@@ -1,0 +1,29 @@
+{
+    "title": "vivarium",
+    "version": "v1",
+    "methods": [
+        "POST", "GET", "PUT", "*"
+    ],
+    "origins": [
+        "*",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:4200",
+        "http://127.0.0.1:4201",
+        "http://127.0.0.1:4202",
+        "http://localhost:4200",
+        "http://localhost:4201",
+        "http://localhost:4202",
+        "http://localhost:8000",
+        "http://localhost:3001",
+        "https://biosimulators.org",
+        "https://www.biosimulators.org",
+        "https://biosimulators.dev",
+        "https://www.biosimulators.dev",
+        "https://run.biosimulations.dev",
+        "https://run.biosimulations.org",
+        "https://biosimulations.dev",
+        "https://biosimulations.org",
+        "https://bio.libretexts.org",
+        "https://compose.biosimulations.org"
+    ]
+}
