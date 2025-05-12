@@ -1,6 +1,5 @@
 """Sets up FastAPI app singleton"""
 
-from functools import partial
 import importlib
 import os 
 import logging as log
@@ -42,7 +41,7 @@ app.add_middleware(
     allow_origins=APP_CONFIG['origins'],  # TODO: specify this for uchc
     allow_credentials=True,
     allow_methods=APP_CONFIG['methods'],
-    allow_headers=["*"]
+    allow_headers=APP_CONFIG['headers']
 )
 
 # add routers: TODO: specify this to be served instead by the reverse-proxy
@@ -55,7 +54,7 @@ for api_name in APP_ROUTERS:
     )
 
 
-@app.get("/health", tags=["Health"])
+@app.get("/", tags=["Health"])
 async def check_health():
     return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
 

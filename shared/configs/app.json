@@ -2,7 +2,10 @@
     "title": "sms-api",
     "version": "0.0.1",
     "methods": [
-        "POST", "GET", "PUT", "*"
+        "POST", 
+        "GET", 
+        "PUT", 
+        "*"
     ],
     "origins": [
         "*",
@@ -30,5 +33,8 @@
         "core",
         "evolve",
         "antibiotics"
+    ],
+    "headers": [
+        "*"
     ]
 }
