@@ -3,7 +3,7 @@ import datetime
 from typing import Any
 import uuid
 
-from api.data_model.base import BaseClass
+from data_model.base import BaseClass
     
 
 @dataclasses.dataclass

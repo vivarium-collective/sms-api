@@ -101,7 +101,7 @@ class EncodedKey(bytes):
 
 def test_base_class():
     from dataclasses import dataclass as dc 
-    from api.data_model.base import BaseClass
+    from data_model.base import BaseClass
     @dc 
     class X(BaseClass):
         i: float

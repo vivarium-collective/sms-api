@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from vivarium.vivarium import Vivarium
 
-from api.data_model.base import BaseClass
+from data_model.base import BaseClass
 
 
 @dc.dataclass

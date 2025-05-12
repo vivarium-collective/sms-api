@@ -1,6 +1,6 @@
 import dataclasses
 
-from api.data_model.base import BaseClass, BaseModel
+from data_model.base import BaseClass, BaseModel
 
 
 class MessageToRoomModel(BaseModel):

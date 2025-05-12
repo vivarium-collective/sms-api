@@ -1,6 +1,6 @@
 import dataclasses
 
-from api.data_model.simulation import BaseClass
+from data_model.simulation import BaseClass
 
 
 @dataclasses.dataclass

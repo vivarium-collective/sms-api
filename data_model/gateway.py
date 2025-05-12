@@ -3,7 +3,7 @@ import dataclasses as dc
 
 import fastapi
 
-from api.data_model.base import BaseClass
+from data_model.base import BaseClass
 
 
 @dc.dataclass
