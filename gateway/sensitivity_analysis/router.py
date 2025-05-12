@@ -8,19 +8,19 @@ from typing import Any
 from fastapi import APIRouter, Depends, UploadFile, File, Body, Query
 import fastapi
 import process_bigraph
-from vivarium import Vivarium
+from vivarium.vivarium import Vivarium
 
-from api.data_model.gateway import RouterConfig
-from api.gateway.community import auth
-from api.gateway.handlers.app_config import root_prefix
-from api.gateway.handlers.multi import launch_scan
-from api.gateway.handlers.vivarium import VivariumFactory, fetch_vivarium, new_id, new_vivarium, pickle_vivarium
+from data_model.gateway import RouterConfig
+community import auth
+from handlers.app_config import root_prefix
+from handlers.multi import launch_scan
+from handlers.vivarium import VivariumFactory, fetch_vivarium, new_id, new_vivarium, pickle_vivarium
 from ecoli import ecoli_core
 
-from api.data_model.base import BaseClass
-from api.data_model.simulation import SimulationRun
-from api.data_model.vivarium import VivariumDocument
-from api.gateway.community.auth import get_user
+from data_model.base import BaseClass
+from data_model.simulation import SimulationRun
+from data_model.vivarium import VivariumDocument
+community.auth import get_user
 
 
 API_PREFIX = "sensitivity-analysis"

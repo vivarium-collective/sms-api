@@ -5,15 +5,14 @@ TODO: track down and re-implement the evolve method (unpickle, set, run, pickle)
 
 from fastapi import APIRouter, Depends, UploadFile, File, Body, Query
 import fastapi
-from vivarium import Vivarium
+from vivarium.vivarium import Vivarium
 
-from api.data_model.gateway import RouterConfig
-from api.data_model.vivarium import VivariumDocument, VivariumMetadata
-from api.gateway.community.auth import get_user
-from api.gateway.evolve import auth
-from api.gateway.handlers.app_config import root_prefix
-from api.gateway.handlers.encryption import db
-from api.gateway.handlers.vivarium import VivariumFactory, new_id
+from data_model.gateway import RouterConfig
+from data_model.vivarium import VivariumDocument, VivariumMetadata
+from gateway.handlers import auth
+from gateway.handlers.app_config import root_prefix
+from gateway.handlers.encryption import db
+from gateway.handlers.vivarium import VivariumFactory, new_id
 
 
 LOCAL_URL = "http://localhost:8080"
@@ -28,12 +27,12 @@ config = RouterConfig(
 )
 
 
-@config.router.get("/", tags=["EvolveAPI"])
-async def get_testroute(user: dict = Depends(get_user)):
+@config.router.get("/test-authentication", operation_id="test-authentication", tags=["Evolve"])
+async def test_authentication(user: dict = Depends(auth.get_user)):
     return user
 
 
-@config.router.post('/add/core', operation_id='add-core', tags=["EvolveAPI"])
+@config.router.post('/add/core', operation_id='add-core', tags=["Evolve"])
 async def add_core(
     core_spec: UploadFile = File(..., description="new pbg.ProcessTypes instance with registered types and processes")):
     pass 
@@ -42,7 +41,7 @@ async def add_core(
 @config.router.post(
     '/create', 
     operation_id='create', 
-    tags=["EvolveAPI"]
+    tags=["Evolve"]
 )
 async def create_vivarium(
     private_key: str = Query(default="1"),  # make_test_password("example")

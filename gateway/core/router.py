@@ -11,19 +11,18 @@ import process_bigraph
 from vivarium.vivarium import Vivarium
 
 from data_model.gateway import RouterConfig
-community import auth
-from handlers.app_config import root_prefix
-from handlers.multi import launch_scan
-from handlers.vivarium import VivariumFactory, fetch_vivarium, new_id, new_vivarium, pickle_vivarium
-from ecoli import ecoli_core
+from gateway.handlers import auth
+from gateway.handlers.app_config import root_prefix
+from gateway.handlers.multi import launch_scan
+from gateway.handlers.vivarium import VivariumFactory, fetch_vivarium, new_id, new_vivarium, pickle_vivarium
 
 from data_model.base import BaseClass
 from data_model.simulation import SimulationRun
 from data_model.vivarium import VivariumDocument
-community.auth import get_user
+from gateway.handlers.auth import get_user
 
 
-API_PREFIX = "inference"
+
 LOCAL_URL = "http://localhost:8080"
 PROD_URL = ""  # TODO: define this
 MAJOR_VERSION = 1
@@ -31,20 +30,19 @@ MAJOR_VERSION = 1
 
 config = RouterConfig(
     router=APIRouter(), 
-    prefix=root_prefix(MAJOR_VERSION) + f"/{API_PREFIX}",
+    prefix=root_prefix(MAJOR_VERSION) + "/core",
     dependencies=[fastapi.Depends(auth.get_user)]
 )
 
 viv_factory = VivariumFactory()
 
-# e54d4431-5dab-474e-b71a-0db1fcb9e659
 
-@config.router.get("/test-authentication", operation_id="test-authentication", tags=["CommunityAPI"])
+@config.router.get("/test-authentication", operation_id="test-authentication", tags=["Core"])
 async def test_authentication(user: dict = Depends(get_user)):
     return user
 
 
-@config.router.post("/run", tags=["CommunityAPI"])
+@config.router.post("/run", tags=["Core"])
 async def run_simulation(
     document: VivariumDocument,
     duration: float = Query(default=11.0),
@@ -64,27 +62,12 @@ async def run_simulation(
     )
 
 
-@config.router.post(
-    "/scan", 
-    tags=["CommunityAPI"], 
-    description="Launch n of the same/similar simulations in parallel async"
-)
-async def run_scan(
-    document: VivariumDocument, 
-    duration: float, 
-    n_threads: int, 
-    perturbation_config: dict[str, Any] | None = None,
-    distribution_config: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    return launch_scan(document, duration, n_threads, perturbation_config, distribution_config)
-
-
 # TODO: have the ecoli interval results call encryption.db.write for each interval
 # TODO: have this method call encryption.db.read for interval data
 @config.router.get(
     '/get/results', 
     operation_id='get-results', 
-    tags=["CommunityAPI"]
+    tags=["Core"]
 )
 async def get_results(key: str, simulation_id: str):
     # for now, data does not need to be encrypted as this api will only be 
@@ -93,58 +76,16 @@ async def get_results(key: str, simulation_id: str):
     pass
 
 
-@config.router.post('/new-vivarium')
-async def create_vivarium(name: str, document: VivariumDocument | None = None):
-    return new_vivarium(name, document)
-
-
-@config.router.get('/get-vivarium')
-async def get_vivarium(viv_id: str = Query(default="testd59659a7-f746-4ce3-a8d1-aeb2e843f208")):
-    viv = fetch_vivarium(viv_id)
-    return viv.make_document()
-
-
-@config.router.post('/run-vivarium')
-async def run_vivarium(
-    viv_id: str = Query(default="testd59659a7-f746-4ce3-a8d1-aeb2e843f208"), 
-    duration: float = Query(default=11.11)
-):
-    try:
-        # get viv pickle
-        viv = fetch_vivarium(viv_id)
-        if "emitter" not in viv.get_state().keys():
-            viv.add_emitter()
-
-        # run
-        viv.run(duration)  # TODO: add timestep?
-
-        # get current state
-        current = viv.make_document()
-
-        # save state
-        pickle_vivarium(viv, viv_id)
-
-        return current
-
-    except Exception as e:
-        raise fastapi.HTTPException(404, str(e))
-
-
-@config.router.post('/sensitivity-analysis')
-async def sensitivity_analysis(parameter_path: str):
-    pass
-
-
 # -- static data -- #
 
-@config.router.get('/get/processes', tags=["CommunityAPI"])
+@config.router.get('/get/processes', tags=["Core"])
 async def get_registered_processes() -> list[str]:
     # TODO: implement this for ecoli_core
     from ecoli import ecoli_core
     return list(ecoli_core.process_registry.registry.keys())
 
 
-@config.router.get('/get/types', tags=["CommunityAPI"])
+@config.router.get('/get/types', tags=["Core"])
 async def get_registered_types() -> list[str]:
     # TODO: implement this for ecoli_core
     from ecoli import ecoli_core
