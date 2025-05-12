@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, UploadFile, File, Body, Query
 import fastapi
 import process_bigraph
+import simdjson
 from vivarium.vivarium import Vivarium
 
 from data_model.gateway import RouterConfig
@@ -42,7 +43,7 @@ async def test_authentication(user: dict = Depends(get_user)):
     return user
 
 
-@config.router.post("/run", tags=["Core"])
+@config.router.post("/run/single", tags=["Core"])
 async def run_simulation(
     document: VivariumDocument,
     duration: float = Query(default=11.0),
@@ -81,12 +82,20 @@ async def get_results(key: str, simulation_id: str):
 @config.router.get('/get/processes', tags=["Core"])
 async def get_registered_processes() -> list[str]:
     # TODO: implement this for ecoli_core
-    from ecoli import ecoli_core
+    from genEcoli import ecoli_core
     return list(ecoli_core.process_registry.registry.keys())
 
 
 @config.router.get('/get/types', tags=["Core"])
 async def get_registered_types() -> list[str]:
     # TODO: implement this for ecoli_core
-    from ecoli import ecoli_core
+    from genEcoli import ecoli_core
     return list(ecoli_core.types().keys())
+
+
+@config.router.get('/get/document', tags=["Core"])
+async def get_core_document():
+    fp = '/Users/alexanderpatrie/Desktop/repos/ecoli/genEcoli/model/state.json'
+    with open(fp, 'r') as f:
+        doc = simdjson.load(f)
+    return doc

@@ -15,7 +15,7 @@ community import auth
 from handlers.app_config import root_prefix
 from handlers.multi import launch_scan
 from handlers.vivarium import VivariumFactory, fetch_vivarium, new_id, new_vivarium, pickle_vivarium
-from ecoli import ecoli_core
+from genEcoli import ecoli_core
 
 from data_model.base import BaseClass
 from data_model.simulation import SimulationRun
@@ -140,12 +140,12 @@ async def sensitivity_analysis(parameter_path: str):
 @config.router.get('/get/processes', tags=["CommunityAPI"])
 async def get_registered_processes() -> list[str]:
     # TODO: implement this for ecoli_core
-    from ecoli import ecoli_core
+    from genEcoli import ecoli_core
     return list(ecoli_core.process_registry.registry.keys())
 
 
 @config.router.get('/get/types', tags=["CommunityAPI"])
 async def get_registered_types() -> list[str]:
     # TODO: implement this for ecoli_core
-    from ecoli import ecoli_core
+    from genEcoli import ecoli_core
     return list(ecoli_core.types().keys())

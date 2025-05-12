@@ -17,7 +17,7 @@ import typer
 import numpy as np
 
 from vivarium.vivarium import Vivarium
-from ecoli import ecoli_core
+from genEcoli import ecoli_core
 
 
 cli = typer.Typer()
