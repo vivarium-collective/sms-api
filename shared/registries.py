@@ -1,8 +1,7 @@
 from process_bigraph import ProcessTypes
 from process_bigraph.processes import TOY_PROCESSES
-from vivarium.tests import DEMO_PROCESSES
 
-from api.shared.managers.registry import RegistryManager
+from shared.managers.registry import RegistryManager
 
 
 manager = RegistryManager()
@@ -13,7 +12,6 @@ manager.add(base_reg_id, base_registry)
 
 # TODO: register types for api and processes here if needed.
 
-TOY_PROCESSES.update(DEMO_PROCESSES)
 manager.register_processes(base_reg_id, TOY_PROCESSES)
 
 

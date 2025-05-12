@@ -1,6 +1,7 @@
 """Sets up FastAPI app singleton"""
 
 from functools import partial
+import importlib
 import os 
 import logging as log
 
@@ -9,26 +10,29 @@ import fastapi
 from fastapi.openapi.utils import get_openapi
 from starlette.middleware.cors import CORSMiddleware
 
-from api.gateway.handlers import app_config
-from api.gateway.community.router import config
+from gateway.handlers.app_config import get_config
+from gateway.core.router import config as community
+from gateway.evolve.router import config as evolve 
 
 
 logger: log.Logger = log.getLogger(__name__)
-
 dot.load_dotenv()
 
-# config spec and env vars
-APP_CONFIG = app_config.get_config(
-    "/Users/alexanderpatrie/Desktop/repos/v2Ecoli/api/shared/configs/app_config.json"
+ROOT = os.path.abspath(
+    os.path.dirname(
+        os.path.dirname(__file__)
+    )
+)
+APP_CONFIG = get_config(
+    os.path.join(ROOT, "shared", "configs", "app.json")
 )
 APP_VERSION = APP_CONFIG['version']
+APP_ROUTERS = APP_CONFIG['routers']
 GATEWAY_PORT = os.getenv("GATEWAY_PORT", "8080")
 
-# endpoint routers
-
-# url roots
 LOCAL_URL = "http://localhost:8080"
 PROD_URL = ""  # TODO: define this
+APP_URL = LOCAL_URL
 
 
 # FastAPI app
@@ -42,17 +46,18 @@ app.add_middleware(
 )
 
 # add routers: TODO: specify this to be served instead by the reverse-proxy
-# config.include(app)
-app.include_router(
-    config.router, 
-    prefix=config.prefix, 
-    dependencies=config.dependencies  # type: ignore
-)
+for api_name in APP_ROUTERS:
+    api = importlib.import_module(f'gateway.{api_name}.router')
+    app.include_router(
+        api.config.router, 
+        prefix=api.config.prefix, 
+        dependencies=api.config.dependencies  # type: ignore
+    )
 
 
-@app.get("/", tags=["Root"])
-async def api_root():
-    return {"GUI": LOCAL_URL + "/docs"}
+@app.get("/health", tags=["Health"])
+async def check_health():
+    return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
 
 
 

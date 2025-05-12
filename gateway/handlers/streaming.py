@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 import dotenv
 from fastapi import WebSocket
 
-from api.data_model.connection import DynamicPacket
+from data_model.connection import DynamicPacket
 
 
 dotenv.load_dotenv()

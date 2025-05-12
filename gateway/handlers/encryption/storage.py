@@ -1,7 +1,7 @@
 import dataclasses as dc
 from hashlib import sha256
 
-from api.data_model.base import BaseClass 
+from data_model.base import BaseClass 
 
 
 @dc.dataclass

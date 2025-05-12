@@ -1,6 +1,6 @@
 import json
 
-from api.data_model.gateway import RouterConfig
+from data_model.gateway import RouterConfig
 
 
 def format_version(major: int):

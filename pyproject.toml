@@ -5,9 +5,13 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = "==3.12.9"
 dependencies = [
+    "cryptography>=44.0.3",
     "fastapi>=0.115.12",
-    "genecoli",
     "pydantic>=2.11.4",
+    "python-dotenv>=1.1.0",
+    "python-multipart>=0.0.20",
+    "uvicorn>=0.34.2",
+    "vivarium-interface>=0.0.5",
 ]
 
 [tool.setuptools]
@@ -18,5 +22,5 @@ packages = [
     "shared"
 ]
 
-[tool.uv.sources]
-genecoli = { path = "../genEcoli" }
+# [tool.uv.sources]
+# genecoli = { path = "../genEcoli" }

@@ -1,6 +1,6 @@
 {
-    "title": "vivarium",
-    "version": "v1",
+    "title": "sms-api",
+    "version": "0.0.1",
     "methods": [
         "POST", "GET", "PUT", "*"
     ],
@@ -25,5 +25,10 @@
         "https://biosimulations.org",
         "https://bio.libretexts.org",
         "https://compose.biosimulations.org"
+    ],
+    "routers": [
+        "core",
+        "evolve",
+        "antibiotics"
     ]
 }

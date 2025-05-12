@@ -7,7 +7,7 @@ from fastapi import WebSocket
 from starlette.websockets import WebSocketState
 from broadcaster import Broadcast
 
-from api.data_model.messages import MessageToRoomModel
+from data_model.messages import MessageToRoomModel
 
 
 class ConnectionManager:

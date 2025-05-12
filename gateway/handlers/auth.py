@@ -1,7 +1,7 @@
 from fastapi import Security, HTTPException, status
 from fastapi.security import APIKeyHeader
 
-from api.gateway.handlers.encryption.storage import check_api_key, get_user_from_api_key
+from gateway.handlers.encryption.storage import check_api_key, get_user_from_api_key
 
 
 auth_key_header = APIKeyHeader(name="X-Community-API-Key")

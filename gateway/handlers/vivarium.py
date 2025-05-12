@@ -9,9 +9,9 @@ import tempfile as tf
 
 from vivarium.vivarium import Vivarium
 
-from api.shared.managers.pickle import Pickler
-from api.shared.registries import manager
-from api.data_model.vivarium import VivariumDocument, VivariumMetadata
+from shared.managers.pickle import Pickler
+from shared.registries import manager
+from data_model.vivarium import VivariumDocument, VivariumMetadata
 
 
 PICKLE_DIR = os.path.abspath("storage")
