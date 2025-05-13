@@ -16,6 +16,11 @@ dependencies = [
     "pysimdjson>=6.0.2",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.5",
+]
+
 [tool.setuptools]
 packages = [
     "data_model",

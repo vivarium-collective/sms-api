@@ -12,8 +12,12 @@ lock:
 
 .PHONY: sync 
 sync:
-	@make lock && uv pip install -e ../genEcoli && uv pip install -e ../vEcoli && make kernel
+	@make lock && uv sync --frozen --all-extras && uv pip install -e ../genEcoli && uv pip install -e ../vEcoli && make kernel
 
 .PHONY: kernel
 kernel:
 	@rm -rf /Users/alexanderpatrie/Library/Jupyter/kernels/sms-api && python -m ipykernel install --user --name sms-api --display-name "Python(SMS)"
+
+.PHONY: test 
+test:
+	@pytest -s tests/deliverables.py
