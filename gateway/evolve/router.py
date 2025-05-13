@@ -9,9 +9,9 @@ from vivarium.vivarium import Vivarium
 
 from data_model.gateway import RouterConfig
 from data_model.vivarium import VivariumDocument, VivariumMetadata
-from gateway.handlers import auth
+from common import auth
 from gateway.handlers.app_config import root_prefix
-from gateway.handlers.encryption import db
+from common.encryption import db
 from gateway.handlers.vivarium import VivariumFactory, new_id
 
 
@@ -25,11 +25,6 @@ config = RouterConfig(
     prefix=root_prefix(MAJOR_VERSION) + "/evolve",
     dependencies=[fastapi.Depends(auth.get_user)]
 )
-
-
-@config.router.get("/test-authentication", operation_id="test-authentication", tags=["Evolve"])
-async def test_authentication(user: dict = Depends(auth.get_user)):
-    return user
 
 
 @config.router.post('/add/core', operation_id='add-core', tags=["Evolve"])

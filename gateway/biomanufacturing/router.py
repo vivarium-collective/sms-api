@@ -39,10 +39,6 @@ viv_factory = VivariumFactory()
 
 # e54d4431-5dab-474e-b71a-0db1fcb9e659
 
-@config.router.get("/test-authentication", operation_id="test-authentication", tags=["CommunityAPI"])
-async def test_authentication(user: dict = Depends(get_user)):
-    return user
-
 
 @config.router.post("/run", tags=["CommunityAPI"])
 async def run_simulation(

@@ -13,7 +13,7 @@ from data_model.base import BaseClass
 from data_model.gateway import RouterConfig
 from data_model.simulation import SimulationRun
 from data_model.vivarium import VivariumDocument
-from gateway.handlers import auth
+from common import auth
 from gateway.handlers.app_config import root_prefix
 from gateway.handlers.vivarium import VivariumFactory, new_id
 
@@ -30,11 +30,6 @@ config = RouterConfig(
     dependencies=[fastapi.Depends(auth.get_user)]
 )
 viv_factory = VivariumFactory()
-
-
-@config.router.get("/test-authentication", operation_id="test-authentication", tags=["Antibiotics"])
-async def test_authentication(user: dict = Depends(auth.get_user)):
-    return user
 
 
 @dc.dataclass

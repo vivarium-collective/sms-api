@@ -9,8 +9,8 @@ import tempfile as tf
 
 from vivarium.vivarium import Vivarium
 
-from shared.managers.pickle import Pickler
-from shared.registries import manager
+from common.managers.pickle import Pickler
+from common.registries import manager
 from data_model.vivarium import VivariumDocument, VivariumMetadata
 
 

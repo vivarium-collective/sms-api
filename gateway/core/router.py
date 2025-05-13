@@ -12,7 +12,7 @@ import simdjson
 from vivarium.vivarium import Vivarium
 
 from data_model.gateway import RouterConfig
-from gateway.handlers import auth
+from common import auth
 from gateway.handlers.app_config import root_prefix
 from gateway.handlers.multi import launch_scan
 from gateway.handlers.vivarium import VivariumFactory, fetch_vivarium, new_id, new_vivarium, pickle_vivarium
@@ -20,7 +20,7 @@ from gateway.handlers.vivarium import VivariumFactory, fetch_vivarium, new_id, n
 from data_model.base import BaseClass
 from data_model.simulation import SimulationRun
 from data_model.vivarium import VivariumDocument
-from gateway.handlers.auth import get_user
+from common.auth import get_user
 
 
 
@@ -38,9 +38,9 @@ config = RouterConfig(
 viv_factory = VivariumFactory()
 
 
-@config.router.get("/test-authentication", operation_id="test-authentication", tags=["Core"])
-async def test_authentication(user: dict = Depends(get_user)):
-    return user
+# @config.router.get("/test-core-authentication", operation_id="test-authentication", tags=["Core"])
+# async def test_core_authentication(user: dict = Depends(get_user)):
+#     return user
 
 
 @config.router.post("/run/single", tags=["Core"])

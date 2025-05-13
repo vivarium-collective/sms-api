@@ -9,6 +9,7 @@ import fastapi
 from fastapi.openapi.utils import get_openapi
 from starlette.middleware.cors import CORSMiddleware
 
+from common import auth
 from gateway.handlers.app_config import get_config
 from gateway.core.router import config as community
 from gateway.evolve.router import config as evolve 
@@ -23,7 +24,7 @@ ROOT = os.path.abspath(
     )
 )
 APP_CONFIG = get_config(
-    os.path.join(ROOT, "shared", "configs", "app.json")
+    os.path.join(ROOT, "common", "configs", "app.json")
 )
 APP_VERSION = APP_CONFIG['version']
 APP_ROUTERS = APP_CONFIG['routers']
@@ -54,7 +55,12 @@ for api_name in APP_ROUTERS:
     )
 
 
-@app.get("/", tags=["Health"])
+@app.get("/test-authentication", operation_id="test-authentication", tags=["Root"])
+async def test_authentication(user: dict = fastapi.Depends(auth.get_user)):
+    return user
+
+
+@app.get("/", tags=["Root"])
 async def check_health():
     return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
 

@@ -21,7 +21,7 @@ packages = [
     "data_model",
     "gateway",
     "server",
-    "shared"
+    "common"
 ]
 
 [tool.uv.sources]
