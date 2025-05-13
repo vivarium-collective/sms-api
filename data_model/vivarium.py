@@ -18,6 +18,11 @@ class VivariumDocument(BaseClass):
 class VivariumMetadata:
     vivarium_id: str
     location: str | None = None
+    secure: bool = True
+
+    def __post_init__(self):
+        if self.secure:
+            self.location = "<=[]=>"
 
 
 @dc.dataclass

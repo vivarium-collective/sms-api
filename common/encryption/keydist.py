@@ -260,8 +260,8 @@ def generate_client(username: str):
     return Client(username=username, location=get_location_coords()) # type: ignore
 
 
-def derive_private(client: User) -> ec.EllipticCurvePrivateKey:
-    secret_string = client.representation
+def derive_private(secret_string: str | None = None, client: User | None = None) -> ec.EllipticCurvePrivateKey:
+    secret_string = secret_string or client.representation if client else ""
     digest = hashlib.sha256(secret_string.encode()).digest()
     order = int(
         "FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16
@@ -290,8 +290,8 @@ def derive_pem(private_key: ec.EllipticCurvePrivateKey) -> Keys:
     return Keys(private=private_pem, public=public_pem)
 
 
-def generate_keys(client: User) -> Keys:
-    private = derive_private(client)
+def generate_keys(secret_string: str | None = None, client: User | None = None) -> Keys:
+    private = derive_private(secret_string, client)
     return derive_pem(private)
 
 

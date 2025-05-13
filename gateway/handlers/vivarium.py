@@ -18,7 +18,7 @@ PICKLE_DIR = os.path.abspath("storage")
 
 class VivariumFactory:
     def get_core(self, protocol: str = "base"):
-        from ecoli.shared.registry import ecoli_core
+        from genEcoli import ecoli_core
         # TODO: parse protocol here and return different cores if needed 
         return ecoli_core
     
