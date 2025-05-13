@@ -1,7 +1,7 @@
 from process_bigraph import ProcessTypes
 from process_bigraph.processes import TOY_PROCESSES
 
-from shared.managers.registry import RegistryManager
+from common.managers.registry import RegistryManager
 
 
 manager = RegistryManager()
