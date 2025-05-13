@@ -32,7 +32,10 @@
     "routers": [
         "core",
         "evolve",
-        "antibiotics"
+        "antibiotics",
+        "biomanufacturing",
+        "inference",
+        "sensitivity_analysis"
     ],
     "headers": [
         "*"

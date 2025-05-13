@@ -15,12 +15,12 @@ def test_root():
 
 def test_auth():
     api_key = "test"
-    url = f"{ROOT}/test-authentication"
+    url = f"{ROOT}/api/v1/test-authentication"
 
     headers = {
         "X-Community-API-Key": api_key
     }
     response = requests.get(url, headers=headers)
-    print(response.status_code)
+    assert response.status_code == 200
     print(response.json())
 

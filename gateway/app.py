@@ -55,7 +55,7 @@ for api_name in APP_ROUTERS:
     )
 
 
-@app.get("/test-authentication", operation_id="test-authentication", tags=["Root"])
+@app.get("/api/v1/test-authentication", operation_id="test-authentication", tags=["Root"])
 async def test_authentication(user: dict = fastapi.Depends(auth.get_user)):
     return user
 
@@ -64,6 +64,3 @@ async def test_authentication(user: dict = fastapi.Depends(auth.get_user)):
 async def check_health():
     return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
 
-
-
-# e54d4431-5dab-474e-b71a-0db1fcb9e659
