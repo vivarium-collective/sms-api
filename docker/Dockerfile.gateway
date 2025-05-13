@@ -10,4 +10,4 @@ COPY . /app
 
 RUN uv lock && uv sync --all-extras
 
-CMD ["gateway", "start", "community"]
+CMD ["make", "gateway"]
