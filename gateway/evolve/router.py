@@ -35,8 +35,8 @@ async def add_core(
 
 
 @config.router.post(
-    '/create', 
-    operation_id='create', 
+    '/create/vivarium', 
+    operation_id='create-vivarium', 
     tags=["Evolve"]
 )
 async def create_vivarium(
@@ -52,3 +52,12 @@ async def create_vivarium(
     db.write(v, viv_id, keys.private.encode('utf-8'))
     
     return VivariumMetadata(viv_id)
+
+
+@config.router.get(
+    '/get/vivarium', 
+    operation_id='get-vivarium', 
+    tags=["Evolve"]
+)
+async def get_vivarium(vivarium_id: str):
+    pass
