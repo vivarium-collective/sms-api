@@ -1,21 +1,66 @@
+"""
+====================
+Connection Managers:
+====================
+
+Connection managers for the following:
+
+- Websocket/gRPC 
+
+"""
+import abc
 import asyncio
+import pickle
 import traceback
 from typing import Dict, Set, List, Tuple
 from operator import itemgetter
 
+from bson import Binary
 from fastapi import WebSocket
+from pymongo import MongoClient
 from starlette.websockets import WebSocketState
-from broadcaster import Broadcast
+from sqlalchemy import create_engine, text
+from vivarium.vivarium import Vivarium
 
 from data_model.messages import MessageToRoomModel
 
 
-class ConnectionManager:
+class SocketBroadcaster:
+    _channels = []
+
+    def __init__(self, uri: str):
+        self.uri = uri
+        # TODO: connect to message broker here
+        # broker = MessageBroker(self.uri)
+        # self.channels = broker.get_channels()
+    
+    @property 
+    def channels(self):
+        return self._channels
+    
+    @channels.setter 
+    def channels(self, ch):
+        self._channels = ch
+    
+    async def connect(self):
+        pass 
+
+    async def disconnect(self):
+        pass 
+
+    async def subscribe(self, channel: str):
+        pass 
+
+    async def publish(self, channel: str, message: dict):
+        pass
+
+
+class SocketConnectionManager:
     """
     This would handle all Message broadcast and all connections to the Service.
     """
 
-    broadcaster = Broadcast("redis://localhost:6379")
+    broadcaster = SocketBroadcaster("redis://localhost:6379")
 
     def __init__(self):
         """

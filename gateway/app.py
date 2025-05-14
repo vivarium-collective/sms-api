@@ -45,6 +45,17 @@ app.add_middleware(
     allow_headers=APP_CONFIG['headers']
 )
 
+
+@app.get("/", tags=["Core"])
+async def check_health():
+    return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
+
+
+@app.get("/api/v1/test/authentication", operation_id="test-authentication", tags=["Core"])
+async def test_authentication(user: dict = fastapi.Depends(auth.get_user)):
+    return user
+
+
 # add routers: TODO: specify this to be served instead by the reverse-proxy
 for api_name in APP_ROUTERS:
     api = importlib.import_module(f'gateway.{api_name}.router')
@@ -55,12 +66,5 @@ for api_name in APP_ROUTERS:
     )
 
 
-@app.get("/api/v1/test/authentication", operation_id="test-authentication", tags=["Root"])
-async def test_authentication(user: dict = fastapi.Depends(auth.get_user)):
-    return user
 
-
-@app.get("/", tags=["Root"])
-async def check_health():
-    return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
 

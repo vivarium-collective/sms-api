@@ -30,12 +30,12 @@
         "https://compose.biosimulations.org"
     ],
     "routers": [
-        "core",
-        "evolve",
         "antibiotics",
         "biomanufacturing",
         "inference",
-        "sensitivity_analysis"
+        "sensitivity_analysis",
+        "core",
+        "evolve"
     ],
     "headers": [
         "*"

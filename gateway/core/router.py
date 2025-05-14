@@ -70,7 +70,7 @@ async def run_simulation(
     operation_id='get-results', 
     tags=["Core"]
 )
-async def get_results(key: str, simulation_id: str):
+async def get_results(simulation_id: str):
     # for now, data does not need to be encrypted as this api will only be 
     #  available if properly authenticated with an API Key.
     # viv = read(EncodedKey(key), vivarium_id)

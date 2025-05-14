@@ -1,8 +1,6 @@
 [project]
 name = "sms-api"
 version = "0.0.1"
-description = "Add your description here"
-readme = "README.md"
 requires-python = "==3.12.9"
 dependencies = [
     "cryptography>=44.0.3",
@@ -11,14 +9,18 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "python-multipart>=0.0.20",
     "uvicorn>=0.34.2",
-    "vivarium-interface>=0.0.5",
-    "genEcoli",
     "pysimdjson>=6.0.2",
+    "pymongo>=4.12.1",
+    "sqlalchemy>=2.0.40",
+    "process-bigraph>=0.0.37",
+    "vivarium-interface>=0.0.5",
+    "bigraph-schema>=0.0.57",
+    "requests>=2.32.3",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3.5",
+    "pytest>=8.3.5"
 ]
 
 [tool.setuptools]
@@ -26,8 +28,6 @@ packages = [
     "data_model",
     "gateway",
     "server",
-    "common"
+    "common",
 ]
 
-[tool.uv.sources]
-genEcoli = { path = "../genEcoli" }
