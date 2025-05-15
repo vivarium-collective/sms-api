@@ -51,8 +51,8 @@ async def simulate_antibiotic_response(antibiotic_name: str, params: AntibioticP
         # TODO: instead, return a simulation run and emit payload to socket
         response = simulate_antibiotic(antibiotic_name, params)
         return response
-    except:
-        raise HTTPException("Something went wrong.")
+    except Exception as e:
+        raise HTTPException(400, str(e))
 
 
 @config.router.post("/get-MIC-curve", tags=["Antibiotics"])
@@ -61,7 +61,7 @@ async def get_mic_curve(params: AntibioticParams) -> MIC:
         response = get_MIC_curve(params)
         return response
     except Exception as e:
-        warnings.warn(str(e)) 
+        raise HTTPException(400, "Something went wrong.")
 
 
 @config.router.post("/get-PAP-curve", tags=["Antibiotics"])
@@ -70,7 +70,7 @@ async def get_pap_curve(params: AntibioticParams) -> PAP:
         response = get_PAP_curve(params)
         return response
     except Exception as e:
-        warnings.warn(str(e)) 
+        raise HTTPException(400, str(e))
 
 
 @config.router.post("/get-single-cell-trajectories", tags=["Antibiotics"])
@@ -79,7 +79,7 @@ async def get_single_cell_trajectories(n_cells: int, params: AntibioticParams):
         response = single_cell_trajectories(n_cells, params)
         return response 
     except Exception as e:
-        warnings.warn(str(e)) 
+        raise HTTPException(400, str(e))
 
 
 @config.router.post("/list-available-parameters", tags=["Antibiotics"])
@@ -88,4 +88,4 @@ async def list_available_parameters():
         response = available_parameters()
         return response 
     except Exception as e:
-        warnings.warn(str(e)) 
+        raise HTTPException(500, str(e))

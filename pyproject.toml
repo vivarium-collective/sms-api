@@ -12,10 +12,9 @@ dependencies = [
     "pysimdjson>=6.0.2",
     "pymongo>=4.12.1",
     "sqlalchemy>=2.0.40",
-    "process-bigraph>=0.0.37",
     "vivarium-interface>=0.0.5",
-    "bigraph-schema>=0.0.57",
     "requests>=2.32.3",
+    "genecoli"
 ]
 
 [project.optional-dependencies]
@@ -30,4 +29,12 @@ packages = [
     "server",
     "common",
 ]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+]
+
+[tool.uv.sources]
+genecoli = { path = "../genEcoli", editable = true }
 

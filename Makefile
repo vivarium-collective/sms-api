@@ -8,7 +8,7 @@ clean:
 
 .PHONY: lock	
 lock:
-	@uv cache clean && uv lock
+	@uv lock
 
 .PHONY: sync 
 sync:
@@ -16,7 +16,11 @@ sync:
 
 .PHONY: kernel
 kernel:
-	@rm -rf /Users/alexanderpatrie/Library/Jupyter/kernels/sms-api && python -m ipykernel install --user --name sms-api --display-name "Python(SMS)"
+	@rm -rf /Users/alexanderpatrie/Library/Jupyter/kernels/sms && uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=SMS
+
+.PHONY: notebook
+notebook:
+	@make kernel && uv run --with jupyter jupyter lab
 
 .PHONY: test 
 test:
@@ -24,4 +28,4 @@ test:
 
 .PHONY: install
 install:
-	@make lock && uv sync && python scripts/install.py
+	@make clean && make lock && uv venv && uv sync
