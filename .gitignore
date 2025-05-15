@@ -11,3 +11,4 @@ wheels/
 uv.lock
 .ipynb_checkpoints/
 .pytest_cache/.idea/
+.idea/
