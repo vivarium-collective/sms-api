@@ -1,0 +1,30 @@
+[project]
+name = "sms-api-gateway"
+version = "0.0.1"
+description = "API Gateway for the Simulating Microbial System Atlantis API"
+readme = "README.md"
+requires-python = "==3.12.9"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.5"
+]
+
+[tool.setuptools]
+packages = [
+    "gateway",
+    "data_model",
+    "common",
+]
+
+[tool.uv.sources]
+genecoli = { path = "../../genEcoli" }
+vecoli = { path = "../../vEcoli" }
+bigraph-schema = { path = "../../bigraph-schema" }
+process-bigraph = { path = "../../process-bigraph" }
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+]
