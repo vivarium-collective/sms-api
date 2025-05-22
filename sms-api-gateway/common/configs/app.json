@@ -17,6 +17,7 @@
         "http://localhost:4201",
         "http://localhost:4202",
         "http://localhost:8000",
+        "http://localhost:8080",
         "http://localhost:3001",
         "https://biosimulators.org",
         "https://www.biosimulators.org",
@@ -30,12 +31,7 @@
         "https://compose.biosimulations.org"
     ],
     "routers": [
-        "antibiotics",
-        "biomanufacturing",
-        "inference",
-        "sensitivity_analysis",
-        "core",
-        "evolve"
+        "core"
     ],
     "headers": [
         "*"

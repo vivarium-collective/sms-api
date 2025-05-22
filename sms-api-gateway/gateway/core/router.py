@@ -4,14 +4,13 @@ import datetime
 
 from fastapi import APIRouter, Query
 import fastapi
-import process_bigraph
-import simdjson
+from gateway.handlers.app_config import root_prefix
+from gateway.handlers.vivarium import VivariumFactory, new_id
+import process_bigraph  # type: ignore
+import simdjson  # type: ignore
 
 from data_model.gateway import RouterConfig
 from common import auth
-from gateway import root_prefix
-from gateway import launch_scan
-from gateway import VivariumFactory, fetch_vivarium, new_id, new_vivarium, pickle_vivarium
 
 from data_model.simulation import SimulationRun
 from data_model.vivarium import VivariumDocument
@@ -30,16 +29,11 @@ config = RouterConfig(
 viv_factory = VivariumFactory()
 
 
-# @config.router.get("/test-core-authentication", operation_id="test-authentication", tags=["Core"])
-# async def test_core_authentication(user: dict = Depends(get_user)):
-#     return user
-
-
 @config.router.post("/run/single", tags=["Core"])
 async def run_simulation(
     document: VivariumDocument,
     duration: float = Query(default=11.0),
-    name: str = Query(default="community_simulation")
+    name: str = Query(default="single")
 ) -> SimulationRun:
     """TODO: instead, here emit a new RequestMessage to gRPC to server with document, duration, and sim_id and run
         it there, then storing the secured results in the server, and then return a sim result confirmation with sim_id
