@@ -9,7 +9,7 @@ async def run_client(experiment_id: str, duration: int, api_key: str, timeout=5.
     uri = f"ws://localhost:8080/api/v1/core/run-simulation?experiment_id={experiment_id}&duration={duration}"
     api_key = "test"
     headers = {
-        "x-community-api-key": api_key
+        "X-Community-API-Key": api_key
     }
     # headers = None
     async with websockets.connect(uri, additional_headers=headers) as websocket:

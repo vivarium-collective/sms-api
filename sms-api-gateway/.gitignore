@@ -76,4 +76,8 @@ trace-*
 # Virtual environment #
 #######################
 .venv/
+
+# User-Defined #
+###############
+.env
 *.db

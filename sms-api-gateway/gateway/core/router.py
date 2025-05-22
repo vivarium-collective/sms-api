@@ -7,7 +7,10 @@ from dataclasses import dataclass, asdict
 import json
 import shutil
 import tempfile as tmp
+import os 
 
+import dotenv as de
+import numpy as np
 import process_bigraph  # type: ignore
 import simdjson  # type: ignore
 import anyio
@@ -27,6 +30,8 @@ from data_model.simulation import SimulationRun
 from data_model.vivarium import VivariumDocument
 
 
+de.load_dotenv()
+
 LOCAL_URL = "http://localhost:8080"
 PROD_URL = ""  # TODO: define this
 MAJOR_VERSION = 1
@@ -42,29 +47,101 @@ broadcast = Broadcast(f"memory://localhost:{BROADCAST_PORT}")
 templates = Jinja2Templates("resources/client_templates")
 
 
+async def validate_socket(websocket: fastapi.WebSocket):
+    """Evaluate the validity of the given websocket request's header and API key therein."""
+    try:
+        await auth.validate_socket(websocket)  # Validate API key manually
+    except fastapi.HTTPException as e:
+        await websocket.close(code=fastapi.status.WS_1008_POLICY_VIOLATION)
+        return 
+    await websocket.accept()
+
+
 @config.router.websocket("/run-simulation")
 async def run_simulation(
+    websocket: fastapi.WebSocket, 
+    experiment_id: str, 
+    duration: int,
+    time_step: float = 0.1,
+    framesize: float | None = None,
+):
+    await validate_socket(websocket)
+
+    tempdir = tmp.mkdtemp()
+    datadir = f'{tempdir}/{experiment_id}'
+
+    try:
+        os.makedirs(datadir, exist_ok=True)
+
+        # Queue to send data from the collector to the websocket sender
+        queue = asyncio.Queue()
+
+        async def run_dispatch():
+            # Run blocking sim in a thread to avoid blocking the event loop
+            await asyncio.to_thread(
+                dispatch_simulation, 
+                experiment_id=experiment_id, 
+                datadir=datadir, 
+                duration=duration
+            )
+
+        async def collect_results():
+            sent = set()
+            t = np.arange(1, duration, framesize or time_step)
+            while True:
+                for i_t in t:
+                    filepath = os.path.join(datadir, f"vivecoli_t{i_t}.json")
+                    if i_t not in sent and os.path.exists(filepath):
+                        with open(filepath) as f:
+                            data = json.load(f)
+                        message = {
+                            experiment_id: data
+                        }
+                        await queue.put(message)
+                        sent.add(i_t)
+
+                if len(sent) == duration:
+                    break
+                await asyncio.sleep(0.2)
+
+        async def send_messages():
+            while True:
+                message = await queue.get()
+                await websocket.send_json(message)
+                queue.task_done()
+
+        await asyncio.gather(
+            run_dispatch(),
+            collect_results(),
+            send_messages()
+        )
+
+    except fastapi.WebSocketDisconnect:
+        print("WebSocket disconnected")
+
+    finally:
+        shutil.rmtree(tempdir)
+
+
+@config.router.websocket("/_run-simulation")
+async def _run_simulation(
     websocket: fastapi.WebSocket, 
     experiment_id: str = Query(...),
     duration: float = Query(default=11.0),
     time_step: float = Query(default=0.1),
     name: str = Query(default="single")
 ):
-    # first, validate auth
-    try:
-        await auth.get_user_ws(websocket)  # Validate API key manually
-    except fastapi.HTTPException:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-    await websocket.accept()
+    # first validate connection
+    await validate_socket(websocket)
 
+    # tempdir to be iteratively written to
     tempdir = tmp.mkdtemp()
     datadir = f'{tempdir}/{experiment_id}'
 
-    # run simulation iteratively
     try:
         for i in range(int(duration)):
-            result = i ** i
+            # dispatch_sim(datadir)
+            result = i**i
             message = {
                 experiment_id: {
                     "interval_id": i,
@@ -73,15 +150,14 @@ async def run_simulation(
             }
             await websocket.send_json(message)
             await asyncio.sleep(1)  # simulate interval delay
-    
-    shutil.rmtree(tempdir)
-
     # return SimulationRun(
     #     id=sim_id,  # ensure users can use this to retrieve the data later
     #     last_updated=str(datetime.datetime.now())
     # )
     except fastapi.WebSocketDisconnect:
         print("WebSocket disconnected")
+    shutil.rmtree(tempdir)
+
 
 
 # TODO: have the ecoli interval results call encryption.db.write for each interval

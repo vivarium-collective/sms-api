@@ -1,10 +1,11 @@
 from fastapi import Security, HTTPException, WebSocket, status
 from fastapi.security import APIKeyHeader
 
+from common.users import key_db
 from common.encryption.storage import check_api_key, get_user_from_api_key
 
+
 API_KEY_HEADER = "X-Community-API-Key"
-EXPECTED_KEY = "test"
 auth_key_header = APIKeyHeader(name=API_KEY_HEADER)
 
 
@@ -17,12 +18,16 @@ def get_user(api_key_header: str = Security(auth_key_header)):
         detail="Invalid API key"
     )
 
-def extract_api_key(headers):
+
+async def validate_socket(websocket: WebSocket, collection: str = "example"):
+    headers = websocket.headers
     api_key = headers.get(API_KEY_HEADER)
-    if api_key != EXPECTED_KEY:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key")
+    if api_key is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not find the given key. Invalid API Key")
+    
+    is_valid = key_db.check_key(api_key, collection)
+    if not is_valid:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key")
     return api_key
 
 
-async def get_user_ws(websocket: WebSocket):
-    return extract_api_key(websocket.headers)

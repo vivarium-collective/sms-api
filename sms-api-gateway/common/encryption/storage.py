@@ -1,8 +1,13 @@
 import dataclasses as dc
 from hashlib import sha256
+import os
+
+import dotenv as de
 
 from data_model.base import BaseClass 
 
+
+de.load_dotenv()
 
 @dc.dataclass
 class UserMetadata(BaseClass):
