@@ -7,7 +7,8 @@ from dataclasses import dataclass, asdict
 import json
 import shutil
 import tempfile as tmp
-import os 
+import os
+import time 
 
 import dotenv as de
 import numpy as np
@@ -62,65 +63,86 @@ async def run_simulation(
     websocket: fastapi.WebSocket, 
     experiment_id: str, 
     duration: int,
-    time_step: float = 0.1,
+    time_step: float = 1.0,
     framesize: float | None = None,
+    overwrite: bool = False
 ):
     await validate_socket(websocket)
-
-    tempdir = tmp.mkdtemp()
+    print(f'Running with duration: {duration}')
+    time.sleep(5)
+    # tempdir = tmp.mkdtemp()
+    tempdir = "mount"
     datadir = f'{tempdir}/{experiment_id}'
-
-    try:
-        os.makedirs(datadir, exist_ok=True)
-
-        # Queue to send data from the collector to the websocket sender
-        queue = asyncio.Queue()
-
-        async def run_dispatch():
-            # Run blocking sim in a thread to avoid blocking the event loop
-            await asyncio.to_thread(
-                dispatch_simulation, 
-                experiment_id=experiment_id, 
-                datadir=datadir, 
-                duration=duration
-            )
-
-        async def collect_results():
-            sent = set()
-            t = np.arange(1, duration, framesize or time_step)
-            while True:
-                for i_t in t:
-                    filepath = os.path.join(datadir, f"vivecoli_t{i_t}.json")
-                    if i_t not in sent and os.path.exists(filepath):
-                        with open(filepath) as f:
-                            data = json.load(f)
-                        message = {
-                            experiment_id: data
-                        }
-                        await queue.put(message)
-                        sent.add(i_t)
-
-                if len(sent) == duration:
-                    break
-                await asyncio.sleep(0.2)
-
-        async def send_messages():
-            while True:
-                message = await queue.get()
-                await websocket.send_json(message)
-                queue.task_done()
-
-        await asyncio.gather(
-            run_dispatch(),
-            collect_results(),
-            send_messages()
+    if os.path.exists(datadir) and overwrite:
+        shutil.rmtree(datadir)
+    if not os.path.exists(datadir) or overwrite:
+        os.makedirs(datadir)
+    
+    async def run_dispatch():
+        # Run blocking sim in a thread to avoid blocking the event loop
+        await asyncio.to_thread(
+            dispatch_simulation, 
+            experiment_id=experiment_id, 
+            datadir=datadir, 
+            duration=duration,
+            time_step=time_step,
+            framesize=framesize
         )
 
-    except fastapi.WebSocketDisconnect:
-        print("WebSocket disconnected")
+    # async def collect_results():
+    #     sent = set()
+    #     t = np.arange(1, duration, framesize or time_step)
+    #     while True:
+    #         for i_t in t:
+    #             filepath = os.path.join(datadir, f"vivecoli_t{i_t}.json")
+    #             print(f'Found filepath: {filepath}')
+    #             if i_t not in sent and os.path.exists(filepath):
+    #                 with open(filepath) as f:
+    #                     data = json.load(f)
+    #                 message = {
+    #                     experiment_id: data
+    #                 }
+    #                 await queue.put(message)
+    #                 sent.add(i_t)
+    #         if len(sent) == duration:
+    #             break
+    #         await asyncio.sleep(0.2)
+        
+    async def collect_results():
+        sent = set()
+        t = np.arange(1, duration, framesize or time_step)
+        try:
+            for i_t in t:
+                filepath = os.path.join(datadir, f"vivecoli_t{i_t}.json")
+                print(f'Found filepath: {filepath}')
+                if os.path.exists(filepath):
+                    with open(filepath) as f:
+                        data = json.load(f)
+                    message = {
+                        experiment_id: data
+                    }
+                    await websocket.send_json(message)
+                    await asyncio.sleep(1)
+        except fastapi.WebSocketDisconnect:
+            print("WS Disconnected")
 
+    # async def send_messages():
+    #     while True:
+    #         message = await queue.get()
+    #         await websocket.send_json(message)
+    #         queue.task_done()
+    # await asyncio.gather(
+    #     run_dispatch(),
+    #     collect_results(),
+    #     send_messages()
+    # )
+    try:
+        dispatch_task = asyncio.create_task(run_dispatch())
+        collection_task = asyncio.create_task(collect_results())
+        await asyncio.gather(dispatch_task, collection_task)
     finally:
-        shutil.rmtree(tempdir)
+        # shutil.rmtree(tempdir)
+        print('Done')
 
 
 @config.router.websocket("/_run-simulation")

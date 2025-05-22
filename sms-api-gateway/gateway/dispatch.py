@@ -27,7 +27,7 @@ def dispatch_simulation(
         config = copy.deepcopy(json.load(f))
     if experiment_id is not None:
         config['experiment_id'] = experiment_id
-    
+    print('Running sim')
     # override save dir
     if datadir is not None:
         config['daughter_outdir'] = datadir
@@ -38,13 +38,13 @@ def dispatch_simulation(
     t = npy.arange(1, dur, framesize or timestep)
     config['save'] = True
     config['save_times'] = t.tolist()
-
     # build, compile, and run sim
-    if datadir is not None and not os.path.exists(datadir):
-        os.mkdir(datadir)
+    # if datadir is not None and not os.path.exists(datadir):
+    #     os.mkdir(datadir)
     
     sim = EcoliSim(config, datadir)
     sim.build_ecoli()
+    sim.total_time = dur
 
     return sim.run()
 
