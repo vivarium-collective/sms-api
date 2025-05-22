@@ -2,13 +2,16 @@
 
 import ast
 import asyncio
+import base64
 import datetime
 from dataclasses import dataclass, asdict
+import gzip
 import json
 import shutil
 import tempfile as tmp
 import os
-import time 
+import time
+import traceback 
 
 import dotenv as de
 import numpy as np
@@ -53,6 +56,7 @@ async def validate_socket(websocket: fastapi.WebSocket):
     try:
         await auth.validate_socket(websocket)  # Validate API key manually
     except fastapi.HTTPException as e:
+        traceback.print_exc()
         await websocket.close(code=fastapi.status.WS_1008_POLICY_VIOLATION)
         return 
     await websocket.accept()
@@ -80,6 +84,7 @@ async def run_simulation(
     
     async def run_dispatch():
         # Run blocking sim in a thread to avoid blocking the event loop
+        print(f'Run dispatch')
         await asyncio.to_thread(
             dispatch_simulation, 
             experiment_id=experiment_id, 
@@ -116,15 +121,22 @@ async def run_simulation(
                 filepath = os.path.join(datadir, f"vivecoli_t{i_t}.json")
                 print(f'Found filepath: {filepath}')
                 if os.path.exists(filepath):
+                    print(f'Collect results {i_t}')
                     with open(filepath) as f:
                         data = json.load(f)
                     message = {
-                        experiment_id: data
+                        experiment_id: {
+                            "interval_id": str(i_t),
+                            "results": data
+                        }
                     }
+                    # print(f'Made message: {message}')
+
                     await websocket.send_json(message)
                     await asyncio.sleep(1)
         except fastapi.WebSocketDisconnect:
             print("WS Disconnected")
+            traceback.print_exc()
 
     # async def send_messages():
     #     while True:
@@ -143,6 +155,11 @@ async def run_simulation(
     finally:
         # shutil.rmtree(tempdir)
         print('Done')
+
+
+def compress_message(data: dict) -> str:
+    compressed = gzip.compress(json.dumps(data).encode())
+    return base64.b64encode(compressed).decode()
 
 
 @config.router.websocket("/_run-simulation")
@@ -170,7 +187,8 @@ async def _run_simulation(
                     "result": result
                 }
             }
-            await websocket.send_json(message)
+            # await websocket.send_json(message)
+            await websocket.send_text(compress_message(message))
             await asyncio.sleep(1)  # simulate interval delay
     # return SimulationRun(
     #     id=sim_id,  # ensure users can use this to retrieve the data later

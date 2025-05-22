@@ -1,8 +1,27 @@
+import base64
+import gzip
+import traceback
 import websockets
 import asyncio
 import json 
 import time
 import sys 
+
+
+def compress_message(data: dict) -> str:
+    compressed = gzip.compress(json.dumps(data).encode())
+    return base64.b64encode(compressed).decode()
+
+
+def decompress_message(encoded) -> dict:
+    # Decode from base64
+    compressed_bytes = base64.b64decode(encoded)
+    
+    # Decompress the gzip-compressed bytes
+    decompressed_bytes = gzip.decompress(compressed_bytes)
+    
+    # Convert bytes back to JSON/dict
+    return json.loads(decompressed_bytes.decode())
 
 
 async def run_client(experiment_id: str, duration: int, api_key: str, overwrite: bool = False, timeout=20.0, buffer=1.0, max_timeout: float = 50.0):
@@ -14,19 +33,18 @@ async def run_client(experiment_id: str, duration: int, api_key: str, overwrite:
     # headers = None
     i = 0
     async with websockets.connect(uri, additional_headers=headers) as websocket:
-        try:
-            while i < max_timeout:
-                try:
-                    # message = await asyncio.wait_for(websocket.recv(), timeout)
-                    message = await websocket.recv()
-                    data = json.loads(message)  
-                    yield data 
-                    await asyncio.sleep(buffer)
-                except websockets.exceptions.ConnectionClosed:
-                    print('Connection Closed!')
-                    i += 1
-        except TimeoutError as e:
-            print(f'Timeout {timeout} reached')
+        while True:
+            try:
+                # message = await asyncio.wait_for(websocket.recv(), timeout)
+                message = await websocket.recv()
+                data = decompress_message(message)
+                # data = json.loads(message) 
+                yield data 
+                await asyncio.sleep(buffer)
+            except websockets.exceptions.ConnectionClosed:
+                print('Connection Closed!')
+                traceback.print_exc()
+                break
     print('timeout reached')
 
 

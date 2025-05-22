@@ -3,7 +3,7 @@
     "experiment_id" : null,
     "suffix_time" : true,
     "description" : "",
-    "progress_bar" : true,
+    "progress_bar" : false,
     "sim_data_path": "/Users/alexanderpatrie/Desktop/repos/ecoli/vEcoli/reconstruction/sim_data/kb/simData.cPickle",
     "emitter" : "timeseries",
     "emitter_arg": {},

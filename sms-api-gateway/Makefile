@@ -13,7 +13,7 @@ exportEnv:
 
 .PHONY: gateway
 gateway:
-	@uv run uvicorn gateway.main:app --reload --port 8080 --host 0.0.0.0
+	@uv run uvicorn gateway.main:app --reload --port 8080 --host 0.0.0.0 --ws websockets --ws-max-size 10000000
 
 .PHONY: clean
 clean:
