@@ -1,5 +1,6 @@
 """Sets up FastAPI app singleton"""
 
+import asyncio
 import importlib
 import os 
 import logging as log
@@ -10,7 +11,7 @@ import dotenv as dot
 import fastapi
 from starlette.middleware.cors import CORSMiddleware
 
-from gateway.sockets import routes, broadcast
+from gateway.core.router import routes, broadcast
 from common import auth
 from gateway.handlers.app_config import get_config
 
@@ -43,12 +44,12 @@ APP_URL = LOCAL_URL
 
 # FastAPI app
 app = fastapi.FastAPI(
-    routes=routes, 
+    # routes=routes, 
     title=APP_CONFIG['title'], 
     version=APP_VERSION, 
-    on_startup=[broadcast.connect], 
-    on_shutdown=[broadcast.disconnect],
-    dependencies=[fastapi.Depends(auth.get_user)]
+    # on_startup=[broadcast.connect], 
+    # on_shutdown=[broadcast.disconnect],
+    # dependencies=[fastapi.Depends(auth.get_user)]
 )
 app.add_middleware(
     CORSMiddleware,
@@ -62,10 +63,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/", tags=["Core"])
-async def check_health():
-    return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
-
+# @app.get("/", tags=["Core"])
+# async def check_health():
+#     return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: fastapi.WebSocket, experiment_id: str = fastapi.Query(...), duration: int = fastapi.Query(...)):
+    await websocket.accept()
+    try:
+        for i in range(duration):
+            result = i ** i
+            message = {
+                experiment_id: {
+                    "interval_id": i,
+                    "result": result
+                }
+            }
+            await websocket.send_json(message)
+            await asyncio.sleep(1)  # simulate interval delay
+    except fastapi.WebSocketDisconnect:
+        print("WebSocket disconnected")
+        
 
 @app.get("/api/v1/test/authentication", operation_id="test-authentication", tags=["Core"])
 async def test_authentication(user: dict = fastapi.Depends(auth.get_user)):

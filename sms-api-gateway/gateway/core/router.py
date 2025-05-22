@@ -1,13 +1,20 @@
 """Endpoint definitions for the CommunityAPI. NOTE: Users of this API must be first authenticated."""
 
+import ast
 import datetime
-
+from dataclasses import dataclass, asdict
 from fastapi import APIRouter, Query
 import fastapi
+import json 
 from gateway.handlers.app_config import root_prefix
 from gateway.handlers.vivarium import VivariumFactory, new_id
 import process_bigraph  # type: ignore
 import simdjson  # type: ignore
+import anyio
+from broadcaster import Broadcast, Event
+from starlette.applications import Starlette
+from starlette.routing import Route, WebSocketRoute
+from starlette.templating import Jinja2Templates
 
 from data_model.gateway import RouterConfig
 from common import auth
@@ -15,21 +22,89 @@ from common import auth
 from data_model.simulation import SimulationRun
 from data_model.vivarium import VivariumDocument
 
+
 LOCAL_URL = "http://localhost:8080"
 PROD_URL = ""  # TODO: define this
 MAJOR_VERSION = 1
-
+SOCKET_URL = "ws://0.0.0.0:8080/run/single"
+BROADCAST_PORT = "8080"
 
 config = RouterConfig(
     router=APIRouter(), 
     prefix=root_prefix(MAJOR_VERSION) + "/core",
     dependencies=[fastapi.Depends(auth.get_user)]
 )
-
 viv_factory = VivariumFactory()
+broadcast = Broadcast(f"memory://localhost:{BROADCAST_PORT}")
+templates = Jinja2Templates("resources/client_templates")
 
 
-@config.router.post("/run/single", tags=["Core"])
+async def homepage(request):
+    template = "index.html"
+    context = {"request": request}
+    return templates.TemplateResponse(template, context)
+
+data = {
+        "experiment": "trial_1",
+        "parameters": {
+            "temperature": 37.5,
+            "reagents": ["A", "B", "C"]
+        },
+        "results": {
+            "success": True,
+            "metrics": {"accuracy": 0.95, "time": 123}
+        }
+    }
+
+
+@dataclass
+class SocketEvent:
+    action: str 
+    user: str 
+    message: str 
+
+
+async def receive_request(websocket):
+    """Gets request payload/params from client"""
+    # TODO: here we can, in parallel, return msg to client and then run the simulation
+    async for message in websocket.iter_text():
+        payload = json.loads(message)
+        payload['message'] = json.dumps(data)
+        msg = json.dumps(payload)
+        await broadcast.publish(channel="chatroom", message=message)
+
+
+async def emit_response(websocket):
+    """Emits data"""
+    async with broadcast.subscribe(channel="chatroom") as subscriber:
+        async for event in subscriber:
+            msg: str = event.message
+            request = json.loads(
+                json.loads(msg)['message']
+            )
+            print(f'Incoming event: {request}')
+            # TODO: here, process simulation request dict, then serialize it
+            response: str = msg
+            print(f'Outgoing event: {response}, {type(response)}')
+            assert isinstance(response, str)
+            await websocket.send_text(response)
+            print(f'Send data: SEND TEXT COMPLETE')
+            
+
+async def simulation_ws(websocket):
+    await websocket.accept()
+
+    async with anyio.create_task_group() as task_group:
+        # FUNC A: run until first is complete
+        async def run_simulation_ws_receiver() -> None:
+            await receive_request(websocket=websocket)
+            task_group.cancel_scope.cancel()
+
+        task_group.start_soon(run_simulation_ws_receiver)
+        await emit_response(websocket)
+
+
+# @config.router.post("/run/single", tags=["Core"])
 async def run_simulation(
     document: VivariumDocument,
     duration: float = Query(default=11.0),
@@ -85,3 +160,9 @@ async def get_core_document():
     with open(fp, 'r') as f:
         doc = simdjson.load(f)
     return doc
+
+
+routes = [
+    Route("/run/single", homepage),
+    WebSocketRoute(path="/run/single", endpoint=simulation_ws, name='simulation_ws'),
+]

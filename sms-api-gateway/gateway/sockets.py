@@ -39,12 +39,13 @@ async def chatroom_ws_receiver(websocket):
 
 
 async def chatroom_ws_sender(websocket):
+    print(f'Got websocket: {dir(websocket)}, {websocket.url}')
     async with broadcast.subscribe(channel="chatroom") as subscriber:
         async for event in subscriber:
             await websocket.send_text(event.message)
 
 
 routes = [
-    Route("/", homepage),
-    WebSocketRoute("/", chatroom_ws, name='chatroom_ws'),
+    Route("/run", homepage),
+    WebSocketRoute("/run", chatroom_ws, name='chatroom_ws'),
 ]
