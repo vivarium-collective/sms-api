@@ -18,7 +18,7 @@ from operator import itemgetter
 from bson import Binary
 from pymongo import MongoClient
 from sqlalchemy import create_engine, text
-from vivarium.vivarium import Vivarium
+# from vivarium.vivarium import Vivarium
 
 from data_model.base import BaseClass
 
@@ -126,7 +126,7 @@ async def read_vivarium(vivarium_id: str, manager: MongoManager):
 
 def test_vivarium_io():
     from asyncio import run 
-    v = Vivarium()
+    # v = Vivarium()
     v_id = "test"
     manager = MongoManager()
     conf = run(write_vivarium(

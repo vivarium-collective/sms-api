@@ -20,7 +20,7 @@ from fastapi import WebSocket
 from pymongo import MongoClient
 from starlette.websockets import WebSocketState
 from sqlalchemy import create_engine, text
-from vivarium.vivarium import Vivarium
+# from vivarium.vivarium import Vivarium
 
 from data_model.messages import MessageToRoomModel
 

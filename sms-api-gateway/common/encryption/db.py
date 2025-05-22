@@ -13,7 +13,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
-from vivarium.vivarium import Vivarium
+# from vivarium.vivarium import Vivarium
 
 
 load_dotenv()
@@ -74,7 +74,7 @@ def save_cdb(con, name, pswd: bytes):
     fp.close()
 
 
-def pickle_vivarium(v: Vivarium, vivarium_id: str) -> Path:
+def pickle_vivarium(v, vivarium_id: str) -> Path:
     pickled_viv = pickle.dumps(v)
     temp_dir = tempfile.mkdtemp()
     tmp_pickle_path = os.path.join(temp_dir, f"{vivarium_id}.pckl")
@@ -87,7 +87,7 @@ def pickle_vivarium(v: Vivarium, vivarium_id: str) -> Path:
     return Path(tmp_pickle_path)
 
 
-def write(instance: Vivarium, vivarium_id: str, pswd: bytes, table_name: str = "pickles") -> None:
+def write(instance, vivarium_id: str, pswd: bytes, table_name: str = "pickles") -> None:
     # pickle instance
     pickle_path: Path = pickle_vivarium(instance, vivarium_id)
     with open(pickle_path, "rb") as f:
@@ -105,7 +105,7 @@ def write(instance: Vivarium, vivarium_id: str, pswd: bytes, table_name: str = "
     conn.close()
 
 
-def read(pswd: bytes, vivarium_id: str, table_name: str = "pickles") -> Vivarium:
+def read(pswd: bytes, vivarium_id: str, table_name: str = "pickles"):
     # connect and decrypt db
     conn = open_cdb(table_name, pswd)
     cursor = conn.execute(

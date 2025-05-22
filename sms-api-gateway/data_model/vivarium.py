@@ -2,7 +2,7 @@ import dataclasses as dc
 import datetime
 from typing import Any, Dict
 
-from vivarium.vivarium import Vivarium
+# from vivarium.vivarium import Vivarium
 
 from data_model.base import BaseClass
 

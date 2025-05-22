@@ -7,7 +7,11 @@ import dataclasses as dc
 import sqlite3
 
 import tempfile as tf
-from vivarium.vivarium import Vivarium
+# from vivarium.vivarium import Vivarium
+
+
+class Vivarium:
+    pass 
 
 
 class BasePickler(abc.ABC):

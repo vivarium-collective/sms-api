@@ -5,6 +5,7 @@ import asyncio
 import datetime
 from dataclasses import dataclass, asdict
 import json
+import shutil
 import tempfile as tmp
 
 import process_bigraph  # type: ignore
@@ -20,7 +21,7 @@ from starlette.templating import Jinja2Templates
 from data_model.gateway import RouterConfig
 from common import auth
 from gateway.handlers.app_config import root_prefix
-from gateway.handlers.vivarium import VivariumFactory, new_id
+# from gateway.handlers.vivarium import VivariumFactory, new_id
 from gateway.dispatch import dispatch_simulation
 from data_model.simulation import SimulationRun
 from data_model.vivarium import VivariumDocument
@@ -37,13 +38,12 @@ config = RouterConfig(
     prefix=root_prefix(MAJOR_VERSION) + "/core",
     # dependencies=[fastapi.Depends(auth.get_user)]
 )
-viv_factory = VivariumFactory()
 broadcast = Broadcast(f"memory://localhost:{BROADCAST_PORT}")
 templates = Jinja2Templates("resources/client_templates")
 
 
-@config.router.websocket("/ws")
-async def websocket_endpoint(
+@config.router.websocket("/run-simulation")
+async def run_simulation(
     websocket: fastapi.WebSocket, 
     experiment_id: str = Query(...),
     duration: float = Query(default=11.0),
@@ -73,28 +73,15 @@ async def websocket_endpoint(
             }
             await websocket.send_json(message)
             await asyncio.sleep(1)  # simulate interval delay
+    
+    shutil.rmtree(tempdir)
+
+    # return SimulationRun(
+    #     id=sim_id,  # ensure users can use this to retrieve the data later
+    #     last_updated=str(datetime.datetime.now())
+    # )
     except fastapi.WebSocketDisconnect:
         print("WebSocket disconnected")
-
-
-async def run_simulation(
-    experiment_id: str = Query(...),
-    duration: float = Query(default=11.0),
-    time_step: float = Query(default=0.1),
-    name: str = Query(default="single")
-) -> SimulationRun:
-    """TODO: instead, here emit a new RequestMessage to gRPC to server with document, duration, and sim_id and run
-        it there, then storing the secured results in the server, and then return a sim result confirmation with sim_id
-    """
-    # make sim id
-    sim_id = new_id(name)
-
-    # emit payload message to websocket or grpc
-
-    return SimulationRun(
-        id=sim_id,  # ensure users can use this to retrieve the data later
-        last_updated=str(datetime.datetime.now())
-    )
 
 
 # TODO: have the ecoli interval results call encryption.db.write for each interval

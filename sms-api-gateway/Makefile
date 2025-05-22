@@ -17,7 +17,7 @@ gateway:
 
 .PHONY: clean
 clean:
-	@rm -rf uv.lock && rm -rf .venv && rm -rf sms-api.egg-info && uv cache clean
+	@rm -rf uv.lock && rm -rf .venv && rm -rf sms-api.egg-info && uv run pip cache purge && uv cache clean
 
 .PHONY: lock
 lock:
@@ -36,12 +36,11 @@ cleanInstall:
 	@make clean
 	@uv sync
 	@uv pip install pip
-	@uv pip install fastapi pydantic python-multipart python-dotenv aiohttp fsspec h5py ipykernel rustworkx
+	@uv pip install fastapi pydantic python-multipart python-dotenv aiohttp fsspec h5py ipykernel rustworkx cryptography redis broadcaster websockets uvicorn
 	@uv pip install ../../vEcoli
 	@uv pip install ../../genEcoli
 	@uv pip install ../../bigraph-schema
 	@uv pip install ../../process-bigraph
-	@uv pip install vivarium-interface
 	@uv pip freeze > requirements.txt
 	@uv add -r requirements.txt
 
