@@ -13,7 +13,7 @@ exportEnv:
 
 .PHONY: gateway
 gateway:
-	@redis-server & uv run uvicorn gateway.main:app --reload --port 8080 --host 0.0.0.0
+	@uv run uvicorn gateway.main:app --reload --port 8080 --host 0.0.0.0
 
 .PHONY: clean
 clean:

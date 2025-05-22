@@ -1,6 +1,14 @@
 import dataclasses
+from typing import Any 
 
 from data_model.base import BaseClass, BaseModel
+
+
+@dataclasses.dataclass
+class Packet(BaseClass):
+    action: str
+    user: str
+    message: dict[str, Any]
 
 
 class MessageToRoomModel(BaseModel):
