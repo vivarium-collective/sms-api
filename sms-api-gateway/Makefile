@@ -44,3 +44,7 @@ cleanInstall:
 	@uv pip install vivarium-interface
 	@uv pip freeze > requirements.txt
 	@uv add -r requirements.txt
+
+.PHONY: runSim
+runSim:
+	@uv run tests/test_client.py
