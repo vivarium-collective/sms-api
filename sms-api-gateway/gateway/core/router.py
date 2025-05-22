@@ -62,6 +62,13 @@ async def validate_socket(websocket: fastapi.WebSocket):
     await websocket.accept()
 
 
+def compress_message(data: dict) -> str:
+    compressed = gzip.compress(json.dumps(data).encode())
+    return base64.b64encode(compressed).decode()
+
+
+# TODO: how to handle compression?
+
 @config.router.websocket("/run-simulation")
 async def run_simulation(
     websocket: fastapi.WebSocket, 
@@ -132,7 +139,8 @@ async def run_simulation(
                     }
                     # print(f'Made message: {message}')
 
-                    await websocket.send_json(message)
+                    # await websocket.send_json(message)
+                    await websocket.send_text(compress_message(message))
                     await asyncio.sleep(1)
         except fastapi.WebSocketDisconnect:
             print("WS Disconnected")
@@ -157,9 +165,7 @@ async def run_simulation(
         print('Done')
 
 
-def compress_message(data: dict) -> str:
-    compressed = gzip.compress(json.dumps(data).encode())
-    return base64.b64encode(compressed).decode()
+
 
 
 @config.router.websocket("/_run-simulation")
