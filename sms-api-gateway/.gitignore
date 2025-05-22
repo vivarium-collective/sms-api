@@ -80,4 +80,6 @@ trace-*
 # User-Defined #
 ###############
 .env
-*.db
+*.dbmount
+mount ../.git
+mount ../.gitignore
