@@ -67,7 +67,7 @@ def compress_message(data: dict) -> str:
     return base64.b64encode(compressed).decode()
 
 
-# TODO: how to handle compression?
+# TODO: how to handle compression? Chunking/encoding/etc?
 
 @config.router.websocket("/run-simulation")
 async def run_simulation(
