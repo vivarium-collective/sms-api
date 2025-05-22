@@ -55,6 +55,7 @@ if __name__ == "__main__":
     time_step = 0.1
     framesize = time_step
     dispatch_simulation(
+        experiment_id=experiment_id,
         datadir=f'./data/{experiment_id}', 
         time_step=time_step,
         framesize=time_step
