@@ -1,6 +1,7 @@
 """Endpoint definitions for the CommunityAPI. NOTE: Users of this API must be first authenticated."""
 
 import ast
+import asyncio
 import datetime
 from dataclasses import dataclass, asdict
 from fastapi import APIRouter, Query
@@ -32,7 +33,7 @@ BROADCAST_PORT = "8080"
 config = RouterConfig(
     router=APIRouter(), 
     prefix=root_prefix(MAJOR_VERSION) + "/core",
-    dependencies=[fastapi.Depends(auth.get_user)]
+    # dependencies=[fastapi.Depends(auth.get_user)]
 )
 viv_factory = VivariumFactory()
 broadcast = Broadcast(f"memory://localhost:{BROADCAST_PORT}")
@@ -104,6 +105,30 @@ async def simulation_ws(websocket):
         await emit_response(websocket)
 
 
+@config.router.websocket("/ws")
+async def websocket_endpoint(websocket: fastapi.WebSocket, experiment_id: str = fastapi.Query(...), duration: int = fastapi.Query(...)):
+    try:
+        await auth.get_user_ws(websocket)  # Validate API key manually
+    except fastapi.HTTPException:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    await websocket.accept()
+    print(f'Headers: {websocket.headers}')
+    try:
+        for i in range(duration):
+            result = i ** i
+            message = {
+                experiment_id: {
+                    "interval_id": i,
+                    "result": result
+                }
+            }
+            await websocket.send_json(message)
+            await asyncio.sleep(1)  # simulate interval delay
+    except fastapi.WebSocketDisconnect:
+        print("WebSocket disconnected")
+
+        
 # @config.router.post("/run/single", tags=["Core"])
 async def run_simulation(
     document: VivariumDocument,
@@ -162,7 +187,7 @@ async def get_core_document():
     return doc
 
 
-routes = [
-    Route("/run/single", homepage),
-    WebSocketRoute(path="/run/single", endpoint=simulation_ws, name='simulation_ws'),
-]
+# routes = [
+#     Route("/run/single", homepage),
+#     WebSocketRoute(path="/run/single", endpoint=simulation_ws, name='simulation_ws'),
+# ]

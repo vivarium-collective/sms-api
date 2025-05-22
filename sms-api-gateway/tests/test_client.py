@@ -5,9 +5,14 @@ import time
 import sys 
 
 
-async def run_client(experiment_id: str, duration: int, timeout=5.0, buffer=1.0):
-    uri = f"ws://localhost:8080/ws?experiment_id={experiment_id}&duration={duration}"
-    async with websockets.connect(uri) as websocket:
+async def run_client(experiment_id: str, duration: int, api_key: str, timeout=5.0, buffer=1.0):
+    uri = f"ws://localhost:8080/api/v1/core/ws?experiment_id={experiment_id}&duration={duration}"
+    api_key = "test"
+    headers = {
+        "x-community-api-key": api_key
+    }
+    # headers = None
+    async with websockets.connect(uri, additional_headers=headers) as websocket:
         try:
             while True:
                 try:
@@ -22,7 +27,8 @@ async def run_client(experiment_id: str, duration: int, timeout=5.0, buffer=1.0)
 
 
 async def main(experiment_id: str, duration: int):
-    async for msg in run_client(experiment_id, duration):
+    key = "test"
+    async for msg in run_client(experiment_id, duration, key):
         print("Received JSON:", msg)
 
 

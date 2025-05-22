@@ -11,7 +11,7 @@ import dotenv as dot
 import fastapi
 from starlette.middleware.cors import CORSMiddleware
 
-from gateway.core.router import routes, broadcast
+# from gateway.core.router import routes, broadcast
 from common import auth
 from gateway.handlers.app_config import get_config
 
@@ -66,22 +66,22 @@ app.add_middleware(
 # @app.get("/", tags=["Core"])
 # async def check_health():
 #     return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: fastapi.WebSocket, experiment_id: str = fastapi.Query(...), duration: int = fastapi.Query(...)):
-    await websocket.accept()
-    try:
-        for i in range(duration):
-            result = i ** i
-            message = {
-                experiment_id: {
-                    "interval_id": i,
-                    "result": result
-                }
-            }
-            await websocket.send_json(message)
-            await asyncio.sleep(1)  # simulate interval delay
-    except fastapi.WebSocketDisconnect:
-        print("WebSocket disconnected")
+# @app.websocket("/ws")
+# async def websocket_endpoint(websocket: fastapi.WebSocket, experiment_id: str = fastapi.Query(...), duration: int = fastapi.Query(...)):
+#     await websocket.accept()
+#     try:
+#         for i in range(duration):
+#             result = i ** i
+#             message = {
+#                 experiment_id: {
+#                     "interval_id": i,
+#                     "result": result
+#                 }
+#             }
+#             await websocket.send_json(message)
+#             await asyncio.sleep(1)  # simulate interval delay
+#     except fastapi.WebSocketDisconnect:
+#         print("WebSocket disconnected")
         
 
 @app.get("/api/v1/test/authentication", operation_id="test-authentication", tags=["Core"])
@@ -97,4 +97,5 @@ for api_name in APP_ROUTERS:
         prefix=api.config.prefix, 
         dependencies=api.config.dependencies  # type: ignore
     )
-
+for r in app.routes:
+    print(r)
