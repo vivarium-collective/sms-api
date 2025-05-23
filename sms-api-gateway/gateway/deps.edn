@@ -1,0 +1,19 @@
+;; {:deps
+;;  {;; example maven dep
+;;   org.clojure/tools.reader {:mvn/version "1.1.1"}
+;; 
+;;   ;; example git dep
+;;   io.github.sally/awesome {:git/tag "v1.2.3" :git/sha "123abcd"}
+;; 
+;;   ;; example local dep
+;;   my.dev/project {:local/root "../project"}
+;; 
+;;   ;; example local jar
+;;   my.driver/jar {:local/root "../libs/driver.jar"}}}
+
+{:deps 
+ {
+  clojure.java-time/clojure.java-time {:mvn/version "1.1.0"}
+  aleph/aleph {:mvn/version "0.8.3"}
+  http-kit/http-kit {:mvn/version "2.8.0"}}}
+

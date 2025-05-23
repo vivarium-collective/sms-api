@@ -5,6 +5,7 @@ import json
 import sys 
 import copy
 
+
 DEFAULT_ECOLISIM_CONFIG_PATH = os.path.join(
     os.path.dirname(__file__),
     "../resources/config/default.json"
@@ -13,13 +14,14 @@ DEFAULT_DURATION = 1111
 DEFAULT_INTERVAL = 1.0
 
 
-def dispatch_simulation(
+def compile_simulation(
     config_fp: str | None = None, 
     experiment_id: str | None = None,
     duration: float | None = None, 
     time_step: float | None = None,
     framesize: float | None = None,
     datadir: str | None = None,
+    build: bool = True
 ):
     # load config file TODO: replace with pbg doc!
     composite_config_fp = config_fp or DEFAULT_ECOLISIM_CONFIG_PATH
@@ -27,7 +29,6 @@ def dispatch_simulation(
         config = copy.deepcopy(json.load(f))
     if experiment_id is not None:
         config['experiment_id'] = experiment_id
-    print('Running sim')
     # override save dir
     if datadir is not None:
         config['daughter_outdir'] = datadir
@@ -36,16 +37,18 @@ def dispatch_simulation(
     dur = duration or config.get('total_time', DEFAULT_DURATION)
     timestep = time_step or config.get('time_step', DEFAULT_INTERVAL)
     t = npy.arange(1, dur, framesize or timestep)
+    config['total_time'] = dur
+    config['time_step'] = timestep
+    # config['save_times'] = t.tolist()
     config['save'] = True
-    config['save_times'] = t.tolist()
-    # build, compile, and run sim
-    # if datadir is not None and not os.path.exists(datadir):
-    #     os.mkdir(datadir)
     
     sim = EcoliSim(config, datadir)
-    sim.build_ecoli()
-    sim.total_time = dur
+    if build:
+        sim.build_ecoli()
+    return sim
 
+
+def dispatch_simulation(sim: EcoliSim):
     return sim.run()
 
 
@@ -54,11 +57,7 @@ if __name__ == "__main__":
     duration = 111.0
     time_step = 0.1
     framesize = time_step
-    dispatch_simulation(
-        experiment_id=experiment_id,
-        datadir=f'./data/{experiment_id}', 
-        time_step=time_step,
-        framesize=time_step
-    )
+    sim = compile_simulation(experiment_id=experiment_id, duration=duration, time_step=time_step, framesize=framesize)
+    dispatch_simulation(sim)
 
     
