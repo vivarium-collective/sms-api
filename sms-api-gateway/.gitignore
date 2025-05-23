@@ -86,3 +86,4 @@ mount ../.gitignore
 .cpcache/
 .clj-kondo/
 .lsp/
+*.rdb
