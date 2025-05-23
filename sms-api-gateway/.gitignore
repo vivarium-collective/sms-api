@@ -83,3 +83,6 @@ trace-*
 *.dbmount
 mount ../.git
 mount ../.gitignore
+.cpcache/
+.clj-kondo/
+.lsp/
