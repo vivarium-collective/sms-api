@@ -1,3 +1,4 @@
+from dataclasses import asdict, dataclass
 import json
 import os
 import pickle
@@ -64,6 +65,15 @@ client = """
 </html>
 """
 
+@dataclass
+class BulkMolecule:
+    id: str 
+    count: int 
+    submasses: list[float]
+
+    def dict(self):
+        return asdict(self)
+
 
 @app.get("/")
 async def get():
@@ -91,7 +101,15 @@ async def simulate(input_state, ws: WebSocket):
         filepath = os.path.join(datadir, f"vivecoli_t{t_i}.json")
         with open(filepath, 'r') as f:
             result_i = json.load(f)["agents"]["0"]
-        resp_i = json.dumps({**response_template, "interval_id": str(t_i), "results": {"bulk": result_i["bulk"]}})
+        
+        bulk_mols_i = []
+        for mol in result_i["bulk"]:
+            mol_id = mol.pop(0)
+            mol_count = mol.pop(0)
+            bulk_mol = BulkMolecule(id=mol_id, count=mol_count, submasses=mol)
+            bulk_mols_i.append(bulk_mol.dict())
+        # {"bulk": result_i["bulk"]}
+        resp_i = json.dumps({**response_template, "interval_id": str(t_i), "results": {"bulk": bulk_mols_i}})
         await ws.send_text(resp_i)
     shutil.rmtree(datadir)
         
