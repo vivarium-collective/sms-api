@@ -2,6 +2,9 @@ import json
 import pprint
 import threading
 import dataclasses as dc 
+from matplotlib import pyplot as plt
+import pandas as pd
+import seaborn as sns 
 import requests
 from sseclient import SSEClient
 import ipywidgets as widgets
@@ -31,13 +34,32 @@ class IntervalResponse:
 
 
 class Viewer:
-    data = []
+    data = {}
 
     @classmethod
-    def render_data(cls, event):
+    def render_data(cls, event, output_area):
         output_packet = IntervalResponse(**json.loads(event.data))
-        cls.data.append(output_packet)
+        names = []
+        counts = []
+        for result in output_packet.results['bulk']:
+            names.append(result.id)
+            counts.append(result.count)
+        counts_i = dict(zip(names, counts))
+        for name, count in cls.data.items():
+            if name in counts_i:
+                cls.data[name] += count
+            else:
+                cls.data[name] = count
+
+        # with output_area:
+        #     plt.figure(figsize=(6, 4))
+        #     sns.barplot(data=counts_i)
+        #     plt.tight_layout()
+        #     plt.show()
+
+        print(f"Interval ID: {output_packet.interval_id}")
         pprint.pp(output_packet)
+        print()
 
     @classmethod
     def start(cls):
@@ -69,11 +91,14 @@ class Viewer:
                             # NOTE: here is where we actually render the data
                             # display metadata
                             if experiment_id is None:
-                                experiment_id = json.loads(event.data)['experiment_id']
+                                # case: is first iteration
+                                data0 = json.loads(event.data)
+                                experiment_id = data0['experiment_id']
                                 with metadata_widget:
                                     print(f'Running experiment: {experiment_id}')
+
                             # render/display interval data
-                            cls.render_data(event)
+                            cls.render_data(event, output_widget)
             except Exception as e:
                 with output_widget:
                     print(f"Error: {e}")

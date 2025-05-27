@@ -87,3 +87,4 @@ mount ../.gitignore
 .clj-kondo/
 .lsp/
 *.rdb
+data/
