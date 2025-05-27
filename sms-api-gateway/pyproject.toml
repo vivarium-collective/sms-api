@@ -231,6 +231,7 @@ dependencies = [
     "spopt==0.6.1",
     "spreg==1.8.3",
     "sqlalchemy==2.0.41",
+    "sseclient-py>=1.8.0",
     "stack-data==0.6.3",
     "starlette==0.46.2",
     "statsmodels==0.14.4",
