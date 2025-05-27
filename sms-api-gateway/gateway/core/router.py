@@ -147,7 +147,7 @@ async def interval_generator(
 async def run_simulation(
     request: fastapi.Request,
     experiment_id: str = Query(default=new_experiment_id()),
-    duration: float = Query(default=11.0),
+    duration: float = Query(default=3.0),
     time_step: float = Query(default=0.1)
 ):
     return StreamingResponse(

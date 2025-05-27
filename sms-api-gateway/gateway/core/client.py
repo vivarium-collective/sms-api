@@ -34,7 +34,7 @@ client = """
 
         eventSource.addEventListener('intervalUpdate', function (event) {
             data = JSON.parse(event.data);
-            console.log('intervalUpdate', data);
+            console.log('intervalUpdate', data.results.bulk);
             updateData(data)
         });
 
@@ -54,6 +54,10 @@ client = """
 
     function updateData(data) {
         const paragraph = document.createElement('p');
+        const bulkInfo = [];
+        data.results.bulk.forEach((bulk) => {
+            bulkInfo.push(bulk.id)
+        })
         paragraph.textContent = `ExperimentID: ${data.experiment_id}, Interval: ${data.interval_id}, Results: ${data.results}`;
         dataElement.appendChild(paragraph);
     }
