@@ -51,3 +51,7 @@ runSim:
 .PHONY: socket 
 socket:
 	@uv run uvicorn gateway.broadcasting:app --reload --port 8080 --host 0.0.0.0
+
+.PHONY: demo 
+demo:
+	@make gateway & make notebook

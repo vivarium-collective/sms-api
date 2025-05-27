@@ -34,7 +34,7 @@ client = """
 
         eventSource.addEventListener('intervalUpdate', function (event) {
             data = JSON.parse(event.data);
-            console.log('intervalUpdate', data.results.bulk);
+            console.log('intervalUpdate', data);
             updateData(data)
         });
 
