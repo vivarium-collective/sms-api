@@ -9,6 +9,7 @@ import json
 
 import dotenv as dot
 import fastapi
+from fastapi.responses import HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 
 # from gateway.core.router import routes, broadcast
@@ -44,12 +45,8 @@ APP_URL = LOCAL_URL
 
 # FastAPI app
 app = fastapi.FastAPI(
-    # routes=routes, 
     title=APP_CONFIG['title'], 
     version=APP_VERSION, 
-    # on_startup=[broadcast.connect], 
-    # on_shutdown=[broadcast.disconnect],
-    # dependencies=[fastapi.Depends(auth.get_user)]
 )
 app.add_middleware(
     CORSMiddleware,
@@ -69,9 +66,9 @@ async def check_health():
     return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
         
 
-@app.get("/api/v1/test/authentication", operation_id="test-authentication", tags=["Core"])
-async def test_authentication(user: dict = fastapi.Depends(auth.get_user)):
-    return user
+# @app.get("/api/v1/test/authentication", operation_id="test-authentication", tags=["Core"])
+# async def test_authentication(user: dict = fastapi.Depends(auth.get_user)):
+#     return user
 
 
 # add routers: TODO: specify this to be served instead by the reverse-proxy
@@ -80,6 +77,6 @@ for api_name in APP_ROUTERS:
     app.include_router(
         api.config.router, 
         prefix=api.config.prefix, 
-        dependencies=api.config.dependencies  # type: ignore
+        # dependencies=api.config.dependencies  # type: ignore
     )
 

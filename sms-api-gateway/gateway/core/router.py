@@ -11,7 +11,8 @@ import shutil
 import tempfile as tmp
 import os
 import time
-import traceback 
+import traceback
+import uuid 
 
 import dotenv as de
 import numpy as np
@@ -24,12 +25,18 @@ from broadcaster import Broadcast, Event
 from starlette.applications import Starlette
 from starlette.routing import Route, WebSocketRoute
 from starlette.templating import Jinja2Templates
+from fastapi import FastAPI, Response
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+import json, uvicorn
+from asyncio import sleep
 
 from data_model.gateway import RouterConfig
 from common import auth
+from gateway.core.client import client
 from gateway.handlers.app_config import root_prefix
 # from gateway.handlers.vivarium import VivariumFactory, new_id
-from gateway.dispatch import dispatch_simulation
+from gateway.dispatch import dispatch_simulation, compile_simulation
 from data_model.simulation import SimulationRun
 from data_model.vivarium import VivariumDocument
 
@@ -51,15 +58,19 @@ broadcast = Broadcast(f"memory://localhost:{BROADCAST_PORT}")
 templates = Jinja2Templates("resources/client_templates")
 
 
-async def validate_socket(websocket: fastapi.WebSocket):
-    """Evaluate the validity of the given websocket request's header and API key therein."""
-    try:
-        await auth.validate_socket(websocket)  # Validate API key manually
-    except fastapi.HTTPException as e:
-        traceback.print_exc()
-        await websocket.close(code=fastapi.status.WS_1008_POLICY_VIOLATION)
-        return 
-    await websocket.accept()
+@config.router.get("/client", tags=["Core"])
+async def render_client():
+    return HTMLResponse(client)
+
+
+@dataclass 
+class BulkMolecule:
+    id: str 
+    count: int 
+    submasses: list[str]
+
+    def dict(self):
+        return asdict(self)
 
 
 def compress_message(data: dict) -> str:
@@ -67,143 +78,87 @@ def compress_message(data: dict) -> str:
     return base64.b64encode(compressed).decode()
 
 
-# TODO: how to handle compression? Chunking/encoding/etc?
+def new_experiment_id():
+    return str(uuid.uuid4())
 
-@config.router.websocket("/run-simulation")
-async def run_simulation(
-    websocket: fastapi.WebSocket, 
-    experiment_id: str, 
-    duration: int,
-    time_step: float = 1.0,
-    framesize: float | None = None,
-    overwrite: bool = False
+
+async def interval_generator(
+    request: fastapi.Request,
+    experiment_id: str,
+    duration: float,
+    time_step: float,
+    buffer: float = 0.11
 ):
-    await validate_socket(websocket)
-    print(f'Running with duration: {duration}')
-    time.sleep(5)
-    # tempdir = tmp.mkdtemp()
-    tempdir = "mount"
+    # tempdir to be iteratively written to
+    tempdir = tmp.mkdtemp(dir="data")
     datadir = f'{tempdir}/{experiment_id}'
-    if os.path.exists(datadir) and overwrite:
-        shutil.rmtree(datadir)
-    if not os.path.exists(datadir) or overwrite:
-        os.makedirs(datadir)
-    
-    async def run_dispatch():
-        # Run blocking sim in a thread to avoid blocking the event loop
-        print(f'Run dispatch')
-        await asyncio.to_thread(
-            dispatch_simulation, 
-            experiment_id=experiment_id, 
-            datadir=datadir, 
-            duration=duration,
-            time_step=time_step,
-            framesize=framesize
-        )
+    t = np.arange(1, duration, time_step)
+    sim = compile_simulation(experiment_id=experiment_id, datadir=datadir, build=False)
+    sim.time_step = time_step
 
-    # async def collect_results():
-    #     sent = set()
-    #     t = np.arange(1, duration, framesize or time_step)
-    #     while True:
-    #         for i_t in t:
-    #             filepath = os.path.join(datadir, f"vivecoli_t{i_t}.json")
-    #             print(f'Found filepath: {filepath}')
-    #             if i_t not in sent and os.path.exists(filepath):
-    #                 with open(filepath) as f:
-    #                     data = json.load(f)
-    #                 message = {
-    #                     experiment_id: data
-    #                 }
-    #                 await queue.put(message)
-    #                 sent.add(i_t)
-    #         if len(sent) == duration:
-    #             break
-    #         await asyncio.sleep(0.2)
-        
-    async def collect_results():
-        sent = set()
-        t = np.arange(1, duration, framesize or time_step)
+    # iterate over t to get interval_t data
+    for i, t_i in enumerate(t):
+        if await request.is_disconnected():
+            print(f'Client disconnected. Stopping simulation at {t_i}')
+            break 
         try:
-            for i_t in t:
-                filepath = os.path.join(datadir, f"vivecoli_t{i_t}.json")
-                print(f'Found filepath: {filepath}')
-                if os.path.exists(filepath):
-                    print(f'Collect results {i_t}')
-                    with open(filepath) as f:
-                        data = json.load(f)
-                    message = {
-                        experiment_id: {
-                            "interval_id": str(i_t),
-                            "results": data
-                        }
-                    }
-                    # print(f'Made message: {message}')
+            sim.total_time = t_i
+            initial_time = t[i - 1] if not i == 0 else 0.0
+            sim.initial_global_time = initial_time
+            sim.save_times = [t_i]
+            sim.build_ecoli()
 
-                    # await websocket.send_json(message)
-                    await websocket.send_text(compress_message(message))
-                    await asyncio.sleep(1)
-        except fastapi.WebSocketDisconnect:
-            print("WS Disconnected")
+            # runs for just t_i
+            sim.run()
+
+            # read out interval (TODO: this wont be needed w/composite)
+            filepath = os.path.join(datadir, f"vivecoli_t{t_i}.json")
+            with open(filepath, 'r') as f:
+                result_i = json.load(f)["agents"]["0"]
+
+            # extract only bulk (for now)
+            bulk_mols_i = []
+            for mol in result_i["bulk"]:
+                mol_id = mol.pop(0)
+                mol_count = mol.pop(0)
+                bulk_mol = BulkMolecule(id=mol_id, count=mol_count, submasses=mol)
+                bulk_mols_i.append(bulk_mol.dict())
+
+            # TODO: make datamodel for interval response
+            results_i = {"bulk": bulk_mols_i}
+            response_i = {
+                "experiment_id": experiment_id,
+                "duration": sim.total_time, 
+                "interval_id": str(t_i), 
+                "results": results_i
+            }
+            payload_i = json.dumps(response_i)
+            yield f"event: intervalUpdate\ndata: {payload_i}\n\n"
+            await sleep(buffer)
+        except:
+            print(f'ERROR --->\nInterval ID: {t_i}')
             traceback.print_exc()
 
-    # async def send_messages():
-    #     while True:
-    #         message = await queue.get()
-    #         await websocket.send_json(message)
-    #         queue.task_done()
-    # await asyncio.gather(
-    #     run_dispatch(),
-    #     collect_results(),
-    #     send_messages()
-    # )
-    try:
-        dispatch_task = asyncio.create_task(run_dispatch())
-        collection_task = asyncio.create_task(collect_results())
-        await asyncio.gather(dispatch_task, collection_task)
-    finally:
-        # shutil.rmtree(tempdir)
-        print('Done')
-
-
-
-
-
-@config.router.websocket("/_run-simulation")
-async def _run_simulation(
-    websocket: fastapi.WebSocket, 
-    experiment_id: str = Query(...),
-    duration: float = Query(default=11.0),
-    time_step: float = Query(default=0.1),
-    name: str = Query(default="single")
-):
-    # first validate connection
-    await validate_socket(websocket)
-
-    # tempdir to be iteratively written to
-    tempdir = tmp.mkdtemp()
-    datadir = f'{tempdir}/{experiment_id}'
-
-    try:
-        for i in range(int(duration)):
-            # dispatch_sim(datadir)
-            result = i**i
-            message = {
-                experiment_id: {
-                    "interval_id": i,
-                    "result": result
-                }
-            }
-            # await websocket.send_json(message)
-            await websocket.send_text(compress_message(message))
-            await asyncio.sleep(1)  # simulate interval delay
-    # return SimulationRun(
-    #     id=sim_id,  # ensure users can use this to retrieve the data later
-    #     last_updated=str(datetime.datetime.now())
-    # )
-    except fastapi.WebSocketDisconnect:
-        print("WebSocket disconnected")
+    print(f'Removing dir: {tempdir}')
     shutil.rmtree(tempdir)
 
+
+@config.router.get("/run-simulation", tags=["Core"])
+async def run_simulation(
+    request: fastapi.Request,
+    experiment_id: str = Query(default=new_experiment_id()),
+    duration: float = Query(default=11.0),
+    time_step: float = Query(default=0.1)
+):
+    return StreamingResponse(
+        interval_generator(
+            request=request,
+            experiment_id=experiment_id,
+            duration=duration,
+            time_step=time_step
+        ), 
+        media_type="text/event-stream"
+    )
 
 
 # TODO: have the ecoli interval results call encryption.db.write for each interval

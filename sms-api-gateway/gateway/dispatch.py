@@ -29,8 +29,12 @@ def compile_simulation(
         config = copy.deepcopy(json.load(f))
     if experiment_id is not None:
         config['experiment_id'] = experiment_id
+
     # override save dir
     if datadir is not None:
+        if not os.path.exists(datadir):
+            os.makedirs(datadir, exist_ok=True)
+            
         config['daughter_outdir'] = datadir
 
     # configure times and savetimes
