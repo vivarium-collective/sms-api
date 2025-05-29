@@ -29,14 +29,14 @@ kernel:
 
 .PHONY: notebook
 notebook:
-	@make kernel && uv run --with jupyter jupyter lab
+	@make kernel && uv run --with jupyter jupyter lab --NotebookApp.token=dev --port=8888
 
 .PHONY: cleanInstall
 cleanInstall:
 	@make clean
 	@uv sync
 	@uv pip install pip
-	@uv pip install fastapi pydantic python-multipart python-dotenv aiohttp fsspec h5py ipykernel rustworkx cryptography redis broadcaster websockets uvicorn
+	@uv pip install fastapi pydantic python-multipart python-dotenv aiohttp fsspec h5py ipykernel rustworkx cryptography uvicorn networkx sseclient-py equilibrator-api equilibrator-assets
 	@uv pip install ../../vEcoli
 	@uv pip install ../../genEcoli
 	@uv pip install ../../bigraph-schema

@@ -21,7 +21,6 @@ import simdjson  # type: ignore
 import anyio
 from fastapi import APIRouter, Query
 import fastapi
-from broadcaster import Broadcast, Event
 from starlette.applications import Starlette
 from starlette.routing import Route, WebSocketRoute
 from starlette.templating import Jinja2Templates
@@ -52,10 +51,10 @@ BROADCAST_PORT = "8080"
 config = RouterConfig(
     router=APIRouter(), 
     prefix=root_prefix(MAJOR_VERSION) + "/core",
-    # dependencies=[fastapi.Depends(auth.get_user)]
+    dependencies=[fastapi.Depends(auth.get_user)]
 )
-broadcast = Broadcast(f"memory://localhost:{BROADCAST_PORT}")
-templates = Jinja2Templates("resources/client_templates")
+# broadcast = Broadcast(f"memory://localhost:{BROADCAST_PORT}")
+# templates = Jinja2Templates("resources/client_templates")
 
 
 @config.router.get("/client", tags=["Core"])
@@ -82,6 +81,7 @@ def new_experiment_id():
     return str(uuid.uuid4())
 
 
+# TODO: report fluxes listeners for escher
 async def interval_generator(
     request: fastapi.Request,
     experiment_id: str,

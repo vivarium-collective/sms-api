@@ -38,6 +38,8 @@ class Viewer:
 
     @classmethod
     def render_data(cls, event, output_area):
+        # TODO: create a more general "interval dashboard": escher x bulk submasses x bulk counts
+        # TODO: render escher from fluxes listeners
         output_packet = IntervalResponse(**json.loads(event.data))
         names = []
         counts = []

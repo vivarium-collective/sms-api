@@ -47,22 +47,23 @@ APP_URL = LOCAL_URL
 app = fastapi.FastAPI(
     title=APP_CONFIG['title'], 
     version=APP_VERSION, 
+    dependencies=[fastapi.Depends(auth.get_user)]
 )
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=APP_CONFIG['origins'],  # TODO: specify this for uchc
+    # allow_origins=APP_CONFIG['origins'],  # 
     # allow_credentials=True,
     # allow_methods=APP_CONFIG['methods'],
     # allow_headers=APP_CONFIG['headers']
-    allow_origins=["*"],  # change to specific origins in production
+    allow_origins=["*"],  # TODO: specify this for uchc and change to specific origins in production
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
 
 @app.get("/", tags=["Core"])
-async def check_health():
+async def check_health(request: fastapi.Request):
     return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
         
 
@@ -77,6 +78,6 @@ for api_name in APP_ROUTERS:
     app.include_router(
         api.config.router, 
         prefix=api.config.prefix, 
-        # dependencies=api.config.dependencies  # type: ignore
+        dependencies=api.config.dependencies  # type: ignore
     )
 

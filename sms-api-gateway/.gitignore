@@ -88,3 +88,4 @@ mount ../.gitignore
 .lsp/
 *.rdb
 data/
+reconstruction/
