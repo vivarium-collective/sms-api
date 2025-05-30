@@ -13,6 +13,7 @@ import os
 import time
 import traceback
 import uuid 
+from tqdm.notebook import tqdm
 
 import dotenv as de
 import numpy as np
@@ -31,7 +32,7 @@ import json, uvicorn
 from asyncio import sleep
 
 from data_model.gateway import RouterConfig
-from common import auth
+from common import auth, log
 from gateway.core.client import client
 from gateway.handlers.app_config import root_prefix
 # from gateway.handlers.vivarium import VivariumFactory, new_id
@@ -57,9 +58,9 @@ config = RouterConfig(
 # templates = Jinja2Templates("resources/client_templates")
 
 
-@config.router.get("/client", tags=["Core"])
-async def render_client():
-    return HTMLResponse(client)
+# @config.router.get("/client", tags=["Core"])
+# async def render_client():
+#     return HTMLResponse(client)
 
 
 @dataclass 
@@ -87,12 +88,13 @@ async def interval_generator(
     experiment_id: str,
     duration: float,
     time_step: float,
+    start_time: float = 1.0,
     buffer: float = 0.11
 ):
     # tempdir to be iteratively written to
     tempdir = tmp.mkdtemp(dir="data")
     datadir = f'{tempdir}/{experiment_id}'
-    t = np.arange(1, duration, time_step)
+    t = np.arange(start_time, duration, time_step)
     sim = compile_simulation(experiment_id=experiment_id, datadir=datadir, build=False)
     sim.time_step = time_step
 
@@ -148,14 +150,16 @@ async def run_simulation(
     request: fastapi.Request,
     experiment_id: str = Query(default=new_experiment_id()),
     duration: float = Query(default=3.0),
-    time_step: float = Query(default=0.1)
+    time_step: float = Query(default=0.1),
+    start_time: float = Query(default=1.0)
 ):
     return StreamingResponse(
         interval_generator(
             request=request,
             experiment_id=experiment_id,
             duration=duration,
-            time_step=time_step
+            time_step=time_step,
+            start_time=start_time
         ), 
         media_type="text/event-stream"
     )
@@ -191,7 +195,7 @@ async def get_registered_types() -> list[str]:
     return list(ecoli_core.types().keys())
 
 
-@config.router.get('/get/document', tags=["Core"])
+@config.router.get('/get/document', tags=["Core"], dependencies=[fastapi.Depends(auth.get_user)])
 async def get_core_document():
     fp = '/Users/alexanderpatrie/Desktop/repos/ecoli/genEcoli/model/state.json'
     with open(fp, 'r') as f:

@@ -3,7 +3,7 @@
 import asyncio
 import importlib
 import os 
-import logging as log
+import logging
 from typing import Annotated
 import json 
 
@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 
 # from gateway.core.router import routes, broadcast
-from common import auth
+from common import auth, log
 from gateway.handlers.app_config import get_config
 
 
@@ -24,7 +24,7 @@ from gateway.handlers.app_config import get_config
 # "sensitivity_analysis",
 # "evolve"
 
-logger: log.Logger = log.getLogger(__name__)
+logger: logging.Logger = log.get_logger(__file__)
 dot.load_dotenv()
 
 ROOT = os.path.abspath(
@@ -41,38 +41,52 @@ GATEWAY_PORT = os.getenv("GATEWAY_PORT", "8080")
 LOCAL_URL = f"http://localhost:{GATEWAY_PORT}"
 PROD_URL = ""  # TODO: define this
 APP_URL = LOCAL_URL
+APP_TITLE = APP_CONFIG['title']
 
-
-# FastAPI app
-app = fastapi.FastAPI(
-    title=APP_CONFIG['title'], 
-    version=APP_VERSION, 
-    dependencies=[fastapi.Depends(auth.get_user)]
-)
+app = fastapi.FastAPI(title=APP_TITLE, version=APP_VERSION)
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=APP_CONFIG['origins'],  # 
-    # allow_credentials=True,
-    # allow_methods=APP_CONFIG['methods'],
-    # allow_headers=APP_CONFIG['headers']
-    allow_origins=["*"],  # TODO: specify this for uchc and change to specific origins in production
+    allow_origins=APP_CONFIG['origins'],  # TODO: specify this for uchc and change to specific origins in production
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_methods=APP_CONFIG['methods'],
+    allow_headers=APP_CONFIG['headers']
 )
 
 
+# -- root-level methods(auth, health, etc) -- #
+
 @app.get("/", tags=["Core"])
-async def check_health(request: fastapi.Request):
+async def check_health():
     return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
-        
-
-# @app.get("/api/v1/test/authentication", operation_id="test-authentication", tags=["Core"])
-# async def test_authentication(user: dict = fastapi.Depends(auth.get_user)):
-#     return user
 
 
-# add routers: TODO: specify this to be served instead by the reverse-proxy
+@app.post("/login")
+def login(response: fastapi.Response, username: str = fastapi.Form(), password: str = fastapi.Form()):
+    try:
+        user = auth.validate_user(username, password)
+        if not user:
+            # return fastapi.responses.JSONResponse(status_code=401, content={"detail": "Invalid credentials"})
+            raise fastapi.HTTPException(status_code=401, detail="Invalid Credentials")
+        response.set_cookie(key="session_user", value=user.name, httponly=True)
+        return {"message": f"Welcome, {user.name}"}
+    except fastapi.HTTPException as e:
+        logger.error(f'AUTHENTICATION >> Could not authenticate user: {username}.\nDetails:\n{e}')
+        raise e
+
+
+@app.post("/logout")
+def logout(response: fastapi.Response):
+    response.delete_cookie(key="session_user")
+    return {"message": "Logged out"}
+
+
+@app.get("/api/v1/test/authentication", operation_id="test-authentication", tags=["Core"])
+async def test_authentication(user: dict = fastapi.Depends(auth.get_user)):
+    return user
+
+
+# -- router-specific (actual API(s)) endpoints -- #
+
 for api_name in APP_ROUTERS:
     api = importlib.import_module(f'gateway.{api_name}.router')
     app.include_router(

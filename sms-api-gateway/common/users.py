@@ -1,7 +1,9 @@
+from fastapi import HTTPException, Request
 from common.encryption.keydist import User, UserDb
 import dataclasses as dc
 from hashlib import sha256
 import os
+from ast import literal_eval
 
 import dotenv as de
 
@@ -10,103 +12,117 @@ from data_model.base import BaseClass
 
 de.load_dotenv()
 
+
 @dc.dataclass
 class UserMetadata(BaseClass):
     name: str 
+    location: str | None = None
 
 
 @dc.dataclass
-class UserKeys(BaseClass):
-    public: str
-    private: str
+class UserKey(BaseClass):
+    # public: str
+    # private: str
     metadata: UserMetadata
+    password: str 
 
 
 @dc.dataclass
 class KeyData(BaseClass):
-    dev: dict[str, str] = dc.field(default_factory=dict)
-    prod: dict[str, str] = dc.field(default_factory=dict)
-    example: dict[str, str] = dc.field(default_factory=dict)
-
-    @property 
-    def all(self):
-        return self.to_dict()
+    main: list[UserKey] = dc.field(default_factory=list)
+    dev: list[UserKey] = dc.field(default_factory=list)
+    prod: list[UserKey] = dc.field(default_factory=list)
+    example: list[UserKey] = dc.field(default_factory=list)
         
 
 @dc.dataclass
 class Users(BaseClass):
-    dev: dict[str, UserMetadata] = dc.field(default_factory=dict)
-    prod: dict[str, UserMetadata] = dc.field(default_factory=dict)
-    example: dict[str, UserMetadata] = dc.field(default_factory=dict)
+    main: list[UserMetadata] = dc.field(default_factory=list)
+    dev: list[UserMetadata] = dc.field(default_factory=list)
+    prod: list[UserMetadata] = dc.field(default_factory=list)
+    example: list[UserMetadata] = dc.field(default_factory=list)
+    
 
-
-class ApiKeyDB:
-    # {<PUBLIC KEY>: <PRIVATE KEY>}
-    __example_keys = {
-        "test": "test",
-        "e54d4431-5dab-474e-b71a-0db1fcb9e659": "7oDYjo3d9r58EJKYi5x4E8",  # Bob
-        "5f0c7127-3be9-4488-b801-c7b6415b45e9": "mUP7PpTHmFAkxcQLWKMY8t"  # Anita
-    }
-    __example_users = {
-        "test": UserMetadata(name="test-key"),
-        "7oDYjo3d9r58EJKYi5x4E8": UserMetadata(name="Test"),
-        "mUP7PpTHmFAkxcQLWKMY8t": UserMetadata(name="Anita")
-    }
-    api_keys = KeyData(example=__example_keys, dev={}, prod={})
-    users = Users({}, {}, __example_users)
-
-    def add_api_key(self, username: str, key: str, dev: bool = False):
+class ApiKeyDB(object):
+    _example_users = [
+        UserMetadata(name="test-user", location="LOCAL"),
+        UserMetadata(name="Bob"),
+        UserMetadata(name="Anita"),
+    ]
+    _keys = literal_eval(os.getenv('EXAMPLE_KEYS', "[]"))
+    _example_keys = [
+        UserKey(u, k) 
+        for u, k in list(zip(_example_users, _keys))
+    ]
+    users = Users(main=_example_users)
+    api_keys = KeyData(main=_example_keys)
+    
+    def add_user(self, username: str, key: str, scope: str = "main"):
+        # create metadata
         metadata_u = UserMetadata(name=username)
-        if dev:
-            self.api_keys.dev[key] = key
-            self.users.dev[username] = metadata_u
-        else:
-            self.api_keys.prod[key] = key
-            self.users.prod[username] = metadata_u
+        if not self.find_user(username):
+            user_coll = self._get_users(scope)
+            user_coll.append(metadata_u)
 
-    def add_api_keys(self, username: str, public: str, private: str, dev: bool = False):
-        metadata_u = UserMetadata(name=username)
-        if dev:
-            self.api_keys.dev[public] = private
-            self.users.dev[username] = metadata_u
-        else:
-            self.api_keys.prod[public] = private
-            self.users.prod[username] = metadata_u
+        # add key
+        k = UserKey(metadata_u, key)
+        coll = self._get_keys(scope)
+        return coll.append(k)
     
-    def check_key(self, key: str, collection: str) -> bool:
-        keys: dict = getattr(self.api_keys, collection)
-        return key in keys
+    def check_key(self, key: str, scope: str = "main") -> bool:
+        keys: list[UserKey] = self._get_keys(scope)
+        return any([key == k.password for k in keys])
+
+    def remove_user(self, name: str, scope: str = "main"):
+        keys = self._get_keys(scope)
+        users = self._get_users(scope)
+        user = self.find_user(name, scope)
+        if user is not None:
+            keys.remove(user)
+            users.remove(user.metadata)
+
+    def find_user(self, name: str, scope: str = "main") -> UserKey | None:
+        keys: list[UserKey] = self._get_keys(scope)
+        user = None
+        for k in keys:
+            user_k = k.metadata
+            if name == user_k.name:
+                user = k
+        return user
     
-    def remove_api_key(self, public: str):
-        self.api_keys.prod.pop(public, None)
+    def get_metadata_from_api_key(self, api_key: str, scope: str = "example") -> UserMetadata | None:
+        keys: list[UserKey] = self._get_keys(scope)
+        user = None
+        for keydata in keys:
+            if api_key == keydata.password:
+                user = keydata.metadata
+        return user
     
-    def add_user(self, scope: str, user: UserMetadata, private: str):
-        self.users.to_dict()[scope][private] = user
+    def _get_keys(self, scope: str = "main") -> list[UserKey]:
+        return getattr(self.api_keys, scope) 
     
-    def remove_user(self, scope: str, name: str):
-        table = self.users.to_dict()[scope]
-        for private, user in table.items():
-            if user.name == name:
-                delattr(table, private)
-    
-    def get_table(self, scope: str):
-        return self.api_keys.to_dict()[scope]
+    def _get_users(self, scope: str = "main"):
+        return getattr(self.users, scope)
 
 
-def check_api_key(api_key: str, scope: str = "example"):
-    table = key_db.get_table(scope)
-    return api_key in table
+def check_api_key(api_key: str, scope: str = "main"):
+    valid = key_db.check_key(api_key, scope)
+    if not valid:
+        raise ValueError(f"API key {api_key} not found!")
+    return valid 
 
 
-def get_user_from_api_key(api_key: str, scope: str = "example"):
-    table: dict[str, UserMetadata] = key_db.users.to_dict()[scope]
-    return table[key_db.get_table(scope)[api_key]]
+def get_user_from_api_key(api_key: str, scope: str = "example") -> UserMetadata | None:
+   return key_db.get_metadata_from_api_key(api_key, scope)
 
 
-def test_user_db():
-    test_user = User(username="JoeyD")
-    user_db.add_user(test_user)
+async def fetch_user(request: Request, cookie):
+    username = request.cookies.get(cookie)
+    if not username:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"username": username}
 
 
 key_db = ApiKeyDB()
 user_db = UserDb()
+
