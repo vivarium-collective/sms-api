@@ -43,6 +43,19 @@ class AuthenticationError(Exception):
     pass
 
 
+class ApiKeyValue:
+    def __init__(self, v):
+        self.value = v
+
+    def show(self):
+        from common.encryption.safe_data import from_binary, to_binary
+        return from_binary(self.value)
+        
+    def __repr__(self):
+        import hashlib 
+        return hashlib.sha256(self.value.encode('utf-8')).hexdigest()
+
+
 class Dashboard:
     data = {}
     session: requests.Session = requests.Session()
@@ -170,5 +183,20 @@ class Dashboard:
 
         run_button.on_click(on_run_clicked)
         cancel_button.on_click(on_cancel_clicked)
+    
+    @classmethod
+    def run(cls, username: str, duration: float = 11.0, time_step: float = 1.0):
+        def collect_key():
+            from common.encryption.safe_data import from_binary, to_binary
+            import getpass
+            
+            api_key = getpass.getpass("Enter your API key: ")
+            return ApiKeyValue(to_binary(api_key))
+        
+        key = collect_key()
+        return Dashboard.start(username, key.show(), duration, time_step)
+    
+
+dashboard = Dashboard()
 
 
