@@ -1,7 +1,8 @@
 import json
 import pprint
 import threading
-import dataclasses as dc 
+import dataclasses as dc
+import warnings 
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
@@ -14,9 +15,6 @@ from IPython.display import display as idisplay, clear_output
 from tqdm.notebook import tqdm
 import time
 from typing import Iterable, Callable
-
-
-
 
 
 @dc.dataclass
@@ -41,11 +39,17 @@ class IntervalResponse:
         self.results['bulk'] = bulk_data
 
 
-class Viewer:
+class AuthenticationError(Exception):
+    pass
+
+
+class Dashboard:
     data = {}
+    session: requests.Session = requests.Session()
+    url_root: str = "http://0.0.0.0:8080"
 
     @classmethod
-    def _render_dashboard(cls, event):
+    def _render_components(cls, event):
         # TODO: create a more general "interval dashboard": escher x bulk submasses x bulk counts
         # TODO: render escher from fluxes listeners
         output_packet = IntervalResponse(**json.loads(event.data))
@@ -89,16 +93,29 @@ class Viewer:
         print('Done')
     
     @classmethod
-    def _display_zeroth(cls, experiment_id: str | None, event: Event, metadata_widget: widgets.Output):
-        if experiment_id is None:
-            # case: is first iteration
-            data0 = json.loads(event.data)
-            experiment_id = data0['experiment_id']
-            with metadata_widget:
-                print(f'Running experiment: {experiment_id}')
-
+    def authenticate(
+        cls, 
+        username: str,
+        key: str,
+        auth_url: str = f"http://0.0.0.0:8080/login",  # TODO: change this for prod
+        verbose: bool = False
+    ) -> requests.Response:
+        response = Dashboard.session.post(auth_url, data={'username': username, 'password': key}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        if verbose:
+            print("Status Code:", response.status_code)
+            print("Response JSON:", response.json())
+            print("Cookies:", response.cookies.get_dict())
+        if response.status_code != 200:
+            warnings.warn(f'There was an issue with authentication as I just got a status code of: {response.status_code}')
+        return response
+        
     @classmethod
-    def start(cls, duration: float | None = None, time_step: float | None = None):
+    def start(cls, username: str, key: str, duration: float = 11.0, time_step: float = 1.0):
+        # first, authenticate and login
+        auth_resp = cls.authenticate(username=username, key=key)
+        if auth_resp.status_code != 200:
+            raise AuthenticationError(f"User {username} could not be authenticated.")
+
         # -- ui elements -- #
         run_button = widgets.Button(description="Run")
         cancel_button = widgets.Button(description="Cancel", disabled=True)
@@ -119,17 +136,18 @@ class Viewer:
                 headers = {
                     'X-Community-API-Key': 'test'
                 }
-                with requests.get(url, headers=headers, stream=True) as response:
+                with requests.get(url, stream=True) as response:
                     client = SSEClient(response)
                     with output_widget:
                         t = np.arange()
                         for event in client.events():
+                            # get event status: break loop if cancelled
                             if stop_event.is_set():
                                 print("Stream cancelled.")
                                 break
                             
                             # NOTE: here is where we actually render the data
-                            Viewer._render_dashboard(event)
+                            Dashboard._render_components(event)
             except Exception as e:
                 with output_widget:
                     print(f"Error: {e}")
@@ -154,5 +172,3 @@ class Viewer:
         cancel_button.on_click(on_cancel_clicked)
 
 
-def start():
-    return Viewer.start()
