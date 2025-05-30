@@ -123,12 +123,7 @@ class Dashboard:
         return response
         
     @classmethod
-    def start(cls, username: str, key: str, duration: float = 11.0, time_step: float = 1.0):
-        # first, authenticate and login
-        auth_resp = cls.authenticate(username=username, key=key)
-        if auth_resp.status_code != 200:
-            raise AuthenticationError(f"User {username} could not be authenticated.")
-
+    def start(cls, duration: float = 11.0, time_step: float = 1.0):
         # -- ui elements -- #
         run_button = widgets.Button(description="Run")
         cancel_button = widgets.Button(description="Cancel", disabled=True)
@@ -194,7 +189,12 @@ class Dashboard:
             return ApiKeyValue(to_binary(api_key))
         
         key = collect_key()
-        return Dashboard.start(username, key.show(), duration, time_step)
+        auth_resp = Dashboard.authenticate(username=username, key=key.show())
+        if auth_resp.status_code != 200:
+            raise AuthenticationError(f"User {username} could not be authenticated.")
+        else:
+            print(f'User: {username} has been successfully authenticated!')
+        return Dashboard.start(duration, time_step)
     
 
 dashboard = Dashboard()
