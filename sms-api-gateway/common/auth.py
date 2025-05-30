@@ -4,9 +4,8 @@ from fastapi import Security, HTTPException, WebSocket, status, Request
 from fastapi.security import APIKeyHeader
 from fastapi.responses import JSONResponse
 
-from common.users import key_db
+from common.users import key_db, check_api_key, get_user_from_api_key
 from common.log import get_logger
-from common.encryption.storage import UserMetadata, check_api_key, get_user_from_api_key
 
 
 logger = get_logger(__file__)
@@ -20,10 +19,12 @@ def get_user(api_key_header: str = Security(auth_key_header)):
     if check_api_key(api_key_header):
         user = get_user_from_api_key(api_key_header)
         return user
-    raise HTTPException(
+    e = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid API key"
     )
+    logger.error(str(e))
+    raise e
 
 
 def validate_user(username: str, pwd: str, collection: str = "example") -> UserMetadata:
@@ -32,7 +33,12 @@ def validate_user(username: str, pwd: str, collection: str = "example") -> UserM
     if valid_key and user is not None and user.name == username:
         return user
     else: 
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key")
+        e = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key"
+        )
+        logger.error(str(e))
+        raise e
         
 
 async def validate_socket(websocket: WebSocket, collection: str = "example"):
