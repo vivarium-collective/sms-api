@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 
 # from gateway.core.router import routes, broadcast
-from common import auth, log
+from common import auth, log, users
 from gateway.handlers.app_config import get_config
 
 
@@ -61,16 +61,14 @@ async def check_health():
 
 
 @app.post("/login")
-def login(response: fastapi.Response, username: str = fastapi.Form(), password: str = fastapi.Form()):
+def login(response: fastapi.Response, username: str = fastapi.Form(default="test-user"), password: str = fastapi.Form(default="test")):
     try:
         user = auth.validate_user(username, password)
-        if not user:
-            # return fastapi.responses.JSONResponse(status_code=401, content={"detail": "Invalid credentials"})
-            raise fastapi.HTTPException(status_code=401, detail="Invalid Credentials")
         response.set_cookie(key="session_user", value=user.name, httponly=True)
         return {"message": f"Welcome, {user.name}"}
     except fastapi.HTTPException as e:
         logger.error(f'AUTHENTICATION >> Could not authenticate user: {username}.\nDetails:\n{e}')
+        # return fastapi.responses.JSONResponse(status_code=401, content={"detail": "Invalid credentials"})
         raise e
 
 
@@ -80,8 +78,8 @@ def logout(response: fastapi.Response):
     return {"message": "Logged out"}
 
 
-@app.get("/api/v1/test/authentication", operation_id="test-authentication", tags=["Core"])
-async def test_authentication(user: dict = fastapi.Depends(auth.get_user)):
+@app.get("/api/v1/test-authentication", operation_id="test-authentication", tags=["Core"])
+async def test_authentication(user: dict = fastapi.Depends(users.fetch_user)):
     return user
 
 

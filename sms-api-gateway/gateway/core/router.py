@@ -32,7 +32,7 @@ import json, uvicorn
 from asyncio import sleep
 
 from data_model.gateway import RouterConfig
-from common import auth, log
+from common import auth, log, users
 from gateway.core.client import client
 from gateway.handlers.app_config import root_prefix
 # from gateway.handlers.vivarium import VivariumFactory, new_id
@@ -52,7 +52,7 @@ BROADCAST_PORT = "8080"
 config = RouterConfig(
     router=APIRouter(), 
     prefix=root_prefix(MAJOR_VERSION) + "/core",
-    dependencies=[fastapi.Depends(auth.get_user)]
+    dependencies=[fastapi.Depends(users.fetch_user)]
 )
 # broadcast = Broadcast(f"memory://localhost:{BROADCAST_PORT}")
 # templates = Jinja2Templates("resources/client_templates")
@@ -195,7 +195,7 @@ async def get_registered_types() -> list[str]:
     return list(ecoli_core.types().keys())
 
 
-@config.router.get('/get/document', tags=["Core"], dependencies=[fastapi.Depends(auth.get_user)])
+@config.router.get('/get/document', tags=["Core"])
 async def get_core_document():
     fp = '/Users/alexanderpatrie/Desktop/repos/ecoli/genEcoli/model/state.json'
     with open(fp, 'r') as f:

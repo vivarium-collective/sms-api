@@ -90,7 +90,7 @@ class ApiKeyDB(object):
                 user = k
         return user
     
-    def get_metadata_from_api_key(self, api_key: str, scope: str = "example") -> UserMetadata | None:
+    def get_metadata_from_api_key(self, api_key: str, scope: str = "main") -> UserMetadata | None:
         keys: list[UserKey] = self._get_keys(scope)
         user = None
         for keydata in keys:
@@ -112,11 +112,11 @@ def check_api_key(api_key: str, scope: str = "main"):
     return valid 
 
 
-def get_user_from_api_key(api_key: str, scope: str = "example") -> UserMetadata | None:
+def get_user_from_api_key(api_key: str, scope: str = "main") -> UserMetadata | None:
    return key_db.get_metadata_from_api_key(api_key, scope)
 
 
-async def fetch_user(request: Request, cookie):
+async def fetch_user(request: Request, cookie: str = "session_user"):
     username = request.cookies.get(cookie)
     if not username:
         raise HTTPException(status_code=401, detail="Not authenticated")

@@ -4,7 +4,7 @@ from fastapi import Security, HTTPException, WebSocket, status, Request
 from fastapi.security import APIKeyHeader
 from fastapi.responses import JSONResponse
 
-from common.users import key_db, check_api_key, get_user_from_api_key
+from common.users import key_db, check_api_key, get_user_from_api_key, UserMetadata
 from common.log import get_logger
 
 
@@ -16,6 +16,9 @@ auth_key_header = APIKeyHeader(name=API_KEY_HEADER)
 
 
 def get_user(api_key_header: str = Security(auth_key_header)):
+    """
+    FastAPI app dependency.
+    """
     if check_api_key(api_key_header):
         user = get_user_from_api_key(api_key_header)
         return user
@@ -27,11 +30,21 @@ def get_user(api_key_header: str = Security(auth_key_header)):
     raise e
 
 
-def validate_user(username: str, pwd: str, collection: str = "example") -> UserMetadata:
+def validate_user(username: str, pwd: str, collection: str = "main") -> UserMetadata:
+    """
+    Used at login
+    
+    :param username: 
+    :param pwd:
+    :param collection: (str) defaults to "main".
+
+    :return: UserMetadata
+    :raises: fastapi.HTTPException if either username and/or pwd is not valid.
+    """
     valid_key = key_db.check_key(pwd, collection)
-    user = get_user_from_api_key(pwd)
-    if valid_key and user is not None and user.name == username:
-        return user
+    user = key_db.find_user(username)
+    if valid_key and user is not None:
+        return user.metadata
     else: 
         e = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
