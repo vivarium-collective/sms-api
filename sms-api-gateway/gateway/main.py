@@ -60,6 +60,10 @@ async def check_health():
     return {"GUI": LOCAL_URL + "/docs", "status": "RUNNING"}
 
 
+@app.post("/t")
+async def t(request: fastapi.Request, b: dict = fastapi.Body(), x: int = fastapi.Query(default=22)):
+    return [request.query_params, await request.form(), await request.body()]
+
 @app.post("/login")
 def login(response: fastapi.Response, username: str = fastapi.Form(default="test-user"), password: str = fastapi.Form(default="test")):
     try:

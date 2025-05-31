@@ -4,7 +4,7 @@ import ast
 import asyncio
 import base64
 import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 import gzip
 import json
 import shutil
@@ -15,6 +15,8 @@ import traceback
 import uuid 
 from tqdm.notebook import tqdm
 
+import pydantic as pyd
+from pydantic import BaseModel, ConfigDict
 import dotenv as de
 import numpy as np
 import process_bigraph  # type: ignore
@@ -82,19 +84,44 @@ def new_experiment_id():
     return str(uuid.uuid4())
 
 
+class Base(BaseModel):
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
+
+
+@dataclass
+class WCMSimulationRequest:
+    experiment_id: str | None = None 
+    total_time: float | str | None = None 
+    time_step: float | str | None = None 
+    start_time: float | str | None = None
+    cookie: str | None = None
+    last_updated: str = field(default=str(datetime.datetime.now().strftime("%d/%m/%Y_%H:%M:%S")))
+
+
 # TODO: report fluxes listeners for escher
 async def interval_generator(
     request: fastapi.Request,
     experiment_id: str,
-    duration: float,
+    total_time: float,
     time_step: float,
     start_time: float = 1.0,
     buffer: float = 0.11
 ):
-    # tempdir to be iteratively written to
+    # yield a formalized request confirmation to client TODO: possibly emit something here
+    pld = {}
+    for k, v in request.query_params:
+        val = v
+        if v.isdigit():
+            val = float(v)
+        pld[k] = val
+            
+    req = WCMSimulationRequest(**pld)
+    yield f"event: intervalUpdate\ndata: {json.dumps(asdict(req))}\n\n" 
+
+    # set up simulation params
     tempdir = tmp.mkdtemp(dir="data")
     datadir = f'{tempdir}/{experiment_id}'
-    t = np.arange(start_time, duration, time_step)
+    t = np.arange(start_time, total_time, time_step)
     sim = compile_simulation(experiment_id=experiment_id, datadir=datadir, build=False)
     sim.time_step = time_step
 
@@ -149,7 +176,7 @@ async def interval_generator(
 async def run_simulation(
     request: fastapi.Request,
     experiment_id: str = Query(default=new_experiment_id()),
-    duration: float = Query(default=3.0),
+    total_time: float = Query(default=3.0),
     time_step: float = Query(default=0.1),
     start_time: float = Query(default=1.0)
 ):
@@ -157,7 +184,7 @@ async def run_simulation(
         interval_generator(
             request=request,
             experiment_id=experiment_id,
-            duration=duration,
+            total_time=total_time,
             time_step=time_step,
             start_time=start_time
         ), 
