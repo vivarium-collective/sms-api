@@ -18,6 +18,8 @@ from tqdm.notebook import tqdm
 import time
 from typing import Any, Iterable, Callable
 
+from data_model.api import WCMIntervalData, WCMIntervalResponse
+
 
 @dc.dataclass
 class BulkResult:
@@ -83,10 +85,10 @@ class Dashboard(object):
     def set(self, dataname: str, dataval: Any):
         return self.__setitem__(dataname, dataval)
     
-    def _increment_counts(self, output_packet: IntervalResponse):
+    def _increment_counts(self, output_packet: WCMIntervalResponse):
         names = []
         counts = []
-        for result in output_packet.results['bulk']:
+        for result in output_packet.data.bulk:
             names.append(result.id)
             counts.append(result.count)
         counts_i = dict(zip(names, counts))
@@ -98,7 +100,7 @@ class Dashboard(object):
             else:
                 self.set("name", count)
     
-    def _plot_interval(self, output_packet: IntervalResponse):
+    def _plot_interval(self, output_packet: WCMIntervalResponse):
         # TODO: implement some nice plotting here: a dashboard with bigraph-viz, seaborn/plotly, etc
         # with output_area:
         #     plt.figure(figsize=(6, 4))
@@ -107,10 +109,9 @@ class Dashboard(object):
         #     plt.show()
         pass
 
-    def _render_components(self, event):
+    def _render_data(self, output_packet: WCMIntervalResponse):
         # TODO: create a more general "interval dashboard": escher x bulk submasses x bulk counts
         # TODO: render escher from fluxes listeners
-        output_packet = IntervalResponse(**json.loads(event.data))
         self._increment_counts(output_packet)
         self._plot_interval(output_packet)
 
@@ -179,19 +180,29 @@ class Dashboard(object):
                     with output_widget:
                         print(f'Running simulation for duration: {len(t)}...\n')
                         # for i in tqdm(t, desc="Fetching Results...", unit="step"):
-                        nevents = 0
+                        n = 0
                         for event in client.events():
                             # get event status: break loop if cancelled
                             if stop_event.is_set():
                                 print("Stream cancelled.")
                                 break
                             else:
-                                nevents += 1
+                                n += 1
                             
-                            output_packet = IntervalResponse(**json.loads(event.data))
+                            raw_packet = json.loads(event.data)
+                            raw_results = raw_packet.pop("results")
+                            if raw_results is None:
+                                raise Exception("No results could be extracted")
+                            results_n = WCMIntervalData(**raw_results)
+                            kwargs = {**raw_packet, "data": results_n}
+                            packet_n = WCMIntervalResponse(**kwargs)
                             
-                            # NOTE: here is where we actually render the data
-                            Dashboard._render_components(event)
+                            # store data after datamodel validation-fit
+                            for k, v in packet_n.data.dict().items():
+                                self.set(k, v)
+
+                            # NOTE: here is where we actually render the response packet data
+                            self._render_data(packet_n)
             except Exception as e:
                 with output_widget:
                     print(f"Error: {e}")
