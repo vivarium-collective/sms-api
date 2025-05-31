@@ -3,6 +3,7 @@
 import ast
 import asyncio
 import base64
+from collections import defaultdict
 import datetime
 from dataclasses import dataclass, asdict, field
 import gzip
@@ -12,6 +13,7 @@ import tempfile as tmp
 import os
 import time
 import traceback
+from typing import Iterable
 import uuid 
 from tqdm.notebook import tqdm
 
@@ -76,6 +78,17 @@ def new_experiment_id():
     return str(uuid.uuid4())
 
 
+def get_save_times(start, end, framesize, t):
+    frames = np.arange(start, end, framesize)
+    hist = np.histogram(frames, bins=t, range=None, density=None, weights=None)
+    h = list(zip(hist[1], hist[0]))
+    save_times = []
+    for i, v in h:
+        if v > 0:
+            save_times.append(i.tolist())
+    return save_times
+
+
 # TODO: report fluxes listeners for escher
 async def interval_generator(
     request: fastapi.Request,
@@ -83,7 +96,8 @@ async def interval_generator(
     total_time: float,
     time_step: float,
     start_time: float = 1.0,
-    buffer: float = 0.11
+    buffer: float = 0.11,
+    framesize: float | None = None
 ):
     # yield a formalized request confirmation to client TODO: possibly emit something here
     request_payload = {}
@@ -100,6 +114,8 @@ async def interval_generator(
     tempdir = tmp.mkdtemp(dir="data")
     datadir = f'{tempdir}/{experiment_id}'
     t = np.arange(start_time, total_time, time_step)
+    save_times = get_save_times(start_time, total_time, framesize, t) if framesize else None
+    
     sim = compile_simulation(experiment_id=experiment_id, datadir=datadir, build=False)
     sim.time_step = time_step
 
@@ -112,7 +128,16 @@ async def interval_generator(
             sim.total_time = t_i
             initial_time = t[i - 1] if not i == 0 else 0.0
             sim.initial_global_time = initial_time
-            sim.save_times = [t_i]
+
+            # configure report interval
+            if save_times is not None:
+                if t[i] in save_times:
+                    report_idx = save_times.index(t[i])
+                    sim.save_times = [save_times[report_idx]]
+            else:
+                sim.save_times = [t_i]
+
+            # build/populate sim
             sim.build_ecoli()
 
             # runs for just t_i
@@ -177,7 +202,8 @@ async def run_simulation(
     experiment_id: str = Query(default=new_experiment_id()),
     total_time: float = Query(default=3.0),
     time_step: float = Query(default=0.1),
-    start_time: float = Query(default=1.0)
+    start_time: float = Query(default=1.0),
+    framesize: float = Query(default=1.0)
 ):
     return StreamingResponse(
         interval_generator(
@@ -185,7 +211,8 @@ async def run_simulation(
             experiment_id=experiment_id,
             total_time=total_time,
             time_step=time_step,
-            start_time=start_time
+            start_time=start_time,
+            framesize=framesize
         ), 
         media_type="text/event-stream"
     )
@@ -227,6 +254,15 @@ async def get_core_document():
     with open(fp, 'r') as f:
         doc = simdjson.load(f)
     return doc
+
+
+def test_get_save_times():
+    start = 0.1111
+    end = 11.11
+    fs = 0.1
+    step = 0.000001
+    t = np.arange(start, end, step)
+    return get_save_times(start, end, fs, t)
 
 
 # -- secure ws chat-like -- #
