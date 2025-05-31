@@ -189,8 +189,7 @@ class Dashboard(object):
                     client = SSEClient(response)
                     with output_widget:
                         print(f'Running simulation for duration: {len(t)}...\n')
-                        # for i in tqdm(t, desc="Fetching Results...", unit="step"):
-                        n = 0
+          
                         stream_stopped = False
                         for idx, ti in enumerate(tqdm(t, desc="Processing Simulation...")):
                             if stream_stopped:
@@ -201,8 +200,6 @@ class Dashboard(object):
                                     print("Stream cancelled.")
                                     stream_stopped = True
                                     break
-                                else:
-                                    n += 1
                                 
                                 raw_packet = json.loads(event.data)
                                 raw_results = raw_packet.pop("results")
