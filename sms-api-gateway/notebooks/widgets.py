@@ -151,7 +151,14 @@ class Dashboard(object):
             warnings.warn(f'There was an issue with authentication as I just got a status code of: {response.status_code}')
         return response
         
-    def _start(self, experiment_name: str | None = None, duration: float = 11.0, time_step: float = 1.0):
+    def _start(
+            self, 
+            experiment_name: str | None = None, 
+            duration: float = 11.0, 
+            time_step: float = 1.0,
+            start_time: float = 0.01111,
+            framesize: float = 1.0
+    ):
         exp_name = experiment_name or f'experiment-{str(uuid.uuid4())}'
         # -- ui elements -- #
         self.run_button = iwidgets.Button(description="Run")
@@ -173,36 +180,44 @@ class Dashboard(object):
                 query_params = {
                     'experiment_id': exp_name,
                     'total_time': duration,
-                    'time_step': time_step
+                    'time_step': time_step,
+                    'start_time': start_time,
+                    'framesize': framesize
                 }
+                t = np.arange(start_time, duration, time_step)
                 with self.session.get(url, params=query_params, stream=True) as response:
                     client = SSEClient(response)
                     with output_widget:
                         print(f'Running simulation for duration: {len(t)}...\n')
                         # for i in tqdm(t, desc="Fetching Results...", unit="step"):
                         n = 0
-                        for event in client.events():
-                            # get event status: break loop if cancelled
-                            if stop_event.is_set():
-                                print("Stream cancelled.")
+                        stream_stopped = False
+                        for idx, ti in enumerate(tqdm(t, desc="Processing Simulation...")):
+                            if stream_stopped:
                                 break
-                            else:
-                                n += 1
-                            
-                            raw_packet = json.loads(event.data)
-                            raw_results = raw_packet.pop("results")
-                            if raw_results is None:
-                                raise Exception("No results could be extracted")
-                            results_n = WCMIntervalData(**raw_results)
-                            kwargs = {**raw_packet, "data": results_n}
-                            packet_n = WCMIntervalResponse(**kwargs)
-                            
-                            # store data after datamodel validation-fit
-                            for k, v in packet_n.data.dict().items():
-                                self.set(k, v)
+                            for event in client.events():
+                                # get event status: break loop if cancelled
+                                if stop_event.is_set():
+                                    print("Stream cancelled.")
+                                    stream_stopped = True
+                                    break
+                                else:
+                                    n += 1
+                                
+                                raw_packet = json.loads(event.data)
+                                raw_results = raw_packet.pop("results")
+                                if raw_results is None:
+                                    raise Exception("No results could be extracted")
+                                results_n = WCMIntervalData(**raw_results)
+                                kwargs = {**raw_packet, "data": results_n}
+                                packet_n = WCMIntervalResponse(**kwargs)
+                                
+                                # store data after datamodel validation-fit
+                                for k, v in packet_n.data.dict().items():
+                                    self.set(k, v)
 
-                            # NOTE: here is where we actually render the response packet data
-                            self._render_data(packet_n)
+                                # NOTE: here is where we actually render the response packet data
+                                self._render_data(packet_n)
             except Exception as e:
                 with output_widget:
                     print(f"Error: {e}")
