@@ -140,15 +140,15 @@ async def interval_generator(
     buffer: float = 0.11
 ):
     # yield a formalized request confirmation to client TODO: possibly emit something here
-    pld = {}
+    request_payload = {}
     for k, v in request.query_params:
         val = v
         if v.isdigit():
             val = float(v)
-        pld[k] = val
+        request_payload[k] = val
             
-    req = WCMSimulationRequest(**pld)
-    yield f"event: intervalUpdate\ndata: {req.json()}\n\n" 
+    req = WCMSimulationRequest(**request_payload)
+    yield format_event(req.json()) 
 
     # set up simulation params
     tempdir = tmp.mkdtemp(dir="data")
@@ -201,14 +201,14 @@ async def interval_generator(
                 ))
             )
 
-
-            # TODO: make datamodel for interval response
-            results_i = WCMIntervalData(bulk=bulk_results_i, listeners=listener_results_i)
             response_i = WCMIntervalResponse(**{
                 "experiment_id": experiment_id,
                 "duration": sim.total_time, 
                 "interval_id": str(t_i), 
-                "results": results_i
+                "results": WCMIntervalData(
+                    bulk=bulk_results_i, 
+                    listeners=listener_results_i
+                )
             })
             payload_i: str = response_i.json()
             yield format_event(payload_i)
