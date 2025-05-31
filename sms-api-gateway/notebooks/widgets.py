@@ -2,19 +2,21 @@ import json
 import pprint
 import threading
 import dataclasses as dc
+import uuid
 import warnings 
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns 
 import requests
+from requests import Session
 from sseclient import SSEClient, Event
-import ipywidgets as widgets
+import ipywidgets as iwidgets
 from IPython.display import display as idisplay, clear_output
 
 from tqdm.notebook import tqdm
 import time
-from typing import Iterable, Callable
+from typing import Any, Iterable, Callable
 
 
 @dc.dataclass
@@ -56,39 +58,66 @@ class ApiKeyValue:
         return hashlib.sha256(self.value.encode('utf-8')).hexdigest()
 
 
-class Dashboard:
-    data = {}
-    session: requests.Session = requests.Session()
-    url_root: str = "http://0.0.0.0:8080"
+class Dashboard(object):
+    _data = {}
+    _url_root: str = "http://0.0.0.0:8080"
 
-    @classmethod
-    def _render_components(cls, event):
-        # TODO: create a more general "interval dashboard": escher x bulk submasses x bulk counts
-        # TODO: render escher from fluxes listeners
-        output_packet = IntervalResponse(**json.loads(event.data))
+    def __init__(self, url_root: str | None = None, session: Session | None = None, *args, **kwargs):
+        self.url_root = url_root or self._url_root
+        self.session = session or Session()
+
+    @property
+    def data(self):
+        return self._data
+    
+    @data.setter
+    def data(self, v):
+        self._data = v
+    
+    def __setitem__(self, k, v):
+        import copy 
+        d = copy.deepcopy(self.data)
+        d.update({k: v})
+        self.data = d 
+    
+    def set(self, dataname: str, dataval: Any):
+        return self.__setitem__(dataname, dataval)
+    
+    def _increment_counts(self, output_packet: IntervalResponse):
         names = []
         counts = []
         for result in output_packet.results['bulk']:
             names.append(result.id)
             counts.append(result.count)
         counts_i = dict(zip(names, counts))
-        for name, count in cls.data.items():
+        for name, count in self.data.items():
             if name in counts_i:
-                cls.data[name] += count
+                current = self.data[name]
+                current += count
+                self.set("name", current)
             else:
-                cls.data[name] = count
-
+                self.set("name", count)
+    
+    def _plot_interval(self, output_packet: IntervalResponse):
         # TODO: implement some nice plotting here: a dashboard with bigraph-viz, seaborn/plotly, etc
         # with output_area:
         #     plt.figure(figsize=(6, 4))
         #     sns.barplot(data=counts_i)
         #     plt.tight_layout()
         #     plt.show()
+        pass
 
-        # print(f"Interval ID: {output_packet.interval_id}")
-        # pprint.pp(output_packet)
-        # print()
-        print("I promise that a dashboard will go here!\n")
+    def _render_components(self, event):
+        # TODO: create a more general "interval dashboard": escher x bulk submasses x bulk counts
+        # TODO: render escher from fluxes listeners
+        output_packet = IntervalResponse(**json.loads(event.data))
+        self._increment_counts(output_packet)
+        self._plot_interval(output_packet)
+
+        print(f">> Interval ID: {output_packet.interval_id}")
+        pprint.pp(output_packet.experiment_id)
+        print()
+        print(">> I promise that a dashboard will go here!\n")
     
     @classmethod
     def display_progress_bar(
@@ -105,15 +134,14 @@ class Dashboard:
             time.sleep(buffer)
         print('Done')
     
-    @classmethod
     def authenticate(
-        cls, 
+        self, 
         username: str,
         key: str,
         auth_url: str = f"http://0.0.0.0:8080/login",  # TODO: change this for prod
         verbose: bool = False
     ) -> requests.Response:
-        response = Dashboard.session.post(auth_url, data={'username': username, 'password': key}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        response = self.session.post(auth_url, data={'username': username, 'password': key}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
         if verbose:
             print("Status Code:", response.status_code)
             print("Response JSON:", response.json())
@@ -122,14 +150,16 @@ class Dashboard:
             warnings.warn(f'There was an issue with authentication as I just got a status code of: {response.status_code}')
         return response
         
-    @classmethod
-    def start(cls, duration: float = 11.0, time_step: float = 1.0):
+    def _start(self, experiment_name: str | None = None, duration: float = 11.0, time_step: float = 1.0):
+        exp_name = experiment_name or f'experiment-{str(uuid.uuid4())}'
         # -- ui elements -- #
-        run_button = widgets.Button(description="Run")
-        cancel_button = widgets.Button(description="Cancel", disabled=True)
-        output_area = widgets.Output()
-        metadata_area = widgets.Output()
-        idisplay(run_button, cancel_button, output_area, metadata_area)
+        self.run_button = iwidgets.Button(description="Run")
+        self.cancel_button = iwidgets.Button(description="Cancel", disabled=True)
+        self.output_area = iwidgets.Output()
+        self.metadata_area = iwidgets.Output()
+        self.password_input = iwidgets.Password(continuous_update=False, description='Please enter password:', placeholder='Make it long!')
+
+        idisplay(self.run_button, self.cancel_button, self.output_area, self.metadata_area, self.password_input)
 
         # -- threading config -- #
         stop_event = threading.Event()
@@ -138,21 +168,27 @@ class Dashboard:
         def stream_sse(url, output_widget, metadata_widget):
             stop_event.clear()
             output_widget.clear_output()
-            
             try:
-                experiment_id = None
-                headers = {
-                    'X-Community-API-Key': 'test'
+                query_params = {
+                    'experiment_id': exp_name,
+                    'total_time': duration,
+                    'time_step': time_step
                 }
-                with requests.get(url, stream=True) as response:
+                with self.session.get(url, params=query_params, stream=True) as response:
                     client = SSEClient(response)
                     with output_widget:
-                        t = np.arange()
+                        print(f'Running simulation for duration: {len(t)}...\n')
+                        # for i in tqdm(t, desc="Fetching Results...", unit="step"):
+                        nevents = 0
                         for event in client.events():
                             # get event status: break loop if cancelled
                             if stop_event.is_set():
                                 print("Stream cancelled.")
                                 break
+                            else:
+                                nevents += 1
+                            
+                            output_packet = IntervalResponse(**json.loads(event.data))
                             
                             # NOTE: here is where we actually render the data
                             Dashboard._render_components(event)
@@ -162,39 +198,38 @@ class Dashboard:
 
         def on_run_clicked(b):
             global stream_thread
-            run_button.disabled = True
-            cancel_button.disabled = False
+            self.run_button.disabled = True
+            self.cancel_button.disabled = False
 
             stream_url = "http://0.0.0.0:8080/api/v1/core/run-simulation"
-            stream_thread = threading.Thread(target=stream_sse, args=(stream_url, output_area, metadata_area))
+            stream_thread = threading.Thread(target=stream_sse, args=(stream_url, self.output_area, self.metadata_area))
             stream_thread.start()
 
         def on_cancel_clicked(b):
             stop_event.set()
-            run_button.disabled = False
-            cancel_button.disabled = True
+            self.run_button.disabled = False
+            self.cancel_button.disabled = True
             if stream_thread is not None:
                 stream_thread.join()
 
-        run_button.on_click(on_run_clicked)
-        cancel_button.on_click(on_cancel_clicked)
+        self.run_button.on_click(on_run_clicked)
+        self.cancel_button.on_click(on_cancel_clicked)
     
-    @classmethod
-    def run(cls, username: str, duration: float = 11.0, time_step: float = 1.0):
-        def collect_key():
-            from common.encryption.safe_data import from_binary, to_binary
-            import getpass
-            
-            api_key = getpass.getpass("Enter your API key: ")
-            return ApiKeyValue(to_binary(api_key))
-        
-        key = collect_key()
-        auth_resp = Dashboard.authenticate(username=username, key=key.show())
+    def up(self, username: str, duration: float = 11.0, time_step: float = 1.0):
+        # key = collect_key()
+        auth_resp = self.authenticate(username=username, key=self.password_input.value)  # key=key.show())
         if auth_resp.status_code != 200:
             raise AuthenticationError(f"User {username} could not be authenticated.")
         else:
             print(f'User: {username} has been successfully authenticated!')
-        return Dashboard.start(duration, time_step)
+        return self._start(duration, time_step)
+
+    @staticmethod
+    def collect_key():
+        from common.encryption.safe_data import from_binary, to_binary
+        import getpass
+        api_key = getpass.getpass("Enter your API key: ")
+        return ApiKeyValue(to_binary(api_key))
     
 
 dashboard = Dashboard()

@@ -6,9 +6,11 @@ Base data model relating to utils, files, protocols, etc.
 import ast
 from dataclasses import dataclass, asdict, Field, field
 import datetime
+import json
 from types import FunctionType
 from typing import Any, Callable, List, Dict, Optional, Union
 
+import pandas as pd
 from pydantic import ConfigDict, BaseModel as _BaseModel
 
 
@@ -22,23 +24,38 @@ class BaseClass:
     @property
     def base_exception(self):
         return Exception(f"Cannot set a value as it is protected.")
-
-    @property
-    def _get_time(self):
+    
+    @classmethod
+    def _stamp_factory(cls):
         return get_timestamp
-
+    
+    @classmethod
+    def get_timestamp(cls):
+        return BaseClass._stamp_factory()
+    
     @property
     def timestamp(self):
-        return self._get_time()
-    
+        return BaseClass.get_timestamp()
+
     @timestamp.setter
     def timestamp(self, v):
         raise self.base_exception
 
-    def to_dict(self):
+    def dict(self):
         serialized = asdict(self)
         serialized['timestamp'] = self.timestamp
         return serialized
+    
+    def json(self):
+        return json.dumps(self.dict())
+    
+    def dataframe(self):
+        data = self.dict()
+        indices = list(range(len(data)))
+        return pd.DataFrame(data, index=indices)
+    
+    def to_dict(self):
+        return self.dict()
     
     @property
     def _attributes(self):

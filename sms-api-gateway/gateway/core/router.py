@@ -19,6 +19,7 @@ import pydantic as pyd
 from pydantic import BaseModel, ConfigDict
 import dotenv as de
 import numpy as np
+from data_model.base import BaseClass
 import process_bigraph  # type: ignore
 import simdjson  # type: ignore
 import anyio
@@ -65,16 +66,6 @@ config = RouterConfig(
 #     return HTMLResponse(client)
 
 
-@dataclass 
-class BulkMolecule:
-    id: str 
-    count: int 
-    submasses: list[str]
-
-    def dict(self):
-        return asdict(self)
-
-
 def compress_message(data: dict) -> str:
     compressed = gzip.compress(json.dumps(data).encode())
     return base64.b64encode(compressed).decode()
@@ -89,13 +80,54 @@ class Base(BaseModel):
 
 
 @dataclass
-class WCMSimulationRequest:
-    experiment_id: str | None = None 
-    total_time: float | str | None = None 
-    time_step: float | str | None = None 
-    start_time: float | str | None = None
-    cookie: str | None = None
-    last_updated: str = field(default=str(datetime.datetime.now().strftime("%d/%m/%Y_%H:%M:%S")))
+class ISimulationRequest(BaseClass):
+    experiment_id: str | None = None
+    last_update: str | None = None 
+    cookie: str = "session_user"
+
+    def __post_init__(self):
+        if self.last_update is None:
+            self.refresh_timestamp()
+
+    def refresh_timestamp(self):
+        self.last_update = self.timestamp()
+
+
+# -- requests -- # 
+@dataclass
+class WCMSimulationRequest(ISimulationRequest):
+    total_time: float = 10.0 
+    time_step: float = 1.0 
+    start_time: float = 0.1111
+
+
+# -- responses -- # 
+@dataclass 
+class BulkMoleculeData(BaseClass):
+    id: str 
+    count: int 
+    submasses: list[str]
+
+
+@dataclass
+class ListenerData(BaseClass):
+    fba_results: dict = field(default_factory=dict)
+    atp: dict = field(default_factory=dict)
+    equilibrium_listener: dict = field(default_factory=dict)
+
+
+@dataclass
+class WCMIntervalData(BaseClass):
+    bulk: list[BulkMoleculeData]
+    listeners: ListenerData
+    # TODO: add more!
+
+
+@dataclass
+class WCMIntervalResponse(BaseClass):
+    experiment_id: str 
+    interval_id: str
+    results: WCMIntervalData
 
 
 # TODO: report fluxes listeners for escher
@@ -116,7 +148,7 @@ async def interval_generator(
         pld[k] = val
             
     req = WCMSimulationRequest(**pld)
-    yield f"event: intervalUpdate\ndata: {json.dumps(asdict(req))}\n\n" 
+    yield f"event: intervalUpdate\ndata: {req.json()}\n\n" 
 
     # set up simulation params
     tempdir = tmp.mkdtemp(dir="data")
@@ -145,24 +177,41 @@ async def interval_generator(
             with open(filepath, 'r') as f:
                 result_i = json.load(f)["agents"]["0"]
 
-            # extract only bulk (for now)
-            bulk_mols_i = []
+            # TODO: gradually extract more data
+            # extract bulk
+            bulk_results_i = []
             for mol in result_i["bulk"]:
-                mol_id = mol.pop(0)
-                mol_count = mol.pop(0)
-                bulk_mol = BulkMolecule(id=mol_id, count=mol_count, submasses=mol)
-                bulk_mols_i.append(bulk_mol.dict())
+                mol_id, mol_count = list(map(
+                    lambda _: mol.pop(0),
+                    list(range(2))
+                ))
+                bulk_mol = BulkMoleculeData(id=mol_id, count=mol_count, submasses=mol)
+                bulk_results_i.append(bulk_mol)
+            
+            # extract listener data
+            listener_data = result_i["listeners"]
+            extracted_listeners = ["fba_results", "atp", "equilibrium_listener"]
+            listener_results_i = ListenerData(
+                **dict(zip(
+                    extracted_listeners,
+                    list(map(
+                        lambda name: listener_data[name],
+                        extracted_listeners
+                    ))
+                ))
+            )
+
 
             # TODO: make datamodel for interval response
-            results_i = {"bulk": bulk_mols_i}
-            response_i = {
+            results_i = WCMIntervalData(bulk=bulk_results_i, listeners=listener_results_i)
+            response_i = WCMIntervalResponse(**{
                 "experiment_id": experiment_id,
                 "duration": sim.total_time, 
                 "interval_id": str(t_i), 
                 "results": results_i
-            }
-            payload_i = json.dumps(response_i)
-            yield f"event: intervalUpdate\ndata: {payload_i}\n\n"
+            })
+            payload_i: str = response_i.json()
+            yield format_event(payload_i)
             await sleep(buffer)
         except:
             print(f'ERROR --->\nInterval ID: {t_i}')
@@ -170,6 +219,10 @@ async def interval_generator(
 
     print(f'Removing dir: {tempdir}')
     shutil.rmtree(tempdir)
+
+
+def format_event(payload_i: str):
+    return f"event: intervalUpdate\ndata: {payload_i}\n\n"
 
 
 @config.router.get("/run-simulation", tags=["Core"])

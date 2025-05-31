@@ -55,3 +55,7 @@ socket:
 .PHONY: demo 
 demo:
 	@make gateway & make notebook
+
+.PHONY: py 
+py:
+	@uv run python
