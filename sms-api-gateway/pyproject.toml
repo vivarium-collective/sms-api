@@ -287,6 +287,8 @@ packages = [
     "gateway",
     "data_model",
     "common",
+    "deployment",
+    "server"
 ]
 
 [tool.uv.sources]

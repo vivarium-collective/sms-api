@@ -16,7 +16,9 @@ from typing import Dict, Set, List, Tuple
 from operator import itemgetter
 
 from bson import Binary
-from pymongo import MongoClient
+from gridfs.asynchronous import AsyncGridFS
+from pymongo import AsyncMongoClient, MongoClient
+from pymongo.asynchronous.collection import AsyncCollection
 from sqlalchemy import create_engine, text
 # from vivarium.vivarium import Vivarium
 
@@ -52,19 +54,29 @@ class MongoManager(DbManager):
 
     def __init__(self, url: str | None = None):
         self.url = url or "mongodb://localhost:27017/"
+        self.fs = AsyncGridFS(self.get_db())
 
     @property 
     def engine(self):
-        return MongoClient(self.url)
+        return AsyncMongoClient(self.url)
     
-    async def read(self, collection_name: str, query: dict):
-        return self.engine.db[collection_name].find_one(query)
+    def get_db(self, db_name: str = "simulations"):
+        return self.engine[db_name]
     
-    async def write(self, collection_name: str, data: dict):
-        return self.engine.db[collection_name].insert_one(data)
-    
-    async def view(self, collection_name: str) -> list[dict]:
-        return [d for d in self.engine.db[collection_name].find()]
+    async def read(self, collection_name: str, query: dict, db_name: str = "simulations"):
+        db = self.get_db(db_name)
+        result = await db[collection_name].find_one(query)
+        return result 
+        
+    async def write(self, collection_name: str, data: dict, db_name: str = "simulations"):
+        db = self.get_db(db_name)
+        result = await db[collection_name].insert_one(data)
+        return result 
+        
+    async def view(self, collection_name: str, db_name: str = "simulations") -> list[dict]:
+        db = self.get_db(db_name)
+        collection: AsyncCollection = db.get_collection(collection_name)
+        return [d for d in collection.find()]
 
 
 class SqlManager(DbManager):
@@ -100,14 +112,14 @@ class VivariumRecord(BaseClass):
     instance: Binary
 
 
-def package_vivarium(vivarium_id: str, instance: Vivarium):
+def package_vivarium(vivarium_id: str): # instance: Vivarium):
     """Package/prepare vivarium instance for storage."""
     return VivariumRecord(vivarium_id, Binary(pickle.dumps(instance)))
 
     
 async def write_vivarium(
         vivarium_id: str, 
-        instance: Vivarium, 
+        # instance: Vivarium, 
         manager: MongoManager
 ):
     record = package_vivarium(vivarium_id, instance)

@@ -29,6 +29,7 @@ class WCMSimulationRequest(ISimulationRequest):
     total_time: float = 10.0 
     time_step: float = 1.0 
     start_time: float = 0.1111
+    simulation_id: str | None = None
 
 
 # -- responses -- # 

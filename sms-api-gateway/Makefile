@@ -15,6 +15,10 @@ exportEnv:
 gateway:
 	@uv run uvicorn gateway.main:app --reload --port 8080 --host 0.0.0.0 --ws websockets --ws-max-size 10000000
 
+.PHONY: server 
+server:
+	@uv run server/main.py 
+
 .PHONY: clean
 clean:
 	@rm -rf uv.lock && rm -rf .venv && rm -rf sms-api.egg-info && uv run pip cache purge && uv cache clean
