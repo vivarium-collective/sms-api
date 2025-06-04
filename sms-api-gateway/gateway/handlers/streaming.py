@@ -41,3 +41,18 @@ async def receive_packet(ws, state: list):
     msg = await ws.recv()
     payload = json.loads(msg)
     state.append(payload)
+
+
+async def subscribe(url: str | None = None, socket_port: int = 8765):
+    async with websockets.connect(url or f"ws://localhost:{socket_port}") as websocket:
+        response = await websocket.recv()
+        print(f"Received from server: {response}")
+        return response
+    
+
+async def publish(*data, url: str | None = None, socket_port: int = 8765): 
+    async with websockets.connect(url or f"ws://localhost:{socket_port}") as websocket:
+        msg = json.dumps(data)
+        await websocket.send(msg)
+        print('Emitted new request!')
+

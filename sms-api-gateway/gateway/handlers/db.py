@@ -3,6 +3,9 @@ import sqlite3
 
 from typing import List, Any
 
+from pymongo import AsyncMongoClient
+from pymongo.asynchronous.database import AsyncDatabase
+
 
 SIMDATA_ROW_SCHEMA = {
     "experiment_id": "TEXT PRIMARY KEY",
@@ -10,6 +13,7 @@ SIMDATA_ROW_SCHEMA = {
 }
 DATABASE_DIR = "databases"
 DEFAULT_SIMDATA_DB_PATH = f"{DATABASE_DIR}/simdata.db"
+
 
 def connection(db_path: str = DEFAULT_SIMDATA_DB_PATH):
     return sqlite3.connect(db_path)
@@ -86,3 +90,10 @@ def test_insert():
     }
 
     write("experiments", payload, conn)
+
+
+def configure_mongo():
+    MONGO_URI = "mongodb://localhost:27017/"
+    client = AsyncMongoClient(MONGO_URI)
+    db: AsyncDatabase = client.get_database("simulations")
+    return client, db 
