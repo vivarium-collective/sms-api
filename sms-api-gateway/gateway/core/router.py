@@ -66,11 +66,33 @@ logger = log.get_logger(__file__)
 
 de.load_dotenv()
 
-LOCAL_URL = "http://localhost:8080"
-PROD_URL = ""  # TODO: define this
+
+class UrlPrefixes:
+    local = "http://localhost"
+    prod = "https://"  # TODO: complete this
+    socket = "ws://localhost"
+    mongo = "mongodb://localhost"
+
+
+INTERACTION_MODE = os.getenv("MODE", "dev")
+
+HTTP_PREFIX = UrlPrefixes.local if INTERACTION_MODE == "dev" else UrlPrefixes.prod 
+PORT = 8080
+URL_ROOT = f"{HTTP_PREFIX}:{PORT}"
+
+SOCKET_PREFIX = UrlPrefixes.socket
+RUN_SIMULATION_SOCKET = 8765
+GET_RESULTS_SOCKET = 8766
+
+def get_socket_url(socket_port: int):
+    return f"{SOCKET_PREFIX}:{socket_port}"
+
+
+MONGO_PREFIX = UrlPrefixes.mongo
+MONGO_PORT = 27017
+MONGO_URI = f"{MONGO_PREFIX}:{MONGO_PORT}"
+
 MAJOR_VERSION = 1
-SOCKET_URL = "ws://0.0.0.0:8080/run/single"
-BROADCAST_PORT = "8080"
 
 config = RouterConfig(
     router=APIRouter(), 
@@ -78,7 +100,6 @@ config = RouterConfig(
     dependencies=[fastapi.Depends(users.fetch_user)]
 )
 
-MONGO_URI = "mongodb://localhost:27017/"
 db_manager = MongoManager(MONGO_URI)
 client, db = configure_mongo()
 
@@ -86,6 +107,12 @@ client, db = configure_mongo()
 def compress_message(data: dict) -> str:
     compressed = gzip.compress(json.dumps(data).encode())
     return base64.b64encode(compressed).decode()
+
+
+def decompress_message(encoded_data: str) -> dict:
+    compressed = base64.b64decode(encoded_data)
+    decompressed = gzip.decompress(compressed).decode()
+    return json.loads(decompressed)
 
 
 def new_experiment_id():
@@ -138,7 +165,7 @@ async def run_simulation(simulation_request: SimulationRequest):
     # emit new request to socket port
     async with websockets.connect("ws://localhost:8765") as websocket:
         await websocket.send(json.dumps(payload))
-        logger.info(f'Sent message for {simulation_request.experiment_id}')
+        logger.info(f'Sent request for: {simulation_request.experiment_id}')
    
     # return formalized request
     return SimulationRun(
@@ -158,14 +185,16 @@ async def run_simulation(simulation_request: SimulationRequest):
 async def get_results(simulation_id: str = Query(...)):
     n_iter = 0
     job = None
+
+    # option A: retrieve the data via a websocket 
     while n_iter < 10:
-        async with websockets.connect("ws://localhost:8765") as websocket:
+        url = get_socket_url(GET_RESULTS_SOCKET)
+        async with websockets.connect(url) as websocket:
             await websocket.send(json.dumps({'simulation_id': simulation_id}))
             logger.info(f'Sent get request message for {simulation_id}')
-            response = await websocket.recv()
-            job = json.loads(pickle.loads(response))
+            response = await websocket.recv(decode=True)
+            job = decompress_message(response)
             logger.info(f'Got a response: {job}')
-
             if job is None:
                 await asyncio.sleep(2.0)
                 n_iter += 1
