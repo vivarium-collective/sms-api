@@ -11,10 +11,6 @@ dep:
 exportEnv:
 	@uv pip freeze > requirements.txt
 
-.PHONY: server 
-server:
-	@uv run python server/main.py 
-
 .PHONY: clean
 clean:
 	@rm -rf uv.lock && rm -rf .venv && rm -rf sms-api.egg-info && uv run pip cache purge && uv cache clean
@@ -47,3 +43,15 @@ cleanInstall:
 .PHONY: py 
 py:
 	@uv run python
+
+.PHONY: simulations
+simulations:
+	@uv run server/run_simulation.py
+
+.PHONY: results
+results:
+	@uv run server/get_results.py
+
+.PHONY: server 
+server:
+	@make simulations & make results
