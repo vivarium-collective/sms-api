@@ -1,36 +1,23 @@
-"""Endpoint definitions for the CommunityAPI. NOTE: Users of this API must be first authenticated."""
+"""Endpoint definitions for the CoreAPI. NOTE: Users of this API must be first authenticated."""
 
-import ast
 import asyncio
 import base64
-from collections import defaultdict
-import datetime
 from dataclasses import dataclass, asdict, field
-import enum
 import gzip
 import json
-import pickle
-import shutil
-import tempfile as tmp
 import os
-import time
-import traceback
-from typing import Callable, Iterable
+from typing import Callable
 import uuid 
-import gridfs
-import gridfs.asynchronous
-import gridfs.synchronous
-from pymongo import AsyncMongoClient, MongoClient
-from pymongo.asynchronous.database import AsyncDatabase
-from tqdm.notebook import tqdm
 
-import pydantic as pyd
-from pydantic import BaseModel, ConfigDict, Field
-from pymongo.results import InsertOneResult
 import dotenv as de
-import numpy as np
 import websockets
-from common.connectors.db import MongoConnector
+import simdjson  # type: ignore
+from fastapi import APIRouter, Query
+import fastapi
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from asyncio import sleep
+
 from common.managers.db import MongoManager
 from data_model.api import BulkMoleculeData, ListenerData, WCMIntervalData, WCMIntervalResponse, WCMSimulationRequest
 from data_model.base import BaseClass
@@ -38,28 +25,11 @@ from data_model.jobs import SimulationRunStatuses
 from data_model.requests import SimulationRequest
 from gateway.handlers.db import configure_mongo
 from gateway.handlers.simulation import interval_generator
-import process_bigraph  # type: ignore
-import simdjson  # type: ignore
-import anyio
-from fastapi import APIRouter, Query, WebSocket
-import fastapi
-from starlette.applications import Starlette
-from starlette.routing import Route, WebSocketRoute
-from starlette.templating import Jinja2Templates
-from fastapi import FastAPI, Response
-from fastapi.responses import HTMLResponse, StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-import json, uvicorn
-from asyncio import sleep
-
 from data_model.gateway import RouterConfig
 from common import auth, log, users
 from gateway.core.client import client
 from gateway.handlers.app_config import root_prefix
-# from gateway.handlers.vivarium import VivariumFactory, new_id
-
 from data_model.jobs import SimulationRun
-from data_model.vivarium import VivariumDocument
 
 
 logger = log.get_logger(__file__)
@@ -133,6 +103,7 @@ async def stream_simulation(
     start_time: float = Query(default=1.0),
     framesize: float = Query(default=1.0)
 ):
+    compile_simulation = lambda: NotImplementedError("TODO: finish this!")
     return StreamingResponse(
         interval_generator(
             request=request,
@@ -140,7 +111,8 @@ async def stream_simulation(
             total_time=total_time,
             time_step=time_step,
             start_time=start_time,
-            framesize=framesize
+            framesize=framesize,
+            compile_simulation=compile_simulation
         ), 
         media_type="text/event-stream"
     )

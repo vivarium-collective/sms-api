@@ -5,14 +5,12 @@ import shutil
 import subprocess
 import traceback
 import tempfile as tmp
+from typing import Callable
 
 import fastapi
 import numpy as np
 
 from data_model.api import BulkMoleculeData, ListenerData, WCMIntervalData, WCMIntervalResponse, WCMSimulationRequest
-from gateway.dispatch import dispatch_simulation, compile_simulation
-# import process_bigraph as pbg
-# from vivarium.vivarium import Vivarium
 
 
 __all__ = [
@@ -89,6 +87,7 @@ async def interval_generator(
     experiment_id: str,
     total_time: float,
     time_step: float,
+    compile_simulation: Callable,
     start_time: float = 1.0,
     buffer: float = 0.11,
     framesize: float | None = None
