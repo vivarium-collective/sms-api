@@ -33,7 +33,7 @@ cleanInstall:
 	@uv sync
 	@uv pip install pip
 	@uv pip install fastapi pydantic python-multipart python-dotenv aiohttp fsspec h5py
-	@uv pip install --editable ../../vEcoli
+	@uv pip install ./vEcoli
 	@uv pip freeze > requirements.txt
 	@uv add -r requirements.txt
 # @uv pip install ../../bigraph-schema

@@ -5,13 +5,10 @@
 FROM python:3.12.9-slim-bookworm
 
 # uv setup
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates make git
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates make gcc g++ build-essential
 ADD https://astral.sh/uv/install.sh /uv-installer.sh
 RUN sh /uv-installer.sh && rm /uv-installer.sh
 ENV PATH="/root/.local/bin/:$PATH"
-
-WORKDIR /root
-RUN git clone https://github.com/CovertLab/vEcoli.git
 
 WORKDIR /app
 ADD . /app 

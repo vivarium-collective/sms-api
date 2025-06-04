@@ -10,13 +10,11 @@ ADD https://astral.sh/uv/install.sh /uv-installer.sh
 RUN sh /uv-installer.sh && rm /uv-installer.sh
 ENV PATH="/root/.local/bin/:$PATH"
 
-WORKDIR /root
-RUN git clone https://github.com/CovertLab/vEcoli.git
-
 WORKDIR /app
 ADD . /app 
  
-RUN make cleanInstall
+RUN uv venv \
+    && uv sync
 
 CMD ["make", "simulations"]
 
