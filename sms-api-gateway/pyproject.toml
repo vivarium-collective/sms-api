@@ -25,7 +25,6 @@ dependencies = [
     "autograd==1.8.0",
     "babel==2.17.0",
     "beautifulsoup4==4.13.4",
-    "bigraph-schema",
     "biopython==1.85",
     "bleach==6.2.0",
     "cachetools==5.5.2",
@@ -66,7 +65,6 @@ dependencies = [
     "frozenlist==1.6.0",
     "fsspec==2025.5.1",
     "gcsfs==2025.5.1",
-    "genecoli",
     "geopandas==1.0.1",
     "giddy==2.3.6",
     "google-api-core==2.24.2",
@@ -163,7 +161,6 @@ dependencies = [
     "pointpats==2.5.1",
     "polars==1.30.0",
     "pooch==1.8.2",
-    "process-bigraph",
     "prometheus-client==0.22.0",
     "prompt-toolkit==3.0.51",
     "propcache==0.3.1",
@@ -259,7 +256,6 @@ dependencies = [
     "uri-template==1.3.0",
     "urllib3==2.4.0",
     "uvicorn==0.34.2",
-    "vecoli",
     "vivarium-core==1.6.5",
     "wcwidth==0.2.13",
     "webcolors==24.11.1",
@@ -286,17 +282,8 @@ energy = [
 packages = [
     "gateway",
     "data_model",
-    "common",
-    "deployment",
-    "server"
+    "common"
 ]
-
-[tool.uv.sources]
-bigraph-schema = { path = "../../bigraph-schema" }
-genecoli = { path = "../../genEcoli" }
-process-bigraph = { path = "../../process-bigraph" }
-vecoli = { path = "../../vEcoli" }
-vivarium-interface = { path = "../../vivarium-interface" }
 
 [dependency-groups]
 demo = [
