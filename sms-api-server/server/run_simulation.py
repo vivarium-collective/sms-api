@@ -186,14 +186,14 @@ async def processor(websocket: WebSocket):
         await asyncio.sleep(2.22)
 
 
-async def run_simulation_queue(port=8765):
+async def queue(port=8765):
     async with websockets.serve(processor, "localhost", port):
         print(f"WebSocket server running on ws://localhost:{port}")
         await asyncio.Future()
     
 
 if __name__ == "__main__":
-    asyncio.run(run_simulation_queue())
+    asyncio.run(queue())
 
 
     
