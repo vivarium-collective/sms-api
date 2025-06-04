@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import gzip
 import json
 import os
 import pickle
@@ -52,13 +54,23 @@ def get_save_times(start, end, framesize, t):
     return save_times
 
 
+def compress_message(data: dict) -> str:
+    compressed = gzip.compress(json.dumps(data).encode())
+    return base64.b64encode(compressed).decode()
+
+
+def decompress_message(encoded_data: str) -> dict:
+    compressed = base64.b64decode(encoded_data)
+    decompressed = gzip.decompress(compressed).decode()
+    return json.loads(decompressed)
+
+
 async def socket_connector(handler: Callable, url: str | None = None, socket_port: int = 8765, *args, **kwargs):
     async with websockets.connect(url or f"ws://localhost:{socket_port}") as websocket:
         return handler(*args, **kwargs)
 
 
 async def process_simulation(
-    ws: WebSocket,
     experiment_id: str | None = None,
     total_time: float | None = None,
     time_step: float | None = None,
@@ -144,7 +156,6 @@ async def process_simulation(
                 }
             }
             results[interval_id] = response_i
-            await ws.send(json.dumps(results))
             await asyncio.sleep(buffer)
         except:
             print(f'ERROR --->\nInterval ID: {t_i}')
@@ -156,54 +167,33 @@ async def process_simulation(
     return {"simulation_id": req.simulation_id, "results": results}
 
 
-async def process_run(request, runs, db, ws):
+async def write_run(response, runs, db):
     """Mongo Processor for adding runs"""
-    response = await process_simulation(ws=ws, **request)
     collection = db.get_collection("get_results")
     await collection.insert_one(response)
     await runs.add_run(response)
 
 
-async def process_query(request, websocket: WebSocket):
-    """Websocket processor for getting results"""
-    run = await runs.get_run(**request)
-    if run is None:
-        collection = db.get_collection("get_results")
-        r = await collection.find_one(request)
-        if r is not None:
-            r.pop("_id", None)
-            run = r
-    packet = json.dumps(run)
-    await websocket.send(pickle.dumps(packet))
-    # print(f"Response emitted!!\n{json.dumps(run)}")
-
-
-async def process_payloads(websocket: WebSocket):
+async def processor(websocket: WebSocket):
     global runs
     global db 
     async for request_payload in websocket:
         request = json.loads(request_payload)
         request.pop("_id", None)
         print(f"Got a request payload: {request}")
-
-        # case: is a get results request
-        if "simulation_id" in request and len(request) == 1:
-            await process_query(request, websocket)
-        else:
-            # case: is a sim run request
-            await process_run(request, runs, db, websocket)
-        
+        response = await process_simulation(**request)
+        await write_run(response, runs, db)
         await asyncio.sleep(2.22)
 
 
-async def process_queue(port=8765):
-    async with websockets.serve(process_payloads, "localhost", port):
+async def run_simulation_queue(port=8765):
+    async with websockets.serve(processor, "localhost", port):
         print(f"WebSocket server running on ws://localhost:{port}")
         await asyncio.Future()
     
 
 if __name__ == "__main__":
-    asyncio.run(process_queue())
+    asyncio.run(run_simulation_queue())
 
 
     

@@ -13,7 +13,7 @@ exportEnv:
 
 .PHONY: server 
 server:
-	@uv run server/main.py 
+	@uv run python server/main.py 
 
 .PHONY: clean
 clean:
