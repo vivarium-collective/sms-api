@@ -168,6 +168,7 @@ pyqt5==5.15.11
 pyqt5-qt5==5.15.17
 pyqt5-sip==12.17.0
 pysal==25.1
+pysimdjson==7.0.1
 pytest==8.4.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
@@ -227,12 +228,13 @@ tzdata==2025.2
 unum==4.2.1
 uri-template==1.3.0
 urllib3==2.4.0
-vecoli @ file:///Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/sms-api-server/vEcoli
+-e file:///Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/sms-api-server/vEcoli
 vivarium-core==1.6.5
 wcwidth==0.2.13
 webcolors==24.11.1
 webencodings==0.5.1
 websocket-client==1.8.0
+websockets==15.0.1
 wheel==0.45.1
 widgetsnbextension==4.0.14
 yarl==1.20.0

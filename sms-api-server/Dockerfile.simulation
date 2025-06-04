@@ -4,6 +4,8 @@
 
 FROM python:3.12.9-slim-bookworm
 
+EXPOSE 8765
+
 # uv setup
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates make git
 ADD https://astral.sh/uv/install.sh /uv-installer.sh

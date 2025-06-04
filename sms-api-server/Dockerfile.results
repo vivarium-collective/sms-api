@@ -4,6 +4,8 @@
 
 FROM python:3.12.9-slim-bookworm
 
+EXPOSE 8766
+
 # uv setup
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates make gcc g++ build-essential
 ADD https://astral.sh/uv/install.sh /uv-installer.sh
@@ -13,7 +15,7 @@ ENV PATH="/root/.local/bin/:$PATH"
 WORKDIR /app
 ADD . /app 
  
-RUN make cleanInstall
+RUN uv venv && uv sync
 
 CMD ["make", "results"]
 

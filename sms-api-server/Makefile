@@ -13,7 +13,7 @@ exportEnv:
 
 .PHONY: clean
 clean:
-	@rm -rf uv.lock && rm -rf .venv && rm -rf sms-api.egg-info && uv run pip cache purge && uv cache clean
+	@rm -rf uv.lock && rm -rf .venv && rm -rf sms_api_server.egg-info && uv run pip cache purge && uv cache clean
 
 .PHONY: lock
 lock:
@@ -32,12 +32,16 @@ cleanInstall:
 	@make clean
 	@uv sync
 	@uv pip install pip
-	@uv pip install fastapi pydantic python-multipart python-dotenv aiohttp fsspec h5py
-	@uv pip install ./vEcoli
+	@uv pip install fastapi pydantic python-multipart python-dotenv aiohttp fsspec h5py pysimdjson websockets
+	@uv pip install --editable ./vEcoli
 	@uv pip freeze > requirements.txt
 	@uv add -r requirements.txt
 # @uv pip install ../../bigraph-schema
 # @uv pip install ../../process-bigraph
+
+.PHONY: install
+install:
+	@uv sync
 
 .PHONY: py 
 py:
@@ -45,11 +49,11 @@ py:
 
 .PHONY: simulations
 simulations:
-	@uv run server/run_simulation.py
+	@uv run python controller/run_simulation.py
 
 .PHONY: results
 results:
-	@uv run server/get_results.py
+	@uv run python controller/get_results.py
 
 .PHONY: server 
 server:
