@@ -271,12 +271,6 @@ dependencies = [
 demo = [
     "pytest>=8.3.5"
 ]
-energy = [
-    "pennylane>=0.41.1",
-    "equilibrator-api==0.6.0",
-    "equilibrator-assets==0.6.0",
-    "equilibrator-cache==0.6.1",
-]
 
 [tool.setuptools]
 packages = [
