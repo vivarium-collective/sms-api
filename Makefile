@@ -36,3 +36,8 @@ install-requirements:
 	@uv pip install vivarium-interface
 	@uv pip freeze > requirements.txt
 	@uv add -r requirements.txt
+
+.PHONY: compose
+compose:
+    @docker compose -f ./sms-api-gateway/docker-compose.yml -f ./sms-api-server/docker-compose.yml up
+
