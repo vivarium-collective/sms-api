@@ -22,9 +22,9 @@ from websockets.asyncio.server import ServerConnection as WebSocket
 from common import log
 from common.managers.db import MongoManager
 from data_model.api import BulkMoleculeData, ListenerData, WCMIntervalData, WCMIntervalResponse, WCMSimulationRequest
-from server.dispatch import compile_simulation
-from server.handlers.db import configure_mongo
-from server.handlers.runs import RunsDb
+from controller.dispatch import compile_simulation
+from controller.handlers.db import configure_mongo
+from controller.handlers.runs import RunsDb
 
 
 logger = log.get_logger(__file__)

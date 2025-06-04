@@ -9,7 +9,7 @@ dependencies = [
     "access==1.1.9",
     "affine==2.4.0",
     "aiohappyeyeballs==2.6.1",
-    "aiohttp==3.12.8",
+    "aiohttp==3.12.9",
     "aiosignal==1.3.2",
     "altair==5.5.0",
     "annotated-types==0.7.0",
@@ -24,7 +24,6 @@ dependencies = [
     "autograd==1.8.0",
     "babel==2.17.0",
     "beautifulsoup4==4.13.4",
-    "bigraph-schema",
     "biopython==1.85",
     "bleach==6.2.0",
     "cachetools==5.5.2",
@@ -54,7 +53,6 @@ dependencies = [
     "fastapi==0.115.12",
     "fastjsonschema==2.21.1",
     "fiona==1.10.1",
-    "fire==0.7.0",
     "flexcache==0.3",
     "flexparser==0.4",
     "fonttools==4.58.1",
@@ -62,7 +60,6 @@ dependencies = [
     "frozenlist==1.6.2",
     "fsspec==2025.5.1",
     "gcsfs==2025.5.1",
-    "genecoli",
     "geopandas==1.1.0",
     "giddy==2.3.6",
     "google-api-core==2.25.0",
@@ -143,7 +140,6 @@ dependencies = [
     "packaging==25.0",
     "pandas==2.2.3",
     "pandocfilters==1.5.1",
-    "parsimonious==0.10.0",
     "parso==0.8.4",
     "patsy==1.0.1",
     "pexpect==4.9.0",
@@ -154,7 +150,6 @@ dependencies = [
     "pluggy==1.6.0",
     "pointpats==2.5.1",
     "polars==1.30.0",
-    "process-bigraph",
     "prometheus-client==0.22.1",
     "prompt-toolkit==3.0.51",
     "propcache==0.3.1",
@@ -180,7 +175,6 @@ dependencies = [
     "pyqt5-qt5==5.15.17",
     "pyqt5-sip==12.17.0",
     "pysal==25.1",
-    "pysimdjson>=7.0.1",
     "pytest==8.4.0",
     "python-dateutil==2.9.0.post0",
     "python-dotenv==1.1.0",
@@ -193,7 +187,6 @@ dependencies = [
     "rasterio==1.4.3",
     "rasterstats==0.20.0",
     "referencing==0.36.2",
-    "regex==2024.11.6",
     "requests==2.32.3",
     "requests-oauthlib==2.0.0",
     "rfc3339-validator==0.1.4",
@@ -220,14 +213,12 @@ dependencies = [
     "splot==1.1.7",
     "spopt==0.6.1",
     "spreg==1.8.3",
-    "sqlalchemy>=2.0.41",
     "stack-data==0.6.3",
     "starlette==0.46.2",
     "statsmodels==0.14.4",
     "stochastic-arrow==1.1.0",
     "swiglpk==5.0.12",
     "sympy==1.14.0",
-    "termcolor==3.1.0",
     "terminado==0.18.1",
     "threadpoolctl==3.6.0",
     "tifffile==2025.6.1",
@@ -249,18 +240,14 @@ dependencies = [
     "webcolors==24.11.1",
     "webencodings==0.5.1",
     "websocket-client==1.8.0",
-    "websockets>=15.0.1",
     "wheel==0.45.1",
     "widgetsnbextension==4.0.14",
     "yarl==1.20.0",
 ]
 
 [tool.setuptools]
-packages = ["server", "common", "data_model"]
+packages = ["controller", "common", "data_model"]
 
 [tool.uv.sources]
-bigraph-schema = { path = "../../bigraph-schema", editable = true }
-genecoli = { path = "../../genEcoli", editable = true }
-process-bigraph = { path = "../../process-bigraph", editable = true }
-vecoli = { path = "../../vEcoli", editable = true }
+vecoli = { path = "../../vEcoli" }
 
