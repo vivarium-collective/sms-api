@@ -263,5 +263,3 @@ genecoli = { path = "../genEcoli", editable = true }
 process-bigraph = { path = "../process-bigraph", editable = true }
 sms-api-gateway = { path = "sms-api-gateway", editable = true }
 vecoli = { path = "../vEcoli", editable = true }
-
-

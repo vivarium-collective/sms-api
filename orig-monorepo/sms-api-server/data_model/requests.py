@@ -1,5 +1,4 @@
-import enum
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
 
 
 class SimulationRequest(BaseModel):
@@ -8,5 +7,3 @@ class SimulationRequest(BaseModel):
     time_step: float = 1.0
     start_time: float = 0.0
     framesize: float = 1.0
-
-

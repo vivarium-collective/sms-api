@@ -14,7 +14,7 @@ def main():
         openapi_version=app.openapi_version,
         description=app.description,
         routes=app.routes,
-        servers=app.servers
+        servers=app.servers,
     )
 
     # Convert the JSON OpenAPI spec to YAML
@@ -23,16 +23,16 @@ def main():
     current_directory = os.path.dirname(os.path.realpath(__file__))
 
     # Write the YAML OpenAPI spec to a file in subdirectory spec
-    openapi_version = app.openapi_version.replace('.', '_')
+    openapi_version = app.openapi_version.replace(".", "_")
     spec_fp = f"{current_directory}/spec/openapi_{openapi_version}_generated.yaml"
     if os.path.exists(spec_fp):
-        print('Spec exists, deleting...')
+        print("Spec exists, deleting...")
         os.remove(spec_fp)
 
     with open(spec_fp, "w") as f:
         f.write(openapi_spec_yaml)
 
-    print('New OpenAPI spec for compose_api generated!')
+    print("New OpenAPI spec for compose_api generated!")
 
 
 if __name__ == "__main__":

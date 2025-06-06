@@ -8,13 +8,13 @@ from its Python package.
 
 from typing import TypeGuard
 
-import scipy.constants
 import numpy as np
+import scipy.constants
+from unum import Unum
+from unum.units import *  # noqa: F403
 
 # noinspection PyUnresolvedReferences
-from unum.units import mol, mmol, g, h, L, fg, min, s, umol, dmol, J, K  # noqa: F401
-from unum.units import *  # noqa: F403
-from unum import Unum
+from unum.units import J, K, L, dmol, fg, g, h, min, mmol, mol, s, umol  # noqa: F401
 
 count = Unum.unit("count", mol / scipy.constants.Avogadro)
 nt = Unum.unit("nucleotide", count)

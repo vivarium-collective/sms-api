@@ -2,7 +2,7 @@
 freeze:
 	@uv pip freeze
 
-.PHONY: add 
+.PHONY: add
 dep:
 	@uv pip install $(pkg)
 	@echo $(uv pip freeze | grep typer) >> requirements.txt
@@ -43,7 +43,7 @@ cleanInstall:
 install:
 	@uv sync
 
-.PHONY: py 
+.PHONY: py
 py:
 	@uv run python
 
@@ -55,6 +55,6 @@ simulations:
 results:
 	@uv run python controller/get_results.py
 
-.PHONY: server 
+.PHONY: server
 server:
 	@make simulations & make results

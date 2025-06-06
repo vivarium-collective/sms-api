@@ -4,17 +4,16 @@ allowing for basic type parsing and fields that are dictionaries or lists. The
 reader also supports units and comment lines.
 """
 
-from contextlib import contextmanager
 import csv
-import io
-from itertools import filterfalse
 import json
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
+from itertools import filterfalse
+from typing import Any
+
 import numpy as np
-from typing import Any, Iterator
-
 from wholecell.utils import units
-
 
 CSV_DIALECT = csv.excel_tab
 
@@ -44,19 +43,16 @@ class JsonWriter(csv.DictWriter):
     def writeheader(self):
         # Bypass DictWriter's writeheader() and _dict_to_list(). [Consider
         # reimplementing on csv.writer rather than subclassing DictWriter.]
-        header = ['"{}"'.format(name) for name in self.fieldnames]
+        header = [f'"{name}"' for name in self.fieldnames]
         self.writer.writerow(header)
 
     def _dict_to_list(self, rowdict):
-        rowdict_ = {
-            key: json.dumps(array_to_list(value), ensure_ascii=False)
-            for key, value in rowdict.items()
-        }
+        rowdict_ = {key: json.dumps(array_to_list(value), ensure_ascii=False) for key, value in rowdict.items()}
         # noinspection PyUnresolvedReferences
         return super(JsonWriter, self)._dict_to_list(rowdict_)
 
 
-class JsonReader(object):
+class JsonReader:
     def __init__(self, *args, **kwargs):
         """
         Reader for a .tsv file that supports units and json-coded values.
@@ -70,9 +66,7 @@ class JsonReader(object):
         By default, dialect=CSV_DIALECT, which is excel-tab.
         """
         kwargs.setdefault("dialect", CSV_DIALECT)
-        self.tsv_dict_reader = csv.DictReader(
-            quotechar="'", quoting=csv.QUOTE_MINIMAL, *args, **kwargs
-        )
+        self.tsv_dict_reader = csv.DictReader(quotechar="'", quoting=csv.QUOTE_MINIMAL, *args, **kwargs)
 
         fieldnames = self.tsv_dict_reader.fieldnames
 
@@ -81,11 +75,7 @@ class JsonReader(object):
         self.tsv_dict_reader.fieldnames = fieldnames
 
         # Discard private field names that begin with underscore and empty field names
-        self._fieldnames = [
-            fieldname
-            for fieldname in fieldnames
-            if not fieldname.startswith("_") and fieldname != ""
-        ]
+        self._fieldnames = [fieldname for fieldname in fieldnames if not fieldname.startswith("_") and fieldname != ""]
 
     def __iter__(self):
         return self
@@ -113,7 +103,7 @@ class JsonReader(object):
 
             except (ValueError, TypeError) as e:
                 repr(e)  # TODO(jerry): Why call repr() and discard the result?
-                raise ValueError("failed to parse json string:{}".format(raw_value))
+                raise ValueError(f"failed to parse json string:{raw_value}")
 
             match = re.search(r"(.*?) \((.*?)\)", key)
             if match:
@@ -174,7 +164,7 @@ def tsv_reader(filename: str) -> Iterator[JsonReader]:
     # least before json.loads(). The file can be in UTF-8 or its ASCII subset.
     # ########################################################################
 
-    with io.open(filename, mode="r", encoding="utf-8", newline="") as fh:
+    with open(filename, encoding="utf-8", newline="") as fh:
         reader = JsonReader(filterfalse(comment_line, fh), dialect=CSV_DIALECT)
         yield reader
 
@@ -197,7 +187,7 @@ def tsv_writer(filename: str, fieldnames: list[str]) -> Iterator[JsonWriter]:
     # ########################################################################
 
     fieldnames = list(fieldnames)
-    with io.open(filename, mode="w", encoding="utf-8", newline="") as fh:
+    with open(filename, mode="w", encoding="utf-8", newline="") as fh:
         writer = JsonWriter(fh, fieldnames, dialect=CSV_DIALECT)
         writer.writeheader()
 

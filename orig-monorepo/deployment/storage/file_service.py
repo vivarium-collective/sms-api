@@ -17,7 +17,6 @@ class ListingItem(BaseModel):
 
 
 class FileService(ABC):
-
     @abstractmethod
     async def download_file(self, gcs_path: str, file_path: Optional[Path] = None) -> tuple[str, str]:
         pass

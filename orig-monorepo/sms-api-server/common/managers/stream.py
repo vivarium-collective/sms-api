@@ -5,24 +5,19 @@ Connection Managers:
 
 Connection managers for the following:
 
-- Websocket/gRPC 
+- Websocket/gRPC
 
 """
-import abc
+
 import asyncio
-import pickle
 import traceback
-from typing import Dict, Set, List, Tuple
 from operator import itemgetter
+from typing import Dict, Set
 
-from bson import Binary
-from fastapi import WebSocket
-from pymongo import MongoClient
-from starlette.websockets import WebSocketState
-from sqlalchemy import create_engine, text
 # from vivarium.vivarium import Vivarium
-
 from data_model.messages import MessageToRoomModel
+from fastapi import WebSocket
+from starlette.websockets import WebSocketState
 
 
 class SocketBroadcaster:
@@ -33,23 +28,23 @@ class SocketBroadcaster:
         # TODO: connect to message broker here
         # broker = MessageBroker(self.uri)
         # self.channels = broker.get_channels()
-    
-    @property 
+
+    @property
     def channels(self):
         return self._channels
-    
-    @channels.setter 
+
+    @channels.setter
     def channels(self, ch):
         self._channels = ch
-    
+
     async def connect(self):
-        pass 
+        pass
 
     async def disconnect(self):
-        pass 
+        pass
 
     async def subscribe(self, channel: str):
-        pass 
+        pass
 
     async def publish(self, channel: str, message: dict):
         pass
@@ -90,7 +85,7 @@ class SocketConnectionManager:
         self.user_connections[user_id] = ws_connection
         await self._send_message_to_ws_connection(message="Connection successful", ws_connection=ws_connection)
 
-    async def add_user_connection_to_room(self, room_id: str, user_id: str) -> (bool, str): # type: ignore
+    async def add_user_connection_to_room(self, room_id: str, user_id: str) -> (bool, str):  # type: ignore
         """
         This function would add a user to a Room
         This user id would be added to the ids of the users that are listening to a room
@@ -137,7 +132,9 @@ class SocketConnectionManager:
         """
 
         if not (
-                ws_connection.application_state == WebSocketState.CONNECTED and ws_connection.client_state == WebSocketState.CONNECTED):
+            ws_connection.application_state == WebSocketState.CONNECTED
+            and ws_connection.client_state == WebSocketState.CONNECTED
+        ):
             return False
 
         # Try to send a message
@@ -146,7 +143,7 @@ class SocketConnectionManager:
         except RuntimeError:
             return False
 
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
             return False
 
@@ -171,7 +168,8 @@ class SocketConnectionManager:
 
         for connection in users_ws_connections:
             is_sent, sent_message_response_info = await self._send_message_to_ws_connection(
-                message=f"Room {message.room_id} --> {message.message}", ws_connection=connection)
+                message=f"Room {message.room_id} --> {message.message}", ws_connection=connection
+            )
 
     async def _subscribe_and_listen_to_channel(self, room_id: str):
         """
@@ -190,7 +188,6 @@ class SocketConnectionManager:
                 await self._consume_events(message=message)
 
     async def send_message_to_room(self, message: MessageToRoomModel):
-
         room_connections = self.connections.get(message.room_id, {})
 
         if len(room_connections) == 0:
@@ -201,20 +198,19 @@ class SocketConnectionManager:
         # Send events to the room
         await self.broadcaster.publish(channel=message.room_id, message=message.model_dump())
 
-    async def _send_message_to_ws_connection(self, message: str, ws_connection: WebSocket) -> (bool, str): # type: ignore
+    async def _send_message_to_ws_connection(self, message: str, ws_connection: WebSocket) -> (bool, str):  # type: ignore
         try:
             await ws_connection.send_text(message)
             return True, "Message sent!"
         except RuntimeError:
             return False, "Message Not Sent, Websocket is disconnected"
 
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
 
             return False, "Error Sending Message"
 
     def remove_user_connection(self, user_id):
-
         try:
             self.user_connections.pop(user_id)
         except KeyError:

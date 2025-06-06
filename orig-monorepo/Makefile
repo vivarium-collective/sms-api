@@ -40,4 +40,3 @@ install-requirements:
 .PHONY: compose
 compose:
 	@docker compose -f ./sms-api-gateway/docker-compose.yml -f ./sms-api-server/docker-compose.yml up
-

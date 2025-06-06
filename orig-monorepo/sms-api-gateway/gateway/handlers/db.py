@@ -1,16 +1,11 @@
 import json
 import sqlite3
-
-from typing import List, Any
+from typing import Any
 
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-
-SIMDATA_ROW_SCHEMA = {
-    "experiment_id": "TEXT PRIMARY KEY",
-    "data": "TEXT"
-}
+SIMDATA_ROW_SCHEMA = {"experiment_id": "TEXT PRIMARY KEY", "data": "TEXT"}
 DATABASE_DIR = "databases"
 DEFAULT_SIMDATA_DB_PATH = f"{DATABASE_DIR}/simdata.db"
 
@@ -35,20 +30,17 @@ def write(tablename: str, payload: dict[str, dict], conn: sqlite3.Connection):
     cursor = conn.cursor()
 
     # Ensure the table exists and has the right schema
-    cursor.execute(f'''
+    cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS {tablename} (
             experiment_id TEXT PRIMARY KEY,
             data TEXT
         )
-    ''')
+    """)
 
     # Insert each item from the payload
     for key, data in payload.items():
         json_str = json.dumps(data)
-        cursor.execute(
-            f"INSERT OR REPLACE INTO {tablename} (experiment_id, data) VALUES (?, ?)",
-            (key, json_str)
-        )
+        cursor.execute(f"INSERT OR REPLACE INTO {tablename} (experiment_id, data) VALUES (?, ?)", (key, json_str))
 
     conn.commit()
     return conn
@@ -96,4 +88,4 @@ def configure_mongo():
     MONGO_URI = "mongodb://localhost:27017/"
     client = AsyncMongoClient(MONGO_URI)
     db: AsyncDatabase = client.get_database("simulations")
-    return client, db 
+    return client, db

@@ -1,10 +1,10 @@
 ################
 # SMS API Gateway
-################ 
+################
 
 FROM python:3.12.9-slim-bookworm
 
-# configure uv 
+# configure uv
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
@@ -16,9 +16,8 @@ ENV PATH="/root/.local/bin/:$PATH"
 
 # install project and deps
 ADD . /app
-WORKDIR /app 
+WORKDIR /app
 RUN uv venv \
-    && uv sync 
+    && uv sync
 
 CMD ["make", "gateway"]
-

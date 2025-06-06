@@ -25,8 +25,10 @@ class SSHService:
                 assert isinstance(result.stdout, str)
                 assert isinstance(result.stderr, str)
                 assert isinstance(result.returncode, int)
-                logger.info(msg=f"command {command} retcode {result.returncode} "
-                                f"stdout={result.stdout[:100]} stderr={result.stderr[:100]}")
+                logger.info(
+                    msg=f"command {command} retcode {result.returncode} "
+                    f"stdout={result.stdout[:100]} stderr={result.stderr[:100]}"
+                )
                 return result.returncode, result.stdout, result.stderr
             except asyncssh.ProcessError as exc:
                 logger.error(msg=f"failed to send command {command}, stderr {str(result.stderr)[:100]}", exc_info=exc)

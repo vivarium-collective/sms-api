@@ -1,18 +1,18 @@
 {
     "inherit_from": [],
-    "experiment_id" : null,
-    "suffix_time" : true,
-    "description" : "",
-    "progress_bar" : true,
+    "experiment_id": null,
+    "suffix_time": true,
+    "description": "",
+    "progress_bar": true,
     "sim_data_path": "reconstruction/sim_data/kb/simData.cPickle",
-    "emitter" : "timeseries",
+    "emitter": "timeseries",
     "emitter_arg": {},
-    "emit_topology" : false,
-    "emit_processes" : false,
-    "emit_config" : false,
+    "emit_topology": false,
+    "emit_processes": false,
+    "emit_config": false,
     "emit_unique": false,
-    "log_updates" : false,
-    "raw_output" : true,
+    "log_updates": false,
+    "raw_output": true,
     "seed": 0,
     "mar_regulon": false,
     "amp_lysis": false,
@@ -68,9 +68,9 @@
     "save": false,
     "save_times": [],
 
-    "add_processes" : [],
-    "exclude_processes" : [],
-    "swap_processes" : {},
+    "add_processes": [],
+    "exclude_processes": [],
+    "swap_processes": {},
     "profile": false,
     "processes": [
         "post-division-mass-listener",
@@ -114,7 +114,8 @@
     ],
     "process_configs": {
         "global_clock": {},
-        "replication_data_listener": {"time_step": 1}},
+        "replication_data_listener": { "time_step": 1 }
+    },
     "topology": {
         "bulk-timeline": {
             "bulk": ["bulk"],
@@ -163,8 +164,6 @@
         "unique_molecule_counts": [["ecoli-metabolism"]],
         "ribosome_data_listener": [["ecoli-metabolism"]]
     },
-    "engine_process_reports": [
-        ["listeners"]
-    ],
+    "engine_process_reports": [["listeners"]],
     "emit_paths": []
 }

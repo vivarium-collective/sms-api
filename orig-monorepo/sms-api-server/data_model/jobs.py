@@ -1,4 +1,3 @@
-
 import enum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,9 +13,8 @@ class SimulationRunStatuses(enum.EnumType):
 
 
 class SimulationRun(BaseModel):
-    simulation_id: str 
-    status: str 
+    simulation_id: str
+    status: str
     request: SimulationRequest | None = Field(default=None)
     results: dict | None = Field(default=None)
     model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
-    

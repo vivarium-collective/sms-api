@@ -42,13 +42,8 @@
                 "kinetic_objective_values",
                 "base_reaction_fluxes"
             ],
-            "listeners.atp": [
-                "atp_requested",
-                "atp_allocated_initial"
-            ],
-            "listeners.equilibrium_listener": [
-                "reaction_rates"
-            ]
+            "listeners.atp": ["atp_requested", "atp_allocated_initial"],
+            "listeners.equilibrium_listener": ["reaction_rates"]
         }
     }
 ]

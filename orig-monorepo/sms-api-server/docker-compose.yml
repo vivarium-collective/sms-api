@@ -21,7 +21,7 @@ services:
     environment:
       - STANDALONE=False
       - MONGO_URI = "mongodb://mongodb:27017"
-  
+
   get-results:
     platform: linux/amd64
     build:
@@ -36,7 +36,7 @@ services:
     environment:
       - STANDALONE=False
       - MONGO_URI = "mongodb://mongodb:27017"
-  
+
 networks:
   smsnet:
     driver: bridge

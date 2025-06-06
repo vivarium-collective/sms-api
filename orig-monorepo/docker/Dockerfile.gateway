@@ -10,7 +10,7 @@ RUN sh /uv-installer.sh && rm /uv-installer.sh
 
 ENV PATH="/root/.local/bin/:$PATH"
 
-WORKDIR /app 
+WORKDIR /app
 
 COPY . /app
 

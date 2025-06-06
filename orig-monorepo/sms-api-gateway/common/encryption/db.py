@@ -1,18 +1,19 @@
 import base64
-from hashlib import sha256
+import gzip
 import os
-from os import getcwd
 import pickle
 import sqlite3
-import gzip
 import tempfile
+from hashlib import sha256
+from os import getcwd
 from pathlib import Path
 
-from dotenv import load_dotenv
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from dotenv import load_dotenv
+
 # from vivarium.vivarium import Vivarium
 
 
@@ -20,7 +21,7 @@ load_dotenv()
 
 
 def make_test_password(viv_id: str):
-    return sha256(viv_id.encode('utf-8')).hexdigest()
+    return sha256(viv_id.encode("utf-8")).hexdigest()
 
 
 def salt(size: int = 16):
@@ -54,21 +55,21 @@ def decryption(safe: bytes | str, pswd):
 
 
 def open_cdb(name: str, pswd: bytes):
-    f = gzip.open(getcwd() + name + '_crypted.sql.gz', 'rb')  # TODO: make this safer.
+    f = gzip.open(getcwd() + name + "_crypted.sql.gz", "rb")  # TODO: make this safer.
     safe: bytes | str = f.read()
     f.close()
     content = decryption(safe, pswd)
-    content = content.decode('utf-8')
-    con = sqlite3.connect(':memory:')
+    content = content.decode("utf-8")
+    con = sqlite3.connect(":memory:")
     con.executescript(content)
     return con
 
 
 def save_cdb(con, name, pswd: bytes):
-    fp = gzip.open(getcwd() + name + '_crypted.sql.gz', 'wb')
-    b = b''
+    fp = gzip.open(getcwd() + name + "_crypted.sql.gz", "wb")
+    b = b""
     for line in con.iterdump():
-        b += bytes('%s\n', 'utf8') % bytes(line, 'utf8')
+        b += bytes("%s\n", "utf8") % bytes(line, "utf8")
     b = encryption(b, pswd)
     fp.write(b)
     fp.close()
@@ -78,12 +79,12 @@ def pickle_vivarium(v, vivarium_id: str) -> Path:
     pickled_viv = pickle.dumps(v)
     temp_dir = tempfile.mkdtemp()
     tmp_pickle_path = os.path.join(temp_dir, f"{vivarium_id}.pckl")
-    
+
     with open(tmp_pickle_path, "wb") as f:
         f.write(pickled_viv)
 
     del pickled_viv
-    
+
     return Path(tmp_pickle_path)
 
 
@@ -94,7 +95,7 @@ def write(instance, vivarium_id: str, pswd: bytes, table_name: str = "pickles") 
         data = f.read()
 
     # store to in-memory db
-    conn = sqlite3.connect(':memory:')
+    conn = sqlite3.connect(":memory:")
     cur = conn.cursor()
     cur.execute(f"CREATE TABLE {table_name} (id TEXT PRIMARY KEY, data BLOB)")
     cur.execute(f"INSERT INTO {table_name} VALUES (?, ?)", (vivarium_id, data))
@@ -108,9 +109,7 @@ def write(instance, vivarium_id: str, pswd: bytes, table_name: str = "pickles") 
 def read(pswd: bytes, vivarium_id: str, table_name: str = "pickles"):
     # connect and decrypt db
     conn = open_cdb(table_name, pswd)
-    cursor = conn.execute(
-        f"SELECT data FROM {table_name} WHERE id = ?", (vivarium_id,)
-    )
+    cursor = conn.execute(f"SELECT data FROM {table_name} WHERE id = ?", (vivarium_id,))
     row = cursor.fetchone()
     conn.close()
 
@@ -127,8 +126,3 @@ def list_ids(pswd: bytes, table_name: str = "pickles") -> list[str]:
     ids = [row[0] for row in cursor.fetchall()]
     conn.close()
     return ids
-
-
-
-
-

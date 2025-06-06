@@ -1,5 +1,4 @@
 # install_subprojects.py
-import os
 import subprocess
 from pathlib import Path
 
@@ -19,7 +18,11 @@ def install_packages(packages):
 
 
 if __name__ == "__main__":
-    roots = ["/Users/alexanderpatrie/Desktop/repos/ecoli/genEcoli", "/Users/alexanderpatrie/Desktop/repos/spatio-flux", "/Users/alexanderpatrie/Desktop/repos/ecoli/vEcoli"]
+    roots = [
+        "/Users/alexanderpatrie/Desktop/repos/ecoli/genEcoli",
+        "/Users/alexanderpatrie/Desktop/repos/spatio-flux",
+        "/Users/alexanderpatrie/Desktop/repos/ecoli/vEcoli",
+    ]
     for root in roots:
         packages = find_pyproject_packages(root)
         install_packages(packages)

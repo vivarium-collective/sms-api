@@ -9,9 +9,11 @@ class NumericSlurmValue(BaseModel):
     number: Optional[int] = None
     set: Optional[bool] = None
 
+
 class ExitCode(BaseModel):
     status: list[str]
     return_code: NumericSlurmValue
+
 
 class SlurmJob(BaseModel):
     job_id: int

@@ -2,20 +2,20 @@
 Base data model relating to utils, files, protocols, etc.
 """
 
-
 import ast
-from dataclasses import dataclass, asdict, Field, field
 import datetime
 import json
-from types import FunctionType
-from typing import Any, Callable, List, Dict, Optional, Union
+from dataclasses import asdict, dataclass
+from typing import Any, Dict
 
 import pandas as pd
-from pydantic import ConfigDict, BaseModel as _BaseModel
+from pydantic import BaseModel as _BaseModel
+from pydantic import ConfigDict
 
 
 class BaseModel(_BaseModel):
     """Base Pydantic Model with custom app configuration"""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
@@ -23,16 +23,16 @@ class BaseModel(_BaseModel):
 class BaseClass:
     @property
     def base_exception(self):
-        return Exception(f"Cannot set a value as it is protected.")
-    
+        return Exception("Cannot set a value as it is protected.")
+
     @classmethod
     def _stamp_factory(cls):
         return get_timestamp
-    
+
     @classmethod
     def get_timestamp(cls):
         return BaseClass._stamp_factory()
-    
+
     @property
     def timestamp(self):
         return BaseClass.get_timestamp()
@@ -43,49 +43,49 @@ class BaseClass:
 
     def dict(self):
         serialized = asdict(self)
-        serialized['timestamp'] = self.timestamp
+        serialized["timestamp"] = self.timestamp
         return serialized
-    
+
     def json(self):
         return json.dumps(self.dict())
-    
+
     def dataframe(self):
         data = self.dict()
         indices = list(range(len(data)))
         return pd.DataFrame(data, index=indices)
-    
+
     def to_dict(self):
         return self.dict()
-    
+
     @property
     def _attributes(self):
         serial = self.to_dict()
         return list(serial.keys())
-    
+
     @property
     def attributes(self):
         return self._attributes
 
-    @attributes.setter 
+    @attributes.setter
     def attributes(self, v):
         raise self.base_exception
-    
+
     @property
     def _values(self):
         serial = self.to_dict()
         return list(serial.values())
-    
+
     @property
     def values(self):
         return self._values
 
-    @values.setter 
+    @values.setter
     def values(self, v):
         raise self.base_exception
 
 
 def get_timestamp():
-        return str(datetime.datetime.now())
+    return str(datetime.datetime.now())
 
 
 def parse_value(value: Any) -> Any:
@@ -113,31 +113,36 @@ class DynamicData:
 
 class EncodedKey(bytes):
     def __new__(cls, key: str, *args):
-        return key.encode('utf-8')
+        return key.encode("utf-8")
+
 
 def test_base_class():
-    from dataclasses import dataclass as dc 
+    from dataclasses import dataclass as dc
+
     from data_model.base import BaseClass
-    @dc 
+
+    @dc
     class X(BaseClass):
         i: float
-        j: float 
-        def tuplize(self): return (self.i, self.j)
-    
-    success = False 
+        j: float
+
+        def tuplize(self):
+            return (self.i, self.j)
+
+    success = False
     x = X(11, 2.22)
     try:
         x.timestamp = "123"
     except:
-        success = True 
-    
+        success = True
+
     assert success
     return x
 
 
 @dataclass
 class Node(BaseClass):
-    data: Any 
+    data: Any
     next: Any = None
 
 
@@ -187,7 +192,6 @@ class LinkedList:
             current_node = current_node.next
 
         current_node.next = new_node
-        
 
     # Update node at a given position
     def updateNode(self, val, index):
@@ -280,7 +284,7 @@ class LinkedList:
         while current_node:
             print(current_node.data)
             current_node = current_node.next
-    
+
     def __repr__(self) -> str:
         return str(self.value)
 
@@ -290,6 +294,6 @@ def test_linked_list():
     llist = LinkedList()
 
     # add nodes to the linked list
-    llist.insertAtEnd('a')
-    llist.insertAtBegin('b')
-    assert eval(repr(llist)) == ['b', 'a']
+    llist.insertAtEnd("a")
+    llist.insertAtBegin("b")
+    assert eval(repr(llist)) == ["b", "a"]

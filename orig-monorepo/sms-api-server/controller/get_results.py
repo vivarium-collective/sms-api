@@ -2,30 +2,17 @@ import asyncio
 import base64
 import gzip
 import json
-import os
-import pickle
-import shutil
-import tempfile
-import traceback
-from typing import Any, Callable
 import uuid
-import warnings
-import copy 
+from typing import Callable
 
 import dotenv as de
 import numpy as np
-from pymongo import AsyncMongoClient
-from pymongo.asynchronous.database import AsyncDatabase
 import websockets
+from common import log
 from websockets.asyncio.server import ServerConnection as WebSocket
 
-from common import log
-from common.managers.db import MongoManager
-from data_model.api import BulkMoleculeData, ListenerData, WCMIntervalData, WCMIntervalResponse, WCMSimulationRequest
-from controller.dispatch import compile_simulation
 from controller.handlers.db import configure_mongo
 from controller.handlers.runs import RunsDb
-
 
 logger = log.get_logger(__file__)
 de.load_dotenv()
@@ -80,14 +67,12 @@ async def process_results_query(request, websocket: WebSocket):
         await websocket.send(packet)
         # print(f"Response emitted!!\n{json.dumps(run)}")
     else:
-        await websocket.send(
-            compress_message(
-                {"error": {"message": f"Could not find that job.", "request": request}}))
+        await websocket.send(compress_message({"error": {"message": "Could not find that job.", "request": request}}))
 
 
 async def processor(websocket: WebSocket):
     global runs
-    global db 
+    global db
     async for request_payload in websocket:
         request = json.loads(request_payload)
         request.pop("_id", None)
@@ -100,10 +85,7 @@ async def queue(port=8766):
     async with websockets.serve(processor, "localhost", port):
         print(f"WebSocket server running on ws://localhost:{port}")
         await asyncio.Future()
-    
+
 
 if __name__ == "__main__":
     asyncio.run(queue())
-
-
-    

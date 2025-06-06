@@ -1,14 +1,11 @@
 """Endpoint definitions for the CommunityAPI. NOTE: Users of this API must be first authenticated."""
 
-from fastapi import APIRouter
 import fastapi
-import process_bigraph
-
-from data_model.gateway import RouterConfig
 from common import auth
-from gateway import root_prefix
-from gateway import launch_scan
-from gateway import VivariumFactory, fetch_vivarium, new_id, new_vivarium, pickle_vivarium
+from data_model.gateway import RouterConfig
+from fastapi import APIRouter
+
+from gateway import VivariumFactory, root_prefix
 
 API_PREFIX = "inference"
 LOCAL_URL = "http://localhost:8080"
@@ -17,9 +14,9 @@ MAJOR_VERSION = 1
 
 
 config = RouterConfig(
-    router=APIRouter(), 
+    router=APIRouter(),
     prefix=root_prefix(MAJOR_VERSION) + f"/{API_PREFIX}",
-    dependencies=[fastapi.Depends(auth.get_user)]
+    dependencies=[fastapi.Depends(auth.get_user)],
 )
 
 viv_factory = VivariumFactory()

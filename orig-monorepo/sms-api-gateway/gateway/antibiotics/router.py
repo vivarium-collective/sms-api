@@ -1,25 +1,23 @@
 """Endpoint definitions for the CommunityAPI. NOTE: Users of this API must be first authenticated."""
 
-from fastapi import APIRouter, HTTPException
 import fastapi
-from gateway import (
-    MIC, 
-    PAP, 
-    AntibioticConfig, 
-    AntibioticParams, 
-    AntibioticResponse, 
-    get_MIC_curve, 
-    get_PAP_curve, 
-    get_single_cell_trajectories as single_cell_trajectories, 
-    list_available_parameters as available_parameters, 
-    simulate_antibiotic
-)
-
-from data_model.gateway import RouterConfig
 from common import auth
-from gateway import root_prefix
-from gateway import VivariumFactory, new_id
+from data_model.gateway import RouterConfig
+from fastapi import APIRouter, HTTPException
 
+from gateway import (
+    MIC,
+    PAP,
+    AntibioticParams,
+    AntibioticResponse,
+    VivariumFactory,
+    get_MIC_curve,
+    get_PAP_curve,
+    root_prefix,
+    simulate_antibiotic,
+)
+from gateway import get_single_cell_trajectories as single_cell_trajectories
+from gateway import list_available_parameters as available_parameters
 
 API_PREFIX = "antibiotics"
 LOCAL_URL = "http://localhost:8080"
@@ -28,9 +26,9 @@ MAJOR_VERSION = 1
 
 
 config = RouterConfig(
-    router=APIRouter(), 
+    router=APIRouter(),
     prefix=root_prefix(MAJOR_VERSION) + f"/{API_PREFIX}",
-    dependencies=[fastapi.Depends(auth.get_user)]
+    dependencies=[fastapi.Depends(auth.get_user)],
 )
 viv_factory = VivariumFactory()
 
@@ -50,7 +48,7 @@ async def get_mic_curve(params: AntibioticParams) -> MIC:
     try:
         response = get_MIC_curve(params)
         return response
-    except Exception as e:
+    except Exception:
         raise HTTPException(400, "Something went wrong.")
 
 
@@ -67,7 +65,7 @@ async def get_pap_curve(params: AntibioticParams) -> PAP:
 async def get_single_cell_trajectories(n_cells: int, params: AntibioticParams):
     try:
         response = single_cell_trajectories(n_cells, params)
-        return response 
+        return response
     except Exception as e:
         raise HTTPException(400, str(e))
 
@@ -76,6 +74,6 @@ async def get_single_cell_trajectories(n_cells: int, params: AntibioticParams):
 async def list_available_parameters():
     try:
         response = available_parameters()
-        return response 
+        return response
     except Exception as e:
         raise HTTPException(500, str(e))

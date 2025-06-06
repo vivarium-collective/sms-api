@@ -1,12 +1,7 @@
 {
     "title": "sms-api",
     "version": "0.0.1",
-    "methods": [
-        "POST", 
-        "GET", 
-        "PUT", 
-        "*"
-    ],
+    "methods": ["POST", "GET", "PUT", "*"],
     "origins": [
         "*",
         "http://127.0.0.1:8000",
@@ -30,10 +25,6 @@
         "https://bio.libretexts.org",
         "https://compose.biosimulations.org"
     ],
-    "routers": [
-        "core"
-    ],
-    "headers": [
-        "*"
-    ]
+    "routers": ["core"],
+    "headers": ["*"]
 }

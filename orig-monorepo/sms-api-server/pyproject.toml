@@ -260,6 +260,3 @@ packages = ["controller", "common", "data_model"]
 
 [tool.uv.sources]
 vecoli = { path = "vEcoli" }
-
-
-

@@ -2,6 +2,7 @@ import multiprocessing as mp
 from typing import Any
 
 from data_model.vivarium import VivariumDocument
+
 from gateway import run_vivarium
 
 
@@ -16,11 +17,11 @@ def collect(queue: mp.Queue, channel: list, thread_id: str):
 
 
 def launch_scan(
-    document: VivariumDocument, 
-    duration: float, 
-    n_threads: int, 
+    document: VivariumDocument,
+    duration: float,
+    n_threads: int,
     perturbation_config: dict[str, Any] | None = None,
-    distribution_config: dict[str, Any] | None = None
+    distribution_config: dict[str, Any] | None = None,
 ):
     def worker(thread_id: str, q: mp.Queue):
         # for t in range(duration):  # type: ignore
@@ -28,7 +29,7 @@ def launch_scan(
         #     q.put(result)
         result = run_vivarium(document, duration)
         q.put(result)
-    
+
     # launch processes
     processes = []
     queues = {str(i): mp.Queue() for i in range(n_threads)}  # inter-process
@@ -53,5 +54,5 @@ def launch_scan(
     for tid, data in channels.items():
         print(f"Thread {tid} channel:", data)
         results[tid] = data
-    
+
     return results

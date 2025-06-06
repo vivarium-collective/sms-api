@@ -12,9 +12,7 @@ def get_logger(fname: str, *args, **kwargs) -> logging.Logger:
     console_handler.setLevel(logging.INFO)
 
     # Create a formatter
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     # Add the formatter to the console handler
     console_handler.setFormatter(formatter)
@@ -23,6 +21,3 @@ def get_logger(fname: str, *args, **kwargs) -> logging.Logger:
     root_logger.addHandler(console_handler)
 
     return root_logger
-
-
-

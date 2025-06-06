@@ -3,7 +3,6 @@ import datetime
 from typing import Any, Dict
 
 # from vivarium.vivarium import Vivarium
-
 from data_model.base import BaseClass
 
 
@@ -32,7 +31,7 @@ class VivariumApiError(Exception):
     @property
     def timestamp(self):
         return str(datetime.datetime.now())
-    
+
 
 @dc.dataclass
 class DocumentLookupError(VivariumApiError):

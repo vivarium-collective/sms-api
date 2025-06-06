@@ -12,7 +12,7 @@ class Base(BaseModel):
 @dataclass
 class ISimulationRequest(BaseClass):
     experiment_id: str | None = None
-    last_update: str | None = None 
+    last_update: str | None = None
     cookie: str = "session_user"
 
     def __post_init__(self):
@@ -23,20 +23,20 @@ class ISimulationRequest(BaseClass):
         self.last_update = self.timestamp()
 
 
-# -- requests -- # 
+# -- requests -- #
 @dataclass
 class WCMSimulationRequest(ISimulationRequest):
-    total_time: float = 10.0 
-    time_step: float = 1.0 
+    total_time: float = 10.0
+    time_step: float = 1.0
     start_time: float = 0.1111
     simulation_id: str | None = None
 
 
-# -- responses -- # 
-@dataclass 
+# -- responses -- #
+@dataclass
 class BulkMoleculeData(BaseClass):
-    id: str 
-    count: int 
+    id: str
+    count: int
     submasses: list[str]
 
 
@@ -56,7 +56,6 @@ class WCMIntervalData(BaseClass):
 
 @dataclass
 class WCMIntervalResponse(BaseClass):
-    experiment_id: str 
+    experiment_id: str
     interval_id: str
     data: WCMIntervalData
-

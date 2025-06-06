@@ -1,7 +1,5 @@
-from abc import abstractmethod, ABC
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
 from datetime import datetime
-from enum import Enum
 from typing import *
 
 from pymongo import MongoClient
@@ -9,12 +7,12 @@ from pymongo.collection import Collection
 from pymongo.database import Database
 from pymongo.results import UpdateResult
 
-
-DEFAULT_JOB_COLLECTION_NAME = "run_simulation" 
+DEFAULT_JOB_COLLECTION_NAME = "run_simulation"
 
 
 class DatabaseConnector(ABC):
-    """Abstract class that is both serializable and interacts with the database (of any type). """
+    """Abstract class that is both serializable and interacts with the database (of any type)."""
+
     def __init__(self, connection_uri: str, database_id: str, connector_id: str, local: bool = False):
         self.database_id = database_id
         self.local = local
@@ -26,11 +24,11 @@ class DatabaseConnector(ABC):
     @property
     def client(self):
         return self._get_client(self.connection_uri)
-    
-    @property 
+
+    @property
     def db(self):
         return self._get_database(self.database_id)
-    
+
     @property
     @abstractmethod
     def all_data(self):
@@ -74,11 +72,7 @@ class DatabaseConnector(ABC):
 
 
 class MongoConnector(DatabaseConnector):
-    def __init__(self,
-                 connection_uri: str,
-                 database_id: str,
-                 connector_id: str | None = None,
-                 local: bool = False):
+    def __init__(self, connection_uri: str, database_id: str, connector_id: str | None = None, local: bool = False):
         super().__init__(connection_uri, database_id, connector_id, local)
 
     def confirm_connection(self):
@@ -103,8 +97,8 @@ class MongoConnector(DatabaseConnector):
 
     async def read(self, collection_name: str, **kwargs):
         """Args:
-            collection_name: str
-            kwargs: (as in mongodb query)
+        collection_name: str
+        kwargs: (as in mongodb query)
         """
         # coll_name = self._parse_enum_input(collection_name)
         coll = self.get_collection(collection_name)
@@ -113,10 +107,10 @@ class MongoConnector(DatabaseConnector):
 
     async def write(self, collection_name: str, **kwargs):
         """
-            Args:
-                collection_name: str: collection name in mongodb
-                **kwargs: mongo db `insert_one` query defining the document where the key is as in the key of the document. For example,
-                    something like: results=, etc
+        Args:
+            collection_name: str: collection name in mongodb
+            **kwargs: mongo db `insert_one` query defining the document where the key is as in the key of the document. For example,
+                something like: results=, etc
         """
         try:
             coll = self.get_collection(collection_name)
@@ -132,26 +126,16 @@ class MongoConnector(DatabaseConnector):
     async def update_job_status(self, job_id: str, status: str) -> UpdateResult:
         coll = self.get_collection(DEFAULT_JOB_COLLECTION_NAME)
         return coll.update_one(
-            filter={'job_id': job_id},
-            update={
-                '$set': {
-                    'status': status,
-                    'last_updated': self.timestamp()
-                }
-            }
+            filter={"job_id": job_id}, update={"$set": {"status": status, "last_updated": self.timestamp()}}
         )
 
     async def update_job(self, job_id: str, **params) -> UpdateResult:
         coll = self.get_collection(DEFAULT_JOB_COLLECTION_NAME)
         job_params = params.copy()
-        job_params['last_updated'] = self.timestamp()
-        return coll.update_one(
-            filter={'job_id': job_id},
-            update={'$set': job_params}
-        )
+        job_params["last_updated"] = self.timestamp()
+        return coll.update_one(filter={"job_id": job_id}, update={"$set": job_params})
 
     def refresh_jobs(self):
         coll = DEFAULT_JOB_COLLECTION_NAME
         for job in self.db[coll].find():
             self.db[coll].delete_one(job)
-

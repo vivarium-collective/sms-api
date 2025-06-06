@@ -1,23 +1,18 @@
-import dataclasses
 import json
 import os
-import asyncio
-import websockets
-from typing import Dict, List, Optional
 
 import dotenv
-from fastapi import WebSocket
-
+import websockets
 from data_model.connection import DynamicPacket
-
 
 dotenv.load_dotenv()
 
 CONNECTIONS = {}
-PORT = eval(os.getenv('SERVER_PORT', '8001'))
+PORT = eval(os.getenv("SERVER_PORT", "8001"))
 
 
 # -- conn funcs -- #
+
 
 async def open_websocket(uri: str):
     return await websockets.connect(uri)
@@ -48,11 +43,10 @@ async def subscribe(url: str | None = None, socket_port: int = 8765):
         response = await websocket.recv()
         print(f"Received from server: {response}")
         return response
-    
 
-async def publish(*data, url: str | None = None, socket_port: int = 8765): 
+
+async def publish(*data, url: str | None = None, socket_port: int = 8765):
     async with websockets.connect(url or f"ws://localhost:{socket_port}") as websocket:
         msg = json.dumps(data)
         await websocket.send(msg)
-        print('Emitted new request!')
-
+        print("Emitted new request!")

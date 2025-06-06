@@ -1,6 +1,6 @@
 #####################################
 # SMS API Server: Get Results Service
-##################################### 
+#####################################
 
 FROM python:3.12.9-slim-bookworm
 
@@ -13,9 +13,8 @@ RUN sh /uv-installer.sh && rm /uv-installer.sh
 ENV PATH="/root/.local/bin/:$PATH"
 
 WORKDIR /app
-ADD . /app 
- 
+ADD . /app
+
 RUN uv venv && uv sync
 
 CMD ["make", "results"]
-

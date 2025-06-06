@@ -1,5 +1,5 @@
-from typing import Callable, Any
 import dataclasses as dc
+from typing import Any, Callable
 
 import fastapi
 
@@ -15,12 +15,11 @@ class RouterConfig(BaseClass):
     @property
     def id(self):
         if len(self.prefix) > 1:
-            return self.prefix.split('/')[-1]
-        
+            return self.prefix.split("/")[-1]
+
     def include(self, app: fastapi.FastAPI) -> None:
         return app.include_router(
-            self.router, 
-            prefix=self.prefix, 
-            dependencies=self.dependencies  # type: ignore
+            self.router,
+            prefix=self.prefix,
+            dependencies=self.dependencies,  # type: ignore
         )
-        

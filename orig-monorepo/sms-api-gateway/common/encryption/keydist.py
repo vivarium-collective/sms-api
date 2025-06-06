@@ -1,19 +1,17 @@
 import abc
-from dataclasses import dataclass, field
-import pickle
-from typing import Any
-import uuid
 import hashlib
+import pickle
+import uuid
+from dataclasses import dataclass
+from typing import Any
 from warnings import warn
 
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.backends import default_backend
 import numpy as np
 import requests
-
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from data_model.base import BaseClass
-
 
 __all__ = ["generate_keys", "User", "UserDb"]
 
@@ -24,7 +22,7 @@ class Seed:
 
     @classmethod
     def set_state(cls, pos: int = 1, has_gauss: int = 0, cached_gaussian: float = 0.000002211):
-        state = ('MT19937', cls.generate_state_keys(), pos, has_gauss, cached_gaussian)
+        state = ("MT19937", cls.generate_state_keys(), pos, has_gauss, cached_gaussian)
         return np.random.set_state(state)
 
     @classmethod
@@ -64,21 +62,21 @@ class Key(EncryptionActor):
     @staticmethod
     def _make_id():
         return str(uuid.uuid4())
-    
+
     @property
     def id(self):
         return self._make_id()
 
     def _generator(self, msg: UnencryptedMessage):
         size = len(msg.value)
-        key = ''
+        key = ""
         for i in range(size):
             key += rand_bit()
         return key
 
     def decrypt(self, encrypted_message: EncryptionActor) -> UnencryptedMessage:
         zipped = zip_bits(encrypted_message.value, self.value)
-        msg = ''
+        msg = ""
         for a, b in zipped:
             msg += str(xor(a, b))
         return UnencryptedMessage(self.hydrate(msg))
@@ -93,7 +91,7 @@ class EncryptedMessage(EncryptionActor):
 
     def _generator(self, key: Key):
         zipped = zip_bits(key.message.value, key.value)
-        encrypted = ''
+        encrypted = ""
         for a, b in zipped:
             encrypted += str(xor(a, b))
         return encrypted
@@ -101,13 +99,15 @@ class EncryptedMessage(EncryptionActor):
 
 def to_binary(data) -> str:
     import pickle
+
     binary_blob = pickle.dumps(data)
-    return ''.join(format(byte, '08b') for byte in binary_blob)
+    return "".join(format(byte, "08b") for byte in binary_blob)
 
 
 def from_binary(bit_string):
     import pickle
-    bit_bytes = bytes(int(bit_string[i:i + 8], 2) for i in range(0, len(bit_string), 8))
+
+    bit_bytes = bytes(int(bit_string[i : i + 8], 2) for i in range(0, len(bit_string), 8))
     return pickle.loads(bit_bytes)
 
 
@@ -121,10 +121,7 @@ def xor(a: int, b: int) -> int:
 
 # noinspection PyTypeChecker
 def zip_bits(msg: str, pad: str) -> tuple[int, int]:
-    split_msg, split_pad = tuple(list(map(
-        lambda arr: [bit for bit in arr],
-        [msg, pad]
-    )))
+    split_msg, split_pad = tuple(list(map(lambda arr: [bit for bit in arr], [msg, pad])))
 
     return tuple(zip(split_msg, split_pad))
 
@@ -145,7 +142,8 @@ def decrypt(key: Key, encrypted: EncryptedMessage):
 
 def test_components():
     import numpy as np
-    data = {'dna': np.random.random((11,)), 'mrna': {'x': 11.11, 'y': 22.22, 'z': 0.00001122}}
+
+    data = {"dna": np.random.random((11,)), "mrna": {"x": 11.11, "y": 22.22, "z": 0.00001122}}
     key = get_key(data)
     encrypted = encrypt(key)
     hyrdated = decrypt(key, encrypted)
@@ -154,7 +152,9 @@ def test_components():
 
 def new_password() -> str:
     import hashlib
+
     import numpy as np
+
     root = str(np.random.random())
     passphrase = hashlib.sha256(root.encode()).hexdigest()
     msg = UnencryptedMessage(passphrase)
@@ -166,15 +166,15 @@ def new_password() -> str:
 @dataclass
 class Keys(BaseClass):
     # TODO: encrypt this further upon export
-    private: str 
+    private: str
     public: str
 
     def export_private(self, location: str):
-        with open(location, 'w') as f:
+        with open(location, "w") as f:
             f.write(self.private)
-    
+
     def export_public(self, location: str):
-        with open(location, 'w') as f:
+        with open(location, "w") as f:
             f.write(self.public)
 
 
@@ -182,7 +182,7 @@ class Keys(BaseClass):
 class User(BaseClass):
     username: str
     location: tuple | None = None
-    keys: Keys | None = None 
+    keys: Keys | None = None
 
     def __post_init__(self):
         if self.location is None:
@@ -190,29 +190,29 @@ class User(BaseClass):
         if not self.keys:
             self.keys = generate_keys(self)
 
-    @property 
+    @property
     def authenticated(self) -> bool:
         return self.keys is not None
-        
+
     @property
     def id(self) -> str:
-        return f"{self.username}-{str(uuid.uuid4())}"
-    
-    @property 
+        return f"{self.username}-{uuid.uuid4()!s}"
+
+    @property
     def representation(self):
         return f"{self.id}{self.location}"
-    
+
     def verify(self):
         return self.authenticated
 
 
 @dataclass
 class AuthenticatedUser(BaseClass):
-    username: str 
-    id: str 
+    username: str
+    id: str
 
 
-class UserDb(object):
+class UserDb:
     users: list[AuthenticatedUser] = []
     keys: dict[str, Keys | None] = {}
 
@@ -220,17 +220,14 @@ class UserDb(object):
         assert user.verify(), "This client cannot be verified. Try adding public and private keys."
         self.users.append(AuthenticatedUser(username=user.username, id=user.id))
         self.keys[user.id] = user.keys
-    
+
     def find_user(self, username: str):
-        user = filter(
-            lambda u: u.username == username,
-            self.users
-        )
+        user = filter(lambda u: u.username == username, self.users)
         try:
             return next(user)
         except StopIteration:
-            pass 
-    
+            pass
+
     def remove_user(self, username: str):
         usr = self.find_user(username)
         if usr:
@@ -257,15 +254,13 @@ def get_location_coords() -> tuple[float, float]:
 
 
 def generate_client(username: str):
-    return Client(username=username, location=get_location_coords()) # type: ignore
+    return Client(username=username, location=get_location_coords())  # type: ignore
 
 
 def derive_private(secret_string: str | None = None, client: User | None = None) -> ec.EllipticCurvePrivateKey:
     secret_string = secret_string or client.representation if client else ""
     digest = hashlib.sha256(secret_string.encode()).digest()
-    order = int(
-        "FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16
-    )
+    order = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
     private_value = int.from_bytes(digest, "big") % order
     if private_value == 0:
         raise ValueError("Invalid key: value must not be 0")
@@ -282,10 +277,14 @@ def derive_pem(private_key: ec.EllipticCurvePrivateKey) -> Keys:
     ).decode()
 
     # 🔓 Public key (PEM)
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo  # RFC 5280
-    ).decode()
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,  # RFC 5280
+        )
+        .decode()
+    )
 
     return Keys(private=private_pem, public=public_pem)
 
@@ -293,6 +292,3 @@ def derive_pem(private_key: ec.EllipticCurvePrivateKey) -> Keys:
 def generate_keys(secret_string: str | None = None, client: User | None = None) -> Keys:
     private = derive_private(secret_string, client)
     return derive_pem(private)
-
-
-

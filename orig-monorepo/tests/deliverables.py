@@ -1,5 +1,4 @@
-import requests 
-
+import requests
 
 USE_LOCAL = True
 LOCAL_URL = "http://localhost:8080/"
@@ -17,10 +16,7 @@ def test_auth():
     api_key = "test"
     url = f"{ROOT}/api/v1/test-authentication"
 
-    headers = {
-        "X-Community-API-Key": api_key
-    }
+    headers = {"X-Community-API-Key": api_key}
     response = requests.get(url, headers=headers)
     assert response.status_code == 200
     print(response.json())
-

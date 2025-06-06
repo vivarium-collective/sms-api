@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Any 
+from typing import Any
 
 from data_model.base import BaseClass, BaseModel
 

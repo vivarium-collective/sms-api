@@ -2,7 +2,7 @@
 freeze:
 	@uv pip freeze
 
-.PHONY: add 
+.PHONY: add
 dep:
 	@uv pip install $(pkg)
 	@echo $(uv pip freeze | grep typer) >> requirements.txt
@@ -15,9 +15,9 @@ exportEnv:
 gateway:
 	@uv run uvicorn gateway.main:app --reload --port 8080 --host 0.0.0.0 --ws websockets --ws-max-size 10000000
 
-.PHONY: server 
+.PHONY: server
 server:
-	@uv run server/main.py 
+	@uv run server/main.py
 
 .PHONY: clean
 clean:
@@ -52,14 +52,14 @@ cleanInstall:
 runSim:
 	@uv run tests/test_client.py
 
-.PHONY: socket 
+.PHONY: socket
 socket:
 	@uv run uvicorn gateway.broadcasting:app --reload --port 8080 --host 0.0.0.0
 
-.PHONY: demo 
+.PHONY: demo
 demo:
 	@make gateway & make notebook
 
-.PHONY: py 
+.PHONY: py
 py:
 	@uv run python
