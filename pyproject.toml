@@ -32,18 +32,14 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.mypy]
 files = ["sms_api"]
-disallow_untyped_defs = "True"
-disallow_any_unimported = "True"
-no_implicit_optional = "True"
-check_untyped_defs = "True"
-warn_return_any = "True"
-warn_unused_ignores = "True"
-show_error_codes = "True"
-
-
+exclude = "orig-monorepo/*"
+strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.deptry]
+exclude = ["orig-monorepo/*", ".venv/*"]
 
 [tool.ruff]
 target-version = "py39"
@@ -87,6 +83,7 @@ ignore = [
     # DoNotAssignLambda
     "E731",
 ]
+exclude = ["orig-monorepo/*", ".venv/*"]
 
 [tool.ruff.format]
 preview = true
