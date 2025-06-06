@@ -10,20 +10,19 @@ from typing import Callable
 
 import dotenv as de
 import fastapi
-import simdjson  # type: ignore
+import simdjson
 import websockets
-from common import log, users
-from common.managers.db import MongoManager
-from data_model.gateway import RouterConfig
-from data_model.jobs import SimulationRun, SimulationRunStatuses
-from data_model.requests import SimulationRequest
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
-from gateway.core.client import client
-from gateway.handlers.app_config import root_prefix
-from gateway.handlers.db import configure_mongo
-from gateway.handlers.simulation import interval_generator
+from sms_api.common import log, users
+from sms_api.common.managers.db import MongoManager
+from sms_api.data_model.gateway import RouterConfig
+from sms_api.data_model.jobs import SimulationRun, SimulationRunStatuses
+from sms_api.data_model.requests import SimulationRequest
+from sms_api.gateway.handlers.app_config import root_prefix
+from sms_api.gateway.handlers.db import configure_mongo
+from sms_api.gateway.handlers.simulation import interval_generator
 
 logger = log.get_logger(__file__)
 
@@ -63,7 +62,7 @@ config = RouterConfig(
 )
 
 db_manager = MongoManager(MONGO_URI)
-client, db = configure_mongo()
+_client, db = configure_mongo()
 
 
 def compress_message(data: dict) -> str:
@@ -82,7 +81,7 @@ def new_experiment_id():
 
 
 async def socket_connector(handler: Callable, url: str | None = None, socket_port: int = 8765, *args, **kwargs):
-    async with websockets.connect(url or f"ws://localhost:{socket_port}") as websocket:
+    async with websockets.connect(url or f"ws://localhost:{socket_port}") as _websocket:
         return handler(*args, **kwargs)
 
 

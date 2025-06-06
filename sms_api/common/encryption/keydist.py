@@ -11,7 +11,8 @@ import requests
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from data_model.base import BaseClass
+
+from sms_api.data_model.base import BaseClass
 
 __all__ = ["generate_keys", "User", "UserDb"]
 
@@ -70,7 +71,7 @@ class Key(EncryptionActor):
     def _generator(self, msg: UnencryptedMessage):
         size = len(msg.value)
         key = ""
-        for i in range(size):
+        for _i in range(size):
             key += rand_bit()
         return key
 
@@ -234,7 +235,7 @@ class UserDb:
             self.users.remove(usr)
             self.keys.pop(usr.id, None)
         else:
-            warn("That user could not be found")
+            warn("That user could not be found", stacklevel=2)
 
 
 def get_location_coords() -> tuple[float, float]:
@@ -253,8 +254,8 @@ def get_location_coords() -> tuple[float, float]:
         return default
 
 
-def generate_client(username: str):
-    return Client(username=username, location=get_location_coords())  # type: ignore
+# def generate_client(username: str):
+#     return Client(username=username, location=get_location_coords())  # type: ignore
 
 
 def derive_private(secret_string: str | None = None, client: User | None = None) -> ec.EllipticCurvePrivateKey:

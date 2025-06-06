@@ -4,7 +4,6 @@ import fastapi
 from common import auth
 from data_model.gateway import RouterConfig
 from fastapi import APIRouter
-
 from gateway import VivariumFactory, root_prefix
 
 API_PREFIX = "inference"

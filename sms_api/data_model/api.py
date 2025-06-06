@@ -1,8 +1,7 @@
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel, ConfigDict
-
 from data_model.base import BaseClass
+from pydantic import BaseModel, ConfigDict
 
 
 class Base(BaseModel):

@@ -3,10 +3,9 @@ import os
 from ast import literal_eval
 
 import dotenv as de
+from common.encryption.keydist import UserDb
 from data_model.base import BaseClass
 from fastapi import HTTPException, Request
-
-from common.encryption.keydist import UserDb
 
 de.load_dotenv()
 

@@ -11,17 +11,16 @@ Connection managers for the following:
 """
 
 import abc
-import pickle
 from dataclasses import dataclass
 
 from bson import Binary
-
-# from vivarium.vivarium import Vivarium
-from data_model.base import BaseClass
 from gridfs.asynchronous import AsyncGridFS
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.collection import AsyncCollection
 from sqlalchemy import create_engine, text
+
+# from vivarium.vivarium import Vivarium
+from sms_api.data_model.base import BaseClass
 
 VIVARIUM_INSTANCE_COLLECTION_NAME = "vivarium"
 
@@ -105,38 +104,38 @@ class VivariumRecord(BaseClass):
     instance: Binary
 
 
-def package_vivarium(vivarium_id: str):  # instance: Vivarium):
-    """Package/prepare vivarium instance for storage."""
-    return VivariumRecord(vivarium_id, Binary(pickle.dumps(instance)))
-
-
-async def write_vivarium(
-    vivarium_id: str,
-    # instance: Vivarium,
-    manager: MongoManager,
-):
-    record = package_vivarium(vivarium_id, instance)
-    conf = await manager.write(VIVARIUM_INSTANCE_COLLECTION_NAME, record.to_dict())
-    return conf
-
-
-async def read_vivarium(vivarium_id: str, manager: MongoManager):
-    read = await manager.read(VIVARIUM_INSTANCE_COLLECTION_NAME, {"vivarium_id": vivarium_id})
-    if read is not None:
-        instance = read.get("instance")
-        return pickle.loads(instance)
-    else:
-        raise OSError(f"{vivarium_id} not found in vivarium ids. Check and try again.")
-
-
-def test_vivarium_io():
-    from asyncio import run
-
-    # v = Vivarium()
-    v_id = "test"
-    manager = MongoManager()
-    conf = run(write_vivarium(v_id, v, manager))
-    assert conf is not None
-    record = run(read_vivarium(v_id, manager))
-    assert "make_document" in dir(record)
-    print(record)
+# def package_vivarium(vivarium_id: str):  # instance: Vivarium):
+#     """Package/prepare vivarium instance for storage."""
+#     return VivariumRecord(vivarium_id, Binary(pickle.dumps(instance)))
+#
+#
+# async def write_vivarium(
+#     vivarium_id: str,
+#     # instance: Vivarium,
+#     manager: MongoManager,
+# ):
+#     record = package_vivarium(vivarium_id, instance)
+#     conf = await manager.write(VIVARIUM_INSTANCE_COLLECTION_NAME, record.to_dict())
+#     return conf
+#
+#
+# async def read_vivarium(vivarium_id: str, manager: MongoManager):
+#     read = await manager.read(VIVARIUM_INSTANCE_COLLECTION_NAME, {"vivarium_id": vivarium_id})
+#     if read is not None:
+#         instance = read.get("instance")
+#         return pickle.loads(instance)
+#     else:
+#         raise OSError(f"{vivarium_id} not found in vivarium ids. Check and try again.")
+#
+#
+# def test_vivarium_io():
+#     from asyncio import run
+#
+#     # v = Vivarium()
+#     v_id = "test"
+#     manager = MongoManager()
+#     conf = run(write_vivarium(v_id, v, manager))
+#     assert conf is not None
+#     record = run(read_vivarium(v_id, manager))
+#     assert "make_document" in dir(record)
+#     print(record)

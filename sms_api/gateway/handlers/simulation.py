@@ -6,11 +6,19 @@ import shutil
 import subprocess
 import tempfile as tmp
 import traceback
+from asyncio import sleep
 from typing import Callable
 
 import fastapi
 import numpy as np
-from data_model.api import BulkMoleculeData, ListenerData, WCMIntervalData, WCMIntervalResponse, WCMSimulationRequest
+
+from sms_api.data_model.api import (
+    BulkMoleculeData,
+    ListenerData,
+    WCMIntervalData,
+    WCMIntervalResponse,
+    WCMSimulationRequest,
+)
 
 __all__ = ["t", "run_vivarium", "get_results", "get_latest", "run_simulation", "interval_generator"]
 

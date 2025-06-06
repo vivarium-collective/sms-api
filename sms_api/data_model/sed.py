@@ -5,7 +5,7 @@ Data model relating to SED2 (S.E.D.) specification
 from abc import abstractmethod
 from dataclasses import dataclass
 from types import NoneType
-from typing import *
+from typing import Any, Dict, List, Optional, Union
 
 import requests
 from bsp.data_model.base import BaseClass as _BaseClass
@@ -266,7 +266,7 @@ class SpatialModel(SedModel):
         model_source: Union[BiomodelID, ModelFilepath, str],
         model_id=None,
         model_name=None,
-        model_language: str = None,
+        model_language: str | None = None,
         model_changes: ModelChanges = None,
         model_units: ModelUnits = None,
     ):

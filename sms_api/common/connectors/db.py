@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import *
 
 from pymongo import MongoClient
 from pymongo.collection import Collection
@@ -114,7 +113,7 @@ class MongoConnector(DatabaseConnector):
         """
         try:
             coll = self.get_collection(collection_name)
-            result = coll.insert_one(kwargs.copy())
+            _result = coll.insert_one(kwargs.copy())
             return kwargs.copy()
         except:
             return {}

@@ -41,7 +41,7 @@ class SafeData:
 
     def flush(self):
         c = copy.deepcopy(self.history)
-        for k, v in c.items():
+        for k, _v in c.items():
             self.remove(k)
         del c
 
@@ -69,7 +69,7 @@ def generate_key(msg_binary: str) -> str:
     binary_str = msg_binary
     size = len(binary_str)
     key = ""
-    for i in range(size):
+    for _i in range(size):
         key += rand_bit()
     return key
 

@@ -9,9 +9,8 @@ import fastapi
 
 # from gateway.core.router import routes, broadcast
 from common import auth, log, users
-from starlette.middleware.cors import CORSMiddleware
-
 from gateway.handlers.app_config import get_config
+from starlette.middleware.cors import CORSMiddleware
 
 # TODO: add the rest of these routers to app.json:
 # "antibiotics",

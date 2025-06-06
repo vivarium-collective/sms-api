@@ -10,10 +10,9 @@ from common.managers.db import write_vivarium
 from data_model.gateway import RouterConfig
 from data_model.vivarium import VivariumDocument, VivariumMetadata
 from fastapi import APIRouter, Body, File, Query, UploadFile
+from gateway import VivariumFactory, new_id, root_prefix
 from process_bigraph import ProcessTypes
 from vivarium.vivarium import Vivarium
-
-from gateway import VivariumFactory, new_id, root_prefix
 
 LOCAL_URL = "http://localhost:8080"
 PROD_URL = ""  # TODO: define this

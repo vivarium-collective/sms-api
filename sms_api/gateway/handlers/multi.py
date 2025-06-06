@@ -2,7 +2,6 @@ import multiprocessing as mp
 from typing import Any
 
 from data_model.vivarium import VivariumDocument
-
 from gateway import run_vivarium
 
 

@@ -1,8 +1,7 @@
 import enum
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from data_model.requests import SimulationRequest
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SimulationRunStatuses(enum.EnumType):

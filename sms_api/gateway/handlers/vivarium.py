@@ -77,7 +77,7 @@ def new_vivarium(name: str, document: VivariumDocument | None = None) -> Vivariu
     viv_id = new_id(name)
 
     # write pickle to db
-    location = pickle_vivarium(v, viv_id)
+    _location = pickle_vivarium(v, viv_id)
 
     return VivariumMetadata(viv_id)
 

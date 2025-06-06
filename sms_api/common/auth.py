@@ -1,8 +1,7 @@
-from fastapi import HTTPException, Security, WebSocket, status
-from fastapi.security import APIKeyHeader
-
 from common.log import get_logger
 from common.users import UserMetadata, check_api_key, get_user_from_api_key, key_db
+from fastapi import HTTPException, Security, WebSocket, status
+from fastapi.security import APIKeyHeader
 
 logger = get_logger(__file__)
 

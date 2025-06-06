@@ -32,7 +32,7 @@ class JsonWriter(csv.DictWriter):
         By default, dialect=CSV_DIALECT, which is excel-tab.
         """
         kwargs.setdefault("dialect", CSV_DIALECT)
-        super(JsonWriter, self).__init__(
+        super().__init__(
             quotechar="'",
             quoting=csv.QUOTE_MINIMAL,
             lineterminator="\n",
@@ -49,7 +49,7 @@ class JsonWriter(csv.DictWriter):
     def _dict_to_list(self, rowdict):
         rowdict_ = {key: json.dumps(array_to_list(value), ensure_ascii=False) for key, value in rowdict.items()}
         # noinspection PyUnresolvedReferences
-        return super(JsonWriter, self)._dict_to_list(rowdict_)
+        return super()._dict_to_list(rowdict_)
 
 
 class JsonReader:
