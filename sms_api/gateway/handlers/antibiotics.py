@@ -4,8 +4,9 @@
 import dataclasses as dc
 
 import numpy as np
-from data_model.base import BaseClass
 from matplotlib import pyplot as plt
+
+from sms_api.data_model.base import BaseClass
 
 
 @dc.dataclass
@@ -102,12 +103,12 @@ def get_single_cell_trajectories(n_cells: int, params: AntibioticParams) -> list
 
 
 # 5. List of parameters
-def list_available_parameters():
+def list_available_parameters() -> dict[str, list[float]]:
     return {"dose": [0.01, 10], "sensitivity": [0.1, 10], "mic": [0.5, 10], "rate": [0.1, 1.0]}
 
 
 # 6. Parameter scan
-def run_parameter_scan(param_name, values, fixed_params):
+def run_parameter_scan(param_name: str, values, fixed_params):
     results = []
     for v in values:
         p = fixed_params.copy()
@@ -120,7 +121,7 @@ def run_parameter_scan(param_name, values, fixed_params):
 # -- plots -- #
 
 
-def plot_mic_curve(mic_curve, title="MIC Curve: Survival vs. Antibiotic Dose"):
+def plot_mic_curve(mic_curve, title: str = "MIC Curve: Survival vs. Antibiotic Dose") -> None:
     """
     Plot a MIC (Minimum Inhibitory Concentration) survival curve.
 
@@ -143,7 +144,7 @@ def plot_mic_curve(mic_curve, title="MIC Curve: Survival vs. Antibiotic Dose"):
     plt.show()
 
 
-def plot_pap_curve(pap_curve, title="PAP Curve: Population Survival vs. Dose"):
+def plot_pap_curve(pap_curve, title: str = "PAP Curve: Population Survival vs. Dose") -> None:
     doses = pap_curve["dose"]
     survival = pap_curve["survival"]
 
@@ -158,7 +159,7 @@ def plot_pap_curve(pap_curve, title="PAP Curve: Population Survival vs. Dose"):
     plt.show()
 
 
-def plot_antibiotic_response(response, title="Simulated Antibiotic Response Over Time"):
+def plot_antibiotic_response(response, title: str = "Simulated Antibiotic Response Over Time") -> None:
     time = response["time"]
 
     plt.figure(figsize=(10, 6))
@@ -175,7 +176,7 @@ def plot_antibiotic_response(response, title="Simulated Antibiotic Response Over
     plt.show()
 
 
-def plot_single_cell_trajectories(trajectories, title="Single-Cell Lysis Trajectories"):
+def plot_single_cell_trajectories(trajectories, title: str = "Single-Cell Lysis Trajectories") -> None:
     plt.figure(figsize=(8, 5))
     for i, cell in enumerate(trajectories):
         plt.plot(cell["time"], cell["lysis_prob"], label=f"Cell {i + 1}", alpha=0.7)
@@ -188,7 +189,7 @@ def plot_single_cell_trajectories(trajectories, title="Single-Cell Lysis Traject
     plt.show()
 
 
-def plot_parameter_scan(scan_results, title="Parameter Scan: Survival Curves"):
+def plot_parameter_scan(scan_results, title: str = "Parameter Scan: Survival Curves"):
     param_name = scan_results["param"]
     values = scan_results["values"]
     survival_curves = scan_results["survival_curves"]

@@ -3,7 +3,8 @@ import os
 
 import yaml
 from fastapi.openapi.utils import get_openapi
-from gateway.gateway import app
+
+from sms_api.gateway.main import app
 
 
 def main():

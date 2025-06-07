@@ -14,10 +14,11 @@ import traceback
 from operator import itemgetter
 from typing import Dict, Set
 
-# from vivarium.vivarium import Vivarium
-from data_model.messages import MessageToRoomModel
 from fastapi import WebSocket
 from starlette.websockets import WebSocketState
+
+# from vivarium.vivarium import Vivarium
+from sms_api.data_model.messages import MessageToRoomModel
 
 
 class SocketBroadcaster:

@@ -73,7 +73,7 @@ def get_latest(viv) -> dict:
         raise ValueError("There are no results available.")
 
 
-def get_save_times(start, end, framesize, t):
+def get_save_times(start: float, end: float, framesize: float, t):
     frames = np.arange(start, end, framesize)
     hist = np.histogram(frames, bins=t, range=None, density=None, weights=None)
     h = list(zip(hist[1], hist[0]))
@@ -94,7 +94,7 @@ async def interval_generator(
     start_time: float = 1.0,
     buffer: float = 0.11,
     framesize: float | None = None,
-):
+) -> None:
     # yield a formalized request confirmation to client TODO: possibly emit something here
     request_payload = {}
     for k, v in request.query_params:
@@ -176,5 +176,5 @@ async def interval_generator(
     shutil.rmtree(tempdir)
 
 
-def format_event(payload_i: str):
+def format_event(payload_i: str) -> str:
     return f"event: intervalUpdate\ndata: {payload_i}\n\n"

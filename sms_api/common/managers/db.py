@@ -17,7 +17,7 @@ from bson import Binary
 from gridfs.asynchronous import AsyncGridFS
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.collection import AsyncCollection
-from sqlalchemy import create_engine, text
+from sqlalchemy import Engine, create_engine, text
 
 # from vivarium.vivarium import Vivarium
 from sms_api.data_model.base import BaseClass
@@ -51,7 +51,7 @@ class MongoManager(DbManager):
         self.fs = AsyncGridFS(self.get_db())
 
     @property
-    def engine(self):
+    def engine(self) -> AsyncMongoClient:
         return AsyncMongoClient(self.url)
 
     def get_db(self, db_name: str = "simulations"):
@@ -80,7 +80,7 @@ class SqlManager(DbManager):
         self.url = url or self._default_url
 
     @property
-    def engine(self):
+    def engine(self) -> Engine:
         return create_engine(self.url)
 
     def new_table(self, tablename: str, schema: str):

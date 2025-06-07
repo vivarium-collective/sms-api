@@ -10,7 +10,6 @@ from typing import Callable
 
 import dotenv as de
 import fastapi
-import simdjson
 import websockets
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
@@ -47,7 +46,7 @@ RUN_SIMULATION_SOCKET = 8765
 GET_RESULTS_SOCKET = 8766
 
 
-def get_socket_url(socket_port: int):
+def get_socket_url(socket_port: int) -> str:
     return f"{SOCKET_PREFIX}:{socket_port}"
 
 
@@ -76,7 +75,7 @@ def decompress_message(encoded_data: str) -> dict:
     return json.loads(decompressed)
 
 
-def new_experiment_id():
+def new_experiment_id() -> str:
     return str(uuid.uuid4())
 
 
@@ -95,7 +94,7 @@ async def stream_simulation(
     time_step: float = Query(default=0.1),
     start_time: float = Query(default=1.0),
     framesize: float = Query(default=1.0),
-):
+) -> StreamingResponse:
     compile_simulation = lambda: NotImplementedError("TODO: finish this!")
     return StreamingResponse(
         interval_generator(
@@ -112,7 +111,7 @@ async def stream_simulation(
 
 
 @config.router.post("/run-simulation", tags=["Core"])
-async def run_simulation(simulation_request: SimulationRequest):
+async def run_simulation(simulation_request: SimulationRequest) -> SimulationRun:
     # format request payload
     simulation_id = f"{simulation_request.experiment_id}-{uuid.uuid4()!s}"
     payload = {"simulation_id": simulation_id, **simulation_request.model_dump()}
@@ -139,7 +138,7 @@ async def run_simulation(simulation_request: SimulationRequest):
 # TODO: have the ecoli interval results call encryption.db.write for each interval
 # TODO: have this method call encryption.db.read for interval data
 @config.router.get("/get/results", operation_id="get-results", tags=["Core"])
-async def get_results(simulation_id: str = Query(...)):
+async def get_results(simulation_id: str = Query(...)) -> SimulationRun:
     n_iter = 0
     job = None
 
@@ -165,27 +164,27 @@ async def get_results(simulation_id: str = Query(...)):
 
 
 # -- static data -- #
-
-
-@config.router.get("/get/processes", tags=["Core"])
-async def get_registered_processes() -> list[str]:
-    # TODO: implement this for ecoli_core
-    from genEcoli import ecoli_core
-
-    return list(ecoli_core.process_registry.registry.keys())
-
-
-@config.router.get("/get/types", tags=["Core"])
-async def get_registered_types() -> list[str]:
-    # TODO: implement this for ecoli_core
-    from genEcoli import ecoli_core
-
-    return list(ecoli_core.types().keys())
-
-
-@config.router.get("/get/document", tags=["Core"])
-async def get_core_document():
-    fp = "/Users/alexanderpatrie/Desktop/repos/ecoli/genEcoli/model/state.json"
-    with open(fp) as f:
-        doc = simdjson.load(f)
-    return doc
+#
+#
+# @config.router.get("/get/processes", tags=["Core"])
+# async def get_registered_processes() -> list[str]:
+#     # TODO: implement this for ecoli_core
+#     from genEcoli import ecoli_core
+#
+#     return list(ecoli_core.process_registry.registry.keys())
+#
+#
+# @config.router.get("/get/types", tags=["Core"])
+# async def get_registered_types() -> list[str]:
+#     # TODO: implement this for ecoli_core
+#     from genEcoli import ecoli_core
+#
+#     return list(ecoli_core.types().keys())
+#
+#
+# @config.router.get("/get/document", tags=["Core"])
+# async def get_core_document() -> dict[str, Any]:
+#     fp = "/Users/alexanderpatrie/Desktop/repos/ecoli/genEcoli/model/state.json"
+#     with open(fp) as f:
+#         doc = json.load(f)
+#     return doc

@@ -7,10 +7,11 @@ import os
 import dotenv as dot
 import fastapi
 
-# from gateway.core.router import routes, broadcast
+# from sms_api.gateway.core.router import routes, broadcast
 from common import auth, log, users
-from gateway.handlers.app_config import get_config
 from starlette.middleware.cors import CORSMiddleware
+
+from sms_api.gateway.handlers.app_config import get_config
 
 # TODO: add the rest of these routers to app.json:
 # "antibiotics",

@@ -2,9 +2,10 @@
 
 import fastapi
 from common import auth
-from data_model.gateway import RouterConfig
 from fastapi import APIRouter
-from gateway import VivariumFactory, root_prefix
+
+from sms_api.data_model.gateway import RouterConfig
+from sms_api.gateway import VivariumFactory, root_prefix
 
 API_PREFIX = "inference"
 LOCAL_URL = "http://localhost:8080"

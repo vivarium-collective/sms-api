@@ -3,7 +3,7 @@ import datetime
 from typing import Any, Dict
 
 # from vivarium.vivarium import Vivarium
-from data_model.base import BaseClass
+from sms_api.data_model.base import BaseClass
 
 
 @dc.dataclass

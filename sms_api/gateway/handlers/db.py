@@ -10,11 +10,11 @@ DATABASE_DIR = "databases"
 DEFAULT_SIMDATA_DB_PATH = f"{DATABASE_DIR}/simdata.db"
 
 
-def connection(db_path: str = DEFAULT_SIMDATA_DB_PATH):
+def connection(db_path: str = DEFAULT_SIMDATA_DB_PATH) -> sqlite3.Connection:
     return sqlite3.connect(db_path)
 
 
-def write(tablename: str, payload: dict[str, dict], conn: sqlite3.Connection):
+def write(tablename: str, payload: dict[str, dict], conn: sqlite3.Connection) -> sqlite3.Connection:
     """
     Inserts a JSON payload into the specified SQLite table.
 
@@ -46,7 +46,9 @@ def write(tablename: str, payload: dict[str, dict], conn: sqlite3.Connection):
     return conn
 
 
-def read(tablename: str, columns: list[str], filters: dict[str, Any], db_path: str = DEFAULT_SIMDATA_DB_PATH):
+def read(
+    tablename: str, columns: list[str], filters: dict[str, Any], db_path: str = DEFAULT_SIMDATA_DB_PATH
+) -> list[dict[str, Any]]:
     """
     Query a SQLite table with specified columns and filter conditions.
 
@@ -74,7 +76,7 @@ def read(tablename: str, columns: list[str], filters: dict[str, Any], db_path: s
     return results
 
 
-def test_insert():
+def test_insert() -> None:
     conn = sqlite3.connect("test.db")
     payload = {
         "experiment1": {"temperature": 37, "pH": 7.2},
@@ -84,7 +86,7 @@ def test_insert():
     write("experiments", payload, conn)
 
 
-def configure_mongo():
+def configure_mongo() -> tuple[AsyncMongoClient, AsyncDatabase]:
     MONGO_URI = "mongodb://localhost:27017/"
     client = AsyncMongoClient(MONGO_URI)
     db: AsyncDatabase = client.get_database("simulations")

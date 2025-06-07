@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from common.managers.pickle import Pickler
-from data_model.vivarium import VivariumDocument, VivariumMetadata
 from vivarium.vivarium import Vivarium
+
+from sms_api.data_model.vivarium import VivariumDocument, VivariumMetadata
 
 PICKLE_DIR = os.path.abspath("storage")
 

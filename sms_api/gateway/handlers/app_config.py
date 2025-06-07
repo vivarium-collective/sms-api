@@ -1,6 +1,6 @@
 import json
 
-from data_model.gateway import RouterConfig
+from sms_api.data_model.gateway import RouterConfig
 
 
 def format_version(major: int):

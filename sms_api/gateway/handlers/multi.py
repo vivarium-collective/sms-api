@@ -1,8 +1,8 @@
 import multiprocessing as mp
 from typing import Any
 
-from data_model.vivarium import VivariumDocument
-from gateway import run_vivarium
+from sms_api.data_model.vivarium import VivariumDocument
+from sms_api.gateway import run_vivarium
 
 
 def collect(queue: mp.Queue, channel: list, thread_id: str):

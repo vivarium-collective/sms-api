@@ -2,9 +2,10 @@
 
 import fastapi
 from common import auth
-from data_model.gateway import RouterConfig
 from fastapi import APIRouter, HTTPException
-from gateway import (
+
+from sms_api.data_model.gateway import RouterConfig
+from sms_api.gateway import (
     MIC,
     PAP,
     AntibioticParams,
@@ -15,8 +16,8 @@ from gateway import (
     root_prefix,
     simulate_antibiotic,
 )
-from gateway import get_single_cell_trajectories as single_cell_trajectories
-from gateway import list_available_parameters as available_parameters
+from sms_api.gateway import get_single_cell_trajectories as single_cell_trajectories
+from sms_api.gateway import list_available_parameters as available_parameters
 
 API_PREFIX = "antibiotics"
 LOCAL_URL = "http://localhost:8080"

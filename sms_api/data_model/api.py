@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
 
-from data_model.base import BaseClass
 from pydantic import BaseModel, ConfigDict
+
+from sms_api.data_model.base import BaseClass
 
 
 class Base(BaseModel):

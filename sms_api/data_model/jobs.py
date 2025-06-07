@@ -1,7 +1,8 @@
 import enum
 
-from data_model.requests import SimulationRequest
 from pydantic import BaseModel, ConfigDict, Field
+
+from sms_api.data_model.requests import SimulationRequest
 
 
 class SimulationRunStatuses(enum.EnumType):

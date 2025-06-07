@@ -3,7 +3,8 @@ import os
 
 import dotenv
 import websockets
-from data_model.connection import DynamicPacket
+
+from sms_api.data_model.connection import DynamicPacket
 
 dotenv.load_dotenv()
 

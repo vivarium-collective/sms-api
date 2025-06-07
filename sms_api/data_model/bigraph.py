@@ -13,7 +13,7 @@ class NodeSpec(dict):
         config: Dict[str, Any],
         inputs: Dict[str, List[str]],
         outputs: Dict[str, List[str]],
-        name: str = None,
+        name: str | None = None,
     ):
         super().__init__()
         self._type = _type
@@ -30,7 +30,7 @@ def node_spec(
     config: Dict[str, Any],
     inputs: Dict[str, List[str]],
     outputs: Dict[str, List[str]],
-    name: str = None,
+    name: str | None = None,
 ) -> Dict[str, Any]:
     spec = {"_type": _type, "address": address, "config": config, "inputs": inputs, "outputs": outputs}
 
@@ -38,13 +38,13 @@ def node_spec(
 
 
 def step_node_spec(
-    address: str, config: Dict[str, Any], inputs: Dict[str, Any], outputs: Dict[str, Any], name: str = None
+    address: str, config: Dict[str, Any], inputs: Dict[str, Any], outputs: Dict[str, Any], name: str | None = None
 ):
     return node_spec(name=name, _type="step", address=address, config=config, inputs=inputs, outputs=outputs)
 
 
 def process_node_spec(
-    address: str, config: Dict[str, Any], inputs: Dict[str, Any], outputs: Dict[str, Any], name: str = None
+    address: str, config: Dict[str, Any], inputs: Dict[str, Any], outputs: Dict[str, Any], name: str | None = None
 ):
     return node_spec(name=name, _type="process", address=address, config=config, inputs=inputs, outputs=outputs)
 

@@ -119,7 +119,7 @@ class EncodedKey(bytes):
 def test_base_class():
     from dataclasses import dataclass as dc
 
-    from data_model.base import BaseClass
+    from sms_api.data_model.base import BaseClass
 
     @dc
     class X(BaseClass):

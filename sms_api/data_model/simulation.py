@@ -2,7 +2,7 @@ import dataclasses
 import uuid
 from typing import Any
 
-from data_model.base import BaseClass
+from sms_api.data_model.base import BaseClass
 
 
 @dataclasses.dataclass

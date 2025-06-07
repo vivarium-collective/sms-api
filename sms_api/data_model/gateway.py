@@ -2,7 +2,8 @@ import dataclasses as dc
 from typing import Any, Callable
 
 import fastapi
-from data_model.base import BaseClass
+
+from sms_api.data_model.base import BaseClass
 
 
 @dc.dataclass
