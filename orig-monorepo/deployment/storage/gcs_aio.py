@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import quote
 
-from biosim_server.common.storage import ListingItem
-from biosim_server.config import get_settings
+from sms_api.common.storage import ListingItem
+from sms_api.config import get_settings
 from gcloud.aio.auth import Token
 from gcloud.aio.storage import Storage
 from gcloud.aio.storage.constants import DEFAULT_TIMEOUT

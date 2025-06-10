@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from biosim_server.common.storage.gcs_aio import (
+from sms_api.common.storage.gcs_aio import (
     close_token,
     create_token,
     download_gcs_file,
@@ -11,7 +11,7 @@ from biosim_server.common.storage.gcs_aio import (
     upload_bytes_to_gcs,
     upload_file_to_gcs,
 )
-from biosim_server.config import get_local_cache_dir
+from sms_api.config import get_local_cache_dir
 from temporalio import workflow
 
 with workflow.unsafe.imports_passed_through():
@@ -19,7 +19,7 @@ with workflow.unsafe.imports_passed_through():
 from pathlib import Path
 from typing import Optional
 
-from biosim_server.common.storage.file_service import FileService, ListingItem
+from sms_api.common.storage.file_service import FileService, ListingItem
 from gcloud.aio.auth import Token
 from typing_extensions import override
 

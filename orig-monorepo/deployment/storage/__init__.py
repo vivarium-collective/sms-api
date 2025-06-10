@@ -1,6 +1,6 @@
-from biosim_server.common.storage.file_service import FileService, ListingItem
-from biosim_server.common.storage.file_service_gcs import FileServiceGCS
-from biosim_server.common.storage.gcs_aio import (
+from sms_api.common.storage.file_service import FileService, ListingItem
+from sms_api.common.storage.file_service_gcs import FileServiceGCS
+from sms_api.common.storage.gcs_aio import (
     close_token,
     create_token,
     download_gcs_file,

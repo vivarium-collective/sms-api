@@ -6,7 +6,7 @@ import ast
 import datetime
 import json
 from dataclasses import asdict, dataclass
-from typing import Any, Dict
+from typing import Any, Dict, Callable
 
 import pandas as pd
 from pydantic import BaseModel as _BaseModel
@@ -22,69 +22,69 @@ class BaseModel(_BaseModel):
 @dataclass
 class BaseClass:
     @property
-    def base_exception(self):
+    def base_exception(self) -> Exception:
         return Exception("Cannot set a value as it is protected.")
 
     @classmethod
-    def _stamp_factory(cls):
+    def _stamp_factory(cls) -> Callable[[], str]:
         return get_timestamp
 
     @classmethod
-    def get_timestamp(cls):
-        return BaseClass._stamp_factory()
+    def get_timestamp(cls) -> str:
+        return BaseClass._stamp_factory()()
 
     @property
-    def timestamp(self):
+    def timestamp(self) -> str:
         return BaseClass.get_timestamp()
 
     @timestamp.setter
-    def timestamp(self, v):
+    def timestamp(self, _v: str) -> None:
         raise self.base_exception
 
-    def dict(self):
+    def dict(self) -> Dict[str, Any]:
         serialized = asdict(self)
         serialized["timestamp"] = self.timestamp
         return serialized
 
-    def json(self):
+    def json(self) -> str:
         return json.dumps(self.dict())
 
-    def dataframe(self):
+    def dataframe(self) -> pd.DataFrame:
         data = self.dict()
         indices = list(range(len(data)))
         return pd.DataFrame(data, index=indices)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return self.dict()
 
     @property
-    def _attributes(self):
+    def _attributes(self) -> list[str]:
         serial = self.to_dict()
         return list(serial.keys())
 
     @property
-    def attributes(self):
+    def attributes(self) -> list[str]:
         return self._attributes
 
     @attributes.setter
-    def attributes(self, v):
+    def attributes(self, _v: list[str]) -> None:
         raise self.base_exception
 
     @property
-    def _values(self):
+    def _values(self) -> list[Any]:
         serial = self.to_dict()
         return list(serial.values())
 
     @property
-    def values(self):
+    def values(self) -> list[Any]:
         return self._values
 
     @values.setter
-    def values(self, v):
+    def values(self, _v: list[Any]) -> None:
         raise self.base_exception
 
 
-def get_timestamp():
+def get_timestamp() -> str:
     return str(datetime.datetime.now())
 
 
@@ -105,18 +105,18 @@ def parse_value(value: Any) -> Any:
 class DynamicData:
     _params: Dict[str, Any]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         cleaned = parse_value(self._params)
         for k, v in cleaned.items():
             setattr(self, k, v)
 
 
 class EncodedKey(bytes):
-    def __new__(cls, key: str, *args):
+    def __new__(cls, key: str, *args) -> bytes:
         return key.encode("utf-8")
 
 
-def test_base_class():
+def test_base_class() -> None:
     from dataclasses import dataclass as dc
 
     from sms_api.data_model.base import BaseClass

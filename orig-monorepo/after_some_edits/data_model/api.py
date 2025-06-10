@@ -15,11 +15,11 @@ class ISimulationRequest(BaseClass):
     last_update: str | None = None
     cookie: str = "session_user"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.last_update is None:
             self.refresh_timestamp()
 
-    def refresh_timestamp(self):
+    def refresh_timestamp(self) -> None:
         self.last_update = self.timestamp()
 
 
