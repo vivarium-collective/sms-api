@@ -7,27 +7,33 @@ repository = "https://github.com/vivarium-collective/sms-api"
 documentation = "https://vivarium-collective.github.io/sms-api/"
 readme = "README.md"
 packages = [
-  {include = "sms_api"}
+    {include = "sms_api"},
+    {include = "tests"},
 ]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
+uvicorn = "^0.34.3"
 dotenv = "^0.9.9"
 fastapi = "^0.115.12"
-websockets = "^15.0.1"
+pydantic = "^2.11.5"
+asyncssh = "^2.21.0"
+pydantic-settings = "^2.9.1"
+pyyaml = "^6.0.2"
+typing-extensions = "^4.14.0"
 pymongo = "^4.13.0"
-numpy = "^2.2.6"
-sqlalchemy = "^2.0.41"
-cryptography = "^45.0.3"
-matplotlib = "^3.10.3"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.2.0"
+pytest = "^8.3.5"
 pytest-cov = "^4.0.0"
 deptry = "^0.16.2"
 mypy = "^1.5.1"
 pre-commit = "^3.4.0"
 tox = "^4.11.1"
+types-requests = "^2.32.0.20250602"
+types-pyyaml = "^6.0.12.20250516"
+pytest-asyncio = "^1.0.0"
+testcontainers = "^4.10.0"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.2"
@@ -48,6 +54,7 @@ testpaths = ["tests"]
 
 [tool.deptry]
 exclude = ["orig-monorepo/*", ".venv/*"]
+ignore = ["DEP003", "DEP004"]
 
 [tool.ruff]
 target-version = "py39"
@@ -86,74 +93,74 @@ select = [
     "TRY",
 ]
 ignore = [
-    # A001 Variable `sum` is shadowing a Python builtin
-    "A001",
-    # B008 Do not perform function call `Body` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
-    "B008",
-    # B026 Star-arg unpacking after a keyword argument is strongly discouraged
-    "B026",
-    # B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-    "B904",
-    # C414 Unnecessary `list` call within `tuple()`
-    "C414",
-    # C416 Unnecessary `list` comprehension (rewrite using `list()`)
-    "C416",
-    # C417 Unnecessary `map` usage (rewrite using a `list` comprehension)
-    "C417",
-    # C419 Unnecessary list comprehension
-    "C419",
-    # E501 Line too long (131 > 120)
-    "E501",
-    # E722 Do not use bare `except`
-    "E722",
-    # E731 Do not assign a `lambda` expression, use a `def`
-    "E731",
-    # F841 Local variable `keys` is assigned to but never used
-    "F841",
-    # PGH003 Use specific rule codes when ignoring type issues
-    "PGH003",
-    # RUF009 Do not perform function call `Field` in dataclass defaults
-    "RUF009",
+#    # A001 Variable `sum` is shadowing a Python builtin
+#    "A001",
+#    # B008 Do not perform function call `Body` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+#    "B008",
+#    # B026 Star-arg unpacking after a keyword argument is strongly discouraged
+#    "B026",
+#    # B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
+#    "B904",
+#    # C414 Unnecessary `list` call within `tuple()`
+#    "C414",
+#    # C416 Unnecessary `list` comprehension (rewrite using `list()`)
+#    "C416",
+#    # C417 Unnecessary `map` usage (rewrite using a `list` comprehension)
+#    "C417",
+#    # C419 Unnecessary list comprehension
+#    "C419",
+#    # E501 Line too long (131 > 120)
+#    "E501",
+#    # E722 Do not use bare `except`
+#    "E722",
+#    # E731 Do not assign a `lambda` expression, use a `def`
+#    "E731",
+#    # F841 Local variable `keys` is assigned to but never used
+#    "F841",
+#    # PGH003 Use specific rule codes when ignoring type issues
+#    "PGH003",
+#    # RUF009 Do not perform function call `Field` in dataclass defaults
+#    "RUF009",
     # RUF012 Mutable class attributes should be annotated with `typing.ClassVar`
     "RUF012",
-    # RUF013 PEP 484 prohibits implicit `Optional
-    "RUF013",
-    # S101 Use of `assert` detected
-    "S101",
-    # *** S113 Probable use of `requests` call without timeout
-    "S113",
-    # S301 `pickle` and modules that wrap it can be unsafe when used to deserialize untrusted data, possible security issue
-    "S301",
-    # S307 Use of possibly insecure function
-    "S307",
-    # S603 `subprocess` call: check for execution of untrusted input
-    "S603",
-    # S608 Possible SQL injection vector through string-based query construction
-    "S608",
-    # SIM101 Multiple `isinstance` calls for expression, merge into a single call
-    "SIM101",
-    # SIM105 Use `contextlib.suppress(KeyError)` instead of `try`-`except`-`pass`
-    "SIM105",
-    # SIM108 Use ternary operator `source = self.model_source.value if isinstance(self.model_source, ModelFilepath) else self.model_source` instead of `if`-`else`-block
-    "SIM108",
-    # SIM118 Use `key not in dict` instead of `key not in dict.keys()`
-    "SIM118",
+#    # RUF013 PEP 484 prohibits implicit `Optional
+#    "RUF013",
+#    # S101 Use of `assert` detected
+#    "S101",
+#    # *** S113 Probable use of `requests` call without timeout
+#    "S113",
+#    # S301 `pickle` and modules that wrap it can be unsafe when used to deserialize untrusted data, possible security issue
+#    "S301",
+#    # S307 Use of possibly insecure function
+#    "S307",
+#    # S603 `subprocess` call: check for execution of untrusted input
+#    "S603",
+#    # S608 Possible SQL injection vector through string-based query construction
+#    "S608",
+#    # SIM101 Multiple `isinstance` calls for expression, merge into a single call
+#    "SIM101",
+#    # SIM105 Use `contextlib.suppress(KeyError)` instead of `try`-`except`-`pass`
+#    "SIM105",
+#    # SIM108 Use ternary operator `source = self.model_source.value if isinstance(self.model_source, ModelFilepath) else self.model_source` instead of `if`-`else`-block
+#    "SIM108",
+#    # SIM118 Use `key not in dict` instead of `key not in dict.keys()`
+#    "SIM118",
     # TRY002 Create your own exception
     "TRY002",
     # TRY003 Avoid specifying long messages outside the exception class
     "TRY003",
-    # TRY004 Prefer `TypeError` exception for invalid type
-    "TRY004",
+#    # TRY004 Prefer `TypeError` exception for invalid type
+#    "TRY004",
     # TRY201 Use `raise` without specifying exception name
     "TRY201",
     # TRY300 Consider moving this statement to an `else` block
     "TRY300",
-    # TRY400 Use `logging.exception` instead of `logging.error`
-    "TRY400",
-    # UP006 Use `dict` instead of `Dict` for type annotation
-    "UP006",
-    # UP035 `typing.Dict` is deprecated, use `dict` instead
-    "UP035",
+#    # TRY400 Use `logging.exception` instead of `logging.error`
+#    "TRY400",
+#    # UP006 Use `dict` instead of `Dict` for type annotation
+#    "UP006",
+#    # UP035 `typing.Dict` is deprecated, use `dict` instead
+#    "UP035",
 ]
 exclude = ["orig-monorepo/*", ".venv/*"]
 
