@@ -6,10 +6,15 @@ from dataclasses import dataclass, asdict, field
 import gzip
 import json
 import os
-from typing import Callable
+from typing import Callable, Generator
 import uuid 
 
 import dotenv as de
+import nats
+from nats.aio.client import Client as NATS
+from nats.aio.subscription import Subscription
+from nats.aio.msg import Msg
+import redis
 import websockets
 import simdjson  # type: ignore
 from fastapi import APIRouter, Query
@@ -57,6 +62,8 @@ GET_RESULTS_SOCKET = 8766
 def get_socket_url(socket_port: int):
     return f"{SOCKET_PREFIX}:{socket_port}"
 
+RUN_SIMULATION_REDIS_PORT = 6379
+GET_RESULTS_REDIS_PORT = 6380
 
 MONGO_PREFIX = UrlPrefixes.mongo
 MONGO_PORT = 27017
@@ -71,15 +78,52 @@ config = RouterConfig(
 )
 
 db_manager = MongoManager(MONGO_URI)
-client, db = configure_mongo()
+mongo_client, mongo_db = configure_mongo()
+simulation_broker = redis.Redis(host='localhost', port=RUN_SIMULATION_REDIS_PORT, decode_responses=True)
+results_broker = redis.Redis(host='localhost', port=GET_RESULTS_REDIS_PORT, decode_responses=True)
 
+
+async def get_broker(server=None) -> NATS:
+    nc = await nats.connect()
+    return nc
+
+
+async def subscriber(nc: NATS, channel_id: str):
+    sub = await nc.subscribe(channel_id)
+    msg: Msg = await sub.next_msg()
+    yield msg 
+
+
+async def publish(nc: NATS, channel_id: str, data: dict) -> None:
+    await nc.publish(channel_id, bytes(json.dumps(data).encode()))
+    return 
+
+
+class Message(dict):
+    def __new__(cls, *args, **kwargs):
+        return cls.__new__(cls, *args, **kwargs)
+
+
+async def send_message(r: redis.Redis, dataname: str, data: dict):
+    return r.hset(dataname, mapping=data)
+
+
+async def recieve_message(r: redis.Redis, dataname: str) -> Message:
+    return Message(**r.hgetall(dataname))
+    
 
 def compress_message(data: dict) -> str:
+    import json 
+    import gzip 
+    import base64
     compressed = gzip.compress(json.dumps(data).encode())
     return base64.b64encode(compressed).decode()
 
 
 def decompress_message(encoded_data: str) -> dict:
+    import json 
+    import gzip 
+    import base64
     compressed = base64.b64decode(encoded_data)
     decompressed = gzip.decompress(compressed).decode()
     return json.loads(decompressed)
@@ -87,35 +131,6 @@ def decompress_message(encoded_data: str) -> dict:
 
 def new_experiment_id():
     return str(uuid.uuid4())
-
-
-async def socket_connector(handler: Callable, url: str | None = None, socket_port: int = 8765, *args, **kwargs):
-    async with websockets.connect(url or f"ws://localhost:{socket_port}") as websocket:
-        return handler(*args, **kwargs)
-
-
-@config.router.get("/stream-simulation", tags=["Core"], description="Submit a simulation run and return a streaming response.")
-async def stream_simulation(
-    request: fastapi.Request,
-    experiment_id: str = Query(default=new_experiment_id()),
-    total_time: float = Query(default=3.0),
-    time_step: float = Query(default=0.1),
-    start_time: float = Query(default=1.0),
-    framesize: float = Query(default=1.0)
-):
-    compile_simulation = lambda: NotImplementedError("TODO: finish this!")
-    return StreamingResponse(
-        interval_generator(
-            request=request,
-            experiment_id=experiment_id,
-            total_time=total_time,
-            time_step=time_step,
-            start_time=start_time,
-            framesize=framesize,
-            compile_simulation=compile_simulation
-        ), 
-        media_type="text/event-stream"
-    )
 
 
 @config.router.post("/run-simulation", tags=["Core"])
@@ -131,13 +146,14 @@ async def run_simulation(simulation_request: SimulationRequest):
 
     # write request to db
     collection_name = "run_simulation"
-    collection = db.get_collection(collection_name)
+    collection = mongo_db.get_collection(collection_name)
     await collection.insert_one(simulation_run.model_dump())
 
     # emit new request to socket port
-    async with websockets.connect("ws://localhost:8765") as websocket:
-        await websocket.send(json.dumps(payload))
-        logger.info(f'Sent request for: {simulation_request.experiment_id}')
+    await send_message(simulation_broker, simulation_id, simulation_run.model_dump())
+    # async with websockets.connect("ws://localhost:8765") as websocket:
+    #     await websocket.send(json.dumps(payload))
+    #     logger.info(f'Sent request for: {simulation_request.experiment_id}')
    
     # return formalized request
     return SimulationRun(
@@ -160,19 +176,17 @@ async def get_results(simulation_id: str = Query(...)):
 
     # option A: retrieve the data via a websocket 
     while n_iter < 10:
-        url = get_socket_url(GET_RESULTS_SOCKET)
-        async with websockets.connect(url) as websocket:
-            await websocket.send(json.dumps({'simulation_id': simulation_id}))
-            logger.info(f'Sent get request message for {simulation_id}')
-            response = await websocket.recv(decode=True)
-            job = decompress_message(response)
-            logger.info(f'Got a response: {job}')
-            if job is None:
-                await asyncio.sleep(2.0)
-                n_iter += 1
-                continue
-            else:
-                break
+        await send_message(results_broker, simulation_id, {'simulation_id': simulation_id})
+        response = await recieve_message(results_broker, simulation_id)
+        logger.info(f'Sent get request message for {simulation_id}')
+        job = decompress_message(response)
+        logger.info(f'Got a response: {job}')
+        if job is None:
+            await asyncio.sleep(2.0)
+            n_iter += 1
+            continue
+        else:
+            break
     if job:
         return SimulationRun(simulation_id=job["simulation_id"], status=job["status"], results=job.get("results")) 
     else:
@@ -201,4 +215,29 @@ async def get_core_document():
     with open(fp, 'r') as f:
         doc = simdjson.load(f)
     return doc
+
+
+# NOTE: not yet used; to be implemented later
+# @config.router.get("/stream-simulation", tags=["Core"], description="Submit a simulation run and return a streaming response.")
+# async def stream_simulation(
+#     request: fastapi.Request,
+#     experiment_id: str = Query(default=new_experiment_id()),
+#     total_time: float = Query(default=3.0),
+#     time_step: float = Query(default=0.1),
+#     start_time: float = Query(default=1.0),
+#     framesize: float = Query(default=1.0)
+# ):
+#     compile_simulation = lambda: NotImplementedError("TODO: finish this!")
+#     return StreamingResponse(
+#         interval_generator(
+#             request=request,
+#             experiment_id=experiment_id,
+#             total_time=total_time,
+#             time_step=time_step,
+#             start_time=start_time,
+#             framesize=framesize,
+#             compile_simulation=compile_simulation
+#         ), 
+#         media_type="text/event-stream"
+#     )
 

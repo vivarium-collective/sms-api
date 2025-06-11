@@ -63,3 +63,15 @@ demo:
 .PHONY: py 
 py:
 	@uv run python
+
+.PHONY: mongo
+mongo:
+	@docker run -d --name mongodb -p 27017:27017 mongo 
+
+.PHONY: redis 
+redis:
+	@docker run -d --name redis -p 6379:6379 redis
+
+.PHONY: nats 
+nats:
+	@docker run -d --name nats -p 4222:4222 nats

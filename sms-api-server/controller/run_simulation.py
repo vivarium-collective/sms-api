@@ -16,6 +16,7 @@ import dotenv as de
 import numpy as np
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
+import redis
 import websockets
 from websockets.asyncio.server import ServerConnection as WebSocket
 
@@ -34,9 +35,11 @@ SIMULATION_REQUESTS_COLLECTION = "run_simulation"
 SIMULATION_RESPONSE_COLLECTION = "get_results"
 MONGO_URI = "mongodb://localhost:27017/"
 SOCKET_PORT = 8765
+REDIS_PORT = 6379
 
 runs = RunsDb()
-client, db = configure_mongo()
+broker = redis.Redis(host='localhost', port=REDIS_PORT, decode_responses=True)
+mongo_client, mongo_db = configure_mongo()
 
 
 def new_experiment_id():
@@ -182,7 +185,7 @@ async def processor(websocket: WebSocket):
         request.pop("_id", None)
         print(f"Got a request payload: {request}")
         response = await process_simulation(**request)
-        await write_run(response, runs, db)
+        await write_run(response, runs, mongo_db)
         await asyncio.sleep(2.22)
 
 
