@@ -39,4 +39,3 @@ To enable the code coverage reports, see [here](https://fpgmaas.github.io/cookie
 ---
 
 Repository initiated with [fpgmaas/cookiecutter-poetry](https://github.com/fpgmaas/cookiecutter-poetry).
-

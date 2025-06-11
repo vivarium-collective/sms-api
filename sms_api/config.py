@@ -45,8 +45,8 @@ class Settings(BaseSettings):
     biosimulations_api_base_url: str = "https://api.biosimulations.org"
 
     slurm_submit_host: str = ""  # "mantis-sub-1.cam.uchc.edu"
-    slurm_submit_user: str = ""  # "crbmapi"
-    slurm_submit_key_path: str = ""  # "/Users/jimschaff/.ssh/crbmapi"
+    slurm_submit_user: str = ""  # "svc_vivarium"
+    slurm_submit_key_path: str = ""  # "/Users/jimschaff/.ssh/id_rsa"
 
 
 @lru_cache
