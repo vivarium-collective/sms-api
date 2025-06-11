@@ -6,4 +6,3 @@ configMapGenerator:
     envs:
       - api.env
       - shared.env
-

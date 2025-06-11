@@ -4,22 +4,22 @@ kind: Kustomization
 namespace: sms-api-rke
 
 images:
-- name: ghcr.io/biosimulations/biosim-api
-  newTag: amd64_0.2.1
-- name: docker.io/library/mongo
-  newTag: 8.0.4
+  - name: ghcr.io/biosimulations/biosim-api
+    newTag: amd64_0.2.1
+  - name: docker.io/library/mongo
+    newTag: 8.0.4
 
 replicas:
-- count: 1
-  name: api
-- count: 1
-  name: mongodb
+  - count: 1
+    name: api
+  - count: 1
+    name: mongodb
 
 resources:
-- ingress.yaml
-- secret-ghcr.yaml
-- secret-shared.yaml
-- api-pvc.yaml
-- mongodb-pvc.yaml
-- ../../config/sms-api-rke
-- ../../base
+  - ingress.yaml
+  - secret-ghcr.yaml
+  - secret-shared.yaml
+  - api-pvc.yaml
+  - mongodb-pvc.yaml
+  - ../../config/sms-api-rke
+  - ../../base

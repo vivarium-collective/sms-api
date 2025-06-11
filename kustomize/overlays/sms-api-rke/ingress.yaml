@@ -9,17 +9,17 @@ metadata:
 spec:
   ingressClassName: nginx
   tls:
-      - hosts:
-          - rke-cp-01.cam.uchc.edu
-        secretName: letsencrypt-prod-api-tls
+    - hosts:
+        - rke-cp-01.cam.uchc.edu
+      secretName: letsencrypt-prod-api-tls
   rules:
-  - host: rke-cp-01.cam.uchc.edu
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: api
-            port:
-              number: 8000
+    - host: rke-cp-01.cam.uchc.edu
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000

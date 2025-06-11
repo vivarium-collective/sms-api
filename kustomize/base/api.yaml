@@ -28,9 +28,9 @@ spec:
               value: /app/secret/gcs-credentials.json
             - name: MONGODB_URI
               valueFrom:
-                  secretKeyRef:
-                    name: shared-secrets
-                    key: mongodb-uri
+                secretKeyRef:
+                  name: shared-secrets
+                  key: mongodb-uri
           volumeMounts:
             - name: gcs-credentials
               mountPath: /app/secret
@@ -43,10 +43,10 @@ spec:
             claimName: api-cache-pvc
         - name: gcs-credentials
           secret:
-              secretName: shared-secrets
-              items:
-                - key: gcs_credentials.json
-                  path: gcs-credentials.json
+            secretName: shared-secrets
+            items:
+              - key: gcs_credentials.json
+                path: gcs-credentials.json
       imagePullSecrets:
         - name: ghcr-secret
 
