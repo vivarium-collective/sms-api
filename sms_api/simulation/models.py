@@ -1,17 +1,40 @@
+import hashlib
 from enum import StrEnum
 
 from pydantic import BaseModel
 
-# class ParcaDataset(BaseModel):
-#     id: str
-#     name: str
-#     remote_archive_path: str
-#     description: str | None = None
-#     hash: str
+
+class ParcaDataset(BaseModel):
+    id: str  # Unique identifier for the dataset
+    name: str  # Name of the dataset
+    remote_archive_path: str  # Path to the dataset archive in remote storage
+    description: str | None = None  # Optional description of the dataset
+    hash: str  # Hash of the dataset for integrity verification
 
 
-class Parameters(BaseModel):
+class VariantSpec(BaseModel):
+    variant_id: str  # Unique identifier for the variant
+    name: str  # Name of the variant
+    description: str | None = None  # Optional description of the variant
+    parameters: dict[str, float]  # Parameters specific to the variant, e.g., growth rate, yield coefficients
+
+
+class SimulationSpec(BaseModel):
+    parca_dataset: ParcaDataset
+    variant_spec: VariantSpec
     named_parameters: dict[str, float]  # Named parameters for the simulation
+
+
+class EcoliSimulationRequest(BaseModel):
+    simulation_spec: SimulationSpec  # Parameters for the simulation
+    simulator_version: str
+
+    @property
+    def deep_hash(self) -> str:
+        """Generate a deep hash of the simulation request for caching purposes."""
+        json = self.model_dump_json(exclude_unset=True, exclude_none=True)
+        # Use a consistent hashing function to ensure reproducibility
+        return hashlib.md5(json.encode()).hexdigest()
 
 
 class JobStatus(StrEnum):
@@ -19,10 +42,6 @@ class JobStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     PENDING = "pending"
-
-
-class EcoliSimulationRequest(BaseModel):
-    parameters: Parameters  # Parameters for the simulation
 
 
 class EcoliSimulation(BaseModel):

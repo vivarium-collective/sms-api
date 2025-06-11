@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 import dotenv
 import uvicorn
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Body, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from sms_api.dependencies import (
@@ -76,8 +76,14 @@ def get_version() -> str:
     return APP_VERSION
 
 
-@app.post("/simulation")
-async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
+@app.post(
+    path="/simulation",
+    response_model=EcoliSimulation,
+    operation_id="simulate",
+    tags=["Simulations"],
+    summary="Run a single vEcoli simulation with given parameter overrides",
+)
+async def run_simulation(sim_request: EcoliSimulationRequest = Body(description="job specification")) -> EcoliSimulation:
     # Placeholder for running a simulation
     # In a real implementation, this would trigger the simulation logic
     db_id = "111333"
