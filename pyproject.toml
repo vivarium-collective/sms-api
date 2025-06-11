@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sms_api"
-version = "0.0.1"
+version = "0.2.2"
 description = "This is the api server for Vivarium simulation services."
 authors = ["Alex Patrie <alex.patrie@gmail.com>"]
 repository = "https://github.com/vivarium-collective/sms-api"

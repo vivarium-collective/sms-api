@@ -31,19 +31,17 @@ while [[ "$1" == --* ]]; do
 done
 
 # Validate the number of positional arguments
-if [ "$#" -ne 3 ]; then
+if [ "$#" -ne 2 ]; then
     echo "Illegal number of parameters"
-    echo "Usage: ./sealed_secret_shared.sh [--cert <filename.pem>] <namespace> <mongo_user> <mongo_pswd>"
+    echo "Usage: ./sealed_secret_shared.sh [--cert <filename.pem>] <namespace> <mongodb_uri>"
     exit 1
 fi
 
 SECRET_NAME="shared-secrets"
 NAMESPACE=$1
-MONGO_USERNAME=$2
-MONGO_PASSWORD=$2
+MONGODB_URI=$2
 
 # Create the generic secret and seal it
 kubectl create secret generic ${SECRET_NAME} --dry-run=client \
-      --from-literal=mongo-username="${MONGO_USERNAME}" \
-      --from-literal=mongo-password="${MONGO_PASSWORD}" \
+      --from-literal=mongodb-uri="${MONGODB_URI}" \
       --namespace="${NAMESPACE}" -o yaml | kubeseal --format yaml ${CERT_ARG:+--cert=$CERT_ARG}

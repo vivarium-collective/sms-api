@@ -10,10 +10,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - rke-cp-01.cam.uchc.edu
-      secretName: letsencrypt-prod-api-tls
+        - sms.cam.uchc.edu
+      secretName: letsencrypt-prod-sms-api-tls
   rules:
-    - host: rke-cp-01.cam.uchc.edu
+    - host: sms.cam.uchc.edu
       http:
         paths:
           - path: /

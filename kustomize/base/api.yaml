@@ -24,29 +24,18 @@ spec:
             - configMapRef:
                 name: api-config
           env:
-            - name: STORAGE_GCS_CREDENTIALS_FILE
-              value: /app/secret/gcs-credentials.json
             - name: MONGODB_URI
               valueFrom:
                 secretKeyRef:
                   name: shared-secrets
                   key: mongodb-uri
           volumeMounts:
-            - name: gcs-credentials
-              mountPath: /app/secret
-              readOnly: true
             - name: api-cache-pvc
               mountPath: /app/scratch
       volumes:
         - name: api-cache-pvc
           persistentVolumeClaim:
             claimName: api-cache-pvc
-        - name: gcs-credentials
-          secret:
-            secretName: shared-secrets
-            items:
-              - key: gcs_credentials.json
-                path: gcs-credentials.json
       imagePullSecrets:
         - name: ghcr-secret
 
