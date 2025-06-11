@@ -1,0 +1,42 @@
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    networks:
+      - smsnet
+
+  run-simulation:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: ./Dockerfile.simulation
+    image: ghcr.io/vivarium-collective/sms-run-simulation:0.0.1
+    container_name: run-simulation
+    networks:
+      - smsnet
+    depends_on:
+      - mongodb
+    environment:
+      - STANDALONE=False
+      - MONGO_URI = "mongodb://mongodb:27017"
+
+  get-results:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: ./Dockerfile.results
+    image: ghcr.io/vivarium-collective/sms-get-results:0.0.1
+    container_name: get-results
+    networks:
+      - smsnet
+    depends_on:
+      - mongodb
+    environment:
+      - STANDALONE=False
+      - MONGO_URI = "mongodb://mongodb:27017"
+
+networks:
+  smsnet:
+    driver: bridge

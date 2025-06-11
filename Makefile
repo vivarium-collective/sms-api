@@ -1,43 +1,45 @@
-.PHONY: gateway
-gateway:
-	@uvicorn gateway.app:app --reload --port 8080 --host 0.0.0.0
-
-.PHONY: clean
-clean:
-	@rm -rf uv.lock && rm -rf .venv && rm -rf sms-api.egg-info && uv cache clean
-
-.PHONY: lock
-lock:
-	@rm -rf uv.lock && uv lock
-
-.PHONY: kernel
-kernel:
-	@rm -rf /Users/alexanderpatrie/Library/Jupyter/kernels/smsapi && uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=smsapi
-
-.PHONY: notebook
-notebook:
-	@make kernel && uv run --with jupyter jupyter lab
-
 .PHONY: install
-install:
-	@make clean && uv venv && uv sync && uv pip install pip && make kernel
+install: ## Install the poetry environment and install the pre-commit hooks
+	@echo "🚀 Creating virtual environment using pyenv and poetry"
+	@poetry install
+	@ poetry run pre-commit install
+	@poetry shell
 
-.PHONY: install-requirements
-install-requirements:
-	@make clean
-	@uv sync
-	@uv pip install pip
-	@uv pip install fastapi pydantic python-multipart python-dotenv aiohttp fsspec h5py ipykernel rustworkx
-	@uv pip install ../vEcoli
-	@uv pip install ../genEcoli
-	@uv pip install ../bigraph-schema
-	@uv pip install ../process-bigraph
-	@uv pip install ./sms-api-gateway
-	@uv pip install vivarium-interface
-	@uv pip freeze > requirements.txt
-	@uv add -r requirements.txt
+.PHONY: check
+check: ## Run code quality tools.
+	@echo "🚀 Checking Poetry lock file consistency with 'pyproject.toml': Running poetry check --lock"
+	@poetry check --lock
+	@echo "🚀 Linting code: Running pre-commit"
+	@poetry run pre-commit run -a
+	@echo "🚀 Static type checking: Running mypy"
+	@poetry run mypy
+	@echo "🚀 Checking for obsolete dependencies: Running deptry"
+	@poetry run deptry .
 
-.PHONY: compose
-compose:
-	@docker compose -f ./sms-api-gateway/docker-compose.yml -f ./sms-api-server/docker-compose.yml up
+.PHONY: test
+test: ## Test the code with pytest
+	@echo "🚀 Testing code: Running pytest"
+	@poetry run pytest --cov --cov-config=pyproject.toml --cov-report=xml
 
+.PHONY: build
+build: clean-build ## Build wheel file using poetry
+	@echo "🚀 Creating wheel file"
+	@poetry build
+
+.PHONY: clean-build
+clean-build: ## clean build artifacts
+	@rm -rf dist
+
+.PHONY: docs-test
+docs-test: ## Test if documentation can be built without warnings or errors
+	@poetry run mkdocs build -s
+
+.PHONY: docs
+docs: ## Build and serve the documentation
+	@poetry run mkdocs serve
+
+.PHONY: help
+help:
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+.DEFAULT_GOAL := help
