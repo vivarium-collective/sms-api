@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 import dotenv
 import uvicorn
-from fastapi import APIRouter, Body, FastAPI
+from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from sms_api.dependencies import (
@@ -13,7 +13,14 @@ from sms_api.dependencies import (
     shutdown_standalone,
 )
 from sms_api.log_config import setup_logging
-from sms_api.simulation.models import EcoliSimulation, EcoliSimulationRequest
+from sms_api.simulation.models import (
+    EcoliSimulation,
+    EcoliSimulationRequest,
+    JobStatus,
+    ParcaDataset,
+    ParcaDatasetRequest,
+    SimulatorVersion,
+)
 from sms_api.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -62,9 +69,7 @@ app.add_middleware(
     CORSMiddleware, allow_origins=APP_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
 
-
 # -- endpoint logic -- #
-
 
 @app.get("/")
 def root() -> dict[str, str]:
@@ -76,14 +81,46 @@ def get_version() -> str:
     return APP_VERSION
 
 
-@app.post(
-    path="/simulation",
-    response_model=EcoliSimulation,
+@app.get(
+    path="/simulator_version",
+    response_model=SimulatorVersion,
     operation_id="simulate",
+    tags=["Simulations"],
+    summary="Run a parameter calculationsingle vEcoli simulation with given parameter overrides",
+)
+async def get_simulator_versions() -> list[SimulatorVersion]:
+    simulator_versions: list[SimulatorVersion] = []
+    simulator_versions.append(
+        SimulatorVersion(id="abc123", version="1.2.3", docker_image="my_docker_image", docker_hash="my_docker_hash")
+    )
+    return simulator_versions
+
+
+@app.post(
+    path="/vecoli_parca",
+    response_model=ParcaDataset,
+    operation_id="calculate_parameters",
+    tags=["Simulations"],
+    summary="Run a parameter calculation",
+)
+async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
+    parca_dataset = ParcaDataset(
+        id="dataset123",
+        parca_dataset_request=parca_request,  # Request parameters for the dataset
+        remote_archive_path="/path/to/parca/picklefile",
+        job_status=JobStatus.COMPLETED,
+    )
+    return parca_dataset
+
+
+@app.post(
+    path="/vecoli_simulation",
+    response_model=EcoliSimulation,
+    operation_id="run_simulation",
     tags=["Simulations"],
     summary="Run a single vEcoli simulation with given parameter overrides",
 )
-async def run_simulation(sim_request: EcoliSimulationRequest = Body(description="job specification")) -> EcoliSimulation:
+async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
     # Placeholder for running a simulation
     # In a real implementation, this would trigger the simulation logic
     db_id = "111333"

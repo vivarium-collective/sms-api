@@ -4,23 +4,38 @@ import pytest
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.results import InsertOneResult
 
-from sms_api.simulation.models import EcoliSimulationRequest, ParcaDataset, SimulationSpec, VariantSpec
+from sms_api.simulation.models import (
+    EcoliSimulationRequest,
+    JobStatus,
+    ParcaDataset,
+    ParcaDatasetRequest,
+    SimulationSpec,
+    SimulatorVersion,
+    VariantSpec,
+)
 
 
 @pytest.mark.asyncio
 async def test_save_request_to_mongo(mongo_test_collection: AsyncCollection) -> None:
     param1_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
     param2_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
-    param3_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
-    param4_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
-    # get a timestamp as an integer
 
+    simulation_version = SimulatorVersion(
+        id="test_simulator_id",
+        version="1.0.0",
+        docker_image="test_docker_image",
+        docker_hash="test_docker_hash",
+    )
+    parca_dataset_request = ParcaDatasetRequest(
+        simulator_version=simulation_version,
+        is_default=True,
+    )
     parca_dataset = ParcaDataset(
         id="test_dataset_id",
-        name="test_dataset",
-        remote_archive_path="http://example.com/parca",
-        description="Test dataset for E. coli simulations",
-        hash="abc123hash",
+        parca_dataset_request=parca_dataset_request,
+        remote_archive_path="/path/to/remote/archive",
+        job_status=JobStatus.NOT_SUBMITTED,
+        error_message=None,
     )
     variant_spec = VariantSpec(
         variant_id="test_variant_id",
@@ -31,11 +46,10 @@ async def test_save_request_to_mongo(mongo_test_collection: AsyncCollection) -> 
     simulation_spec = SimulationSpec(
         parca_dataset=parca_dataset,
         variant_spec=variant_spec,
-        named_parameters={"param3": param3_value, "param4": param4_value},
     )
     ecoli_sim_request = EcoliSimulationRequest(
         simulation_spec=simulation_spec,
-        simulator_version="1.0.0",
+        simulator_version=simulation_version,
     )
 
     # insert a document into the database
