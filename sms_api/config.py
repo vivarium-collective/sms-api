@@ -40,10 +40,6 @@ class Settings(BaseSettings):
     mongodb_collection_sims: str = "BiosimSims"
     mongodb_collection_compare: str = "BiosimCompare"
 
-    simdata_api_base_url: str = "https://simdata.api.biosimulations.org"
-    biosimulators_api_base_url: str = "https://api.biosimulators.org"
-    biosimulations_api_base_url: str = "https://api.biosimulations.org"
-
     slurm_submit_host: str = ""  # "mantis-sub-1.cam.uchc.edu"
     slurm_submit_user: str = ""  # "svc_vivarium"
     slurm_submit_key_path: str = ""  # "/Users/jimschaff/.ssh/id_rsa"
