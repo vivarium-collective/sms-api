@@ -40,7 +40,17 @@ class Settings(BaseSettings):
     mongodb_collection_sims: str = "BiosimSims"
     mongodb_collection_compare: str = "BiosimCompare"
 
-    slurm_submit_host: str = ""  # "mantis-sub-1.cam.uchc.edu"
+    postgres_user: str = "<USER>"
+    postgres_password: str = "<PASSWORD>"
+    postgres_database: str = "sms"
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_pool_size: int = 10  # number of connections in the pool
+    postgres_max_overflow: int = 5  # maximum number of connections that can be created beyond the pool size
+    postgres_pool_timeout: int = 30  # timeout for acquiring a connection from the pool in seconds
+    postgres_pool_recycle: int = 1800  # recycle connections every seconds
+
+    slurm_submit_host: str = ""
     slurm_submit_user: str = ""  # "svc_vivarium"
     slurm_submit_key_path: str = ""  # "/Users/jimschaff/.ssh/id_rsa"
 

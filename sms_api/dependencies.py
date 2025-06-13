@@ -1,24 +1,37 @@
-from typing import Any
-
-from pymongo import AsyncMongoClient
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.config import get_settings
-from sms_api.simulation.database import SimulationDatabaseService, SimulationDatabaseServiceMongo
+from sms_api.simulation.simulation_database import SimulationDatabaseService, SimulationDatabaseServiceSQL
 from sms_api.simulation.simulation_service import SimulationService, SimulationServiceSlurm
 
-# ------- database service (standalone or pytest) ------
+# ------- postgres database service (standalone or pytest) ------
 
-global_database_service: SimulationDatabaseService | None = None
-
-
-def set_database_service(database_service: SimulationDatabaseService | None) -> None:
-    global global_database_service
-    global_database_service = database_service
+global_postgres_engine: AsyncEngine | None = None
 
 
-def get_database_service() -> SimulationDatabaseService | None:
-    global global_database_service
-    return global_database_service
+def set_postgres_engine(engine: AsyncEngine | None) -> None:
+    global global_postgres_engine
+    global_postgres_engine = engine
+
+
+def get_postgres_engine() -> AsyncEngine | None:
+    global global_postgres_engine
+    return global_postgres_engine
+
+
+# ------- simulation database service (standalone or pytest) ------
+
+global_simulation_database_service: SimulationDatabaseService | None = None
+
+
+def set_simulation_database_service(database_service: SimulationDatabaseService | None) -> None:
+    global global_simulation_database_service
+    global_simulation_database_service = database_service
+
+
+def get_simulation_database_service() -> SimulationDatabaseService | None:
+    global global_simulation_database_service
+    return global_simulation_database_service
 
 
 # ------- simulation service (standalone or pytest) ------
@@ -43,14 +56,39 @@ async def init_standalone() -> None:
     _settings = get_settings()
     set_simulation_service(SimulationServiceSlurm())
 
-    mongo_client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(get_settings().mongodb_uri)
-    set_database_service(SimulationDatabaseServiceMongo(db_client=mongo_client))
+    PG_USER = _settings.postgres_user
+    PG_PSWD = _settings.postgres_password
+    PG_DATABASE = _settings.postgres_database
+    PG_HOST = _settings.postgres_host
+    PG_PORT = _settings.postgres_port
+    PG_POOL_SIZE = _settings.postgres_pool_size
+    PG_MAX_OVERFLOW = _settings.postgres_max_overflow
+    PG_POOL_TIMEOUT = _settings.postgres_pool_timeout
+    PG_POOL_RECYCLE = _settings.postgres_pool_recycle
+    if not PG_USER or not PG_PSWD or not PG_DATABASE or not PG_HOST or not PG_PORT:
+        raise ValueError("Postgres connection settings are not properly configured.")
+    postgres_url = f"postgresql+asyncpg://{PG_USER}:{PG_PSWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
+    engine = create_async_engine(
+        postgres_url,
+        echo=True,
+        pool_size=PG_POOL_SIZE,
+        max_overflow=PG_MAX_OVERFLOW,
+        pool_timeout=PG_POOL_TIMEOUT,
+        pool_recycle=PG_POOL_RECYCLE,
+    )
+    set_postgres_engine(engine)
+
+    set_simulation_database_service(SimulationDatabaseServiceSQL(engine))
 
 
 async def shutdown_standalone() -> None:
-    db_service = get_database_service()
-    if db_service:
-        await db_service.close()
+    mongodb_service = get_simulation_database_service()
+    if mongodb_service:
+        await mongodb_service.close()
+
+    engine = get_postgres_engine()
+    if engine:
+        await engine.dispose()
 
     set_simulation_service(None)
-    set_database_service(None)
+    set_simulation_database_service(None)

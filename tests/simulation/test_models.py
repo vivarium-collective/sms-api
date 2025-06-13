@@ -1,70 +1,51 @@
 import random
 
 import pytest
-from pymongo.asynchronous.collection import AsyncCollection
-from pymongo.results import InsertOneResult
 
 from sms_api.simulation.models import (
+    EcoliSimulation,
     EcoliSimulationRequest,
-    JobStatus,
-    ParcaDataset,
     ParcaDatasetRequest,
-    SimulationSpec,
-    SimulatorVersion,
-    VariantSpec,
 )
+from sms_api.simulation.simulation_database import SimulationDatabaseService
 
 
 @pytest.mark.asyncio
-async def test_save_request_to_mongo(mongo_test_collection: AsyncCollection) -> None:
+async def test_save_request_to_mongo(database_service: SimulationDatabaseService) -> None:
     param1_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
     param2_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
 
-    simulation_version = SimulatorVersion(
-        id="test_simulator_id",
-        version="1.0.0",
-        docker_image="test_docker_image",
-        docker_hash="test_docker_hash",
+    simulator_version = await database_service.get_or_insert_simulator(
+        version="1.0.0", docker_image="test_docker_image", docker_hash="test_docker_hash"
     )
     parca_dataset_request = ParcaDatasetRequest(
-        simulator_version=simulation_version,
-        is_default=True,
+        simulator_version=simulator_version,
+        parca_config={"param1": 5},
     )
-    parca_dataset = ParcaDataset(
-        id="test_dataset_id",
-        parca_dataset_request=parca_dataset_request,
-        remote_archive_path="/path/to/remote/archive",
-        job_status=JobStatus.NOT_SUBMITTED,
-        error_message=None,
-    )
-    variant_spec = VariantSpec(
-        variant_id="test_variant_id",
-        name="test_variant",
-        description="Test variant for E. coli simulations",
-        parameters={"param1": param1_value, "param2": param2_value},
-    )
-    simulation_spec = SimulationSpec(
-        parca_dataset=parca_dataset,
-        variant_spec=variant_spec,
-    )
+    parca_dataset = await database_service.get_or_insert_parca_dataset(parca_dataset_request=parca_dataset_request)
+
     ecoli_sim_request = EcoliSimulationRequest(
-        simulation_spec=simulation_spec,
-        simulator_version=simulation_version,
+        simulator=simulator_version,
+        parca_dataset_id=parca_dataset.database_id,
+        variant_config={
+            "named_parameters": {
+                "param1": param1_value,
+                "param2": param2_value,
+            }
+        },
     )
 
     # insert a document into the database
-    result: InsertOneResult = await mongo_test_collection.insert_one(ecoli_sim_request.model_dump())
-    assert result.acknowledged
+    sim: EcoliSimulation = await database_service.insert_simulation(ecoli_sim_request)
+    assert sim.database_id is not None
 
     # reread the document from the database
-    document = await mongo_test_collection.find_one({"_id": result.inserted_id})
-    assert document is not None
-    saved_request = EcoliSimulationRequest.model_validate(document)
+    sim2 = await database_service.get_simulation(sim.database_id)
+    assert sim2 is not None
 
-    assert saved_request.simulation_spec == ecoli_sim_request.simulation_spec
-    assert saved_request.simulator_version == ecoli_sim_request.simulator_version
-    assert saved_request.deep_hash == ecoli_sim_request.deep_hash
+    assert sim == sim2
 
     # delete the document from the database
-    del_result = await mongo_test_collection.delete_one({"_id": result.inserted_id})
-    assert del_result.deleted_count == 1
+    await database_service.delete_simulation(sim.database_id)
+    sim3 = await database_service.get_simulation(sim.database_id)
+    assert sim3 is None

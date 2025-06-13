@@ -6,7 +6,7 @@ from pymongo.results import InsertOneResult
 
 
 @pytest.mark.asyncio
-async def test_mongo(mongo_test_collection: AsyncCollection) -> None:
+async def test_mongo(mongo_test_collection: AsyncCollection) -> None:  # type: ignore[type-arg]
     param1_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
     param2_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
     # get a timestamp as an integer
