@@ -1,0 +1,444 @@
+import logging
+from abc import ABC, abstractmethod
+
+from sqlalchemy import Result, and_, select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from typing_extensions import override
+
+from sms_api.simulation.models import (
+    EcoliSimulation,
+    EcoliSimulationRequest,
+    ParcaDataset,
+    ParcaDatasetRequest,
+    SimulatorVersion,
+    SlurmJob,
+)
+from sms_api.simulation.tables_orm import ORMParcaDataset, ORMSimulation, ORMSimulator, ORMSlurmJob
+
+logger = logging.getLogger(__name__)
+
+
+class SimulationDatabaseService(ABC):
+    @abstractmethod
+    async def get_or_insert_simulator(self, version: str, docker_image: str, docker_hash: str) -> SimulatorVersion:
+        pass
+
+    @abstractmethod
+    async def get_simulator(self, simulator_id: int) -> SimulatorVersion | None:
+        pass
+
+    @abstractmethod
+    async def delete_simulator(self, simulator_id: int) -> None:
+        pass
+
+    @abstractmethod
+    async def list_simulators(self) -> list[SimulatorVersion]:
+        pass
+
+    @abstractmethod
+    async def get_slurm_job(self, slurm_job_id: int) -> SlurmJob | None:
+        pass
+
+    @abstractmethod
+    async def get_or_insert_parca_dataset(self, parca_dataset_request: ParcaDatasetRequest) -> ParcaDataset:
+        pass
+
+    @abstractmethod
+    async def get_parca_dataset(self, parca_dataset_id: int) -> ParcaDataset | None:
+        pass
+
+    @abstractmethod
+    async def delete_parca_dataset(self, parca_dataset_id: int) -> None:
+        pass
+
+    @abstractmethod
+    async def list_parca_datasets(self) -> list[ParcaDataset]:
+        pass
+
+    @abstractmethod
+    async def insert_simulation(self, sim_request: EcoliSimulationRequest) -> EcoliSimulation:
+        pass
+
+    @abstractmethod
+    async def get_simulation(self, simulation_id: int) -> EcoliSimulation | None:
+        pass
+
+    @abstractmethod
+    async def delete_simulation(self, simulation_id: int) -> None:
+        pass
+
+    @abstractmethod
+    async def list_simulations(self) -> list[EcoliSimulation]:
+        pass
+
+    @abstractmethod
+    async def close(self) -> None:
+        pass
+
+
+class SimulationDatabaseServiceSQL(SimulationDatabaseService):
+    async_sessionmaker: async_sessionmaker[AsyncSession]
+
+    def __init__(self, async_engine: AsyncEngine):
+        self.async_sessionmaker = async_sessionmaker(async_engine, expire_on_commit=True)
+
+    async def _get_orm_simulator(self, session: AsyncSession, simulator_id: int) -> ORMSimulator | None:
+        stmt1 = select(ORMSimulator).where(ORMSimulator.id == simulator_id).limit(1)
+        result1: Result[tuple[ORMSimulator]] = await session.execute(stmt1)
+        orm_simulator: ORMSimulator | None = result1.scalars().one_or_none()
+        return orm_simulator
+
+    async def _get_orm_simulation(self, session: AsyncSession, simulation_id: int) -> ORMSimulation | None:
+        stmt1 = select(ORMSimulation).where(ORMSimulation.id == simulation_id).limit(1)
+        result1: Result[tuple[ORMSimulation]] = await session.execute(stmt1)
+        orm_simulation: ORMSimulation | None = result1.scalars().one_or_none()
+        return orm_simulation
+
+    async def _get_orm_parca_dataset(self, session: AsyncSession, parca_dataset_id: int) -> ORMParcaDataset | None:
+        stmt1 = select(ORMParcaDataset).where(ORMParcaDataset.id == parca_dataset_id).limit(1)
+        result1: Result[tuple[ORMParcaDataset]] = await session.execute(stmt1)
+        orm_parca_dataset: ORMParcaDataset | None = result1.scalars().one_or_none()
+        return orm_parca_dataset
+
+    async def _get_orm_slurm_job(self, session: AsyncSession, slurm_job_id: int) -> ORMSlurmJob | None:
+        stmt1 = select(ORMSlurmJob).where(ORMSlurmJob.id == slurm_job_id).limit(1)
+        result1: Result[tuple[ORMSlurmJob]] = await session.execute(stmt1)
+        orm_slurm_job: ORMSlurmJob | None = result1.scalars().one_or_none()
+        return orm_slurm_job
+
+    @override
+    async def get_or_insert_simulator(self, version: str, docker_image: str, docker_hash: str) -> SimulatorVersion:
+        async with self.async_sessionmaker() as session, session.begin():
+            stmt1 = (
+                select(ORMSimulator)
+                .where(
+                    and_(
+                        ORMSimulator.version == version,
+                        ORMSimulator.docker_image == docker_image,
+                        ORMSimulator.docker_hash == docker_hash,
+                    )
+                )
+                .limit(1)
+            )
+            result1: Result[tuple[ORMSimulator]] = await session.execute(stmt1)
+            existing_orm_simulator: ORMSimulator | None = result1.scalars().one_or_none()
+            if existing_orm_simulator is not None:
+                # If the simulator already exists, return its version
+                return SimulatorVersion(
+                    database_id=existing_orm_simulator.id,
+                    version=existing_orm_simulator.version,
+                    docker_image=existing_orm_simulator.docker_image,
+                    docker_hash=existing_orm_simulator.docker_hash,
+                )
+            # did not find the simulator, so insert it
+            new_orm_simulator = ORMSimulator(
+                version=version,
+                docker_image=docker_image,
+                docker_hash=docker_hash,
+            )
+            session.add(new_orm_simulator)
+            await session.flush()
+            # Ensure the ORM object is inserted and has an ID
+            return SimulatorVersion(
+                database_id=new_orm_simulator.id,
+                version=new_orm_simulator.version,
+                docker_image=new_orm_simulator.docker_image,
+                docker_hash=new_orm_simulator.docker_hash,
+            )
+
+    @override
+    async def get_simulator(self, simulator_id: int) -> SimulatorVersion | None:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_simulator = await self._get_orm_simulator(session, simulator_id=simulator_id)
+            if orm_simulator is None:
+                return None
+            return SimulatorVersion(
+                database_id=orm_simulator.id,
+                version=orm_simulator.version,
+                docker_image=orm_simulator.docker_image,
+                docker_hash=orm_simulator.docker_hash,
+            )
+
+    @override
+    async def delete_simulator(self, simulator_id: int) -> None:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_simulator: ORMSimulator | None = await self._get_orm_simulator(session, simulator_id=simulator_id)
+            if orm_simulator is None:
+                raise Exception(f"Simulator with id {simulator_id} not found in the database")
+            await session.delete(orm_simulator)
+
+    @override
+    async def list_simulators(self) -> list[SimulatorVersion]:
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMSimulator)
+            result: Result[tuple[ORMSimulator]] = await session.execute(stmt)
+            orm_simulators = result.scalars().all()
+
+            simulator_versions: list[SimulatorVersion] = []
+            for orm_simulator in orm_simulators:
+                simulator_versions.append(
+                    SimulatorVersion(
+                        database_id=orm_simulator.id,
+                        version=orm_simulator.version,
+                        docker_image=orm_simulator.docker_image,
+                        docker_hash=orm_simulator.docker_hash,
+                    )
+                )
+            return simulator_versions
+
+    @override
+    async def get_slurm_job(self, slurm_job_id: int) -> SlurmJob | None:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_slurm_job: ORMSlurmJob | None = await self._get_orm_slurm_job(session, slurm_job_id=slurm_job_id)
+            if orm_slurm_job is None:
+                return None
+            return SlurmJob(
+                database_id=orm_slurm_job.id,
+                slurm_job_id=orm_slurm_job.slurm_job_id,
+                status=orm_slurm_job.status.to_job_status(),
+                start_time=str(orm_slurm_job.start_time) if orm_slurm_job.start_time else None,
+                end_time=str(orm_slurm_job.end_time) if orm_slurm_job.end_time else None,
+                error_message=orm_slurm_job.error_message,
+            )
+
+    @override
+    async def get_or_insert_parca_dataset(self, parca_dataset_request: ParcaDatasetRequest) -> ParcaDataset:
+        async with self.async_sessionmaker() as session, session.begin():
+            simulator_id = parca_dataset_request.simulator_version.database_id
+            stmt1 = (
+                select(ORMParcaDataset)
+                .where(
+                    and_(
+                        ORMParcaDataset.simulator_id == simulator_id,
+                        ORMParcaDataset.parca_config_hash == parca_dataset_request.config_hash,
+                    )
+                )
+                .limit(1)
+            )
+            result1: Result[tuple[ORMParcaDataset]] = await session.execute(stmt1)
+            existing_orm_parca_dataset: ORMParcaDataset | None = result1.scalars().one_or_none()
+            if existing_orm_parca_dataset is not None:
+                slurm_job: SlurmJob | None = await self.get_slurm_job(existing_orm_parca_dataset.slurm_job_id)
+                simulator_version: SimulatorVersion | None = await self.get_simulator(
+                    existing_orm_parca_dataset.simulator_id
+                )
+                if simulator_version is None:
+                    raise Exception(
+                        f"Simulator with id {existing_orm_parca_dataset.simulator_id} not found in the database"
+                    )
+                return ParcaDataset(
+                    database_id=existing_orm_parca_dataset.id,
+                    parca_dataset_request=ParcaDatasetRequest(
+                        simulator_version=simulator_version,
+                        parca_config=existing_orm_parca_dataset.parca_config,
+                    ),
+                    remote_archive_path=existing_orm_parca_dataset.remote_archive_path,
+                    slurm_job=slurm_job,
+                )
+            else:
+                # did not find the parca dataset, so insert it
+                orm_simulator: ORMSimulator | None = await self._get_orm_simulator(session, simulator_id=simulator_id)
+                if orm_simulator is None:
+                    raise Exception(f"Simulator with id {simulator_id} not found in the database")
+                orm_parca_dataset = ORMParcaDataset(
+                    simulator_id=orm_simulator.id,
+                    parca_config=parca_dataset_request.parca_config,
+                    parca_config_hash=parca_dataset_request.config_hash,
+                )
+                session.add(orm_parca_dataset)
+                await session.flush()  # Ensure the ORM object is inserted and has an ID
+                # Ensure the ORM object is inserted and has an ID
+                orm_parca_dataset_id = orm_parca_dataset.id
+                # Prepare the ParcaDataset object to return
+                simulator_version = SimulatorVersion(
+                    database_id=orm_simulator.id,
+                    version=orm_simulator.version,
+                    docker_image=orm_simulator.docker_image,
+                    docker_hash=orm_simulator.docker_hash,
+                )
+                parca_dataset_request = ParcaDatasetRequest(
+                    simulator_version=simulator_version,
+                    parca_config=orm_parca_dataset.parca_config,
+                )
+                parca_dataset = ParcaDataset(
+                    database_id=orm_parca_dataset_id,
+                    parca_dataset_request=parca_dataset_request,
+                    remote_archive_path=None,
+                    slurm_job=None,  # Initially set to None, can be updated later
+                )
+                return parca_dataset
+
+    @override
+    async def get_parca_dataset(self, simulator_id: int) -> ParcaDataset | None:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_parca_dataset: ORMParcaDataset | None = await self._get_orm_parca_dataset(
+                session, parca_dataset_id=simulator_id
+            )
+            if orm_parca_dataset is None:
+                return None
+
+            slurm_job: SlurmJob | None = await self.get_slurm_job(orm_parca_dataset.slurm_job_id)
+            simulator_version: SimulatorVersion | None = await self.get_simulator(orm_parca_dataset.simulator_id)
+            if simulator_version is None:
+                raise Exception(f"Simulator with id {orm_parca_dataset.simulator_id} not found in the database")
+
+            return ParcaDataset(
+                database_id=orm_parca_dataset.id,
+                parca_dataset_request=ParcaDatasetRequest(
+                    simulator_version=simulator_version,
+                    parca_config=orm_parca_dataset.parca_config,
+                ),
+                remote_archive_path=orm_parca_dataset.remote_archive_path,
+                slurm_job=slurm_job,
+            )
+
+    @override
+    async def delete_parca_dataset(self, parca_dataset: int) -> None:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_parca_dataset: ORMParcaDataset | None = await self._get_orm_parca_dataset(
+                session, parca_dataset_id=parca_dataset
+            )
+            if orm_parca_dataset is None:
+                raise Exception(f"Parca Dataset with id {parca_dataset} not found in the database")
+            await session.delete(orm_parca_dataset)
+
+    @override
+    async def list_parca_datasets(self) -> list[ParcaDataset]:
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMParcaDataset)
+            result: Result[tuple[ORMParcaDataset]] = await session.execute(stmt)
+            orm_parca_datasets = result.scalars().all()
+
+            parca_datasets: list[ParcaDataset] = []
+            for orm_parca_dataset in orm_parca_datasets:
+                slurm_job: SlurmJob | None = await self.get_slurm_job(orm_parca_dataset.slurm_job_id)
+                simulator_version: SimulatorVersion | None = await self.get_simulator(orm_parca_dataset.simulator_id)
+                if simulator_version is None:
+                    raise Exception(f"Simulator with id {orm_parca_dataset.simulator_id} not found in the database")
+                parca_datasets.append(
+                    ParcaDataset(
+                        database_id=orm_parca_dataset.id,
+                        parca_dataset_request=ParcaDatasetRequest(
+                            simulator_version=simulator_version,
+                            parca_config=orm_parca_dataset.parca_config,
+                        ),
+                        remote_archive_path=orm_parca_dataset.remote_archive_path,
+                        slurm_job=slurm_job,
+                    )
+                )
+            return parca_datasets
+
+    @override
+    async def insert_simulation(self, sim_request: EcoliSimulationRequest) -> EcoliSimulation:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_simulator: ORMSimulator | None = await self._get_orm_simulator(
+                session, simulator_id=sim_request.simulator.database_id
+            )
+            if orm_simulator is None:
+                raise Exception(f"Simulator with id {sim_request.simulator.database_id} not found in the database")
+
+            orm_parca_dataset: ORMParcaDataset | None = await self._get_orm_parca_dataset(
+                session, parca_dataset_id=sim_request.parca_dataset_id
+            )
+            if orm_parca_dataset is None:
+                raise Exception(f"Parca Dataset with id {sim_request.parca_dataset_id} not found in the database")
+
+            if orm_parca_dataset.simulator_id != orm_simulator.id:
+                raise Exception(
+                    f"Parca Dataset simulator mismatch, id={orm_simulator.id} and {sim_request.simulator.database_id}"
+                )
+            orm_simulation = ORMSimulation(
+                simulator_id=orm_simulator.id,
+                parca_dataset_id=orm_parca_dataset.id,
+                variant_config=sim_request.variant_config,
+                variant_config_hash=sim_request.variant_config_hash,
+            )
+            session.add(orm_simulation)
+            await session.flush()  # Ensure the ORM object is inserted and has an ID
+
+            # prepare the EcoliSimulation object to return
+            simulator_version = SimulatorVersion(
+                database_id=orm_simulator.id,
+                version=orm_simulator.version,
+                docker_image=orm_simulator.docker_image,
+                docker_hash=orm_simulator.docker_hash,
+            )
+            sim_request = EcoliSimulationRequest(
+                simulator=simulator_version,
+                parca_dataset_id=orm_parca_dataset.id,
+                variant_config=orm_simulation.variant_config,
+            )
+            simulation = EcoliSimulation(database_id=orm_simulation.id, sim_request=sim_request)
+            return simulation
+
+    @override
+    async def get_simulation(self, simulation_id: int) -> EcoliSimulation | None:
+        async with self.async_sessionmaker() as session:
+            orm_simulation: ORMSimulation | None = await self._get_orm_simulation(session, simulation_id)
+            if orm_simulation is None:
+                return None
+
+            orm_simulator: ORMSimulator | None = await self._get_orm_simulator(
+                session, simulator_id=orm_simulation.simulator_id
+            )
+            if orm_simulator is None:
+                raise Exception(f"Simulator with id {orm_simulation.simulator_id} not found in the database")
+
+            # Prepare the EcoliSimulation object to return
+            simulator_version = SimulatorVersion(
+                database_id=orm_simulation.simulator_id,
+                version=orm_simulator.version,
+                docker_image=orm_simulator.docker_image,
+                docker_hash=orm_simulator.docker_hash,
+            )
+            sim_request = EcoliSimulationRequest(
+                simulator=simulator_version,
+                parca_dataset_id=orm_simulation.parca_dataset_id,
+                variant_config=orm_simulation.variant_config,
+            )
+            simulation = EcoliSimulation(database_id=orm_simulation.id, sim_request=sim_request)
+            return simulation
+
+    @override
+    async def delete_simulation(self, simulation_id: int) -> None:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_simulation: ORMSimulation | None = await self._get_orm_simulation(session, simulation_id)
+            if orm_simulation is None:
+                raise Exception(f"Simulation with id {simulation_id} not found in the database")
+            await session.delete(orm_simulation)
+
+    @override
+    async def list_simulations(self) -> list[EcoliSimulation]:
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMSimulation)
+            result: Result[tuple[ORMSimulation]] = await session.execute(stmt)
+            orm_simulations = result.scalars().all()
+
+            simulations: list[EcoliSimulation] = []
+            for orm_simulation in orm_simulations:
+                orm_simulator: ORMSimulator | None = await self._get_orm_simulator(
+                    session, simulator_id=orm_simulation.simulator_id
+                )
+                if orm_simulator is None:
+                    raise Exception(f"Simulator with id {orm_simulation.simulator_id} not found in the database")
+
+                # Prepare the EcoliSimulation object to return
+                simulator_version = SimulatorVersion(
+                    database_id=orm_simulator.id,
+                    version=orm_simulator.version,
+                    docker_image=orm_simulator.docker_image,
+                    docker_hash=orm_simulator.docker_hash,
+                )
+                sim_request = EcoliSimulationRequest(
+                    simulator=simulator_version,
+                    parca_dataset_id=orm_simulation.parca_dataset_id,
+                    variant_config=orm_simulation.variant_config,
+                )
+                simulation = EcoliSimulation(database_id=orm_simulation.id, sim_request=sim_request)
+                simulations.append(simulation)
+
+            return simulations
+
+    @override
+    async def close(self) -> None:
+        pass
