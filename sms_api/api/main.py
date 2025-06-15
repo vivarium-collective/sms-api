@@ -3,8 +3,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import APIRouter, Depends, FastAPI
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from sms_api.dependencies import (
@@ -99,13 +98,15 @@ def get_version() -> str:
     summary="get the list of available simulator versions",
 )
 async def get_simulator_versions() -> list[SimulatorVersion]:
+    sim_db_service = get_simulation_database_service()
+    if sim_db_service is None:
+        logger.error("Simulation database service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+
     try:
-        db_service = get_simulation_database_service()
-        if db_service is None:
-            raise Exception("Simulation database service is not initialized")
-        return await db_service.list_simulators()
+        return await sim_db_service.list_simulators()
     except Exception as e:
-        logger.error(f"Error getting list of simulation versions: {e}")
+        logger.exception("Error getting list of simulation versions")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -117,15 +118,18 @@ async def get_simulator_versions() -> list[SimulatorVersion]:
     summary="Run a parameter calculation",
 )
 async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
+    sim_db_service = get_simulation_database_service()
+    if sim_db_service is None:
+        logger.error("Simulation database service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+
     try:
-        db_service = get_simulation_database_service()
-        if db_service is None:
-            raise Exception("Simulation database service is not initialized")
-        parca_dataset: ParcaDataset = await db_service.get_or_insert_parca_dataset(parca_request)
+        parca_dataset: ParcaDataset = await sim_db_service.get_or_insert_parca_dataset(parca_request)
         return parca_dataset
     except Exception as e:
-        logger.error(f"Error running PARCA: {e}")
+        logger.exception("Error running PARCA")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 @app.post(
     path="/vecoli_simulation",
@@ -135,16 +139,17 @@ async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
     summary="Run a single vEcoli simulation with given parameter overrides",
 )
 async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
-    try:
-        sim_db_service = get_simulation_database_service()
-        if sim_db_service is None:
-            raise Exception("Simulation database service is not initialized")
-        inserted_sim: EcoliSimulation = await sim_db_service.insert_simulation(sim_request)
+    sim_db_service = get_simulation_database_service()
+    if sim_db_service is None:
+        logger.error("Simulation database service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
 
+    try:
+        inserted_sim: EcoliSimulation = await sim_db_service.insert_simulation(sim_request)
         # don't wait to submit the job to SLURM, just return the simulation object
         return inserted_sim
     except Exception as e:
-        logger.error(f"Error running vEcoli simulation: {e}")
+        logger.exception("Error running vEcoli simulation")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
