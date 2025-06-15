@@ -96,7 +96,7 @@ cmctl check api
 ### Install CloudNativePG
 
 ```aiignore
-kubectl apply --server-side -f cnpg-operator/minikube/cnpg-1.26.0.yaml
+kubectl apply --server-side -f cnpg-operator/cnpg-1.26.0.yaml
 ```
 
 ### Install the PostgreSQL database cluster

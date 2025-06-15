@@ -11,7 +11,7 @@ wget https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.2
 ### apply the CNPG Operator
 
 ```bash
-kubectl apply --server-side -f minikube/cnpg-1.26.0.yaml
+kubectl apply --server-side -f cnpg-1.26.0.yaml
 ```
 
 ### output was
@@ -69,7 +69,7 @@ see https://cloudnative-pg.io/documentation/1.26/quickstart/
 
 ```bash
 kubectl create namespace postgres-cluster
-kubectl apply -f postgres-cluster/minikube/cluster-example.yaml
+kubectl apply -f postgres-cluster/minikube/sms-postgres-cluster.yaml
 kubectl get pods -n postgres-cluster
 ```
 
