@@ -24,11 +24,31 @@ spec:
             - configMapRef:
                 name: api-config
           env:
-            - name: MONGODB_URI
+            - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
                   name: shared-secrets
-                  key: mongodb-uri
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: shared-secrets
+                  key: postgres-password
+            - name: POSTGRES_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: shared-secrets
+                  key: postgres-database
+            - name: POSTGRES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: shared-secrets
+                  key: postgres-host
+            - name: POSTGRES_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: shared-secrets
+                  key: postgres-port
           volumeMounts:
             - name: api-cache-pvc
               mountPath: /app/scratch

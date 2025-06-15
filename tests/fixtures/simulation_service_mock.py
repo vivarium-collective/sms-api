@@ -23,16 +23,16 @@ class SimulationServiceMock(SimulationService):
             self.sim_runs = sim_runs
 
     @override
-    async def submit_parca_job(self, simulation_run_id: EcoliSimulationRequest) -> SlurmJob:
-        pass
+    async def submit_parca_job(self, simulation_run_id: EcoliSimulationRequest) -> int:
+        return 1  # Mock job ID
 
     @override
-    async def submit_sim_job(self, simulation_run_id: EcoliSimulationRequest) -> SlurmJob:
-        pass
+    async def submit_sim_job(self, simulation_run_id: EcoliSimulationRequest) -> int:
+        return 1  # Mock job ID
 
     @override
-    async def get_slurm_job_status(self, slurm_job_id: str) -> SlurmJob:
-        pass
+    async def get_slurm_job_status(self, slurm_job_id: str) -> SlurmJob | None:
+        return None
 
     @override
     async def close(self) -> None:

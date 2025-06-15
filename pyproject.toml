@@ -22,6 +22,8 @@ pydantic-settings = "^2.9.1"
 pyyaml = "^6.0.2"
 typing-extensions = "^4.14.0"
 pymongo = "^4.13.0"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.41"}
+asyncpg = "^0.30.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
@@ -45,7 +47,7 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.mypy]
-files = ["sms_api"]
+files = ["sms_api", "tests"]
 exclude = "orig-monorepo/*"
 strict = true
 
@@ -54,7 +56,7 @@ testpaths = ["tests"]
 
 [tool.deptry]
 exclude = ["orig-monorepo/*", ".venv/*"]
-ignore = ["DEP003", "DEP004"]
+ignore = ["DEP002", "DEP003", "DEP004"]
 
 [tool.ruff]
 target-version = "py39"
