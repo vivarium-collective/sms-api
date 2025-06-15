@@ -47,8 +47,6 @@ class ORMHpcRun(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
     job_type: Mapped[JobType] = mapped_column(nullable=False)
-    simulation_id: Mapped[int] = mapped_column(ForeignKey("simulation.id"), nullable=True)
-    parca_dataset_id: Mapped[int] = mapped_column(ForeignKey("parca_dataset.id"), nullable=True)
     slurmjobid: Mapped[int] = mapped_column(nullable=True)
     start_time: Mapped[datetime.datetime] = mapped_column(nullable=True)
     end_time: Mapped[datetime.datetime] = mapped_column(nullable=True)
