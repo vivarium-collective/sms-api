@@ -13,6 +13,7 @@
 | Certificate Manager with Let's Encrypt | for automatic refresh of SSL certificates                          |
 | Nginx Ingress controller               | for reverse proxies and CORS handling                              |
 | Persistent Volumes/Claims              | to map NFS mounts to pods                                          |
+| CloudNativePG                          | for PostgreSQL database management                                 |
 
 # local minikube config
 
@@ -24,7 +25,7 @@
 brew install qemu
 brew install socket_vmnet
 brew tap homebrew/services
-HOMEBREW=$(which brew) && sudo ${HOMEBREW} services start socket_vmnet
+# HOMEBREW=$(which brew) && sudo ${HOMEBREW} services start socket_vmnet
 # minikube start --driver qemu --network socket_vmnet --memory=8g --cpus=2
 # on M
 minikube start --memory=32g --cpus=8
@@ -58,7 +59,7 @@ kubectl get secret --namespace monitoring prometheus-grafana -o jsonpath="{.data
 ```bash
 minikube addons enable ingress
 kubectl get pods -n ingress-nginx
-kubectl patch configmap/ingress-nginx-controller -n ingress-nginx --type merge -p '{"data":{"allow-snippet-annotations":"true"}}'
+# kubectl patch configmap/ingress-nginx-controller -n ingress-nginx --type merge -p '{"data":{"allow-snippet-annotations":"true"}}'
 ```
 
 ### Sealed Secrets setup
@@ -92,6 +93,19 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 cmctl check api
 ```
 
+### Install CloudNativePG
+
+```aiignore
+kubectl apply --server-side -f cnpg-operator/minikube/cnpg-1.26.0.yaml
+```
+
+### Install the PostgreSQL database cluster
+
+```aiignore
+
+```
+
+````bash
 # Configure minikube networking for local development
 
 ### set up DNS entries for ingress routing

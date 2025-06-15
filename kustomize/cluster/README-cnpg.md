@@ -68,5 +68,13 @@ see https://cloudnative-pg.io/documentation/1.26/quickstart/
 ### create a PostgreSQL cluster
 
 ```bash
+kubectl create namespace postgres-cluster
 kubectl apply -f postgres-cluster/minikube/cluster-example.yaml
+kubectl get pods -n postgres-cluster
+```
+
+### monitor the cluster
+
+```bash
+kubectl apply -f postgres-cluster/minikube/pod-monitor.yaml
 ```

@@ -1,11 +1,19 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: cluster-example
+  name: sms-postgres-cluster
   namespace: postgres-cluster
 spec:
   instances: 3
   imageName: ghcr.io/cloudnative-pg/postgresql:17.5
 
+  bootstrap:
+    initdb:
+      database: sms
+      owner: sms
+
   storage:
     size: 1Gi
+
+  monitoring:
+    enablePodMonitor: true
