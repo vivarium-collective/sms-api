@@ -9,7 +9,10 @@ from pydantic_settings import BaseSettings
 KV_DRIVER = Literal["file", "s3", "gcs"]
 TS_DRIVER = Literal["zarr", "n5", "zarr3"]
 
-load_dotenv()
+# -- load dev env -- #
+REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
+DEV_ENV_PATH = os.path.join(REPO_ROOT, "assets", "dev", "config", ".dev_env")
+load_dotenv(DEV_ENV_PATH)  # NOTE: create an env config at this filepath if dev
 
 ENV_CONFIG_ENV_FILE = "CONFIG_ENV_FILE"
 ENV_SECRET_ENV_FILE = "SECRET_ENV_FILE"  # noqa: S105 Possible hardcoded password assigned to: "ENV_SECRET_ENV_FILE"

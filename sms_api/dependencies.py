@@ -1,8 +1,11 @@
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.config import get_settings
 from sms_api.simulation.simulation_database import SimulationDatabaseService, SimulationDatabaseServiceSQL
 from sms_api.simulation.simulation_service import SimulationService, SimulationServiceSlurm
+from sms_api.simulation.tables_orm import create_db
 
 # ------- postgres database service (standalone or pytest) ------
 
@@ -76,6 +79,8 @@ async def init_standalone() -> None:
         pool_timeout=PG_POOL_TIMEOUT,
         pool_recycle=PG_POOL_RECYCLE,
     )
+    logging.warn("calling create_db() to initialize the database tables")
+    await create_db(engine)
     set_postgres_engine(engine)
 
     set_simulation_database_service(SimulationDatabaseServiceSQL(engine))

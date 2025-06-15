@@ -1,14 +1,14 @@
 import logging
-import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-import dotenv
 import uvicorn
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi import HTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from sms_api.dependencies import (
+    get_postgres_engine,
     get_simulation_database_service,
     init_standalone,
     shutdown_standalone,
@@ -26,15 +26,11 @@ from sms_api.version import __version__
 logger = logging.getLogger(__name__)
 setup_logging(logger)
 
-# -- load dev env -- #
-REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
-DEV_ENV_PATH = os.path.join(REPO_ROOT, "assets", "dev", "config", ".dev_env")
-dotenv.load_dotenv(DEV_ENV_PATH)  # NOTE: create an env config at this filepath if dev
-
 # -- constraints -- #
 APP_VERSION = __version__
 APP_TITLE = "sms-api"
 APP_ORIGINS = [
+    "http://0.0.0.0:8000",
     "http://127.0.0.1:8000",
     "http://127.0.0.1:4200",
     "http://127.0.0.1:4201",
@@ -46,8 +42,8 @@ APP_ORIGINS = [
     "http://localhost:3001",
 ]
 APP_SERVERS: list[dict[str, str]] = [
-    {"url": "https://sms.cam.uchc.edu", "description": "Production server"},
-    {"url": "http://localhost:3001", "description": "Main Development server"},
+    # {"url": "https://sms.cam.uchc.edu", "description": "Production server"},
+    # {"url": "http://localhost:3001", "description": "Main Development server"},
 ]
 
 # -- app components -- #
@@ -72,6 +68,18 @@ app.add_middleware(
 # -- endpoint logic -- #
 
 
+# base sim (cached)
+# antibiotic
+# biomanufacturing
+# batch variant endpoint
+# design specific endpoints.
+# downsampling ...
+# biocyc id
+# api to download the data
+# marimo instead of Jupyter notebooks....(auth). ... also on gov cloud.
+# endpoint to send sql like queries to parquet files back to client
+
+
 @app.get("/")
 def root() -> dict[str, str]:
     return {"docs": "https://biosim.biosimulations.org/docs", "version": APP_VERSION}
@@ -84,16 +92,21 @@ def get_version() -> str:
 
 @app.get(
     path="/simulator_version",
-    response_model=SimulatorVersion,
-    operation_id="simulate",
+    response_model=list[SimulatorVersion],
+    operation_id="get-simulator-version",
     tags=["Simulations"],
-    summary="Run a parameter calculationsingle vEcoli simulation with given parameter overrides",
+    dependencies=[Depends(get_simulation_database_service), Depends(get_postgres_engine)],
+    summary="get the list of available simulator versions",
 )
 async def get_simulator_versions() -> list[SimulatorVersion]:
-    db_service = get_simulation_database_service()
-    if db_service is None:
-        raise Exception("Simulation database service is not initialized")
-    return await db_service.list_simulators()
+    try:
+        db_service = get_simulation_database_service()
+        if db_service is None:
+            raise Exception("Simulation database service is not initialized")
+        return await db_service.list_simulators()
+    except Exception as e:
+        logger.error(f"Error getting list of simulation versions: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post(
@@ -104,12 +117,15 @@ async def get_simulator_versions() -> list[SimulatorVersion]:
     summary="Run a parameter calculation",
 )
 async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
-    db_service = get_simulation_database_service()
-    if db_service is None:
-        raise Exception("Simulation database service is not initialized")
-    parca_dataset: ParcaDataset = await db_service.get_or_insert_parca_dataset(parca_request)
-    return parca_dataset
-
+    try:
+        db_service = get_simulation_database_service()
+        if db_service is None:
+            raise Exception("Simulation database service is not initialized")
+        parca_dataset: ParcaDataset = await db_service.get_or_insert_parca_dataset(parca_request)
+        return parca_dataset
+    except Exception as e:
+        logger.error(f"Error running PARCA: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 @app.post(
     path="/vecoli_simulation",
@@ -119,13 +135,17 @@ async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
     summary="Run a single vEcoli simulation with given parameter overrides",
 )
 async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
-    sim_db_service = get_simulation_database_service()
-    if sim_db_service is None:
-        raise Exception("Simulation database service is not initialized")
-    inserted_sim: EcoliSimulation = await sim_db_service.insert_simulation(sim_request)
+    try:
+        sim_db_service = get_simulation_database_service()
+        if sim_db_service is None:
+            raise Exception("Simulation database service is not initialized")
+        inserted_sim: EcoliSimulation = await sim_db_service.insert_simulation(sim_request)
 
-    # don't wait to submit the job to SLURM, just return the simulation object
-    return inserted_sim
+        # don't wait to submit the job to SLURM, just return the simulation object
+        return inserted_sim
+    except Exception as e:
+        logger.error(f"Error running vEcoli simulation: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 if __name__ == "__main__":

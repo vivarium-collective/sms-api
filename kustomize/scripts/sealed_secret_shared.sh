@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -u
+
 # This script is used to create a sealed secret for the gcs storage
 # this script should take 3 arguments as input:
 #   namespace
@@ -31,17 +33,26 @@ while [[ "$1" == --* ]]; do
 done
 
 # Validate the number of positional arguments
-if [ "$#" -ne 2 ]; then
+if [ "$#" -ne 6 ]; then
     echo "Illegal number of parameters"
-    echo "Usage: ./sealed_secret_shared.sh [--cert <filename.pem>] <namespace> <mongodb_uri>"
+    echo "Usage: ./sealed_secret_shared.sh [--cert <filename.pem>] <namespace> <postgres_user> <postgres_password> <postgres_database> <postgres_host> <postgres_port>"
     exit 1
 fi
 
 SECRET_NAME="shared-secrets"
 NAMESPACE=$1
-MONGODB_URI=$2
+POSTGRES_USER=$2
+POSTGRES_PASSWORD=$3
+POSTGRES_DATABASE=$4
+POSTGRES_HOST=$5
+POSTGRES_PORT=$6
+
 
 # Create the generic secret and seal it
 kubectl create secret generic ${SECRET_NAME} --dry-run=client \
-      --from-literal=mongodb-uri="${MONGODB_URI}" \
+      --from-literal=postgres-user="${POSTGRES_USER}" \
+      --from-literal=postgres-password="${POSTGRES_PASSWORD}" \
+      --from-literal=postgres-database="${POSTGRES_DATABASE}" \
+      --from-literal=postgres-host="${POSTGRES_HOST}" \
+      --from-literal=postgres-port="${POSTGRES_PORT}" \
       --namespace="${NAMESPACE}" -o yaml | kubeseal --format yaml ${CERT_ARG:+--cert=$CERT_ARG}
