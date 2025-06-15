@@ -8,12 +8,12 @@ from typing_extensions import override
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
+    HpcRun,
     ParcaDataset,
     ParcaDatasetRequest,
     SimulatorVersion,
-    SlurmJob,
 )
-from sms_api.simulation.tables_orm import ORMParcaDataset, ORMSimulation, ORMSimulator, ORMSlurmJob
+from sms_api.simulation.tables_orm import ORMHpcRun, ORMParcaDataset, ORMSimulation, ORMSimulator
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,11 @@ class SimulationDatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def get_slurm_job(self, slurm_job_id: int) -> SlurmJob | None:
+    async def get_hpcrun_by_slurmjobid(self, slurmjobid: int) -> HpcRun | None:
+        pass
+
+    @abstractmethod
+    async def get_hpcrun(self, hpcrun_id: int) -> HpcRun | None:
         pass
 
     @abstractmethod
@@ -100,11 +104,17 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
         orm_parca_dataset: ORMParcaDataset | None = result1.scalars().one_or_none()
         return orm_parca_dataset
 
-    async def _get_orm_slurm_job(self, session: AsyncSession, slurm_job_id: int) -> ORMSlurmJob | None:
-        stmt1 = select(ORMSlurmJob).where(ORMSlurmJob.id == slurm_job_id).limit(1)
-        result1: Result[tuple[ORMSlurmJob]] = await session.execute(stmt1)
-        orm_slurm_job: ORMSlurmJob | None = result1.scalars().one_or_none()
-        return orm_slurm_job
+    async def _get_orm_hpcrun(self, session: AsyncSession, hpcrun_id: int) -> ORMHpcRun | None:
+        stmt1 = select(ORMHpcRun).where(ORMHpcRun.id == hpcrun_id).limit(1)
+        result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
+        orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
+        return orm_hpc_job
+
+    async def _get_orm_hpcrun_by_slurmjobid(self, session: AsyncSession, slurmjobid: int) -> ORMHpcRun | None:
+        stmt1 = select(ORMHpcRun).where(ORMHpcRun.id == slurmjobid).limit(1)
+        result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
+        orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
+        return orm_hpc_job
 
     @override
     async def get_or_insert_simulator(self, version: str, docker_image: str, docker_hash: str) -> SimulatorVersion:
@@ -187,18 +197,33 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             return simulator_versions
 
     @override
-    async def get_slurm_job(self, slurm_job_id: int) -> SlurmJob | None:
+    async def get_hpcrun_by_slurmjobid(self, slurmjobid: int) -> HpcRun | None:
         async with self.async_sessionmaker() as session, session.begin():
-            orm_slurm_job: ORMSlurmJob | None = await self._get_orm_slurm_job(session, slurm_job_id=slurm_job_id)
-            if orm_slurm_job is None:
+            orm_hpc_job: ORMHpcRun | None = await self._get_orm_hpcrun_by_slurmjobid(session, slurmjobid=slurmjobid)
+            if orm_hpc_job is None:
                 return None
-            return SlurmJob(
-                database_id=orm_slurm_job.id,
-                slurm_job_id=orm_slurm_job.slurm_job_id,
-                status=orm_slurm_job.status.to_job_status(),
-                start_time=str(orm_slurm_job.start_time) if orm_slurm_job.start_time else None,
-                end_time=str(orm_slurm_job.end_time) if orm_slurm_job.end_time else None,
-                error_message=orm_slurm_job.error_message,
+            return HpcRun(
+                database_id=orm_hpc_job.id,
+                slurmjobid=orm_hpc_job.slurmjobid,
+                status=orm_hpc_job.status.to_job_status(),
+                start_time=str(orm_hpc_job.start_time) if orm_hpc_job.start_time else None,
+                end_time=str(orm_hpc_job.end_time) if orm_hpc_job.end_time else None,
+                error_message=orm_hpc_job.error_message,
+            )
+
+    @override
+    async def get_hpcrun(self, hpcrun_id: int) -> HpcRun | None:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_hpc_job: ORMHpcRun | None = await self._get_orm_hpcrun(session, hpcrun_id=hpcrun_id)
+            if orm_hpc_job is None:
+                return None
+            return HpcRun(
+                database_id=orm_hpc_job.id,
+                slurmjobid=orm_hpc_job.slurmjobid,
+                status=orm_hpc_job.status.to_job_status(),
+                start_time=str(orm_hpc_job.start_time) if orm_hpc_job.start_time else None,
+                end_time=str(orm_hpc_job.end_time) if orm_hpc_job.end_time else None,
+                error_message=orm_hpc_job.error_message,
             )
 
     @override
@@ -218,7 +243,7 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             result1: Result[tuple[ORMParcaDataset]] = await session.execute(stmt1)
             existing_orm_parca_dataset: ORMParcaDataset | None = result1.scalars().one_or_none()
             if existing_orm_parca_dataset is not None:
-                slurm_job: SlurmJob | None = await self.get_slurm_job(existing_orm_parca_dataset.slurm_job_id)
+                hpc_run: HpcRun | None = await self.get_hpcrun(hpcrun_id=existing_orm_parca_dataset.hpcrun_id)
                 simulator_version: SimulatorVersion | None = await self.get_simulator(
                     existing_orm_parca_dataset.simulator_id
                 )
@@ -233,7 +258,7 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                         parca_config=existing_orm_parca_dataset.parca_config,
                     ),
                     remote_archive_path=existing_orm_parca_dataset.remote_archive_path,
-                    slurm_job=slurm_job,
+                    hpc_run=hpc_run,
                 )
             else:
                 # did not find the parca dataset, so insert it
@@ -264,7 +289,7 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                     database_id=orm_parca_dataset_id,
                     parca_dataset_request=parca_dataset_request,
                     remote_archive_path=None,
-                    slurm_job=None,  # Initially set to None, can be updated later
+                    hpc_run=None,  # Initially set to None, can be updated later
                 )
                 return parca_dataset
 
@@ -277,7 +302,7 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             if orm_parca_dataset is None:
                 return None
 
-            slurm_job: SlurmJob | None = await self.get_slurm_job(orm_parca_dataset.slurm_job_id)
+            hpc_run: HpcRun | None = await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id)
             simulator_version: SimulatorVersion | None = await self.get_simulator(orm_parca_dataset.simulator_id)
             if simulator_version is None:
                 raise Exception(f"Simulator with id {orm_parca_dataset.simulator_id} not found in the database")
@@ -289,7 +314,7 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                     parca_config=orm_parca_dataset.parca_config,
                 ),
                 remote_archive_path=orm_parca_dataset.remote_archive_path,
-                slurm_job=slurm_job,
+                hpc_run=hpc_run,
             )
 
     @override
@@ -311,7 +336,7 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
 
             parca_datasets: list[ParcaDataset] = []
             for orm_parca_dataset in orm_parca_datasets:
-                slurm_job: SlurmJob | None = await self.get_slurm_job(orm_parca_dataset.slurm_job_id)
+                hpc_run: HpcRun | None = await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id)
                 simulator_version: SimulatorVersion | None = await self.get_simulator(orm_parca_dataset.simulator_id)
                 if simulator_version is None:
                     raise Exception(f"Simulator with id {orm_parca_dataset.simulator_id} not found in the database")
@@ -323,7 +348,7 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                             parca_config=orm_parca_dataset.parca_config,
                         ),
                         remote_archive_path=orm_parca_dataset.remote_archive_path,
-                        slurm_job=slurm_job,
+                        hpc_run=hpc_run,
                     )
                 )
             return parca_datasets

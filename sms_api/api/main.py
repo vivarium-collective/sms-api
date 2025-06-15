@@ -146,7 +146,7 @@ async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation
 
     try:
         inserted_sim: EcoliSimulation = await sim_db_service.insert_simulation(sim_request)
-        # don't wait to submit the job to SLURM, just return the simulation object
+        # don't wait to submit the job to HPC, just return the simulation object
         return inserted_sim
     except Exception as e:
         logger.exception("Error running vEcoli simulation")

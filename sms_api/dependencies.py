@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.config import get_settings
 from sms_api.simulation.simulation_database import SimulationDatabaseService, SimulationDatabaseServiceSQL
-from sms_api.simulation.simulation_service import SimulationService, SimulationServiceSlurm
+from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
 from sms_api.simulation.tables_orm import create_db
 
 # ------- postgres database service (standalone or pytest) ------
@@ -57,7 +57,7 @@ def get_simulation_service() -> SimulationService | None:
 
 async def init_standalone() -> None:
     _settings = get_settings()
-    set_simulation_service(SimulationServiceSlurm())
+    set_simulation_service(SimulationServiceHpc())
 
     PG_USER = _settings.postgres_user
     PG_PSWD = _settings.postgres_password

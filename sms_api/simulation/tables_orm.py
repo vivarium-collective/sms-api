@@ -40,8 +40,8 @@ class ORMSimulator(Base):
     docker_hash: Mapped[str] = mapped_column(nullable=False)
 
 
-class ORMSlurmJob(Base):
-    __tablename__ = "slurm_job"
+class ORMHpcRun(Base):
+    __tablename__ = "hpcrun"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
@@ -49,7 +49,7 @@ class ORMSlurmJob(Base):
     job_type: Mapped[JobType] = mapped_column(nullable=False)
     simulation_id: Mapped[int] = mapped_column(ForeignKey("simulation.id"), nullable=True)
     parca_dataset_id: Mapped[int] = mapped_column(ForeignKey("parca_dataset.id"), nullable=True)
-    slurm_job_id: Mapped[int] = mapped_column(nullable=False)
+    slurmjobid: Mapped[int] = mapped_column(nullable=True)
     start_time: Mapped[datetime.datetime] = mapped_column(nullable=True)
     end_time: Mapped[datetime.datetime] = mapped_column(nullable=True)
     status: Mapped[JobStatusDB] = mapped_column(nullable=False)
@@ -65,7 +65,7 @@ class ORMParcaDataset(Base):
     simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False)
     parca_config: Mapped[dict[str, int | float | str]] = mapped_column(JSONB, nullable=False)
     parca_config_hash: Mapped[str] = mapped_column(nullable=False)
-    slurm_job_id: Mapped[int] = mapped_column(ForeignKey("slurm_job.id"), nullable=True)
+    hpcrun_id: Mapped[int] = mapped_column(ForeignKey("hpcrun.id"), nullable=True)
     remote_archive_path: Mapped[str] = mapped_column(nullable=True)
 
 
@@ -79,7 +79,7 @@ class ORMSimulation(Base):
     parca_dataset_id: Mapped[int] = mapped_column(ForeignKey("parca_dataset.id"), nullable=False)
     variant_config: Mapped[dict[str, dict[str, int | float | str]]] = mapped_column(JSONB, nullable=False)
     variant_config_hash: Mapped[str] = mapped_column(nullable=False)
-    job_id: Mapped[int] = mapped_column(ForeignKey("slurm_job.id"), nullable=True)
+    hpcrun_id: Mapped[int] = mapped_column(ForeignKey("hpcrun.id"), nullable=True)
 
 
 async def create_db(async_engine: AsyncEngine) -> None:

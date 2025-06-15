@@ -13,9 +13,9 @@ class JobStatus(StrEnum):
     FAILED = "failed"
 
 
-class SlurmJob(BaseModel):
+class HpcRun(BaseModel):
     database_id: int
-    slurm_job_id: int | None = None  # Slurm job ID if applicable
+    slurmjobid: int | None = None  # Slurm job ID if applicable
     status: JobStatus | None = None
     start_time: str | None = None  # ISO format datetime string
     end_time: str | None = None  # ISO format datetime string or None if still running
@@ -44,7 +44,7 @@ class ParcaDataset(BaseModel):
     database_id: int  # Unique identifier for the dataset
     parca_dataset_request: ParcaDatasetRequest  # Request parameters for the dataset
     remote_archive_path: str | None = None  # Path to the dataset archive in remote storage
-    slurm_job: SlurmJob | None = None  # Slurm job ID if applicable
+    hpc_run: HpcRun | None = None  # HPC run ID if applicable
 
 
 class EcoliSimulationRequest(BaseModel):
@@ -63,4 +63,4 @@ class EcoliSimulationRequest(BaseModel):
 class EcoliSimulation(BaseModel):
     database_id: int
     sim_request: EcoliSimulationRequest
-    slurm_job: SlurmJob | None = None  # Slurm job ID if applicable
+    hpc_run: HpcRun | None = None  # HPC run ID if applicable
