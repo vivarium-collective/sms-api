@@ -14,9 +14,39 @@ wget https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.2
 kubectl apply --server-side -f cnpg-1.26.0.yaml
 ```
 
-### output was
+### output was the following in minikube
 
 ```aiignore
+namespace/cnpg-system serverside-applied
+customresourcedefinition.apiextensions.k8s.io/backups.postgresql.cnpg.io serverside-applied
+customresourcedefinition.apiextensions.k8s.io/clusterimagecatalogs.postgresql.cnpg.io serverside-applied
+customresourcedefinition.apiextensions.k8s.io/clusters.postgresql.cnpg.io serverside-applied
+customresourcedefinition.apiextensions.k8s.io/databases.postgresql.cnpg.io serverside-applied
+customresourcedefinition.apiextensions.k8s.io/imagecatalogs.postgresql.cnpg.io serverside-applied
+customresourcedefinition.apiextensions.k8s.io/poolers.postgresql.cnpg.io serverside-applied
+customresourcedefinition.apiextensions.k8s.io/publications.postgresql.cnpg.io serverside-applied
+customresourcedefinition.apiextensions.k8s.io/scheduledbackups.postgresql.cnpg.io serverside-applied
+customresourcedefinition.apiextensions.k8s.io/subscriptions.postgresql.cnpg.io serverside-applied
+serviceaccount/cnpg-manager serverside-applied
+clusterrole.rbac.authorization.k8s.io/cnpg-database-editor-role serverside-applied
+clusterrole.rbac.authorization.k8s.io/cnpg-database-viewer-role serverside-applied
+clusterrole.rbac.authorization.k8s.io/cnpg-manager serverside-applied
+clusterrole.rbac.authorization.k8s.io/cnpg-publication-editor-role serverside-applied
+clusterrole.rbac.authorization.k8s.io/cnpg-publication-viewer-role serverside-applied
+clusterrole.rbac.authorization.k8s.io/cnpg-subscription-editor-role serverside-applied
+clusterrole.rbac.authorization.k8s.io/cnpg-subscription-viewer-role serverside-applied
+clusterrolebinding.rbac.authorization.k8s.io/cnpg-manager-rolebinding serverside-applied
+configmap/cnpg-default-monitoring serverside-applied
+service/cnpg-webhook-service serverside-applied
+deployment.apps/cnpg-controller-manager serverside-applied
+mutatingwebhookconfiguration.admissionregistration.k8s.io/cnpg-mutating-webhook-configuration serverside-applied
+validatingwebhookconfiguration.admissionregistration.k8s.io/cnpg-validating-webhook-configuration serverside-applied
+```
+
+### output was the following in vxrails
+
+```aiignore
+(sms-api-py3.12) (base) jimschaff@LT-0919652 cnpg-operator % kubectl apply --server-side -f cnpg-1.26.0.yaml
 namespace/cnpg-system serverside-applied
 customresourcedefinition.apiextensions.k8s.io/backups.postgresql.cnpg.io serverside-applied
 customresourcedefinition.apiextensions.k8s.io/clusterimagecatalogs.postgresql.cnpg.io serverside-applied
@@ -65,11 +95,19 @@ brew install kubectl-cnpg
 
 see https://cloudnative-pg.io/documentation/1.26/quickstart/
 
-### create a PostgreSQL cluster
+### create a PostgreSQL cluster on minikube
 
 ```bash
 kubectl create namespace postgres-cluster
 kubectl apply -f postgres-cluster/minikube/sms-postgres-cluster.yaml
+kubectl get pods -n postgres-cluster
+```
+
+### create a PostgreSQL cluster on vxrails
+
+```bash
+kubectl create namespace postgres-cluster
+kubectl apply -f postgres-cluster/vxrails/sms-postgres-cluster.yaml
 kubectl get pods -n postgres-cluster
 ```
 
