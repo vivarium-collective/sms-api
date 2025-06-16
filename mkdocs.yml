@@ -17,11 +17,19 @@ plugins:
         python:
           setup_commands:
             - import sys
-            - sys.path.append('../')
+            - sys.path.append('.')
 theme:
   name: material
-  feature:
-    tabs: true
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.annotation
+    - content.code.copy
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
