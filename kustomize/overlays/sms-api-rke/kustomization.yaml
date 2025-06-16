@@ -12,7 +12,7 @@ images:
 replicas:
   - count: 1
     name: api
-  - count: 1
+  - count: 0
     name: mongodb
 
 resources:

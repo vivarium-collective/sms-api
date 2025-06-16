@@ -25,7 +25,7 @@ class SimulationService(ABC):
         pass
 
     @abstractmethod
-    async def get_slurm_job_status(self, slurm_job_id: str) -> SlurmJob | None:
+    async def get_slurm_job_status(self, slurmjobid: str) -> SlurmJob | None:
         pass
 
     @abstractmethod
@@ -33,7 +33,7 @@ class SimulationService(ABC):
         pass
 
 
-class SimulationServiceSlurm(SimulationService):
+class SimulationServiceHpc(SimulationService):
     @override
     async def submit_parca_job(self, simulation_run_id: EcoliSimulationRequest) -> int:
         settings = get_settings()
@@ -58,18 +58,18 @@ class SimulationServiceSlurm(SimulationService):
                 sbatch_file.write(parca_submission_script)
 
             # submit the job to Slurm
-            slurm_job_id = await slurm_service.submit_job(
+            slurmjobid = await slurm_service.submit_job(
                 local_sbatch_file=local_sbatch_file_path, remote_sbatch_file=remote_sbatch_file_path
             )
 
-            return slurm_job_id
+            return slurmjobid
 
     @override
     async def submit_sim_job(self, simulation_run_id: EcoliSimulationRequest) -> int:
         return -1
 
     @override
-    async def get_slurm_job_status(self, slurm_job_id: str) -> SlurmJob | None:
+    async def get_slurm_job_status(self, slurmjobid: str) -> SlurmJob | None:
         return None
 
     @override

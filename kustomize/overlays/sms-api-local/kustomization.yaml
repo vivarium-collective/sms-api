@@ -4,7 +4,7 @@ kind: Kustomization
 namespace: sms-api-local
 
 images:
-  - name: ghcr.io/biosimulations/biosim-api
+  - name: ghcr.io/biosimulations/sms-api
     newTag: arm64_0.2.2
   - name: docker.io/library/mongo
     newTag: 8.0.4
@@ -12,7 +12,7 @@ images:
 replicas:
   - count: 1
     name: api
-  - count: 1
+  - count: 0
     name: mongodb
 
 resources:
