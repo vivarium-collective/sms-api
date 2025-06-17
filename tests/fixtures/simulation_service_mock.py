@@ -23,6 +23,12 @@ class SimulationServiceMock(SimulationService):
             self.sim_runs = sim_runs
 
     @override
+    async def clone_repository_if_needed(
+        self, git_commit_hash: str, repo_url: str = "https://github.com/CovertLab/vEcoli", branch: str = "master"
+    ) -> None:
+        pass
+
+    @override
     async def submit_parca_job(self, simulation_run_id: EcoliSimulationRequest) -> int:
         return 1  # Mock job ID
 

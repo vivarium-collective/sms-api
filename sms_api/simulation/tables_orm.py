@@ -34,10 +34,9 @@ class ORMSimulator(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
-
-    version: Mapped[str] = mapped_column(nullable=False)
-    docker_image: Mapped[str] = mapped_column(nullable=False)
-    docker_hash: Mapped[str] = mapped_column(nullable=False)
+    git_repo_url: Mapped[str] = mapped_column(nullable=False)
+    git_branch: Mapped[str] = mapped_column(nullable=False)
+    git_commit_hash: Mapped[str] = mapped_column(nullable=False)
 
 
 class ORMHpcRun(Base):

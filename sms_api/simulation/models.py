@@ -24,9 +24,9 @@ class HpcRun(BaseModel):
 
 class SimulatorVersion(BaseModel):
     database_id: int  # Unique identifier for the simulator version
-    version: str  # displayed version
-    docker_image: str  # Docker image for the simulator version
-    docker_hash: str  # Optional Docker image hash for integrity verification
+    git_commit_hash: str  # Git commit hash for the specific simulator version
+    git_repo_url: str  # Git repository URL for the simulator
+    git_branch: str  # Git branch name for the simulator version
 
 
 class ParcaDatasetRequest(BaseModel):
