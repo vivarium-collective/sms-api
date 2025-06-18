@@ -231,6 +231,7 @@ class SimulationServiceHpc(SimulationService):
 
                     binds="-B {remote_vEcoli_repo_path!s}:/vEcoli -B {parca_remote_path!s}:/parca_out"
                     image="{apptainer_image_path!s}"
+                    cd {remote_vEcoli_repo_path!s}
                     singularity run $binds $image uv run \\
                          --env-file /vEcoli/.env /vEcoli/runscripts/parca.py \\
                          --config /vEcoli/ecoli/composites/ecoli_configs/run_parca.json -c 3 -o /parca_out
