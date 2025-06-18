@@ -3,7 +3,7 @@ import logging
 from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
-from sms_api.simulation.models import EcoliSimulation, EcoliSimulationRequest
+from sms_api.simulation.models import EcoliSimulation, EcoliSimulationRequest, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,10 @@ class SimulationServiceMock(SimulationService):
         self, git_commit_hash: str, repo_url: str = "https://github.com/CovertLab/vEcoli", branch: str = "master"
     ) -> None:
         pass
+
+    @override
+    async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
+        return 1  # Mock job ID
 
     @override
     async def submit_parca_job(self, simulation_run_id: EcoliSimulationRequest) -> int:

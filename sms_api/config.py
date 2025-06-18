@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     slurm_submit_host: str = ""
     slurm_submit_user: str = ""  # "svc_vivarium"
     slurm_submit_key_path: str = ""  # "/Users/jimschaff/.ssh/id_rsa"
+    slurm_partition: str = ""
+    slurm_qos: str = ""
+    slurm_log_base_path: str = ""
+
+    hpc_repo_base_path: str = ""
 
 
 @lru_cache

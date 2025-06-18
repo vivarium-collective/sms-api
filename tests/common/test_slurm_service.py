@@ -1,3 +1,4 @@
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -25,19 +26,21 @@ async def test_slurm_job_query(slurm_service: SlurmService) -> None:
 @pytest.mark.asyncio
 async def test_slurm_job_submit(slurm_service: SlurmService, slurm_template_hello: str) -> None:
     _all_jobs_before_submit: list[SlurmJob] = await slurm_service.get_job_status()
-    # write slurm_template_hello to a temp file
-    local_sbatch_file = Path(f"job_{uuid.uuid4().hex}.sbatch")
-    with open(local_sbatch_file, "w") as f:
-        f.write(slurm_template_hello)
+    settings = get_settings()
+    remote_path = Path(settings.slurm_log_base_path)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_dir = Path(tmpdir)
+        # write slurm_template_hello to a temp file
+        local_sbatch_file = tmp_dir / f"job_{uuid.uuid4().hex}.sbatch"
+        with open(local_sbatch_file, "w") as f:
+            f.write(slurm_template_hello)
 
-    remote_sbatch_file = Path(local_sbatch_file.name)
-    job_id: int = await slurm_service.submit_job(
-        local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
-    )
+        remote_sbatch_file = remote_path / local_sbatch_file.name
+        job_id: int = await slurm_service.submit_job(
+            local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
+        )
 
-    submitted_job: list[SlurmJob] = await slurm_service.get_job_status(job_id=job_id)
-    assert submitted_job is not None and len(submitted_job) == 1
-    assert submitted_job[0].job_id == job_id
-    assert submitted_job[0].name == "my_test_job"
-
-    local_sbatch_file.unlink()
+        submitted_job: list[SlurmJob] = await slurm_service.get_job_status(job_id=job_id)
+        assert submitted_job is not None and len(submitted_job) == 1
+        assert submitted_job[0].job_id == job_id
+        assert submitted_job[0].name == "my_test_job"

@@ -243,7 +243,11 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             result1: Result[tuple[ORMParcaDataset]] = await session.execute(stmt1)
             existing_orm_parca_dataset: ORMParcaDataset | None = result1.scalars().one_or_none()
             if existing_orm_parca_dataset is not None:
-                hpc_run: HpcRun | None = await self.get_hpcrun(hpcrun_id=existing_orm_parca_dataset.hpcrun_id)
+                hpc_run: HpcRun | None = (
+                    await self.get_hpcrun(hpcrun_id=existing_orm_parca_dataset.hpcrun_id)
+                    if existing_orm_parca_dataset.hpcrun_id
+                    else None
+                )
                 simulator_version: SimulatorVersion | None = await self.get_simulator(
                     existing_orm_parca_dataset.simulator_id
                 )
@@ -302,7 +306,9 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             if orm_parca_dataset is None:
                 return None
 
-            hpc_run: HpcRun | None = await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id)
+            hpc_run: HpcRun | None = (
+                await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id) if orm_parca_dataset.hpcrun_id else None
+            )
             simulator_version: SimulatorVersion | None = await self.get_simulator(orm_parca_dataset.simulator_id)
             if simulator_version is None:
                 raise Exception(f"Simulator with id {orm_parca_dataset.simulator_id} not found in the database")
@@ -336,7 +342,11 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
 
             parca_datasets: list[ParcaDataset] = []
             for orm_parca_dataset in orm_parca_datasets:
-                hpc_run: HpcRun | None = await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id)
+                hpc_run: HpcRun | None = (
+                    await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id)
+                    if orm_parca_dataset.hpcrun_id
+                    else None
+                )
                 simulator_version: SimulatorVersion | None = await self.get_simulator(orm_parca_dataset.simulator_id)
                 if simulator_version is None:
                     raise Exception(f"Simulator with id {orm_parca_dataset.simulator_id} not found in the database")

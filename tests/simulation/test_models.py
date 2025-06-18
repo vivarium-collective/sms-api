@@ -16,7 +16,7 @@ async def test_save_request_to_mongo(database_service: SimulationDatabaseService
     param2_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
 
     simulator_version = await database_service.insert_simulator(
-        git_commit_hash="9c3d1c8cf6f1be9a027a183ae09abe1d9870a6d0",
+        git_commit_hash="9c3d1c8",
         git_repo_url="https://github.com/CovertLab/vEcoli",
         git_branch="master",
     )

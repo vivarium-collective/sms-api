@@ -1,5 +1,6 @@
 import datetime
 import enum
+from typing import Optional
 
 from sqlalchemy import ForeignKey, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -36,7 +37,8 @@ class ORMSimulator(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
     git_repo_url: Mapped[str] = mapped_column(nullable=False)
     git_branch: Mapped[str] = mapped_column(nullable=False)
-    git_commit_hash: Mapped[str] = mapped_column(nullable=False)
+    git_commit_hash: Mapped[str] = mapped_column(nullable=False)  # first 7 characters of the commit hash
+    hpcrun_id: Mapped[Optional[int]] = mapped_column(ForeignKey("hpcrun.id"), nullable=True, index=True)
 
 
 class ORMHpcRun(Base):
@@ -46,11 +48,11 @@ class ORMHpcRun(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
     job_type: Mapped[JobType] = mapped_column(nullable=False)
-    slurmjobid: Mapped[int] = mapped_column(nullable=True)
-    start_time: Mapped[datetime.datetime] = mapped_column(nullable=True)
-    end_time: Mapped[datetime.datetime] = mapped_column(nullable=True)
+    slurmjobid: Mapped[Optional[int]] = mapped_column(nullable=True)
+    start_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
+    end_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
     status: Mapped[JobStatusDB] = mapped_column(nullable=False)
-    error_message: Mapped[str] = mapped_column(nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(nullable=True)
 
 
 class ORMParcaDataset(Base):
@@ -59,11 +61,11 @@ class ORMParcaDataset(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
-    simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False)
+    simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
     parca_config: Mapped[dict[str, int | float | str]] = mapped_column(JSONB, nullable=False)
     parca_config_hash: Mapped[str] = mapped_column(nullable=False)
-    hpcrun_id: Mapped[int] = mapped_column(ForeignKey("hpcrun.id"), nullable=True)
-    remote_archive_path: Mapped[str] = mapped_column(nullable=True)
+    hpcrun_id: Mapped[Optional[int]] = mapped_column(ForeignKey("hpcrun.id"), nullable=True, index=True)
+    remote_archive_path: Mapped[Optional[str]] = mapped_column(nullable=True)
 
 
 class ORMSimulation(Base):
@@ -72,11 +74,11 @@ class ORMSimulation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
-    simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False)
-    parca_dataset_id: Mapped[int] = mapped_column(ForeignKey("parca_dataset.id"), nullable=False)
+    simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
+    parca_dataset_id: Mapped[int] = mapped_column(ForeignKey("parca_dataset.id"), nullable=False, index=True)
     variant_config: Mapped[dict[str, dict[str, int | float | str]]] = mapped_column(JSONB, nullable=False)
     variant_config_hash: Mapped[str] = mapped_column(nullable=False)
-    hpcrun_id: Mapped[int] = mapped_column(ForeignKey("hpcrun.id"), nullable=True)
+    hpcrun_id: Mapped[Optional[int]] = mapped_column(ForeignKey("hpcrun.id"), nullable=True, index=True)
 
 
 async def create_db(async_engine: AsyncEngine) -> None:
