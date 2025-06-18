@@ -24,6 +24,7 @@ class JobStatusDB(enum.Enum):
 class JobType(enum.Enum):
     SIMULATION = "simulation"
     PARCA = "parca"
+    BUILD_IMAGE = "build_image"
 
 
 class Base(AsyncAttrs, DeclarativeBase):

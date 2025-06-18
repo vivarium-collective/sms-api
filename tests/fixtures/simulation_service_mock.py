@@ -3,7 +3,7 @@ import logging
 from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
-from sms_api.simulation.models import EcoliSimulation, EcoliSimulationRequest, SimulatorVersion
+from sms_api.simulation.models import EcoliSimulation, EcoliSimulationRequest, ParcaDataset, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class SimulationServiceMock(SimulationService):
         return 1  # Mock job ID
 
     @override
-    async def submit_parca_job(self, simulation_run_id: EcoliSimulationRequest) -> int:
+    async def submit_parca_job(self, parca_dataset: ParcaDataset) -> int:
         return 1  # Mock job ID
 
     @override
