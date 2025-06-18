@@ -131,7 +131,7 @@ class SimulationServiceHpc(SimulationService):
         )
         slurm_service = SlurmService(ssh_service=ssh_service)
 
-        random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
         slurm_job_name = f"build-image-{simulator_version.git_commit_hash}-{random_suffix}"
 
         slurm_log_remote_path = Path(settings.slurm_log_base_path)
@@ -160,14 +160,14 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --qos={settings.slurm_qos}
                     #SBATCH --wait
                     #SBATCH --output={slurm_log_file}
-                    #SBATCH --nodelist=mantis-039
-                    
+                    #SBATCH --nodelist={settings.slurm_node_list}
+
                     set -e
-                                        
+
                     echo "Building vEcoli image for commit {simulator_version.git_commit_hash} on $(hostname) ..."
                     env
                     mkdir -p {slurm_image_remote_path!s}
-                    
+
                     # if the image already exists, skip the build
                     if [ -f {apptainer_image_path!s} ]; then
                         echo "Image {apptainer_image_path!s} already exists. Skipping build."
@@ -176,13 +176,13 @@ class SimulationServiceHpc(SimulationService):
 
                     cd {remote_vEcoli_path!s}
                     {build_image_cmd}
-                    
+
                     # if the image does not exist after the build, fail the job
                     if [ ! -f {apptainer_image_path!s} ]; then
                         echo "Image build failed. Image not found at {apptainer_image_path!s}."
                         exit 1
                     fi
-                    
+
                     echo "Build completed. Image saved to {apptainer_image_path!s}."
                     """)
                 f.write(script_content)
