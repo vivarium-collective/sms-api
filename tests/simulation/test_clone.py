@@ -6,7 +6,7 @@ from sms_api.simulation.simulation_service import SimulationService
 
 main_branch = "master"
 repo_url = "https://github.com/CovertLab/vEcoli"
-latest_commit_hash = "9c3d1c8"
+latest_commit_hash = "8ed6a30"
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")

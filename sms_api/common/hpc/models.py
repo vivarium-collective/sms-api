@@ -45,3 +45,9 @@ class SlurmJob(BaseModel):
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
         return self.model_dump_json(by_alias=True, exclude_unset=True)
+
+    def is_done(self) -> bool:
+        """Check if the job is done based on its state."""
+        if not self.job_state:
+            return False
+        return any(u.upper() in ["COMPLETED", "FAILED"] for u in self.job_state)

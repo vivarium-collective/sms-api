@@ -21,6 +21,7 @@ class SSHService:
     async def run_command(self, command: str) -> tuple[int, str, str]:
         async with asyncssh.connect(host=self.hostname, username=self.username, client_keys=[self.key_path]) as conn:
             try:
+                logger.info(f"Running ssh command: {command}")
                 result: SSHCompletedProcess = await conn.run(command, check=True)
                 if not isinstance(result.stdout, str):
                     raise TypeError(f"Expected result.stdout to be str, got {type(result.stdout)}")

@@ -41,7 +41,7 @@ class SimulationServiceMock(SimulationService):
         return 1  # Mock job ID
 
     @override
-    async def get_slurm_job_status(self, slurm_job_id: str) -> SlurmJob | None:
+    async def get_slurm_job_status(self, slurm_job_id: int) -> SlurmJob | None:
         return None
 
     @override

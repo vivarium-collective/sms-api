@@ -1,4 +1,6 @@
 import logging
+import random
+import string
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -30,7 +32,7 @@ class SimulationService(ABC):
         pass
 
     @abstractmethod
-    async def get_slurm_job_status(self, slurmjobid: str) -> SlurmJob | None:
+    async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
         pass
 
     @abstractmethod
@@ -129,22 +131,25 @@ class SimulationServiceHpc(SimulationService):
         )
         slurm_service = SlurmService(ssh_service=ssh_service)
 
-        slurm_job_name = f"build-image-{simulator_version.git_commit_hash}"
+        random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        slurm_job_name = f"build-image-{simulator_version.git_commit_hash}-{random_suffix}"
 
         slurm_log_remote_path = Path(settings.slurm_log_base_path)
         slurm_log_file = slurm_log_remote_path / f"{slurm_job_name}.out"
         slurm_submit_file = slurm_log_remote_path / f"{slurm_job_name}.sbatch"
 
         version_base_remote_path = Path(settings.hpc_repo_base_path) / simulator_version.git_commit_hash
-        remote_build_script_path = version_base_remote_path / "vEcoli" / "runscripts" / "container" / "build-image.sh"
+        remote_build_script_relative_path = Path("runscripts") / "container" / "build-image.sh"
+        remote_vEcoli_path = version_base_remote_path / "vEcoli"
 
-        apptainer_image_path = slurm_log_remote_path / f"vecoli-{simulator_version.git_commit_hash}.sif"
+        slurm_image_remote_path = Path(settings.slurm_image_base_path)
+        apptainer_image_path = slurm_image_remote_path / f"vecoli-{simulator_version.git_commit_hash}.sif"
 
         # build the submit script
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
-                build_image_cmd = f"{remote_build_script_path!s} -i {apptainer_image_path!s} -a"
+                build_image_cmd = f"{remote_build_script_relative_path!s} -i {apptainer_image_path!s} -a"
                 script_content = dedent(f"""\
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
@@ -152,25 +157,62 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --cpus-per-task 2
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
+                    #SBATCH --qos={settings.slurm_qos}
                     #SBATCH --wait
                     #SBATCH --output={slurm_log_file}
+                    #SBATCH --nodelist=mantis-039
+                    
+                    set -e
+                                        
+                    echo "Building vEcoli image for commit {simulator_version.git_commit_hash} on $(hostname) ..."
+                    env
+                    mkdir -p {slurm_image_remote_path!s}
+                    
+                    # if the image already exists, skip the build
+                    if [ -f {apptainer_image_path!s} ]; then
+                        echo "Image {apptainer_image_path!s} already exists. Skipping build."
+                        exit 0
+                    fi
+
+                    cd {remote_vEcoli_path!s}
                     {build_image_cmd}
+                    
+                    # if the image does not exist after the build, fail the job
+                    if [ ! -f {apptainer_image_path!s} ]; then
+                        echo "Image build failed. Image not found at {apptainer_image_path!s}."
+                        exit 1
+                    fi
+                    
+                    echo "Build completed. Image saved to {apptainer_image_path!s}."
                     """)
                 f.write(script_content)
 
-        # submit the build script to slurm
-        slurm_jobid = await slurm_service.submit_job(
-            local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
-        )
-        return slurm_jobid
+            # submit the build script to slurm
+            slurm_jobid = await slurm_service.submit_job(
+                local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+            )
+            return slurm_jobid
 
     @override
     async def submit_sim_job(self, simulation_run_id: EcoliSimulationRequest) -> int:
         return -1
 
     @override
-    async def get_slurm_job_status(self, slurmjobid: str) -> SlurmJob | None:
-        return None
+    async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
+        settings = get_settings()
+        ssh_service = SSHService(
+            hostname=settings.slurm_submit_host,
+            username=settings.slurm_submit_user,
+            key_path=Path(settings.slurm_submit_key_path),
+        )
+        slurm_service = SlurmService(ssh_service=ssh_service)
+        job_ids: list[SlurmJob] = await slurm_service.get_job_status(job_id=slurmjobid)
+        if len(job_ids) == 0:
+            return None
+        elif len(job_ids) == 1:
+            return job_ids[0]
+        else:
+            raise RuntimeError(f"Multiple jobs found with ID {slurmjobid}: {job_ids}")
 
     @override
     async def close(self) -> None:
