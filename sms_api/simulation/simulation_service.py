@@ -323,6 +323,7 @@ class SimulationServiceHpc(SimulationService):
                     binds+=" -B {experiment_path_parent!s}:/out"
                     image="{apptainer_image_path!s}"
                     cd {remote_vEcoli_repo_path!s}
+                    git -C ./configs diff HEAD >> ./source-info/git_diff.txt
                     singularity run $binds $image uv run \\
                          --env-file /vEcoli/.env /vEcoli/ecoli/experiments/ecoli_master_sim.py \\
                          --generations 1 --emitter parquet --emitter_arg out_dir='/out' \\
