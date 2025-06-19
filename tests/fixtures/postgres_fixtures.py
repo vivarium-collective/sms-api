@@ -10,7 +10,7 @@ from sms_api.simulation.simulation_database import SimulationDatabaseService, Si
 from sms_api.simulation.tables_orm import create_db
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def postgres_url() -> Generator[str, None, None]:
     with PostgresContainer("postgres:15") as postgres:
         url = postgres.get_connection_url().replace("postgresql+psycopg2://", "postgresql+asyncpg://")

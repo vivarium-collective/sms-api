@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     hpc_image_base_path: str = ""
     hpc_parca_base_path: str = ""
     hpc_repo_base_path: str = ""
+    hpc_sim_base_path: str = ""
 
 
 @lru_cache

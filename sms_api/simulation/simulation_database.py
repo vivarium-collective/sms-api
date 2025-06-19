@@ -298,10 +298,10 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                 return parca_dataset
 
     @override
-    async def get_parca_dataset(self, simulator_id: int) -> ParcaDataset | None:
+    async def get_parca_dataset(self, parca_dataset_id: int) -> ParcaDataset | None:
         async with self.async_sessionmaker() as session, session.begin():
             orm_parca_dataset: ORMParcaDataset | None = await self._get_orm_parca_dataset(
-                session, parca_dataset_id=simulator_id
+                session, parca_dataset_id=parca_dataset_id
             )
             if orm_parca_dataset is None:
                 return None
