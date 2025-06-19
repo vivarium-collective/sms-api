@@ -15,8 +15,13 @@ async def test_save_request_to_mongo(database_service: SimulationDatabaseService
     param1_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
     param2_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
 
-    simulator_version = await database_service.get_or_insert_simulator(
-        version="1.0.0", docker_image="test_docker_image", docker_hash="test_docker_hash"
+    for simulator in await database_service.list_simulators():
+        await database_service.delete_simulator(simulator_id=simulator.database_id)
+
+    simulator_version = await database_service.insert_simulator(
+        git_commit_hash="9c3d1c8",
+        git_repo_url="https://github.com/CovertLab/vEcoli",
+        git_branch="master",
     )
     parca_dataset_request = ParcaDatasetRequest(
         simulator_version=simulator_version,

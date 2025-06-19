@@ -17,7 +17,7 @@ class SlurmService:
         self.ssh_service = ssh_service
 
     async def get_job_status(self, job_id: int | None = None) -> list[SlurmJob]:
-        command = "squeue --json"
+        command = "squeue --json -u $USER"
         if job_id is not None:
             command = command + f" -j {job_id}"
         return_code, stdout, stderr = await self.ssh_service.run_command(command=command)
@@ -31,7 +31,7 @@ class SlurmService:
 
     async def submit_job(self, local_sbatch_file: Path, remote_sbatch_file: Path) -> int:
         await self.ssh_service.scp_upload(local_file=local_sbatch_file, remote_path=remote_sbatch_file)
-        command = f"sbatch --parsable {local_sbatch_file}"
+        command = f"sbatch --parsable {remote_sbatch_file}"
         return_code, stdout, stderr = await self.ssh_service.run_command(command=command)
         if return_code != 0:
             raise Exception(

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class SimulationDatabaseService(ABC):
     @abstractmethod
-    async def get_or_insert_simulator(self, version: str, docker_image: str, docker_hash: str) -> SimulatorVersion:
+    async def insert_simulator(self, git_commit_hash: str, git_repo_url: str, git_branch: str) -> SimulatorVersion:
         pass
 
     @abstractmethod
@@ -117,15 +117,15 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
         return orm_hpc_job
 
     @override
-    async def get_or_insert_simulator(self, version: str, docker_image: str, docker_hash: str) -> SimulatorVersion:
+    async def insert_simulator(self, git_commit_hash: str, git_repo_url: str, git_branch: str) -> SimulatorVersion:
         async with self.async_sessionmaker() as session, session.begin():
             stmt1 = (
                 select(ORMSimulator)
                 .where(
                     and_(
-                        ORMSimulator.version == version,
-                        ORMSimulator.docker_image == docker_image,
-                        ORMSimulator.docker_hash == docker_hash,
+                        ORMSimulator.git_commit_hash == git_commit_hash,
+                        ORMSimulator.git_repo_url == git_repo_url,
+                        ORMSimulator.git_branch == git_branch,
                     )
                 )
                 .limit(1)
@@ -133,27 +133,27 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             result1: Result[tuple[ORMSimulator]] = await session.execute(stmt1)
             existing_orm_simulator: ORMSimulator | None = result1.scalars().one_or_none()
             if existing_orm_simulator is not None:
-                # If the simulator already exists, return its version
-                return SimulatorVersion(
-                    database_id=existing_orm_simulator.id,
-                    version=existing_orm_simulator.version,
-                    docker_image=existing_orm_simulator.docker_image,
-                    docker_hash=existing_orm_simulator.docker_hash,
+                # If the simulator already exists
+                logger.error(
+                    f"Simulator with git_commit_hash={git_commit_hash}, git_repo_url={git_repo_url}, "
+                    f"git_branch={git_branch} already exists in the database"
                 )
+                raise RuntimeError(f"Simulator with git_commit_hash={git_commit_hash} already exists in the database")
+
             # did not find the simulator, so insert it
             new_orm_simulator = ORMSimulator(
-                version=version,
-                docker_image=docker_image,
-                docker_hash=docker_hash,
+                git_commit_hash=git_commit_hash,
+                git_repo_url=git_repo_url,
+                git_branch=git_branch,
             )
             session.add(new_orm_simulator)
             await session.flush()
             # Ensure the ORM object is inserted and has an ID
             return SimulatorVersion(
                 database_id=new_orm_simulator.id,
-                version=new_orm_simulator.version,
-                docker_image=new_orm_simulator.docker_image,
-                docker_hash=new_orm_simulator.docker_hash,
+                git_commit_hash=new_orm_simulator.git_commit_hash,
+                git_repo_url=new_orm_simulator.git_repo_url,
+                git_branch=new_orm_simulator.git_branch,
             )
 
     @override
@@ -164,9 +164,9 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                 return None
             return SimulatorVersion(
                 database_id=orm_simulator.id,
-                version=orm_simulator.version,
-                docker_image=orm_simulator.docker_image,
-                docker_hash=orm_simulator.docker_hash,
+                git_commit_hash=orm_simulator.git_commit_hash,
+                git_repo_url=orm_simulator.git_repo_url,
+                git_branch=orm_simulator.git_branch,
             )
 
     @override
@@ -189,9 +189,9 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                 simulator_versions.append(
                     SimulatorVersion(
                         database_id=orm_simulator.id,
-                        version=orm_simulator.version,
-                        docker_image=orm_simulator.docker_image,
-                        docker_hash=orm_simulator.docker_hash,
+                        git_commit_hash=orm_simulator.git_commit_hash,
+                        git_repo_url=orm_simulator.git_repo_url,
+                        git_branch=orm_simulator.git_branch,
                     )
                 )
             return simulator_versions
@@ -243,7 +243,11 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             result1: Result[tuple[ORMParcaDataset]] = await session.execute(stmt1)
             existing_orm_parca_dataset: ORMParcaDataset | None = result1.scalars().one_or_none()
             if existing_orm_parca_dataset is not None:
-                hpc_run: HpcRun | None = await self.get_hpcrun(hpcrun_id=existing_orm_parca_dataset.hpcrun_id)
+                hpc_run: HpcRun | None = (
+                    await self.get_hpcrun(hpcrun_id=existing_orm_parca_dataset.hpcrun_id)
+                    if existing_orm_parca_dataset.hpcrun_id
+                    else None
+                )
                 simulator_version: SimulatorVersion | None = await self.get_simulator(
                     existing_orm_parca_dataset.simulator_id
                 )
@@ -277,9 +281,9 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                 # Prepare the ParcaDataset object to return
                 simulator_version = SimulatorVersion(
                     database_id=orm_simulator.id,
-                    version=orm_simulator.version,
-                    docker_image=orm_simulator.docker_image,
-                    docker_hash=orm_simulator.docker_hash,
+                    git_commit_hash=orm_simulator.git_commit_hash,
+                    git_repo_url=orm_simulator.git_repo_url,
+                    git_branch=orm_simulator.git_branch,
                 )
                 parca_dataset_request = ParcaDatasetRequest(
                     simulator_version=simulator_version,
@@ -294,15 +298,17 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                 return parca_dataset
 
     @override
-    async def get_parca_dataset(self, simulator_id: int) -> ParcaDataset | None:
+    async def get_parca_dataset(self, parca_dataset_id: int) -> ParcaDataset | None:
         async with self.async_sessionmaker() as session, session.begin():
             orm_parca_dataset: ORMParcaDataset | None = await self._get_orm_parca_dataset(
-                session, parca_dataset_id=simulator_id
+                session, parca_dataset_id=parca_dataset_id
             )
             if orm_parca_dataset is None:
                 return None
 
-            hpc_run: HpcRun | None = await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id)
+            hpc_run: HpcRun | None = (
+                await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id) if orm_parca_dataset.hpcrun_id else None
+            )
             simulator_version: SimulatorVersion | None = await self.get_simulator(orm_parca_dataset.simulator_id)
             if simulator_version is None:
                 raise Exception(f"Simulator with id {orm_parca_dataset.simulator_id} not found in the database")
@@ -336,7 +342,11 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
 
             parca_datasets: list[ParcaDataset] = []
             for orm_parca_dataset in orm_parca_datasets:
-                hpc_run: HpcRun | None = await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id)
+                hpc_run: HpcRun | None = (
+                    await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id)
+                    if orm_parca_dataset.hpcrun_id
+                    else None
+                )
                 simulator_version: SimulatorVersion | None = await self.get_simulator(orm_parca_dataset.simulator_id)
                 if simulator_version is None:
                     raise Exception(f"Simulator with id {orm_parca_dataset.simulator_id} not found in the database")
@@ -384,9 +394,9 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             # prepare the EcoliSimulation object to return
             simulator_version = SimulatorVersion(
                 database_id=orm_simulator.id,
-                version=orm_simulator.version,
-                docker_image=orm_simulator.docker_image,
-                docker_hash=orm_simulator.docker_hash,
+                git_commit_hash=orm_simulator.git_commit_hash,
+                git_repo_url=orm_simulator.git_repo_url,
+                git_branch=orm_simulator.git_branch,
             )
             sim_request = EcoliSimulationRequest(
                 simulator=simulator_version,
@@ -412,9 +422,9 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             # Prepare the EcoliSimulation object to return
             simulator_version = SimulatorVersion(
                 database_id=orm_simulation.simulator_id,
-                version=orm_simulator.version,
-                docker_image=orm_simulator.docker_image,
-                docker_hash=orm_simulator.docker_hash,
+                git_commit_hash=orm_simulator.git_commit_hash,
+                git_repo_url=orm_simulator.git_repo_url,
+                git_branch=orm_simulator.git_branch,
             )
             sim_request = EcoliSimulationRequest(
                 simulator=simulator_version,
@@ -450,9 +460,9 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                 # Prepare the EcoliSimulation object to return
                 simulator_version = SimulatorVersion(
                     database_id=orm_simulator.id,
-                    version=orm_simulator.version,
-                    docker_image=orm_simulator.docker_image,
-                    docker_hash=orm_simulator.docker_hash,
+                    git_commit_hash=orm_simulator.git_commit_hash,
+                    git_repo_url=orm_simulator.git_repo_url,
+                    git_branch=orm_simulator.git_branch,
                 )
                 sim_request = EcoliSimulationRequest(
                     simulator=simulator_version,
