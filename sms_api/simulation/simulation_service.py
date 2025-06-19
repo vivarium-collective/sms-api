@@ -316,7 +316,7 @@ class SimulationServiceHpc(SimulationService):
 
                     commit_hash="{simulator_version.git_commit_hash}"
                     sim_id="{ecoli_simulation.database_id}"
-                    echo "running simulation: commit=$commit_hash, simulation id=sim_id on $(hostname) ..."
+                    echo "running simulation: commit=$commit_hash, simulation id=$sim_id on $(hostname) ..."
 
                     binds="-B {remote_vEcoli_repo_path!s}:/vEcoli"
                     binds+=" -B {parca_parent_path!s}:/parca"
