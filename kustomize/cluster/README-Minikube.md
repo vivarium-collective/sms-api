@@ -17,6 +17,12 @@
 
 # local minikube config
 
+#### This should be run in the `kustomize` directory:
+
+```bash
+cd kustomize
+```
+
 ### install Lens
 
 ### install and start minikube on macos
@@ -93,10 +99,10 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 cmctl check api
 ```
 
-### Install CloudNativePG
+### Install CloudNativePG (see README-cnpg.md for more details)
 
 ```aiignore
-kubectl apply --server-side -f cnpg-operator/cnpg-1.26.0.yaml
+kubectl apply --server-side -f cluster/cnpg-operator/cnpg-1.26.0.yaml
 ```
 
 ### Install the PostgreSQL database cluster
@@ -123,6 +129,8 @@ echo "127.0.0.1 minikube.local" | sudo tee -a /etc/hosts
   of minikube ip or kubectl get ingress - this is an important gotcha."
 
 # deploying sms-api services to minikube
+
+# NOW, RUN GENERATE SECRETS SCRIPT (sms_dev_secrets.sh)
 
 ### verify the kustomization scripts
 
