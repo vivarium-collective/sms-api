@@ -4,6 +4,8 @@ from pathlib import Path
 import asyncssh
 from asyncssh import SSHCompletedProcess
 
+from sms_api.config import get_settings
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -19,6 +21,10 @@ class SSHService:
         self.key_path = key_path
 
     async def run_command(self, command: str) -> tuple[int, str, str]:
+        """
+        :rtype: `tuple[int, str, str]`
+        :return: returncode, stdout, stderr
+        """
         async with asyncssh.connect(host=self.hostname, username=self.username, client_keys=[self.key_path]) as conn:
             try:
                 logger.info(f"Running ssh command: {command}")
@@ -53,6 +59,12 @@ class SSHService:
                 ) from exc
 
     async def scp_download(self, local_file: Path, remote_path: Path) -> None:
+        """
+        Download a file found in the HPC at `remote_path` and save it to `local_file`.
+
+        :param local_file: (`Path`) Local path which to save the downloaded file.
+        :param remote_path: (`Path`) Remote path within the HPC that you wish to download
+        """
         async with asyncssh.connect(host=self.hostname, username=self.username, client_keys=[self.key_path]) as conn:
             try:
                 await asyncssh.scp(srcpaths=(conn, remote_path), dstpath=local_file)
@@ -65,3 +77,12 @@ class SSHService:
 
     async def close(self) -> None:
         pass  # nothing to do here because we don't yet keep the connection around.
+
+
+def get_ssh_service() -> SSHService:
+    settings = get_settings()
+    return SSHService(
+        hostname=settings.slurm_submit_host,
+        username=settings.slurm_submit_user,
+        key_path=Path(settings.slurm_submit_key_path),
+    )
