@@ -1,9 +1,10 @@
-from enum import StrEnum
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-import typing
+from enum import StrEnum
 
+# import pyarrow.parquet as pq
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from starlette.middleware.cors import CORSMiddleware
@@ -16,16 +17,15 @@ from sms_api.dependencies import (
     shutdown_standalone,
 )
 from sms_api.log_config import setup_logging
+from sms_api.simulation.database_service import SimulationDatabaseService
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
-    HpcRun,
     ParcaDataset,
     ParcaDatasetRequest,
     SimulatorVersion,
 )
-from sms_api.simulation.simulation_database import SimulationDatabaseService
-from sms_api.simulation.simulation_service import SimulationService
+from sms_api.simulation.simulation_service import SimulationServiceHpc
 from sms_api.simulation.tables_orm import JobType
 from sms_api.version import __version__
 
@@ -47,9 +47,11 @@ APP_ORIGINS = [
     "http://localhost:8000",
     "http://localhost:3001",
 ]
+DEV_SERVER_URL = "http://localhost:3001"
+PROD_SERVER_URL = "https://sms.cam.uchc.edu"
 APP_SERVERS: list[dict[str, str]] = [
-    # {"url": "https://sms.cam.uchc.edu", "description": "Production server"},
-    # {"url": "http://localhost:3001", "description": "Main Development server"},
+    # {"url": PROD_SERVER_URL, "description": "Production server"},
+    # {"url": DEV_SERVER_URL, "description": "Main Development server"},
 ]
 
 # -- app components -- #
@@ -86,6 +88,24 @@ app.add_middleware(
 # endpoint to send sql like queries to parquet files back to client
 
 
+class ServiceTypes(StrEnum):
+    SIMULATION = "simulation"
+    DATABASE = "database"
+
+    @classmethod
+    def all(cls) -> list[str]:
+        return [cls.SIMULATION, cls.DATABASE]
+
+
+class ServiceStatuses(StrEnum):
+    UP = "running"
+    DOWN = "not running"
+
+    @classmethod
+    def down(cls, reason: str) -> str:
+        return f"{cls.DOWN}: {reason}"
+
+
 @app.get("/")
 def root() -> dict[str, str]:
     return {"docs": f"{app.docs_url}", "version": APP_VERSION}
@@ -117,66 +137,20 @@ async def get_simulator_versions() -> list[SimulatorVersion]:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.get(
-    path="/get-run",
-    response_model=HpcRun,
-    operation_id="get-run",
-    tags=["Simulations"],
-    dependencies=[Depends(get_simulation_database_service), Depends(get_postgres_engine)]
-)
-async def get_run(hpc_run_id: str = Query(...)) -> HpcRun:
-    pass 
-
-
-class Services(StrEnum):
-    SIMULATION="simulation"
-    DATABASE="database"
-
-
-def get_service(service_type: Services) -> SimulationDatabaseService | SimulationService:
-    service = None
-    if service_type == "database":
-        service = get_simulation_database_service()
-    elif service_type == "simulation":
-        service = get_simulation_service()
-    if service is None:
-        logger.error(f"{service_type.value} service is not initialized")
-        raise HTTPException(status_code=500, detail=f"{service_type.value} service is not initialized")
-    else:
-        return service
-    
-
-@app.get(
-    path="/check-services",
-    operation_id="check-services"
-)
-async def check_services():
-    conf = {}
-    service_types = [Services.SIMULATION, Services.DATABASE]
-    for stype in service_types:
-        try:
-            service = get_service(stype)
-            conf[stype.value] = "UP"
-        except HTTPException as e:
-            conf[stype.value] = str(e)
-    return conf
-    
-
 @app.post(
     path="/simulator_version",
     response_model=SimulatorVersion,
     operation_id="insert-simulator-version",
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_database_service), Depends(get_postgres_engine)],
-    summary="Upload a new simulator (vEcoli) version."
+    summary="Upload a new simulator (vEcoli) version.",
 )
 async def insert_simulator_version(
-    git_commit_hash: str = Query(..., description="First 7 characters of git commit hash"),
+    git_commit_hash: str | None = Query(default=None, description="First 7 characters of git commit hash"),
     git_repo_url: str = Query(default="https://github.com/CovertLab/vEcoli"),
     git_branch: str = Query(default="master"),
 ) -> SimulatorVersion:
-    # TODO: after insert,
-    # TODO: check hash length
+    # check parameterized service availabilities
     sim_db_service: SimulationDatabaseService | None = get_simulation_database_service()
     if sim_db_service is None:
         logger.error("Simulation database service is not initialized")
@@ -185,13 +159,20 @@ async def insert_simulator_version(
     if sim_service is None:
         logger.error("Simulation service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
+    hpc_service = SimulationServiceHpc()
+    if hpc_service is None:
+        logger.error("HPC service is not initialized")
+        raise HTTPException(status_code=500, detail="HPC service is not initialized")
+
+    # use commit hash or latest hash
+    commit_hash = git_commit_hash or await hpc_service.get_latest_commit_hash()
 
     try:
         simulator_version = await sim_db_service.insert_simulator(
-            git_commit_hash=git_commit_hash, git_repo_url=git_repo_url, git_branch=git_branch
+            git_commit_hash=commit_hash, git_repo_url=git_repo_url, git_branch=git_branch
         )
         await sim_service.clone_repository_if_needed(
-            git_commit_hash=git_commit_hash, git_repo_url=git_repo_url, git_branch=git_branch
+            git_commit_hash=commit_hash, git_repo_url=git_repo_url, git_branch=git_branch
         )
         build_job_id = await sim_service.submit_build_image_job(simulator_version=simulator_version)
         _hpc_run = await sim_db_service.insert_hpcrun(job_type=JobType.BUILD_IMAGE, slurmjobid=build_job_id)
@@ -234,13 +215,13 @@ async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
 
 
 @app.post(
-    path="/vecoli_simulation",
+    path="/submit_simulation",
     response_model=EcoliSimulation,
-    operation_id="run_simulation",
+    operation_id="submit_simulation",
     tags=["Simulations"],
-    summary="Run a single vEcoli simulation with given parameter overrides",
+    summary="Submit a single vEcoli simulation with given parameter overrides",
 )
-async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
+async def submit_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
     sim_db_service = get_simulation_database_service()
     if sim_db_service is None:
         logger.error("Simulation database service is not initialized")
@@ -255,6 +236,119 @@ async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.post(
+    path="/vecoli_simulation",
+    response_model=EcoliSimulation,
+    operation_id="run_simulation",
+    tags=["Simulations"],
+    summary="Run a single vEcoli simulation with given parameter overrides",
+)
+async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
+    sim_db_service = get_simulation_database_service()
+    if sim_db_service is None:
+        logger.error("Simulation database service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+
+    try:
+        hpc_sim_service = SimulationServiceHpc()
+        if sim_request.simulator.git_commit_hash is None:
+            sim_request.simulator.git_commit_hash = await hpc_sim_service.get_latest_commit_hash()
+
+        inserted_sim: EcoliSimulation = await submit_simulation(sim_request=sim_request)
+
+        slurm_job_id = await hpc_sim_service.submit_ecoli_simulation_job(
+            ecoli_simulation=inserted_sim, simulation_database_service=sim_db_service
+        )
+
+        await asyncio.sleep(2.0)
+        hpc_run = await sim_db_service.get_hpcrun_by_slurmjobid(slurmjobid=slurm_job_id)
+
+        if hpc_run is not None:
+            inserted_sim.hpc_run = hpc_run
+
+        return inserted_sim
+    except Exception as e:
+        logger.exception("Error running vEcoli simulation")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# @app.post(
+#     path="/vecoli_simulation",
+#     response_model=EcoliSimulation,
+#     operation_id="run_simulation",
+#     tags=["Simulations"],
+#     summary="Run a single vEcoli simulation with given parameter overrides",
+# )
+# async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
+#     sim_db_service = get_simulation_database_service()
+#     if sim_db_service is None:
+#         logger.error("Simulation database service is not initialized")
+#         raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+#
+#     try:
+#         inserted_sim: EcoliSimulation = await sim_db_service.insert_simulation(sim_request)
+#         # don't wait to submit the job to HPC, just return the simulation object
+#         return inserted_sim
+#     except Exception as e:
+#         logger.exception("Error running vEcoli simulation")
+#         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# async def read_chunk(chunk_id: int):
+#     fp = f"{chunk_id}.pq"
+#     return pq.read_table(fp)
+
+
+# @app.get(
+#     path="/get-run",
+#     # response_model=HpcRun,
+#     operation_id="get-run",
+#     tags=["Simulations"],
+#     dependencies=[Depends(get_simulation_database_service), Depends(get_postgres_engine)],
+# )
+# async def get_results(hpc_run_id: str = Query(...)):
+#     try:
+#         results = {}
+#
+#         # 1. get ssh service
+#         ssh_svc: SSHService = get_ssh_service()
+#
+#         # 2. create slurm service with ssh svc
+#
+#         # 3. parse parent output dir filepath using run id
+#
+#         # 4. scp_download with slurm svc the appropriate pq file from #3
+#
+#         # 5.
+#         results = {}
+#         outdir = get_outdir_from_hpc(ssh_svc, hpc_run_id)
+#         chunk_paths = os.listdir(outdir)
+#         for fname in chunk_paths:
+#             remote_chunk_path = Path(os.path.join(outdir, fname))
+#             local_chunk_path = Path(os.path.join(tempfile.mkdtemp(), fname))
+#             await ssh_svc.scp_download(local_file=local_path, remote_path=remote_chunk_path)
+#             df = pq.read_table(local_chunk_path).to_pandas()
+#             results[fname.split(".")[0]] = df.to_dict()
+#
+#         return results
+#     except HTTPException as e:
+#         logger.exception("Error running PARCA")
+#         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# @app.get(path="/check-services", operation_id="check-services", response_model=ServiceStatuses)
+# async def check_services():
+#     conf = {}
+#     for stype in ServiceTypes.all():
+#         try:
+#             _service = get_service(stype)
+#             status = ServiceStatuses.UP
+#         except HTTPException as e:
+#             status = ServiceStatuses.down(str(e))
+#         conf[stype.value] = status
+#     return ServiceStatuses(**conf)
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)  # noqa: S104 binding to all interfaces
-    logger.info("Server started")
+    logger.info("API Gateway Server started")
