@@ -9,11 +9,12 @@ from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
     HpcRun,
+    JobStatus,
     ParcaDataset,
     ParcaDatasetRequest,
     SimulatorVersion,
 )
-from sms_api.simulation.tables_orm import ORMHpcRun, ORMParcaDataset, ORMSimulation, ORMSimulator
+from sms_api.simulation.tables_orm import JobStatusDB, JobType, ORMHpcRun, ORMParcaDataset, ORMSimulation, ORMSimulator
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,10 @@ class SimulationDatabaseService(ABC):
 
     @abstractmethod
     async def get_hpcrun(self, hpcrun_id: int) -> HpcRun | None:
+        pass
+
+    @abstractmethod
+    async def insert_hpcrun(self, job_type: JobType, slurmjobid: int) -> HpcRun:
         pass
 
     @abstractmethod
@@ -225,6 +230,18 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                 end_time=str(orm_hpc_job.end_time) if orm_hpc_job.end_time else None,
                 error_message=orm_hpc_job.error_message,
             )
+
+    @override
+    async def insert_hpcrun(self, job_type: JobType, slurmjobid: int) -> HpcRun:
+        async with self.async_sessionmaker() as session, session.begin():
+            hpc_run: HpcRun | None = await self.get_hpcrun_by_slurmjobid(slurmjobid=slurmjobid)
+            if hpc_run is not None:
+                raise Exception(f"Found an existing HPC run with the same slurm job id: {slurmjobid}.")
+            orm_hpc_run = ORMHpcRun(job_type=job_type, slurmjobid=slurmjobid, status=JobStatusDB.QUEUED)
+            session.add(orm_hpc_run)
+            await session.flush()  # Ensure the ORM object is inserted and has an ID
+
+            return HpcRun(database_id=orm_hpc_run.id, slurmjobid=slurmjobid, status=JobStatus.QUEUED)
 
     @override
     async def get_or_insert_parca_dataset(self, parca_dataset_request: ParcaDatasetRequest) -> ParcaDataset:
