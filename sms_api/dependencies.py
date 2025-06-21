@@ -3,7 +3,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.config import get_settings
-from sms_api.simulation.simulation_database import SimulationDatabaseService, SimulationDatabaseServiceSQL
+from sms_api.simulation.database_service import SimulationDatabaseService, SimulationDatabaseServiceSQL
 from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
 from sms_api.simulation.tables_orm import create_db
 

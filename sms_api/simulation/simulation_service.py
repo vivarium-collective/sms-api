@@ -12,6 +12,7 @@ from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
+from sms_api.simulation.database_service import SimulationDatabaseService
 from sms_api.simulation.hpc_utils import (
     get_apptainer_image_file,
     get_experiment_path,
