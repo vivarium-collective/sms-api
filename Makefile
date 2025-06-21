@@ -42,4 +42,23 @@ docs: ## Build and serve the documentation
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
+.PHONY: ssh
+ssh:
+	@ssh -i $(key) svc_vivarium@login.hpc.cam.uchc.edu
+
+.PHONY: new-build
+new-build:
+	@./kustomize/scripts/build_and_push.sh 
+
+.PHONY: apply-build
+apply-build:
+	@kubectl kustomize kustomize/overlays/sms-api-local | kubectl apply -f -
+
+.PHONY: new
+new:
+	@make new-build
+	@make apply-build
+
 .DEFAULT_GOAL := help
+
+	

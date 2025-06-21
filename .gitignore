@@ -167,3 +167,5 @@ cython_debug/
 #.idea/
 
 .idea/
+.dev_env
+mysealedsecret.yaml
