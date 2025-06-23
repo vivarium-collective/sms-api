@@ -32,6 +32,16 @@ from sms_api.version import __version__
 logger = logging.getLogger(__name__)
 setup_logging(logger)
 
+
+class ServerModes(StrEnum):
+    DEV = "http://localhost:3001"
+    PROD = "https://sms.cam.uchc.edu"
+
+
+def get_server_url(dev: bool = True):
+    return ServerModes.DEV if dev else ServerModes.PROD
+
+
 # -- constraints -- #
 APP_VERSION = __version__
 APP_TITLE = "sms-api"
@@ -47,8 +57,8 @@ APP_ORIGINS = [
     "http://localhost:8000",
     "http://localhost:3001",
 ]
-DEV_SERVER_URL = "http://localhost:3001"
-PROD_SERVER_URL = "https://sms.cam.uchc.edu"
+SERVER_URL = get_server_url(dev=True)
+
 APP_SERVERS: list[dict[str, str]] = [
     # {"url": PROD_SERVER_URL, "description": "Production server"},
     # {"url": DEV_SERVER_URL, "description": "Main Development server"},
@@ -108,7 +118,7 @@ class ServiceStatuses(StrEnum):
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"docs": f"{app.docs_url}", "version": APP_VERSION}
+    return {"docs": f"{SERVER_URL}/{app.docs_url}", "version": APP_VERSION}
 
 
 @app.get("/version")
