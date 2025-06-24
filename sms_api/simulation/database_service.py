@@ -425,6 +425,9 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
 
     @override
     async def get_simulation(self, simulation_id: int) -> EcoliSimulation | None:
+        """
+        :param simulation_id: (`int`) Simulation (database) ID of the run.
+        """
         async with self.async_sessionmaker() as session:
             orm_simulation: ORMSimulation | None = await self._get_orm_simulation(session, simulation_id)
             if orm_simulation is None:
