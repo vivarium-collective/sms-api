@@ -1,23 +1,34 @@
-import asyncio
 import logging
+import os
+import shutil
+import tempfile
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from enum import StrEnum
+from pathlib import Path
 
-# import pyarrow.parquet as pq
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
+
+# import pyarrow.parquet as pq
+from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
 
+from sms_api.common.ssh.ssh_service import get_ssh_service
+from sms_api.config import get_settings
 from sms_api.dependencies import (
     get_postgres_engine,
     get_simulation_database_service,
-    get_simulation_service,
+    get_simulation_service,  # as _get_simulation_service,
     init_standalone,
     shutdown_standalone,
 )
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import SimulationDatabaseService
+from sms_api.simulation.hpc_utils import (
+    format_experiment_path,
+    get_experiment_dirname,
+)
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
@@ -38,7 +49,7 @@ class ServerModes(StrEnum):
     PROD = "https://sms.cam.uchc.edu"
 
 
-def get_server_url(dev: bool = True):
+def get_server_url(dev: bool = True) -> ServerModes:
     return ServerModes.DEV if dev else ServerModes.PROD
 
 
@@ -116,9 +127,32 @@ class ServiceStatuses(StrEnum):
         return f"{cls.DOWN}: {reason}"
 
 
+# def check_service(service_type: ServiceTypes):
+#     def decorator(service_getter):
+#         def wrapper(*args, **kwargs):
+#             service = service_getter()
+#             if service is None:
+#                 service_type = kwargs['service_type']
+#                 logger.error(f"{service_type} service is not initialized")
+#                 raise HTTPException(status_code=500, detail=f"{service_type} service is not initialized")
+#             return service
+#         return wrapper
+#     return decorator
+#
+#
+# @check_service(service_type=ServiceTypes.DATABASE)
+# async def get_database_service():
+#     return get_simulation_database_service()
+#
+#
+# @check_service(service_type=ServiceTypes.SIMULATION)
+# async def get_simulation_service():
+#     return _get_simulation_service()
+
+
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"docs": f"{SERVER_URL}/{app.docs_url}", "version": APP_VERSION}
+    return {"docs": f"{SERVER_URL}{app.docs_url}", "version": APP_VERSION}
 
 
 @app.get("/version")
@@ -139,7 +173,6 @@ async def get_simulator_versions() -> list[SimulatorVersion]:
     if sim_db_service is None:
         logger.error("Simulation database service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
-
     try:
         return await sim_db_service.list_simulators()
     except Exception as e:
@@ -188,13 +221,6 @@ async def insert_simulator_version(
         _hpc_run = await sim_db_service.insert_hpcrun(job_type=JobType.BUILD_IMAGE, slurmjobid=build_job_id)
         # TODO: stick hpc run into simulator version record in DB
         return simulator_version
-        # assert job_id is not None
-        # start_time = time.time()
-        # while start_time + 60 > time.time():
-        #     slurm_job = await sim_service.get_slurm_job_status(slurmjobid=build_job_id)
-        #     if slurm_job is not None and slurm_job.is_done():
-        #         break
-        #     await asyncio.sleep(5)
     except Exception as e:
         logger.exception("Error inserting simulator version.")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -266,20 +292,75 @@ async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation
 
         inserted_sim: EcoliSimulation = await submit_simulation(sim_request=sim_request)
 
-        slurm_job_id = await hpc_sim_service.submit_ecoli_simulation_job(
+        await hpc_sim_service.submit_ecoli_simulation_job(
             ecoli_simulation=inserted_sim, simulation_database_service=sim_db_service
         )
 
-        await asyncio.sleep(2.0)
-        hpc_run = await sim_db_service.get_hpcrun_by_slurmjobid(slurmjobid=slurm_job_id)
-
-        if hpc_run is not None:
-            inserted_sim.hpc_run = hpc_run
+        # await asyncio.sleep(2.0)
+        # hpc_run = await sim_db_service.get_hpcrun_by_slurmjobid(slurmjobid=slurm_job_id)
+        # if hpc_run is not None:
+        #     inserted_sim.hpc_run = hpc_run
 
         return inserted_sim
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+class ResultsPath(BaseModel):
+    remote: str
+
+
+@app.get(
+    path="/get-results-path",
+    # response_model=HpcRun,
+    operation_id="get-results-path",
+    tags=["Simulations"],
+    # dependencies=[Depends(get_simulation_database_service), Depends(get_postgres_engine)],
+)
+async def get_results_path(build_job_id: int, git_commit_hash: str) -> ResultsPath:
+    sim_service = get_simulation_service()
+    if sim_service is None:
+        logger.error("Simulation service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
+    ssh_service = get_ssh_service()
+    if ssh_service is None:
+        logger.error("SSH service is not initialized")
+        raise HTTPException(status_code=500, detail="SSH service is not initialized")
+    try:
+        # slurm_job = None
+        # start_time = time.time()
+        # while start_time + 60 > time.time():
+        #     slurm_job = await sim_service.get_slurm_job_status(slurmjobid=build_job_id)
+        #     # case: results are readable
+        #     if slurm_job is not None and slurm_job.is_done():
+        #         break
+        #     await asyncio.sleep(5)
+
+        hpc_settings = get_settings()
+        experiment_dirname = get_experiment_dirname(build_job_id, git_commit_hash)
+        remote_dir_root = format_experiment_path(hpc_settings, experiment_dirname)
+        remote_dirpath = get_single_simulation_chunks_dirpath(remote_dir_root)
+
+        local_dirpath = os.path.join(tempfile.mkdtemp(), experiment_dirname)
+        shutil.rmtree(local_dirpath)
+        return ResultsPath(**{"remote": remote_dirpath})
+    except Exception as e:
+        logger.exception(f"Error fetching simulation results for job id: {build_job_id}.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+def get_single_simulation_chunks_dirpath(remote_dir_root: Path) -> str:
+    experiment_dirname = str(remote_dir_root).split("/")[-1]
+    return os.path.join(
+        remote_dir_root,
+        "history",
+        f"'experiment_id={experiment_dirname}",
+        "'variant=0'",
+        "'lineage_seed=0'",
+        "'generation=1'",
+        "'agent_id=0'",
+    )
 
 
 # @app.post(
