@@ -1,5 +1,7 @@
 import asyncio
+import os
 import time
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +16,19 @@ main_branch = "master"
 repo_url = "https://github.com/CovertLab/vEcoli"
 # latest_commit_hash = "96bb7a2"
 latest_commit_hash = read_latest_commit()
+
+
+def get_single_simulation_chunks_dirpath(remote_dir_root: Path) -> str:
+    experiment_dirname = str(remote_dir_root).split("/")[-1]
+    return os.path.join(
+        remote_dir_root,
+        "history",
+        f"'experiment_id={experiment_dirname}",
+        "'variant=0'",
+        "'lineage_seed=0'",
+        "'generation=1'",
+        "'agent_id=0'",
+    )
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
@@ -109,3 +124,17 @@ async def test_simulate(
     assert slurm_job_sim.is_done()
     assert slurm_job_sim.job_id == sim_job_id
     assert slurm_job_sim.name.startswith(f"sim-{latest_commit_hash}-")
+
+    # hpc_settings = get_settings()
+    # experiment_dirname = get_experiment_dirname(build_job_id, latest_commit_hash)
+    # remote_dir_root = format_experiment_path(hpc_settings, experiment_dirname)
+    # remote_dirpath = get_single_simulation_chunks_dirpath(remote_dir_root)
+    # local_dirpath = os.path.join(tempfile.mkdtemp(), experiment_dirname)
+
+    # get chunk ids
+    # for each chunk:
+    #   remote_fp = pathjoin(remote_dirpath, chunkfile)
+    #   local_fp = pathjoin(local_dirpath, chunkfile)
+    #   hpc_service.scp_download(remote_fp, local_fp)
+
+    # shutil.rmtree(local_dirpath)
