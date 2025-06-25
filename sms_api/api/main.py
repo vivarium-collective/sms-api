@@ -1,11 +1,7 @@
 import logging
-import os
-import shutil
-import tempfile
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from enum import StrEnum
-from pathlib import Path
 
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
@@ -14,8 +10,8 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
 
+from sms_api.common.hpc.sim_utils import read_latest_commit
 from sms_api.common.ssh.ssh_service import get_ssh_service
-from sms_api.config import get_settings
 from sms_api.dependencies import (
     get_postgres_engine,
     get_simulation_database_service,
@@ -25,10 +21,6 @@ from sms_api.dependencies import (
 )
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import SimulationDatabaseService
-from sms_api.simulation.hpc_utils import (
-    format_experiment_path,
-    get_experiment_dirname,
-)
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
@@ -312,13 +304,16 @@ class ResultsPath(BaseModel):
 
 
 @app.get(
-    path="/get-results-path",
+    path="/get-results",
     # response_model=HpcRun,
-    operation_id="get-results-path",
+    operation_id="get-results",
     tags=["Simulations"],
-    # dependencies=[Depends(get_simulation_database_service), Depends(get_postgres_engine)],
+    dependencies=[Depends(get_simulation_service), Depends(get_ssh_service)],
 )
-async def get_results_path(build_job_id: int, git_commit_hash: str) -> ResultsPath:
+async def get_results(
+    database_id: int = Query(description="Database Id returned from /submit-simulation"),
+    git_commit_hash: str = Query(default=read_latest_commit()),
+) -> None:
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
@@ -328,39 +323,14 @@ async def get_results_path(build_job_id: int, git_commit_hash: str) -> ResultsPa
         logger.error("SSH service is not initialized")
         raise HTTPException(status_code=500, detail="SSH service is not initialized")
     try:
-        # slurm_job = None
-        # start_time = time.time()
-        # while start_time + 60 > time.time():
-        #     slurm_job = await sim_service.get_slurm_job_status(slurmjobid=build_job_id)
-        #     # case: results are readable
-        #     if slurm_job is not None and slurm_job.is_done():
-        #         break
-        #     await asyncio.sleep(5)
-
-        hpc_settings = get_settings()
-        experiment_dirname = get_experiment_dirname(build_job_id, git_commit_hash)
-        remote_dir_root = format_experiment_path(hpc_settings, experiment_dirname)
-        remote_dirpath = get_single_simulation_chunks_dirpath(remote_dir_root)
-
-        local_dirpath = os.path.join(tempfile.mkdtemp(), experiment_dirname)
-        shutil.rmtree(local_dirpath)
-        return ResultsPath(**{"remote": remote_dirpath})
+        hpc_service = SimulationServiceHpc()
+        latest_commit = await hpc_service.get_latest_commit_hash()
+        if latest_commit != git_commit_hash:
+            git_commit_hash = latest_commit
+        pass
     except Exception as e:
-        logger.exception(f"Error fetching simulation results for job id: {build_job_id}.")
+        logger.exception(f"Error fetching simulation results for id: {database_id}.")
         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-def get_single_simulation_chunks_dirpath(remote_dir_root: Path) -> str:
-    experiment_dirname = str(remote_dir_root).split("/")[-1]
-    return os.path.join(
-        remote_dir_root,
-        "history",
-        f"'experiment_id={experiment_dirname}",
-        "'variant=0'",
-        "'lineage_seed=0'",
-        "'generation=1'",
-        "'agent_id=0'",
-    )
 
 
 # @app.post(
