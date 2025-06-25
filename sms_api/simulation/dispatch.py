@@ -30,7 +30,7 @@ def validate_job(job: SlurmJob | None) -> None:
 
 async def run_simulation(
     simulation_service_slurm: SimulationServiceHpc, database_service: SimulationDatabaseService, total_time: float | None = None
-) -> None:
+) -> tuple[EcoliSimulation, int]:
     """
     Submit a single whole-cell-model vEcoli simulation request to the HPC and run the entire
         workflow (including parca if needed) for the specified duration.
@@ -107,7 +107,10 @@ async def run_simulation(
         ecoli_simulation=simulation, simulation_database_service=database_service
     )
     assert sim_job_id is not None
+    return simulation, sim_job_id
 
+
+async def poll_slurm_job(simulation_service_slurm: SimulationServiceHpc, sim_job_id: int):
     # poll for job status
     start_time = time.time()
     while start_time + 60 > time.time():
@@ -115,6 +118,7 @@ async def run_simulation(
         if slurm_job_sim is not None and slurm_job_sim.is_done():
             break
         await asyncio.sleep(5)
+
     validate_job(slurm_job_sim)
 
 

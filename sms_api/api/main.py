@@ -21,6 +21,7 @@ from sms_api.dependencies import (
 )
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import SimulationDatabaseService
+from sms_api.simulation.dispatch import run_simulation
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
@@ -243,9 +244,9 @@ async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
 
 
 @app.post(
-    path="/submit_simulation",
+    path="/vecoli_simulation",
     response_model=EcoliSimulation,
-    operation_id="submit_simulation",
+    operation_id="submit-simulation",
     tags=["Simulations"],
     summary="Submit a single vEcoli simulation with given parameter overrides.",
 )
@@ -265,42 +266,28 @@ async def submit_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulat
 
 
 @app.post(
-    path="/vecoli_simulation",
-    response_model=EcoliSimulation,
-    operation_id="run_simulation",
+    path="run-simulation",
+    # response_model=EcoliSimulation,
+    operation_id="run-simulation",
     tags=["Simulations"],
     summary="Run a single vEcoli simulation with given parameter overrides",
 )
-async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
+async def run_wcm_simulation(sim_request: EcoliSimulationRequest) -> dict[str, EcoliSimulation | int]:
     sim_db_service = get_simulation_database_service()
     if sim_db_service is None:
         logger.error("Simulation database service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
 
+    hpc_sim_service = SimulationServiceHpc()
+    if sim_request.simulator.git_commit_hash is None:
+        sim_request.simulator.git_commit_hash = await hpc_sim_service.get_latest_commit_hash()
+    
     try:
-        hpc_sim_service = SimulationServiceHpc()
-        if sim_request.simulator.git_commit_hash is None:
-            sim_request.simulator.git_commit_hash = await hpc_sim_service.get_latest_commit_hash()
-
-        inserted_sim: EcoliSimulation = await submit_simulation(sim_request=sim_request)
-
-        await hpc_sim_service.submit_ecoli_simulation_job(
-            ecoli_simulation=inserted_sim, simulation_database_service=sim_db_service
-        )
-
-        # await asyncio.sleep(2.0)
-        # hpc_run = await sim_db_service.get_hpcrun_by_slurmjobid(slurmjobid=slurm_job_id)
-        # if hpc_run is not None:
-        #     inserted_sim.hpc_run = hpc_run
-
-        return inserted_sim
+        inserted_sim, sim_job_id = await run_simulation(hpc_sim_service, sim_db_service)
+        return {"simulation": inserted_sim, "sim_job_id": sim_job_id}
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-class ResultsPath(BaseModel):
-    remote: str
 
 
 @app.get(
