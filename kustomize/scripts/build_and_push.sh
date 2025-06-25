@@ -11,7 +11,8 @@ version=${1:-${declared_version}}
 
 echo "building and pushing images for version ${version}"
 
-for architecture in amd64 arm64; do
+# for architecture in amd64 arm64; do
+for architecture in amd64; do
 
   for service in api; do
 

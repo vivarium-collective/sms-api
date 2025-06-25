@@ -48,17 +48,25 @@ ssh:
 
 .PHONY: new-build
 new-build:
-	@./kustomize/scripts/build_and_push.sh 
+	@./kustomize/scripts/build_and_push.sh
 
 .PHONY: apply-build
 apply-build:
 	@kubectl kustomize kustomize/overlays/sms-api-local | kubectl apply -f -
+
+.PHONY: restart-deployment
+restart-deployment:
+	@kubectl rollout restart deployment $(name) -n sms-api-local
 
 .PHONY: new
 new:
 	@make new-build
 	@make apply-build
 
-.DEFAULT_GOAL := help
+.PHONY: update
+update:
+	# @make check
+	@make new
+	@make restart-deployment name=$(name)
 
-	
+.DEFAULT_GOAL := help

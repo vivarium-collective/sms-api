@@ -99,7 +99,7 @@ see https://cloudnative-pg.io/documentation/1.26/quickstart/
 
 ```bash
 kubectl create namespace postgres-cluster
-kubectl apply -f postgres-cluster/minikube/sms-postgres-cluster.yaml
+kubectl apply -f cluster/postgres-cluster/minikube/sms-postgres-cluster.yaml
 kubectl get pods -n postgres-cluster
 ```
 
@@ -112,7 +112,8 @@ kubectl get pods -n postgres-cluster
 ```
 
 ### monitor the cluster
+#!! this script does not exist
 
 ```bash
-kubectl apply -f postgres-cluster/minikube/pod-monitor.yaml
+kubectl apply -f cluster/postgres-cluster/minikube/pod-monitor.yaml
 ```

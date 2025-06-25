@@ -169,3 +169,5 @@ cython_debug/
 .idea/
 .dev_env
 mysealedsecret.yaml
+kustomize/overlays/sms-api-local/secret*
+kustomize/kubeseal
