@@ -4,7 +4,7 @@ from pathlib import Path
 import asyncssh
 from asyncssh import SSHCompletedProcess
 
-from sms_api.config import get_settings
+from sms_api.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -79,10 +79,10 @@ class SSHService:
         pass  # nothing to do here because we don't yet keep the connection around.
 
 
-def get_ssh_service() -> SSHService:
-    settings = get_settings()
+def get_ssh_service(settings: Settings | None = None) -> SSHService:
+    ssh_settings = settings or get_settings()
     return SSHService(
-        hostname=settings.slurm_submit_host,
-        username=settings.slurm_submit_user,
-        key_path=Path(settings.slurm_submit_key_path),
+        hostname=ssh_settings.slurm_submit_host,
+        username=ssh_settings.slurm_submit_user,
+        key_path=Path(ssh_settings.slurm_submit_key_path),
     )
