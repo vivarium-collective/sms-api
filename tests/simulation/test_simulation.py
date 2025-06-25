@@ -1,17 +1,28 @@
 import asyncio
+import json
 import time
 
 import pytest
 
+from sms_api.common.hpc.sim_utils import read_latest_commit
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import SimulationDatabaseService
-from sms_api.simulation.models import EcoliSimulationRequest, ParcaDatasetRequest, SimulatorVersion
+from sms_api.simulation.models import EcoliSimulation, EcoliSimulationRequest, ParcaDatasetRequest, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 main_branch = "master"
 repo_url = "https://github.com/CovertLab/vEcoli"
-latest_commit_hash = "96bb7a2"
+# latest_commit_hash = "96bb7a2"
+latest_commit_hash = read_latest_commit()
+
+
+async def write_test_request(simulation: EcoliSimulation) -> None:
+    try:
+        with open("assets/tests/test_request.json", "w") as f:
+            json.dump(simulation.model_dump(), f, indent=4)
+    except Exception as e:
+        print(e)
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
@@ -84,6 +95,7 @@ async def test_simulate(
     assert slurm_job_parca.job_id == parca_job_id
     assert slurm_job_parca.name.startswith(f"parca-{latest_commit_hash}-")
 
+    # create new simulation instance by inserting it into the db (not yet submitted to hpc)
     simulation_request = EcoliSimulationRequest(
         simulator=simulator,
         parca_dataset_id=parca_dataset.database_id,
@@ -91,11 +103,16 @@ async def test_simulate(
     )
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
+    # write test request (TODO: move this)
+    await write_test_request(simulation=simulation)
+
+    # actually submit the simulation to the hpc and return an indexable sim job id
     sim_job_id = await simulation_service_slurm.submit_ecoli_simulation_job(
         ecoli_simulation=simulation, simulation_database_service=database_service
     )
     assert sim_job_id is not None
 
+    # poll for job status
     start_time = time.time()
     while start_time + 60 > time.time():
         slurm_job_sim = await simulation_service_slurm.get_slurm_job_status(slurmjobid=sim_job_id)
@@ -107,3 +124,7 @@ async def test_simulate(
     assert slurm_job_sim.is_done()
     assert slurm_job_sim.job_id == sim_job_id
     assert slurm_job_sim.name.startswith(f"sim-{latest_commit_hash}-")
+
+
+# async def test_read_chunks():
+#     pass

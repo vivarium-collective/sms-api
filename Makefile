@@ -19,6 +19,7 @@ check: ## Run code quality tools.
 .PHONY: test
 test: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
+	@make write-latest-commit
 	@poetry run pytest --cov --cov-config=pyproject.toml --cov-report=xml
 
 .PHONY: build
@@ -58,8 +59,19 @@ apply-build:
 restart-deployment:
 	@kubectl rollout restart deployment $(name) -n sms-api-local
 
+.PHONY: check-minikube
+check-minikube:
+	@is_minikube=$$(poetry run python -c "import os; print(str('minikube' in os.getenv('KUBECONFIG', '')).lower())"); \
+	if [ $$is_minikube = "true" ]; then \
+		echo "You're using minikube"; \
+	else \
+		echo "Not using minikube. Exiting."; \
+		exit 1; \
+	fi
+
 .PHONY: new
 new:
+	@make check-minikube
 	@make new-build
 	@make apply-build
 
@@ -68,5 +80,28 @@ update:
 	# @make check
 	@make new
 	@make restart-deployment name=$(name)
+
+.PHONY: apply
+apply:
+	@cd kustomize
+	@kubectl kustomize overlays/sms-api-local | kubectl apply -f -
+	@cd ..
+
+.PHONY: write-latest-commit
+write-latest-commit:
+	@poetry run python sms_api/latest_commit.py
+
+.PHONY: repl
+repl:
+	@poetry run python -m asyncio
+
+.PHONY: setkube
+setkube:
+	@export KUBECONFIG=$(path)
+	@echo "You're now using the kubeconfig path: $${KUBECONFIG}"
+
+.PHONY: whichkube
+whichkube:
+	@echo $${KUBECONFIG}
 
 .DEFAULT_GOAL := help

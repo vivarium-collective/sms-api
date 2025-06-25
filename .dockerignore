@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pkl
+
+# Poetry virtualenvs
+.venv/
+
+# Output or scratch files
+scratch/
+*.csv
+*.tsv
+*.txt
+*.log
+*.dat
+*.npy
+
+# Notebooks
+*.ipynb
+
+# Git & VCS
+.git/
+
+# OS & editor files
+.DS_Store
+.vscode/
+.idea/
+
+# Docker artifacts
+Dockerfile
+*.tar
+*.tar.gz

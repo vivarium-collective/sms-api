@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sms_api.config import get_settings
+from sms_api.config import Settings, get_settings
 from sms_api.simulation.models import EcoliSimulation, ParcaDataset, SimulatorVersion
 
 
@@ -39,6 +39,20 @@ def get_experiment_path(ecoli_simulation: EcoliSimulation) -> Path:
     git_commit_hash = ecoli_simulation.sim_request.simulator.git_commit_hash
     experiment_dirname = f"experiment_{git_commit_hash}_id_{sim_id}"
     return Path(settings.hpc_sim_base_path) / experiment_dirname
+
+
+def get_experiment_dirname(database_id: int, git_commit_hash: str) -> str:
+    return f"experiment_{git_commit_hash}_id_{database_id}"
+
+
+def format_experiment_path(settings: Settings, experiment_dirname: str) -> Path:
+    return Path(settings.hpc_sim_base_path) / experiment_dirname
+
+
+def get_experiment_path_from_database_id(database_id: int, git_commit_hash: str) -> Path:
+    settings = get_settings()
+    experiment_dirname = get_experiment_dirname(database_id=database_id, git_commit_hash=git_commit_hash)
+    return format_experiment_path(settings, experiment_dirname)
 
 
 def get_apptainer_image_file(simulator_version: SimulatorVersion) -> Path:
