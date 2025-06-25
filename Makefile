@@ -46,9 +46,19 @@ help:
 ssh:
 	@ssh -i $(key) svc_vivarium@login.hpc.cam.uchc.edu
 
+.PHONY: check-minikube
+check-minikube:
+	@is_minikube=$$(poetry run python -c "import os; print(str('minikube' in os.getenv('KUBECONFIG', '')).lower())"); \
+	if [ $$is_minikube = "true" ]; then \
+		echo "You're using minikube"; \
+	else \
+		echo "Not using minikube. Exiting."; \
+		exit 1; \
+	fi
+
 .PHONY: new-build
 new-build:
-	@./kustomize/scripts/build_and_push.sh 
+	@./kustomize/scripts/build_and_push.sh
 
 .PHONY: apply-build
 apply-build:
@@ -56,9 +66,18 @@ apply-build:
 
 .PHONY: new
 new:
+	@make check-minikube
 	@make new-build
 	@make apply-build
 
-.DEFAULT_GOAL := help
+.PHONY: apply
+apply:
+	@cd kustomize
+	@kubectl kustomize overlays/sms-api-local | kubectl apply -f -
+	@cd ..
 
-	
+.PHONY: get-latest-commit
+get-latest-commit:
+	@poetry run python sms_api/latest_commit.py
+
+.DEFAULT_GOAL := help

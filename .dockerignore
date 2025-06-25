@@ -10,7 +10,6 @@ __pycache__/
 # Output or scratch files
 scratch/
 *.csv
-*.json
 *.tsv
 *.txt
 *.log
@@ -22,7 +21,6 @@ scratch/
 
 # Git & VCS
 .git/
-.gitignore
 
 # OS & editor files
 .DS_Store
@@ -33,4 +31,3 @@ scratch/
 Dockerfile
 *.tar
 *.tar.gz
-
