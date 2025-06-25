@@ -4,7 +4,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from sms_api.common.hpc.utils import read_latest_commit
+from sms_api.common.hpc.sim_utils import read_latest_commit
 
 latest_commit_hash = "96bb7a2"
 

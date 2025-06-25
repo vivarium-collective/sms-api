@@ -1,6 +1,6 @@
 import pytest
 
-from sms_api.common.hpc.utils import read_latest_commit
+from sms_api.common.hpc.sim_utils import read_latest_commit
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 from sms_api.simulation.simulation_service import SimulationService
