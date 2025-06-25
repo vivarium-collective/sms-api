@@ -46,6 +46,14 @@ help:
 ssh:
 	@ssh -i $(key) svc_vivarium@login.hpc.cam.uchc.edu
 
+.PHONY: new-build
+new-build:
+	@./kustomize/scripts/build_and_push.sh
+
+.PHONY: apply-build
+apply-build:
+	@kubectl kustomize kustomize/overlays/sms-api-local | kubectl apply -f -
+
 .PHONY: check-minikube
 check-minikube:
 	@is_minikube=$$(poetry run python -c "import os; print(str('minikube' in os.getenv('KUBECONFIG', '')).lower())"); \
@@ -55,14 +63,6 @@ check-minikube:
 		echo "Not using minikube. Exiting."; \
 		exit 1; \
 	fi
-
-.PHONY: new-build
-new-build:
-	@./kustomize/scripts/build_and_push.sh
-
-.PHONY: apply-build
-apply-build:
-	@kubectl kustomize kustomize/overlays/sms-api-local | kubectl apply -f -
 
 .PHONY: new
 new:
@@ -83,5 +83,14 @@ write-latest-commit:
 .PHONY: repl
 repl:
 	@poetry run python -m asyncio
+
+.PHONY: setkube
+setkube:
+	@export KUBECONFIG=$(path)
+	@echo "You're now using the kubeconfig path: $${KUBECONFIG}"
+
+.PHONY: whichkube
+whichkube:
+	@echo $${KUBECONFIG}
 
 .DEFAULT_GOAL := help
