@@ -255,7 +255,7 @@ async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
     response_model=EcoliSimulation,
     operation_id="submit_simulation",
     tags=["Simulations"],
-    summary="Submit a single vEcoli simulation with given parameter overrides",
+    summary="Submit a single vEcoli simulation with given parameter overrides.",
 )
 async def submit_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
     sim_db_service = get_simulation_database_service()

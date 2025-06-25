@@ -4,6 +4,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from sms_api.common.hpc.utils import read_latest_commit
+
 latest_commit_hash = "96bb7a2"
 
 
@@ -26,7 +28,9 @@ class HpcRun(BaseModel):
 
 class SimulatorVersion(BaseModel):
     database_id: int  # Unique identifier for the simulator version
-    git_commit_hash: str = latest_commit_hash  # Git commit hash for the specific simulator version (first 7 characters)
+    git_commit_hash: str = Field(
+        default=read_latest_commit()
+    )  # Git commit hash for the specific simulator version (first 7 characters)
     git_repo_url: str = "https://github.com/CovertLab/vEcoli"  # Git repository URL for the simulator
     git_branch: str = "master"  # Git branch name for the simulator version
 

@@ -3,6 +3,7 @@ import time
 
 import pytest
 
+from sms_api.common.hpc.utils import read_latest_commit
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import SimulationDatabaseService
@@ -10,7 +11,8 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 main_branch = "master"
 repo_url = "https://github.com/CovertLab/vEcoli"
-latest_commit_hash = "96bb7a2"
+# latest_commit_hash = "96bb7a2"
+latest_commit_hash = read_latest_commit()
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
