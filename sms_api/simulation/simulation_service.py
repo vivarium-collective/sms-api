@@ -352,7 +352,6 @@ class SimulationServiceHpc(SimulationService):
                          --experiment_id {experiment_id} \\
                          --daughter_outdir "/out/{experiment_id}" \\
                          --sim_data_path "/parca/{parca_dataset_dirname}/kb/simData.cPickle" \\
-                         --total_time {ecoli_simulation.sim_request.total_time} \\
                          --fail_at_total_time
 
                     # if the parca directory is empty after the run, fail the job
