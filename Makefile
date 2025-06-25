@@ -76,8 +76,12 @@ apply:
 	@kubectl kustomize overlays/sms-api-local | kubectl apply -f -
 	@cd ..
 
-.PHONY: get-latest-commit
-get-latest-commit:
+.PHONY: write-latest-commit
+write-latest-commit:
 	@poetry run python sms_api/latest_commit.py
+
+.PHONY: repl
+repl:
+	@poetry run python -m asyncio
 
 .DEFAULT_GOAL := help
