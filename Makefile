@@ -51,9 +51,10 @@ ssh:
 new-build:
 	@./kustomize/scripts/build_and_push.sh
 
-.PHONY: apply-overlays
-apply-overlays:
+.PHONY: apply
+apply:
 	@kubectl kustomize kustomize/overlays/sms-api-local | kubectl apply -f -
+	@make restart
 
 .PHONY: check-minikube
 check-minikube:
@@ -75,8 +76,7 @@ new:
 	@make latest-commit
 	@make spec
 	@make new-build
-	@make apply-overlays
-	@make restart
+	@make apply
 
 .PHONY: restart-deployment
 restart-deployment:
@@ -102,5 +102,9 @@ setkube:
 .PHONY: whichkube
 whichkube:
 	@echo $${KUBECONFIG}
+
+.PHONY: gateway
+gateway:
+	@poetry run uvicorn sms_api.api.main:app --reload
 
 .DEFAULT_GOAL := help

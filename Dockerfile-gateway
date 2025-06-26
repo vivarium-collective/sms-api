@@ -1,6 +1,3 @@
-# THIS FILE HAS NOT BEEN CHANGED
-
-
 # Use the official Python image from the Docker Hub
 FROM python:3.13.2-slim-bookworm AS base
 
