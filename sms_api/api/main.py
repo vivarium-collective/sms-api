@@ -7,7 +7,6 @@ import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 
 # import pyarrow.parquet as pq
-from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
 
 from sms_api.common.hpc.sim_utils import read_latest_commit
@@ -25,6 +24,7 @@ from sms_api.simulation.dispatch import run_simulation
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
+    EcoliSimulationRun,
     ParcaDataset,
     ParcaDatasetRequest,
     SimulatorVersion,
@@ -182,7 +182,7 @@ async def get_simulator_versions() -> list[SimulatorVersion]:
     summary="Upload a new simulator (vEcoli) version.",
 )
 async def insert_simulator_version(
-    git_commit_hash: str | None = Query(default=None, description="First 7 characters of git commit hash"),
+    git_commit_hash: str = Query(default_factory=read_latest_commit, description="First 7 characters of git commit hash"),
     git_repo_url: str = Query(default="https://github.com/CovertLab/vEcoli"),
     git_branch: str = Query(default="master"),
 ) -> SimulatorVersion:
@@ -248,7 +248,7 @@ async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
     response_model=EcoliSimulation,
     operation_id="submit-simulation",
     tags=["Simulations"],
-    summary="Submit a single vEcoli simulation with given parameter overrides.",
+    summary="Submit to the db a single vEcoli simulation with given parameter overrides.",
 )
 async def submit_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
     sim_db_service = get_simulation_database_service()
@@ -266,13 +266,13 @@ async def submit_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulat
 
 
 @app.post(
-    path="run-simulation",
-    # response_model=EcoliSimulation,
+    path="/run-simulation",
+    response_model=EcoliSimulationRun,
     operation_id="run-simulation",
     tags=["Simulations"],
     summary="Run a single vEcoli simulation with given parameter overrides",
 )
-async def run_wcm_simulation(sim_request: EcoliSimulationRequest) -> dict[str, EcoliSimulation | int]:
+async def run_wcm_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulationRun:
     sim_db_service = get_simulation_database_service()
     if sim_db_service is None:
         logger.error("Simulation database service is not initialized")
@@ -281,10 +281,10 @@ async def run_wcm_simulation(sim_request: EcoliSimulationRequest) -> dict[str, E
     hpc_sim_service = SimulationServiceHpc()
     if sim_request.simulator.git_commit_hash is None:
         sim_request.simulator.git_commit_hash = await hpc_sim_service.get_latest_commit_hash()
-    
+
     try:
         inserted_sim, sim_job_id = await run_simulation(hpc_sim_service, sim_db_service)
-        return {"simulation": inserted_sim, "sim_job_id": sim_job_id}
+        return EcoliSimulationRun(job_id=sim_job_id, simulation=inserted_sim)
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
         raise HTTPException(status_code=500, detail=str(e)) from e

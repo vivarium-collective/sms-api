@@ -51,8 +51,8 @@ ssh:
 new-build:
 	@./kustomize/scripts/build_and_push.sh
 
-.PHONY: apply-build
-apply-build:
+.PHONY: apply-overlays
+apply-overlays:
 	@kubectl kustomize kustomize/overlays/sms-api-local | kubectl apply -f -
 
 .PHONY: check-minikube
@@ -65,20 +65,29 @@ check-minikube:
 		exit 1; \
 	fi
 
+.PHONY: spec
+spec:
+	@poetry run python ./sms_api/api/openapi_spec.py
+
 .PHONY: new
 new:
 	@make check-minikube
+	@make latest-commit
+	@make spec
 	@make new-build
-	@make apply-build
+	@make apply-overlays
+	@make restart
 
-.PHONY: apply
-apply:
-	@cd kustomize
-	@kubectl kustomize overlays/sms-api-local | kubectl apply -f -
-	@cd ..
+.PHONY: restart-deployment
+restart-deployment:
+	@kubectl rollout restart deployment -n $(namespace)
 
-.PHONY: write-latest-commit
-write-latest-commit:
+.PHONY: restart
+restart:
+	@make restart-deployment namespace="sms-api-local"
+
+.PHONY: latest-commit
+latest-commit:
 	@poetry run python sms_api/latest_commit.py
 
 .PHONY: repl

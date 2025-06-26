@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import json
 from enum import StrEnum
@@ -29,7 +30,7 @@ class HpcRun(BaseModel):
 class SimulatorVersion(BaseModel):
     database_id: int  # Unique identifier for the simulator version
     git_commit_hash: str = Field(
-        default=read_latest_commit()
+        default_factory=read_latest_commit
     )  # Git commit hash for the specific simulator version (first 7 characters)
     git_repo_url: str = "https://github.com/CovertLab/vEcoli"  # Git repository URL for the simulator
     git_branch: str = "master"  # Git branch name for the simulator version
@@ -71,3 +72,13 @@ class EcoliSimulation(BaseModel):
     database_id: int
     sim_request: EcoliSimulationRequest
     hpc_run: HpcRun | None = None  # HPC run ID if applicable
+
+
+def timestamp():
+    return str(datetime.datetime.now())
+
+
+class EcoliSimulationRun(BaseModel):
+    job_id: int
+    simulation: EcoliSimulation
+    last_update: str = Field(default_factory=timestamp)

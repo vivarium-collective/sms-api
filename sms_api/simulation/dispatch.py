@@ -1,20 +1,21 @@
 import asyncio
-import json
 import os
 import shutil
 import tempfile
 import time
 from pathlib import Path
 
-import pytest
-
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.sim_utils import get_single_simulation_chunks_dirpath, read_latest_commit
-from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import SimulationDatabaseService
 from sms_api.simulation.hpc_utils import format_experiment_path, get_experiment_dirname
-from sms_api.simulation.models import EcoliSimulation, EcoliSimulationRequest, HpcRun, ParcaDatasetRequest, SimulatorVersion
+from sms_api.simulation.models import (
+    EcoliSimulation,
+    EcoliSimulationRequest,
+    ParcaDatasetRequest,
+    SimulatorVersion,
+)
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 main_branch = "master"
@@ -23,13 +24,18 @@ latest_commit_hash = read_latest_commit()
 
 
 def validate_job(job: SlurmJob | None) -> None:
-    assert job is not None, "Job does not exist."
-    assert job.is_done(), "Job is not yet complete"
-    return 
+    if job is not None:
+        if not job.is_done():
+            raise Exception("Job is not yet done.")
+    else:
+        raise Exception("Could not find job.")
+    return
 
 
 async def run_simulation(
-    simulation_service_slurm: SimulationServiceHpc, database_service: SimulationDatabaseService, total_time: float | None = None
+    simulation_service_slurm: SimulationServiceHpc,
+    database_service: SimulationDatabaseService,
+    total_time: float | None = None,
 ) -> tuple[EcoliSimulation, int]:
     """
     Submit a single whole-cell-model vEcoli simulation request to the HPC and run the entire
@@ -62,7 +68,7 @@ async def run_simulation(
 
     if build_job_id is None:
         raise Exception(f"Could not submit simulation with the simulator:\n{simulator.model_dump_json()}")
-    
+
     start_time = time.time()
     while start_time + 60 > time.time():
         slurm_job_build = await simulation_service_slurm.get_slurm_job_status(slurmjobid=build_job_id)
@@ -95,18 +101,11 @@ async def run_simulation(
         simulation_request.total_time = total_time
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
-    # write test request (TODO: move this)
-    try:
-        with open("assets/tests/test_request.json", "w") as f:
-            json.dump(simulation.model_dump(), f, indent=4)
-    except Exception as e:
-        print(e)
-
     # actually submit the simulation to the hpc and return an indexable sim job id
     sim_job_id = await simulation_service_slurm.submit_ecoli_simulation_job(
         ecoli_simulation=simulation, simulation_database_service=database_service
     )
-    assert sim_job_id is not None
+
     return simulation, sim_job_id
 
 
