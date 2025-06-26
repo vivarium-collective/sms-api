@@ -49,18 +49,27 @@ spec:
                 secretKeyRef:
                   name: shared-secrets
                   key: postgres-port
-            - name: SLURM_SUBMIT_KEY_PATH
-              valueFrom:
-                secretKeyRef:
-                  name: ssh-secret
-                  key: ssh-privatekey
+            # - name: SLURM_SUBMIT_KEY_PATH
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: ssh-secret
+            #       key: ssh-privatekey
           volumeMounts:
             - name: api-cache-pvc
               mountPath: /app/scratch
+            - name: ssh-key
+              mountPath: /app/keys
+              readOnly: true
       volumes:
         - name: api-cache-pvc
           persistentVolumeClaim:
             claimName: api-cache-pvc
+        - name: ssh-key
+          secret:
+            secretName: ssh-secret
+            items:
+              - key: ssh-privatekey
+                path: sms_id_rsa
       imagePullSecrets:
         - name: ghcr-secret
 

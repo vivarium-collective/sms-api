@@ -1,0 +1,75 @@
+volumes:
+  shared-cache:
+  postgres-data:
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    networks:
+      - smsnet
+  
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: devuser
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: smsdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - smsnet
+
+  gateway:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile-gateway
+    # image: ghcr.io/vivarium-collective/sms-gateway:0.0.1
+    container_name: gateway
+    ports:
+      - "8000:8000"
+    networks:
+      - smsnet
+    depends_on:
+      - mongodb
+    environment:
+      - STANDALONE=False
+      - POSTGRES_USER=devuser
+      - POSTGRES_PASSWORD=devpassword
+      - POSTGRES_DB=smsdb
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+    volumes:
+      - shared-cache:/app/datacache
+
+  worker:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile-worker
+    # image: ghcr.io/vivarium-collective/sms-run-simulation:0.0.1
+    container_name: worker
+    networks:
+      - smsnet
+    depends_on:
+      - mongodb
+    environment:
+      - STANDALONE=False
+      - POSTGRES_USER=devuser
+      - POSTGRES_PASSWORD=devpassword
+      - POSTGRES_DB=smsdb
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+    volumes:
+      - shared-cache:/app/datacache
+
+networks:
+  smsnet:
+    driver: bridge

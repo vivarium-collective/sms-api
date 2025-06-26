@@ -182,7 +182,9 @@ async def get_simulator_versions() -> list[SimulatorVersion]:
     summary="Upload a new simulator (vEcoli) version.",
 )
 async def insert_simulator_version(
-    git_commit_hash: str = Query(default_factory=read_latest_commit, description="First 7 characters of git commit hash"),
+    git_commit_hash: str = Query(
+        default_factory=read_latest_commit, description="First 7 characters of git commit hash"
+    ),
     git_repo_url: str = Query(default="https://github.com/CovertLab/vEcoli"),
     git_branch: str = Query(default="master"),
 ) -> SimulatorVersion:
