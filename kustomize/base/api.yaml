@@ -49,6 +49,11 @@ spec:
                 secretKeyRef:
                   name: shared-secrets
                   key: postgres-port
+            - name: SLURM_SUBMIT_KEY_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: ssh-secret
+                  key: ssh-privatekey
           volumeMounts:
             - name: api-cache-pvc
               mountPath: /app/scratch
