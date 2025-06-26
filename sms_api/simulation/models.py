@@ -74,7 +74,7 @@ class EcoliSimulation(BaseModel):
     hpc_run: HpcRun | None = None  # HPC run ID if applicable
 
 
-def timestamp():
+def timestamp() -> str:
     return str(datetime.datetime.now())
 
 

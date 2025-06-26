@@ -109,7 +109,7 @@ async def run_simulation(
     return simulation, sim_job_id
 
 
-async def poll_slurm_job(simulation_service_slurm: SimulationServiceHpc, sim_job_id: int):
+async def poll_slurm_job(simulation_service_slurm: SimulationServiceHpc, sim_job_id: int) -> None:
     # poll for job status
     start_time = time.time()
     while start_time + 60 > time.time():
