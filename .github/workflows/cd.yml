@@ -18,13 +18,9 @@ jobs:
 
       - name: Set up the environment
         uses: ./.github/actions/setup-poetry-env
-    
+
       - name: Log in to GHCR
         run: echo "${{ secrets.REPO_ADMIN_GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.REPO_ADMIN_GH_USERNAME }}" --password-stdin
-    
+
       # - name: Run deployment script
       #   run: chmod +x ./kustomize/scripts/build_and_push.sh
-  
-  
-      
-        
