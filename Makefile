@@ -201,4 +201,8 @@ pingpg:
 pingdb:
 	@psql "postgresql://alexanderpatrie:dev@localhost:65432/sms?sslmode=disable"
 
+.PHONY: check-latest 
+check-latest:
+	@curl -s https://api.github.com/repos/CovertLab/vEcoli/commits/master | jq -r '"\(.sha[0:7]) \(.commit.author.date)"'
+	
 .DEFAULT_GOAL := help
