@@ -1,21 +1,24 @@
 import asyncio
 import os
 import sys
-from pathlib import Path
 
 import asyncssh
+import pytest
+import pytest_asyncio
 
-TEST_KEY_PATH = os.path.join(os.getenv("HOME", "/Users/alexanderpatrie"), ".ssh", "sms_id_rsa")
 HPC_HOST = "login.hpc.cam.uchc.edu"
 HPC_USER = "svc_vivarium"
 
 
-def get_key_path() -> Path:
+def get_key_path() -> str:
     args = sys.argv
-    return Path(args[1]) if len(args) > 1 else Path(os.getenv("HOME", "/Users/alexanderpatrie")) / ".ssh" / "sms_id_rsa"
+    for arg in args:
+        if arg.startswith("key="):
+            return arg.split("=")[-1]
+    return os.path.join(os.getenv("HOME", "/Users/alexanderpatrie"), ".ssh", "sms_id_rsa")
 
 
-async def test_ssh(host: str, username: str, key_fp: Path) -> bool:
+async def run_test_ssh(host: str, username: str, key_fp: str) -> bool:
     try:
         async with asyncssh.connect(
             host=host,
@@ -35,5 +38,25 @@ async def test_ssh(host: str, username: str, key_fp: Path) -> bool:
         return False
 
 
+@pytest_asyncio.fixture(scope="session")
+async def hpc_host() -> str:
+    return HPC_HOST
+
+
+@pytest_asyncio.fixture(scope="session")
+async def hpc_user() -> str:
+    return HPC_USER
+
+
+@pytest_asyncio.fixture(scope="session")
+async def key_path() -> str:
+    return get_key_path()
+
+
+@pytest.mark.asyncio
+async def test_asyncssh(hpc_host: str, hpc_user: str, key_path: str) -> bool:
+    return await run_test_ssh(hpc_host, hpc_user, key_path)
+
+
 if __name__ == "__main__":
-    asyncio.run(test_ssh(host="login.hpc.cam.uchc.edu", username="svc_vivarium", key_fp=get_key_path()))
+    asyncio.run(run_test_ssh(host="login.hpc.cam.uchc.edu", username="svc_vivarium", key_fp=get_key_path()))
