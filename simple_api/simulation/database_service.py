@@ -283,6 +283,7 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                     raise Exception(
                         f"Simulator with id {existing_orm_parca_dataset.simulator_id} not found in the database"
                     )
+                logger.info(f"The parca dataset already exists:\n{parca_dataset_request}")
                 return ParcaDataset(
                     database_id=existing_orm_parca_dataset.id,
                     parca_dataset_request=ParcaDatasetRequest(
@@ -292,7 +293,9 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                     remote_archive_path=existing_orm_parca_dataset.remote_archive_path,
                     hpc_run=hpc_run,
                 )
+
             else:
+                logger.info(f"The parca dataset doesn't yet exist:\n{parca_dataset_request}")
                 # did not find the parca dataset, so insert it
                 orm_simulator: ORMSimulator | None = await self._get_orm_simulator(session, simulator_id=simulator_id)
                 if orm_simulator is None:

@@ -94,7 +94,7 @@ async def init_standalone(env_path: Path | None = None, enable_ssl: bool = True)
     # configure asnd set simulation service
     set_simulation_service(SimulationServiceHpc())
 
-    # configure and set db engine service 
+    # configure and set db engine service
     def engine_params(**kwargs):
         return kwargs
 

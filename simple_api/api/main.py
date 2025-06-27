@@ -16,17 +16,14 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from enum import StrEnum
 from functools import partial
 from pathlib import Path
-from typing import Any
 
 import dotenv
 import pandas as pd
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 
 # import pyarrow.parquet as pq
 from starlette.middleware.cors import CORSMiddleware
@@ -51,6 +48,10 @@ from simple_api.simulation.models import (
     EcoliSimulationRun,
     ParcaDataset,
     ParcaDatasetRequest,
+    ServerModes,
+    ServicePing,
+    ServiceTypes,
+    SimulatorHash,
     SimulatorVersion,
 )
 from simple_api.simulation.simulation_service import SimulationServiceHpc
@@ -59,18 +60,6 @@ from simple_api.version import __version__
 
 logger = logging.getLogger(__name__)
 setup_logging(logger)
-
-
-class ServerModes(StrEnum):
-    DEV = "http://localhost:8888"
-    PROD = "https://sms.cam.uchc.edu"
-
-
-class ServiceTypes(StrEnum):
-    SIMULATION = "simulation"
-    MONGO = "mongo"
-    POSTGRES = "postgres"
-    AUTH = "auth"
 
 
 def get_server_url(dev: bool = True) -> ServerModes:
@@ -141,22 +130,6 @@ def root() -> dict[str, str]:
 @app.get("/version")
 def get_version() -> str:
     return APP_VERSION
-
-
-class ServicePing(BaseModel):
-    service_type: ServiceTypes
-    dialect_name: str
-    dialect_driver: str
-
-
-class SimulatorHash(BaseModel):
-    latest_commit_hash: str
-
-    def model_post_init(self, __context: Any) -> None:
-        diff = len(self.latest_commit_hash) - 7
-        if abs(diff) > 0:
-            reason = "short" if diff < 0 else "long"
-            raise ValueError(f"The commit hash you provided ({self.latest_commit_hash}) is too {reason}.")
 
 
 @app.get("/ping-db")
@@ -277,9 +250,18 @@ async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
         logger.error("Simulation database service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
 
+    sim_service = get_simulation_service()
+    if sim_service is None:
+        logger.error("Simulation service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
+
     try:
         parca_dataset: ParcaDataset = await sim_db_service.get_or_insert_parca_dataset(parca_request)
-        return parca_dataset
+        print(parca_dataset)
+        # now, use sim service to run the parca job(submit)
+        # then return
+        # return parca_dataset
+
     except Exception as e:
         logger.exception("Error running PARCA")
         raise HTTPException(status_code=500, detail=str(e)) from e

@@ -2,6 +2,7 @@ import datetime
 import hashlib
 import json
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -82,3 +83,31 @@ class EcoliSimulationRun(BaseModel):
     job_id: int
     simulation: EcoliSimulation
     last_update: str = Field(default_factory=timestamp)
+
+
+class ServerModes(StrEnum):
+    DEV = "http://localhost:8888"
+    PROD = "https://sms.cam.uchc.edu"
+
+
+class ServiceTypes(StrEnum):
+    SIMULATION = "simulation"
+    MONGO = "mongo"
+    POSTGRES = "postgres"
+    AUTH = "auth"
+
+
+class ServicePing(BaseModel):
+    service_type: ServiceTypes
+    dialect_name: str
+    dialect_driver: str
+
+
+class SimulatorHash(BaseModel):
+    latest_commit_hash: str
+
+    def model_post_init(self, __context: Any) -> None:
+        diff = len(self.latest_commit_hash) - 7
+        if abs(diff) > 0:
+            reason = "short" if diff < 0 else "long"
+            raise ValueError(f"The commit hash you provided ({self.latest_commit_hash}) is too {reason}.")

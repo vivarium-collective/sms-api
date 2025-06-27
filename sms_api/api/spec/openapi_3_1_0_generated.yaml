@@ -8,7 +8,7 @@ paths:
       summary: Root
       operationId: root__get
       responses:
-        "200":
+        '200':
           description: Successful Response
           content:
             application/json:
@@ -22,7 +22,7 @@ paths:
       summary: Get Version
       operationId: get_version_version_get
       responses:
-        "200":
+        '200':
           description: Successful Response
           content:
             application/json:
@@ -32,177 +32,177 @@ paths:
   /simulator_version:
     get:
       tags:
-        - Simulations
+      - Simulations
       summary: get the list of available simulator versions
       operationId: get-simulator-version
       responses:
-        "200":
+        '200':
           description: Successful Response
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/SimulatorVersion"
+                  $ref: '#/components/schemas/SimulatorVersion'
                 title: Response Get-Simulator-Version
     post:
       tags:
-        - Simulations
+      - Simulations
       summary: Upload a new simulator (vEcoli) version.
       operationId: insert-simulator-version
       parameters:
-        - name: git_commit_hash
-          in: query
-          required: false
-          schema:
-            type: string
-            description: First 7 characters of git commit hash
-            title: Git Commit Hash
+      - name: git_commit_hash
+        in: query
+        required: false
+        schema:
+          type: string
           description: First 7 characters of git commit hash
-        - name: git_repo_url
-          in: query
-          required: false
-          schema:
-            type: string
-            default: https://github.com/CovertLab/vEcoli
-            title: Git Repo Url
-        - name: git_branch
-          in: query
-          required: false
-          schema:
-            type: string
-            default: master
-            title: Git Branch
+          title: Git Commit Hash
+        description: First 7 characters of git commit hash
+      - name: git_repo_url
+        in: query
+        required: false
+        schema:
+          type: string
+          default: https://github.com/CovertLab/vEcoli
+          title: Git Repo Url
+      - name: git_branch
+        in: query
+        required: false
+        schema:
+          type: string
+          default: master
+          title: Git Branch
       responses:
-        "200":
+        '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SimulatorVersion"
-        "422":
+                $ref: '#/components/schemas/SimulatorVersion'
+        '422':
           description: Validation Error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
+                $ref: '#/components/schemas/HTTPValidationError'
   /vecoli_parca:
     post:
       tags:
-        - Simulations
+      - Simulations
       summary: Run a parameter calculation
       operationId: calculate_parameters
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ParcaDatasetRequest"
+              $ref: '#/components/schemas/ParcaDatasetRequest'
         required: true
       responses:
-        "200":
+        '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ParcaDataset"
-        "422":
+                $ref: '#/components/schemas/ParcaDataset'
+        '422':
           description: Validation Error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
+                $ref: '#/components/schemas/HTTPValidationError'
   /vecoli_simulation:
     post:
       tags:
-        - Simulations
+      - Simulations
       summary: Submit to the db a single vEcoli simulation with given parameter overrides.
       operationId: submit-simulation
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EcoliSimulationRequest"
+              $ref: '#/components/schemas/EcoliSimulationRequest'
         required: true
       responses:
-        "200":
+        '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EcoliSimulation"
-        "422":
+                $ref: '#/components/schemas/EcoliSimulation'
+        '422':
           description: Validation Error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
+                $ref: '#/components/schemas/HTTPValidationError'
   /run-simulation:
     post:
       tags:
-        - Simulations
+      - Simulations
       summary: Run a single vEcoli simulation with given parameter overrides
       operationId: run-simulation
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EcoliSimulationRequest"
+              $ref: '#/components/schemas/EcoliSimulationRequest'
         required: true
       responses:
-        "200":
+        '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EcoliSimulationRun"
-        "422":
+                $ref: '#/components/schemas/EcoliSimulationRun'
+        '422':
           description: Validation Error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
+                $ref: '#/components/schemas/HTTPValidationError'
   /get-results:
     get:
       tags:
-        - Simulations
+      - Simulations
       summary: Get Results
       operationId: get-results
       parameters:
-        - name: database_id
-          in: query
-          required: true
-          schema:
-            type: integer
-            description: Database Id returned from /submit-simulation
-            title: Database Id
+      - name: database_id
+        in: query
+        required: true
+        schema:
+          type: integer
           description: Database Id returned from /submit-simulation
-        - name: git_commit_hash
-          in: query
-          required: false
-          schema:
-            type: string
-            default: d24e988
-            title: Git Commit Hash
+          title: Database Id
+        description: Database Id returned from /submit-simulation
+      - name: git_commit_hash
+        in: query
+        required: false
+        schema:
+          type: string
+          default: d24e988
+          title: Git Commit Hash
       requestBody:
         content:
           application/json:
             schema:
               anyOf:
-                - $ref: "#/components/schemas/Settings"
-                - type: "null"
+              - $ref: '#/components/schemas/Settings'
+              - type: 'null'
               title: Settings
       responses:
-        "200":
+        '200':
           description: Successful Response
           content:
             application/json:
               schema: {}
-        "422":
+        '422':
           description: Validation Error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     EcoliSimulation:
@@ -211,20 +211,20 @@ components:
           type: integer
           title: Database Id
         sim_request:
-          $ref: "#/components/schemas/EcoliSimulationRequest"
+          $ref: '#/components/schemas/EcoliSimulationRequest'
         hpc_run:
           anyOf:
-            - $ref: "#/components/schemas/HpcRun"
-            - type: "null"
+          - $ref: '#/components/schemas/HpcRun'
+          - type: 'null'
       type: object
       required:
-        - database_id
-        - sim_request
+      - database_id
+      - sim_request
       title: EcoliSimulation
     EcoliSimulationRequest:
       properties:
         simulator:
-          $ref: "#/components/schemas/SimulatorVersion"
+          $ref: '#/components/schemas/SimulatorVersion'
         parca_dataset_id:
           type: integer
           title: Parca Dataset Id
@@ -232,9 +232,9 @@ components:
           additionalProperties:
             additionalProperties:
               anyOf:
-                - type: integer
-                - type: number
-                - type: string
+              - type: integer
+              - type: number
+              - type: string
             type: object
           type: object
           title: Variant Config
@@ -244,9 +244,9 @@ components:
           default: 11
       type: object
       required:
-        - simulator
-        - parca_dataset_id
-        - variant_config
+      - simulator
+      - parca_dataset_id
+      - variant_config
       title: EcoliSimulationRequest
     EcoliSimulationRun:
       properties:
@@ -254,20 +254,20 @@ components:
           type: integer
           title: Job Id
         simulation:
-          $ref: "#/components/schemas/EcoliSimulation"
+          $ref: '#/components/schemas/EcoliSimulation'
         last_update:
           type: string
           title: Last Update
       type: object
       required:
-        - job_id
-        - simulation
+      - job_id
+      - simulation
       title: EcoliSimulationRun
     HTTPValidationError:
       properties:
         detail:
           items:
-            $ref: "#/components/schemas/ValidationError"
+            $ref: '#/components/schemas/ValidationError'
           type: array
           title: Detail
       type: object
@@ -279,40 +279,40 @@ components:
           title: Database Id
         slurmjobid:
           anyOf:
-            - type: integer
-            - type: "null"
+          - type: integer
+          - type: 'null'
           title: Slurmjobid
         status:
           anyOf:
-            - $ref: "#/components/schemas/JobStatus"
-            - type: "null"
+          - $ref: '#/components/schemas/JobStatus'
+          - type: 'null'
         start_time:
           anyOf:
-            - type: string
-            - type: "null"
+          - type: string
+          - type: 'null'
           title: Start Time
         end_time:
           anyOf:
-            - type: string
-            - type: "null"
+          - type: string
+          - type: 'null'
           title: End Time
         error_message:
           anyOf:
-            - type: string
-            - type: "null"
+          - type: string
+          - type: 'null'
           title: Error Message
       type: object
       required:
-        - database_id
+      - database_id
       title: HpcRun
     JobStatus:
       type: string
       enum:
-        - waiting
-        - queued
-        - running
-        - completed
-        - failed
+      - waiting
+      - queued
+      - running
+      - completed
+      - failed
       title: JobStatus
     ParcaDataset:
       properties:
@@ -320,37 +320,37 @@ components:
           type: integer
           title: Database Id
         parca_dataset_request:
-          $ref: "#/components/schemas/ParcaDatasetRequest"
+          $ref: '#/components/schemas/ParcaDatasetRequest'
         remote_archive_path:
           anyOf:
-            - type: string
-            - type: "null"
+          - type: string
+          - type: 'null'
           title: Remote Archive Path
         hpc_run:
           anyOf:
-            - $ref: "#/components/schemas/HpcRun"
-            - type: "null"
+          - $ref: '#/components/schemas/HpcRun'
+          - type: 'null'
       type: object
       required:
-        - database_id
-        - parca_dataset_request
+      - database_id
+      - parca_dataset_request
       title: ParcaDataset
     ParcaDatasetRequest:
       properties:
         simulator_version:
-          $ref: "#/components/schemas/SimulatorVersion"
+          $ref: '#/components/schemas/SimulatorVersion'
         parca_config:
           additionalProperties:
             anyOf:
-              - type: integer
-              - type: number
-              - type: string
+            - type: integer
+            - type: number
+            - type: string
           type: object
           title: Parca Config
       type: object
       required:
-        - simulator_version
-        - parca_config
+      - simulator_version
+      - parca_config
       title: ParcaDatasetRequest
     Settings:
       properties:
@@ -369,17 +369,17 @@ components:
         storage_tensorstore_driver:
           type: string
           enum:
-            - zarr
-            - n5
-            - zarr3
+          - zarr
+          - n5
+          - zarr3
           title: Storage Tensorstore Driver
           default: zarr3
         storage_tensorstore_kvstore_driver:
           type: string
           enum:
-            - file
-            - s3
-            - gcs
+          - file
+          - s3
+          - gcs
           title: Storage Tensorstore Kvstore Driver
           default: gcs
         temporal_service_url:
@@ -393,7 +393,7 @@ components:
         storage_gcs_credentials_file:
           type: string
           title: Storage Gcs Credentials File
-          default: ""
+          default: ''
         mongodb_uri:
           type: string
           title: Mongodb Uri
@@ -453,47 +453,47 @@ components:
         slurm_submit_host:
           type: string
           title: Slurm Submit Host
-          default: ""
+          default: ''
         slurm_submit_user:
           type: string
           title: Slurm Submit User
-          default: ""
+          default: ''
         slurm_submit_key_path:
           type: string
           title: Slurm Submit Key Path
-          default: ""
+          default: ''
         slurm_partition:
           type: string
           title: Slurm Partition
-          default: ""
+          default: ''
         slurm_node_list:
           type: string
           title: Slurm Node List
-          default: ""
+          default: ''
         slurm_qos:
           type: string
           title: Slurm Qos
-          default: ""
+          default: ''
         slurm_log_base_path:
           type: string
           title: Slurm Log Base Path
-          default: ""
+          default: ''
         hpc_image_base_path:
           type: string
           title: Hpc Image Base Path
-          default: ""
+          default: ''
         hpc_parca_base_path:
           type: string
           title: Hpc Parca Base Path
-          default: ""
+          default: ''
         hpc_repo_base_path:
           type: string
           title: Hpc Repo Base Path
-          default: ""
+          default: ''
         hpc_sim_base_path:
           type: string
           title: Hpc Sim Base Path
-          default: ""
+          default: ''
       additionalProperties: false
       type: object
       title: Settings
@@ -515,15 +515,15 @@ components:
           default: master
       type: object
       required:
-        - database_id
+      - database_id
       title: SimulatorVersion
     ValidationError:
       properties:
         loc:
           items:
             anyOf:
-              - type: string
-              - type: integer
+            - type: string
+            - type: integer
           type: array
           title: Location
         msg:
@@ -534,7 +534,7 @@ components:
           title: Error Type
       type: object
       required:
-        - loc
-        - msg
-        - type
+      - loc
+      - msg
+      - type
       title: ValidationError
