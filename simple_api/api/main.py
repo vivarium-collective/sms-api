@@ -150,15 +150,13 @@ class ServicePing(BaseModel):
 
 
 class SimulatorHash(BaseModel):
-    git_commit_hash: str
-    git_repo_url: str
-    git_branch: str
+    latest_commit_hash: str
 
     def model_post_init(self, __context: Any) -> None:
-        diff = len(self.git_commit_hash) - 7
+        diff = len(self.latest_commit_hash) - 7
         if abs(diff) > 0:
             reason = "short" if diff < 0 else "long"
-            raise ValueError(f"The commit hash you provided ({self.git_commit_hash}) is too {reason}.")
+            raise ValueError(f"The commit hash you provided ({self.latest_commit_hash}) is too {reason}.")
 
 
 @app.get("/ping-db")
@@ -188,8 +186,8 @@ async def get_latest_simulator_hash(
         raise HTTPException(status_code=500, detail="HPC service is not initialized")
 
     try:
-        latest_commit = await hpc_service.get_latest_commit_hash()
-        return SimulatorHash(git_branch=git_branch, git_commit_hash=latest_commit, git_repo_url=git_repo_url)
+        latest_commit = await hpc_service.get_latest_commit_hash(git_branch=git_branch, git_repo_url=git_repo_url)
+        return SimulatorHash(latest_commit_hash=latest_commit)
     except Exception as e:
         logger.exception("Error getting the latest simulator commit.")
         raise HTTPException(status_code=500, detail=str(e)) from e

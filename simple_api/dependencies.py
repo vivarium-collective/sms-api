@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from simple_api.config import get_settings
 from simple_api.log_config import setup_logging
 from simple_api.simulation.database_service import SimulationDatabaseService, SimulationDatabaseServiceSQL
-from simple_api.simulation.simulation_service import SimulationService
+from simple_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
 from simple_api.simulation.tables_orm import create_db
 
 dotenv.load_dotenv("assets/dev/config/.dev_env")
@@ -91,7 +91,10 @@ async def init_standalone(env_path: Path | None = None, enable_ssl: bool = True)
     :param env_path: (`Path`) Path to the environment file. If no value is passed,
         settings will be derived from `get_settings()`. See `get_settings` for more details. Defaults to `None`.
     """
+    # configure asnd set simulation service
+    set_simulation_service(SimulationServiceHpc())
 
+    # configure and set db engine service 
     def engine_params(**kwargs):
         return kwargs
 
@@ -149,5 +152,5 @@ async def shutdown_standalone() -> None:
     if engine:
         await engine.dispose()
 
-    # set_simulation_service(None)
+    set_simulation_service(None)
     set_simulation_database_service(None)
