@@ -3,8 +3,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from dotenv import load_dotenv
 import dotenv
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
 KV_DRIVER = Literal["file", "s3", "gcs"]
@@ -71,17 +71,16 @@ class Settings(BaseSettings):
     def from_env(cls, env_path: Path):
         if dotenv.load_dotenv(env_path):
             instance: Settings = super().__new__(cls)
-            env = os.environ 
+            env = os.environ
             svars = vars()
             for k, v in svars.items():
                 varname = k.upper()
-                if varname in env.keys():
+                if varname in env:
                     new = env[k] if isinstance(v, str) else int(env[k])
                     setattr(instance, k, new)
         else:
-            raise FileNotFoundError(f'An env file could not be found at: {env_path}')
+            raise FileNotFoundError(f"An env file could not be found at: {env_path}")
         return instance
-
 
 
 @lru_cache

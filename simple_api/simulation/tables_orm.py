@@ -85,4 +85,4 @@ class ORMSimulation(Base):
 async def create_db(async_engine: AsyncEngine) -> None:
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print('Finished creating db')
+    print("Finished creating db")

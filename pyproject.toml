@@ -167,7 +167,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = ["orig-monorepo/*", ".venv/*", "sms_api/worker/*"]
+exclude = ["orig-monorepo/*", ".venv/*", "sms_api/worker/*", "simple_api/worker/*"]
 
 [tool.ruff.format]
 preview = true

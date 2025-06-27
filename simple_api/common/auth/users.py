@@ -1,16 +1,15 @@
 from passlib.hash import argon2
-
-from pymongo import AsyncMongoClient
 from pydantic import BaseModel
+from pymongo import AsyncMongoClient
 
 from simple_api.common.database.db_utils import get_mongo_uri
 
 
 class ApiUser(BaseModel):
-    username: str 
-    email: str 
-    hashed_pwd: str 
-    disabled: bool 
+    username: str
+    email: str
+    hashed_pwd: str
+    disabled: bool
 
 
 AUTH_DB_NAME = "secure"
@@ -25,7 +24,6 @@ async def insert_user(user: ApiUser, uri: str | None = None):
     client = get_mongo_client(uri)
     userdb = client.get_database(AUTH_DB_NAME)
     return await userdb.users.insert_one(user.model_dump())
-
 
 
 def hash_password(actual: str):

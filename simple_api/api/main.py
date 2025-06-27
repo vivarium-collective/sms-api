@@ -11,17 +11,16 @@
 - endpoint to send sql like queries to parquet files back to client
 """
 
-from functools import partial
 import io
 import logging
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from enum import StrEnum
-import os
+from functools import partial
 from pathlib import Path
 
 import dotenv
-from fastapi.security import OAuth2PasswordBearer
 import pandas as pd
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
@@ -30,7 +29,6 @@ from fastapi.responses import StreamingResponse
 # import pyarrow.parquet as pq
 from starlette.middleware.cors import CORSMiddleware
 
-from simple_api.dependencies import get_postgres_uri
 from simple_api.common.hpc.sim_utils import get_single_simulation_chunks_dirpath, read_latest_commit
 from simple_api.common.ssh.ssh_service import get_ssh_service
 from simple_api.config import get_settings
@@ -101,17 +99,17 @@ router = APIRouter()
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     dev_mode_warning = None
-    env_path = 'assets/dev/config/.dev_env'
+    env_path = "assets/dev/config/.dev_env"
     dotenv.load_dotenv(env_path)
-    dev_mode = os.getenv('DEV_MODE', '0')
+    dev_mode = os.getenv("DEV_MODE", "0")
     start_standalone = partial(init_standalone, env_path=Path(env_path))
     if bool(int(dev_mode)):
-        dev_mode_warning = f"Development Mode is currently engaged!!!"
-        start_standalone.keywords['enable_ssl'] = False
+        dev_mode_warning = "Development Mode is currently engaged!!!"
+        start_standalone.keywords["enable_ssl"] = False
 
     await start_standalone()
     if dev_mode_warning:
-        logger.warning(f"Development Mode is currently engaged!!!", stacklevel=1)
+        logger.warning("Development Mode is currently engaged!!!", stacklevel=1)
     yield
     await shutdown_standalone()
 
