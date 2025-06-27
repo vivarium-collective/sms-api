@@ -23,7 +23,7 @@ services:
       - POSTGRES_PORT=1111
       - NATS_URI=nats://nats:4222
     ports:
-      - "1111:1111"
+      - "65432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
