@@ -36,15 +36,17 @@ def get_postgres_engine() -> AsyncEngine | None:
 
 # ------- simulation database service (standalone or pytest) ------
 
-global_simulation_database_service: SimulationDatabaseService | None = None
+global_simulation_database_service: SimulationDatabaseService | SimulationDatabaseServiceSQL | None = None
 
 
-def set_simulation_database_service(database_service: SimulationDatabaseService | None) -> None:
+def set_simulation_database_service(
+    database_service: SimulationDatabaseService | SimulationDatabaseServiceSQL | None,
+) -> None:
     global global_simulation_database_service
     global_simulation_database_service = database_service
 
 
-def get_simulation_database_service() -> SimulationDatabaseService | None:
+def get_simulation_database_service() -> SimulationDatabaseService | SimulationDatabaseServiceSQL | None:
     global global_simulation_database_service
     return global_simulation_database_service
 

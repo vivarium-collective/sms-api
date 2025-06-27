@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 
 class SimulationDatabaseService(ABC):
+    _engine: AsyncEngine
+
     @abstractmethod
     async def insert_simulator(self, git_commit_hash: str, git_repo_url: str, git_branch: str) -> SimulatorVersion:
         pass
@@ -94,8 +96,10 @@ class SimulationDatabaseService(ABC):
 
 class SimulationDatabaseServiceSQL(SimulationDatabaseService):
     async_sessionmaker: async_sessionmaker[AsyncSession]
+    _engine: AsyncEngine
 
     def __init__(self, async_engine: AsyncEngine):
+        self._engine = async_engine
         self.async_sessionmaker = async_sessionmaker(async_engine, expire_on_commit=True)
 
     async def _get_orm_simulator(self, session: AsyncSession, simulator_id: int) -> ORMSimulator | None:

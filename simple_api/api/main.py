@@ -25,6 +25,7 @@ import pandas as pd
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 # import pyarrow.parquet as pq
 from starlette.middleware.cors import CORSMiddleware
@@ -62,6 +63,13 @@ setup_logging(logger)
 class ServerModes(StrEnum):
     DEV = "http://localhost:8888"
     PROD = "https://sms.cam.uchc.edu"
+
+
+class ServiceTypes(StrEnum):
+    SIMULATION = "simulation"
+    MONGO = "mongo"
+    POSTGRES = "postgres"
+    AUTH = "auth"
 
 
 def get_server_url(dev: bool = True) -> ServerModes:
@@ -132,6 +140,26 @@ def root() -> dict[str, str]:
 @app.get("/version")
 def get_version() -> str:
     return APP_VERSION
+
+
+class ServicePing(BaseModel):
+    service_type: ServiceTypes
+    dialect_name: str
+    dialect_driver: str
+
+
+@app.get("/ping-db")
+async def ping_db() -> ServicePing:
+    sim_db_service = get_simulation_database_service()
+    if sim_db_service is None:
+        logger.error("Simulation database service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+    else:
+        return ServicePing(
+            service_type=ServiceTypes.POSTGRES,
+            dialect_name=sim_db_service._engine.name,
+            dialect_driver=sim_db_service._engine.driver,
+        )
 
 
 @app.get(
