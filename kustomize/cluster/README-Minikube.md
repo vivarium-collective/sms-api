@@ -17,6 +17,12 @@
 
 # local minikube config
 
+#### This should be run in the `kustomize` directory:
+
+```bash
+cd kustomize
+```
+
 ### install Lens
 
 ### install and start minikube on macos
@@ -52,6 +58,14 @@ Log into Grafana with admin and the password from the following command.
 
 ```bash
 kubectl get secret --namespace monitoring prometheus-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+```
+
+### install NATS helm repo
+
+```bash
+helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+heml repo update
+helm install nats nats/nats
 ```
 
 ### set up ingress controller
@@ -93,10 +107,10 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 cmctl check api
 ```
 
-### Install CloudNativePG
+### Install CloudNativePG (see README-cnpg.md for more details)
 
 ```aiignore
-kubectl apply --server-side -f cnpg-operator/cnpg-1.26.0.yaml
+kubectl apply --server-side -f cluster/cnpg-operator/cnpg-1.26.0.yaml
 ```
 
 ### Install the PostgreSQL database cluster
@@ -123,6 +137,8 @@ echo "127.0.0.1 minikube.local" | sudo tee -a /etc/hosts
   of minikube ip or kubectl get ingress - this is an important gotcha."
 
 # deploying sms-api services to minikube
+
+# NOW, RUN GENERATE SECRETS SCRIPT (sms_dev_secrets.sh)
 
 ### verify the kustomization scripts
 
@@ -162,3 +178,16 @@ sudo kubectl port-forward --address ${EXTERNAL_IP} -n ${DEV_NAMESPACE} deploymen
 sed -i '' "s/jmshost_sim_external=.*/jmshost_sim_external=${EXTERNAL_IP}/" ./config/jimdev/submit.env
 ```
 ````
+
+# _Workflow_ - Making a change and reflecting it locally:
+
+1. Make your changes
+2. `make new`
+3. Go to Lens under Deployments (minikube) and restart the deployment.
+4. Go to the pod and select a new random port forward.
+
+### To get the postgres password:
+
+```bash
+kubectl get secret sms-postgres-cluster-app -n postgres-cluster -o jsonpath="{.data.password}" | base64 -d
+```

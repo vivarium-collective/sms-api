@@ -3,8 +3,8 @@ import logging
 from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.simulation.database_service import SimulationDatabaseService
 from sms_api.simulation.models import EcoliSimulation, ParcaDataset, SimulatorVersion
-from sms_api.simulation.simulation_database import SimulationDatabaseService
 from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from testcontainers.postgres import PostgresContainer  # type: ignore [import-untyped]
 
 from sms_api.dependencies import get_postgres_engine, set_postgres_engine
-from sms_api.simulation.simulation_database import SimulationDatabaseService, SimulationDatabaseServiceSQL
+from sms_api.simulation.database_service import SimulationDatabaseService, SimulationDatabaseServiceSQL
 from sms_api.simulation.tables_orm import create_db
 
 

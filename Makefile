@@ -1,3 +1,11 @@
+LOCAL_POSTGRES_USER:=$(USER)
+LOCAL_POSTGRES_PASSWORD=dev
+LOCAL_POSTGRES_DB=sms
+LOCAL_POSTGRES_HOST=localhost
+LOCAL_POSTGRES_PORT=65432
+POSTGRES_PORT=5432
+
+
 .PHONY: install
 install: ## Install the poetry environment and install the pre-commit hooks
 	@echo "🚀 Creating virtual environment using pyenv and poetry"
@@ -15,11 +23,21 @@ check: ## Run code quality tools.
 	@poetry run mypy
 	@echo "🚀 Checking for obsolete dependencies: Running deptry"
 	@poetry run deptry .
+	@make spec
+
+.PHONY: clean
+clean:
+	@rm -rf .pytest_cache
+	@rm -rf .mypy_cache
+	@rm -rf .ruff_cache
+	@find . -name '__pycache__' -exec rm -r {} + -o -name '*.pyc' -delete
 
 .PHONY: test
 test: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
+	@make write-latest-commit
 	@poetry run pytest --cov --cov-config=pyproject.toml --cov-report=xml
+	@poetry run python tests/connection/test_ssh.py
 
 .PHONY: build
 build: clean-build ## Build wheel file using poetry
@@ -41,5 +59,151 @@ docs: ## Build and serve the documentation
 .PHONY: help
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+.PHONY: ssh
+ssh:
+	@ssh -i $(key) svc_vivarium@login.hpc.cam.uchc.edu
+
+.PHONY: new-build
+new-build:
+	@./kustomize/scripts/build_and_push.sh
+
+.PHONY: apply
+apply:
+	@kubectl kustomize kustomize/overlays/sms-api-local | kubectl apply -f -
+	@make restart
+
+.PHONY: check-minikube
+check-minikube:
+	@is_minikube=$$(poetry run python -c "import os; print(str('minikube' in os.getenv('KUBECONFIG', '')).lower())"); \
+	if [ $$is_minikube = "true" ]; then \
+		echo "You're using minikube"; \
+	else \
+		echo "Not using minikube. Exiting."; \
+		exit 1; \
+	fi
+
+.PHONY: spec
+spec:
+	@poetry run python ./sms_api/api/openapi_spec.py
+
+.PHONY: new
+new:
+	@make check-minikube
+	@make latest-commit
+	@make spec
+	@make new-build
+	@make apply
+
+.PHONY: restart-deployment
+restart-deployment:
+	@kubectl rollout restart deployment -n $(namespace)
+
+.PHONY: restart
+restart:
+	@make restart-deployment namespace="sms-api-local"
+
+.PHONY: latest-commit
+latest-commit:
+	@poetry run python sms_api/latest_commit.py
+
+.PHONY: repl
+repl:
+	@poetry run python -m asyncio
+
+.PHONY: setkube
+setkube:
+	@export KUBECONFIG=$(path)
+	@echo "You're now using the kubeconfig path: $${KUBECONFIG}"
+
+.PHONY: whichkube
+whichkube:
+	@echo $${KUBECONFIG}
+
+.PHONY: gateway
+gateway:
+	@poetry run uvicorn simple_api.api.main:app --reload --host 0.0.0.0 --port 8888
+
+.PHONY: pginit
+pginit:
+	@initdb -D $(path)
+
+.PHONY: pgup
+pgup:
+	@touch "$(path)/.log"
+	@pg_ctl -D $(path) -l "$(path)/.log" -o "-p $(port)" start
+
+.PHONY: pgdown
+pgdown:
+	@pg_ctl stop -D $(dbname)
+
+.PHONY: pgdb-new
+pgdb-new:
+	@createdb $(dbname)
+
+.PHONY: pgdb-conn
+pgdb-conn:
+	@psql $(dbname)
+
+.PHONY: pgdb-drop
+pgdb-drop:
+	@dropdb $(dbname)
+
+usr:
+	@echo
+
+# --name postgresql
+.PHONY: dbup
+dbup:
+	@service_name="pgdb"; \
+	[ -z "$(port)" ] && port=${LOCAL_POSTGRES_PORT} || port=$(port); \
+	[ -z "$(password)" ] && password=${LOCAL_POSTGRES_PASSWORD} || password=$(password); \
+	docker run -d \
+		--name $$service_name \
+		-e POSTGRES_PASSWORD=$$password \
+		-e POSTGRES_USER=${LOCAL_POSTGRES_USER} \
+		-e POSTGRES_HOST=localhost \
+		-e POSTGRES_DB=${LOCAL_POSTGRES_DB} \
+		-p $$port:${POSTGRES_PORT} \
+		postgres:17
+
+.PHONY: dbdown
+dbdown:
+	@make rmcont name="pgdb"
+
+.PHONY: mongoup
+mongoup:
+	@docker run -d \
+		--name mongodb \
+		-p $(port):$(port) \
+		mongo
+
+.PHONY: percona
+percona:
+	@docker run -d --name psmdb -p 27017:27017 --restart always percona/percona-server-mongodb:6.0.24-19
+
+.PHONY: compose-external
+compose-external:
+	@echo "Starting the following services: mongodb, postgresql, nats"
+	@docker compose up mongodb pgdb broker
+
+.PHONY: rmcont
+rmcont:
+	@docker rm -f $(name)
+
+# this command should run psql -h localhost -p 65432 -U alexanderpatrie sms
+.PHONY: pingpg
+pingpg:
+	@[ -z "$(user)" ] && user=${LOCAL_POSTGRES_USER} || user=$(user); \
+	[ -z "$(port)" ] && port=${LOCAL_POSTGRES_PORT} || port=$(port); \
+	psql -h localhost -p $$port -U ${LOCAL_POSTGRES_USER} sms;
+
+.PHONY: pingdb
+pingdb:
+	@psql "postgresql://alexanderpatrie:dev@localhost:65432/sms?sslmode=disable"
+
+.PHONY: check-latest
+check-latest:
+	@curl -s https://api.github.com/repos/CovertLab/vEcoli/commits/master | jq -r '"\(.sha[0:7]) \(.commit.author.date)"'
 
 .DEFAULT_GOAL := help

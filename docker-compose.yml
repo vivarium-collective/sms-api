@@ -1,0 +1,91 @@
+volumes:
+  shared-cache:
+  postgres-data:
+  broker-data:
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    networks:
+      - smsnet
+
+  pgdb:
+    image: postgres:17
+    container_name: pgdb
+    restart: always
+    environment:
+      - POSTGRES_PASSWORD=dev
+      - POSTGRES_DB=sms
+      - POSTGRES_HOST=localhost
+      - POSTGRES_PORT=1111
+      - NATS_URI=nats://nats:4222
+    ports:
+      - "65432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - smsnet
+
+  gateway:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile-gateway
+    # image: ghcr.io/vivarium-collective/sms-gateway:0.0.1
+    container_name: gateway
+    networks:
+      - smsnet
+    depends_on:
+      - mongodb
+      - pgdb
+    environment:
+      - POSTGRES_PASSWORD=dev
+      - POSTGRES_DB=sms
+      - POSTGRES_HOST=localhost
+      - POSTGRES_PORT=1111
+      - NATS_URI=nats://nats:4222
+    ports:
+      - "8888:8888"
+    volumes:
+      - shared-cache:/app/datacache
+
+  worker:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile-worker
+    # image: ghcr.io/vivarium-collective/sms-run-simulation:0.0.1
+    container_name: worker
+    networks:
+      - smsnet
+    depends_on:
+      - mongodb
+      - pgdb
+    environment:
+      - POSTGRES_PASSWORD=dev
+      - POSTGRES_DB=sms
+      - POSTGRES_HOST=localhost
+      - POSTGRES_PORT=1111
+      - NATS_URI=nats://nats:4222
+    volumes:
+      - shared-cache:/app/datacache
+
+  broker:
+    image: nats
+    container_name: broker
+    restart: always
+    ports:
+      - "4222:4222" # client connections
+      - "8222:8222" # monitoring
+      - "6222:6222" # clustering
+    volumes:
+      - broker-data:/var/lib/broker/data
+    networks:
+      - smsnet
+
+networks:
+  smsnet:
+    driver: bridge

@@ -16,6 +16,7 @@ replicas:
     name: mongodb
 
 resources:
+  - secret-ssh.yaml
   - ingress.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
