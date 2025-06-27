@@ -1,6 +1,7 @@
 volumes:
   shared-cache:
   postgres-data:
+  broker-data:
 
 services:
   mongodb:
@@ -10,17 +11,19 @@ services:
       - "27017:27017"
     networks:
       - smsnet
-  
-  postgres:
-    image: postgres:15
-    container_name: postgres
-    restart: unless-stopped
+
+  pgdb:
+    image: postgres:17
+    container_name: pgdb
+    restart: always
     environment:
-      POSTGRES_USER: devuser
-      POSTGRES_PASSWORD: devpassword
-      POSTGRES_DB: smsdb
+      - POSTGRES_PASSWORD=dev
+      - POSTGRES_DB=sms
+      - POSTGRES_HOST=localhost
+      - POSTGRES_PORT=1111
+      - NATS_URI=nats://nats:4222
     ports:
-      - "5432:5432"
+      - "1111:1111"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -33,19 +36,19 @@ services:
       dockerfile: Dockerfile-gateway
     # image: ghcr.io/vivarium-collective/sms-gateway:0.0.1
     container_name: gateway
-    ports:
-      - "8000:8000"
     networks:
       - smsnet
     depends_on:
       - mongodb
+      - pgdb
     environment:
-      - STANDALONE=False
-      - POSTGRES_USER=devuser
-      - POSTGRES_PASSWORD=devpassword
-      - POSTGRES_DB=smsdb
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
+      - POSTGRES_PASSWORD=dev
+      - POSTGRES_DB=sms
+      - POSTGRES_HOST=localhost
+      - POSTGRES_PORT=1111
+      - NATS_URI=nats://nats:4222
+    ports:
+      - "8888:8888"
     volumes:
       - shared-cache:/app/datacache
 
@@ -60,15 +63,28 @@ services:
       - smsnet
     depends_on:
       - mongodb
+      - pgdb
     environment:
-      - STANDALONE=False
-      - POSTGRES_USER=devuser
-      - POSTGRES_PASSWORD=devpassword
-      - POSTGRES_DB=smsdb
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
+      - POSTGRES_PASSWORD=dev
+      - POSTGRES_DB=sms
+      - POSTGRES_HOST=localhost
+      - POSTGRES_PORT=1111
+      - NATS_URI=nats://nats:4222
     volumes:
       - shared-cache:/app/datacache
+
+  broker:
+    image: nats
+    container_name: broker
+    restart: always
+    ports:
+      - "4222:4222" # client connections
+      - "8222:8222" # monitoring
+      - "6222:6222" # clustering
+    volumes:
+      - broker-data:/var/lib/broker/data
+    networks:
+      - smsnet
 
 networks:
   smsnet:

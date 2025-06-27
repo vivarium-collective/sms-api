@@ -1,3 +1,11 @@
+LOCAL_POSTGRES_USER:=$(USER)
+LOCAL_POSTGRES_PASSWORD=dev
+LOCAL_POSTGRES_DB=sms
+LOCAL_POSTGRES_HOST=localhost
+LOCAL_POSTGRES_PORT=65432
+POSTGRES_PORT=5432
+
+
 .PHONY: install
 install: ## Install the poetry environment and install the pre-commit hooks
 	@echo "🚀 Creating virtual environment using pyenv and poetry"
@@ -15,6 +23,13 @@ check: ## Run code quality tools.
 	@poetry run mypy
 	@echo "🚀 Checking for obsolete dependencies: Running deptry"
 	@poetry run deptry .
+
+.PHONY: clean
+clean:
+	@rm -rf .pytest_cache
+	@rm -rf .mypy_cache
+	@rm -rf .ruff_cache
+	@find . -name '__pycache__' -exec rm -r {} + -o -name '*.pyc' -delete
 
 .PHONY: test
 test: ## Test the code with pytest
@@ -105,6 +120,80 @@ whichkube:
 
 .PHONY: gateway
 gateway:
-	@poetry run uvicorn sms_api.api.main:app --reload
+	@poetry run uvicorn simple_api.api.main:app --reload --host 0.0.0.0 --port 8888
+
+.PHONY: pginit
+pginit:
+	@initdb -D $(path)
+
+.PHONY: pgup
+pgup:
+	@touch "$(path)/.log"
+	@pg_ctl -D $(path) -l "$(path)/.log" -o "-p $(port)" start
+
+.PHONY: pgdown
+pgdown:
+	@pg_ctl stop -D $(dbname)
+
+.PHONY: pgdb-new
+pgdb-new:
+	@createdb $(dbname)
+
+.PHONY: pgdb-conn
+pgdb-conn:
+	@psql $(dbname)
+
+.PHONY: pgdb-drop
+pgdb-drop:
+	@dropdb $(dbname)
+
+usr:
+	@echo
+
+# --name postgresql
+.PHONY: pgdb
+pgdb:
+	@service_name="pgdb"; \
+	[ -z "$(port)" ] && port=${LOCAL_POSTGRES_PORT} || port=$(port); \
+	[ -z "$(password)" ] && password=${LOCAL_POSTGRES_PASSWORD} || password=$(password); \
+	docker run -d \
+		--name $$service_name \
+		-e POSTGRES_PASSWORD=$$password \
+		-e POSTGRES_USER=${LOCAL_POSTGRES_USER} \
+		-e POSTGRES_HOST=localhost \
+		-e POSTGRES_DB=${LOCAL_POSTGRES_DB} \
+		-p $$port:${POSTGRES_PORT} \
+		postgres:17
+
+.PHONY: mongoup-local
+mongoup-local:
+	@docker run -d \
+		--name mongodb \
+		-p $(port):$(port) \
+		mongo
+
+.PHONY: perconaup-local
+perconaup-local:
+	@docker run -d --name psmdb -p 27017:27017 --restart always percona/percona-server-mongodb:6.0.24-19
+
+.PHONY: externalup
+externalup:
+	@echo "Starting the following services: mongodb, postgresql, nats"
+	@docker compose up mongodb pgdb broker
+
+.PHONY: dockrem
+dockrem:
+	@docker rm -f $(name)
+
+.PHONY: pgping
+pgping:
+	@echo "Use the local password: ${LOCAL_POSTGRES_PASSWORD} and username: ${LOCAL_POSTGRES_USER}"; \
+	[ -z "$(port)" ] && port=${LOCAL_POSTGRES_PORT} || port=$(port); \
+	psql -h localhost -p $$port -U ${LOCAL_POSTGRES_USER} sms;
+# psql -h localhost -p 65432 -U alexanderpatrie sms
+
+.PHONY: quickping
+quickping:
+	@psql "postgresql://alexanderpatrie:dev@localhost:65432/sms?sslmode=disable"
 
 .DEFAULT_GOAL := help
