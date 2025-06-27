@@ -9,11 +9,10 @@ Simple Worker module. This module should do the following:
 3c.   save job results to db(jobi.results)
 """
 
-
 import asyncio
+import random
 from concurrent.futures import ProcessPoolExecutor
 from time import sleep
-import random
 
 jobs = iter([random.randint(1000, 9999) for _ in range(5)])
 
@@ -30,8 +29,8 @@ async def poll_for_jobs() -> int:
     try:
         return next(jobs)
     except:
-        print('No more jobs')
-        raise RuntimeError('Done.')
+        print("No more jobs")
+        raise RuntimeError("Done.")
 
 
 # this func should be the worker loop
@@ -44,12 +43,12 @@ async def worker_loop(pool: ProcessPoolExecutor) -> None:
                 seen.add(job)
                 loop = asyncio.get_running_loop()
                 loop.run_in_executor(pool, run, job)
-                print(f'Finished: {job}')
+                print(f"Finished: {job}")
             for i in range(4):
-                print(f'Sleep {i} for job: {job}')
+                print(f"Sleep {i} for job: {job}")
                 await asyncio.sleep(0.5)
         except RuntimeError:
-            print('There are no more jobs. Done. Waiting.')
+            print("There are no more jobs. Done. Waiting.")
 
 
 # this func should spin up a new process worker for each request

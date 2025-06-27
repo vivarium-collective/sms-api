@@ -1,3 +1,11 @@
+"""
+Gateway dispatcher. This module provides the following logic:
+
+a. A way to validate jobs (ensure not garbage-in)
+b. A way to actually run the simulation workflow (clone, dbio, run, etc)
+c. A way to read the data as required for /get-results.
+"""
+
 import asyncio
 import os
 import shutil

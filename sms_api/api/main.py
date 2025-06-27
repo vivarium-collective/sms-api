@@ -1,16 +1,34 @@
+"""
+- base sim (cached)
+- antibiotic
+- biomanufacturing
+- batch variant endpoint
+- design specific endpoints.
+- downsampling ...
+- biocyc id
+- api to download the data
+- marimo instead of Jupyter notebooks....(auth). ... also on gov cloud.
+- endpoint to send sql like queries to parquet files back to client
+"""
+
+import io
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from enum import StrEnum
+from pathlib import Path
 
+import pandas as pd
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 # import pyarrow.parquet as pq
 from starlette.middleware.cors import CORSMiddleware
 
-from sms_api.common.hpc.sim_utils import read_latest_commit
+from sms_api.common.hpc.sim_utils import get_single_simulation_chunks_dirpath, read_latest_commit
 from sms_api.common.ssh.ssh_service import get_ssh_service
+from sms_api.config import get_settings
 from sms_api.dependencies import (
     get_postgres_engine,
     get_simulation_database_service,
@@ -21,6 +39,7 @@ from sms_api.dependencies import (
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import SimulationDatabaseService
 from sms_api.simulation.dispatch import run_simulation
+from sms_api.simulation.hpc_utils import format_experiment_path, get_experiment_dirname
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
@@ -88,18 +107,6 @@ app.add_middleware(
 )
 
 # -- endpoint logic -- #
-
-
-# base sim (cached)
-# antibiotic
-# biomanufacturing
-# batch variant endpoint
-# design specific endpoints.
-# downsampling ...
-# biocyc id
-# api to download the data
-# marimo instead of Jupyter notebooks....(auth). ... also on gov cloud.
-# endpoint to send sql like queries to parquet files back to client
 
 
 class ServiceTypes(StrEnum):
@@ -322,6 +329,21 @@ async def get_results(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+async def generate_chunk_stream(simulator: SimulatorVersion, database_id: int, chunk_id: int) -> StreamingResponse:
+    experiment_dirname = get_experiment_dirname(database_id, simulator.git_commit_hash)
+    experiment_dir_root = format_experiment_path(get_settings(), experiment_dirname)
+    remote_dirpath: Path = get_single_simulation_chunks_dirpath(
+        experiment_dir_root
+    )  # eg: experiment_dirname/'experiment=....', etc
+    stream = io.StringIO()
+    df = pd.read_parquet(f"{remote_dirpath}/{chunk_id}.pq")
+    stream.write(df.to_json())
+    stream.seek(0)  # Reset cursor to start
+    return StreamingResponse(
+        stream, media_type="application/json", headers={"Content-Disposition": "attachment; filename=data.json"}
+    )
+
+
 # @app.post(
 #     path="/vecoli_simulation",
 #     response_model=EcoliSimulation,
@@ -342,61 +364,6 @@ async def get_results(
 #     except Exception as e:
 #         logger.exception("Error running vEcoli simulation")
 #         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-# async def read_chunk(chunk_id: int):
-#     fp = f"{chunk_id}.pq"
-#     return pq.read_table(fp)
-
-
-# @app.get(
-#     path="/get-run",
-#     # response_model=HpcRun,
-#     operation_id="get-run",
-#     tags=["Simulations"],
-#     dependencies=[Depends(get_simulation_database_service), Depends(get_postgres_engine)],
-# )
-# async def get_results(hpc_run_id: str = Query(...)):
-#     try:
-#         results = {}
-#
-#         # 1. get ssh service
-#         ssh_svc: SSHService = get_ssh_service()
-#
-#         # 2. create slurm service with ssh svc
-#
-#         # 3. parse parent output dir filepath using run id
-#
-#         # 4. scp_download with slurm svc the appropriate pq file from #3
-#
-#         # 5.
-#         results = {}
-#         outdir = get_outdir_from_hpc(ssh_svc, hpc_run_id)
-#         chunk_paths = os.listdir(outdir)
-#         for fname in chunk_paths:
-#             remote_chunk_path = Path(os.path.join(outdir, fname))
-#             local_chunk_path = Path(os.path.join(tempfile.mkdtemp(), fname))
-#             await ssh_svc.scp_download(local_file=local_path, remote_path=remote_chunk_path)
-#             df = pq.read_table(local_chunk_path).to_pandas()
-#             results[fname.split(".")[0]] = df.to_dict()
-#
-#         return results
-#     except HTTPException as e:
-#         logger.exception("Error running PARCA")
-#         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-# @app.get(path="/check-services", operation_id="check-services", response_model=ServiceStatuses)
-# async def check_services():
-#     conf = {}
-#     for stype in ServiceTypes.all():
-#         try:
-#             _service = get_service(stype)
-#             status = ServiceStatuses.UP
-#         except HTTPException as e:
-#             status = ServiceStatuses.down(str(e))
-#         conf[stype.value] = status
-#     return ServiceStatuses(**conf)
 
 
 if __name__ == "__main__":
