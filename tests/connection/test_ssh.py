@@ -18,7 +18,7 @@ def get_key_path() -> str:
     return os.path.join(os.getenv("HOME", "/Users/alexanderpatrie"), ".ssh", "sms_id_rsa")
 
 
-async def run_test_ssh(host: str, username: str, key_fp: str) -> bool:
+async def run_test_ssh(host: str, username: str, key_fp: str, cmd: str | None = None) -> bool:
     try:
         async with asyncssh.connect(
             host=host,
@@ -26,7 +26,7 @@ async def run_test_ssh(host: str, username: str, key_fp: str) -> bool:
             client_keys=[key_fp],
             known_hosts=None,  # optional: disables host key checking
         ) as conn:
-            result = await conn.run("echo ping && whoami && echo $HOME", check=True)
+            result = await conn.run(cmd or "echo ping && whoami && echo $HOME", check=True)
             stdout = result.stdout.decode() if isinstance(result.stdout, bytes) else result.stdout
             if stdout is not None:
                 print(f"Connection successful.\nOutput: {stdout.strip()}")

@@ -1,4 +1,5 @@
 import os
+import shutil
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -24,6 +25,8 @@ if os.getenv(ENV_CONFIG_ENV_FILE) is not None and os.path.exists(str(os.getenv(E
 if os.getenv(ENV_SECRET_ENV_FILE) is not None and os.path.exists(str(os.getenv(ENV_SECRET_ENV_FILE))):
     load_dotenv(os.getenv(ENV_SECRET_ENV_FILE))
 
+os.environ["SLURM_SUBMIT_HOST"] = "login.hpc.cam.uchc.edu"
+
 
 class Settings(BaseSettings):
     storage_bucket: str = "files.biosimulations.dev"
@@ -44,8 +47,8 @@ class Settings(BaseSettings):
     mongodb_collection_sims: str = "BiosimSims"
     mongodb_collection_compare: str = "BiosimCompare"
 
-    postgres_user: str = "<USER>"
-    postgres_password: str = "<PASSWORD>"
+    postgres_user: str = os.getenv("POSTGRES_USER", "<USER>")
+    postgres_password: str = os.getenv("POSTGRES_PASSWORD", "<PASSWORD>")
     postgres_database: str = "sms"
     postgres_host: str = "localhost"
     postgres_port: int = 5432
@@ -54,13 +57,15 @@ class Settings(BaseSettings):
     postgres_pool_timeout: int = 30  # timeout for acquiring a connection from the pool in seconds
     postgres_pool_recycle: int = 1800  # recycle connections every seconds
 
-    slurm_submit_host: str = ""
-    slurm_submit_user: str = ""  # "svc_vivarium"
-    slurm_submit_key_path: str = ""  # "/Users/jimschaff/.ssh/id_rsa"
-    slurm_partition: str = ""
-    slurm_node_list: str = ""  # comma-separated list of nodes, e.g., "node1,node2"
-    slurm_qos: str = ""
-    slurm_log_base_path: str = ""
+    slurm_submit_host: str = "login.hpc.cam.uchc.edu"  # "mantis-sub-1.cam.uchc.edu"
+    slurm_submit_user: str = os.getenv("SLURM_SUBMIT_USER", "svc_vivarium")
+    slurm_submit_key_path: str = os.getenv(
+        "SLURM_SUBMIT_KEY_PATH", "/Users/alexanderpatrie/.ssh/sms_id_rsa"
+    )  # "/Users/jimschaff/.ssh/id_rsa"
+    slurm_partition: str = "vivarium"
+    slurm_node_list: str = "mantis-039"  # comma-separated list of nodes, e.g., "node1,node2"
+    slurm_qos: str = "vivarium"
+    slurm_log_base_path: str = "/home/FCAM/svc_vivarium/dev/htclogs"
 
     hpc_image_base_path: str = ""
     hpc_parca_base_path: str = ""
@@ -93,3 +98,7 @@ def get_local_cache_dir() -> Path:
     local_cache_dir = Path(settings.storage_local_cache_dir)
     local_cache_dir.mkdir(parents=True, exist_ok=True)
     return local_cache_dir
+
+
+def purge_local_cache_dir(local_cache_dir: Path) -> None:
+    shutil.rmtree(local_cache_dir)
