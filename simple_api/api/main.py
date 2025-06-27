@@ -150,8 +150,8 @@ class ServicePing(BaseModel):
 
 
 class SimulatorHash(BaseModel):
-    git_commit_hash: str 
-    git_repo_url: str 
+    git_commit_hash: str
+    git_repo_url: str
     git_branch: str
 
     def model_post_init(self, __context: Any) -> None:
@@ -159,7 +159,6 @@ class SimulatorHash(BaseModel):
         if abs(diff) > 0:
             reason = "short" if diff < 0 else "long"
             raise ValueError(f"The commit hash you provided ({self.git_commit_hash}) is too {reason}.")
-
 
 
 @app.get("/ping-db")
@@ -177,10 +176,7 @@ async def ping_db() -> ServicePing:
 
 
 @app.get(
-    "/latest-simulator-hash",
-    response_model=SimulatorHash,
-    operation_id="latest-simulator-hash",
-    tags=["Simulations"]
+    "/latest-simulator-hash", response_model=SimulatorHash, operation_id="latest-simulator-hash", tags=["Simulations"]
 )
 async def get_latest_simulator_hash(
     git_repo_url: str = Query(default="https://github.com/CovertLab/vEcoli"),
@@ -197,6 +193,7 @@ async def get_latest_simulator_hash(
     except Exception as e:
         logger.exception("Error getting the latest simulator commit.")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 @app.get(
     path="/simulator_version",

@@ -36,6 +36,7 @@ test: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
 	@make write-latest-commit
 	@poetry run pytest --cov --cov-config=pyproject.toml --cov-report=xml
+	@poetry run python tests/connection/test_ssh.py
 
 .PHONY: build
 build: clean-build ## Build wheel file using poetry
