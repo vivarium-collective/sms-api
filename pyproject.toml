@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "sms_api"
+name = "sms-api"
 version = "0.2.2"
 description = "This is the api server for Vivarium simulation services."
 authors = ["Alex Patrie <alex.patrie@gmail.com>"]
@@ -9,21 +9,24 @@ readme = "README.md"
 packages = [
     {include = "sms_api"},
     {include = "tests"},
+    {include = "simple_api"}
 ]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
 uvicorn = "^0.34.3"
 dotenv = "^0.9.9"
-fastapi = "^0.115.12"
 pydantic = "^2.11.5"
 asyncssh = "^2.21.0"
 pydantic-settings = "^2.9.1"
 pyyaml = "^6.0.2"
 typing-extensions = "^4.14.0"
-pymongo = "^4.13.0"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.41"}
 asyncpg = "^0.30.0"
+duckdb = "^1.3.1"
+fastapi = {version = "^0.115.14", extras = ["standard"]}
+passlib = "^1.7.4"
+pymongo = {version = "^4.13.2", extras = ["encryption"]}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
@@ -164,7 +167,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = ["orig-monorepo/*", ".venv/*"]
+exclude = ["orig-monorepo/*", ".venv/*", "sms_api/worker/*"]
 
 [tool.ruff.format]
 preview = true
