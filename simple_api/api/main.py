@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from enum import StrEnum
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import dotenv
 import pandas as pd
@@ -148,6 +149,19 @@ class ServicePing(BaseModel):
     dialect_driver: str
 
 
+class SimulatorHash(BaseModel):
+    git_commit_hash: str 
+    git_repo_url: str 
+    git_branch: str
+
+    def model_post_init(self, __context: Any) -> None:
+        diff = len(self.git_commit_hash) - 7
+        if abs(diff) > 0:
+            reason = "short" if diff < 0 else "long"
+            raise ValueError(f"The commit hash you provided ({self.git_commit_hash}) is too {reason}.")
+
+
+
 @app.get("/ping-db")
 async def ping_db() -> ServicePing:
     sim_db_service = get_simulation_database_service()
@@ -161,6 +175,28 @@ async def ping_db() -> ServicePing:
             dialect_driver=sim_db_service._engine.driver,
         )
 
+
+@app.get(
+    "/latest-simulator-hash",
+    response_model=SimulatorHash,
+    operation_id="latest-simulator-hash",
+    tags=["Simulations"]
+)
+async def get_latest_simulator_hash(
+    git_repo_url: str = Query(default="https://github.com/CovertLab/vEcoli"),
+    git_branch: str = Query(default="master"),
+) -> SimulatorHash:
+    hpc_service = SimulationServiceHpc()
+    if hpc_service is None:
+        logger.error("HPC service is not initialized")
+        raise HTTPException(status_code=500, detail="HPC service is not initialized")
+
+    try:
+        latest_commit = await hpc_service.get_latest_commit_hash()
+        return SimulatorHash(git_branch=git_branch, git_commit_hash=latest_commit, git_repo_url=git_repo_url)
+    except Exception as e:
+        logger.exception("Error getting the latest simulator commit.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 @app.get(
     path="/simulator_version",
