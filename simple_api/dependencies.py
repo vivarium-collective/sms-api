@@ -85,7 +85,7 @@ def get_async_engine(enable_ssl: bool = True, **engine_params) -> AsyncEngine:
 
 async def init_standalone(
         env_path: Path | None = None,
-        enable_ssl: bool = False
+        enable_ssl: bool = True
 ) -> None:
     """
     NOTE: The following command works: `psql -h localhost -p 65432 -U alexanderpatrie sms` which is -> `psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER $POSTGRES_DB`

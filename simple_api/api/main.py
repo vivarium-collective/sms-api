@@ -11,11 +11,13 @@
 - endpoint to send sql like queries to parquet files back to client
 """
 
+from functools import partial
 import io
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from enum import StrEnum
+import os
 from pathlib import Path
 
 import dotenv
@@ -58,11 +60,9 @@ from simple_api.version import __version__
 logger = logging.getLogger(__name__)
 setup_logging(logger)
 
-dotenv.load_dotenv('assets/dev/config/.dev_env')
-
 
 class ServerModes(StrEnum):
-    DEV = "http://localhost:3001"
+    DEV = "http://localhost:8888"
     PROD = "https://sms.cam.uchc.edu"
 
 
@@ -100,7 +100,18 @@ router = APIRouter()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
-    await init_standalone()
+    dev_mode_warning = None
+    env_path = 'assets/dev/config/.dev_env'
+    dotenv.load_dotenv(env_path)
+    dev_mode = os.getenv('DEV_MODE', '0')
+    start_standalone = partial(init_standalone, env_path=Path(env_path))
+    if bool(int(dev_mode)):
+        dev_mode_warning = f"Development Mode is currently engaged!!!"
+        start_standalone.keywords['enable_ssl'] = False
+
+    await start_standalone()
+    if dev_mode_warning:
+        logger.warning(f"Development Mode is currently engaged!!!", stacklevel=1)
     yield
     await shutdown_standalone()
 
