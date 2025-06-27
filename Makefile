@@ -151,8 +151,8 @@ usr:
 	@echo
 
 # --name postgresql
-.PHONY: pgdb
-pgdb:
+.PHONY: dbup
+dbup:
 	@service_name="pgdb"; \
 	[ -z "$(port)" ] && port=${LOCAL_POSTGRES_PORT} || port=$(port); \
 	[ -z "$(password)" ] && password=${LOCAL_POSTGRES_PASSWORD} || password=$(password); \
@@ -165,35 +165,39 @@ pgdb:
 		-p $$port:${POSTGRES_PORT} \
 		postgres:17
 
-.PHONY: mongoup-local
-mongoup-local:
+.PHONY: dbdown
+dbdown:
+	@make rmcont name="pgdb"
+
+.PHONY: mongoup
+mongoup:
 	@docker run -d \
 		--name mongodb \
 		-p $(port):$(port) \
 		mongo
 
-.PHONY: perconaup-local
-perconaup-local:
+.PHONY: percona
+percona:
 	@docker run -d --name psmdb -p 27017:27017 --restart always percona/percona-server-mongodb:6.0.24-19
 
-.PHONY: externalup
-externalup:
+.PHONY: compose-external
+compose-external:
 	@echo "Starting the following services: mongodb, postgresql, nats"
 	@docker compose up mongodb pgdb broker
 
-.PHONY: dockrem
-dockrem:
+.PHONY: rmcont
+rmcont:
 	@docker rm -f $(name)
 
-.PHONY: pgping
-pgping:
-	@echo "Use the local password: ${LOCAL_POSTGRES_PASSWORD} and username: ${LOCAL_POSTGRES_USER}"; \
+# this command should run psql -h localhost -p 65432 -U alexanderpatrie sms
+.PHONY: pingpg
+pingpg:
+	@[ -z "$(user)" ] && user=${LOCAL_POSTGRES_USER} || user=$(user); \
 	[ -z "$(port)" ] && port=${LOCAL_POSTGRES_PORT} || port=$(port); \
 	psql -h localhost -p $$port -U ${LOCAL_POSTGRES_USER} sms;
-# psql -h localhost -p 65432 -U alexanderpatrie sms
 
-.PHONY: quickping
-quickping:
+.PHONY: pingdb
+pingdb:
 	@psql "postgresql://alexanderpatrie:dev@localhost:65432/sms?sslmode=disable"
 
 .DEFAULT_GOAL := help
