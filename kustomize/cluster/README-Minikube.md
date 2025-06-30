@@ -87,6 +87,7 @@ helm install sealed-secrets -n kube-system \
      --set-string fullnameOverride=sealed-secrets-controller sealed-secrets/sealed-secrets
 ```
 
+# prom-operator
 create a secret and seal it
 
 ```bash
@@ -165,6 +166,13 @@ for vcell-rest, vcell-api and s3proxy services
 sudo minikube tunnel
 ```
 
+### build and push the containers (!_)
+
+```bash
+docker login ghcr.io -u <GITHUB_USERNAME> -p <GITHUB_CONTAINER_ACCESS_TOKEN>
+./scripts/build_and_push.sh
+```
+
 ### expose NATS message broker to UCH routable ip address
 
 for nats service to receive status messages from simulation workers on HPC cluster
@@ -191,3 +199,10 @@ sed -i '' "s/jmshost_sim_external=.*/jmshost_sim_external=${EXTERNAL_IP}/" ./con
 ```bash
 kubectl get secret sms-postgres-cluster-app -n postgres-cluster -o jsonpath="{.data.password}" | base64 -d
 ```
+
+
+### making updates
+
+./scripts/build_and_push.sh
+kubectl kustomize overlays/sms-api-local | kubectl apply -f -
+

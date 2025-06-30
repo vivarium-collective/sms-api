@@ -73,6 +73,10 @@ apply:
 	@kubectl kustomize kustomize/overlays/sms-api-local | kubectl apply -f -
 	@make restart
 
+.PHONY: restart-deployment
+restart-deployment:
+	@kubectl rollout restart deployment $(name) -n sms-api-local
+
 .PHONY: check-minikube
 check-minikube:
 	@is_minikube=$$(poetry run python -c "import os; print(str('minikube' in os.getenv('KUBECONFIG', '')).lower())"); \
@@ -95,9 +99,22 @@ new:
 	@make new-build
 	@make apply
 
+
 .PHONY: restart-deployment
 restart-deployment:
 	@kubectl rollout restart deployment -n $(namespace)
+
+.PHONY: update
+update:
+	# @make check
+	@make new
+	@make restart-deployment name=$(name)
+
+.PHONY: apply
+apply:
+	@cd kustomize
+	@kubectl kustomize overlays/sms-api-local | kubectl apply -f -
+	@cd ..
 
 .PHONY: restart
 restart:
