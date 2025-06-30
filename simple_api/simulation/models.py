@@ -28,7 +28,7 @@ class HpcRun(BaseModel):
     error_message: str | None = None  # Error message if the simulation failed
 
 
-class SimulatorHash(BaseModel):
+class _SimulatorHash(BaseModel):
     latest_commit: str
 
     def model_post_init(self, __context: Any) -> None:
@@ -39,11 +39,11 @@ class SimulatorHash(BaseModel):
 
     def model_dump(self):
         return self.latest_commit
-
+    
 
 class SimulatorVersion(BaseModel):
     database_id: int  # Unique identifier for the simulator version
-    git_commit_hash: str | SimulatorHash = Field(
+    git_commit_hash: str  = Field(
         default_factory=read_latest_commit
     )  # Git commit hash for the specific simulator version (first 7 characters)
     git_repo_url: str = "https://github.com/CovertLab/vEcoli"  # Git repository URL for the simulator
@@ -114,3 +114,9 @@ class ServicePing(BaseModel):
     service_type: ServiceTypes
     dialect_name: str
     dialect_driver: str
+
+
+class Namespaces(StrEnum):
+    DEVELOPMENT = "dev"
+    PRODUCTION = "prod"
+    TEST = "test"

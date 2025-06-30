@@ -4,6 +4,7 @@ LOCAL_POSTGRES_DB=sms
 LOCAL_POSTGRES_HOST=localhost
 LOCAL_POSTGRES_PORT=65432
 POSTGRES_PORT=5432
+LATEST_COMMIT_PATH=assets/latest_commit.txt
 
 
 .PHONY: install
@@ -120,8 +121,8 @@ apply:
 restart:
 	@make restart-deployment namespace="sms-api-local"
 
-.PHONY: latest-commit
-latest-commit:
+.PHONY: write-latest-commit
+write-latest-commit:
 	@poetry run python sms_api/latest_commit.py
 
 .PHONY: repl
@@ -219,8 +220,23 @@ pingpg:
 pingdb:
 	@psql "postgresql://alexanderpatrie:dev@localhost:65432/sms?sslmode=disable"
 
-.PHONY: check-latest
-check-latest:
-	@curl -s https://api.github.com/repos/CovertLab/vEcoli/commits/master | jq -r '"\(.sha[0:7]) \(.commit.author.date)"'
+.PHONY: get-latest-simulator
+get-latest-simulator:
+	@latest=$$( \
+		curl -s https://api.github.com/repos/CovertLab/vEcoli/commits/master \
+		| jq -r '"\(.sha[0:7]) \(.commit.author.date)"' \
+	); \
+	echo $${latest} | awk '{print $$1}'
+
+.PHONY: latest-simulator 
+latest-simulator:
+	@latest_commit=$$(make get-latest-simulator | awk '{print $1}'); \
+	latest_known=$$(cat ${LATEST_COMMIT_PATH}); \
+	if [ $$latest_commit != $$latest_known ]; then \
+		echo $$latest_commit > ${LATEST_COMMIT_PATH}; \
+	else \
+		echo "You have the latest commit."; \
+	fi; \
+	cat ${LATEST_COMMIT_PATH}
 
 .DEFAULT_GOAL := help
