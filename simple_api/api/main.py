@@ -39,7 +39,7 @@ from simple_api.dependencies import (
     shutdown_standalone,
 )
 from simple_api.log_config import setup_logging
-from simple_api.simulation.database_service import SimulationDatabaseService
+from simple_api.simulation.db_service import SimulationDatabaseService
 from simple_api.simulation.dispatch import run_simulation
 from simple_api.simulation.hpc_utils import format_experiment_path, get_experiment_dirname
 from simple_api.simulation.models import (
@@ -161,7 +161,7 @@ async def get_latest_simulator_hash(
 
     try:
         latest_commit = await hpc_service.get_latest_commit_hash(git_branch=git_branch, git_repo_url=git_repo_url)
-        return SimulatorHash(latest_commit=latest_commit)
+        return SimulatorHash(latest_commit)
     except Exception as e:
         logger.exception("Error getting the latest simulator commit.")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -351,6 +351,8 @@ async def get_results(
         logger.exception(f"Error fetching simulation results for id: {database_id}.")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
+
+# mount remote drives as persistent volume 
 
 @app.get(
     path="/test-get-results",

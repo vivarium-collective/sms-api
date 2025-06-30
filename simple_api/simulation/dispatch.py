@@ -16,7 +16,7 @@ from pathlib import Path
 from simple_api.common.hpc.models import SlurmJob
 from simple_api.common.hpc.sim_utils import get_single_simulation_chunks_dirpath, read_latest_commit
 from simple_api.config import get_settings
-from simple_api.simulation.database_service import SimulationDatabaseService
+from simple_api.simulation.db_service import SimulationDatabaseService
 from simple_api.simulation.hpc_utils import format_experiment_path, get_experiment_dirname
 from simple_api.simulation.models import (
     EcoliSimulation,

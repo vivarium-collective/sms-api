@@ -12,7 +12,7 @@ from simple_api.common.hpc.models import SlurmJob
 from simple_api.common.hpc.slurm_service import SlurmService
 from simple_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from simple_api.config import get_settings
-from simple_api.simulation.database_service import SimulationDatabaseService
+from simple_api.simulation.db_service import SimulationDatabaseService
 from simple_api.simulation.hpc_utils import (
     get_apptainer_image_file,
     get_experiment_path,

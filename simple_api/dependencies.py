@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from simple_api.config import get_settings
 from simple_api.log_config import setup_logging
-from simple_api.simulation.database_service import SimulationDatabaseService, SimulationDatabaseServiceSQL
+from simple_api.simulation.db_service import SimulationDatabaseService, SimulationDatabaseServiceSQL
 from simple_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
 from simple_api.simulation.tables_orm import create_db
 
