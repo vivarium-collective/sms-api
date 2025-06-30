@@ -28,9 +28,22 @@ class HpcRun(BaseModel):
     error_message: str | None = None  # Error message if the simulation failed
 
 
+class SimulatorHash(BaseModel):
+    latest_commit: str
+
+    def model_post_init(self, __context: Any) -> None:
+        diff = len(self.latest_commit) - 7
+        if abs(diff) > 0:
+            reason = "short" if diff < 0 else "long"
+            raise ValueError(f"The commit hash you provided ({self.latest_commit}) is too {reason}.")
+
+    def model_dump(self):
+        return self.latest_commit
+
+
 class SimulatorVersion(BaseModel):
     database_id: int  # Unique identifier for the simulator version
-    git_commit_hash: str = Field(
+    git_commit_hash: str | SimulatorHash = Field(
         default_factory=read_latest_commit
     )  # Git commit hash for the specific simulator version (first 7 characters)
     git_repo_url: str = "https://github.com/CovertLab/vEcoli"  # Git repository URL for the simulator
@@ -101,13 +114,3 @@ class ServicePing(BaseModel):
     service_type: ServiceTypes
     dialect_name: str
     dialect_driver: str
-
-
-class SimulatorHash(BaseModel):
-    latest_commit_hash: str
-
-    def model_post_init(self, __context: Any) -> None:
-        diff = len(self.latest_commit_hash) - 7
-        if abs(diff) > 0:
-            reason = "short" if diff < 0 else "long"
-            raise ValueError(f"The commit hash you provided ({self.latest_commit_hash}) is too {reason}.")

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from simple_api.config import Settings, get_settings
+from simple_api.config import get_settings
 from simple_api.simulation.models import EcoliSimulation, ParcaDataset, SimulatorVersion
 
 
@@ -45,8 +45,9 @@ def get_experiment_dirname(database_id: int, git_commit_hash: str) -> str:
     return f"experiment_{git_commit_hash}_id_{database_id}"
 
 
-def format_experiment_path(settings: Settings, experiment_dirname: str) -> Path:
-    return Path(settings.hpc_sim_base_path) / experiment_dirname
+def format_experiment_path(experiment_dirname: str, namespace: str = "test") -> Path:
+    base_path = f"/home/FCAM/svc_vivarium/{namespace}/sims"
+    return Path(base_path) / experiment_dirname
 
 
 def get_experiment_path_from_database_id(database_id: int, git_commit_hash: str) -> Path:

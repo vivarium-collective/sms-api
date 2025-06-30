@@ -3,8 +3,10 @@ import os
 import warnings
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Callable
 
 import dotenv
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from simple_api.config import get_settings
@@ -24,6 +26,18 @@ DEFAULT_POSTGRES_USER = os.getenv("USER")
 global_postgres_engine: AsyncEngine | None = None
 
 
+def verify_service(getter: Callable):
+    def wrapper():
+        service = getter()
+        if service is None:
+            logger.error("Simulation database service is not initialized")
+            raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+        else:
+            return service
+
+    return wrapper
+
+
 def set_postgres_engine(engine: AsyncEngine | None) -> None:
     global global_postgres_engine
     global_postgres_engine = engine
@@ -36,17 +50,18 @@ def get_postgres_engine() -> AsyncEngine | None:
 
 # ------- simulation database service (standalone or pytest) ------
 
-global_simulation_database_service: SimulationDatabaseService | SimulationDatabaseServiceSQL | None = None
+global_simulation_database_service: SimulationDatabaseService | None = None
 
 
 def set_simulation_database_service(
-    database_service: SimulationDatabaseService | SimulationDatabaseServiceSQL | None,
+    database_service: SimulationDatabaseService | None,
 ) -> None:
     global global_simulation_database_service
     global_simulation_database_service = database_service
 
 
-def get_simulation_database_service() -> SimulationDatabaseService | SimulationDatabaseServiceSQL | None:
+@verify_service
+def get_simulation_database_service() -> SimulationDatabaseService | None:
     global global_simulation_database_service
     return global_simulation_database_service
 
@@ -61,6 +76,7 @@ def set_simulation_service(simulation_service: SimulationService | None) -> None
     global_simulation_service = simulation_service
 
 
+@verify_service
 def get_simulation_service() -> SimulationService | None:
     global global_simulation_service
     return global_simulation_service
