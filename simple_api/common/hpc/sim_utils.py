@@ -15,10 +15,10 @@ def get_single_simulation_chunks_dirpath(remote_dir_root: Path) -> Path:
         os.path.join(
             remote_dir_root,
             "history",
-            f"'experiment_id={experiment_dirname}",
-            "'variant=0'",
-            "'lineage_seed=0'",
-            "'generation=1'",
-            "'agent_id=0'",
+            f"experiment_id={experiment_dirname}",
+            "variant=0",
+            "lineage_seed=0",
+            "generation=1",
+            "agent_id=0",
         )
     )
