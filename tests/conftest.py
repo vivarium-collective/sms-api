@@ -14,3 +14,7 @@ from tests.fixtures.slurm_fixtures import (  # noqa: F401
     slurm_template_hello,
     ssh_service,
 )
+from tests.fixtures.results_fixtures import (
+    latest_commit, 
+    expected_columns
+)
