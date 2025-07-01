@@ -12,13 +12,22 @@ from sms_api.simulation.models import (
     ParcaDataset,
     ParcaDatasetRequest,
     SimulatorVersion,
+    WorkerEvent,
 )
-from sms_api.simulation.tables_orm import ORMHpcRun, ORMParcaDataset, ORMSimulation, ORMSimulator
+from sms_api.simulation.tables_orm import ORMHpcRun, ORMParcaDataset, ORMSimulation, ORMSimulator, ORMWorkerEvent
 
 logger = logging.getLogger(__name__)
 
 
 class SimulationDatabaseService(ABC):
+    @abstractmethod
+    async def insert_worker_event(self, worker_event: WorkerEvent) -> WorkerEvent:
+        pass
+
+    @abstractmethod
+    async def list_worker_events(self, sim_job_id: int, prev_sequence_number: int | None = None) -> list[WorkerEvent]:
+        pass
+
     @abstractmethod
     async def insert_simulator(self, git_commit_hash: str, git_repo_url: str, git_branch: str) -> SimulatorVersion:
         pass
@@ -362,6 +371,38 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                     )
                 )
             return parca_datasets
+
+    @override
+    async def insert_worker_event(self, worker_event: WorkerEvent) -> WorkerEvent:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_worker_event = ORMWorkerEvent.from_worker_event(worker_event)
+            session.add(orm_worker_event)
+            await session.flush()  # Ensure the ORM object is inserted and has an ID
+
+            # prepare the EcoliSimulation object to return
+            new_worker_event = orm_worker_event.to_worker_event()
+            return new_worker_event
+
+    @override
+    async def list_worker_events(self, sim_job_id: int, prev_sequence_number: int | None = None) -> list[WorkerEvent]:
+        async with self.async_sessionmaker() as session, session.begin():
+            stmt = (
+                select(ORMWorkerEvent)
+                .where(
+                    and_(
+                        ORMWorkerEvent.hpcrun_id == sim_job_id,
+                        ORMWorkerEvent.sequence_number > (prev_sequence_number or -1),
+                    )
+                )
+                .order_by(ORMWorkerEvent.sequence_number)
+            )
+            result: Result[tuple[ORMWorkerEvent]] = await session.execute(stmt)
+            orm_worker_events = result.scalars().all()
+
+            worker_events: list[WorkerEvent] = []
+            for orm_worker_event in orm_worker_events:
+                worker_events.append(orm_worker_event.to_worker_event())
+            return worker_events
 
     @override
     async def insert_simulation(self, sim_request: EcoliSimulationRequest) -> EcoliSimulation:

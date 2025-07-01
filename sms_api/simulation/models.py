@@ -64,3 +64,13 @@ class EcoliSimulation(BaseModel):
     database_id: int
     sim_request: EcoliSimulationRequest
     hpc_run: HpcRun | None = None  # HPC run ID if applicable
+
+
+class WorkerEvent(BaseModel):
+    database_id: int  # Unique identifier for the worker event (created by the database)
+    created_at: str  # ISO format datetime string (created by the database)
+    hpcrun_id: int  # Unique identifier for the simulation job
+    sequence_number: int  # Sequence number provided by the message producer (emitter)
+    sim_data: list[tuple[str, str, float]]  # Simulation data with label/path/value
+    global_time: float | None = None  # Global time of the simulation, if applicable
+    error_message: str | None = None

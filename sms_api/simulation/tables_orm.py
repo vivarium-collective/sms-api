@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from sms_api.simulation.models import JobStatus
+from sms_api.simulation.models import JobStatus, WorkerEvent
 
 
 class JobStatusDB(enum.Enum):
@@ -80,6 +80,40 @@ class ORMSimulation(Base):
     variant_config: Mapped[dict[str, dict[str, int | float | str]]] = mapped_column(JSONB, nullable=False)
     variant_config_hash: Mapped[str] = mapped_column(nullable=False)
     hpcrun_id: Mapped[Optional[int]] = mapped_column(ForeignKey("hpcrun.id"), nullable=True, index=True)
+
+
+class ORMWorkerEvent(Base):
+    __tablename__ = "worker_event"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+    sequence_number: Mapped[int] = mapped_column(nullable=False, index=True)
+    sim_data: Mapped[list[tuple[str, str, float]]] = mapped_column(JSONB, nullable=False)
+    global_time: Mapped[Optional[float]] = mapped_column(nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(nullable=True)
+    hpcrun_id: Mapped[int] = mapped_column(ForeignKey("hpcrun.id"), nullable=False, index=True)
+
+    @classmethod
+    def from_worker_event(cls, worker_event: "WorkerEvent") -> "ORMWorkerEvent":
+        return cls(
+            sequence_number=worker_event.sequence_number,
+            sim_data=worker_event.sim_data,
+            global_time=worker_event.global_time,
+            error_message=worker_event.error_message,
+            hpcrun_id=worker_event.hpcrun_id,
+        )
+
+    def to_worker_event(self) -> WorkerEvent:
+        return WorkerEvent(
+            database_id=self.id,
+            created_at=str(self.created_at),
+            sequence_number=self.sequence_number,
+            sim_data=self.sim_data,
+            global_time=self.global_time,
+            error_message=self.error_message,
+            hpcrun_id=self.hpcrun_id,
+        )
 
 
 async def create_db(async_engine: AsyncEngine) -> None:

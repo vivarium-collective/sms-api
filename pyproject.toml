@@ -24,6 +24,7 @@ typing-extensions = "^4.14.0"
 pymongo = "^4.13.0"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.41"}
 asyncpg = "^0.30.0"
+nats-py = "^2.10.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
@@ -35,7 +36,7 @@ tox = "^4.11.1"
 types-requests = "^2.32.0.20250602"
 types-pyyaml = "^6.0.12.20250516"
 pytest-asyncio = "^1.0.0"
-testcontainers = "^4.10.0"
+testcontainers = {extras = ["nats", "postgres"], version = "^4.10.0"}
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.2"
