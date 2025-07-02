@@ -1,8 +1,15 @@
+import enum
 import hashlib
 import json
 from enum import StrEnum
 
 from pydantic import BaseModel
+
+
+class JobType(enum.Enum):
+    SIMULATION = "simulation"
+    PARCA = "parca"
+    BUILD_IMAGE = "build_image"
 
 
 class JobStatus(StrEnum):
@@ -15,7 +22,9 @@ class JobStatus(StrEnum):
 
 class HpcRun(BaseModel):
     database_id: int
-    slurmjobid: int | None = None  # Slurm job ID if applicable
+    slurmjobid: int  # Slurm job ID if applicable
+    job_type: JobType
+    ref_id: int  # primary key of the object this HPC run is associated with (sim, parca, etc.)
     status: JobStatus | None = None
     start_time: str | None = None  # ISO format datetime string
     end_time: str | None = None  # ISO format datetime string or None if still running
@@ -44,7 +53,6 @@ class ParcaDataset(BaseModel):
     database_id: int  # Unique identifier for the dataset
     parca_dataset_request: ParcaDatasetRequest  # Request parameters for the dataset
     remote_archive_path: str | None = None  # Path to the dataset archive in remote storage
-    hpc_run: HpcRun | None = None  # HPC run ID if applicable
 
 
 class EcoliSimulationRequest(BaseModel):
@@ -63,12 +71,11 @@ class EcoliSimulationRequest(BaseModel):
 class EcoliSimulation(BaseModel):
     database_id: int
     sim_request: EcoliSimulationRequest
-    hpc_run: HpcRun | None = None  # HPC run ID if applicable
 
 
 class WorkerEvent(BaseModel):
-    database_id: int  # Unique identifier for the worker event (created by the database)
-    created_at: str  # ISO format datetime string (created by the database)
+    database_id: int | None = None  # Unique identifier for the worker event (created by the database)
+    created_at: str | None = None  # ISO format datetime string (created by the database)
     hpcrun_id: int  # Unique identifier for the simulation job
     sequence_number: int  # Sequence number provided by the message producer (emitter)
     sim_data: list[tuple[str, str, float]]  # Simulation data with label/path/value

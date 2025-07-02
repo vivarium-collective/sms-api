@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from sms_api.simulation.models import JobStatus, WorkerEvent
+from sms_api.simulation.models import HpcRun, JobStatus, JobType, WorkerEvent
 
 
 class JobStatusDB(enum.Enum):
@@ -21,10 +21,17 @@ class JobStatusDB(enum.Enum):
         return JobStatus(self.value)
 
 
-class JobType(enum.Enum):
+class JobTypeDB(enum.Enum):
     SIMULATION = "simulation"
     PARCA = "parca"
     BUILD_IMAGE = "build_image"
+
+    def to_job_type(self) -> JobType:
+        return JobType(self.value)
+
+    @classmethod
+    def from_job_type(cls, job_type: JobType) -> "JobTypeDB":
+        return JobTypeDB(job_type.value)
 
 
 class Base(AsyncAttrs, DeclarativeBase):
@@ -39,7 +46,6 @@ class ORMSimulator(Base):
     git_repo_url: Mapped[str] = mapped_column(nullable=False)
     git_branch: Mapped[str] = mapped_column(nullable=False)
     git_commit_hash: Mapped[str] = mapped_column(nullable=False)  # first 7 characters of the commit hash
-    hpcrun_id: Mapped[Optional[int]] = mapped_column(ForeignKey("hpcrun.id"), nullable=True, index=True)
 
 
 class ORMHpcRun(Base):
@@ -48,12 +54,30 @@ class ORMHpcRun(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
-    job_type: Mapped[JobType] = mapped_column(nullable=False)
-    slurmjobid: Mapped[Optional[int]] = mapped_column(nullable=True)
+    job_type: Mapped[JobTypeDB] = mapped_column(nullable=False)
+    slurmjobid: Mapped[int] = mapped_column(nullable=True)
     start_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
     end_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
     status: Mapped[JobStatusDB] = mapped_column(nullable=False)
     error_message: Mapped[Optional[str]] = mapped_column(nullable=True)
+    jobref_simulation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("simulation.id"), nullable=True, index=True)
+    jobref_parca_dataset_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("parca_dataset.id"), nullable=True, index=True
+    )
+    jobref_simulator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("simulator.id"), nullable=True, index=True)
+
+    def to_hpc_run(self) -> HpcRun:
+        ref_id = self.jobref_simulation_id or self.jobref_parca_dataset_id or self.jobref_simulator_id
+        if ref_id is None:
+            raise RuntimeError("ORMHpcRun must have at least one job reference set.")
+        return HpcRun(
+            database_id=self.id,
+            slurmjobid=self.slurmjobid,
+            job_type=self.job_type.to_job_type(),
+            ref_id=ref_id,
+            status=self.status.to_job_status(),
+            error_message=self.error_message,
+        )
 
 
 class ORMParcaDataset(Base):
@@ -65,7 +89,6 @@ class ORMParcaDataset(Base):
     simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
     parca_config: Mapped[dict[str, int | float | str]] = mapped_column(JSONB, nullable=False)
     parca_config_hash: Mapped[str] = mapped_column(nullable=False)
-    hpcrun_id: Mapped[Optional[int]] = mapped_column(ForeignKey("hpcrun.id"), nullable=True, index=True)
     remote_archive_path: Mapped[Optional[str]] = mapped_column(nullable=True)
 
 
@@ -79,7 +102,6 @@ class ORMSimulation(Base):
     parca_dataset_id: Mapped[int] = mapped_column(ForeignKey("parca_dataset.id"), nullable=False, index=True)
     variant_config: Mapped[dict[str, dict[str, int | float | str]]] = mapped_column(JSONB, nullable=False)
     variant_config_hash: Mapped[str] = mapped_column(nullable=False)
-    hpcrun_id: Mapped[Optional[int]] = mapped_column(ForeignKey("hpcrun.id"), nullable=True, index=True)
 
 
 class ORMWorkerEvent(Base):

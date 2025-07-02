@@ -12,4 +12,3 @@ async def nats_client() -> AsyncGenerator[NATSClient, None]:
         client = await nats.connect(nats_container.nats_uri())
         yield client
         await client.close()
-

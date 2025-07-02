@@ -3,8 +3,8 @@ from typing import Any
 
 from nats.aio.client import Client as NATSClient
 from nats.aio.msg import Msg
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from sms_api.config import get_settings
 from sms_api.simulation.models import WorkerEvent
 from sms_api.simulation.simulation_database import SimulationDatabaseService
 
@@ -19,8 +19,9 @@ class JobScheduler:
         self.nats_client = nats_client
         self.database_service = database_service
 
-    async def subscribe(self, session: AsyncSession, simulator_id: int) -> None:
-        logger.debug(f"Subscribing to NATS messages for simulator_id: {simulator_id}")
+    async def subscribe(self) -> None:
+        subject = get_settings().nats_worker_event_subject
+        logger.info(f"Subscribing to NATS messages for subject '{subject}'")
 
         async def message_handler(msg: Msg) -> Any:
             subject = msg.subject
@@ -29,7 +30,7 @@ class JobScheduler:
             worker_event = WorkerEvent.model_validate_json(data)
             _updated_worker_event = await self.database_service.insert_worker_event(worker_event)
 
-        await self.nats_client.subscribe(f"simulator.{simulator_id}", cb=message_handler)
+        await self.nats_client.subscribe(subject=subject, cb=message_handler)
 
     async def close(self) -> None:
         logger.debug("Closing NATS client connection")
