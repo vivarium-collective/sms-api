@@ -1,13 +1,12 @@
 # EcoliSimulationRun
 
-
 ## Properties
 
-Name | Type | Description | Notes
------------- | ------------- | ------------- | -------------
-**job_id** | **int** |  | 
-**simulation** | [**EcoliSimulation**](EcoliSimulation.md) |  | 
-**last_update** | **str** |  | [optional] 
+| Name            | Type                                      | Description | Notes      |
+| --------------- | ----------------------------------------- | ----------- | ---------- |
+| **job_id**      | **int**                                   |             |
+| **simulation**  | [**EcoliSimulation**](EcoliSimulation.md) |             |
+| **last_update** | **str**                                   |             | [optional] |
 
 ## Example
 
@@ -26,6 +25,5 @@ ecoli_simulation_run_dict = ecoli_simulation_run_instance.to_dict()
 # create an instance of EcoliSimulationRun from a dict
 ecoli_simulation_run_from_dict = EcoliSimulationRun.from_dict(ecoli_simulation_run_dict)
 ```
+
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

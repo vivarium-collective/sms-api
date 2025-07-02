@@ -1,14 +1,13 @@
 # ParcaDataset
 
-
 ## Properties
 
-Name | Type | Description | Notes
------------- | ------------- | ------------- | -------------
-**database_id** | **int** |  | 
-**parca_dataset_request** | [**ParcaDatasetRequest**](ParcaDatasetRequest.md) |  | 
-**remote_archive_path** | **str** |  | [optional] 
-**hpc_run** | [**HpcRun**](HpcRun.md) |  | [optional] 
+| Name                      | Type                                              | Description | Notes      |
+| ------------------------- | ------------------------------------------------- | ----------- | ---------- |
+| **database_id**           | **int**                                           |             |
+| **parca_dataset_request** | [**ParcaDatasetRequest**](ParcaDatasetRequest.md) |             |
+| **remote_archive_path**   | **str**                                           |             | [optional] |
+| **hpc_run**               | [**HpcRun**](HpcRun.md)                           |             | [optional] |
 
 ## Example
 
@@ -27,6 +26,5 @@ parca_dataset_dict = parca_dataset_instance.to_dict()
 # create an instance of ParcaDataset from a dict
 parca_dataset_from_dict = ParcaDataset.from_dict(parca_dataset_dict)
 ```
+
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

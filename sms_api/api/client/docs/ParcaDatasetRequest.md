@@ -1,12 +1,11 @@
 # ParcaDatasetRequest
 
-
 ## Properties
 
-Name | Type | Description | Notes
------------- | ------------- | ------------- | -------------
-**simulator_version** | [**SimulatorVersion**](SimulatorVersion.md) |  | 
-**parca_config** | [**Dict[str, VariantConfigValueValue]**](VariantConfigValueValue.md) |  | 
+| Name                  | Type                                                                 | Description | Notes |
+| --------------------- | -------------------------------------------------------------------- | ----------- | ----- |
+| **simulator_version** | [**SimulatorVersion**](SimulatorVersion.md)                          |             |
+| **parca_config**      | [**Dict[str, VariantConfigValueValue]**](VariantConfigValueValue.md) |             |
 
 ## Example
 
@@ -25,6 +24,5 @@ parca_dataset_request_dict = parca_dataset_request_instance.to_dict()
 # create an instance of ParcaDatasetRequest from a dict
 parca_dataset_request_from_dict = ParcaDatasetRequest.from_dict(parca_dataset_request_dict)
 ```
+
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

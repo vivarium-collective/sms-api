@@ -1,24 +1,23 @@
 # sms_api.api.client.SimulationsApi
 
-All URIs are relative to *http://localhost*
+All URIs are relative to _http://localhost_
 
-Method | HTTP request | Description
-------------- | ------------- | -------------
-[**calculate_parameters**](SimulationsApi.md#calculate_parameters) | **POST** /vecoli_parca | Run a parameter calculation
-[**get_results**](SimulationsApi.md#get_results) | **GET** /get-results | Get Results
-[**get_simulator_version**](SimulationsApi.md#get_simulator_version) | **GET** /simulator_version | get the list of available simulator versions
-[**insert_simulator_version**](SimulationsApi.md#insert_simulator_version) | **POST** /simulator_version | Upload a new simulator (vEcoli) version.
-[**run_simulation**](SimulationsApi.md#run_simulation) | **POST** /run-simulation | Run a single vEcoli simulation with given parameter overrides
-[**submit_simulation**](SimulationsApi.md#submit_simulation) | **POST** /vecoli_simulation | Submit to the db a single vEcoli simulation with given parameter overrides.
-
+| Method                                                                     | HTTP request                | Description                                                                 |
+| -------------------------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------- |
+| [**calculate_parameters**](SimulationsApi.md#calculate_parameters)         | **POST** /vecoli_parca      | Run a parameter calculation                                                 |
+| [**get_results**](SimulationsApi.md#get_results)                           | **GET** /get-results        | Get Results                                                                 |
+| [**get_simulator_version**](SimulationsApi.md#get_simulator_version)       | **GET** /simulator_version  | get the list of available simulator versions                                |
+| [**insert_simulator_version**](SimulationsApi.md#insert_simulator_version) | **POST** /simulator_version | Upload a new simulator (vEcoli) version.                                    |
+| [**run_simulation**](SimulationsApi.md#run_simulation)                     | **POST** /run-simulation    | Run a single vEcoli simulation with given parameter overrides               |
+| [**submit_simulation**](SimulationsApi.md#submit_simulation)               | **POST** /vecoli_simulation | Submit to the db a single vEcoli simulation with given parameter overrides. |
 
 # **calculate_parameters**
+
 > ParcaDataset calculate_parameters(parca_dataset_request)
 
 Run a parameter calculation
 
 ### Example
-
 
 ```python
 import sms_api.api.client
@@ -38,7 +37,7 @@ configuration = sms_api.api.client.Configuration(
 with sms_api.api.client.ApiClient(configuration) as api_client:
     # Create an instance of the API class
     api_instance = sms_api.api.client.SimulationsApi(api_client)
-    parca_dataset_request = sms_api.api.client.ParcaDatasetRequest() # ParcaDatasetRequest | 
+    parca_dataset_request = sms_api.api.client.ParcaDatasetRequest() # ParcaDatasetRequest |
 
     try:
         # Run a parameter calculation
@@ -49,14 +48,11 @@ with sms_api.api.client.ApiClient(configuration) as api_client:
         print("Exception when calling SimulationsApi->calculate_parameters: %s\n" % e)
 ```
 
-
-
 ### Parameters
 
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **parca_dataset_request** | [**ParcaDatasetRequest**](ParcaDatasetRequest.md)|  | 
+| Name                      | Type                                              | Description | Notes |
+| ------------------------- | ------------------------------------------------- | ----------- | ----- |
+| **parca_dataset_request** | [**ParcaDatasetRequest**](ParcaDatasetRequest.md) |             |
 
 ### Return type
 
@@ -68,25 +64,25 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
- - **Accept**: application/json
+- **Content-Type**: application/json
+- **Accept**: application/json
 
 ### HTTP response details
 
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-**200** | Successful Response |  -  |
-**422** | Validation Error |  -  |
+| Status code | Description         | Response headers |
+| ----------- | ------------------- | ---------------- |
+| **200**     | Successful Response | -                |
+| **422**     | Validation Error    | -                |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **get_results**
+
 > object get_results(database_id, git_commit_hash=git_commit_hash, settings=settings)
 
 Get Results
 
 ### Example
-
 
 ```python
 import sms_api.api.client
@@ -118,16 +114,13 @@ with sms_api.api.client.ApiClient(configuration) as api_client:
         print("Exception when calling SimulationsApi->get_results: %s\n" % e)
 ```
 
-
-
 ### Parameters
 
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **database_id** | **int**| Database Id returned from /submit-simulation | 
- **git_commit_hash** | **str**|  | [optional] [default to &#39;d24e988&#39;]
- **settings** | [**Settings**](Settings.md)|  | [optional] 
+| Name                | Type                        | Description                                  | Notes                                     |
+| ------------------- | --------------------------- | -------------------------------------------- | ----------------------------------------- |
+| **database_id**     | **int**                     | Database Id returned from /submit-simulation |
+| **git_commit_hash** | **str**                     |                                              | [optional] [default to &#39;d24e988&#39;] |
+| **settings**        | [**Settings**](Settings.md) |                                              | [optional]                                |
 
 ### Return type
 
@@ -139,25 +132,25 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
- - **Accept**: application/json
+- **Content-Type**: application/json
+- **Accept**: application/json
 
 ### HTTP response details
 
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-**200** | Successful Response |  -  |
-**422** | Validation Error |  -  |
+| Status code | Description         | Response headers |
+| ----------- | ------------------- | ---------------- |
+| **200**     | Successful Response | -                |
+| **422**     | Validation Error    | -                |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **get_simulator_version**
+
 > List[SimulatorVersion] get_simulator_version()
 
 get the list of available simulator versions
 
 ### Example
-
 
 ```python
 import sms_api.api.client
@@ -186,8 +179,6 @@ with sms_api.api.client.ApiClient(configuration) as api_client:
         print("Exception when calling SimulationsApi->get_simulator_version: %s\n" % e)
 ```
 
-
-
 ### Parameters
 
 This endpoint does not need any parameter.
@@ -202,24 +193,24 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: Not defined
- - **Accept**: application/json
+- **Content-Type**: Not defined
+- **Accept**: application/json
 
 ### HTTP response details
 
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-**200** | Successful Response |  -  |
+| Status code | Description         | Response headers |
+| ----------- | ------------------- | ---------------- |
+| **200**     | Successful Response | -                |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **insert_simulator_version**
+
 > SimulatorVersion insert_simulator_version(git_commit_hash=git_commit_hash, git_repo_url=git_repo_url, git_branch=git_branch)
 
 Upload a new simulator (vEcoli) version.
 
 ### Example
-
 
 ```python
 import sms_api.api.client
@@ -251,16 +242,13 @@ with sms_api.api.client.ApiClient(configuration) as api_client:
         print("Exception when calling SimulationsApi->insert_simulator_version: %s\n" % e)
 ```
 
-
-
 ### Parameters
 
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **git_commit_hash** | **str**| First 7 characters of git commit hash | [optional] 
- **git_repo_url** | **str**|  | [optional] [default to &#39;https://github.com/CovertLab/vEcoli&#39;]
- **git_branch** | **str**|  | [optional] [default to &#39;master&#39;]
+| Name                | Type    | Description                           | Notes                                                                 |
+| ------------------- | ------- | ------------------------------------- | --------------------------------------------------------------------- |
+| **git_commit_hash** | **str** | First 7 characters of git commit hash | [optional]                                                            |
+| **git_repo_url**    | **str** |                                       | [optional] [default to &#39;https://github.com/CovertLab/vEcoli&#39;] |
+| **git_branch**      | **str** |                                       | [optional] [default to &#39;master&#39;]                              |
 
 ### Return type
 
@@ -272,25 +260,25 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: Not defined
- - **Accept**: application/json
+- **Content-Type**: Not defined
+- **Accept**: application/json
 
 ### HTTP response details
 
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-**200** | Successful Response |  -  |
-**422** | Validation Error |  -  |
+| Status code | Description         | Response headers |
+| ----------- | ------------------- | ---------------- |
+| **200**     | Successful Response | -                |
+| **422**     | Validation Error    | -                |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **run_simulation**
+
 > EcoliSimulationRun run_simulation(ecoli_simulation_request)
 
 Run a single vEcoli simulation with given parameter overrides
 
 ### Example
-
 
 ```python
 import sms_api.api.client
@@ -310,7 +298,7 @@ configuration = sms_api.api.client.Configuration(
 with sms_api.api.client.ApiClient(configuration) as api_client:
     # Create an instance of the API class
     api_instance = sms_api.api.client.SimulationsApi(api_client)
-    ecoli_simulation_request = sms_api.api.client.EcoliSimulationRequest() # EcoliSimulationRequest | 
+    ecoli_simulation_request = sms_api.api.client.EcoliSimulationRequest() # EcoliSimulationRequest |
 
     try:
         # Run a single vEcoli simulation with given parameter overrides
@@ -321,14 +309,11 @@ with sms_api.api.client.ApiClient(configuration) as api_client:
         print("Exception when calling SimulationsApi->run_simulation: %s\n" % e)
 ```
 
-
-
 ### Parameters
 
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **ecoli_simulation_request** | [**EcoliSimulationRequest**](EcoliSimulationRequest.md)|  | 
+| Name                         | Type                                                    | Description | Notes |
+| ---------------------------- | ------------------------------------------------------- | ----------- | ----- |
+| **ecoli_simulation_request** | [**EcoliSimulationRequest**](EcoliSimulationRequest.md) |             |
 
 ### Return type
 
@@ -340,25 +325,25 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
- - **Accept**: application/json
+- **Content-Type**: application/json
+- **Accept**: application/json
 
 ### HTTP response details
 
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-**200** | Successful Response |  -  |
-**422** | Validation Error |  -  |
+| Status code | Description         | Response headers |
+| ----------- | ------------------- | ---------------- |
+| **200**     | Successful Response | -                |
+| **422**     | Validation Error    | -                |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **submit_simulation**
+
 > EcoliSimulation submit_simulation(ecoli_simulation_request)
 
 Submit to the db a single vEcoli simulation with given parameter overrides.
 
 ### Example
-
 
 ```python
 import sms_api.api.client
@@ -378,7 +363,7 @@ configuration = sms_api.api.client.Configuration(
 with sms_api.api.client.ApiClient(configuration) as api_client:
     # Create an instance of the API class
     api_instance = sms_api.api.client.SimulationsApi(api_client)
-    ecoli_simulation_request = sms_api.api.client.EcoliSimulationRequest() # EcoliSimulationRequest | 
+    ecoli_simulation_request = sms_api.api.client.EcoliSimulationRequest() # EcoliSimulationRequest |
 
     try:
         # Submit to the db a single vEcoli simulation with given parameter overrides.
@@ -389,14 +374,11 @@ with sms_api.api.client.ApiClient(configuration) as api_client:
         print("Exception when calling SimulationsApi->submit_simulation: %s\n" % e)
 ```
 
-
-
 ### Parameters
 
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **ecoli_simulation_request** | [**EcoliSimulationRequest**](EcoliSimulationRequest.md)|  | 
+| Name                         | Type                                                    | Description | Notes |
+| ---------------------------- | ------------------------------------------------------- | ----------- | ----- |
+| **ecoli_simulation_request** | [**EcoliSimulationRequest**](EcoliSimulationRequest.md) |             |
 
 ### Return type
 
@@ -408,15 +390,14 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
- - **Accept**: application/json
+- **Content-Type**: application/json
+- **Accept**: application/json
 
 ### HTTP response details
 
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-**200** | Successful Response |  -  |
-**422** | Validation Error |  -  |
+| Status code | Description         | Response headers |
+| ----------- | ------------------- | ---------------- |
+| **200**     | Successful Response | -                |
+| **422**     | Validation Error    | -                |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-

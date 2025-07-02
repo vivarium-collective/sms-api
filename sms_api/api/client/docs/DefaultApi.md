@@ -1,20 +1,19 @@
 # sms_api.api.client.DefaultApi
 
-All URIs are relative to *http://localhost*
+All URIs are relative to _http://localhost_
 
-Method | HTTP request | Description
-------------- | ------------- | -------------
-[**get_version_version_get**](DefaultApi.md#get_version_version_get) | **GET** /version | Get Version
-[**root_get**](DefaultApi.md#root_get) | **GET** / | Root
-
+| Method                                                               | HTTP request     | Description |
+| -------------------------------------------------------------------- | ---------------- | ----------- |
+| [**get_version_version_get**](DefaultApi.md#get_version_version_get) | **GET** /version | Get Version |
+| [**root_get**](DefaultApi.md#root_get)                               | **GET** /        | Root        |
 
 # **get_version_version_get**
+
 > str get_version_version_get()
 
 Get Version
 
 ### Example
-
 
 ```python
 import sms_api.api.client
@@ -42,8 +41,6 @@ with sms_api.api.client.ApiClient(configuration) as api_client:
         print("Exception when calling DefaultApi->get_version_version_get: %s\n" % e)
 ```
 
-
-
 ### Parameters
 
 This endpoint does not need any parameter.
@@ -58,24 +55,24 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: Not defined
- - **Accept**: application/json
+- **Content-Type**: Not defined
+- **Accept**: application/json
 
 ### HTTP response details
 
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-**200** | Successful Response |  -  |
+| Status code | Description         | Response headers |
+| ----------- | ------------------- | ---------------- |
+| **200**     | Successful Response | -                |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **root_get**
+
 > Dict[str, str] root_get()
 
 Root
 
 ### Example
-
 
 ```python
 import sms_api.api.client
@@ -103,8 +100,6 @@ with sms_api.api.client.ApiClient(configuration) as api_client:
         print("Exception when calling DefaultApi->root_get: %s\n" % e)
 ```
 
-
-
 ### Parameters
 
 This endpoint does not need any parameter.
@@ -119,14 +114,13 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: Not defined
- - **Accept**: application/json
+- **Content-Type**: Not defined
+- **Accept**: application/json
 
 ### HTTP response details
 
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-**200** | Successful Response |  -  |
+| Status code | Description         | Response headers |
+| ----------- | ------------------- | ---------------- |
+| **200**     | Successful Response | -                |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-

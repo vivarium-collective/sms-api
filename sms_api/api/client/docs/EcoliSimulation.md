@@ -1,13 +1,12 @@
 # EcoliSimulation
 
-
 ## Properties
 
-Name | Type | Description | Notes
------------- | ------------- | ------------- | -------------
-**database_id** | **int** |  | 
-**sim_request** | [**EcoliSimulationRequest**](EcoliSimulationRequest.md) |  | 
-**hpc_run** | [**HpcRun**](HpcRun.md) |  | [optional] 
+| Name            | Type                                                    | Description | Notes      |
+| --------------- | ------------------------------------------------------- | ----------- | ---------- |
+| **database_id** | **int**                                                 |             |
+| **sim_request** | [**EcoliSimulationRequest**](EcoliSimulationRequest.md) |             |
+| **hpc_run**     | [**HpcRun**](HpcRun.md)                                 |             | [optional] |
 
 ## Example
 
@@ -26,6 +25,5 @@ ecoli_simulation_dict = ecoli_simulation_instance.to_dict()
 # create an instance of EcoliSimulation from a dict
 ecoli_simulation_from_dict = EcoliSimulation.from_dict(ecoli_simulation_dict)
 ```
+
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

@@ -1,14 +1,13 @@
 # SimulatorVersion
 
-
 ## Properties
 
-Name | Type | Description | Notes
------------- | ------------- | ------------- | -------------
-**database_id** | **int** |  | 
-**git_commit_hash** | **str** |  | [optional] 
-**git_repo_url** | **str** |  | [optional] [default to 'https://github.com/CovertLab/vEcoli']
-**git_branch** | **str** |  | [optional] [default to 'master']
+| Name                | Type    | Description | Notes                                                         |
+| ------------------- | ------- | ----------- | ------------------------------------------------------------- |
+| **database_id**     | **int** |             |
+| **git_commit_hash** | **str** |             | [optional]                                                    |
+| **git_repo_url**    | **str** |             | [optional] [default to 'https://github.com/CovertLab/vEcoli'] |
+| **git_branch**      | **str** |             | [optional] [default to 'master']                              |
 
 ## Example
 
@@ -27,6 +26,5 @@ simulator_version_dict = simulator_version_instance.to_dict()
 # create an instance of SimulatorVersion from a dict
 simulator_version_from_dict = SimulatorVersion.from_dict(simulator_version_dict)
 ```
+
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

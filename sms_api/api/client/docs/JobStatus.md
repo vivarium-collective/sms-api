@@ -1,18 +1,15 @@
 # JobStatus
 
-
 ## Enum
 
-* `WAITING` (value: `'waiting'`)
+- `WAITING` (value: `'waiting'`)
 
-* `QUEUED` (value: `'queued'`)
+- `QUEUED` (value: `'queued'`)
 
-* `RUNNING` (value: `'running'`)
+- `RUNNING` (value: `'running'`)
 
-* `COMPLETED` (value: `'completed'`)
+- `COMPLETED` (value: `'completed'`)
 
-* `FAILED` (value: `'failed'`)
+- `FAILED` (value: `'failed'`)
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

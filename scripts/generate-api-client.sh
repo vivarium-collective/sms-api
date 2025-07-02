@@ -13,4 +13,3 @@ LIB_DIR="${ROOT_DIR}"
 # TODO: make attributes dictionaries - easier to work with
 PACKAGE="sms_api.api.client"
 openapi-generator-cli generate -i "${SPEC_DIR}/openapi_3_1_0_generated.yaml" -g python -o "${LIB_DIR}" --additional-properties=packageName=${PACKAGE},generateSourceCodeOnly=true
-

@@ -1,14 +1,13 @@
 # EcoliSimulationRequest
 
-
 ## Properties
 
-Name | Type | Description | Notes
------------- | ------------- | ------------- | -------------
-**simulator** | [**SimulatorVersion**](SimulatorVersion.md) |  | 
-**parca_dataset_id** | **int** |  | 
-**variant_config** | **Dict[str, Dict[str, VariantConfigValueValue]]** |  | 
-**total_time** | **float** |  | [optional] [default to 11]
+| Name                 | Type                                              | Description | Notes                      |
+| -------------------- | ------------------------------------------------- | ----------- | -------------------------- |
+| **simulator**        | [**SimulatorVersion**](SimulatorVersion.md)       |             |
+| **parca_dataset_id** | **int**                                           |             |
+| **variant_config**   | **Dict[str, Dict[str, VariantConfigValueValue]]** |             |
+| **total_time**       | **float**                                         |             | [optional] [default to 11] |
 
 ## Example
 
@@ -27,6 +26,5 @@ ecoli_simulation_request_dict = ecoli_simulation_request_instance.to_dict()
 # create an instance of EcoliSimulationRequest from a dict
 ecoli_simulation_request_from_dict = EcoliSimulationRequest.from_dict(ecoli_simulation_request_dict)
 ```
+
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

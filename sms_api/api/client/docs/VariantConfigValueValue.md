@@ -1,10 +1,9 @@
 # VariantConfigValueValue
 
-
 ## Properties
 
-Name | Type | Description | Notes
------------- | ------------- | ------------- | -------------
+| Name | Type | Description | Notes |
+| ---- | ---- | ----------- | ----- |
 
 ## Example
 
@@ -23,6 +22,5 @@ variant_config_value_value_dict = variant_config_value_value_instance.to_dict()
 # create an instance of VariantConfigValueValue from a dict
 variant_config_value_value_from_dict = VariantConfigValueValue.from_dict(variant_config_value_value_dict)
 ```
+
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-
