@@ -7,8 +7,20 @@ from testcontainers.nats import NatsContainer  # type: ignore[import-untyped]
 
 
 @pytest_asyncio.fixture(scope="session")
-async def nats_client() -> AsyncGenerator[NATSClient, None]:
+async def nats_container_uri() -> AsyncGenerator[str, None]:
     with NatsContainer() as nats_container:
-        client = await nats.connect(nats_container.nats_uri())
-        yield client
-        await client.close()
+        yield nats_container.nats_uri()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def nats_subscriber_client(nats_container_uri: str) -> AsyncGenerator[NATSClient, None]:
+    client = await nats.connect(nats_container_uri, verbose=True)
+    yield client
+    await client.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def nats_producer_client(nats_container_uri: str) -> AsyncGenerator[NATSClient, None]:
+    client = await nats.connect(nats_container_uri, verbose=True)
+    yield client
+    await client.close()

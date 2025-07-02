@@ -56,9 +56,10 @@ async def insert_job(database_service: SimulationDatabaseService) -> tuple[Ecoli
 
 
 @pytest.mark.asyncio
-async def test_messaging(nats_client: NATSClient, database_service: SimulationDatabaseService) -> None:
-    # get the scheduler object
-    scheduler = JobScheduler(nats_client=nats_client, database_service=database_service)
+async def test_messaging(
+    nats_subscriber_client: NATSClient, nats_producer_client: NATSClient, database_service: SimulationDatabaseService
+) -> None:
+    scheduler = JobScheduler(nats_client=nats_subscriber_client, database_service=database_service)
     await scheduler.subscribe()
 
     # Simulate a job submission and worker event handling
@@ -74,13 +75,13 @@ async def test_messaging(nats_client: NATSClient, database_service: SimulationDa
     )
 
     # send worker messages to the broker
-    await nats_client.publish(
+    await nats_producer_client.publish(
         subject=get_settings().nats_worker_event_subject,
         payload=worker_event.model_dump_json(exclude_unset=True, exclude_none=True).encode("utf-8"),
     )
     # get the updated state of the job
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.1)
     _updated_worker_events = await database_service.list_worker_events(
         hpcrun_id=hpc_run.database_id, prev_sequence_number=sequence_number - 1
     )
-    # Here you would typically publish a message and the
+    assert len(_updated_worker_events) == 1

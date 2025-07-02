@@ -13,15 +13,16 @@ from sms_api.simulation.models import (
     ParcaDataset,
     ParcaDatasetRequest,
     SimulatorVersion,
-    WorkerEvent, JobStatus,
+    WorkerEvent,
 )
 from sms_api.simulation.tables_orm import (
+    JobStatusDB,
     JobTypeDB,
     ORMHpcRun,
     ORMParcaDataset,
     ORMSimulation,
     ORMSimulator,
-    ORMWorkerEvent, JobStatusDB,
+    ORMWorkerEvent,
 )
 
 logger = logging.getLogger(__name__)

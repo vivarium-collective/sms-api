@@ -31,6 +31,10 @@ class JobScheduler:
             _updated_worker_event = await self.database_service.insert_worker_event(worker_event)
 
         await self.nats_client.subscribe(subject=subject, cb=message_handler)
+        if self.nats_client.is_connected:
+            logger.info("NATS client is connected and subscription is set up.")
+        else:
+            logger.error("NATS client is not connected.")
 
     async def close(self) -> None:
         logger.debug("Closing NATS client connection")
