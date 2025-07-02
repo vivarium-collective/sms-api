@@ -8,8 +8,7 @@ documentation = "https://vivarium-collective.github.io/sms-api/"
 readme = "README.md"
 packages = [
     {include = "sms_api"},
-    {include = "tests"},
-    {include = "simple_api"}
+    {include = "tests"}
 ]
 
 [tool.poetry.dependencies]
@@ -29,6 +28,9 @@ passlib = "^1.7.4"
 pymongo = {version = "^4.13.2", extras = ["encryption"]}
 nats-py = {extras = ["nkeys"], version = "^2.10.0"}
 pandas = "^2.3.0"
+dask = {version = "^2025.5.1", extras = ["complete", "distributed"]}
+polars = "^1.31.0"
+orjson = "^3.10.18"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
@@ -169,7 +171,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = ["orig-monorepo/*", ".venv/*", "sms_api/worker/*", "simple_api/worker/*"]
+exclude = ["orig-monorepo/*", ".venv/*", "sms_api/worker/*"]
 
 [tool.ruff.format]
 preview = true

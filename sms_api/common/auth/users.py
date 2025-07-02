@@ -2,7 +2,7 @@ from passlib.hash import argon2
 from pydantic import BaseModel
 from pymongo import AsyncMongoClient
 
-from simple_api.common.database.db_utils import get_mongo_uri
+from sms_api.common.database.db_utils import get_mongo_uri
 
 
 class ApiUser(BaseModel):
