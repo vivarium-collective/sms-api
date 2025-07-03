@@ -24,7 +24,7 @@ from sms_api.simulation.models import (
     ParcaDatasetRequest,
     SimulatorVersion,
 )
-from sms_api.simulation.simulation_service import SimulationServiceHpc
+from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
 
 main_branch = "master"
 repo_url = "https://github.com/CovertLab/vEcoli"
@@ -40,8 +40,11 @@ def validate_job(job: SlurmJob | None) -> None:
     return
 
 
+# TODO: Create a new SQL Model/ORM representing a Table called status:
+# Then at the completetion (or even start) of each polling block below,
+# update row status
 async def run_simulation(
-    simulation_service_slurm: SimulationServiceHpc,
+    simulation_service: SimulationService,
     database_service: SimulationDatabaseService,
     total_time: float | None = None,
 ) -> tuple[EcoliSimulation, int]:
@@ -67,19 +70,22 @@ async def run_simulation(
         )
 
     # clone the repository if needed
-    await simulation_service_slurm.clone_repository_if_needed(
-        git_commit_hash=simulator.git_commit_hash, git_repo_url=simulator.git_repo_url, git_branch=simulator.git_branch
+    _hash: str = simulator.git_commit_hash
+    await simulation_service.clone_repository_if_needed(
+        git_commit_hash=_hash,
+        git_repo_url=simulator.git_repo_url,
+        git_branch=simulator.git_branch,
     )
 
     # build the image
-    build_job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
+    build_job_id = await simulation_service.submit_build_image_job(simulator_version=simulator)
 
     if build_job_id is None:
         raise Exception(f"Could not submit simulation with the simulator:\n{simulator.model_dump_json()}")
 
     start_time = time.time()
     while start_time + 60 > time.time():
-        slurm_job_build = await simulation_service_slurm.get_slurm_job_status(slurmjobid=build_job_id)
+        slurm_job_build = await simulation_service.get_slurm_job_status(slurmjobid=build_job_id)
         if slurm_job_build is not None and slurm_job_build.is_done():
             break
         await asyncio.sleep(5)
@@ -89,11 +95,11 @@ async def run_simulation(
     parca_dataset = await database_service.get_or_insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     # run parca
-    parca_job_id = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
+    parca_job_id = await simulation_service.submit_parca_job(parca_dataset=parca_dataset)
 
     start_time = time.time()
     while start_time + 60 > time.time():
-        slurm_job_parca = await simulation_service_slurm.get_slurm_job_status(slurmjobid=parca_job_id)
+        slurm_job_parca = await simulation_service.get_slurm_job_status(slurmjobid=parca_job_id)
         if slurm_job_parca is not None and slurm_job_parca.is_done():
             break
         await asyncio.sleep(5)
@@ -110,7 +116,7 @@ async def run_simulation(
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
     # actually submit the simulation to the hpc and return an indexable sim job id
-    sim_job_id = await simulation_service_slurm.submit_ecoli_simulation_job(
+    sim_job_id = await simulation_service.submit_ecoli_simulation_job(
         ecoli_simulation=simulation, simulation_database_service=database_service
     )
 

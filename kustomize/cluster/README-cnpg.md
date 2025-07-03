@@ -112,6 +112,7 @@ kubectl get pods -n postgres-cluster
 ```
 
 ### monitor the cluster
+
 #!! this script does not exist
 
 ```bash

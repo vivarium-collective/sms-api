@@ -14,7 +14,10 @@ from tests.fixtures.slurm_fixtures import (  # noqa: F401
     slurm_template_hello,
     ssh_service,
 )
-from tests.fixtures.results_fixtures import (
-    latest_commit, 
-    expected_columns
-)
+# from tests.fixtures.nats_fixtures import (
+#     # jetstream_client,
+#     nats_container_uri,
+#     nats_producer_client,
+#     nats_subscriber_client,
+#     background_event_loop
+# )

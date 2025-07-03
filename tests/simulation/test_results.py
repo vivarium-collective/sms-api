@@ -1,22 +1,17 @@
-import asyncio
-import json
-from pathlib import Path
 import shutil
 import tempfile
-from textwrap import indent
-import time
+from pathlib import Path
 
 import pandas as pd
 import pytest
-import pytest_asyncio
 
-from simple_api.common.hpc.sim_utils import get_single_simulation_chunks_dirpath, read_latest_commit
-from simple_api.simulation.hpc_utils import get_experiment_dirpath, get_remote_chunks_dirpath
+from sms_api.common.hpc.sim_utils import get_single_simulation_chunks_dirpath
 from sms_api.common.ssh.ssh_service import get_ssh_service
+from sms_api.simulation.hpc_utils import get_experiment_dirpath
 
 main_branch = "master"
 repo_url = "https://github.com/CovertLab/vEcoli"
-latest_commit = '96bb7a2'
+latest_commit = "96bb7a2"
 db_id = 1
 
 

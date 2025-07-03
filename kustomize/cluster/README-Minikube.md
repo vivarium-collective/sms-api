@@ -88,6 +88,7 @@ helm install sealed-secrets -n kube-system \
 ```
 
 # prom-operator
+
 create a secret and seal it
 
 ```bash
@@ -200,9 +201,7 @@ sed -i '' "s/jmshost_sim_external=.*/jmshost_sim_external=${EXTERNAL_IP}/" ./con
 kubectl get secret sms-postgres-cluster-app -n postgres-cluster -o jsonpath="{.data.password}" | base64 -d
 ```
 
-
 ### making updates
 
 ./scripts/build_and_push.sh
 kubectl kustomize overlays/sms-api-local | kubectl apply -f -
-

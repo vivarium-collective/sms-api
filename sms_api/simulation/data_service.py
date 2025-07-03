@@ -1,4 +1,5 @@
 import asyncio
+from functools import lru_cache
 import glob
 import json
 import logging
@@ -16,26 +17,24 @@ import time
 from typing import Any, Callable, Iterator
 
 from anyio import mkdtemp
+from async_lru import alru_cache
+from asyncssh import SSHClientConnection
 import dask
 import dask.dataframe as ddf
 from dask.distributed import Client
-import duckdb
-import pandas as pd
 import polars as pl
-import pyarrow
-import pyarrow.lib as libarrow
 from typing_extensions import override
 
-from simple_api.common.hpc.models import SlurmJob
-from simple_api.common.hpc.sim_utils import get_single_simulation_chunks_dirpath, read_latest_commit
-from simple_api.common.hpc.slurm_service import SlurmService
-from simple_api.common.ssh.ssh_service import SSHService, get_ssh_service
-from simple_api.config import Settings, get_settings
-from simple_api.simulation.db_service import SimulationDatabaseService
-from simple_api.simulation.hpc_utils import (
+from sms_api.common.hpc.models import SlurmJob
+from sms_api.common.hpc.sim_utils import get_single_simulation_chunks_dirpath, read_latest_commit
+from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
+from sms_api.config import Settings, get_settings
+from sms_api.simulation.database_service import SimulationDatabaseService
+from sms_api.simulation.hpc_utils import (
     get_remote_chunks_dirpath,
 )
-from simple_api.simulation.models import EcoliSimulation, Namespaces, ParcaDataset, SimulatorVersion
+from sms_api.simulation.models import EcoliSimulation, Namespaces, ParcaDataset, SimulatorVersion
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -96,15 +95,16 @@ class DataServiceHpc(DataService):
         filenames = [Path(os.path.join(chunks_dir, fname)) for fname in re.findall(r'(\d+\.pq)', stdout)]
         return filenames
     
+    @alru_cache
     async def read_simulation_chunks(self, experiment_id: str, namespace: Namespaces) -> tuple[Path, pl.LazyFrame]:
         # TODO: instead use a session so as to not iteratively reauth
         local_chunks_dir = Path(await mkdtemp(dir="datamount", prefix=experiment_id))
         for chunkpath in await self.get_simulation_chunk_paths(experiment_id, namespace):
             local_fp = local_chunks_dir / chunkpath.parts[-1]
             await self.ssh_service.scp_download(local_file=local_fp, remote_path=chunkpath)
-
+            
         return local_chunks_dir, self.scan_simulation_chunks(local_chunks_dir)
-                
+    
     def scan_simulation_chunks(self, chunks_dirpath: Path):
         return pl.scan_parquet(f"{str(chunks_dirpath)}/*.pq", rechunk=True)
 

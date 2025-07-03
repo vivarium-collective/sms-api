@@ -3,9 +3,10 @@ LOCAL_POSTGRES_PASSWORD=dev
 LOCAL_POSTGRES_DB=sms
 LOCAL_POSTGRES_HOST=localhost
 LOCAL_POSTGRES_PORT=65432
-POSTGRES_PORT=5432
-LATEST_COMMIT_PATH=assets/latest_commit.txt
 
+LATEST_COMMIT_PATH=assets/latest_commit.txt
+POSTGRES_PORT=5432
+GATEWAY_PORT=8000
 
 .PHONY: install
 install: ## Install the poetry environment and install the pre-commit hooks
@@ -140,7 +141,12 @@ whichkube:
 
 .PHONY: gateway
 gateway:
-	@poetry run uvicorn simple_api.api.main:app --reload --host 0.0.0.0 --port 8888
+	@make spec
+	@poetry run uvicorn sms_api.api.main:app \
+		--env-file assets/dev/config/.dev_env \
+		--host 0.0.0.0 \
+		--port 8000 \
+		--reload 
 
 .PHONY: pginit
 pginit:
@@ -228,7 +234,7 @@ get-latest-simulator:
 	); \
 	echo $${latest} | awk '{print $$1}'
 
-.PHONY: latest-simulator 
+.PHONY: latest-simulator
 latest-simulator:
 	@latest_commit=$$(make get-latest-simulator | awk '{print $1}'); \
 	latest_known=$$(cat ${LATEST_COMMIT_PATH}); \

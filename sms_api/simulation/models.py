@@ -82,3 +82,27 @@ class EcoliSimulationRun(BaseModel):
     job_id: int
     simulation: EcoliSimulation
     last_update: str = Field(default_factory=timestamp)
+
+
+class ServerModes(StrEnum):
+    DEV = "http://localhost:8000"
+    PROD = "https://sms.cam.uchc.edu"
+
+
+class ServiceTypes(StrEnum):
+    SIMULATION = "simulation"
+    MONGO = "mongo"
+    POSTGRES = "postgres"
+    AUTH = "auth"
+
+
+class ServicePing(BaseModel):
+    service_type: ServiceTypes
+    dialect_name: str
+    dialect_driver: str
+
+
+class Namespaces(StrEnum):
+    DEVELOPMENT = "dev"
+    PRODUCTION = "prod"
+    TEST = "test"

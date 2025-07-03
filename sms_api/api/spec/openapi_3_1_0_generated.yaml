@@ -2,6 +2,11 @@ openapi: 3.1.0
 info:
   title: sms-api
   version: 0.2.2
+servers:
+- url: https://sms.cam.uchc.edu
+  description: Production server
+- url: http://localhost:8000
+  description: Main Development server
 paths:
   /:
     get:
@@ -29,6 +34,41 @@ paths:
               schema:
                 type: string
                 title: Response Get Version Version Get
+  /latest-simulator-hash:
+    get:
+      tags:
+      - Simulations
+      summary: Get Latest Simulator Hash
+      operationId: latest-simulator-hash
+      parameters:
+      - name: git_repo_url
+        in: query
+        required: false
+        schema:
+          type: string
+          default: https://github.com/CovertLab/vEcoli
+          title: Git Repo Url
+      - name: git_branch
+        in: query
+        required: false
+        schema:
+          type: string
+          default: master
+          title: Git Branch
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: string
+                title: Response Latest-Simulator-Hash
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /simulator_version:
     get:
       tags:
@@ -41,10 +81,11 @@ paths:
           content:
             application/json:
               schema:
-                type: array
                 items:
                   $ref: '#/components/schemas/SimulatorVersion'
+                type: array
                 title: Response Get-Simulator-Version
+  /insert-simulator-version:
     post:
       tags:
       - Simulations
@@ -111,7 +152,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /vecoli_simulation:
+  /submit-simulation:
     post:
       tags:
       - Simulations
@@ -140,8 +181,8 @@ paths:
     post:
       tags:
       - Simulations
-      summary: Run a single vEcoli simulation with given parameter overrides
-      operationId: run-simulation
+      summary: Run Vecoli Simulation
+      operationId: run_vecoli_simulation_run_simulation_post
       requestBody:
         content:
           application/json:
@@ -154,7 +195,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EcoliSimulationRun'
+                $ref: '#/components/schemas/EcoliSimulation'
         '422':
           description: Validation Error
           content:
@@ -162,12 +203,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
   /get-results:
-    get:
+    post:
       tags:
       - Simulations
       summary: Get Results
       operationId: get-results
       parameters:
+      - name: observable_names
+        in: query
+        required: true
+        schema:
+          type: array
+          items:
+            type: string
+          title: Observable Names
+      - name: experiment_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: experiment_96bb7a2_id_1_20250620-181422
+          title: Experiment Id
       - name: database_id
         in: query
         required: true
@@ -191,6 +247,56 @@ paths:
               - $ref: '#/components/schemas/Settings'
               - type: 'null'
               title: Settings
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /get-simulation-status:
+    get:
+      tags:
+      - Simulations
+      summary: Get Simulation Status
+      operationId: get-simulation-status
+      parameters:
+      - name: simulation_id
+        in: query
+        required: true
+        schema:
+          type: integer
+          title: Simulation Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HpcRun'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /read-chunk:
+    get:
+      summary: Read Chunk
+      operationId: read_chunk_read_chunk_get
+      parameters:
+      - name: pq_path
+        in: query
+        required: false
+        schema:
+          type: string
+          default: assets/tests/test_history/1200.pq
+          title: Pq Path
       responses:
         '200':
           description: Successful Response
@@ -248,21 +354,6 @@ components:
       - parca_dataset_id
       - variant_config
       title: EcoliSimulationRequest
-    EcoliSimulationRun:
-      properties:
-        job_id:
-          type: integer
-          title: Job Id
-        simulation:
-          $ref: '#/components/schemas/EcoliSimulation'
-        last_update:
-          type: string
-          title: Last Update
-      type: object
-      required:
-      - job_id
-      - simulation
-      title: EcoliSimulationRun
     HTTPValidationError:
       properties:
         detail:
@@ -417,11 +508,11 @@ components:
         postgres_user:
           type: string
           title: Postgres User
-          default: <USER>
+          default: alexanderpatrie
         postgres_password:
           type: string
           title: Postgres Password
-          default: <PASSWORD>
+          default: dev
         postgres_database:
           type: string
           title: Postgres Database
@@ -453,31 +544,31 @@ components:
         slurm_submit_host:
           type: string
           title: Slurm Submit Host
-          default: ''
+          default: login.hpc.cam.uchc.edu
         slurm_submit_user:
           type: string
           title: Slurm Submit User
-          default: ''
+          default: svc_vivarium
         slurm_submit_key_path:
           type: string
           title: Slurm Submit Key Path
-          default: ''
+          default: /Users/alexanderpatrie/.ssh/sms_id_rsa
         slurm_partition:
           type: string
           title: Slurm Partition
-          default: ''
+          default: vivarium
         slurm_node_list:
           type: string
           title: Slurm Node List
-          default: ''
+          default: mantis-039
         slurm_qos:
           type: string
           title: Slurm Qos
-          default: ''
+          default: vivarium
         slurm_log_base_path:
           type: string
           title: Slurm Log Base Path
-          default: ''
+          default: /home/FCAM/svc_vivarium/dev/htclogs
         hpc_image_base_path:
           type: string
           title: Hpc Image Base Path
@@ -494,6 +585,10 @@ components:
           type: string
           title: Hpc Sim Base Path
           default: ''
+        slurm_base_path:
+          type: string
+          title: Slurm Base Path
+          default: /home/FCAM/svc_vivarium
       additionalProperties: false
       type: object
       title: Settings

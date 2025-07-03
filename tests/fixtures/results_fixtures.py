@@ -1,11 +1,12 @@
-from collections.abc import AsyncGenerator
 import json
+from collections.abc import AsyncGenerator
 from pathlib import Path
+
 import pytest_asyncio
 
-from simple_api.common.hpc.sim_utils import read_latest_commit
-from simple_api.common.ssh.ssh_service import SSHService
-from simple_api.config import get_settings
+from sms_api.common.hpc.sim_utils import read_latest_commit
+from sms_api.common.ssh.ssh_service import SSHService
+from sms_api.config import get_settings
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -15,10 +16,10 @@ async def latest_commit():
 
 @pytest_asyncio.fixture(scope="function")
 async def expected_columns():
-    with open('assets/tests/expected_columns.json', 'r') as fp:
+    with open("assets/tests/expected_columns.json") as fp:
         return json.load(fp)
-    
-    
+
+
 @pytest_asyncio.fixture(scope="function")
 async def ssh_service() -> AsyncGenerator[SSHService]:
     ssh_service = SSHService(
@@ -28,5 +29,3 @@ async def ssh_service() -> AsyncGenerator[SSHService]:
     )
     yield ssh_service
     await ssh_service.close()
-
-
