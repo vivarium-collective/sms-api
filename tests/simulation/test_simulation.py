@@ -11,7 +11,7 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 main_branch = "master"
 repo_url = "https://github.com/CovertLab/vEcoli"
-latest_commit_hash = "d24e988"
+latest_commit_hash = "12bdd5e"
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
@@ -90,7 +90,7 @@ async def test_simulate(simulation_service_slurm: SimulationServiceHpc, database
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
     sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
-        ecoli_simulation=simulation, simulation_database_service=database_service
+        ecoli_simulation=simulation, database_service=database_service
     )
     assert sim_slurmjobid is not None
 
