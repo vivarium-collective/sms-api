@@ -25,6 +25,7 @@ pymongo = "^4.13.0"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.41"}
 asyncpg = "^0.30.0"
 nats-py = "^2.10.0"
+alembic = "^1.16.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"

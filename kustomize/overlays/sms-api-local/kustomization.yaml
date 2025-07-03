@@ -5,7 +5,7 @@ namespace: sms-api-local
 
 images:
   - name: ghcr.io/biosimulations/sms-api
-    newTag: arm64_0.2.2
+    newTag: 0.2.2
   - name: docker.io/library/mongo
     newTag: 8.0.4
 
@@ -17,10 +17,11 @@ replicas:
 
 resources:
   - ingress.yaml
-  - secret-ghcr.yaml
-  - secret-shared.yaml
   - api-pvc.yaml
   - nats-svc.yaml
   - mongodb-pvc.yaml
+  - secret-ghcr.yaml
+  - secret-shared.yaml
+  - secret-ssh.yaml
   - ../../config/sms-api-local
   - ../../base

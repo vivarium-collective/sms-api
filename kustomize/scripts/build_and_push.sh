@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # version is an optional argument, defaults to the version defined in sms_api/version.py'
@@ -11,21 +13,17 @@ version=${1:-${declared_version}}
 
 echo "building and pushing images for version ${version}"
 
-for architecture in amd64 arm64; do
+for service in api; do
 
-  for service in api; do
+  tag="${version}"
+  dockerfile="${ROOT_DIR}/Dockerfile-${service}"
+  image_name="ghcr.io/biosimulations/sms-${service}:${tag}"
 
-    tag="${architecture}_${version}"
-    platform="linux/${architecture}"
-    dockerfile="${ROOT_DIR}/Dockerfile-${service}"
-    image_name="ghcr.io/biosimulations/sms-${service}:${tag}"
+  docker buildx build --platform=linux/amd64 -f ${dockerfile} --tag ${image_name} "${ROOT_DIR}" \
+    || { echo "Failed to build ${service}"; exit 1; }
 
-    docker build --platform=${platform} -f ${dockerfile} --tag ${image_name} "${ROOT_DIR}" \
-      || { echo "Failed to build ${service} for platform ${platform}"; exit 1; }
+  docker push ${image_name}  \
+    || { echo "Failed to push ${service}"; exit 1; }
 
-    docker push ${image_name}  \
-      || { echo "Failed to push ${service} for platform ${platform}"; exit 1; }
-
-    echo "built and pushed service ${service} version ${version} for platform ${platform}"
-  done
+  echo "built and pushed service ${service} version ${version}"
 done
