@@ -49,14 +49,13 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.mypy]
 files = ["sms_api", "tests"]
-exclude = "orig-monorepo/*"
 strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.deptry]
-exclude = ["orig-monorepo/*", ".venv/*"]
+exclude = [".venv/*"]
 ignore = ["DEP002", "DEP003", "DEP004"]
 
 [tool.ruff]
@@ -165,7 +164,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = ["orig-monorepo/*", ".venv/*"]
+exclude = [".venv/*"]
 
 [tool.ruff.format]
 preview = true
