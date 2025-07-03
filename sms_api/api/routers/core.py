@@ -43,7 +43,7 @@ from sms_api.dependencies import (
 )
 from sms_api.log_config import setup_logging
 from sms_api.simulation.data_service import DataServiceHpc
-from sms_api.simulation.database_service import DatabaseService
+from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import format_experiment_path, get_experiment_dirname, read_latest_commit
 from sms_api.simulation.models import (
     EcoliSimulation,
@@ -256,15 +256,16 @@ async def submit_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulat
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
 )
-async def run_vecoli_simulation(sim_request: EcoliSimulationRequest):
+async def run_vecoli_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
     try:
         simulation_service_slurm = get_simulation_service()
         database_service = get_database_service()
         simulation = await submit_simulation(sim_request=sim_request)
-        sim_job_id = await simulation_service_slurm.submit_ecoli_simulation_job(
+        slurm_jobid = await simulation_service_slurm.submit_ecoli_simulation_job(
             ecoli_simulation=simulation, simulation_database_service=database_service
         )
-        assert sim_job_id is not None
+        if slurm_jobid:
+            simulation.slurmjob_id = slurm_jobid
         return simulation
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
@@ -328,34 +329,16 @@ async def get_simulation_status(
     if sim_service is None:
         logger.error("Simulation service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
-    db_service = get_database_service()
+    db_service: DatabaseServiceSQL = get_database_service()
     if db_service is None:
         logger.error("SSH service is not initialized")
         raise HTTPException(status_code=500, detail="SSH service is not initialized")
 
     experiment_dir = Path("/home/FCAM/svc_vivarium/test/sims/experiment_96bb7a2_id_1_20250620-181422")
     try:
-        simulation: EcoliSimulation = await db_service.get_simulation(simulation_id=simulation_id)
-        slurm_job_sim = await sim_service.get_slurm_job_status(slurmjobid=simulation.hpc_run.slurmjobid)
-        # poll for job status
-        start_time = time.time()
-        while start_time + 60 > time.time():
-            if slurm_job_sim is not None and slurm_job_sim.is_done():
-                break
-            await asyncio.sleep(5)
-
-        # stream = io.StringIO()
-        # stream.write(df.write_json())
-        # stream.seek(0)  # Reset cursor to start
-        # return StreamingResponse(
-        #     stream, media_type="application/json", headers={"Content-Disposition": "attachment; filename=data.json"}
-        # )
-        end = time.time()
-        exec_duration = end - start
-        logger.info(f"Duration: {exec_duration}")
-
-        # return StreamingResponse(io.StringIO(df.write_ndjson()), media_type="application/x-ndjson")
-        return JSONResponse(content=json.loads(df.write_json()))
+        simulation: EcoliSimulation | None = await db_service.get_hpcrun_by_slurmjobid(simulation_id=simulation_id)
+        if simulation:
+            worker_events = await db_service.list_worker_events(hpcrun_id=simulation.hpcrun_id)
     except Exception as e:
         logger.exception(f"Error fetching simulation results for test dir: {experiment_dir}.")
         raise HTTPException(status_code=500, detail=str(e)) from e

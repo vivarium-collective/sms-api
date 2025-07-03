@@ -75,6 +75,7 @@ class EcoliSimulationRequest(BaseModel):
 class EcoliSimulation(BaseModel):
     database_id: int
     sim_request: EcoliSimulationRequest
+    slurmjob_id: int | None = None
 
 
 class WorkerEvent(BaseModel):
