@@ -3,9 +3,11 @@ kind: Kustomization
 
 namespace: sms-api-rke
 
-components:
-  - ../images.yaml
+images:
+  - name: ghcr.io/biosimulations/sms-api
+    newTag: amd64_0.2.2
 
 resources:
   - alembic-job.yaml
-  - ../secret-shared.yaml
+  - secret-shared.yaml
+  - secret-ghcr.yaml
