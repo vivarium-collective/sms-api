@@ -1,14 +1,33 @@
 import logging
+from typing import Callable
 
 import nats
+from fastapi import HTTPException
 from nats.aio.client import Client as NATSClient
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.config import get_settings
+from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
 from sms_api.simulation.tables_orm import create_db
+
+logger = logging.getLogger(__name__)
+setup_logging(logger)
+
+
+def verify_service(getter: Callable) -> Callable[[], DatabaseService | SimulationService | None]:
+    def wrapper() -> DatabaseService | SimulationService | None:
+        service = getter()
+        if service is None:
+            logger.error("Simulation database service is not initialized")
+            raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+        else:
+            return service
+
+    return wrapper
+
 
 # ------- postgres database service (standalone or pytest) ------
 
@@ -35,6 +54,7 @@ def set_database_service(database_service: DatabaseService | None) -> None:
     global_database_service = database_service
 
 
+@verify_service
 def get_database_service() -> DatabaseService | None:
     global global_database_service
     return global_database_service
@@ -50,6 +70,7 @@ def set_simulation_service(simulation_service: SimulationService | None) -> None
     global_simulation_service = simulation_service
 
 
+@verify_service
 def get_simulation_service() -> SimulationService | None:
     global global_simulation_service
     return global_simulation_service
@@ -63,7 +84,13 @@ global_job_scheduler: JobScheduler | None = None
 # ------ initialized standalone application (standalone) ------
 
 
-async def init_standalone() -> None:
+def get_async_engine(enable_ssl: bool = True, **engine_params) -> AsyncEngine:
+    if not enable_ssl:
+        engine_params["connect_args"] = {"ssl": "disable"}
+    return create_async_engine(**engine_params)
+
+
+async def init_standalone(enable_ssl: bool = True) -> None:
     _settings = get_settings()
     set_simulation_service(SimulationServiceHpc())
 
@@ -79,13 +106,14 @@ async def init_standalone() -> None:
     if not PG_USER or not PG_PSWD or not PG_DATABASE or not PG_HOST or not PG_PORT:
         raise ValueError("Postgres connection settings are not properly configured.")
     postgres_url = f"postgresql+asyncpg://{PG_USER}:{PG_PSWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
-    engine = create_async_engine(
-        postgres_url,
+    engine = get_async_engine(
+        url=postgres_url,
         echo=True,
         pool_size=PG_POOL_SIZE,
         max_overflow=PG_MAX_OVERFLOW,
         pool_timeout=PG_POOL_TIMEOUT,
         pool_recycle=PG_POOL_RECYCLE,
+        enable_ssl=enable_ssl,
     )
     logging.warn("calling create_db() to initialize the database tables")
     await create_db(engine)
