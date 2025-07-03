@@ -333,7 +333,7 @@ class SimulationServiceHpc(SimulationService):
                             if echo "$line" | grep -q "{settings.nats_emitter_magic_word}"; then
                                 clean_line="$(echo "$line" | sed \
                                    -e 's/{settings.nats_emitter_magic_word}//g' \
-                                   -e "s/'/\&quot;/g" )"
+                                   -e "s/'/\\&quot;/g" )"
                                 nats pub {settings.nats_worker_event_subject} "'$clean_line'"
                             fi
                         done &
