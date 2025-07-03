@@ -331,9 +331,10 @@ class SimulationServiceHpc(SimulationService):
                     else
                         tail -F {slurm_log_file!s} | while read -r line; do
                             if echo "$line" | grep -q "{settings.nats_emitter_magic_word}"; then
-                                clean_line="$(echo "$line" | sed 's/{settings.nats_emitter_magic_word}//')"
-                                escaped_line="${{clean_line//\'/&quot;}}"
-                                nats pub {settings.nats_worker_event_subject} "'$escaped_line'"
+                                clean_line="$(echo "$line" | sed \
+                                   -e 's/{settings.nats_emitter_magic_word}//g' \
+                                   -e "s/'/\&quot;/g" )"
+                                nats pub {settings.nats_worker_event_subject} "'$clean_line'"
                             fi
                         done &
                         SCRAPE_PID=$!
