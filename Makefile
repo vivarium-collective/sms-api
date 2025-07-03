@@ -127,9 +127,6 @@ pgdb-conn:
 pgdb-drop:
 	@dropdb $(dbname)
 
-usr:
-	@echo
-
 # --name postgresql
 .PHONY: dbup
 dbup:
@@ -156,6 +153,9 @@ mongoup:
 		-p $(port):$(port) \
 		mongo
 
+.PHONY: natsup
+natsup:
+	@docker run -d --name nats --rm -p 4222:4222 nats
 
 # this command should run psql -h localhost -p 65432 -U alexanderpatrie sms
 .PHONY: pingpg
