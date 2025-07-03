@@ -1,0 +1,3 @@
+images:
+  - name: ghcr.io/biosimulations/sms-api
+    newTag: arm64_0.2.2

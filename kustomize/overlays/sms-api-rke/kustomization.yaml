@@ -3,17 +3,14 @@ kind: Kustomization
 
 namespace: sms-api-rke
 
-images:
-  - name: ghcr.io/biosimulations/sms-api
-    newTag: amd64_0.2.2
-  - name: docker.io/library/mongo
-    newTag: 8.0.4
-
 replicas:
   - count: 1
     name: api
   - count: 0
     name: mongodb
+
+components:
+  - images.yaml
 
 resources:
   - ingress.yaml

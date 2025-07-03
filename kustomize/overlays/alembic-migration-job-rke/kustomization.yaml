@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sms-api-rke
+
+components:
+  - ../sms-api-rke/images.yaml
+
+resources:
+  - alembic-job.yaml
+  - ../sms-api-rke/secret-shared.yaml
