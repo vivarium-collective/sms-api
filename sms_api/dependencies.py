@@ -1,8 +1,11 @@
 import logging
 
+import nats
+from nats.aio.client import Client as NATSClient
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.config import get_settings
+from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.simulation_database import SimulationDatabaseService, SimulationDatabaseServiceSQL
 from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
 from sms_api.simulation.tables_orm import create_db
@@ -52,6 +55,11 @@ def get_simulation_service() -> SimulationService | None:
     return global_simulation_service
 
 
+# ------ nats client (standalone) -----------------------------
+
+global_nats_client: NATSClient | None = None
+global_job_scheduler: JobScheduler | None = None
+
 # ------ initialized standalone application (standalone) ------
 
 
@@ -83,7 +91,15 @@ async def init_standalone() -> None:
     await create_db(engine)
     set_postgres_engine(engine)
 
-    set_simulation_database_service(SimulationDatabaseServiceSQL(engine))
+    simulation_database = SimulationDatabaseServiceSQL(engine)
+    set_simulation_database_service(simulation_database)
+
+    global global_nats_client
+    global global_job_scheduler
+    global_nats_client = await nats.connect(_settings.nats_url)
+    global_job_scheduler = JobScheduler(nats_client=global_nats_client, database_service=simulation_database)
+
+    await global_job_scheduler.subscribe()
 
 
 async def shutdown_standalone() -> None:
@@ -97,3 +113,8 @@ async def shutdown_standalone() -> None:
 
     set_simulation_service(None)
     set_simulation_database_service(None)
+
+    global global_nats_client
+    if global_nats_client:
+        await global_nats_client.close()
+        global_nats_client = None

@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - api.yaml
   - mongodb.yaml
+  - nats.yaml
