@@ -64,7 +64,7 @@ kubectl get secret --namespace monitoring prometheus-grafana -o jsonpath="{.data
 
 ```bash
 helm repo add nats https://nats-io.github.io/k8s/helm/charts/
-heml repo update
+helm repo update
 helm install nats nats/nats
 ```
 

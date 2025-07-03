@@ -12,7 +12,7 @@ GATEWAY_PORT=8000
 install: ## Install the poetry environment and install the pre-commit hooks
 	@echo "🚀 Creating virtual environment using pyenv and poetry"
 	@poetry install
-	@ poetry run pre-commit install
+	@poetry run pre-commit install
 	@poetry shell
 
 .PHONY: check
@@ -93,6 +93,12 @@ check-minikube:
 spec:
 	@poetry run python ./sms_api/api/openapi_spec.py
 
+.PHONY: cycle
+cycle:
+	@make spec
+	@make new-build
+	@make apply
+
 .PHONY: new
 new:
 	@make check-minikube
@@ -102,21 +108,21 @@ new:
 	@make apply
 
 
-.PHONY: restart-deployment
-restart-deployment:
-	@kubectl rollout restart deployment -n $(namespace)
+# .PHONY: restart-deployment
+# restart-deployment:
+# 	@kubectl rollout restart deployment -n $(namespace)
 
 .PHONY: update
 update:
-	# @make check
+#	@make check
 	@make new
 	@make restart-deployment name=$(name)
 
-.PHONY: apply
-apply:
-	@cd kustomize
-	@kubectl kustomize overlays/sms-api-local | kubectl apply -f -
-	@cd ..
+# .PHONY: apply
+# apply:
+# 	@cd kustomize
+# 	@kubectl kustomize overlays/sms-api-local | kubectl apply -f -
+# 	@cd ..
 
 .PHONY: restart
 restart:

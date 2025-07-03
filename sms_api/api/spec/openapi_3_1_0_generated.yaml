@@ -211,7 +211,7 @@ paths:
       parameters:
       - name: observable_names
         in: query
-        required: true
+        required: false
         schema:
           type: array
           items:
@@ -237,7 +237,7 @@ paths:
         required: false
         schema:
           type: string
-          default: d24e988
+          default: 12bdd5e
           title: Git Commit Hash
       requestBody:
         content:
@@ -508,11 +508,11 @@ components:
         postgres_user:
           type: string
           title: Postgres User
-          default: alexanderpatrie
+          default: sms
         postgres_password:
           type: string
           title: Postgres Password
-          default: dev
+          default: TjzJ4z2OV8ygXNBEeo7yBsKmE3WpdoT1DuxXY1YTgi9dxuAvlgajOXmKQb0VbhZ2
         postgres_database:
           type: string
           title: Postgres Database
@@ -552,7 +552,7 @@ components:
         slurm_submit_key_path:
           type: string
           title: Slurm Submit Key Path
-          default: /Users/alexanderpatrie/.ssh/sms_id_rsa
+          default: /home/youdonotexist/.ssh/id_ed25519
         slurm_partition:
           type: string
           title: Slurm Partition

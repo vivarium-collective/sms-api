@@ -11,31 +11,21 @@ This is the api server for Vivarium simulation services.
 - **Github repository**: <https://github.com/vivarium-collective/sms-api/>
 - **Documentation** <https://vivarium-collective.github.io/sms-api/>
 
-## Getting started with your project
+## install
 
-First, create a repository on GitHub with the same name as this project, and then run the following commands:
+Extensive setup instructions for minikube and services live in the `kustomize/cluster/README-Minikube.md`
 
-```bash
-git init -b main
-git add .
-git commit -m "init commit"
-git remote add origin git@github.com:vivarium-collective/sms-api.git
-git push -u origin main
-```
+## run
 
-Finally, install the environment and the pre-commit hooks with
+The Makefile contains several commands that can be used to interact with the various components of the system.
 
-```bash
-make install
-```
+### make test
 
-You are now ready to start development on your project!
-The CI/CD pipeline will be triggered when you open a pull request, merge to main, or when you create a new release.
+Ensures the python code runs for all the various components - if your system is set up correctly all tests will pass.
 
-To finalize the set-up for publishing to PyPI or Artifactory, see [here](https://fpgmaas.github.io/cookiecutter-poetry/features/publishing/#set-up-for-pypi).
-For activating the automatic documentation with MkDocs, see [here](https://fpgmaas.github.io/cookiecutter-poetry/features/mkdocs/#enabling-the-documentation-on-github).
-To enable the code coverage reports, see [here](https://fpgmaas.github.io/cookiecutter-poetry/features/codecov/).
+### make cycle
 
----
-
-Repository initiated with [fpgmaas/cookiecutter-poetry](https://github.com/fpgmaas/cookiecutter-poetry).
+This command does a few things:
+* Generates the OpenAPI spec
+* Builds the latest container from the repository and uploads it to the biosimulators container registry
+* Applies the local kubernetes overlay to minikube using kubectl
