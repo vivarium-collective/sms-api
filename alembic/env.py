@@ -2,11 +2,11 @@ import asyncio
 import os
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from alembic import context
 from sms_api.simulation.tables_orm import Base
 
 # this is the Alembic Config object, which provides

@@ -5,9 +5,10 @@ namespace: sms-api-rke
 
 images:
   - name: ghcr.io/biosimulations/sms-api
-    newTag: amd64_0.2.2
+    newTag: 0.2.2
 
 resources:
   - alembic-job.yaml
   - secret-shared.yaml
   - secret-ghcr.yaml
+  - ../../config/sms-api-rke
