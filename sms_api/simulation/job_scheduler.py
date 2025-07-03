@@ -5,17 +5,17 @@ from nats.aio.client import Client as NATSClient
 from nats.aio.msg import Msg
 
 from sms_api.config import get_settings
+from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import WorkerEvent
-from sms_api.simulation.simulation_database import SimulationDatabaseService
 
 logger = logging.getLogger(__name__)
 
 
 class JobScheduler:
     nats_client: NATSClient
-    database_service: SimulationDatabaseService
+    database_service: DatabaseService
 
-    def __init__(self, nats_client: NATSClient, database_service: SimulationDatabaseService):
+    def __init__(self, nats_client: NATSClient, database_service: DatabaseService):
         self.nats_client = nats_client
         self.database_service = database_service
 

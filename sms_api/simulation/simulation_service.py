@@ -12,6 +12,7 @@ from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
+from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
     get_apptainer_image_file,
     get_experiment_path,
@@ -22,7 +23,6 @@ from sms_api.simulation.hpc_utils import (
     get_vEcoli_repo_dir,
 )
 from sms_api.simulation.models import EcoliSimulation, ParcaDataset, SimulatorVersion
-from sms_api.simulation.simulation_database import SimulationDatabaseService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -39,7 +39,7 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, simulation_database_service: SimulationDatabaseService
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService
     ) -> int:
         pass
 
@@ -246,7 +246,7 @@ class SimulationServiceHpc(SimulationService):
 
     @override
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, simulation_database_service: SimulationDatabaseService
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService
     ) -> int:
         settings = get_settings()
         ssh_service = SSHService(
@@ -254,13 +254,13 @@ class SimulationServiceHpc(SimulationService):
             username=settings.slurm_submit_user,
             key_path=Path(settings.slurm_submit_key_path),
         )
-        if simulation_database_service is None:
-            raise RuntimeError("SimulationDatabaseService is not available. Cannot submit EcoliSimulation job.")
+        if database_service is None:
+            raise RuntimeError("DatabaseService is not available. Cannot submit EcoliSimulation job.")
 
         if ecoli_simulation.sim_request is None:
             raise ValueError("EcoliSimulation must have a sim_request set to submit a job.")
 
-        parca_dataset = await simulation_database_service.get_parca_dataset(
+        parca_dataset = await database_service.get_parca_dataset(
             parca_dataset_id=ecoli_simulation.sim_request.parca_dataset_id
         )
         if parca_dataset is None:

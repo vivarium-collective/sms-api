@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from sms_api.dependencies import (
+    get_database_service,
     get_postgres_engine,
-    get_simulation_database_service,
     init_standalone,
     shutdown_standalone,
 )
@@ -94,11 +94,11 @@ def get_version() -> str:
     response_model=list[SimulatorVersion],
     operation_id="get-simulator-version",
     tags=["Simulations"],
-    dependencies=[Depends(get_simulation_database_service), Depends(get_postgres_engine)],
+    dependencies=[Depends(get_database_service), Depends(get_postgres_engine)],
     summary="get the list of available simulator versions",
 )
 async def get_simulator_versions() -> list[SimulatorVersion]:
-    sim_db_service = get_simulation_database_service()
+    sim_db_service = get_database_service()
     if sim_db_service is None:
         logger.error("Simulation database service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
@@ -118,7 +118,7 @@ async def get_simulator_versions() -> list[SimulatorVersion]:
     summary="Run a parameter calculation",
 )
 async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
-    sim_db_service = get_simulation_database_service()
+    sim_db_service = get_database_service()
     if sim_db_service is None:
         logger.error("Simulation database service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
@@ -139,7 +139,7 @@ async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
     summary="Run a single vEcoli simulation with given parameter overrides",
 )
 async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
-    sim_db_service = get_simulation_database_service()
+    sim_db_service = get_database_service()
     if sim_db_service is None:
         logger.error("Simulation database service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation database service is not initialized")

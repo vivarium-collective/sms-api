@@ -28,7 +28,7 @@ from sms_api.simulation.tables_orm import (
 logger = logging.getLogger(__name__)
 
 
-class SimulationDatabaseService(ABC):
+class DatabaseService(ABC):
     @abstractmethod
     async def insert_worker_event(self, worker_event: WorkerEvent) -> WorkerEvent:
         pass
@@ -102,7 +102,7 @@ class SimulationDatabaseService(ABC):
         pass
 
 
-class SimulationDatabaseServiceSQL(SimulationDatabaseService):
+class DatabaseServiceSQL(DatabaseService):
     async_sessionmaker: async_sessionmaker[AsyncSession]
 
     def __init__(self, async_engine: AsyncEngine):
