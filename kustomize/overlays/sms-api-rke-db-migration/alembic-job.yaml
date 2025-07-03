@@ -9,6 +9,7 @@ spec:
       containers:
         - name: alembic
           image: ghcr.io/biosimulations/sms-api:latest
+          imagePullPolicy: Always
           command: ["poetry", "run", "alembic", "upgrade", "head"]
           env:
             - name: SQLALCHEMY_DATABASE_URL
@@ -16,3 +17,5 @@ spec:
                 secretKeyRef:
                   name: shared-secrets
                   key: postgres-uri
+      imagePullSecrets:
+        - name: ghcr-secret
