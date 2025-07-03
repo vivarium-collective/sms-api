@@ -1,9 +1,10 @@
+import datetime
 import enum
 import hashlib
 import json
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class JobType(enum.Enum):
@@ -81,3 +82,33 @@ class WorkerEvent(BaseModel):
     sim_data: list[tuple[str, str, float]]  # Simulation data with label/path/value
     global_time: float | None = None  # Global time of the simulation, if applicable
     error_message: str | None = None
+
+
+class EcoliSimulationRun(BaseModel):
+    job_id: int
+    simulation: EcoliSimulation
+    last_update: str = Field(default_factory=lambda: str(datetime.datetime.now()))
+
+
+class ServerModes(StrEnum):
+    DEV = "http://localhost:8000"
+    PROD = "https://sms.cam.uchc.edu"
+
+
+class ServiceTypes(StrEnum):
+    SIMULATION = "simulation"
+    MONGO = "mongo"
+    POSTGRES = "postgres"
+    AUTH = "auth"
+
+
+class ServicePing(BaseModel):
+    service_type: ServiceTypes
+    dialect_name: str
+    dialect_driver: str
+
+
+class Namespaces(StrEnum):
+    DEVELOPMENT = "dev"
+    PRODUCTION = "prod"
+    TEST = "test"
