@@ -3,7 +3,10 @@ import enum
 import hashlib
 import json
 from enum import StrEnum
+import os
+from pathlib import Path
 
+import dotenv
 from pydantic import BaseModel, Field
 
 
@@ -93,6 +96,10 @@ class EcoliSimulationRun(BaseModel):
 class ServerModes(StrEnum):
     DEV = "http://localhost:8000"
     PROD = "https://sms.cam.uchc.edu"
+
+    @classmethod
+    def detect(cls, env_path: Path) -> str:
+        return cls.DEV if dotenv.load_dotenv(env_path) else cls.PROD
 
 
 class ServiceTypes(StrEnum):

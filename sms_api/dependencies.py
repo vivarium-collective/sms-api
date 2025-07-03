@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.config import get_settings
 from sms_api.log_config import setup_logging
+from sms_api.simulation.data_service import DataService, DataServiceHpc
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 setup_logging(logger)
 
 
-def verify_service(getter: Callable) -> Callable[[], DatabaseService | SimulationService | None]:
+def verify_service(getter: Callable) -> Callable:
     def wrapper() -> DatabaseService | SimulationService | None:
         service = getter()
         if service is None:
@@ -81,6 +82,23 @@ def get_simulation_service() -> SimulationService | None:
 global_nats_client: NATSClient | None = None
 global_job_scheduler: JobScheduler | None = None
 
+
+# ------ data service (standalone or pytest) ------------------
+
+global_data_service: DataService | None = None
+
+
+def set_data_service(data_service: DataService | None) -> None:
+    global global_data_service
+    global_data_service = data_service
+
+
+@verify_service
+def get_data_service() -> DataService | None:
+    global global_data_service
+    return global_data_service
+
+
 # ------ initialized standalone application (standalone) ------
 
 
@@ -92,7 +110,10 @@ def get_async_engine(enable_ssl: bool = True, **engine_params) -> AsyncEngine:
 
 async def init_standalone(enable_ssl: bool = True) -> None:
     _settings = get_settings()
+
+    # set services that don't require params (currently using hpc)
     set_simulation_service(SimulationServiceHpc())
+    set_data_service(DataServiceHpc())
 
     PG_USER = _settings.postgres_user
     PG_PSWD = _settings.postgres_password
@@ -115,7 +136,7 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         pool_recycle=PG_POOL_RECYCLE,
         enable_ssl=enable_ssl,
     )
-    logging.warn("calling create_db() to initialize the database tables")
+    logging.warning("calling create_db() to initialize the database tables")
     await create_db(engine)
     set_postgres_engine(engine)
 
@@ -141,6 +162,7 @@ async def shutdown_standalone() -> None:
 
     set_simulation_service(None)
     set_database_service(None)
+    set_data_service(None)
 
     global global_nats_client
     if global_nats_client:
