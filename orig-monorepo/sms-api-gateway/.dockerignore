@@ -1,9 +1,0 @@
-notebooks/
-*.egg-info
-tmp*
-build/
-.lsp
-.clj-kondo
-__pycache__
-.venv
-deployment/
