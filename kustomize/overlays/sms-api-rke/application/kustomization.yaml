@@ -14,10 +14,10 @@ components:
 
 resources:
   - ingress.yaml
-  - secret-ghcr.yaml
-  - secret-shared.yaml
   - api-pvc.yaml
   - nats-svc.yaml
   - mongodb-pvc.yaml
-  - ../../config/sms-api-rke
-  - ../../base
+  - ../secret-ghcr.yaml
+  - ../secret-shared.yaml
+  - ../../../config/sms-api-rke
+  - ../../../base

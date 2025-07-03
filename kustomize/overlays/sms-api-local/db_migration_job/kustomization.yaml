@@ -4,8 +4,8 @@ kind: Kustomization
 namespace: sms-api-rke
 
 components:
-  - ../sms-api-rke/images.yaml
+  - ../images.yaml
 
 resources:
   - alembic-job.yaml
-  - ../sms-api-rke/secret-shared.yaml
+  - ../secret-shared.yaml
