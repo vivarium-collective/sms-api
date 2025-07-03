@@ -12,6 +12,7 @@ from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
+from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
     get_apptainer_image_file,
     get_experiment_path,
@@ -22,7 +23,6 @@ from sms_api.simulation.hpc_utils import (
     get_vEcoli_repo_dir,
 )
 from sms_api.simulation.models import EcoliSimulation, ParcaDataset, SimulatorVersion
-from sms_api.simulation.simulation_database import SimulationDatabaseService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -39,7 +39,7 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, simulation_database_service: SimulationDatabaseService
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService
     ) -> int:
         pass
 
@@ -246,7 +246,7 @@ class SimulationServiceHpc(SimulationService):
 
     @override
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, simulation_database_service: SimulationDatabaseService
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService
     ) -> int:
         settings = get_settings()
         ssh_service = SSHService(
@@ -254,13 +254,13 @@ class SimulationServiceHpc(SimulationService):
             username=settings.slurm_submit_user,
             key_path=Path(settings.slurm_submit_key_path),
         )
-        if simulation_database_service is None:
-            raise RuntimeError("SimulationDatabaseService is not available. Cannot submit EcoliSimulation job.")
+        if database_service is None:
+            raise RuntimeError("DatabaseService is not available. Cannot submit EcoliSimulation job.")
 
         if ecoli_simulation.sim_request is None:
             raise ValueError("EcoliSimulation must have a sim_request set to submit a job.")
 
-        parca_dataset = await simulation_database_service.get_parca_dataset(
+        parca_dataset = await database_service.get_parca_dataset(
             parca_dataset_id=ecoli_simulation.sim_request.parca_dataset_id
         )
         if parca_dataset is None:
@@ -286,7 +286,7 @@ class SimulationServiceHpc(SimulationService):
         # uv run --env-file .env ecoli/experiments/ecoli_master_sim.py \
         #             --generations 1 --emitter parquet --emitter_arg out_dir='out' \
         #             --experiment_id "parca_1" --daughter_outdir "out/parca_1" \
-        #             --sim_data_path "out/parca_1/kb/simData.cPickle" --fail_at_total_time
+        #             --sim_data_path "out/parca_1/kb/simData.cPickle" ----fail_at_max_duration
 
         # build the submit script
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -323,6 +323,24 @@ class SimulationServiceHpc(SimulationService):
                     binds+=" -B {experiment_path_parent!s}:/out"
                     image="{apptainer_image_path!s}"
                     cd {remote_vEcoli_repo_path!s}
+
+                    # scrape the slurm log file for the magic word and publish to NATS
+                    export NATS_URL={settings.nats_emitter_url}
+                    if [ -z "$NATS_URL" ]; then
+                        echo "NATS_URL environment variable is not set."
+                    else
+                        tail -F {slurm_log_file!s} | while read -r line; do
+                            if echo "$line" | grep -q "{settings.nats_emitter_magic_word}"; then
+                                clean_line="$(echo "$line" | sed \
+                                   -e 's/{settings.nats_emitter_magic_word}//g' \
+                                   -e "s/'/\\&quot;/g" )"
+                                nats pub {settings.nats_worker_event_subject} "'$clean_line'"
+                            fi
+                        done &
+                        SCRAPE_PID=$!
+                        TAIL_PID=$(pgrep -P $SCRAPE_PID tail)
+                    fi
+
                     git -C ./configs diff HEAD >> ./source-info/git_diff.txt
                     singularity run $binds $image uv run \\
                          --env-file /vEcoli/.env /vEcoli/ecoli/experiments/ecoli_master_sim.py \\
@@ -330,9 +348,18 @@ class SimulationServiceHpc(SimulationService):
                          --experiment_id {experiment_id} \\
                          --daughter_outdir "/out/{experiment_id}" \\
                          --sim_data_path "/parca/{parca_dataset_dirname}/kb/simData.cPickle" \\
-                         --fail_at_total_time
+                         --fail_at_max_duration
 
-                    # if the parca directory is empty after the run, fail the job
+                    if [ -n "$SCRAPE_PID" ]; then
+                        echo "Waiting for scrape to finish..."
+                        sleep 10  # give time for the scrape to finish
+                        kill $SCRAPE_PID || true  # kill the scrape process if it is still running
+                        kill $TAIL_PID || true  # kill the tail process if it is still running
+                    else
+                        echo "No scrape process found."
+                    fi
+
+                    # if the experiment directory is empty after the run, fail the job
                     if [ ! "$(ls -A {experiment_path!s})" ]; then
                         echo "Simulation output directory {experiment_path!s} is empty. Job must have failed."
                         exit 1

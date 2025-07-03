@@ -5,13 +5,13 @@ import pytest
 
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
+from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import ParcaDatasetRequest, SimulatorVersion
-from sms_api.simulation.simulation_database import SimulationDatabaseService
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 main_branch = "master"
 repo_url = "https://github.com/CovertLab/vEcoli"
-latest_commit_hash = "5f21165"
+latest_commit_hash = "12bdd5e"
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
@@ -24,9 +24,7 @@ async def test_latest_repo_installed(ssh_service: SSHService) -> None:
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_parca(
-    simulation_service_slurm: SimulationServiceHpc, database_service: SimulationDatabaseService
-) -> None:
+async def test_parca(simulation_service_slurm: SimulationServiceHpc, database_service: DatabaseService) -> None:
     # check if the latest commit is already installed
     simulator: SimulatorVersion | None = None
     for _simulator in await database_service.list_simulators():

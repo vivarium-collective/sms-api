@@ -9,16 +9,34 @@ from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
     HpcRun,
+    JobType,
     ParcaDataset,
     ParcaDatasetRequest,
     SimulatorVersion,
+    WorkerEvent,
 )
-from sms_api.simulation.tables_orm import ORMHpcRun, ORMParcaDataset, ORMSimulation, ORMSimulator
+from sms_api.simulation.tables_orm import (
+    JobStatusDB,
+    JobTypeDB,
+    ORMHpcRun,
+    ORMParcaDataset,
+    ORMSimulation,
+    ORMSimulator,
+    ORMWorkerEvent,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class SimulationDatabaseService(ABC):
+class DatabaseService(ABC):
+    @abstractmethod
+    async def insert_worker_event(self, worker_event: WorkerEvent) -> WorkerEvent:
+        pass
+
+    @abstractmethod
+    async def list_worker_events(self, hpcrun_id: int, prev_sequence_number: int | None = None) -> list[WorkerEvent]:
+        pass
+
     @abstractmethod
     async def insert_simulator(self, git_commit_hash: str, git_repo_url: str, git_branch: str) -> SimulatorVersion:
         pass
@@ -33,6 +51,10 @@ class SimulationDatabaseService(ABC):
 
     @abstractmethod
     async def list_simulators(self) -> list[SimulatorVersion]:
+        pass
+
+    @abstractmethod
+    async def insert_hpcrun(self, slurmjobid: int, job_type: JobType, ref_id: int) -> HpcRun:
         pass
 
     @abstractmethod
@@ -80,7 +102,7 @@ class SimulationDatabaseService(ABC):
         pass
 
 
-class SimulationDatabaseServiceSQL(SimulationDatabaseService):
+class DatabaseServiceSQL(DatabaseService):
     async_sessionmaker: async_sessionmaker[AsyncSession]
 
     def __init__(self, async_engine: AsyncEngine):
@@ -197,19 +219,30 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             return simulator_versions
 
     @override
+    async def insert_hpcrun(self, slurmjobid: int, job_type: JobType, ref_id: int) -> HpcRun:
+        jobref_simulation_id = ref_id if job_type == JobType.SIMULATION else None
+        jobref_parca_dataset_id = None if job_type == JobType.PARCA else None
+        jobref_simulator_id = None if job_type == JobType.BUILD_IMAGE else None
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_hpc_run = ORMHpcRun(
+                slurmjobid=slurmjobid,
+                job_type=JobTypeDB.from_job_type(job_type),
+                status=JobStatusDB.RUNNING,
+                jobref_simulator_id=jobref_simulator_id,
+                jobref_simulation_id=jobref_simulation_id,
+                jobref_parca_dataset_id=jobref_parca_dataset_id,
+            )
+            session.add(orm_hpc_run)
+            await session.flush()
+            return orm_hpc_run.to_hpc_run()
+
+    @override
     async def get_hpcrun_by_slurmjobid(self, slurmjobid: int) -> HpcRun | None:
         async with self.async_sessionmaker() as session, session.begin():
             orm_hpc_job: ORMHpcRun | None = await self._get_orm_hpcrun_by_slurmjobid(session, slurmjobid=slurmjobid)
             if orm_hpc_job is None:
                 return None
-            return HpcRun(
-                database_id=orm_hpc_job.id,
-                slurmjobid=orm_hpc_job.slurmjobid,
-                status=orm_hpc_job.status.to_job_status(),
-                start_time=str(orm_hpc_job.start_time) if orm_hpc_job.start_time else None,
-                end_time=str(orm_hpc_job.end_time) if orm_hpc_job.end_time else None,
-                error_message=orm_hpc_job.error_message,
-            )
+            return orm_hpc_job.to_hpc_run()
 
     @override
     async def get_hpcrun(self, hpcrun_id: int) -> HpcRun | None:
@@ -217,14 +250,7 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             orm_hpc_job: ORMHpcRun | None = await self._get_orm_hpcrun(session, hpcrun_id=hpcrun_id)
             if orm_hpc_job is None:
                 return None
-            return HpcRun(
-                database_id=orm_hpc_job.id,
-                slurmjobid=orm_hpc_job.slurmjobid,
-                status=orm_hpc_job.status.to_job_status(),
-                start_time=str(orm_hpc_job.start_time) if orm_hpc_job.start_time else None,
-                end_time=str(orm_hpc_job.end_time) if orm_hpc_job.end_time else None,
-                error_message=orm_hpc_job.error_message,
-            )
+            return orm_hpc_job.to_hpc_run()
 
     @override
     async def get_or_insert_parca_dataset(self, parca_dataset_request: ParcaDatasetRequest) -> ParcaDataset:
@@ -243,11 +269,6 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             result1: Result[tuple[ORMParcaDataset]] = await session.execute(stmt1)
             existing_orm_parca_dataset: ORMParcaDataset | None = result1.scalars().one_or_none()
             if existing_orm_parca_dataset is not None:
-                hpc_run: HpcRun | None = (
-                    await self.get_hpcrun(hpcrun_id=existing_orm_parca_dataset.hpcrun_id)
-                    if existing_orm_parca_dataset.hpcrun_id
-                    else None
-                )
                 simulator_version: SimulatorVersion | None = await self.get_simulator(
                     existing_orm_parca_dataset.simulator_id
                 )
@@ -262,7 +283,6 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                         parca_config=existing_orm_parca_dataset.parca_config,
                     ),
                     remote_archive_path=existing_orm_parca_dataset.remote_archive_path,
-                    hpc_run=hpc_run,
                 )
             else:
                 # did not find the parca dataset, so insert it
@@ -293,7 +313,6 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                     database_id=orm_parca_dataset_id,
                     parca_dataset_request=parca_dataset_request,
                     remote_archive_path=None,
-                    hpc_run=None,  # Initially set to None, can be updated later
                 )
                 return parca_dataset
 
@@ -306,9 +325,6 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
             if orm_parca_dataset is None:
                 return None
 
-            hpc_run: HpcRun | None = (
-                await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id) if orm_parca_dataset.hpcrun_id else None
-            )
             simulator_version: SimulatorVersion | None = await self.get_simulator(orm_parca_dataset.simulator_id)
             if simulator_version is None:
                 raise Exception(f"Simulator with id {orm_parca_dataset.simulator_id} not found in the database")
@@ -320,7 +336,6 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                     parca_config=orm_parca_dataset.parca_config,
                 ),
                 remote_archive_path=orm_parca_dataset.remote_archive_path,
-                hpc_run=hpc_run,
             )
 
     @override
@@ -342,11 +357,6 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
 
             parca_datasets: list[ParcaDataset] = []
             for orm_parca_dataset in orm_parca_datasets:
-                hpc_run: HpcRun | None = (
-                    await self.get_hpcrun(hpcrun_id=orm_parca_dataset.hpcrun_id)
-                    if orm_parca_dataset.hpcrun_id
-                    else None
-                )
                 simulator_version: SimulatorVersion | None = await self.get_simulator(orm_parca_dataset.simulator_id)
                 if simulator_version is None:
                     raise Exception(f"Simulator with id {orm_parca_dataset.simulator_id} not found in the database")
@@ -358,10 +368,41 @@ class SimulationDatabaseServiceSQL(SimulationDatabaseService):
                             parca_config=orm_parca_dataset.parca_config,
                         ),
                         remote_archive_path=orm_parca_dataset.remote_archive_path,
-                        hpc_run=hpc_run,
                     )
                 )
             return parca_datasets
+
+    @override
+    async def insert_worker_event(self, worker_event: WorkerEvent) -> WorkerEvent:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_worker_event = ORMWorkerEvent.from_worker_event(worker_event)
+            session.add(orm_worker_event)
+            await session.flush()  # Ensure the ORM object is inserted and has an ID
+
+            # prepare the EcoliSimulation object to return
+            new_worker_event = orm_worker_event.to_worker_event()
+            return new_worker_event
+
+    @override
+    async def list_worker_events(self, hpcrun_id: int, prev_sequence_number: int | None = None) -> list[WorkerEvent]:
+        async with self.async_sessionmaker() as session, session.begin():
+            stmt = (
+                select(ORMWorkerEvent)
+                .where(
+                    and_(
+                        ORMWorkerEvent.hpcrun_id == hpcrun_id,
+                        ORMWorkerEvent.sequence_number > (prev_sequence_number or -1),
+                    )
+                )
+                .order_by(ORMWorkerEvent.sequence_number)
+            )
+            result: Result[tuple[ORMWorkerEvent]] = await session.execute(stmt)
+            orm_worker_events = result.scalars().all()
+
+            worker_events: list[WorkerEvent] = []
+            for orm_worker_event in orm_worker_events:
+                worker_events.append(orm_worker_event.to_worker_event())
+            return worker_events
 
     @override
     async def insert_simulation(self, sim_request: EcoliSimulationRequest) -> EcoliSimulation:

@@ -20,3 +20,8 @@ def setup_logging(logger: logging.Logger) -> None:
     # Add the console handler to the root logger and uvicorn logger
     root_logger.addHandler(console_handler)
     logger.addHandler(console_handler)
+
+    # Enable NATS client logging
+    nats_logger = logging.getLogger("nats")
+    nats_logger.setLevel(logging.DEBUG)
+    nats_logger.addHandler(console_handler)

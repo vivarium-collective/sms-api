@@ -1,9 +1,12 @@
 import logging
 
+import nats
+from nats.aio.client import Client as NATSClient
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.config import get_settings
-from sms_api.simulation.simulation_database import SimulationDatabaseService, SimulationDatabaseServiceSQL
+from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
+from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
 from sms_api.simulation.tables_orm import create_db
 
@@ -24,17 +27,17 @@ def get_postgres_engine() -> AsyncEngine | None:
 
 # ------- simulation database service (standalone or pytest) ------
 
-global_simulation_database_service: SimulationDatabaseService | None = None
+global_database_service: DatabaseService | None = None
 
 
-def set_simulation_database_service(database_service: SimulationDatabaseService | None) -> None:
-    global global_simulation_database_service
-    global_simulation_database_service = database_service
+def set_database_service(database_service: DatabaseService | None) -> None:
+    global global_database_service
+    global_database_service = database_service
 
 
-def get_simulation_database_service() -> SimulationDatabaseService | None:
-    global global_simulation_database_service
-    return global_simulation_database_service
+def get_database_service() -> DatabaseService | None:
+    global global_database_service
+    return global_database_service
 
 
 # ------- simulation service (standalone or pytest) ------
@@ -51,6 +54,11 @@ def get_simulation_service() -> SimulationService | None:
     global global_simulation_service
     return global_simulation_service
 
+
+# ------ nats client (standalone) -----------------------------
+
+global_nats_client: NATSClient | None = None
+global_job_scheduler: JobScheduler | None = None
 
 # ------ initialized standalone application (standalone) ------
 
@@ -83,11 +91,19 @@ async def init_standalone() -> None:
     await create_db(engine)
     set_postgres_engine(engine)
 
-    set_simulation_database_service(SimulationDatabaseServiceSQL(engine))
+    database = DatabaseServiceSQL(engine)
+    set_database_service(database)
+
+    global global_nats_client
+    global global_job_scheduler
+    global_nats_client = await nats.connect(_settings.nats_url)
+    global_job_scheduler = JobScheduler(nats_client=global_nats_client, database_service=database)
+
+    await global_job_scheduler.subscribe()
 
 
 async def shutdown_standalone() -> None:
-    mongodb_service = get_simulation_database_service()
+    mongodb_service = get_database_service()
     if mongodb_service:
         await mongodb_service.close()
 
@@ -96,4 +112,9 @@ async def shutdown_standalone() -> None:
         await engine.dispose()
 
     set_simulation_service(None)
-    set_simulation_database_service(None)
+    set_database_service(None)
+
+    global global_nats_client
+    if global_nats_client:
+        await global_nats_client.close()
+        global_nats_client = None

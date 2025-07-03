@@ -1190,6 +1190,22 @@ files = [
 ]
 
 [[package]]
+name = "nats-py"
+version = "2.10.0"
+description = "NATS client for Python"
+optional = false
+python-versions = ">=3.7"
+groups = ["main", "dev"]
+files = [
+    {file = "nats_py-2.10.0.tar.gz", hash = "sha256:9d44265a097edb30d40e214c1dd1a7405c1451d33480ce714c041fb73bb66a10"},
+]
+
+[package.extras]
+aiohttp = ["aiohttp"]
+fast-parse = ["fast-mail-parser"]
+nkeys = ["nkeys"]
+
+[[package]]
 name = "nodeenv"
 version = "1.9.1"
 description = "Node.js virtual environment builder"
@@ -1966,6 +1982,7 @@ files = [
 
 [package.dependencies]
 docker = "*"
+nats-py = {version = "*", optional = true, markers = "extra == \"nats\""}
 python-dotenv = "*"
 typing-extensions = "*"
 urllib3 = "*"
@@ -2284,4 +2301,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "1be79fdb2b15ed2127b8439206eac8a2cef7f33027017d0777d0465ce9e9af04"
+content-hash = "e4b0426785b5ce9a536750f6fa722420ef93335ac77e034e738ea950ca727d05"

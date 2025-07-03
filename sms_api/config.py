@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     hpc_repo_base_path: str = ""
     hpc_sim_base_path: str = ""
 
+    nats_url: str = ""
+    nats_worker_event_subject: str = "worker.events"
+
+    nats_emitter_url: str = ""
+    nats_emitter_magic_word: str = "emitter-magic-word"
+
 
 @lru_cache
 def get_settings() -> Settings:
