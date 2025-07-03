@@ -48,8 +48,7 @@ POSTGRES_HOST=$5
 POSTGRES_PORT=$6
 
 # construct a postgres URI
-POSTGRES_URI="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DATABASE}"
-
+POSTGRES_URI="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DATABASE}"
 
 # Create the generic secret and seal it
 kubectl create secret generic ${SECRET_NAME} --dry-run=client \

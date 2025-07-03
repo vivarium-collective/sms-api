@@ -11,7 +11,7 @@ spec:
           image: ghcr.io/biosimulations/sms-api:latest
           command: ["poetry", "run", "alembic", "upgrade", "head"]
           env:
-            - name: DATABASE_URL
+            - name: SQLALCHEMY_DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: shared-secrets
