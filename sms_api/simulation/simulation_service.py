@@ -323,6 +323,23 @@ class SimulationServiceHpc(SimulationService):
                     binds+=" -B {experiment_path_parent!s}:/out"
                     image="{apptainer_image_path!s}"
                     cd {remote_vEcoli_repo_path!s}
+
+                    # scrape the slurm log file for the magic word and publish to NATS
+                    export NATS_URL={settings.nats_emitter_url}
+                    if [ -z "$NATS_URL" ]; then
+                        echo "NATS_URL environment variable is not set."
+                    else
+                        tail -F {slurm_log_file!s} | while read -r line; do
+                            if echo "$line" | grep -q "{settings.nats_emitter_magic_word}"; then
+                                clean_line="$(echo "$line" | sed 's/{settings.nats_emitter_magic_word}//')"
+                                escaped_line="${{clean_line//\'/&quot;}}"
+                                nats pub {settings.nats_worker_event_subject} "'$escaped_line'"
+                            fi
+                        done &
+                        SCRAPE_PID=$!
+                        TAIL_PID=$(pgrep -P $SCRAPE_PID tail)
+                    fi
+
                     git -C ./configs diff HEAD >> ./source-info/git_diff.txt
                     singularity run $binds $image uv run \\
                          --env-file /vEcoli/.env /vEcoli/ecoli/experiments/ecoli_master_sim.py \\
@@ -332,7 +349,16 @@ class SimulationServiceHpc(SimulationService):
                          --sim_data_path "/parca/{parca_dataset_dirname}/kb/simData.cPickle" \\
                          --fail_at_max_duration
 
-                    # if the parca directory is empty after the run, fail the job
+                    if [ -n "$SCRAPE_PID" ]; then
+                        echo "Waiting for scrape to finish..."
+                        sleep 10  # give time for the scrape to finish
+                        kill $SCRAPE_PID || true  # kill the scrape process if it is still running
+                        kill $TAIL_PID || true  # kill the tail process if it is still running
+                    else
+                        echo "No scrape process found."
+                    fi
+
+                    # if the experiment directory is empty after the run, fail the job
                     if [ ! "$(ls -A {experiment_path!s})" ]; then
                         echo "Simulation output directory {experiment_path!s} is empty. Job must have failed."
                         exit 1

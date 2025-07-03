@@ -68,6 +68,9 @@ class Settings(BaseSettings):
 
     nats_worker_event_subject: str = "worker.events"
 
+    nats_emitter_url: str = ""
+    nats_emitter_magic_word: str = "emitter-magic-word"
+
 
 @lru_cache
 def get_settings() -> Settings:
