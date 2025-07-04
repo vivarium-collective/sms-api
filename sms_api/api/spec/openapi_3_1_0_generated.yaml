@@ -201,7 +201,7 @@ paths:
         required: false
         schema:
           type: string
-          default: 12bdd5e
+          default: fe28cd2
           title: Git Commit Hash
       requestBody:
         required: true

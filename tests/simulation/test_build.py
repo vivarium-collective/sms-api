@@ -10,12 +10,11 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 main_branch = "master"
 repo_url = "https://github.com/CovertLab/vEcoli"
-latest_commit_hash = "12bdd5e"
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_latest_repo_installed(ssh_service: SSHService) -> None:
+async def test_latest_repo_installed(ssh_service: SSHService, latest_commit_hash: str) -> None:
     return_code, stdout, stderr = await ssh_service.run_command(f"git ls-remote -h {repo_url} {main_branch}")
     assert return_code == 0
     assert stdout.strip("\n").split()[0][:7] == latest_commit_hash
@@ -23,7 +22,9 @@ async def test_latest_repo_installed(ssh_service: SSHService) -> None:
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_build(simulation_service_slurm: SimulationServiceHpc, database_service: DatabaseService) -> None:
+async def test_build(
+    simulation_service_slurm: SimulationServiceHpc, database_service: DatabaseService, latest_commit_hash: str
+) -> None:
     # insert the latest commit into the database
     simulator = await database_service.insert_simulator(
         git_commit_hash=latest_commit_hash, git_repo_url=repo_url, git_branch=main_branch
