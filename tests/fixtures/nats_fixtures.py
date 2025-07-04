@@ -1,6 +1,6 @@
 import asyncio
-from collections.abc import AsyncGenerator, Generator
 import threading
+from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import nats

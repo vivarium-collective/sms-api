@@ -1,11 +1,13 @@
 import asyncio
+import concurrent
+import concurrent.futures
 import threading
 
 import nats
 import pytest
+import uvloop
 from nats.aio.client import Client as NATSClient
 from nats.aio.msg import Msg
-import uvloop
 from testcontainers.nats import NatsContainer
 
 
@@ -64,12 +66,13 @@ loop = uvloop.new_event_loop()
 thread = threading.Thread(target=loop.run_forever, daemon=True)
 thread.start()
 
-def call_async(coro):
+
+def call_async(coro) -> concurrent.futures.Future:
     """Submit a coroutine to run in the background event loop."""
     return asyncio.run_coroutine_threadsafe(coro, loop)
 
 
-async def run_pubsub(subscriber: NATSClient, producer: NATSClient, received: asyncio.Event, data_holder: dict):
+async def run_pubsub(subscriber: NATSClient, producer: NATSClient, received: asyncio.Event, data_holder: dict) -> None:
     async def message_handler(msg: Msg):
         data_holder["data"] = msg.data
         received.set()
@@ -80,7 +83,7 @@ async def run_pubsub(subscriber: NATSClient, producer: NATSClient, received: asy
     await asyncio.wait_for(received.wait(), timeout=0.1)
 
 
-def test_sync_pubsub():
+def test_sync_pubsub() -> None:
     # 1. Launch the container synchronously
     with NatsContainer() as nats_container:
         uri = nats_container.nats_uri()
@@ -112,7 +115,7 @@ def test_sync_pubsub():
         # call_async(run_pubsub()).result(timeout=5)
 
         assert data_holder["data"] == b"hello world"
-        print(f'Data holder: {data_holder}')
+        print(f"Data holder: {data_holder}")
 
         # 4. Cleanup
         call_async(subscriber.close()).result(timeout=2)

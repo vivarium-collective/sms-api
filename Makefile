@@ -144,7 +144,7 @@ dbup:
 
 .PHONY: dbdown
 dbdown:
-	@make rmcont name="pgdb"
+	@docker rm -f pgdb
 
 .PHONY: mongoup
 mongoup:
@@ -186,5 +186,13 @@ latest-simulator:
 		echo "You have the latest commit."; \
 	fi; \
 	cat ${LATEST_COMMIT_PATH}
+
+.PHONY: testmod
+testmod:
+	@poetry run pytest -s $(m)
+
+.PHONY: ssh
+ssh:
+	@ssh -i $(key) svc_vivarium@login.hpc.cam.uchc.edu
 
 .DEFAULT_GOAL := help
