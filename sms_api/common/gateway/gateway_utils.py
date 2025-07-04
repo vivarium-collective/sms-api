@@ -3,11 +3,11 @@ from sms_api.simulation.models import HpcRun, JobType, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationService
 
 
-def format_version(major: int):
+def format_version(major: int) -> str:
     return f"v{major}"
 
 
-def root_prefix(major) -> str:
+def root_prefix(major: int) -> str:
     return f"/api/{format_version(major)}"
 
 

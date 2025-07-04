@@ -38,5 +38,5 @@ async def app_client(fastapi_app: FastAPI, local_base_url: str) -> AsyncGenerato
 
 
 @pytest_asyncio.fixture(scope="function")
-async def latest_commit_hash(simulation_service_slurm: SimulationServiceHpc):
-    return await simulation_service_slurm.get_latest_commit_hash()
+async def latest_commit_hash(simulation_service_slurm: SimulationServiceHpc) -> AsyncGenerator[str, None]:
+    yield await simulation_service_slurm.get_latest_commit_hash()

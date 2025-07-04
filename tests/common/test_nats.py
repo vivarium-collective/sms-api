@@ -1,14 +1,9 @@
 import asyncio
-import concurrent
-import concurrent.futures
 import threading
 
-import nats
 import pytest
-import uvloop
 from nats.aio.client import Client as NATSClient
 from nats.aio.msg import Msg
-from testcontainers.nats import NatsContainer
 
 
 @pytest.mark.asyncio
@@ -60,63 +55,3 @@ async def test_sync_producer_with_async_subscriber(
 
     await asyncio.wait_for(received.wait(), timeout=1.0)
     assert data_holder["data"] == b"hello world 9"
-
-
-loop = uvloop.new_event_loop()
-thread = threading.Thread(target=loop.run_forever, daemon=True)
-thread.start()
-
-
-def call_async(coro) -> concurrent.futures.Future:
-    """Submit a coroutine to run in the background event loop."""
-    return asyncio.run_coroutine_threadsafe(coro, loop)
-
-
-async def run_pubsub(subscriber: NATSClient, producer: NATSClient, received: asyncio.Event, data_holder: dict) -> None:
-    async def message_handler(msg: Msg):
-        data_holder["data"] = msg.data
-        received.set()
-
-    await subscriber.subscribe("test.subject", cb=message_handler)
-    await asyncio.sleep(1.0)  # wait for subscription to be ready
-    await producer.publish("test.subject", b"hello world")
-    await asyncio.wait_for(received.wait(), timeout=0.1)
-
-
-def test_sync_pubsub() -> None:
-    # 1. Launch the container synchronously
-    with NatsContainer() as nats_container:
-        uri = nats_container.nats_uri()
-
-        # 2. Create clients
-        subscriber_future = call_async(nats.connect(uri, verbose=True))
-        producer_future = call_async(nats.connect(uri, verbose=True))
-
-        subscriber = subscriber_future.result(timeout=5)
-        producer = producer_future.result(timeout=5)
-        assert subscriber.is_connected
-        assert producer.is_connected
-
-        # 3. Run test logic
-        received = asyncio.Event()
-        data_holder = {}
-
-        # async def message_handler(msg: Msg):
-        #     data_holder["data"] = msg.data
-        #     received.set()
-
-        # async def run_pubsub():
-        #     await subscriber.subscribe("test.subject", cb=message_handler)
-        #     await asyncio.sleep(1.0)  # wait for subscription to be ready
-        #     await producer.publish("test.subject", b"hello world")
-        #     await asyncio.wait_for(received.wait(), timeout=0.1)
-
-        call_async(run_pubsub(subscriber, producer, received, data_holder)).result(timeout=5)
-        # call_async(run_pubsub()).result(timeout=5)
-
-        assert data_holder["data"] == b"hello world"
-        print(f"Data holder: {data_holder}")
-
-        # 4. Cleanup
-        call_async(subscriber.close()).result(timeout=2)
-        call_async(producer.close()).result(timeout=2)

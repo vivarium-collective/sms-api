@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
 
+from sms_api.common.gateway.models import Namespace
 from sms_api.config import get_settings
-from sms_api.simulation.models import EcoliSimulation, Namspace, ParcaDataset, SimulatorVersion
+from sms_api.simulation.models import EcoliSimulation, ParcaDataset, SimulatorVersion
 
 
 def get_slurm_log_file(slurm_job_name: str) -> Path:
@@ -52,20 +53,20 @@ def get_experiment_dirname(database_id: int, git_commit_hash: str) -> str:
     return f"experiment_{git_commit_hash}_id_{database_id}"
 
 
-def format_experiment_path(experiment_dirname: str, namespace: Namspace = Namspace.TEST) -> Path:
+def format_experiment_path(experiment_dirname: str, namespace: Namespace = Namespace.TEST) -> Path:
     base_path = f"/home/FCAM/svc_vivarium/{namespace}/sims"
     return Path(base_path) / experiment_dirname
 
 
 def get_experiment_dirpath(
-    simulation_database_id: int, git_commit_hash: str, namespace: Namspace | None = None
+    simulation_database_id: int, git_commit_hash: str, namespace: Namespace | None = None
 ) -> Path:
     experiment_dirname = get_experiment_dirname(database_id=simulation_database_id, git_commit_hash=git_commit_hash)
-    return format_experiment_path(experiment_dirname=experiment_dirname, namespace=namespace or Namspace.TEST)
+    return format_experiment_path(experiment_dirname=experiment_dirname, namespace=namespace or Namespace.TEST)
 
 
 def get_remote_chunks_dirpath(
-    simulation_database_id: int, git_commit_hash: str, namespace: Namspace | None = None
+    simulation_database_id: int, git_commit_hash: str, namespace: Namespace | None = None
 ) -> Path:
     remote_dir_root = get_experiment_dirpath(
         simulation_database_id=simulation_database_id, git_commit_hash=git_commit_hash, namespace=namespace

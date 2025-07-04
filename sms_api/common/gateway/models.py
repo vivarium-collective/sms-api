@@ -1,6 +1,7 @@
 import dataclasses as dc
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import dotenv
 import fastapi
@@ -10,12 +11,14 @@ import fastapi
 class RouterConfig:
     router: fastapi.APIRouter
     prefix: str
-    dependencies: list | None = None
+    dependencies: list[Any] | None = None
 
     @property
-    def id(self):
+    def id(self) -> str | None:
         if len(self.prefix) > 1:
             return self.prefix.split("/")[-1]
+        else:
+            return None
 
     def include(self, app: fastapi.FastAPI) -> None:
         return app.include_router(self.router, prefix=self.prefix, dependencies=self.dependencies or [])
@@ -28,7 +31,7 @@ class ServiceType(StrEnum):
     AUTH = "auth"
 
 
-class Namspace(StrEnum):
+class Namespace(StrEnum):
     DEVELOPMENT = "dev"
     PRODUCTION = "prod"
     TEST = "test"

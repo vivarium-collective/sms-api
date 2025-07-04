@@ -10,12 +10,12 @@ from anyio import mkdtemp
 from async_lru import alru_cache
 from typing_extensions import override
 
+from sms_api.common.gateway.models import Namespace
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import Settings, get_settings
 from sms_api.simulation.hpc_utils import (
     get_remote_chunks_dirpath,
 )
-from sms_api.simulation.models import Namspace
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -36,7 +36,9 @@ class DataService(ABC):
         return get_ssh_service(settings=self.settings)
 
     @abstractmethod
-    async def get_remote_chunk_path(self) -> Path:
+    def get_remote_chunk_path(
+        self, db_id: int, commit_hash: str, chunk_id: int, namespace: Namespace | None = None
+    ) -> Path:
         pass
 
     @abstractmethod
@@ -44,26 +46,30 @@ class DataService(ABC):
         pass
 
     @abstractmethod
-    async def get_simulation_chunk_paths(self, experiment_id: str, namespace: Namspace) -> list[Path]:
+    async def get_simulation_chunk_paths(self, experiment_id: str, namespace: Namespace) -> list[Path]:
         pass
 
     @abstractmethod
-    async def read_simulation_chunks(self, experiment_id: str, namespace: Namspace) -> tuple[Path, pl.LazyFrame]:
+    async def read_simulation_chunks(self, experiment_id: str, namespace: Namespace) -> tuple[Path, pl.LazyFrame]:
         pass
 
-    def scan_simulation_chunks(self, chunks_dirpath: Path):
+    def scan_simulation_chunks(self, chunks_dirpath: Path) -> pl.LazyFrame:
         return pl.scan_parquet(f"{chunks_dirpath!s}/*.pq", rechunk=True)
+
+    @abstractmethod
+    async def close(self) -> None:
+        pass
 
 
 class DataServiceHpc(DataService):
     @override
     def get_remote_chunk_path(
-        self, db_id: int, commit_hash: str, chunk_id: int, namespace: Namspace | None = None
+        self, db_id: int, commit_hash: str, chunk_id: int, namespace: Namespace | None = None
     ) -> Path:
         results_fname = f"{chunk_id}.pq"
 
         # get remote dirpath
-        remote_dirpath = get_remote_chunks_dirpath(db_id, commit_hash, namespace or Namspace.TEST)
+        remote_dirpath = get_remote_chunks_dirpath(db_id, commit_hash, namespace or Namespace.TEST)
         return remote_dirpath / results_fname
 
     async def download_chunk(self, remote_chunk_path: Path, local_dirpath: Path | None = None) -> Path:
@@ -79,7 +85,7 @@ class DataServiceHpc(DataService):
             raise OSError(e) from e
 
     @alru_cache
-    async def get_simulation_chunk_paths(self, experiment_id: str, namespace: Namspace) -> list[Path]:
+    async def get_simulation_chunk_paths(self, experiment_id: str, namespace: Namespace) -> list[Path]:
         experiment_dir = Path(f"{self.settings.slurm_base_path}/{namespace}/sims/{experiment_id}")
         chunks_dir = Path(
             os.path.join(
@@ -97,7 +103,7 @@ class DataServiceHpc(DataService):
         return filenames
 
     @alru_cache
-    async def read_simulation_chunks(self, experiment_id: str, namespace: Namspace) -> tuple[Path, pl.LazyFrame]:
+    async def read_simulation_chunks(self, experiment_id: str, namespace: Namespace) -> tuple[Path, pl.LazyFrame]:
         # TODO: instead use a session so as to not iteratively reauth
         local_chunks_dir = Path(await mkdtemp(dir="datamount", prefix=experiment_id))
         for chunkpath in await self.get_simulation_chunk_paths(experiment_id, namespace):
@@ -105,3 +111,7 @@ class DataServiceHpc(DataService):
             await self.ssh_service.scp_download(local_file=local_fp, remote_path=chunkpath)
 
         return local_chunks_dir, self.scan_simulation_chunks(local_chunks_dir)
+
+    @override
+    async def close(self) -> None:
+        pass

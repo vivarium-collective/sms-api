@@ -1,10 +1,6 @@
-import asyncio
-import threading
-from collections.abc import AsyncGenerator, Generator
-from typing import Any
+from collections.abc import AsyncGenerator
 
 import nats
-import pytest
 import pytest_asyncio
 from nats.aio.client import Client as NATSClient
 
@@ -30,15 +26,6 @@ async def nats_producer_client(nats_container_uri: str) -> AsyncGenerator[NATSCl
     client = await nats.connect(nats_container_uri, verbose=True)
     yield client
     await client.close()
-
-
-@pytest.fixture(scope="session", autouse=True)
-def background_event_loop_fixture() -> Generator[asyncio.AbstractEventLoop, Any, None]:
-    loop = asyncio.new_event_loop()
-    thread = threading.Thread(target=loop.run_forever, daemon=True)
-    thread.start()
-    yield loop
-    loop.call_soon_threadsafe(loop.stop)
 
 
 # @pytest_asyncio.fixture

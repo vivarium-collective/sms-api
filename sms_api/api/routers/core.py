@@ -20,7 +20,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import ORJSONResponse
 
 from sms_api.common.gateway.gateway_utils import dispatch_build_job
-from sms_api.common.gateway.models import RouterConfig
+from sms_api.common.gateway.models import Namespace, RouterConfig, ServerMode
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.dependencies import (
     get_database_service,
@@ -35,17 +35,15 @@ from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
     HpcRun,
-    Namspace,
+    JobType,
     ParcaDataset,
     ParcaDatasetRequest,
     RegisteredSimulators,
     RequestedObservables,
-    ServerMode,
     SimulatorVersion,
     WorkerEvent,
 )
 from sms_api.simulation.simulation_service import SimulationServiceHpc
-from sms_api.simulation.tables_orm import JobType
 from sms_api.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -238,11 +236,18 @@ async def submit_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulat
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
 )
 async def run_vecoli_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
+    sim_service = get_simulation_service()
+    if sim_service is None:
+        logger.error("Simulation service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Database service is not initialized")
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+
     try:
-        simulation_service_slurm = get_simulation_service()
-        db_service = get_database_service()
         simulation: EcoliSimulation = await db_service.insert_simulation(sim_request)
-        slurm_jobid = await simulation_service_slurm.submit_ecoli_simulation_job(
+        slurm_jobid = await sim_service.submit_ecoli_simulation_job(
             ecoli_simulation=simulation, database_service=db_service
         )
         _hpc_run = await db_service.insert_hpcrun(
@@ -267,7 +272,7 @@ async def get_results(
     experiment_id: str = Query(default="experiment_96bb7a2_id_1_20250620-181422"),
     database_id: int = Query(description="Database Id returned from /submit-simulation"),
     git_commit_hash: str = Query(default=LATEST_COMMIT),
-):
+) -> ORJSONResponse:
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
@@ -279,7 +284,7 @@ async def get_results(
     try:
         service = DataServiceHpc()
 
-        local_dir, lazy_frame = await service.read_simulation_chunks(experiment_id, Namspace.TEST)
+        local_dir, lazy_frame = await service.read_simulation_chunks(experiment_id, Namespace.TEST)
         background_tasks.add_task(shutil.rmtree, local_dir)
         selected_cols = observable_names.items if len(observable_names.items) else ["bulk", "^listeners__mass.*"]
         data = (

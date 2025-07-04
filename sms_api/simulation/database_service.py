@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 
 from sqlalchemy import Result, and_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import InstrumentedAttribute
 from typing_extensions import override
 
 from sms_api.simulation.models import (
@@ -148,7 +149,7 @@ class DatabaseServiceSQL(DatabaseService):
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
         return orm_hpc_job
 
-    def _get_job_type_reference(self, job_type: JobType):
+    def _get_job_type_ref(self, job_type: JobType) -> InstrumentedAttribute[int | None]:
         match job_type:
             case JobType.BUILD_IMAGE:
                 return ORMHpcRun.jobref_simulator_id
@@ -158,7 +159,7 @@ class DatabaseServiceSQL(DatabaseService):
                 return ORMHpcRun.jobref_simulation_id
 
     async def _get_orm_hpcrun_by_ref(self, session: AsyncSession, ref_id: int, job_type: JobType) -> ORMHpcRun | None:
-        reference = self._get_job_type_reference(job_type)
+        reference = self._get_job_type_ref(job_type)
         stmt1 = select(ORMHpcRun).where(reference == ref_id).limit(1)
         result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
