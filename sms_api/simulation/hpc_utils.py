@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from sms_api.config import get_settings
-from sms_api.simulation.models import EcoliSimulation, Namespaces, ParcaDataset, SimulatorVersion
+from sms_api.simulation.models import EcoliSimulation, Namspace, ParcaDataset, SimulatorVersion
 
 
 def get_slurm_log_file(slurm_job_name: str) -> Path:
@@ -52,35 +52,21 @@ def get_experiment_dirname(database_id: int, git_commit_hash: str) -> str:
     return f"experiment_{git_commit_hash}_id_{database_id}"
 
 
-def format_experiment_path(experiment_dirname: str, namespace: Namespaces = Namespaces.TEST) -> Path:
+def format_experiment_path(experiment_dirname: str, namespace: Namspace = Namspace.TEST) -> Path:
     base_path = f"/home/FCAM/svc_vivarium/{namespace}/sims"
     return Path(base_path) / experiment_dirname
 
 
 def get_experiment_dirpath(
-    simulation_database_id: int, git_commit_hash: str, namespace: Namespaces | None = None
+    simulation_database_id: int, git_commit_hash: str, namespace: Namspace | None = None
 ) -> Path:
-    """
-    :param simulation_database_id: (`int`) database ID for the given simulation. TODO: replace this with a better primary key
-    :param git_commit_hash: (`str`) Last 7 characters of the commit hash for the simulator version used to run the simulation.
-    :param namespace: (`Namespaces`) Namespace used to store the results in HPC.
-        Choose one of: prod, test, dev. Defaults to `test`.
-    """
     experiment_dirname = get_experiment_dirname(database_id=simulation_database_id, git_commit_hash=git_commit_hash)
-    return format_experiment_path(experiment_dirname=experiment_dirname, namespace=namespace or Namespaces.TEST)
+    return format_experiment_path(experiment_dirname=experiment_dirname, namespace=namespace or Namspace.TEST)
 
 
 def get_remote_chunks_dirpath(
-    simulation_database_id: int, git_commit_hash: str, namespace: Namespaces | None = None
+    simulation_database_id: int, git_commit_hash: str, namespace: Namspace | None = None
 ) -> Path:
-    """
-    Obtains the absolute path to the innermost dirpath child in which `.pq` chunk files are stored for a given single (WCM)
-        simulation on the HPC.
-
-    :param simulation_database_id: (`int`) database ID for the given simulation. TODO: replace this with a better primary key
-    :param git_commit_hash: (`str`) Last 7 characters of the commit hash for the simulator version used to run the simulation.
-    :param namespace: (`Namespaces`) Namespace used to store the results in HPC. Choose one of: prod, test, dev. Defaults to `test`.
-    """
     remote_dir_root = get_experiment_dirpath(
         simulation_database_id=simulation_database_id, git_commit_hash=git_commit_hash, namespace=namespace
     )

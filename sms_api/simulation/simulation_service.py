@@ -39,7 +39,7 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, simulation_database_service: DatabaseService
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService
     ) -> int:
         pass
 

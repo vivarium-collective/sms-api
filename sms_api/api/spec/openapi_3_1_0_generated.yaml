@@ -3,15 +3,15 @@ info:
   title: sms-api
   version: 0.2.2
 servers:
-- url: http://localhost:8000
-  description: Main Development server
+  - url: http://localhost:8000
+    description: Main Development server
 paths:
   /:
     get:
       summary: Root
       operationId: root__get
       responses:
-        '200':
+        "200":
           description: Successful Response
           content:
             application/json:
@@ -25,7 +25,7 @@ paths:
       summary: Get Version
       operationId: get_version_version_get
       responses:
-        '200':
+        "200":
           description: Successful Response
           content:
             application/json:

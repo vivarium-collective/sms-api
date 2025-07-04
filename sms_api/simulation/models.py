@@ -3,10 +3,7 @@ import enum
 import hashlib
 import json
 from enum import StrEnum
-import os
-from pathlib import Path
 
-import dotenv
 from pydantic import BaseModel, Field
 
 
@@ -40,6 +37,12 @@ class SimulatorVersion(BaseModel):
     git_commit_hash: str  # Git commit hash for the specific simulator version (first 7 characters)
     git_repo_url: str  # Git repository URL for the simulator
     git_branch: str  # Git branch name for the simulator version
+    created_at: datetime.datetime | None = None
+
+
+class RegisteredSimulators(BaseModel):
+    versions: list[SimulatorVersion]
+    timestamp: datetime.datetime | None = Field(default_factory=datetime.datetime.now)
 
 
 class ParcaDatasetRequest(BaseModel):
@@ -94,29 +97,5 @@ class EcoliSimulationRun(BaseModel):
     last_update: str = Field(default_factory=lambda: str(datetime.datetime.now()))
 
 
-class ServerModes(StrEnum):
-    DEV = "http://localhost:8000"
-    PROD = "https://sms.cam.uchc.edu"
-
-    @classmethod
-    def detect(cls, env_path: Path) -> str:
-        return cls.DEV if dotenv.load_dotenv(env_path) else cls.PROD
-
-
-class ServiceTypes(StrEnum):
-    SIMULATION = "simulation"
-    MONGO = "mongo"
-    POSTGRES = "postgres"
-    AUTH = "auth"
-
-
-class ServicePing(BaseModel):
-    service_type: ServiceTypes
-    dialect_name: str
-    dialect_driver: str
-
-
-class Namespaces(StrEnum):
-    DEVELOPMENT = "dev"
-    PRODUCTION = "prod"
-    TEST = "test"
+class RequestedObservables(BaseModel):
+    items: list[str] = Field(default_factory=list)

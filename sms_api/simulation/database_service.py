@@ -55,6 +55,16 @@ class DatabaseService(ABC):
 
     @abstractmethod
     async def insert_hpcrun(self, slurmjobid: int, job_type: JobType, ref_id: int) -> HpcRun:
+        """
+        :param slurmjobid: (`int`) slurm job id for the associated `job_type`.
+        :param job_type: (`JobType`) job type to be run. Choose one of the following:
+            `JobType.SIMULATION`(/vecoli/run), `JobType.PARCA`(/vecoli/parca), `JobType.BUILD_IMAGE`(/simulator/new)
+        :param ref_id: primary key of the object this HPC run is associated with (sim, parca, etc.).
+        """
+        pass
+
+    @abstractmethod
+    async def get_hpcrun_by_ref(self, ref_id: int, job_type: JobType) -> HpcRun | None:
         pass
 
     @abstractmethod
@@ -138,6 +148,23 @@ class DatabaseServiceSQL(DatabaseService):
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
         return orm_hpc_job
 
+    def _get_job_type_reference(self, job_type: JobType):
+        match job_type:
+            case JobType.BUILD_IMAGE:
+                return ORMHpcRun.jobref_simulator_id
+            case JobType.PARCA:
+                return ORMHpcRun.jobref_parca_dataset_id
+            case JobType.SIMULATION:
+                return ORMHpcRun.jobref_simulation_id
+
+    async def _get_orm_hpcrun_by_ref(self, session: AsyncSession, ref_id: int, job_type: JobType) -> ORMHpcRun | None:
+        reference = self._get_job_type_reference(job_type)
+        stmt1 = select(ORMHpcRun).where(reference == ref_id).limit(1)
+        result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
+        orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
+
+        return orm_hpc_job
+
     @override
     async def insert_simulator(self, git_commit_hash: str, git_repo_url: str, git_branch: str) -> SimulatorVersion:
         async with self.async_sessionmaker() as session, session.begin():
@@ -189,6 +216,7 @@ class DatabaseServiceSQL(DatabaseService):
                 git_commit_hash=orm_simulator.git_commit_hash,
                 git_repo_url=orm_simulator.git_repo_url,
                 git_branch=orm_simulator.git_branch,
+                created_at=orm_simulator.created_at,
             )
 
     @override
@@ -219,10 +247,12 @@ class DatabaseServiceSQL(DatabaseService):
             return simulator_versions
 
     @override
-    async def insert_hpcrun(self, slurmjobid: int, job_type: JobType, ref_id: int) -> HpcRun:
+    async def insert_hpcrun(self, slurmjobid: int, job_type: JobType, ref_id: int | None = None) -> HpcRun:
         jobref_simulation_id = ref_id if job_type == JobType.SIMULATION else None
-        jobref_parca_dataset_id = None if job_type == JobType.PARCA else None
-        jobref_simulator_id = None if job_type == JobType.BUILD_IMAGE else None
+        # jobref_parca_dataset_id = None if job_type == JobType.PARCA else None
+        # jobref_simulator_id = None if job_type == JobType.BUILD_IMAGE else None
+        jobref_parca_dataset_id = ref_id if job_type == JobType.PARCA else None
+        jobref_simulator_id = ref_id if job_type == JobType.BUILD_IMAGE else None
         async with self.async_sessionmaker() as session, session.begin():
             orm_hpc_run = ORMHpcRun(
                 slurmjobid=slurmjobid,
@@ -240,6 +270,14 @@ class DatabaseServiceSQL(DatabaseService):
     async def get_hpcrun_by_slurmjobid(self, slurmjobid: int) -> HpcRun | None:
         async with self.async_sessionmaker() as session, session.begin():
             orm_hpc_job: ORMHpcRun | None = await self._get_orm_hpcrun_by_slurmjobid(session, slurmjobid=slurmjobid)
+            if orm_hpc_job is None:
+                return None
+            return orm_hpc_job.to_hpc_run()
+
+    @override
+    async def get_hpcrun_by_ref(self, ref_id: int, job_type: JobType) -> HpcRun | None:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_hpc_job: ORMHpcRun | None = await self._get_orm_hpcrun_by_ref(session, ref_id=ref_id, job_type=job_type)
             if orm_hpc_job is None:
                 return None
             return orm_hpc_job.to_hpc_run()
