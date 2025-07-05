@@ -6,12 +6,11 @@ from sms_api.simulation.simulation_service import SimulationService
 
 main_branch = "master"
 repo_url = "https://github.com/CovertLab/vEcoli"
-latest_commit_hash = "12bdd5e"
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_latest_repo_installed(ssh_service: SSHService) -> None:
+async def test_latest_repo_installed(ssh_service: SSHService, latest_commit_hash: str) -> None:
     return_code, stdout, stderr = await ssh_service.run_command(f"git ls-remote -h {repo_url} {main_branch}")
     assert return_code == 0
     assert stdout.strip("\n").split()[0][:7] == latest_commit_hash
@@ -19,7 +18,7 @@ async def test_latest_repo_installed(ssh_service: SSHService) -> None:
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_clone(simulation_service_slurm: SimulationService) -> None:
+async def test_clone(simulation_service_slurm: SimulationService, latest_commit_hash: str) -> None:
     with pytest.raises(ValueError):
         await simulation_service_slurm.clone_repository_if_needed(
             git_commit_hash="invalid_commit_hash", git_repo_url=repo_url, git_branch=main_branch

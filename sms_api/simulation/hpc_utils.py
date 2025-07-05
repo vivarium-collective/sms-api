@@ -1,5 +1,7 @@
+import os
 from pathlib import Path
 
+from sms_api.common.gateway.models import Namespace
 from sms_api.config import get_settings
 from sms_api.simulation.models import EcoliSimulation, ParcaDataset, SimulatorVersion
 
@@ -45,3 +47,44 @@ def get_apptainer_image_file(simulator_version: SimulatorVersion) -> Path:
     settings = get_settings()
     hpc_image_remote_path = Path(settings.hpc_image_base_path)
     return hpc_image_remote_path / f"vecoli-{simulator_version.git_commit_hash}.sif"
+
+
+def get_experiment_dirname(database_id: int, git_commit_hash: str) -> str:
+    return f"experiment_{git_commit_hash}_id_{database_id}"
+
+
+def format_experiment_path(experiment_dirname: str, namespace: Namespace = Namespace.TEST) -> Path:
+    base_path = f"/home/FCAM/svc_vivarium/{namespace}/sims"
+    return Path(base_path) / experiment_dirname
+
+
+def get_experiment_dirpath(
+    simulation_database_id: int, git_commit_hash: str, namespace: Namespace | None = None
+) -> Path:
+    experiment_dirname = get_experiment_dirname(database_id=simulation_database_id, git_commit_hash=git_commit_hash)
+    return format_experiment_path(experiment_dirname=experiment_dirname, namespace=namespace or Namespace.TEST)
+
+
+def get_remote_chunks_dirpath(
+    simulation_database_id: int, git_commit_hash: str, namespace: Namespace | None = None
+) -> Path:
+    remote_dir_root = get_experiment_dirpath(
+        simulation_database_id=simulation_database_id, git_commit_hash=git_commit_hash, namespace=namespace
+    )
+    experiment_dirname = str(remote_dir_root).split("/")[-1]
+    return Path(
+        os.path.join(
+            remote_dir_root,
+            "history",
+            f"experiment_id={experiment_dirname}",
+            "variant=0",
+            "lineage_seed=0",
+            "generation=1",
+            "agent_id=0",
+        )
+    )
+
+
+def read_latest_commit() -> str:
+    with open("assets/latest_commit.txt") as f:
+        return f.read().strip()

@@ -1,9 +1,10 @@
+import datetime
 import enum
 import hashlib
 import json
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class JobType(enum.Enum):
@@ -36,6 +37,12 @@ class SimulatorVersion(BaseModel):
     git_commit_hash: str  # Git commit hash for the specific simulator version (first 7 characters)
     git_repo_url: str  # Git repository URL for the simulator
     git_branch: str  # Git branch name for the simulator version
+    created_at: datetime.datetime | None = None
+
+
+class RegisteredSimulators(BaseModel):
+    versions: list[SimulatorVersion]
+    timestamp: datetime.datetime | None = Field(default_factory=datetime.datetime.now)
 
 
 class ParcaDatasetRequest(BaseModel):
@@ -71,6 +78,7 @@ class EcoliSimulationRequest(BaseModel):
 class EcoliSimulation(BaseModel):
     database_id: int
     sim_request: EcoliSimulationRequest
+    slurmjob_id: int | None = None
 
 
 class WorkerEvent(BaseModel):
@@ -81,3 +89,13 @@ class WorkerEvent(BaseModel):
     sim_data: list[tuple[str, str, float]]  # Simulation data with label/path/value
     global_time: float | None = None  # Global time of the simulation, if applicable
     error_message: str | None = None
+
+
+class EcoliSimulationRun(BaseModel):
+    job_id: int
+    simulation: EcoliSimulation
+    last_update: str = Field(default_factory=lambda: str(datetime.datetime.now()))
+
+
+class RequestedObservables(BaseModel):
+    items: list[str] = Field(default_factory=list)

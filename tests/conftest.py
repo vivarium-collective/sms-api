@@ -1,6 +1,7 @@
 import pytest  # noqa: F401
 import pytest_asyncio  # noqa: F401
 
+from tests.fixtures.api_fixtures import fastapi_app, latest_commit_hash, local_base_url  # noqa: F401
 from tests.fixtures.mongodb_fixtures import (  # noqa: F401
     mongo_test_client,
     mongo_test_collection,

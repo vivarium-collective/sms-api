@@ -10,7 +10,7 @@ from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.ssh.ssh_service import SSHService
+from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
@@ -68,6 +68,23 @@ class SimulationService(ABC):
 
 
 class SimulationServiceHpc(SimulationService):
+    async def get_latest_commit_hash(
+        self,
+        ssh_service: SSHService | None = None,
+        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
+        git_branch: str = "master",
+    ) -> str:
+        """
+        :rtype: `str`
+        :return: The last 7 characters of the latest commit hash.
+        """
+        svc = ssh_service or get_ssh_service()
+        return_code, stdout, stderr = await svc.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
+        if return_code != 0:
+            raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
+        latest_commit_hash = stdout.strip("\n")[:7]
+        return latest_commit_hash
+
     @override
     async def clone_repository_if_needed(
         self,
@@ -81,10 +98,15 @@ class SimulationServiceHpc(SimulationService):
             username=settings.slurm_submit_user,
             key_path=Path(settings.slurm_submit_key_path),
         )
-        return_code, stdout, stderr = await ssh_service.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
-        if return_code != 0:
-            raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
-        latest_commit_hash = stdout.strip("\n")[:7]
+
+        # return_code, stdout, stderr = await ssh_service.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
+        # if return_code != 0:
+        #     raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
+        # latest_commit_hash = stdout.strip("\n")[:7]
+
+        latest_commit_hash = await self.get_latest_commit_hash(
+            ssh_service=ssh_service, git_repo_url=git_repo_url, git_branch=git_branch
+        )
         if latest_commit_hash != git_commit_hash:
             raise ValueError(
                 f"Provided git commit hash {git_commit_hash} does not match "

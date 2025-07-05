@@ -167,3 +167,8 @@ cython_debug/
 #.idea/
 
 .idea/
+.dev_env
+datamount/
+test_history/
+sms_api/api/_main.py
+poetry.lock
