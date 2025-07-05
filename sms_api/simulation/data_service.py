@@ -7,7 +7,6 @@ from pathlib import Path
 
 import polars as pl
 from anyio import mkdtemp
-from async_lru import alru_cache
 from typing_extensions import override
 
 from sms_api.common.gateway.models import Namespace
@@ -84,7 +83,6 @@ class DataServiceHpc(DataService):
         except Exception as e:
             raise OSError(e) from e
 
-    @alru_cache
     async def get_simulation_chunk_paths(self, experiment_id: str, namespace: Namespace) -> list[Path]:
         experiment_dir = Path(f"{self.settings.slurm_base_path}/{namespace}/sims/{experiment_id}")
         chunks_dir = Path(
@@ -102,7 +100,6 @@ class DataServiceHpc(DataService):
         filenames = [Path(os.path.join(chunks_dir, fname)) for fname in re.findall(r"(\d+\.pq)", stdout)]
         return filenames
 
-    @alru_cache
     async def read_simulation_chunks(self, experiment_id: str, namespace: Namespace) -> tuple[Path, pl.LazyFrame]:
         # TODO: instead use a session so as to not iteratively reauth
         local_chunks_dir = Path(await mkdtemp(dir="datamount", prefix=experiment_id))

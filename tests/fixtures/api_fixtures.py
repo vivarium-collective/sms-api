@@ -1,13 +1,11 @@
-from collections.abc import AsyncGenerator
+import os
+from pathlib import Path
 
 import pytest_asyncio
-from fastapi import APIRouter, FastAPI
-from httpx import ASGITransport, AsyncClient
+from fastapi import FastAPI
 
 from sms_api.api.main import app
-from sms_api.api.routers import core
-from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.simulation_service import SimulationServiceHpc
+from sms_api.latest_commit import write_latest_commit
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -16,27 +14,17 @@ async def local_base_url() -> str:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def fastapi_app(
-    database_service: DatabaseService, simulation_service_slurm: SimulationServiceHpc
-) -> AsyncGenerator[FastAPI, None]:
+async def fastapi_app() -> FastAPI:
     # app.dependency_overrides[get_database_service] = lambda: database_service
     # app.dependency_overrides[get_simulation_service] = lambda: simulation_service_slurm
-    yield app
+    return app
 
 
-@pytest_asyncio.fixture(scope="function")
-async def core_router(
-    database_service: DatabaseService, simulation_service_slurm: SimulationServiceHpc
-) -> AsyncGenerator[APIRouter, None]:
-    yield core.config.router
-
-
-@pytest_asyncio.fixture
-async def app_client(fastapi_app: FastAPI, local_base_url: str) -> AsyncGenerator[AsyncClient, None]:
-    async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url=local_base_url) as client:
-        yield client
-
-
-@pytest_asyncio.fixture(scope="function")
-async def latest_commit_hash(simulation_service_slurm: SimulationServiceHpc) -> AsyncGenerator[str, None]:
-    yield await simulation_service_slurm.get_latest_commit_hash()
+@pytest_asyncio.fixture(scope="session")
+async def latest_commit_hash() -> str:
+    latest_commit_path = Path("assets/latest_commit.txt")
+    if not os.path.exists(latest_commit_path):
+        await write_latest_commit()
+    with open(latest_commit_path) as fp:
+        latest_commit = fp.read()
+    return latest_commit

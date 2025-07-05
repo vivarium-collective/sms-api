@@ -39,8 +39,18 @@ clean:
 test: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
 	@make write-latest-commit
-	@poetry run pytest --cov --cov-config=pyproject.toml --cov-report=xml
-	@poetry run python tests/connection/test_ssh.py
+	@poetry run pytest -ra --cov --cov-config=pyproject.toml --cov-report=xml
+
+.PHONY: logtest
+logtest: ## Test the code with pytest
+	@echo "🚀 Testing code: Running pytest"
+	@make write-latest-commit
+	@poetry run pytest \
+		--cov \
+		--cov-config=pyproject.toml \
+		--cov-report=xml \
+		--log-file=tests/.log
+		--log-file-level="ERROR"
 
 .PHONY: build
 build: clean-build ## Build wheel file using poetry
