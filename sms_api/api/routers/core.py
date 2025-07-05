@@ -44,39 +44,16 @@ from sms_api.simulation.models import (
     WorkerEvent,
 )
 from sms_api.simulation.simulation_service import SimulationServiceHpc
-from sms_api.version import __version__
 
 logger = logging.getLogger(__name__)
 setup_logging(logger)
+
+LATEST_COMMIT = read_latest_commit()
 
 
 def get_server_url(dev: bool = True) -> ServerMode:
     return ServerMode.DEV if dev else ServerMode.PROD
 
-
-# -- constraints -- #
-LATEST_COMMIT = read_latest_commit()
-APP_VERSION = __version__
-APP_TITLE = "sms-api"
-APP_ORIGINS = [
-    "http://0.0.0.0:8000",
-    "http://127.0.0.1:8000",
-    "http://127.0.0.1:8888",
-    "http://127.0.0.1:4200",
-    "http://127.0.0.1:4201",
-    "http://127.0.0.1:4202",
-    "http://localhost:4200",
-    "http://localhost:4201",
-    "http://localhost:4202",
-    "http://localhost:8888",
-    "http://localhost:3001",
-]
-SERVER_URL = get_server_url(dev=True)
-
-APP_SERVERS: list[dict[str, str]] = [
-    {"url": ServerMode.PROD, "description": "Production server"},
-    {"url": ServerMode.DEV, "description": "Main Development server"},
-]
 
 # -- app components -- #
 

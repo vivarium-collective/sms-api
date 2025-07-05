@@ -26,7 +26,6 @@ check: ## Run code quality tools.
 	@poetry run mypy
 	@echo "🚀 Checking for obsolete dependencies: Running deptry"
 	@poetry run deptry .
-	@make spec
 
 .PHONY: clean
 clean:

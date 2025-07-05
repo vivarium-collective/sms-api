@@ -73,15 +73,12 @@ ACTIVE_URL = ServerMode.detect(Path("assets/dev/config/.dev_env"))
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # configure and start standalone services (data, sim, db, etc)
-    dev_mode_warning = None
     dev_mode = os.getenv("DEV_MODE", "0")
     start_standalone = partial(init_standalone)
     if bool(int(dev_mode)):
-        dev_mode_warning = "Development Mode is currently engaged!!!"
+        logger.warning("Development Mode is currently engaged!!!", stacklevel=1)
         start_standalone.keywords["enable_ssl"] = False
     await start_standalone()
-    if dev_mode_warning:
-        logger.warning("Development Mode is currently engaged!!!", stacklevel=1)
     yield
     await shutdown_standalone()
 
