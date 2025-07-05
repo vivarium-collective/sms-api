@@ -1,0 +1,102 @@
+apiVersion: s3.aws.upbound.io/v1beta1
+kind: Bucket
+metadata:
+  name: my-app-bucket
+spec:
+  forProvider:
+    region: us-gov-west-1
+  providerConfigRef:
+    name: aws-provider
+
+---
+apiVersion: rds.aws.upbound.io/v1beta1
+kind: Instance
+metadata:
+  name: my-app-db
+spec:
+  forProvider:
+    region: us-gov-west-1
+    dbInstanceClass: db.t3.micro
+    engine: postgres
+    engineVersion: "15.3"
+    masterUsername: admin
+    masterPasswordSecretRef:
+      name: my-app-db-secret
+      key: password
+      namespace: crossplane-system
+    allocatedStorage: 20
+    skipFinalSnapshot: true
+  providerConfigRef:
+    name: aws-provider
+
+---
+apiVersion: sns.aws.upbound.io/v1beta1
+kind: Topic
+metadata:
+  name: my-app-topic
+spec:
+  forProvider:
+    region: us-gov-west-1
+  providerConfigRef:
+    name: aws-provider
+
+---
+apiVersion: aws.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: aws-provider
+spec:
+  credentials:
+    source: IRSA
+    roleArn: arn:aws:iam::<account-id>:role/<role-name>
+
+--- or
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/provider-aws:v0.39.0
+
+
+
+---
+apiVersion: ecr.aws.upbound.io/v1beta1
+kind: Repository
+metadata:
+  name: my-app-ecr
+spec:
+  forProvider:
+    region: us-gov-west-1
+  providerConfigRef:
+    name: aws-provider
+
+---
+apiVersion: hostedzone.route53.aws.upbound.io/v1beta1
+kind: HostedZone
+metadata:
+  name: my-app-zone
+spec:
+  forProvider:
+    name: example.com
+    region: us-gov-west-1
+  providerConfigRef:
+    name: aws-provider
+
+---
+apiVersion: recordset.route53.aws.upbound.io/v1beta1
+kind: RecordSet
+metadata:
+  name: my-app-record
+spec:
+  forProvider:
+    zoneIdRef:
+      name: my-app-zone
+    name: www.example.com
+    type: A
+    ttl: 300
+    region: us-gov-west-1
+    records:
+      - 1.2.3.4
+  providerConfigRef:
+    name: aws-provider

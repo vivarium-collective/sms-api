@@ -1,0 +1,35 @@
+# ---------- ParallelCluster configuration (v3) ----------
+Region: us-gov-west-1          # GovCloud-West; use us-gov-east-1 if needed
+ConfigVersion: 3
+
+Image:                          # AMI is auto-selected for GovCloud
+  Os: alinux2                  # AL2, Ubuntu 22.04, AL2023 also OK :contentReference[oaicite:0]{index=0}
+
+HeadNode:
+  InstanceType: m5.large       # Pick any instance that exists in GovCloud
+  Networking:
+    SubnetId: <<< PUBLIC-OR-PRIVATE-SUBNET-ID >>>
+  Ssh:
+    KeyName: <<< EC2-KEYPAIR-NAME >>>
+
+Scheduling:
+  Scheduler: slurm
+  SlurmQueues:
+    - Name: compute
+      Networking:
+        SubnetIds:
+          - <<< SAME-OR-ANOTHER-SUBNET-ID >>>
+      ComputeResources:
+        - Name: m5
+          InstanceType: m5.large          # Also be sure the type is offered in GovCloud
+          MinCount: 0                     # --> cluster is elastic; 0 nodes when idle
+          MaxCount: 32                    # raise / lower as needed
+
+# (Optional) attach one EBS volume as shared /shared
+SharedStorage:
+  - Name: shared-ebs
+    StorageType: Ebs
+    MountDir: /shared
+    EbsSettings:
+      VolumeType: gp3
+      Size: 100

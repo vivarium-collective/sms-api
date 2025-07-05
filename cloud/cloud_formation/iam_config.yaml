@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  CrossplanePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: crossplane-eks-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:*
+            Resource: arn:aws:s3:::*
+          - Effect: Allow
+            Action:
+              - rds:*
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - sns:*
+            Resource: "*"
+      Roles:
+        - !Ref CrossplaneRole
+
+  CrossplaneRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: crossplane-eks-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole

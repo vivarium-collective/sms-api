@@ -1,0 +1,47 @@
+apiVersion: aws.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: user-keys
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: my-key
+      key: secret-key
+
+---
+apiVersion: aws.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: admin-keys
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: admin-key
+      key: admin-secret-key
+
+
+---
+apiVersion: s3.aws.upbound.io/v1beta1
+kind: Bucket
+metadata:
+  name: user-bucket
+spec:
+  forProvider:
+    region: us-east-2
+  providerConfigRef:
+    name: user-keys
+
+---
+apiVersion: s3.aws.upbound.io/v1beta1
+kind: Bucket
+metadata:
+  name: user-bucket
+spec:
+  forProvider:
+    region: us-east-2
+  providerConfigRef:
+    name: admin-keys
