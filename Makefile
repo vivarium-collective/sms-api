@@ -49,8 +49,8 @@ logtest: ## Test the code with pytest
 		--cov \
 		--cov-config=pyproject.toml \
 		--cov-report=xml \
-		--log-file=tests/.log
-		--log-file-level="ERROR"
+		--log-file=tests/.pytest.log \
+		--log-file-level=ERROR
 
 .PHONY: build
 build: clean-build ## Build wheel file using poetry

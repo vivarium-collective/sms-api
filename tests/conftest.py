@@ -20,3 +20,8 @@ from tests.fixtures.slurm_fixtures import (  # noqa: F401
     slurm_template_hello,
     ssh_service,
 )
+from tests.fixtures.api_fixtures import (
+    local_base_url,
+    latest_commit_hash,
+    fastapi_app
+)
