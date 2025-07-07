@@ -1,9 +1,14 @@
 import os
 from pathlib import Path
 
-from sms_api.common.gateway.models import Namespace
+from sms_api.common.gateway.models import Namespace, RouterConfig
 from sms_api.config import get_settings
-from sms_api.simulation.models import EcoliSimulation, ParcaDataset, SimulatorVersion
+from sms_api.simulation.models import (
+    EcoliSimulation,
+    EcoliSimulationRequest,
+    ParcaDataset,
+    SimulatorVersion,
+)
 
 
 def get_slurm_log_file(slurm_job_name: str) -> Path:
@@ -88,3 +93,13 @@ def get_remote_chunks_dirpath(
 def read_latest_commit() -> str:
     with open("assets/latest_commit.txt") as f:
         return f.read().strip()
+
+
+def get_experiment_id(
+    router_config: RouterConfig, simulation: EcoliSimulation, sim_request: EcoliSimulationRequest
+) -> str:
+    return (
+        router_config.prefix.replace("/", "")
+        + "_"
+        + get_experiment_dirname(simulation.database_id, sim_request.simulator.git_commit_hash)
+    )

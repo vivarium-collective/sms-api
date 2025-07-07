@@ -1,3 +1,5 @@
+from logging import Logger
+
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import HpcRun, JobType, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationService
@@ -12,8 +14,13 @@ def root_prefix(major: int) -> str:
 
 
 async def dispatch_build_job(
-    sim_service: SimulationService, sim_db_service: DatabaseService, simulator_version: SimulatorVersion
+    sim_service: SimulationService,
+    sim_db_service: DatabaseService,
+    simulator_version: SimulatorVersion,
+    logger: Logger | None = None,
 ) -> HpcRun:
+    if logger:
+        logger.info(f"Dispatching job with simulator version: {simulator_version.git_commit_hash}")
     # dispatch new build job to hpc/worker
     build_job_id = await sim_service.submit_build_image_job(simulator_version=simulator_version)
     # create and insert hpc run with ref_id pointing to simulator promary key

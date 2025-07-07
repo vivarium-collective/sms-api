@@ -2,7 +2,7 @@
 name = "sms_api"
 version = "0.2.2"
 description = "This is the api server for Vivarium simulation services."
-authors = ["Alex Patrie <alex.patrie@gmail.com>"]
+authors = ["Alex Patrie <alexanderpatrie@gmail.com>"]
 repository = "https://github.com/vivarium-collective/sms-api"
 documentation = "https://vivarium-collective.github.io/sms-api/"
 readme = "README.md"
@@ -26,9 +26,9 @@ sqlalchemy = {extras = ["asyncio"], version = "^2.0.41"}
 asyncpg = "^0.30.0"
 nats-py = "^2.10.0"
 alembic = "^1.16.2"
-polars = "^1.31.0"
 async-lru = "^2.0.5"
 httpx = "^0.28.1"
+polars-lts-cpu = {version = "^1.31.0", extras = ["pyarrow"]}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
@@ -46,6 +46,16 @@ testcontainers = {extras = ["nats", "postgres"], version = "^4.10.0"}
 mkdocs = "^1.4.2"
 mkdocs-material = "^9.2.7"
 mkdocstrings = {extras = ["python"], version = "^0.26.1"}
+
+[tool.poetry.group.client.dependencies]
+marimo = "^0.14.10"
+duckdb = "^1.3.1"
+altair = "^5.5.0"
+sqlglot = "^26.33.0"
+ruff = "^0.12.2"
+nbformat = "^5.10.4"
+vegafusion = "^2.0.2"
+vl-convert-python = "^1.8.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

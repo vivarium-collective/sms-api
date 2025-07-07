@@ -24,7 +24,7 @@ from functools import partial
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from sms_api.common.gateway.models import ServerMode
@@ -58,6 +58,7 @@ APP_ORIGINS = [
     "http://localhost:4201",
     "http://localhost:4202",
     "http://localhost:8888",
+    "http://localhost:8000",
     "http://localhost:3001",
     "https://sms.cam.uchc.edu",
 ]
@@ -65,8 +66,9 @@ APP_ORIGINS = [
 APP_SERVERS: list[dict[str, str]] = [
     {"url": ServerMode.PROD, "description": "Production server"},
     {"url": ServerMode.DEV, "description": "Main Development server"},
+    {"url": "http://localhost:8888", "description": "Local port-forward"},
 ]
-APP_ROUTERS = ["core"]
+APP_ROUTERS = ["core", "antibiotic"]
 ACTIVE_URL = ServerMode.detect(Path("assets/dev/config/.dev_env"))
 
 
@@ -77,7 +79,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     start_standalone = partial(init_standalone)
     if bool(int(dev_mode)):
         logger.warning("Development Mode is currently engaged!!!", stacklevel=1)
-        start_standalone.keywords["enable_ssl"] = False
+        start_standalone.keywords["enable_ssl"] = True
     await start_standalone()
     yield
     await shutdown_standalone()
@@ -110,6 +112,15 @@ async def root() -> dict[str, str]:
 @app.get("/version")
 async def get_version() -> str:
     return APP_VERSION
+
+
+@app.get("/endpoints")
+async def get_paths(bg_tasks: BackgroundTasks):
+    try:
+        bg_tasks.add_task(logger.info, await root())
+        return {"endpoints": [f"{ACTIVE_URL}{route.path}" for route in app.routes if "doc" not in route.path]}
+    except Exception as e:
+        raise HTTPException(detail=str(e), status_code=404)
 
 
 if __name__ == "__main__":

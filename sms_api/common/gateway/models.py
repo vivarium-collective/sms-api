@@ -5,6 +5,7 @@ from typing import Any
 
 import dotenv
 import fastapi
+import httpx
 
 
 @dc.dataclass
@@ -44,3 +45,27 @@ class ServerMode(StrEnum):
     @classmethod
     def detect(cls, env_path: Path) -> str:
         return cls.DEV if dotenv.load_dotenv(env_path) else cls.PROD
+
+
+class RouterType(StrEnum):
+    CORE = "core"
+    ANTIBIOTIC = "antibiotic"
+    BIOMANUFACTURING = "biomanufacturing"
+
+
+def get_url(
+    path: str | None = None,
+    parts: list[str] | None = None,
+    router: RouterType | None = None,
+    mode: ServerMode = ServerMode.DEV,
+):
+    url = httpx.URL(mode)
+    if path:
+        parts = path.split("/")
+    path_parts = parts or []
+    if router:
+        path_parts.insert(0, router)
+    if len(path_parts):
+        suffix = "/".join(path_parts)
+        return url.join(suffix)
+    return url

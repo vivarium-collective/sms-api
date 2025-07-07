@@ -2,6 +2,7 @@ import datetime
 import enum
 import hashlib
 import json
+from collections.abc import Mapping
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -32,11 +33,14 @@ class HpcRun(BaseModel):
     error_message: str | None = None  # Error message if the simulation failed
 
 
-class SimulatorVersion(BaseModel):
-    database_id: int  # Unique identifier for the simulator version
+class Simulator(BaseModel):
     git_commit_hash: str  # Git commit hash for the specific simulator version (first 7 characters)
-    git_repo_url: str  # Git repository URL for the simulator
-    git_branch: str  # Git branch name for the simulator version
+    git_repo_url: str = Field(default="https://github.com/CovertLab/vEcoli")  # Git repository URL for the simulator
+    git_branch: str = Field(default="master")  # Git branch name for the simulator version
+
+
+class SimulatorVersion(Simulator):
+    database_id: int  # Unique identifier for the simulator version
     created_at: datetime.datetime | None = None
 
 
@@ -75,10 +79,25 @@ class EcoliSimulationRequest(BaseModel):
         return hashlib.md5(json.encode()).hexdigest()  # noqa: S324 insecure hash `md5` is okay for caching
 
 
+class AntibioticSimulationRequest(EcoliSimulationRequest):
+    antibiotics_config: dict[str, dict[str, int | float | str]] = Field(default_factory=dict)
+
+
 class EcoliSimulation(BaseModel):
     database_id: int
     sim_request: EcoliSimulationRequest
     slurmjob_id: int | None = None
+
+
+class AntibioticSimulation(EcoliSimulation):
+    sim_request: AntibioticSimulationRequest
+
+
+class EcoliExperiment(BaseModel):
+    experiment_id: str
+    simulation: EcoliSimulation | AntibioticSimulation
+    last_updated: str = Field(default_factory=lambda: str(datetime.datetime.now()))
+    metadata: Mapping[str, str] = Field(default_factory=dict)
 
 
 class WorkerEvent(BaseModel):
@@ -89,12 +108,6 @@ class WorkerEvent(BaseModel):
     sim_data: list[tuple[str, str, float]]  # Simulation data with label/path/value
     global_time: float | None = None  # Global time of the simulation, if applicable
     error_message: str | None = None
-
-
-class EcoliSimulationRun(BaseModel):
-    job_id: int
-    simulation: EcoliSimulation
-    last_update: str = Field(default_factory=lambda: str(datetime.datetime.now()))
 
 
 class RequestedObservables(BaseModel):

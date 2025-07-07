@@ -30,8 +30,9 @@ from sms_api.dependencies import (
 from sms_api.log_config import setup_logging
 from sms_api.simulation.data_service import DataServiceHpc
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.hpc_utils import read_latest_commit
+from sms_api.simulation.hpc_utils import get_experiment_id, read_latest_commit
 from sms_api.simulation.models import (
+    EcoliExperiment,
     EcoliSimulation,
     EcoliSimulationRequest,
     HpcRun,
@@ -40,6 +41,7 @@ from sms_api.simulation.models import (
     ParcaDatasetRequest,
     RegisteredSimulators,
     RequestedObservables,
+    Simulator,
     SimulatorVersion,
     WorkerEvent,
 )
@@ -63,11 +65,11 @@ def get_server_url(dev: bool = True) -> ServerMode:
 config = RouterConfig(router=APIRouter(), prefix="/core", dependencies=[])
 
 
-@config.router.get("/simulator/latest", operation_id="latest-simulator-hash", tags=["Simulations"])
-async def get_latest_simulator_hash(
+@config.router.get("/simulator/latest", operation_id="latest-simulator-hash", tags=["Simulators"])
+async def get_latest_simulator(
     git_repo_url: str = Query(default="https://github.com/CovertLab/vEcoli"),
     git_branch: str = Query(default="master"),
-) -> str:
+) -> Simulator:
     hpc_service = SimulationServiceHpc()
     if hpc_service is None:
         logger.error("HPC service is not initialized")
@@ -75,7 +77,7 @@ async def get_latest_simulator_hash(
 
     try:
         latest_commit = await hpc_service.get_latest_commit_hash(git_branch=git_branch, git_repo_url=git_repo_url)
-        return latest_commit
+        return Simulator(git_commit_hash=latest_commit, git_repo_url=git_repo_url, git_branch=git_branch)
     except Exception as e:
         logger.exception("Error getting the latest simulator commit.")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -84,8 +86,8 @@ async def get_latest_simulator_hash(
 @config.router.get(
     path="/simulator/versions",
     response_model=RegisteredSimulators,
-    operation_id="get-simulator-version",
-    tags=["Simulations"],
+    operation_id="get-core-simulator-version",
+    tags=["Simulators"],
     dependencies=[Depends(get_database_service), Depends(get_postgres_engine)],
     summary="get the list of available simulator versions",
 )
@@ -105,19 +107,21 @@ async def get_simulator_versions() -> RegisteredSimulators:
 @config.router.post(
     path="/simulator/upload",
     response_model=SimulatorVersion,
-    operation_id="insert-simulator-version",
-    tags=["Simulations"],
+    operation_id="insert-core-simulator-version",
+    tags=["Simulators"],
     dependencies=[Depends(get_database_service), Depends(get_postgres_engine)],
     summary="Upload a new simulator (vEcoli) version.",
 )
 async def insert_simulator_version(
     background_tasks: BackgroundTasks,
-    git_commit_hash: str = Query(default="12bdd5e", description="First 7 characters of git commit hash"),
-    git_repo_url: str = Query(default="https://github.com/CovertLab/vEcoli"),  # TODO: can this be arbitrarily aliased?
-    git_branch: str = Query(default="master"),
+    simulator: Simulator,
 ) -> SimulatorVersion:
-    if not git_repo_url == "https://github.com/CovertLab/vEcoli":
+    if not simulator.git_repo_url == "https://github.com/CovertLab/vEcoli":
         raise HTTPException(status_code=404, detail="You may not upload a simulator from any other source.")
+    if not simulator.git_branch == "master":
+        raise HTTPException(
+            status_code=404, detail="You must be authorized to upload a simulator from any branch other than main."
+        )
 
     # check parameterized service availabilities
     sim_db_service: DatabaseService | None = get_database_service()
@@ -136,16 +140,19 @@ async def insert_simulator_version(
     try:
         # clone latest commit/version
         await sim_service.clone_repository_if_needed(
-            git_commit_hash=git_commit_hash, git_repo_url=git_repo_url, git_branch=git_branch
+            git_commit_hash=simulator.git_commit_hash,
+            git_repo_url=simulator.git_repo_url,
+            git_branch=simulator.git_branch,
         )
-
         # insert new simulator record
         simulator_version: SimulatorVersion = await sim_db_service.insert_simulator(
-            git_commit_hash=git_commit_hash, git_repo_url=git_repo_url, git_branch=git_branch
+            git_commit_hash=simulator.git_commit_hash,
+            git_repo_url=simulator.git_repo_url,
+            git_branch=simulator.git_branch,
         )
 
         # either use background tasks or directly call _hpc_run = await dispatch_build_job(...)
-        background_tasks.add_task(dispatch_build_job, sim_service, sim_db_service, simulator_version)
+        background_tasks.add_task(dispatch_build_job, sim_service, sim_db_service, simulator_version, logger=logger)
         return simulator_version
     except Exception as e:
         logger.exception("Error inserting simulator version.")
@@ -153,7 +160,7 @@ async def insert_simulator_version(
 
 
 @config.router.post(
-    path="/vecoli/parca",
+    path="/simulation/parca",
     response_model=ParcaDataset,
     operation_id="run-parca",
     tags=["Simulations"],
@@ -184,7 +191,7 @@ async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
 
 
 @config.router.post(
-    path="/vecoli/submit",
+    path="/simulation/submit",
     response_model=EcoliSimulation,
     operation_id="submit-simulation",
     tags=["Simulations"],
@@ -206,13 +213,13 @@ async def submit_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulat
 
 
 @config.router.post(
-    path="/vecoli/run",
+    path="/simulation/run",
     operation_id="run-simulation",
-    response_model=EcoliSimulation,
+    response_model=EcoliExperiment,
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
 )
-async def run_vecoli_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
+async def run_vecoli_simulation(sim_request: EcoliSimulationRequest) -> EcoliExperiment:
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
@@ -230,14 +237,15 @@ async def run_vecoli_simulation(sim_request: EcoliSimulationRequest) -> EcoliSim
         _hpc_run = await db_service.insert_hpcrun(
             job_type=JobType.PARCA, slurmjobid=slurm_jobid, ref_id=simulation.database_id
         )
-        return simulation
+        experiment_id = get_experiment_id(router_config=config, simulation=simulation, sim_request=sim_request)
+        return EcoliExperiment(experiment_id=experiment_id, simulation=simulation)
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.post(
-    path="/vecoli/results",
+    path="/simulation/results",
     response_class=ORJSONResponse,
     operation_id="get-simulation-results",
     tags=["Simulations"],
@@ -281,7 +289,7 @@ async def get_results(
 
 
 @config.router.get(
-    path="/vecoli/status",
+    path="/simulation/status",
     response_model=WorkerEvent,
     operation_id="get-simulation-status",
     tags=["Simulations"],
