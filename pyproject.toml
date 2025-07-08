@@ -9,6 +9,7 @@ readme = "README.md"
 packages = [
     {include = "sms_api"},
     {include = "tests"},
+    {include = "client"}
 ]
 
 [tool.poetry.dependencies]
@@ -56,6 +57,13 @@ ruff = "^0.12.2"
 nbformat = "^5.10.4"
 vegafusion = "^2.0.2"
 vl-convert-python = "^1.8.0"
+tqdm = "^4.67.1"
+seaborn = "^0.13.2"
+
+
+[tool.poetry.group.users.dependencies]
+passlib = {version = "^1.7.4", extras = ["bcrypt"]}
+pyjwt = {version = "^2.10.1", extras = ["crypto"]}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

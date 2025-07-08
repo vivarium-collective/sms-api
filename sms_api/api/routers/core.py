@@ -137,26 +137,31 @@ async def insert_simulator_version(
         logger.error("HPC service is not initialized")
         raise HTTPException(status_code=500, detail="HPC service is not initialized")
 
-    try:
-        # clone latest commit/version
-        await sim_service.clone_repository_if_needed(
-            git_commit_hash=simulator.git_commit_hash,
-            git_repo_url=simulator.git_repo_url,
-            git_branch=simulator.git_branch,
-        )
-        # insert new simulator record
-        simulator_version: SimulatorVersion = await sim_db_service.insert_simulator(
-            git_commit_hash=simulator.git_commit_hash,
-            git_repo_url=simulator.git_repo_url,
-            git_branch=simulator.git_branch,
-        )
+    existing_version = await sim_db_service.get_simulator_by_commit(simulator.git_commit_hash)
+    if existing_version is None:
+        try:
+            # insert new simulator record
+            simulator_version: SimulatorVersion = await sim_db_service.insert_simulator(
+                git_commit_hash=simulator.git_commit_hash,
+                git_repo_url=simulator.git_repo_url,
+                git_branch=simulator.git_branch,
+            )
 
-        # either use background tasks or directly call _hpc_run = await dispatch_build_job(...)
-        background_tasks.add_task(dispatch_build_job, sim_service, sim_db_service, simulator_version, logger=logger)
-        return simulator_version
-    except Exception as e:
-        logger.exception("Error inserting simulator version.")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+            # clone latest commit/version
+            await sim_service.clone_repository_if_needed(
+                git_commit_hash=simulator.git_commit_hash,
+                git_repo_url=simulator.git_repo_url,
+                git_branch=simulator.git_branch,
+            )
+
+            # either use background tasks or directly call _hpc_run = await dispatch_build_job(...)
+            background_tasks.add_task(dispatch_build_job, sim_service, sim_db_service, simulator_version, logger=logger)
+            return simulator_version
+        except Exception as e:
+            logger.exception("Error inserting simulator version.")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+    else:
+        return existing_version
 
 
 @config.router.post(

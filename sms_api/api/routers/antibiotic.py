@@ -20,6 +20,7 @@ from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.log_config import setup_logging
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
+    EcoliExperiment,
     EcoliSimulationRequest,
 )
 from sms_api.simulation.simulation_service import SimulationServiceHpc
@@ -46,7 +47,7 @@ config = RouterConfig(router=APIRouter(), prefix="/antibiotic", dependencies=[])
 async def get_antibiotics(
     git_repo_url: str = Query(default="https://github.com/CovertLab/vEcoli"),
     git_branch: str = Query(default="master"),
-):
+) -> dict[str, str]:
     hpc_service = SimulationServiceHpc()
     if hpc_service is None:
         logger.error("HPC service is not initialized")
@@ -60,7 +61,7 @@ async def get_antibiotics(
 
 
 @config.router.get("/simulation/run", operation_id="get-antibiotics-simulator-versions", tags=["Simulations"])
-async def run_antibiotics(request: EcoliSimulationRequest):
+async def run_antibiotics(request: EcoliSimulationRequest) -> EcoliExperiment:
     hpc_service = SimulationServiceHpc()
     if hpc_service is None:
         logger.error("HPC service is not initialized")
@@ -69,5 +70,5 @@ async def run_antibiotics(request: EcoliSimulationRequest):
     try:
         return await run_vecoli_simulation(request)
     except Exception as e:
-        logger.exception(e)
+        logger.exception("Could not run simulation.")
         raise HTTPException(status_code=500, detail=str(e)) from e

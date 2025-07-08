@@ -47,6 +47,10 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def get_simulator_by_commit(self, commit_hash: str) -> SimulatorVersion | None:
+        pass
+
+    @abstractmethod
     async def delete_simulator(self, simulator_id: int) -> None:
         pass
 
@@ -210,6 +214,22 @@ class DatabaseServiceSQL(DatabaseService):
     async def get_simulator(self, simulator_id: int) -> SimulatorVersion | None:
         async with self.async_sessionmaker() as session, session.begin():
             orm_simulator = await self._get_orm_simulator(session, simulator_id=simulator_id)
+            if orm_simulator is None:
+                return None
+            return SimulatorVersion(
+                database_id=orm_simulator.id,
+                git_commit_hash=orm_simulator.git_commit_hash,
+                git_repo_url=orm_simulator.git_repo_url,
+                git_branch=orm_simulator.git_branch,
+                created_at=orm_simulator.created_at,
+            )
+
+    @override
+    async def get_simulator_by_commit(self, commit_hash: str) -> SimulatorVersion | None:
+        async with self.async_sessionmaker() as session, session.begin():
+            stmt1 = select(ORMSimulator).where(ORMSimulator.git_commit_hash == commit_hash).limit(1)
+            result1: Result[tuple[ORMSimulator]] = await session.execute(stmt1)
+            orm_simulator: ORMSimulator | None = result1.scalars().one_or_none()
             if orm_simulator is None:
                 return None
             return SimulatorVersion(

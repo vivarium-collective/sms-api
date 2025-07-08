@@ -18,17 +18,26 @@ async def dispatch_build_job(
     sim_db_service: DatabaseService,
     simulator_version: SimulatorVersion,
     logger: Logger | None = None,
-) -> HpcRun:
+) -> int:
     if logger:
         logger.info(f"Dispatching job with simulator version: {simulator_version.git_commit_hash}")
     # dispatch new build job to hpc/worker
     build_job_id = await sim_service.submit_build_image_job(simulator_version=simulator_version)
     # create and insert hpc run with ref_id pointing to simulator promary key
-    return await sim_db_service.insert_hpcrun(
-        job_type=JobType.BUILD_IMAGE, slurmjobid=build_job_id, ref_id=simulator_version.database_id
-    )
+    # return await sim_db_service.insert_hpcrun(
+    #     job_type=JobType.BUILD_IMAGE, slurmjobid=build_job_id, ref_id=simulator_version.database_id
+    # )
+    return build_job_id
 
 
 async def get_simulation_hpcrun(simulation_id: int, db_service: DatabaseService) -> HpcRun | None:
     hpcrun = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
     return hpcrun
+
+
+def format_marimo_appname(appname: str) -> str:
+    """Capitalizes and separates appnames(module names) if needed."""
+    if "_" in appname:
+        return " ".join([part.replace(part[0], part[0].upper()) for part in appname.split("_")])
+    else:
+        return appname.replace(appname[0], appname[0].upper())

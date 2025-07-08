@@ -110,7 +110,7 @@ gateway:
 	@poetry run uvicorn sms_api.api.main:app \
 		--env-file assets/dev/config/.dev_env \
 		--host 0.0.0.0 \
-		--port 8000 \
+		--port ${LOCAL_GATEWAY_PORT} \
 		--reload
 
 .PHONY: pginit
@@ -147,9 +147,9 @@ dbup:
 	docker run -d \
 		--name $$service_name \
 		-e POSTGRES_PASSWORD=$$password \
-		-e POSTGRES_USER=${LOCAL_POSTGRES_USER} \
+		-e POSTGRES_USER=${POSTGRES_USER} \
 		-e POSTGRES_HOST=localhost \
-		-e POSTGRES_DB=${LOCAL_POSTGRES_DB} \
+		-e POSTGRES_DB=${POSTGRES_DB} \
 		-p $$port:${POSTGRES_PORT} \
 		postgres:17
 

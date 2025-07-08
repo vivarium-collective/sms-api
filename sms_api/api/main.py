@@ -22,11 +22,16 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
+from typing import Any
 
+import marimo
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.templating import Jinja2Templates
+from starlette import templating
 from starlette.middleware.cors import CORSMiddleware
 
+from sms_api.common.gateway.gateway_utils import format_marimo_appname
 from sms_api.common.gateway.models import ServerMode
 from sms_api.dependencies import (
     init_standalone,
@@ -38,10 +43,6 @@ from sms_api.version import __version__
 
 logger = logging.getLogger(__name__)
 setup_logging(logger)
-
-
-def get_server_url(dev: bool = True) -> ServerMode:
-    return ServerMode.DEV if dev else ServerMode.PROD
 
 
 LATEST_COMMIT = read_latest_commit()
@@ -66,10 +67,13 @@ APP_ORIGINS = [
 APP_SERVERS: list[dict[str, str]] = [
     {"url": ServerMode.PROD, "description": "Production server"},
     {"url": ServerMode.DEV, "description": "Main Development server"},
-    {"url": "http://localhost:8888", "description": "Local port-forward"},
+    {"url": ServerMode.PORT_FORWARD_DEV, "description": "Local port-forward"},
 ]
 APP_ROUTERS = ["core", "antibiotic"]
 ACTIVE_URL = ServerMode.detect(Path("assets/dev/config/.dev_env"))
+
+
+# -- app configuration: lifespan and middleware -- #
 
 
 @asynccontextmanager
@@ -101,11 +105,45 @@ for api_name in APP_ROUTERS:
         logger.exception(f"Could not register the following api: {api_name}")
 
 
+# -- set ui templates and marimo notebook apps -- #
+
+client_dir = Path("client")
+ui_dir = client_dir / "ui"
+templates_dir = client_dir / "templates"
+
+server = marimo.create_asgi_app()
+app_names: list[str] = []
+
+for filename in sorted(os.listdir(ui_dir)):
+    if filename.endswith(".py"):
+        app_name = format_marimo_appname(os.path.splitext(filename)[0])
+        app_path = os.path.join(ui_dir, filename)
+        server = server.with_app(path=f"/{app_name}", root=app_path)
+        app_names.append(app_name)
+
+templates = Jinja2Templates(directory=templates_dir)
+
+
 # -- app-level endpoints -- #
+
+# TODO: this will obviously be replaced by a 3rd party auth specific to govcloud, etc
+users = {"dev": "test"}
+
+
+def get_current_user(request: Request) -> Any | None:
+    username = request.session.get("username")
+    if username is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return username
 
 
 @app.get("/")
-async def root() -> dict[str, str]:
+async def home(request: Request) -> templating._TemplateResponse:
+    return templates.TemplateResponse("home.html", {"request": request, "app_names": app_names})
+
+
+@app.get("/health")
+async def check_health() -> dict[str, str]:
     return {"docs": f"{ACTIVE_URL}{app.docs_url}", "version": APP_VERSION}
 
 
@@ -114,13 +152,9 @@ async def get_version() -> str:
     return APP_VERSION
 
 
-@app.get("/endpoints")
-async def get_paths(bg_tasks: BackgroundTasks):
-    try:
-        bg_tasks.add_task(logger.info, await root())
-        return {"endpoints": [f"{ACTIVE_URL}{route.path}" for route in app.routes if "doc" not in route.path]}
-    except Exception as e:
-        raise HTTPException(detail=str(e), status_code=404)
+# -- mount marimo apps to FastAPI root -- #
+
+app.mount("/", server.build())
 
 
 if __name__ == "__main__":

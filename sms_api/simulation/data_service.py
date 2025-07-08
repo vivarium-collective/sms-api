@@ -5,8 +5,10 @@ import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+import numpy
 import polars as pl
 from anyio import mkdtemp
+from pydantic import BaseModel
 from typing_extensions import override
 
 from sms_api.common.gateway.models import Namespace
@@ -112,3 +114,15 @@ class DataServiceHpc(DataService):
     @override
     async def close(self) -> None:
         pass
+
+
+class PackedArray(BaseModel):
+    shape: tuple[int, int]
+    values: list[float]
+
+    def hydrate(self) -> numpy.ndarray:
+        return numpy.array(self.values).reshape(self.shape)
+
+
+def pack_array(arr: numpy.ndarray) -> PackedArray:
+    return PackedArray(shape=arr.shape, values=arr.flatten().tolist())

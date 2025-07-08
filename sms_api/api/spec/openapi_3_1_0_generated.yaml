@@ -3,10 +3,6 @@ info:
   title: sms-api
   version: 0.2.2
 servers:
-  - url: https://sms.cam.uchc.edu
-    description: Production server
-  - url: http://localhost:8000
-    description: Main Development server
   - url: http://localhost:8888
     description: Local port-forward
 paths:
@@ -295,10 +291,61 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /login:
+    get:
+      summary: Get Login
+      operationId: get_login_login_get
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+    post:
+      summary: Post Login
+      operationId: post_login_login_post
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/Body_post_login_login_post"
+        required: true
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /logout:
+    get:
+      summary: Logout
+      operationId: logout_logout_get
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
   /:
     get:
-      summary: Root
-      operationId: root__get
+      summary: Home
+      operationId: home__get
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /health:
+    get:
+      summary: Check Health
+      operationId: check_health_health_get
       responses:
         "200":
           description: Successful Response
@@ -308,7 +355,7 @@ paths:
                 additionalProperties:
                   type: string
                 type: object
-                title: Response Root  Get
+                title: Response Check Health Health Get
   /version:
     get:
       summary: Get Version
@@ -395,6 +442,19 @@ components:
       required:
         - observable_names
       title: Body_get-simulation-results
+    Body_post_login_login_post:
+      properties:
+        username:
+          type: string
+          title: Username
+        password:
+          type: string
+          title: Password
+      type: object
+      required:
+        - username
+        - password
+      title: Body_post_login_login_post
     EcoliExperiment:
       properties:
         experiment_id:
