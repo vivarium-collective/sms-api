@@ -9,7 +9,7 @@ readme = "README.md"
 packages = [
     {include = "sms_api"},
     {include = "tests"},
-    {include = "client"}
+    {include = "app"}
 ]
 
 [tool.poetry.dependencies]
