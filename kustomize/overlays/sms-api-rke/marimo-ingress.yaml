@@ -26,10 +26,10 @@ spec:
     - host: sms.cam.uchc.edu
       http:
         paths:
-          - path: /
+          - path: /ws
             pathType: Prefix
             backend:
               service:
                 name: api
                 port:
-                  number: 8080
+                  number: 8000

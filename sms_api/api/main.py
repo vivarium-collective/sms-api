@@ -143,7 +143,7 @@ async def get_version() -> str:
 
 # -- mount marimo apps to FastAPI root -- #
 
-app.mount("/", server.build())
+app.mount("/ws", server.build())
 
 
 if __name__ == "__main__":
