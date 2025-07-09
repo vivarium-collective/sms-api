@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: sms-api-local
+namespace: sms-api-rke
 
 images:
   - name: ghcr.io/biosimulations/sms-api
@@ -16,12 +16,14 @@ replicas:
     name: mongodb
 
 resources:
-  - ingress.yaml
+  - api-ingress.yaml
+  - marimo-ingress.yaml
   - api-pvc.yaml
   - nats-svc.yaml
+  - vivarium-home-pv.yaml
+  - vivarium-home-pvc.yaml
   - mongodb-pvc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
-  - secret-ssh.yaml
-  - ../../config/sms-api-local
+  - ../../config/sms-api-rke
   - ../../base

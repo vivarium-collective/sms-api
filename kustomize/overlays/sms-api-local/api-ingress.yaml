@@ -2,14 +2,21 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: api-ingress
+  labels:
+    app: api-ingress
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - sms.cam.uchc.edu
+      secretName: letsencrypt-prod-sms-api-tls
   rules:
-    - host: api.sms-api-local
+    - host: sms.cam.uchc.edu
       http:
         paths:
-          - path: /
+          - path: /api
             pathType: Prefix
             backend:
               service:

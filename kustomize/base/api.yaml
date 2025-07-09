@@ -14,6 +14,10 @@ spec:
       labels:
         app: api
     spec:
+      securityContext:
+        runAsUser: 17163
+        runAsGroup: 10000
+        fsGroup: 10000
       containers:
         - name: api
           image: ghcr.io/biosimulations/sms-api:latest
@@ -52,10 +56,16 @@ spec:
           volumeMounts:
             - name: api-cache-pvc
               mountPath: /app/scratch
+            - name: vivarium-home-pvc
+              mountPath: /home/FCAM/svc_vivarium
+              subPath: svc_vivarium
       volumes:
         - name: api-cache-pvc
           persistentVolumeClaim:
             claimName: api-cache-pvc
+        - name: vivarium-home-pvc
+          persistentVolumeClaim:
+            claimName: vivarium-home-pvc
       imagePullSecrets:
         - name: ghcr-secret
 
@@ -71,5 +81,9 @@ spec:
     - name: "8000"
       port: 8000
       targetPort: 8000
+    - name: websocket
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
   selector:
     app: api
