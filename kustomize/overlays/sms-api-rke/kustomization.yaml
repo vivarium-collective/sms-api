@@ -16,7 +16,8 @@ replicas:
     name: mongodb
 
 resources:
-  - ingress.yaml
+  - api-ingress.yaml
+  - marimo-ingress.yaml
   - api-pvc.yaml
   - nats-svc.yaml
   - mongodb-pvc.yaml

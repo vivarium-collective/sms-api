@@ -16,7 +16,7 @@ spec:
     - host: sms.cam.uchc.edu
       http:
         paths:
-          - path: /
+          - path: /api
             pathType: Prefix
             backend:
               service:
