@@ -61,7 +61,7 @@ def get_server_url(dev: bool = True) -> ServerMode:
 # TODO: mount nfs driver
 
 
-config = RouterConfig(router=APIRouter(), prefix="/api/core", dependencies=[])
+config = RouterConfig(router=APIRouter(), prefix="/core", dependencies=[])
 
 
 @config.router.get("/simulator/latest", operation_id="latest-simulator-hash", tags=["Simulators"])

@@ -40,7 +40,7 @@ def get_server_url(dev: bool = True) -> ServerMode:
 # TODO: mount nfs driver
 
 
-config = RouterConfig(router=APIRouter(), prefix="/api/antibiotic", dependencies=[])
+config = RouterConfig(router=APIRouter(), prefix="/antibiotic", dependencies=[])
 
 
 @config.router.get("/simulator/versions", operation_id="get-antibiotics-simulator-versions", tags=["Simulators"])
