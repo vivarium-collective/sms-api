@@ -30,6 +30,7 @@ alembic = "^1.16.2"
 async-lru = "^2.0.5"
 httpx = "^0.28.1"
 polars-lts-cpu = {version = "^1.31.0", extras = ["pyarrow"]}
+python-multipart = "^0.0.20"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
@@ -187,7 +188,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "client/ui/*"]
+exclude = [".venv/*", "app/ui/*"]
 
 [tool.ruff.format]
 preview = true

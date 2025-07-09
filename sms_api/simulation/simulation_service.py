@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from textwrap import dedent
 
-from async_lru import alru_cache
 from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
@@ -93,7 +92,6 @@ class SimulationServiceHpc(SimulationService):
         return latest_commit_hash
 
     @override
-    @alru_cache
     async def clone_repository_if_needed(
         self,
         git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name

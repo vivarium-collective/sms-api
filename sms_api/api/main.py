@@ -22,17 +22,16 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
-from typing import Any
 
 import marimo
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from starlette import templating
 from starlette.middleware.cors import CORSMiddleware
 
-from sms_api.common.gateway.gateway_utils import format_marimo_appname
 from sms_api.common.gateway.models import ServerMode
+from sms_api.common.gateway.utils import format_marimo_appname
 from sms_api.dependencies import (
     init_standalone,
     shutdown_standalone,
@@ -125,16 +124,6 @@ templates = Jinja2Templates(directory=templates_dir)
 
 
 # -- app-level endpoints -- #
-
-# TODO: this will obviously be replaced by a 3rd party auth specific to govcloud, etc
-users = {"dev": "test"}
-
-
-def get_current_user(request: Request) -> Any | None:
-    username = request.session.get("username")
-    if username is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return username
 
 
 @app.get("/")

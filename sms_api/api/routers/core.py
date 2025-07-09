@@ -19,7 +19,6 @@ import polars as pl
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import ORJSONResponse
 
-from sms_api.common.gateway.gateway_utils import dispatch_build_job
 from sms_api.common.gateway.models import Namespace, RouterConfig, ServerMode
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.dependencies import (
@@ -29,7 +28,7 @@ from sms_api.dependencies import (
 )
 from sms_api.log_config import setup_logging
 from sms_api.simulation.data_service import DataServiceHpc
-from sms_api.simulation.database_service import DatabaseService
+from sms_api.simulation.handlers import dispatch_build_job
 from sms_api.simulation.hpc_utils import get_experiment_id, read_latest_commit
 from sms_api.simulation.models import (
     EcoliExperiment,
@@ -124,10 +123,11 @@ async def insert_simulator_version(
         )
 
     # check parameterized service availabilities
-    sim_db_service: DatabaseService | None = get_database_service()
+    sim_db_service = get_database_service()
     if sim_db_service is None:
         logger.error("Simulation database service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
@@ -155,7 +155,7 @@ async def insert_simulator_version(
             )
 
             # either use background tasks or directly call _hpc_run = await dispatch_build_job(...)
-            background_tasks.add_task(dispatch_build_job, sim_service, sim_db_service, simulator_version, logger=logger)
+            background_tasks.add_task(dispatch_build_job, sim_service, sim_db_service, simulator_version)  # type: ignore[arg-type]
             return simulator_version
         except Exception as e:
             logger.exception("Error inserting simulator version.")

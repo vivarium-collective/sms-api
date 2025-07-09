@@ -22,7 +22,7 @@ def _():
     import marimo as mo
     import numpy as np
 
-    from client.api.antibiotic import EcoliSim
+    from app.api.simulations import EcoliSim
 
     return EcoliSim, mo, np
 
