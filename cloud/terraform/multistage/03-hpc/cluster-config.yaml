@@ -1,0 +1,28 @@
+Region: ${AWS_REGION}
+HeadNode:
+  InstanceType: c7i.large
+  Networking:
+    SubnetId: ${head_subnet_id}
+  Ssh:
+    KeyName: my-key
+Scheduling:
+  Scheduler: slurm
+  SlurmSettings:
+    ScaledownIdletime: 10
+  SlurmQueues:
+    - Name: cpu
+      ComputeResources:
+        - Name: ondemand
+          Instances:
+            - InstanceType: c7i.2xlarge
+      Networking:
+        SubnetIds: ${compute_subnet_ids}
+      CapacityType: ONDEMAND
+SharedStorage:
+  - Name: fsx
+    StorageType: FsxLustre
+    MountDir: /fsx
+    FsxLustreSettings:
+      DeploymentType: PERSISTENT_2
+      PerUnitStorageThroughput: 200
+      StorageCapacity: 1200
