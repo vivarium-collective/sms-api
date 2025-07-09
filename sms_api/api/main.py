@@ -106,7 +106,7 @@ for api_name in APP_ROUTERS:
 
 # -- set ui templates and marimo notebook apps -- #
 
-client_dir = Path("client")
+client_dir = Path("app")
 ui_dir = client_dir / "ui"
 templates_dir = client_dir / "templates"
 
