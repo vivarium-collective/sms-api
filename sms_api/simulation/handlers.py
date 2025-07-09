@@ -38,8 +38,8 @@ async def get_slurm_job_status(simulation_service_slurm: SimulationService, slur
 
 
 async def get_latest_simulator(
-    git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-    git_branch: str = "master",
+    git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
+    git_branch: str = "messages",
 ) -> Simulator:
     hpc_service = SimulationServiceHpc()
     if hpc_service is None:
@@ -90,8 +90,8 @@ async def upload_simulator(
     database_service: DatabaseService | None = None,
 ) -> SimulatorVersion:
     # TODO: for now, just hardcode this
-    main_branch = "master"
-    repo_url = "https://github.com/CovertLab/vEcoli"
+    main_branch = "messages"
+    repo_url = "https://github.com/vivarium-collective/vEcoli"
 
     if not simulation_service_slurm:
         simulation_service_slurm = get_simulation_service()
@@ -259,8 +259,8 @@ async def simulation_roundtrip(
     latest_commit_hash: str,
 ) -> EcoliExperiment:
     # TODO: for now, just hardcode this
-    main_branch = "master"
-    repo_url = "https://github.com/CovertLab/vEcoli"
+    main_branch = "messages"
+    repo_url = "https://github.com/vivarium-collective/vEcoli"
 
     # check if the latest commit is already installed
     simulator: SimulatorVersion | None = None

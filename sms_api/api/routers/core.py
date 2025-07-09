@@ -66,8 +66,8 @@ config = RouterConfig(router=APIRouter(), prefix="/api/core", dependencies=[])
 
 @config.router.get("/simulator/latest", operation_id="latest-simulator-hash", tags=["Simulators"])
 async def get_latest_simulator(
-    git_repo_url: str = Query(default="https://github.com/CovertLab/vEcoli"),
-    git_branch: str = Query(default="master"),
+    git_repo_url: str = Query(default="https://github.com/vivarium-collective/vEcoli"),
+    git_branch: str = Query(default="messages"),
 ) -> Simulator:
     hpc_service = SimulationServiceHpc()
     if hpc_service is None:
@@ -115,12 +115,12 @@ async def insert_simulator_version(
     background_tasks: BackgroundTasks,
     simulator: Simulator,
 ) -> SimulatorVersion:
-    if not simulator.git_repo_url == "https://github.com/CovertLab/vEcoli":
-        raise HTTPException(status_code=404, detail="You may not upload a simulator from any other source.")
-    if not simulator.git_branch == "master":
-        raise HTTPException(
-            status_code=404, detail="You must be authorized to upload a simulator from any branch other than main."
-        )
+    # if not simulator.git_repo_url == "https://github.com/vivarium-collective/vEcoli":
+    #     raise HTTPException(status_code=404, detail="You may not upload a simulator from any other source.")
+    # if not simulator.git_branch == "messages":
+    #     raise HTTPException(
+    #         status_code=404, detail="You must be authorized to upload a simulator from any branch other than main."
+    #     )
 
     # check parameterized service availabilities
     sim_db_service = get_database_service()

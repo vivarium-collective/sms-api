@@ -9,8 +9,8 @@ from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import ParcaDatasetRequest, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 
-main_branch = "master"
-repo_url = "https://github.com/CovertLab/vEcoli"
+main_branch = "messages"
+repo_url = "https://github.com/vivarium-collective/vEcoli"
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")

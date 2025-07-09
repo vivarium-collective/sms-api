@@ -45,8 +45,8 @@ config = RouterConfig(router=APIRouter(), prefix="/api/antibiotic", dependencies
 
 @config.router.get("/simulator/versions", operation_id="get-antibiotics-simulator-versions", tags=["Simulators"])
 async def get_antibiotics(
-    git_repo_url: str = Query(default="https://github.com/CovertLab/vEcoli"),
-    git_branch: str = Query(default="master"),
+    git_repo_url: str = Query(default="https://github.com/vivarium-collective/vEcoli"),
+    git_branch: str = Query(default="messages"),
 ) -> dict[str, str]:
     hpc_service = SimulationServiceHpc()
     if hpc_service is None:

@@ -20,8 +20,8 @@ async def test_save_request_to_mongo(database_service: DatabaseService) -> None:
 
     simulator_version = await database_service.insert_simulator(
         git_commit_hash="9c3d1c8",
-        git_repo_url="https://github.com/CovertLab/vEcoli",
-        git_branch="master",
+        git_repo_url="https://github.com/vivarium-collective/vEcoli",
+        git_branch="messages",
     )
     parca_dataset_request = ParcaDatasetRequest(
         simulator_version=simulator_version,

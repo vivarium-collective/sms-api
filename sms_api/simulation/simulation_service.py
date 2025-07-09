@@ -51,8 +51,8 @@ class SimulationService(ABC):
     async def clone_repository_if_needed(
         self,
         git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
-        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-        git_branch: str = "master",
+        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
+        git_branch: str = "messages",
     ) -> None:
         """
         Clone a git repository to a remote directory and return the path to the cloned repository.
@@ -73,8 +73,8 @@ class SimulationServiceHpc(SimulationService):
     async def get_latest_commit_hash(
         self,
         ssh_service: SSHService | None = None,
-        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-        git_branch: str = "master",
+        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
+        git_branch: str = "messages",
     ) -> str:
         """
         :rtype: `str`
@@ -95,8 +95,8 @@ class SimulationServiceHpc(SimulationService):
     async def clone_repository_if_needed(
         self,
         git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
-        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-        git_branch: str = "master",
+        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
+        git_branch: str = "messages",
     ) -> None:
         settings = get_settings()
         ssh_service = SSHService(
