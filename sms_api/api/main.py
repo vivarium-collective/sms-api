@@ -63,11 +63,12 @@ APP_ORIGINS = [
     "https://sms.cam.uchc.edu",
 ]
 
-APP_SERVERS: list[dict[str, str]] = [
-    {"url": ServerMode.PROD, "description": "Production server"},
-    {"url": ServerMode.DEV, "description": "Main Development server"},
-    {"url": ServerMode.PORT_FORWARD_DEV, "description": "Local port-forward"},
-]
+# APP_SERVERS: list[dict[str, str]] = [
+#     {"url": ServerMode.PROD, "description": "Production server"},
+#     {"url": ServerMode.DEV, "description": "Main Development server"},
+#     {"url": ServerMode.PORT_FORWARD_DEV, "description": "Local port-forward"},
+# ]
+APP_SERVERS = None
 APP_ROUTERS = ["core", "antibiotic"]
 ACTIVE_URL = ServerMode.detect(Path("assets/dev/config/.dev_env"))
 
@@ -128,7 +129,9 @@ templates = Jinja2Templates(directory=templates_dir)
 
 @app.get("/")
 async def home(request: Request) -> templating._TemplateResponse:
-    return templates.TemplateResponse("home.html", {"request": request, "app_names": app_names, "marimo_path_prefix": "/ws"})
+    return templates.TemplateResponse(
+        "home.html", {"request": request, "app_names": app_names, "marimo_path_prefix": "/ws"}
+    )
 
 
 @app.get("/health")

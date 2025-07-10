@@ -23,7 +23,11 @@
         class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
       >
         {% for app_name in app_names %}
-        <a href="{{ marimo_path_prefix }}/{{ app_name }}" class="block" target="{{ app_name }}">
+        <a
+          href="{{ marimo_path_prefix }}/{{ app_name }}"
+          class="block"
+          target="{{ app_name }}"
+        >
           <div
             class="bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 p-4"
           >

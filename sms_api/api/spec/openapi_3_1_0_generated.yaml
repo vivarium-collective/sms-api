@@ -2,9 +2,6 @@ openapi: 3.1.0
 info:
   title: sms-api
   version: 0.2.2
-servers:
-  - url: http://localhost:8888
-    description: Local port-forward
 paths:
   /core/simulator/latest:
     get:
@@ -18,14 +15,14 @@ paths:
           required: false
           schema:
             type: string
-            default: https://github.com/CovertLab/vEcoli
+            default: https://github.com/vivarium-collective/vEcoli
             title: Git Repo Url
         - name: git_branch
           in: query
           required: false
           schema:
             type: string
-            default: master
+            default: messages
             title: Git Branch
       responses:
         "200":
@@ -180,7 +177,7 @@ paths:
           required: false
           schema:
             type: string
-            default: fe28cd2
+            default: e1a5ba3
             title: Git Commit Hash
       requestBody:
         required: true
@@ -246,21 +243,25 @@ paths:
           required: false
           schema:
             type: string
-            default: https://github.com/CovertLab/vEcoli
+            default: https://github.com/vivarium-collective/vEcoli
             title: Git Repo Url
         - name: git_branch
           in: query
           required: false
           schema:
             type: string
-            default: master
+            default: messages
             title: Git Branch
       responses:
         "200":
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+                title: Response Get-Antibiotics-Simulator-Versions
         "422":
           description: Validation Error
           content:
@@ -284,54 +285,14 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: "#/components/schemas/EcoliExperiment"
         "422":
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
-  /login:
-    get:
-      summary: Get Login
-      operationId: get_login_login_get
-      responses:
-        "200":
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-    post:
-      summary: Post Login
-      operationId: post_login_login_post
-      requestBody:
-        content:
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: "#/components/schemas/Body_post_login_login_post"
-        required: true
-      responses:
-        "200":
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        "422":
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-  /logout:
-    get:
-      summary: Logout
-      operationId: logout_logout_get
-      responses:
-        "200":
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
   /:
     get:
       summary: Home
@@ -368,16 +329,6 @@ paths:
               schema:
                 type: string
                 title: Response Get Version Version Get
-  /endpoints:
-    get:
-      summary: Get Paths
-      operationId: get_paths_endpoints_get
-      responses:
-        "200":
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
 components:
   schemas:
     AntibioticSimulation:
@@ -442,19 +393,6 @@ components:
       required:
         - observable_names
       title: Body_get-simulation-results
-    Body_post_login_login_post:
-      properties:
-        username:
-          type: string
-          title: Username
-        password:
-          type: string
-          title: Password
-      type: object
-      required:
-        - username
-        - password
-      title: Body_post_login_login_post
     EcoliExperiment:
       properties:
         experiment_id:
@@ -764,11 +702,11 @@ components:
         git_repo_url:
           type: string
           title: Git Repo Url
-          default: https://github.com/CovertLab/vEcoli
+          default: https://github.com/vivarium-collective/vEcoli
         git_branch:
           type: string
           title: Git Branch
-          default: master
+          default: messages
       type: object
       required:
         - git_commit_hash
@@ -781,11 +719,11 @@ components:
         git_repo_url:
           type: string
           title: Git Repo Url
-          default: https://github.com/CovertLab/vEcoli
+          default: https://github.com/vivarium-collective/vEcoli
         git_branch:
           type: string
           title: Git Branch
-          default: master
+          default: messages
         database_id:
           type: integer
           title: Database Id

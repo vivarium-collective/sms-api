@@ -13,7 +13,7 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from sms_api.api.routers.core import run_vecoli_simulation
 from sms_api.common.gateway.models import RouterConfig, ServerMode
@@ -43,32 +43,15 @@ def get_server_url(dev: bool = True) -> ServerMode:
 config = RouterConfig(router=APIRouter(), prefix="/antibiotic", dependencies=[])
 
 
-@config.router.get("/simulator/versions", operation_id="get-antibiotics-simulator-versions", tags=["Simulators"])
-async def get_antibiotics(
-    git_repo_url: str = Query(default="https://github.com/vivarium-collective/vEcoli"),
-    git_branch: str = Query(default="messages"),
-) -> dict[str, str]:
-    hpc_service = SimulationServiceHpc()
-    if hpc_service is None:
-        logger.error("HPC service is not initialized")
-        raise HTTPException(status_code=500, detail="HPC service is not initialized")
-
-    try:
-        return {"version": f"{git_repo_url}_{git_branch}"}
-    except Exception as e:
-        logger.exception("Error getting the latest simulator commit.")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
 @config.router.get("/simulation/run", operation_id="get-antibiotics-simulator-versions", tags=["Simulations"])
-async def run_antibiotics(request: EcoliSimulationRequest) -> EcoliExperiment:
+async def run_antibiotics(background_tasks: BackgroundTasks, request: EcoliSimulationRequest) -> EcoliExperiment:
     hpc_service = SimulationServiceHpc()
     if hpc_service is None:
         logger.error("HPC service is not initialized")
         raise HTTPException(status_code=500, detail="HPC service is not initialized")
 
     try:
-        return await run_vecoli_simulation(request)
+        return await run_vecoli_simulation(sim_request=request, background_tasks=background_tasks)
     except Exception as e:
         logger.exception("Could not run simulation.")
         raise HTTPException(status_code=500, detail=str(e)) from e

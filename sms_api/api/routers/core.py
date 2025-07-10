@@ -13,7 +13,6 @@
 
 import logging
 import shutil
-from pathlib import Path
 
 import polars as pl
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -28,8 +27,8 @@ from sms_api.dependencies import (
 )
 from sms_api.log_config import setup_logging
 from sms_api.simulation.data_service import DataServiceHpc
-from sms_api.simulation.handlers import dispatch_build_job
-from sms_api.simulation.hpc_utils import get_experiment_id, read_latest_commit
+from sms_api.simulation.handlers import run_parca, run_simulation, upload_simulator, verify_simulator_payload
+from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
     EcoliExperiment,
     EcoliSimulation,
@@ -115,48 +114,30 @@ async def insert_simulator_version(
     background_tasks: BackgroundTasks,
     simulator: Simulator,
 ) -> SimulatorVersion:
-    # if not simulator.git_repo_url == "https://github.com/vivarium-collective/vEcoli":
-    #     raise HTTPException(status_code=404, detail="You may not upload a simulator from any other source.")
-    # if not simulator.git_branch == "messages":
-    #     raise HTTPException(
-    #         status_code=404, detail="You must be authorized to upload a simulator from any branch other than main."
-    #     )
+    # verify simulator request
+    verify_simulator_payload(simulator)
 
     # check parameterized service availabilities
-    sim_db_service = get_database_service()
-    if sim_db_service is None:
+    db_service = get_database_service()
+    if db_service is None:
         logger.error("Simulation database service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
-
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
-    hpc_service = SimulationServiceHpc()
-    if hpc_service is None:
-        logger.error("HPC service is not initialized")
-        raise HTTPException(status_code=500, detail="HPC service is not initialized")
 
-    existing_version = await sim_db_service.get_simulator_by_commit(simulator.git_commit_hash)
+    existing_version = await db_service.get_simulator_by_commit(simulator.git_commit_hash)
     if existing_version is None:
         try:
-            # insert new simulator record
-            simulator_version: SimulatorVersion = await sim_db_service.insert_simulator(
-                git_commit_hash=simulator.git_commit_hash,
+            return await upload_simulator(
+                commit_hash=simulator.git_commit_hash,
                 git_repo_url=simulator.git_repo_url,
                 git_branch=simulator.git_branch,
+                simulation_service_slurm=sim_service,
+                database_service=db_service,
+                background_tasks=background_tasks,
             )
-
-            # clone latest commit/version
-            await sim_service.clone_repository_if_needed(
-                git_commit_hash=simulator.git_commit_hash,
-                git_repo_url=simulator.git_repo_url,
-                git_branch=simulator.git_branch,
-            )
-
-            # either use background tasks or directly call _hpc_run = await dispatch_build_job(...)
-            background_tasks.add_task(dispatch_build_job, sim_service, sim_db_service, simulator_version)  # type: ignore[arg-type]
-            return simulator_version
         except Exception as e:
             logger.exception("Error inserting simulator version.")
             raise HTTPException(status_code=500, detail=str(e)) from e
@@ -171,9 +152,11 @@ async def insert_simulator_version(
     tags=["Simulations"],
     summary="Run a parameter calculation",
 )
-async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
-    sim_db_service = get_database_service()
-    if sim_db_service is None:
+async def run_parameter_calculator(
+    background_tasks: BackgroundTasks, parca_request: ParcaDatasetRequest
+) -> ParcaDataset:
+    db_service = get_database_service()
+    if db_service is None:
         logger.error("Simulation database service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
 
@@ -183,13 +166,13 @@ async def run_parca(parca_request: ParcaDatasetRequest) -> ParcaDataset:
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
 
     try:
-        parca_dataset: ParcaDataset = await sim_db_service.get_or_insert_parca_dataset(parca_request)
-        parca_job_id = await sim_service.submit_parca_job(parca_dataset)
-        _hpc_run = await sim_db_service.insert_hpcrun(
-            job_type=JobType.PARCA, slurmjobid=parca_job_id, ref_id=parca_dataset.database_id
+        return await run_parca(
+            simulator=parca_request.simulator_version,
+            simulation_service_slurm=sim_service,
+            database_service=db_service,
+            parca_config=parca_request.parca_config,
+            background_tasks=background_tasks,
         )
-
-        return parca_dataset
     except Exception as e:
         logger.exception("Error running PARCA")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -224,7 +207,9 @@ async def submit_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulat
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
 )
-async def run_vecoli_simulation(sim_request: EcoliSimulationRequest) -> EcoliExperiment:
+async def run_vecoli_simulation(
+    background_tasks: BackgroundTasks, sim_request: EcoliSimulationRequest
+) -> EcoliExperiment:
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
@@ -235,15 +220,14 @@ async def run_vecoli_simulation(sim_request: EcoliSimulationRequest) -> EcoliExp
         raise HTTPException(status_code=500, detail="Database service is not initialized")
 
     try:
-        simulation: EcoliSimulation = await db_service.insert_simulation(sim_request)
-        slurm_jobid = await sim_service.submit_ecoli_simulation_job(
-            ecoli_simulation=simulation, database_service=db_service
+        return await run_simulation(
+            simulator=sim_request.simulator,
+            parca_dataset_id=sim_request.parca_dataset_id,
+            database_service=db_service,
+            simulation_service_slurm=sim_service,
+            router_config=config,
+            background_tasks=background_tasks,
         )
-        _hpc_run = await db_service.insert_hpcrun(
-            job_type=JobType.PARCA, slurmjobid=slurm_jobid, ref_id=simulation.database_id
-        )
-        experiment_id = get_experiment_id(router_config=config, simulation=simulation, sim_request=sim_request)
-        return EcoliExperiment(experiment_id=experiment_id, simulation=simulation)
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -290,9 +274,6 @@ async def get_results(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-# mount remote drives as persistent volume
-
-
 @config.router.get(
     path="/simulation/status",
     response_model=WorkerEvent,
@@ -311,8 +292,7 @@ async def get_simulation_status(
     if db_service is None:
         logger.error("SSH service is not initialized")
         raise HTTPException(status_code=500, detail="SSH service is not initialized")
-
-    experiment_dir = Path("/home/FCAM/svc_vivarium/test/sims/experiment_96bb7a2_id_1_20250620-181422")
+    # experiment_dir = Path("/home/FCAM/svc_vivarium/test/sims/experiment_96bb7a2_id_1_20250620-181422")
     try:
         simulation_hpcrun: HpcRun | None = await db_service.get_hpcrun_by_ref(
             ref_id=simulation_id, job_type=JobType.SIMULATION
@@ -323,5 +303,5 @@ async def get_simulation_status(
         else:
             return []
     except Exception as e:
-        logger.exception(f"Error fetching simulation results for test dir: {experiment_dir}.")
+        logger.exception(f"Error fetching simulation results for simulation id: {simulation_id}.")
         raise HTTPException(status_code=500, detail=str(e)) from e

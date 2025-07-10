@@ -11,7 +11,6 @@ from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_experiment_id
 from sms_api.simulation.models import (
     EcoliExperiment,
-    EcoliSimulation,
     EcoliSimulationRequest,
     JobType,
     ParcaDataset,
@@ -26,6 +25,15 @@ logger = logging.getLogger(__name__)
 setup_logging(logger)
 
 # -- roundtrip job handlers that both call the services and return the relative endpoint's DTO -- #
+
+
+def verify_simulator_payload(simulator: Simulator) -> None:
+    if not simulator.git_repo_url == "https://github.com/vivarium-collective/vEcoli":
+        raise HTTPException(status_code=404, detail="You may not upload a simulator from any other source.")
+    if not simulator.git_branch == "messages":
+        raise HTTPException(
+            status_code=404, detail="You must be authorized to upload a simulator from any branch other than main."
+        )
 
 
 async def get_slurm_job_status(simulation_service_slurm: SimulationService, slurm_job_id: int) -> None:
@@ -67,31 +75,17 @@ async def get_simulator_versions() -> RegisteredSimulators:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-async def dispatch_build_job(
-    simulation_service_slurm: SimulationServiceHpc,
-    database_service: DatabaseService,
-    simulator: SimulatorVersion,
-) -> None:
-    # clone the repository if needed
-    await simulation_service_slurm.clone_repository_if_needed(
-        git_commit_hash=simulator.git_commit_hash,
-        git_repo_url=simulator.git_repo_url,
-        git_branch=simulator.git_branch,
-    )
-    # build the image
-    job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
-    await database_service.insert_hpcrun(slurmjobid=job_id, job_type=JobType.BUILD_IMAGE, ref_id=simulator.database_id)
-
-
 async def upload_simulator(
     commit_hash: str,
-    background_tasks: BackgroundTasks | None = None,
+    git_repo_url: str | None = None,
+    git_branch: str | None = None,
     simulation_service_slurm: SimulationService | SimulationServiceHpc | None = None,
     database_service: DatabaseService | None = None,
+    background_tasks: BackgroundTasks | None = None,
 ) -> SimulatorVersion:
     # TODO: for now, just hardcode this
-    main_branch = "messages"
-    repo_url = "https://github.com/vivarium-collective/vEcoli"
+    main_branch = git_branch or "messages"
+    repo_url = git_repo_url or "https://github.com/vivarium-collective/vEcoli"
 
     if not simulation_service_slurm:
         simulation_service_slurm = get_simulation_service()
@@ -190,18 +184,19 @@ async def get_parca_datasets(
     return parca_datasets
 
 
-async def run_simulation_endpoint(
+async def run_simulation(
     simulator: SimulatorVersion,
-    parca_dataset: ParcaDataset,
+    parca_dataset_id: int,
     database_service: DatabaseService,
     simulation_service_slurm: SimulationService,
     router_config: RouterConfig,
-    background_tasks: BackgroundTasks,
+    variant_config: dict[str, dict[str, int | float | str]] | None = None,
+    background_tasks: BackgroundTasks | None = None,
 ) -> EcoliExperiment:
     simulation_request = EcoliSimulationRequest(
         simulator=simulator,
-        parca_dataset_id=parca_dataset.database_id,
-        variant_config={"named_parameters": {"param1": 0.5, "param2": 0.5}},
+        parca_dataset_id=parca_dataset_id,
+        variant_config=variant_config or {"named_parameters": {"param1": 0.5, "param2": 0.5}},
     )
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
@@ -209,47 +204,25 @@ async def run_simulation_endpoint(
         sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
             ecoli_simulation=simulation, database_service=database_service
         )
+        start_time = time.time()
+        while start_time + 60 > time.time():
+            sim_slurmjob = await simulation_service_slurm.get_slurm_job_status(slurmjobid=sim_slurmjobid)
+            if sim_slurmjob is not None and sim_slurmjob.is_done():
+                break
+            await asyncio.sleep(5)
         _hpcrun = await database_service.insert_hpcrun(
             slurmjobid=sim_slurmjobid, job_type=JobType.SIMULATION, ref_id=simulation.database_id
         )
 
-    background_tasks.add_task(dispatch_job)
+    if background_tasks:
+        background_tasks.add_task(dispatch_job)
+    else:
+        await dispatch_job()
+
     experiment_id = get_experiment_id(
         router_config=router_config, simulation=simulation, sim_request=simulation_request
     )
     return EcoliExperiment(experiment_id=experiment_id, simulation=simulation)
-
-
-async def run_simulation(
-    simulator: SimulatorVersion,
-    parca_dataset: ParcaDataset,
-    database_service: DatabaseService | None = None,
-    simulation_service_slurm: SimulationService | None = None,
-) -> EcoliSimulation:
-    if not simulation_service_slurm:
-        simulation_service_slurm = get_simulation_service()
-    if simulation_service_slurm is None:
-        logger.exception("Simulation service is not initialized")
-        raise HTTPException(status_code=404, detail="Simulation service is not initialized")
-    if not database_service:
-        database_service = get_database_service()
-    if database_service is None:
-        logger.exception("Simulation database service is not initialized")
-        raise HTTPException(status_code=404, detail="Simulation database service is not initialized")
-    simulation_request = EcoliSimulationRequest(
-        simulator=simulator,
-        parca_dataset_id=parca_dataset.database_id,
-        variant_config={"named_parameters": {"param1": 0.5, "param2": 0.5}},
-    )
-    simulation = await database_service.insert_simulation(sim_request=simulation_request)
-
-    sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
-        ecoli_simulation=simulation, database_service=database_service
-    )
-    _hpcrun = await database_service.insert_hpcrun(
-        slurmjobid=sim_slurmjobid, job_type=JobType.SIMULATION, ref_id=simulation.database_id
-    )
-    return simulation
 
 
 async def simulation_roundtrip(
