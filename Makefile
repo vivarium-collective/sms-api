@@ -1,12 +1,14 @@
-LOCAL_POSTGRES_USER:=$(USER)
-LOCAL_POSTGRES_PASSWORD=dev
-LOCAL_POSTGRES_DB=sms
+POSTGRES_USER=sms
+POSTGRES_DB=sms
 LOCAL_POSTGRES_HOST=localhost
-LOCAL_POSTGRES_PORT=65432
+LOCAL_POSTGRES_PORT=5555
+LOCAL_GATEWAY_PORT=8888
 
 LATEST_COMMIT_PATH=assets/latest_commit.txt
 POSTGRES_PORT=5432
-GATEWAY_PORT=8000
+
+
+# "postgresql://sms:$$pw@localhost:$(port)/sms?sslmode=disable""postgresql://sms:$$pw@localhost:$(port)/sms?sslmode=disable"
 
 .PHONY: install
 install: ## Install the poetry environment and install the pre-commit hooks
@@ -93,10 +95,10 @@ spec:
 .PHONY: new
 new:
 	@make check-minikube
-	@make latest-commit
+	@make write-latest-commit
 	@make spec
 	@make new-build
-	@make apply
+	@kubectl kustomize kustomize/overlays/sms-api-local | kubectl apply -f -
 
 .PHONY: whichkube
 whichkube:
@@ -108,8 +110,12 @@ gateway:
 	@poetry run uvicorn sms_api.api.main:app \
 		--env-file assets/dev/config/.dev_env \
 		--host 0.0.0.0 \
-		--port 8000 \
+		--port ${LOCAL_GATEWAY_PORT} \
 		--reload
+
+.PHONY: edit-app
+edit-app:
+	@poetry run marimo edit app/ui/$(ui).py
 
 .PHONY: pginit
 pginit:
@@ -145,9 +151,9 @@ dbup:
 	docker run -d \
 		--name $$service_name \
 		-e POSTGRES_PASSWORD=$$password \
-		-e POSTGRES_USER=${LOCAL_POSTGRES_USER} \
+		-e POSTGRES_USER=${POSTGRES_USER} \
 		-e POSTGRES_HOST=localhost \
-		-e POSTGRES_DB=${LOCAL_POSTGRES_DB} \
+		-e POSTGRES_DB=${POSTGRES_DB} \
 		-p $$port:${POSTGRES_PORT} \
 		postgres:17
 
@@ -173,6 +179,11 @@ pingpg:
 	[ -z "$(port)" ] && port=${LOCAL_POSTGRES_PORT} || port=$(port); \
 	psql -h localhost -p $$port -U ${LOCAL_POSTGRES_USER} sms;
 
+.PHONY: pingdb
+pingdb:
+	@uri=$$(make pguri); \
+	psql $$uri
+
 .PHONY: write-latest-commit
 write-latest-commit:
 	@poetry run python sms_api/latest_commit.py
@@ -196,12 +207,32 @@ latest-simulator:
 	fi; \
 	cat ${LATEST_COMMIT_PATH}
 
-.PHONY: testmod
+.PHONY: test-mod
 testmod:
 	@poetry run pytest -s $(m)
 
-.PHONY: ssh
-ssh:
-	@ssh -i $(key) svc_vivarium@login.hpc.cam.uchc.edu
+.PHONY: run-workflow
+workflow:
+	curl -X POST \
+		-H "Authorization: token $(token)" \
+		-H "Accept: application/vnd.github.v3+json" \
+		https://api.github.com/repos/vivarium-collective/sms-api/actions/workflows/build-and-push.yml/dispatches \
+		-d '{"ref": $(branch)}'
+
+.PHONY: generate-client
+generate-client:
+	@make spec
+	@./scripts/generate-api-client.sh
+
+.PHONY: pguri
+pguri:
+	@pg_user=sms; \
+	pg_password=$$(poetry run python -c "import dotenv;import os;dotenv.load_dotenv('assets/dev/config/.dev_env');print(os.getenv('POSTGRES_PASSWORD'))"); \
+	echo postgresql://${POSTGRES_USER}:$$pg_password@${LOCAL_POSTGRES_HOST}:${LOCAL_POSTGRES_PORT}/${POSTGRES_DB}
+
+.PHONY: py
+py:
+	@poetry run python -m asyncio
+
 
 .DEFAULT_GOAL := help

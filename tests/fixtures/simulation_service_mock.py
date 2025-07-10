@@ -25,7 +25,10 @@ class SimulationServiceMock(SimulationService):
 
     @override
     async def clone_repository_if_needed(
-        self, git_commit_hash: str, repo_url: str = "https://github.com/CovertLab/vEcoli", branch: str = "master"
+        self,
+        git_commit_hash: str,
+        repo_url: str = "https://github.com/vivarium-collective/vEcoli",
+        branch: str = "messages",
     ) -> None:
         pass
 

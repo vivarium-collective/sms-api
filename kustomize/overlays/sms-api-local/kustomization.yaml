@@ -19,9 +19,10 @@ resources:
   - ingress.yaml
   - api-pvc.yaml
   - nats-svc.yaml
+  - vivarium-home-pv.yaml
+  - vivarium-home-pvc.yaml
   - mongodb-pvc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
-  - secret-ssh.yaml
-  - ../../config/sms-api-local
+  - ../../config/sms-api-rke
   - ../../base

@@ -51,8 +51,8 @@ class SimulationService(ABC):
     async def clone_repository_if_needed(
         self,
         git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
-        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-        git_branch: str = "master",
+        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
+        git_branch: str = "messages",
     ) -> None:
         """
         Clone a git repository to a remote directory and return the path to the cloned repository.
@@ -68,11 +68,13 @@ class SimulationService(ABC):
 
 
 class SimulationServiceHpc(SimulationService):
+    _latest_commit_hash: str | None = None
+
     async def get_latest_commit_hash(
         self,
         ssh_service: SSHService | None = None,
-        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-        git_branch: str = "master",
+        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
+        git_branch: str = "messages",
     ) -> str:
         """
         :rtype: `str`
@@ -83,14 +85,18 @@ class SimulationServiceHpc(SimulationService):
         if return_code != 0:
             raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
         latest_commit_hash = stdout.strip("\n")[:7]
+        with open("assets/latest_commit.txt", "w") as f:
+            f.write(latest_commit_hash)
+
+        self._latest_commit_hash = latest_commit_hash
         return latest_commit_hash
 
     @override
     async def clone_repository_if_needed(
         self,
         git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
-        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-        git_branch: str = "master",
+        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
+        git_branch: str = "messages",
     ) -> None:
         settings = get_settings()
         ssh_service = SSHService(
@@ -103,10 +109,10 @@ class SimulationServiceHpc(SimulationService):
         # if return_code != 0:
         #     raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
         # latest_commit_hash = stdout.strip("\n")[:7]
-
         latest_commit_hash = await self.get_latest_commit_hash(
             ssh_service=ssh_service, git_repo_url=git_repo_url, git_branch=git_branch
         )
+
         if latest_commit_hash != git_commit_hash:
             raise ValueError(
                 f"Provided git commit hash {git_commit_hash} does not match "

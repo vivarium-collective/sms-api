@@ -73,6 +73,8 @@ class Settings(BaseSettings):
     nats_emitter_url: str = ""
     nats_emitter_magic_word: str = "emitter-magic-word"
 
+    dev_mode: str = "0"
+
 
 @lru_cache
 def get_settings() -> Settings:

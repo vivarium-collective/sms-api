@@ -5,8 +5,10 @@ import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+import numpy
 import polars as pl
 from anyio import mkdtemp
+from pydantic import BaseModel
 from typing_extensions import override
 
 from sms_api.common.gateway.models import Namespace
@@ -109,6 +111,27 @@ class DataServiceHpc(DataService):
 
         return local_chunks_dir, self.scan_simulation_chunks(local_chunks_dir)
 
+    async def read_chunks(self, experiment_id: str, namespace: Namespace) -> Path:
+        # TODO: instead use a session so as to not iteratively reauth
+        local_chunks_dir = Path(await mkdtemp(dir="datamount", prefix=experiment_id))
+        for chunkpath in await self.get_simulation_chunk_paths(experiment_id, namespace):
+            local_fp = local_chunks_dir / chunkpath.parts[-1]
+            await self.ssh_service.scp_download(local_file=local_fp, remote_path=chunkpath)
+
+        return local_chunks_dir
+
     @override
     async def close(self) -> None:
         pass
+
+
+class PackedArray(BaseModel):
+    shape: tuple[int, int]
+    values: list[float]
+
+    def hydrate(self) -> numpy.ndarray:
+        return numpy.array(self.values).reshape(self.shape)
+
+
+def pack_array(arr: numpy.ndarray) -> PackedArray:
+    return PackedArray(shape=arr.shape, values=arr.flatten().tolist())

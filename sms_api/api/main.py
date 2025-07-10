@@ -23,11 +23,15 @@ from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
 
+import marimo
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.templating import Jinja2Templates
+from starlette import templating
 from starlette.middleware.cors import CORSMiddleware
 
 from sms_api.common.gateway.models import ServerMode
+from sms_api.common.gateway.utils import format_marimo_appname
 from sms_api.dependencies import (
     init_standalone,
     shutdown_standalone,
@@ -38,10 +42,6 @@ from sms_api.version import __version__
 
 logger = logging.getLogger(__name__)
 setup_logging(logger)
-
-
-def get_server_url(dev: bool = True) -> ServerMode:
-    return ServerMode.DEV if dev else ServerMode.PROD
 
 
 LATEST_COMMIT = read_latest_commit()
@@ -58,16 +58,22 @@ APP_ORIGINS = [
     "http://localhost:4201",
     "http://localhost:4202",
     "http://localhost:8888",
+    "http://localhost:8000",
     "http://localhost:3001",
     "https://sms.cam.uchc.edu",
 ]
 
-APP_SERVERS: list[dict[str, str]] = [
-    {"url": ServerMode.PROD, "description": "Production server"},
-    {"url": ServerMode.DEV, "description": "Main Development server"},
-]
-APP_ROUTERS = ["core"]
+# APP_SERVERS: list[dict[str, str]] = [
+#     {"url": ServerMode.PROD, "description": "Production server"},
+#     {"url": ServerMode.DEV, "description": "Main Development server"},
+#     {"url": ServerMode.PORT_FORWARD_DEV, "description": "Local port-forward"},
+# ]
+APP_SERVERS = None
+APP_ROUTERS = ["core", "antibiotic"]
 ACTIVE_URL = ServerMode.detect(Path("assets/dev/config/.dev_env"))
+
+
+# -- app configuration: lifespan and middleware -- #
 
 
 @asynccontextmanager
@@ -77,7 +83,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     start_standalone = partial(init_standalone)
     if bool(int(dev_mode)):
         logger.warning("Development Mode is currently engaged!!!", stacklevel=1)
-        start_standalone.keywords["enable_ssl"] = False
+        start_standalone.keywords["enable_ssl"] = True
     await start_standalone()
     yield
     await shutdown_standalone()
@@ -99,17 +105,48 @@ for api_name in APP_ROUTERS:
         logger.exception(f"Could not register the following api: {api_name}")
 
 
+# -- set ui templates and marimo notebook apps -- #
+
+client_dir = Path("app")
+ui_dir = client_dir / "ui"
+templates_dir = client_dir / "templates"
+
+server = marimo.create_asgi_app()
+app_names: list[str] = []
+
+for filename in sorted(os.listdir(ui_dir)):
+    if filename.endswith(".py"):
+        app_name = format_marimo_appname(os.path.splitext(filename)[0])
+        app_path = os.path.join(ui_dir, filename)
+        server = server.with_app(path=f"/{app_name}", root=app_path)
+        app_names.append(app_name)
+
+templates = Jinja2Templates(directory=templates_dir)
+
+
 # -- app-level endpoints -- #
 
 
 @app.get("/")
-async def root() -> dict[str, str]:
+async def home(request: Request) -> templating._TemplateResponse:
+    return templates.TemplateResponse(
+        request, "home.html", {"request": request, "app_names": app_names, "marimo_path_prefix": "/ws"}
+    )
+
+
+@app.get("/health")
+async def check_health() -> dict[str, str]:
     return {"docs": f"{ACTIVE_URL}{app.docs_url}", "version": APP_VERSION}
 
 
 @app.get("/version")
 async def get_version() -> str:
     return APP_VERSION
+
+
+# -- mount marimo apps to FastAPI root -- #
+
+app.mount("/ws", server.build())
 
 
 if __name__ == "__main__":
