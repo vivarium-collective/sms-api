@@ -13,10 +13,12 @@
 
 import logging
 import shutil
+import tempfile
+from pathlib import Path
 
 import polars as pl
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import FileResponse, ORJSONResponse
 
 from sms_api.common.gateway.models import Namespace, RouterConfig, ServerMode
 from sms_api.common.ssh.ssh_service import get_ssh_service
@@ -268,13 +270,13 @@ async def run_vecoli_simulation(
 
 
 @config.router.post(
-    path="/simulation/results",
+    path="/simulation/results/chunks",
     response_class=ORJSONResponse,
     operation_id="get-simulation-results",
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_service), Depends(get_ssh_service)],
 )
-async def get_results(
+async def get_result_chunks(
     background_tasks: BackgroundTasks,
     observable_names: RequestedObservables,
     experiment_id: str = Query(default="experiment_96bb7a2_id_1_20250620-181422"),
@@ -303,6 +305,31 @@ async def get_results(
             .to_dict()
         )
         return ORJSONResponse(content=data)
+    except Exception as e:
+        logger.exception(f"Error fetching simulation results for id: {database_id}.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/simulation/results",
+    response_class=FileResponse,
+    operation_id="get-simulation-results",
+    tags=["Simulations"],
+    dependencies=[Depends(get_simulation_service), Depends(get_ssh_service)],
+)
+async def get_results(
+    background_tasks: BackgroundTasks,
+    experiment_id: str = Query(default="experiment_96bb7a2_id_1_20250620-181422"),
+    database_id: int = Query(default_factory=int, description="Database Id of simulation"),
+) -> FileResponse:
+    try:
+        service = DataServiceHpc()
+        local_dir = await service.read_chunks(experiment_id, Namespace.TEST)
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            zip_path = Path(tmp.name)
+            shutil.make_archive(str(zip_path.with_suffix("")), "zip", root_dir=local_dir)
+            background_tasks.add_task(shutil.rmtree, local_dir)
+        return FileResponse(path=zip_path, filename=f"{experiment_id}_chunks.zip", media_type="application/zip")
     except Exception as e:
         logger.exception(f"Error fetching simulation results for id: {database_id}.")
         raise HTTPException(status_code=500, detail=str(e)) from e
