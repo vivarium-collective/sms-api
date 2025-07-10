@@ -128,7 +128,7 @@ templates = Jinja2Templates(directory=templates_dir)
 
 @app.get("/")
 async def home(request: Request) -> templating._TemplateResponse:
-    return templates.TemplateResponse("home.html", {"request": request, "app_names": app_names})
+    return templates.TemplateResponse("home.html", {"request": request, "app_names": app_names, "marimo_path_prefix": "/ws"})
 
 
 @app.get("/health")
