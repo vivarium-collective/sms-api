@@ -35,10 +35,10 @@ import sms_api.api.client
 from sms_api.api.client.rest import ApiException
 from pprint import pprint
 
-# Defining the host is optional and defaults to https://sms.cam.uchc.edu
+# Defining the host is optional and defaults to http://localhost
 # See configuration.py for a list of all supported configuration parameters.
 configuration = sms_api.api.client.Configuration(
-    host = "https://sms.cam.uchc.edu"
+    host = "http://localhost"
 )
 
 
@@ -47,41 +47,44 @@ configuration = sms_api.api.client.Configuration(
 with sms_api.api.client.ApiClient(configuration) as api_client:
     # Create an instance of the API class
     api_instance = sms_api.api.client.SimulationsApi(api_client)
-    database_id = 56 # int | Database Id returned from /submit-simulation
-    body_get_simulation_results = sms_api.api.client.BodyGetSimulationResults() # BodyGetSimulationResults |
-    experiment_id = 'experiment_96bb7a2_id_1_20250620-181422' # str |  (optional) (default to 'experiment_96bb7a2_id_1_20250620-181422')
-    git_commit_hash = 'fe28cd2' # str |  (optional) (default to 'fe28cd2')
+    ecoli_simulation_request = sms_api.api.client.EcoliSimulationRequest() # EcoliSimulationRequest |
 
     try:
-        # Get Results
-        api_response = api_instance.get_simulation_results(database_id, body_get_simulation_results, experiment_id=experiment_id, git_commit_hash=git_commit_hash)
-        print("The response of SimulationsApi->get_simulation_results:\n")
+        # Run Antibiotics
+        api_response = api_instance.get_antibiotics_simulator_versions(ecoli_simulation_request)
+        print("The response of SimulationsApi->get_antibiotics_simulator_versions:\n")
         pprint(api_response)
     except ApiException as e:
-        print("Exception when calling SimulationsApi->get_simulation_results: %s\n" % e)
+        print("Exception when calling SimulationsApi->get_antibiotics_simulator_versions: %s\n" % e)
 
 ```
 
 ## Documentation for API Endpoints
 
-All URIs are relative to *https://sms.cam.uchc.edu*
+All URIs are relative to _http://localhost_
 
-| Class            | Method                                                                                             | HTTP request                     | Description                                                                 |
-| ---------------- | -------------------------------------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------- |
-| _SimulationsApi_ | [**get_simulation_results**](sms_api/api/client/docs/SimulationsApi.md#get_simulation_results)     | **POST** /core/vecoli/results    | Get Results                                                                 |
-| _SimulationsApi_ | [**get_simulation_status**](sms_api/api/client/docs/SimulationsApi.md#get_simulation_status)       | **GET** /core/vecoli/status      | Get Simulation Status                                                       |
-| _SimulationsApi_ | [**get_simulator_version**](sms_api/api/client/docs/SimulationsApi.md#get_simulator_version)       | **GET** /core/simulator/versions | get the list of available simulator versions                                |
-| _SimulationsApi_ | [**insert_simulator_version**](sms_api/api/client/docs/SimulationsApi.md#insert_simulator_version) | **POST** /core/simulator/upload  | Upload a new simulator (vEcoli) version.                                    |
-| _SimulationsApi_ | [**latest_simulator_hash**](sms_api/api/client/docs/SimulationsApi.md#latest_simulator_hash)       | **GET** /core/simulator/latest   | Get Latest Simulator Hash                                                   |
-| _SimulationsApi_ | [**run_parca**](sms_api/api/client/docs/SimulationsApi.md#run_parca)                               | **POST** /core/vecoli/parca      | Run a parameter calculation                                                 |
-| _SimulationsApi_ | [**run_simulation**](sms_api/api/client/docs/SimulationsApi.md#run_simulation)                     | **POST** /core/vecoli/run        | Run Vecoli Simulation                                                       |
-| _SimulationsApi_ | [**submit_simulation**](sms_api/api/client/docs/SimulationsApi.md#submit_simulation)               | **POST** /core/vecoli/submit     | Submit to the db a single vEcoli simulation with given parameter overrides. |
-| _DefaultApi_     | [**get_version_version_get**](sms_api/api/client/docs/DefaultApi.md#get_version_version_get)       | **GET** /version                 | Get Version                                                                 |
-| _DefaultApi_     | [**root_get**](sms_api/api/client/docs/DefaultApi.md#root_get)                                     | **GET** /                        | Root                                                                        |
+| Class            | Method                                                                                                                 | HTTP request                             | Description                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------- |
+| _SimulationsApi_ | [**get_antibiotics_simulator_versions**](sms_api/api/client/docs/SimulationsApi.md#get_antibiotics_simulator_versions) | **GET** /antibiotic/simulation/run       | Run Antibiotics                                                             |
+| _SimulationsApi_ | [**get_parca_versions**](sms_api/api/client/docs/SimulationsApi.md#get_parca_versions)                                 | **POST** /core/simulation/parca/versions | Run a parameter calculation                                                 |
+| _SimulationsApi_ | [**get_simulation_results**](sms_api/api/client/docs/SimulationsApi.md#get_simulation_results)                         | **POST** /core/simulation/results        | Get Results                                                                 |
+| _SimulationsApi_ | [**get_simulation_status**](sms_api/api/client/docs/SimulationsApi.md#get_simulation_status)                           | **GET** /core/simulation/status          | Get Simulation Status                                                       |
+| _SimulationsApi_ | [**run_parca**](sms_api/api/client/docs/SimulationsApi.md#run_parca)                                                   | **POST** /core/simulation/parca          | Run a parameter calculation                                                 |
+| _SimulationsApi_ | [**run_simulation**](sms_api/api/client/docs/SimulationsApi.md#run_simulation)                                         | **POST** /core/simulation/run            | Run Vecoli Simulation                                                       |
+| _SimulationsApi_ | [**submit_simulation**](sms_api/api/client/docs/SimulationsApi.md#submit_simulation)                                   | **POST** /core/simulation/submit         | Submit to the db a single vEcoli simulation with given parameter overrides. |
+| _SimulatorsApi_  | [**get_core_simulator_version**](sms_api/api/client/docs/SimulatorsApi.md#get_core_simulator_version)                  | **GET** /core/simulator/versions         | get the list of available simulator versions                                |
+| _SimulatorsApi_  | [**insert_core_simulator_version**](sms_api/api/client/docs/SimulatorsApi.md#insert_core_simulator_version)            | **POST** /core/simulator/upload          | Upload a new simulator (vEcoli) version.                                    |
+| _SimulatorsApi_  | [**latest_simulator_hash**](sms_api/api/client/docs/SimulatorsApi.md#latest_simulator_hash)                            | **GET** /core/simulator/latest           | Get Latest Simulator                                                        |
+| _DefaultApi_     | [**check_health_health_get**](sms_api/api/client/docs/DefaultApi.md#check_health_health_get)                           | **GET** /health                          | Check Health                                                                |
+| _DefaultApi_     | [**get_version_version_get**](sms_api/api/client/docs/DefaultApi.md#get_version_version_get)                           | **GET** /version                         | Get Version                                                                 |
+| _DefaultApi_     | [**home_get**](sms_api/api/client/docs/DefaultApi.md#home_get)                                                         | **GET** /                                | Home                                                                        |
 
 ## Documentation For Models
 
+- [AntibioticSimulation](sms_api/api/client/docs/AntibioticSimulation.md)
+- [AntibioticSimulationRequest](sms_api/api/client/docs/AntibioticSimulationRequest.md)
 - [BodyGetSimulationResults](sms_api/api/client/docs/BodyGetSimulationResults.md)
+- [EcoliExperiment](sms_api/api/client/docs/EcoliExperiment.md)
 - [EcoliSimulation](sms_api/api/client/docs/EcoliSimulation.md)
 - [EcoliSimulationRequest](sms_api/api/client/docs/EcoliSimulationRequest.md)
 - [HTTPValidationError](sms_api/api/client/docs/HTTPValidationError.md)
@@ -90,6 +93,8 @@ All URIs are relative to *https://sms.cam.uchc.edu*
 - [RegisteredSimulators](sms_api/api/client/docs/RegisteredSimulators.md)
 - [RequestedObservables](sms_api/api/client/docs/RequestedObservables.md)
 - [Settings](sms_api/api/client/docs/Settings.md)
+- [Simulation](sms_api/api/client/docs/Simulation.md)
+- [Simulator](sms_api/api/client/docs/Simulator.md)
 - [SimulatorVersion](sms_api/api/client/docs/SimulatorVersion.md)
 - [ValidationError](sms_api/api/client/docs/ValidationError.md)
 - [ValidationErrorLocInner](sms_api/api/client/docs/ValidationErrorLocInner.md)

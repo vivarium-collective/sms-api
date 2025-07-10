@@ -100,6 +100,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /core/simulation/parca/versions:
+    post:
+      tags:
+        - Simulations
+      summary: Run a parameter calculation
+      operationId: get-parca-versions
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParcaDataset"
   /core/simulation/submit:
     post:
       tags:
@@ -177,7 +190,7 @@ paths:
           required: false
           schema:
             type: string
-            default: e1a5ba3
+            default: 2bcedc4
             title: Git Commit Hash
       requestBody:
         required: true
@@ -225,43 +238,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkerEvent"
-        "422":
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-  /antibiotic/simulator/versions:
-    get:
-      tags:
-        - Simulators
-      summary: Get Antibiotics
-      operationId: get-antibiotics-simulator-versions
-      parameters:
-        - name: git_repo_url
-          in: query
-          required: false
-          schema:
-            type: string
-            default: https://github.com/vivarium-collective/vEcoli
-            title: Git Repo Url
-        - name: git_branch
-          in: query
-          required: false
-          schema:
-            type: string
-            default: messages
-            title: Git Branch
-      responses:
-        "200":
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
-                title: Response Get-Antibiotics-Simulator-Versions
         "422":
           description: Validation Error
           content:

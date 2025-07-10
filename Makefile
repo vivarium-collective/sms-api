@@ -113,8 +113,8 @@ gateway:
 		--port ${LOCAL_GATEWAY_PORT} \
 		--reload
 
-.PHONY: edit-client
-edit-client:
+.PHONY: edit-app
+edit-app:
 	@poetry run marimo edit app/ui/$(ui).py
 
 .PHONY: pginit

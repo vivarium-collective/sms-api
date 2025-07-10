@@ -27,7 +27,13 @@ from sms_api.dependencies import (
 )
 from sms_api.log_config import setup_logging
 from sms_api.simulation.data_service import DataServiceHpc
-from sms_api.simulation.handlers import run_parca, run_simulation, upload_simulator, verify_simulator_payload
+from sms_api.simulation.handlers import (
+    get_parca_datasets,
+    run_parca,
+    run_simulation,
+    upload_simulator,
+    verify_simulator_payload,
+)
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
     EcoliExperiment,
@@ -172,6 +178,34 @@ async def run_parameter_calculator(
             database_service=db_service,
             parca_config=parca_request.parca_config,
             background_tasks=background_tasks,
+        )
+    except Exception as e:
+        logger.exception("Error running PARCA")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/simulation/parca/versions",
+    response_model=ParcaDataset,
+    operation_id="get-parca-versions",
+    tags=["Simulations"],
+    summary="Run a parameter calculation",
+)
+async def get_parcas() -> list[ParcaDataset]:
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Simulation database service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+
+    sim_service = get_simulation_service()
+    if sim_service is None:
+        logger.error("Simulation service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
+
+    try:
+        return await get_parca_datasets(
+            simulation_service_slurm=sim_service,
+            database_service=db_service,
         )
     except Exception as e:
         logger.exception("Error running PARCA")

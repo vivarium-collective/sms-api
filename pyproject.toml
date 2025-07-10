@@ -42,6 +42,7 @@ vegafusion = "^2.0.2"
 vl-convert-python = "^1.8.0"
 tqdm = "^4.67.1"
 seaborn = "^0.13.2"
+python-dateutil = "^2.9.0.post0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
@@ -67,6 +68,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.mypy]
 files = ["sms_api", "tests"]
 strict = true
+exclude = '^sms_api/api/client/.*'
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -182,7 +184,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "app/ui/*"]
+exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*"]
 
 [tool.ruff.format]
 preview = true

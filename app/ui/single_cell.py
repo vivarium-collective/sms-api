@@ -18,17 +18,14 @@ def _(mo):
 
 
 @app.cell
-async def _():
+def _():
     import marimo as mo
 
     from app.api.simulations import EcoliSim
     from sms_api.dependencies import init_standalone
-    from sms_api.simulation import handlers, models
+    from sms_api.simulation.models import RegisteredSimulators, SimulatorVersion, EcoliExperiment, EcoliSimulationRequest
 
-    # init services
-    await init_standalone()
-
-    return EcoliSim, handlers, mo, models
+    return EcoliSim, RegisteredSimulators, SimulatorVersion, mo
 
 
 @app.cell
@@ -58,16 +55,79 @@ def _(mo):
 
 
 @app.cell
-async def _(handlers):
-    simulator_versions = await handlers.get_simulator_versions()
-    parca_versions = await handlers.get_parca_datasets()
-    latest_simulator = await handlers.get_latest_simulator()
-    return latest_simulator, parca_versions, simulator_versions
+def _():
+    import sms_api.api.client
+    from sms_api.api.client.rest import ApiException
+    from pprint import pprint
+
+    configuration = sms_api.api.client.Configuration(
+        host = "http://localhost:8888",
+    )
+    return ApiException, configuration, pprint, sms_api
 
 
 @app.cell
-def _(latest_simulator, mo, models):
-    def simulators_dropdown(simulator_versions: models.RegisteredSimulators) -> mo.ui.dropdown:
+def _(ApiException, SimulatorVersion, configuration, pprint, sms_api):
+    # -- API Client calls -- #
+
+    def on_run_simulation(simulator: dict, parca_dataset_id: str, variant_config: dict | None = None):
+        with sms_api.api.client.ApiClient(configuration) as api_client:
+            # Create an instance of the API class
+            api_instance = sms_api.api.client.SimulationsApi(api_client)
+            ecoli_simulation_request = sms_api.api.client.EcoliSimulationRequest(
+                simulator=SimulatorVersion(**simulator),
+                parca_dataset_id=parca_dataset_id,
+                variant_config=variant_config or {}
+            ) # EcoliSimulationRequest |
+
+            try:
+                # Run Antibiotics
+                api_response = api_instance.run_simulation(ecoli_simulation_request=ecoli_simulation_request)
+                print("The response of SimulationsApi->get_antibiotics_simulator_versions:\n")
+                pprint(api_response)
+            except ApiException as e:
+                print("Exception when calling SimulationsApi->get_antibiotics_simulator_versions: %s\n" % e)
+
+
+    def get_simulators():
+        with sms_api.api.client.ApiClient(configuration) as api_client:
+            # Create an instance of the API class
+            api_instance = sms_api.api.client.SimulatorsApi(api_client)
+            try:
+                # Run Antibiotics
+                api_response = api_instance.get_core_simulator_version()
+                return api_response
+            except ApiException as e:
+                print("Exception when calling SimulatorsApi->get simulator Versions: %s\n" % e)
+
+
+    def get_parcas():
+        with sms_api.api.client.ApiClient(configuration) as api_client:
+            # Create an instance of the API class
+            api_instance = sms_api.api.client.SimulationsApi(api_client)
+            try:
+                # Run Antibiotics
+                api_response = api_instance.get_parca_versions()
+                return api_response
+                return api_response
+            except ApiException as e:
+                print("Exception when calling SimulatorsApi->get simulator Versions: %s\n" % e)
+
+
+    return get_parcas, get_simulators
+
+
+@app.cell
+def _(get_parcas):
+    get_parcas()
+    return
+
+
+@app.cell
+def _(RegisteredSimulators, mo):
+    # -- marimio ui components -- #
+
+    def simulators_dropdown(simulator_versions: RegisteredSimulators) -> mo.ui.dropdown:
         opts = [f"{simulator.git_commit_hash}, {simulator.database_id}" for simulator in simulator_versions.versions]
         opts.append("latest")
         return mo.ui.dropdown(
@@ -77,86 +137,33 @@ def _(latest_simulator, mo, models):
             label="Select Simulator Version",
         )
 
-    def parca_dropdown(parca_versions: list[models.ParcaDataset]):
-        return mo.ui.dropdown(
-            options=[
-                f"{parca.database_id}, simulator: {parca.parca_dataset_request.simulator_version.git_commit_hash}"
-                for parca in parca_versions
-            ],
-            label="Select Parca Version",
-        )
-
     def run_simulation_button() -> mo.ui.run_button:
         return mo.ui.run_button(label="Run Single Cell Simulation")
 
-    def latest_simulator_display() -> mo.json:
-        return mo.json(data=latest_simulator.model_dump_json())
 
-    def upload_simulator_button() -> mo.ui.run_button:
-        return mo.ui.run_button(label="Upload Simulator")
-
-    def run_parca_button() -> mo.ui.run_button:
-        return mo.ui.run_button(label="Run Parca")
-
-    return (
-        latest_simulator_display,
-        parca_dropdown,
-        run_parca_button,
-        run_simulation_button,
-        simulators_dropdown,
-        upload_simulator_button,
-    )
+    def simulators_display(data: RegisteredSimulators) -> mo.ui.table:
+        return mo.ui.table(
+            data=data.model_dump()['versions'],
+            selection="single",
+            pagination=True
+        )
+    return run_simulation_button, simulators_display, simulators_dropdown
 
 
 @app.cell
-def _(latest_simulator_display, mo, upload_simulator_button):
-    latest_simulator_data = latest_simulator_display()
-    upload_button = upload_simulator_button()
-    mo.vstack([latest_simulator_data, upload_button])
-    return (upload_button,)
+def _(get_simulators, simulators_display):
+    simulator_versions = get_simulators()
+    simulators_table = simulators_display(simulator_versions)
+    simulators_table
+    return (simulator_versions,)
 
 
 @app.cell
-def _(run_parca_button):
-    parca_button = run_parca_button()
-    parca_button
-    return (parca_button,)
-
-
-@app.cell
-async def _(handlers, latest_simulator, upload_button):
-    latest_simulator_version = None
-    if upload_button.value:
-        latest_simulator_version = await handlers.upload_simulator(commit_hash=latest_simulator.git_commit_hash)
-
-    latest_simulator_version
-    return (latest_simulator_version,)
-
-
-@app.cell
-async def _(handlers, latest_simulator_version, parca_button):
-    latest_parca = None
-    if parca_button.value:
-        latest_parca = await handlers.run_parca(simulator=latest_simulator_version)
-
-    latest_parca
-    return
-
-
-@app.cell
-def _(
-    mo,
-    parca_dropdown,
-    parca_versions,
-    run_simulation_button,
-    simulator_versions,
-    simulators_dropdown,
-):
+def _(mo, run_simulation_button, simulator_versions, simulators_dropdown):
     simulators = simulators_dropdown(simulator_versions)
-    parca_datasets = parca_dropdown(parca_versions)
     simulation_run_button = run_simulation_button()
 
-    mo.vstack([simulators, parca_datasets, simulation_run_button])
+    mo.vstack([simulators, simulation_run_button])
     return (simulation_run_button,)
 
 
