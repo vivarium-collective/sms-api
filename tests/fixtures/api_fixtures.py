@@ -5,6 +5,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 
 from sms_api.api.main import app
+from sms_api.config import get_settings
 from sms_api.latest_commit import write_latest_commit
 
 
@@ -22,7 +23,8 @@ async def fastapi_app() -> FastAPI:
 
 @pytest_asyncio.fixture(scope="session")
 async def latest_commit_hash() -> str:
-    latest_commit_path = Path("assets/latest_commit.txt")
+    assets_dir = Path(get_settings().assets_dir)
+    latest_commit_path = assets_dir / "latest_commit.txt"
     if not os.path.exists(latest_commit_path):
         await write_latest_commit()
     with open(latest_commit_path) as fp:

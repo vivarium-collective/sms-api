@@ -32,19 +32,18 @@ from starlette.middleware.cors import CORSMiddleware
 
 from sms_api.common.gateway.models import ServerMode
 from sms_api.common.gateway.utils import format_marimo_appname
+from sms_api.config import get_settings
 from sms_api.dependencies import (
     init_standalone,
     shutdown_standalone,
 )
 from sms_api.log_config import setup_logging
-from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.version import __version__
 
 logger = logging.getLogger(__name__)
 setup_logging(logger)
 
 
-LATEST_COMMIT = read_latest_commit()
 APP_VERSION = __version__
 APP_TITLE = "sms-api"
 APP_ORIGINS = [
@@ -70,7 +69,8 @@ APP_ORIGINS = [
 # ]
 APP_SERVERS = None
 APP_ROUTERS = ["core", "antibiotic"]
-ACTIVE_URL = ServerMode.detect(Path("assets/dev/config/.dev_env"))
+assets_dir = Path(get_settings().assets_dir)
+ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
 
 
 # -- app configuration: lifespan and middleware -- #
@@ -107,7 +107,7 @@ for api_name in APP_ROUTERS:
 
 # -- set ui templates and marimo notebook apps -- #
 
-client_dir = Path("app")
+client_dir = Path(get_settings().app_dir) or Path("app")
 ui_dir = client_dir / "ui"
 templates_dir = client_dir / "templates"
 

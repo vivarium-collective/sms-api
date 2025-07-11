@@ -5,7 +5,7 @@ import pytest
 
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
-from sms_api.simulation.database_service import DatabaseService
+from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import EcoliSimulationRequest, JobType, ParcaDatasetRequest, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 
@@ -24,7 +24,7 @@ async def test_latest_repo_installed(ssh_service: SSHService, latest_commit_hash
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_simulate(
-    simulation_service_slurm: SimulationServiceHpc, database_service: DatabaseService, latest_commit_hash: str
+    simulation_service_slurm: SimulationServiceHpc, database_service: DatabaseServiceSQL, latest_commit_hash: str
 ) -> None:
     # check if the latest commit is already installed
     simulator: SimulatorVersion | None = None

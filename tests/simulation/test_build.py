@@ -23,7 +23,7 @@ async def test_latest_repo_installed(ssh_service: SSHService, latest_commit_hash
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_build(
-    simulation_service_slurm: SimulationServiceHpc, database_service: DatabaseService, latest_commit_hash: str
+    simulation_service_slurm: SimulationServiceHpc, database_service: DatabaseServiceSQL, latest_commit_hash: str
 ) -> None:
     # insert the latest commit into the database
     simulator = await database_service.insert_simulator(

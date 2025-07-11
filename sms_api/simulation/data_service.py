@@ -21,7 +21,8 @@ from sms_api.simulation.hpc_utils import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-TEST_CHUNK_DIR = Path("assets/tests/test_history")
+assets_dir = Path(get_settings().assets_dir)
+TEST_CHUNK_DIR = assets_dir / "tests" / "test_history"
 TEST_CHUNK_PATH = TEST_CHUNK_DIR / "1200.pq"
 TEST_EXPERIMENT_ID = "experiment_96bb7a2_id_1_20250620-181422"
 

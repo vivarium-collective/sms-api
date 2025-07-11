@@ -49,7 +49,7 @@ async def get_latest_simulator(
     git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
     git_branch: str = "messages",
 ) -> Simulator:
-    hpc_service = SimulationServiceHpc()
+    hpc_service = get_simulation_service()
     if hpc_service is None:
         logger.error("HPC service is not initialized")
         raise HTTPException(status_code=500, detail="HPC service is not initialized")

@@ -91,7 +91,10 @@ def get_remote_chunks_dirpath(
 
 
 def read_latest_commit() -> str:
-    with open("assets/latest_commit.txt") as f:
+    settings = get_settings()
+    if not settings.assets_dir:
+        raise ValueError("Assets directory is not set in the settings.")
+    with open(Path(settings.assets_dir) / "latest_commit.txt") as f:
         return f.read().strip()
 
 

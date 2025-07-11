@@ -17,13 +17,13 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from sms_api.api.routers.core import run_vecoli_simulation
 from sms_api.common.gateway.models import RouterConfig, ServerMode
+from sms_api.dependencies import get_simulation_service
 from sms_api.log_config import setup_logging
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
     EcoliExperiment,
     EcoliSimulationRequest,
 )
-from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 logger = logging.getLogger(__name__)
 setup_logging(logger)
@@ -45,7 +45,7 @@ config = RouterConfig(router=APIRouter(), prefix="/antibiotic", dependencies=[])
 
 @config.router.get("/simulation/run", operation_id="get-antibiotics-simulator-versions", tags=["Simulations"])
 async def run_antibiotics(background_tasks: BackgroundTasks, request: EcoliSimulationRequest) -> EcoliExperiment:
-    hpc_service = SimulationServiceHpc()
+    hpc_service = get_simulation_service()
     if hpc_service is None:
         logger.error("HPC service is not initialized")
         raise HTTPException(status_code=500, detail="HPC service is not initialized")

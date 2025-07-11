@@ -51,7 +51,6 @@ from sms_api.simulation.models import (
     SimulatorVersion,
     WorkerEvent,
 )
-from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 logger = logging.getLogger(__name__)
 setup_logging(logger)
@@ -76,7 +75,7 @@ async def get_latest_simulator(
     git_repo_url: str = Query(default="https://github.com/vivarium-collective/vEcoli"),
     git_branch: str = Query(default="messages"),
 ) -> Simulator:
-    hpc_service = SimulationServiceHpc()
+    hpc_service = get_simulation_service()
     if hpc_service is None:
         logger.error("HPC service is not initialized")
         raise HTTPException(status_code=500, detail="HPC service is not initialized")
