@@ -11,9 +11,9 @@ from typing import cast
 from typing import Union
 
 if TYPE_CHECKING:
-  from ..models.simulator_version import SimulatorVersion
-  from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
   from ..models.antibiotic_simulation_request_antibiotics_config import AntibioticSimulationRequestAntibioticsConfig
+  from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
+  from ..models.simulator_version import SimulatorVersion
 
 
 
@@ -44,9 +44,9 @@ class AntibioticSimulationRequest:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.simulator_version import SimulatorVersion
-        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.antibiotic_simulation_request_antibiotics_config import AntibioticSimulationRequestAntibioticsConfig
+        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
+        from ..models.simulator_version import SimulatorVersion
         simulator = self.simulator.to_dict()
 
         parca_dataset_id = self.parca_dataset_id
@@ -74,9 +74,9 @@ class AntibioticSimulationRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.simulator_version import SimulatorVersion
-        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.antibiotic_simulation_request_antibiotics_config import AntibioticSimulationRequestAntibioticsConfig
+        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
+        from ..models.simulator_version import SimulatorVersion
         d = dict(src_dict)
         simulator = SimulatorVersion.from_dict(d.pop("simulator"))
 

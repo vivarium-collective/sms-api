@@ -19,7 +19,7 @@ T = TypeVar("T", bound="ParcaDatasetRequestParcaConfig")
 
 @_attrs_define
 class ParcaDatasetRequestParcaConfig:
-    """ 
+    """
      """
 
     additional_properties: dict[str, Union[float, int, str]] = _attrs_field(init=False, factory=dict)
@@ -29,10 +29,10 @@ class ParcaDatasetRequestParcaConfig:
 
 
     def to_dict(self) -> dict[str, Any]:
-        
+
         field_dict: dict[str, Any] = {}
         for prop_name, prop in self.additional_properties.items():
-            
+
             field_dict[prop_name] = prop
 
 

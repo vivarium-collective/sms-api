@@ -190,7 +190,7 @@ paths:
           required: false
           schema:
             type: string
-            default: 2bcedc4
+            default: 89f34d7
             title: Git Commit Hash
       requestBody:
         required: true

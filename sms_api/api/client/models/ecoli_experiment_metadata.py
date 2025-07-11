@@ -18,7 +18,7 @@ T = TypeVar("T", bound="EcoliExperimentMetadata")
 
 @_attrs_define
 class EcoliExperimentMetadata:
-    """ 
+    """
      """
 
     additional_properties: dict[str, str] = _attrs_field(init=False, factory=dict)
@@ -28,7 +28,7 @@ class EcoliExperimentMetadata:
 
 
     def to_dict(self) -> dict[str, Any]:
-        
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
 

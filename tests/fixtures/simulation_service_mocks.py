@@ -57,7 +57,9 @@ class ConcreteSimulationService(SimulationService):
 
 class SimulationServiceMockCloneAndBuild(ConcreteSimulationService):
     clone_repo_args: tuple[str, str, str] = ("", "", "")
-    submit_build_args: tuple[SimulatorVersion] = (SimulatorVersion(database_id=0, git_branch="", git_repo_url="", git_commit_hash=""),)
+    submit_build_args: tuple[SimulatorVersion] = (
+        SimulatorVersion(database_id=0, git_branch="", git_repo_url="", git_commit_hash=""),
+    )
     expected_build_slurm_job_id: int = -1
 
     def __init__(self, expected_build_slurm_job_id: int) -> None:

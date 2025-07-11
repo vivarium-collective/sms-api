@@ -22,7 +22,7 @@ PACKAGE="sms_api.api.client"
 
 #$OPENAPI_CMD generate -i "${SPEC_DIR}/openapi_3_1_0_generated.yaml" -g python -o "${LIB_DIR}" --additional-properties=packageName=${PACKAGE},generateSourceCodeOnly=true
 # --config "${ROOT_DIR}/scripts/openapi-python-client.yaml"
-openapi-python-client generate --path "${SPEC_DIR}/openapi_3_1_0_generated.yaml" --output-path "${LIB_DIR}" --meta none --fail-on-warning
+openapi-python-client generate --path "${SPEC_DIR}/openapi_3_1_0_generated.yaml" --output-path "${LIB_DIR}" --meta none --fail-on-warning --overwrite
 if [ $? -ne 0 ]; then
     echo "Error: Failed to generate API client."
     exit 1

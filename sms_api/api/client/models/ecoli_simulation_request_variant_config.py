@@ -21,7 +21,7 @@ T = TypeVar("T", bound="EcoliSimulationRequestVariantConfig")
 
 @_attrs_define
 class EcoliSimulationRequestVariantConfig:
-    """ 
+    """
      """
 
     additional_properties: dict[str, 'EcoliSimulationRequestVariantConfigAdditionalProperty'] = _attrs_field(init=False, factory=dict)
@@ -32,7 +32,7 @@ class EcoliSimulationRequestVariantConfig:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.ecoli_simulation_request_variant_config_additional_property import EcoliSimulationRequestVariantConfigAdditionalProperty
-        
+
         field_dict: dict[str, Any] = {}
         for prop_name, prop in self.additional_properties.items():
             field_dict[prop_name] = prop.to_dict()

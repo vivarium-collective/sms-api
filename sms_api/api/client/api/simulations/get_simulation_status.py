@@ -22,9 +22,9 @@ def _get_kwargs(
     num_events: Union[None, Unset, int] = UNSET,
 
 ) -> dict[str, Any]:
-    
 
-    
+
+
 
     params: dict[str, Any] = {}
 

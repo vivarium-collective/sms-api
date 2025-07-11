@@ -21,7 +21,7 @@ T = TypeVar("T", bound="AntibioticSimulationRequestVariantConfig")
 
 @_attrs_define
 class AntibioticSimulationRequestVariantConfig:
-    """ 
+    """
      """
 
     additional_properties: dict[str, 'AntibioticSimulationRequestVariantConfigAdditionalProperty'] = _attrs_field(init=False, factory=dict)
@@ -32,7 +32,7 @@ class AntibioticSimulationRequestVariantConfig:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.antibiotic_simulation_request_variant_config_additional_property import AntibioticSimulationRequestVariantConfigAdditionalProperty
-        
+
         field_dict: dict[str, Any] = {}
         for prop_name, prop in self.additional_properties.items():
             field_dict[prop_name] = prop.to_dict()

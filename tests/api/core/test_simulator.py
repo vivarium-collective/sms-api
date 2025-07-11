@@ -11,16 +11,16 @@ from sms_api.api.client.models.simulator import Simulator as SimulatorDto
 from sms_api.api.client.models.simulator_version import SimulatorVersion as SimulatorVersionDto
 from sms_api.api.client.types import UNSET
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.models import JobType, JobStatus, SimulatorVersion
+from sms_api.simulation.models import JobStatus, JobType, SimulatorVersion
 from tests.fixtures.simulation_service_mocks import SimulationServiceMockCloneAndBuild
 
 
 @pytest.mark.asyncio
 async def test_insert_simulator_version(
-        monkeypatch: pytest.MonkeyPatch,
-        database_service: DatabaseServiceSQL,
-        simulation_service_mock_clone_and_build: SimulationServiceMockCloneAndBuild,
-        in_memory_api_client: Client
+    monkeypatch: pytest.MonkeyPatch,
+    database_service: DatabaseServiceSQL,
+    simulation_service_mock_clone_and_build: SimulationServiceMockCloneAndBuild,
+    in_memory_api_client: Client,
 ) -> None:
     expected_commit_hash = "abc1234"
     expected_git_repo_url = "https://github.com/vivarium-collective/vEcoli"
@@ -28,11 +28,12 @@ async def test_insert_simulator_version(
     simulator_dto = SimulatorDto(
         git_commit_hash=expected_commit_hash, git_repo_url=expected_git_repo_url, git_branch=expected_git_branch
     )
-    response: HTTPValidationError | SimulatorVersionDto | None = await insert_core_simulator_version(client=in_memory_api_client, body=simulator_dto)
+    response: HTTPValidationError | SimulatorVersionDto | None = await insert_core_simulator_version(
+        client=in_memory_api_client, body=simulator_dto
+    )
     assert type(response) is SimulatorVersionDto
     returned_simulator_version_dto: SimulatorVersionDto = response
     assert type(returned_simulator_version_dto) is SimulatorVersionDto
-
 
     # wait for background tasks to complete
     await asyncio.sleep(2)
