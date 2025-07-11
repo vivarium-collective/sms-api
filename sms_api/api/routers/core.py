@@ -312,7 +312,7 @@ async def get_result_chunks(
 @config.router.post(
     path="/simulation/results",
     response_class=FileResponse,
-    operation_id="get-simulation-results",
+    operation_id="get-simulation-results-file",
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_service), Depends(get_ssh_service)],
 )
