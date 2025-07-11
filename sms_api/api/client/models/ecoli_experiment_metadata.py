@@ -6,47 +6,31 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-from typing import Union
 
 
 
 
 
 
-T = TypeVar("T", bound="RequestedObservables")
+T = TypeVar("T", bound="EcoliExperimentMetadata")
 
 
 
 @_attrs_define
-class RequestedObservables:
-    """
-        Attributes:
-            items (Union[Unset, list[str]]):
+class EcoliExperimentMetadata:
+    """ 
      """
 
-    items: Union[Unset, list[str]] = UNSET
-    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+    additional_properties: dict[str, str] = _attrs_field(init=False, factory=dict)
 
 
 
 
 
     def to_dict(self) -> dict[str, Any]:
-        items: Union[Unset, list[str]] = UNSET
-        if not isinstance(self.items, Unset):
-            items = self.items
-
-
-
-
+        
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-        })
-        if items is not UNSET:
-            field_dict["items"] = items
 
         return field_dict
 
@@ -55,25 +39,21 @@ class RequestedObservables:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        items = cast(list[str], d.pop("items", UNSET))
-
-
-        requested_observables = cls(
-            items=items,
+        ecoli_experiment_metadata = cls(
         )
 
 
-        requested_observables.additional_properties = d
-        return requested_observables
+        ecoli_experiment_metadata.additional_properties = d
+        return ecoli_experiment_metadata
 
     @property
     def additional_keys(self) -> list[str]:
         return list(self.additional_properties.keys())
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> str:
         return self.additional_properties[key]
 
-    def __setitem__(self, key: str, value: Any) -> None:
+    def __setitem__(self, key: str, value: str) -> None:
         self.additional_properties[key] = value
 
     def __delitem__(self, key: str) -> None:
