@@ -35,10 +35,8 @@ class HpcRun(BaseModel):
 
 class Simulator(BaseModel):
     git_commit_hash: str  # Git commit hash for the specific simulator version (first 7 characters)
-    git_repo_url: str = Field(
-        default="https://github.com/vivarium-collective/vEcoli"
-    )  # Git repository URL for the simulator
-    git_branch: str = Field(default="messages")  # Git branch name for the simulator version
+    git_repo_url: str  # Git repository URL for the simulator
+    git_branch: str  # Git branch name for the simulator version
 
 
 class SimulatorVersion(Simulator):

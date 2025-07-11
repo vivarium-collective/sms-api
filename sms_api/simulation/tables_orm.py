@@ -77,6 +77,8 @@ class ORMHpcRun(Base):
             ref_id=ref_id,
             status=self.status.to_job_status(),
             error_message=self.error_message,
+            start_time=str(self.start_time) if self.start_time else None,
+            end_time=str(self.end_time) if self.end_time else None,
         )
 
 

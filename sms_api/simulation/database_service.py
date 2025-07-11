@@ -282,6 +282,7 @@ class DatabaseServiceSQL(DatabaseService):
                 jobref_simulator_id=jobref_simulator_id,
                 jobref_simulation_id=jobref_simulation_id,
                 jobref_parca_dataset_id=jobref_parca_dataset_id,
+                start_time=datetime.datetime.now(),
             )
             session.add(orm_hpc_run)
             await session.flush()
@@ -310,6 +311,14 @@ class DatabaseServiceSQL(DatabaseService):
             if orm_hpc_job is None:
                 return None
             return orm_hpc_job.to_hpc_run()
+
+    @override
+    async def delete_hpcrun(self, hpcrun_id: int) -> None:
+        async with self.async_sessionmaker() as session, session.begin():
+            hpcrun: ORMHpcRun | None = await self._get_orm_hpcrun(session, hpcrun_id=hpcrun_id)
+            if hpcrun is None:
+                raise Exception(f"HpcRun with id {hpcrun_id} not found in the database")
+            await session.delete(hpcrun)
 
     @override
     async def get_or_insert_parca_dataset(self, parca_dataset_request: ParcaDatasetRequest) -> ParcaDataset:

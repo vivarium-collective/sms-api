@@ -30,6 +30,15 @@ logger.setLevel(logging.INFO)
 
 class SimulationService(ABC):
     @abstractmethod
+    async def get_latest_commit_hash(
+        self,
+        ssh_service: SSHService | None = None,
+        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
+        git_branch: str = "master",
+    ) -> str:
+        pass
+
+    @abstractmethod
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
         pass
 
@@ -70,6 +79,7 @@ class SimulationService(ABC):
 class SimulationServiceHpc(SimulationService):
     _latest_commit_hash: str | None = None
 
+    @override
     async def get_latest_commit_hash(
         self,
         ssh_service: SSHService | None = None,
@@ -85,7 +95,8 @@ class SimulationServiceHpc(SimulationService):
         if return_code != 0:
             raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
         latest_commit_hash = stdout.strip("\n")[:7]
-        with open("assets/latest_commit.txt", "w") as f:
+        assets_dir = get_settings().assets_dir
+        with open(Path(assets_dir) / "latest_commit.txt", "w") as f:
             f.write(latest_commit_hash)
 
         self._latest_commit_hash = latest_commit_hash

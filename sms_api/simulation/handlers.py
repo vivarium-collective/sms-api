@@ -28,12 +28,15 @@ setup_logging(logger)
 
 
 def verify_simulator_payload(simulator: Simulator) -> None:
-    if not simulator.git_repo_url == "https://github.com/vivarium-collective/vEcoli":
+    if simulator.git_repo_url not in [
+        "https://github.com/vivarium-collective/vEcoli",
+        "https://github.com/CovertLab/vEcoli",
+    ]:
         raise HTTPException(status_code=404, detail="You may not upload a simulator from any other source.")
-    if not simulator.git_branch == "messages":
-        raise HTTPException(
-            status_code=404, detail="You must be authorized to upload a simulator from any branch other than main."
-        )
+    # if not simulator.git_branch == "messages":
+    #     raise HTTPException(
+    #         status_code=404, detail="You must be authorized to upload a simulator from any branch other than main."
+    #     )
 
 
 async def get_slurm_job_status(simulation_service_slurm: SimulationService, slurm_job_id: int) -> None:
