@@ -148,7 +148,7 @@ class DatabaseServiceSQL(DatabaseService):
         return orm_hpc_job
 
     async def _get_orm_hpcrun_by_slurmjobid(self, session: AsyncSession, slurmjobid: int) -> ORMHpcRun | None:
-        stmt1 = select(ORMHpcRun).where(ORMHpcRun.id == slurmjobid).limit(1)
+        stmt1 = select(ORMHpcRun).where(ORMHpcRun.slurmjobid == slurmjobid).limit(1)
         result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
         return orm_hpc_job
