@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from sms_api.simulation.models import HpcRun, JobStatus, JobType, WorkerEvent
+from sms_api.simulation.models import HpcRun, JobStatus, JobType, SimulatorVersion, WorkerEvent
 
 
 class JobStatusDB(enum.Enum):
@@ -46,6 +46,15 @@ class ORMSimulator(Base):
     git_repo_url: Mapped[str] = mapped_column(nullable=False)
     git_branch: Mapped[str] = mapped_column(nullable=False)
     git_commit_hash: Mapped[str] = mapped_column(nullable=False)  # first 7 characters of the commit hash
+
+    def to_simulator_version(self) -> SimulatorVersion:
+        return SimulatorVersion(
+            database_id=self.id,
+            created_at=self.created_at,
+            git_repo_url=self.git_repo_url,
+            git_branch=self.git_branch,
+            git_commit_hash=self.git_commit_hash,
+        )
 
 
 class ORMHpcRun(Base):
