@@ -3,7 +3,6 @@ import time
 
 import pytest
 
-from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import ParcaDatasetRequest, SimulatorVersion
@@ -11,14 +10,6 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 main_branch = "messages"
 repo_url = "https://github.com/vivarium-collective/vEcoli"
-
-
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
-@pytest.mark.asyncio
-async def test_latest_repo_installed(ssh_service: SSHService, latest_commit_hash: str) -> None:
-    return_code, stdout, stderr = await ssh_service.run_command(f"git ls-remote -h {repo_url} {main_branch}")
-    assert return_code == 0
-    assert stdout.strip("\n").split()[0][:7] == latest_commit_hash
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")

@@ -1,9 +1,13 @@
 import os
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
+import httpx
 import pytest_asyncio
 from fastapi import FastAPI
+from httpx import ASGITransport
 
+from sms_api.api.client import Client
 from sms_api.api.main import app
 from sms_api.config import get_settings
 from sms_api.latest_commit import write_latest_commit
@@ -30,3 +34,13 @@ async def latest_commit_hash() -> str:
     with open(latest_commit_path) as fp:
         latest_commit = fp.read()
     return latest_commit
+
+
+@pytest_asyncio.fixture(scope="function")
+async def in_memory_api_client() -> AsyncGenerator[Client, None]:
+    transport = ASGITransport(app=app)
+    async_client = httpx.AsyncClient(transport=transport, base_url="http://testserver")
+    client = Client(base_url="http://testserver", raise_on_unexpected_status=True)
+    client.set_async_httpx_client(async_client)
+    yield client
+    await async_client.aclose()

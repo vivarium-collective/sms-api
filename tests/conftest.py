@@ -1,7 +1,12 @@
 import pytest  # noqa: F401
 import pytest_asyncio  # noqa: F401
 
-from tests.fixtures.api_fixtures import fastapi_app, latest_commit_hash, local_base_url  # noqa: F401
+from tests.fixtures.api_fixtures import (  # noqa: F401
+    fastapi_app,
+    in_memory_api_client,
+    latest_commit_hash,
+    local_base_url,
+)
 from tests.fixtures.mongodb_fixtures import (  # noqa: F401
     mongo_test_client,
     mongo_test_collection,
@@ -15,7 +20,11 @@ from tests.fixtures.nats_fixtures import (  # noqa: F401
     nats_subscriber_client,
 )
 from tests.fixtures.postgres_fixtures import async_postgres_engine, database_service, postgres_url  # noqa: F401
-from tests.fixtures.simulation_fixtures import simulation_service_mock, simulation_service_slurm  # noqa: F401
+from tests.fixtures.simulation_fixtures import (  # noqa: F401
+    expected_build_slurm_job_id,
+    simulation_service_mock_clone_and_build,
+    simulation_service_slurm,
+)
 from tests.fixtures.slurm_fixtures import (  # noqa: F401
     slurm_service,
     slurm_template_hello,
