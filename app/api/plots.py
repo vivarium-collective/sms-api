@@ -1,8 +1,10 @@
+from typing import cast
+
 import numpy as np
 from matplotlib import pyplot as plt
 
 
-def plot_mic_curve(mic_curve, title="MIC Curve: Survival vs. Antibiotic Dose"):
+def plot_mic_curve(mic_curve: dict[str, list[float]], title: str = "MIC Curve: Survival vs. Antibiotic Dose") -> None:
     """
     Plot a MIC (Minimum Inhibitory Concentration) survival curve.
 
@@ -25,7 +27,7 @@ def plot_mic_curve(mic_curve, title="MIC Curve: Survival vs. Antibiotic Dose"):
     plt.show()
 
 
-def plot_pap_curve(pap_curve, title="PAP Curve: Population Survival vs. Dose"):
+def plot_pap_curve(pap_curve: dict[str, list[float]], title: str = "PAP Curve: Population Survival vs. Dose") -> None:
     doses = pap_curve["dose"]
     survival = pap_curve["survival"]
 
@@ -40,7 +42,9 @@ def plot_pap_curve(pap_curve, title="PAP Curve: Population Survival vs. Dose"):
     plt.show()
 
 
-def plot_antibiotic_response(response, title="Simulated Antibiotic Response Over Time"):
+def plot_antibiotic_response(
+    response: dict[str, list[float]], title: str = "Simulated Antibiotic Response Over Time"
+) -> None:
     time = response["time"]
 
     plt.figure(figsize=(10, 6))
@@ -57,7 +61,9 @@ def plot_antibiotic_response(response, title="Simulated Antibiotic Response Over
     plt.show()
 
 
-def plot_single_cell_trajectories(trajectories, title="Single-Cell Lysis Trajectories"):
+def plot_single_cell_trajectories(
+    trajectories: list[dict[str, list[float]]], title: str = "Single-Cell Lysis Trajectories"
+) -> None:
     plt.figure(figsize=(8, 5))
     for i, cell in enumerate(trajectories):
         plt.plot(cell["time"], cell["lysis_prob"], label=f"Cell {i + 1}", alpha=0.7)
@@ -70,10 +76,12 @@ def plot_single_cell_trajectories(trajectories, title="Single-Cell Lysis Traject
     plt.show()
 
 
-def plot_parameter_scan(scan_results, title="Parameter Scan: Survival Curves"):
-    param_name = scan_results["param"]
-    values = scan_results["values"]
-    survival_curves = scan_results["survival_curves"]
+def plot_parameter_scan(
+    scan_results: dict[str, str | list[list[float]]], title: str = "Parameter Scan: Survival Curves"
+) -> None:
+    param_name = cast(str, scan_results["param"])
+    values = cast(list[list[float]], scan_results["values"])
+    survival_curves = cast(list[list[float]], scan_results["survival_curves"])
 
     doses = np.logspace(-2, 1, len(survival_curves[0]))  # Assumes same x-axis
 

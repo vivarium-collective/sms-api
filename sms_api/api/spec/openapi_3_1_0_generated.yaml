@@ -112,7 +112,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ParcaDataset"
+                items:
+                  $ref: "#/components/schemas/ParcaDataset"
+                type: array
+                title: Response Get-Parca-Versions
   /core/simulation/submit:
     post:
       tags:
@@ -163,11 +166,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
-  /core/simulation/results:
+  /core/simulation/results/chunks:
     post:
       tags:
         - Simulations
-      summary: Get Results
+      summary: Get Result Chunks
       operationId: get-simulation-results
       parameters:
         - name: experiment_id
@@ -190,7 +193,7 @@ paths:
           required: false
           schema:
             type: string
-            default: 2bcedc4
+            default: 305f5c8
             title: Git Commit Hash
       requestBody:
         required: true
@@ -204,6 +207,45 @@ paths:
           content:
             application/json:
               schema: {}
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /core/simulation/results:
+    post:
+      tags:
+        - Simulations
+      summary: Get Results
+      operationId: get-simulation-results-file
+      parameters:
+        - name: experiment_id
+          in: query
+          required: false
+          schema:
+            type: string
+            default: experiment_96bb7a2_id_1_20250620-181422
+            title: Experiment Id
+        - name: database_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            description: Database Id of simulation
+            title: Database Id
+          description: Database Id of simulation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - $ref: "#/components/schemas/Settings"
+                - type: "null"
+              title: Settings
+      responses:
+        "200":
+          description: Successful Response
         "422":
           description: Validation Error
           content:
@@ -667,6 +709,14 @@ components:
           type: string
           title: Dev Mode
           default: "0"
+        app_dir:
+          type: string
+          title: App Dir
+          default: app
+        assets_dir:
+          type: string
+          title: Assets Dir
+          default: assets
       additionalProperties: false
       type: object
       title: Settings
@@ -678,14 +728,14 @@ components:
         git_repo_url:
           type: string
           title: Git Repo Url
-          default: https://github.com/vivarium-collective/vEcoli
         git_branch:
           type: string
           title: Git Branch
-          default: messages
       type: object
       required:
         - git_commit_hash
+        - git_repo_url
+        - git_branch
       title: Simulator
     SimulatorVersion:
       properties:
@@ -695,11 +745,9 @@ components:
         git_repo_url:
           type: string
           title: Git Repo Url
-          default: https://github.com/vivarium-collective/vEcoli
         git_branch:
           type: string
           title: Git Branch
-          default: messages
         database_id:
           type: integer
           title: Database Id
@@ -712,6 +760,8 @@ components:
       type: object
       required:
         - git_commit_hash
+        - git_repo_url
+        - git_branch
         - database_id
       title: SimulatorVersion
     ValidationError:

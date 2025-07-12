@@ -5,7 +5,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from testcontainers.postgres import PostgresContainer  # type: ignore [import-untyped]
 
-from sms_api.dependencies import get_postgres_engine, set_postgres_engine
+from sms_api.dependencies import get_database_service, get_postgres_engine, set_database_service, set_postgres_engine
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.tables_orm import create_db
 
@@ -31,5 +31,9 @@ async def async_postgres_engine(postgres_url: str) -> AsyncGenerator[AsyncEngine
 
 
 @pytest_asyncio.fixture(scope="function")
-async def database_service(async_postgres_engine: AsyncEngine) -> DatabaseService:
-    return DatabaseServiceSQL(async_engine=async_postgres_engine)
+async def database_service(async_postgres_engine: AsyncEngine) -> AsyncGenerator[DatabaseService, None]:
+    saved_database_service = get_database_service()
+    database_service = DatabaseServiceSQL(async_engine=async_postgres_engine)
+    set_database_service(database_service)
+    yield database_service
+    set_database_service(saved_database_service)

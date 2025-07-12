@@ -30,6 +30,15 @@ logger.setLevel(logging.INFO)
 
 class SimulationService(ABC):
     @abstractmethod
+    async def get_latest_commit_hash(
+        self,
+        ssh_service: SSHService | None = None,
+        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
+        git_branch: str = "master",
+    ) -> str:
+        pass
+
+    @abstractmethod
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
         pass
 
@@ -70,6 +79,7 @@ class SimulationService(ABC):
 class SimulationServiceHpc(SimulationService):
     _latest_commit_hash: str | None = None
 
+    @override
     async def get_latest_commit_hash(
         self,
         ssh_service: SSHService | None = None,
@@ -85,7 +95,8 @@ class SimulationServiceHpc(SimulationService):
         if return_code != 0:
             raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
         latest_commit_hash = stdout.strip("\n")[:7]
-        with open("assets/latest_commit.txt", "w") as f:
+        assets_dir = get_settings().assets_dir
+        with open(Path(assets_dir) / "latest_commit.txt", "w") as f:
             f.write(latest_commit_hash)
 
         self._latest_commit_hash = latest_commit_hash
@@ -352,22 +363,22 @@ class SimulationServiceHpc(SimulationService):
                     image="{apptainer_image_path!s}"
                     cd {remote_vEcoli_repo_path!s}
 
-                    # scrape the slurm log file for the magic word and publish to NATS
-                    export NATS_URL={settings.nats_emitter_url}
-                    if [ -z "$NATS_URL" ]; then
-                        echo "NATS_URL environment variable is not set."
-                    else
-                        tail -F {slurm_log_file!s} | while read -r line; do
-                            if echo "$line" | grep -q "{settings.nats_emitter_magic_word}"; then
-                                clean_line="$(echo "$line" | sed \
-                                   -e 's/{settings.nats_emitter_magic_word}//g' \
-                                   -e "s/'/\\&quot;/g" )"
-                                nats pub {settings.nats_worker_event_subject} "'$clean_line'"
-                            fi
-                        done &
-                        SCRAPE_PID=$!
-                        TAIL_PID=$(pgrep -P $SCRAPE_PID tail)
-                    fi
+                    # # scrape the slurm log file for the magic word and publish to NATS
+                    # export NATS_URL={settings.nats_emitter_url}
+                    # if [ -z "$NATS_URL" ]; then
+                    #     echo "NATS_URL environment variable is not set."
+                    # else
+                    #     tail -F {slurm_log_file!s} | while read -r line; do
+                    #         if echo "$line" | grep -q "{settings.nats_emitter_magic_word}"; then
+                    #             clean_line="$(echo "$line" | sed \
+                    #                -e 's/{settings.nats_emitter_magic_word}//g' \
+                    #                -e "s/'/\\&quot;/g" )"
+                    #             nats pub {settings.nats_worker_event_subject} "'$clean_line'"
+                    #         fi
+                    #     done &
+                    #     SCRAPE_PID=$!
+                    #     TAIL_PID=$(pgrep -P $SCRAPE_PID tail)
+                    # fi
 
                     git -C ./configs diff HEAD >> ./source-info/git_diff.txt
                     singularity run $binds $image uv run \\
@@ -378,14 +389,14 @@ class SimulationServiceHpc(SimulationService):
                          --sim_data_path "/parca/{parca_dataset_dirname}/kb/simData.cPickle" \\
                          --fail_at_max_duration
 
-                    if [ -n "$SCRAPE_PID" ]; then
-                        echo "Waiting for scrape to finish..."
-                        sleep 10  # give time for the scrape to finish
-                        kill $SCRAPE_PID || true  # kill the scrape process if it is still running
-                        kill $TAIL_PID || true  # kill the tail process if it is still running
-                    else
-                        echo "No scrape process found."
-                    fi
+                    # if [ -n "$SCRAPE_PID" ]; then
+                    #     echo "Waiting for scrape to finish..."
+                    #     sleep 10  # give time for the scrape to finish
+                    #     kill $SCRAPE_PID || true  # kill the scrape process if it is still running
+                    #     kill $TAIL_PID || true  # kill the tail process if it is still running
+                    # else
+                    #     echo "No scrape process found."
+                    # fi
 
                     # if the experiment directory is empty after the run, fail the job
                     if [ ! "$(ls -A {experiment_path!s})" ]; then

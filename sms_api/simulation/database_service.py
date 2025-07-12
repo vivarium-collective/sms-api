@@ -1,3 +1,4 @@
+import datetime
 import logging
 from abc import ABC, abstractmethod
 
@@ -81,6 +82,10 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def delete_hpcrun(self, hpcrun_id: int) -> None:
+        pass
+
+    @abstractmethod
     async def get_or_insert_parca_dataset(self, parca_dataset_request: ParcaDatasetRequest) -> ParcaDataset:
         pass
 
@@ -148,7 +153,7 @@ class DatabaseServiceSQL(DatabaseService):
         return orm_hpc_job
 
     async def _get_orm_hpcrun_by_slurmjobid(self, session: AsyncSession, slurmjobid: int) -> ORMHpcRun | None:
-        stmt1 = select(ORMHpcRun).where(ORMHpcRun.id == slurmjobid).limit(1)
+        stmt1 = select(ORMHpcRun).where(ORMHpcRun.slurmjobid == slurmjobid).limit(1)
         result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
         return orm_hpc_job
@@ -203,12 +208,7 @@ class DatabaseServiceSQL(DatabaseService):
             session.add(new_orm_simulator)
             await session.flush()
             # Ensure the ORM object is inserted and has an ID
-            return SimulatorVersion(
-                database_id=new_orm_simulator.id,
-                git_commit_hash=new_orm_simulator.git_commit_hash,
-                git_repo_url=new_orm_simulator.git_repo_url,
-                git_branch=new_orm_simulator.git_branch,
-            )
+            return new_orm_simulator.to_simulator_version()
 
     @override
     async def get_simulator(self, simulator_id: int) -> SimulatorVersion | None:
@@ -216,13 +216,7 @@ class DatabaseServiceSQL(DatabaseService):
             orm_simulator = await self._get_orm_simulator(session, simulator_id=simulator_id)
             if orm_simulator is None:
                 return None
-            return SimulatorVersion(
-                database_id=orm_simulator.id,
-                git_commit_hash=orm_simulator.git_commit_hash,
-                git_repo_url=orm_simulator.git_repo_url,
-                git_branch=orm_simulator.git_branch,
-                created_at=orm_simulator.created_at,
-            )
+            return orm_simulator.to_simulator_version()
 
     @override
     async def get_simulator_by_commit(self, commit_hash: str) -> SimulatorVersion | None:
@@ -232,13 +226,7 @@ class DatabaseServiceSQL(DatabaseService):
             orm_simulator: ORMSimulator | None = result1.scalars().one_or_none()
             if orm_simulator is None:
                 return None
-            return SimulatorVersion(
-                database_id=orm_simulator.id,
-                git_commit_hash=orm_simulator.git_commit_hash,
-                git_repo_url=orm_simulator.git_repo_url,
-                git_branch=orm_simulator.git_branch,
-                created_at=orm_simulator.created_at,
-            )
+            return orm_simulator.to_simulator_version()
 
     @override
     async def delete_simulator(self, simulator_id: int) -> None:
@@ -257,14 +245,7 @@ class DatabaseServiceSQL(DatabaseService):
 
             simulator_versions: list[SimulatorVersion] = []
             for orm_simulator in orm_simulators:
-                simulator_versions.append(
-                    SimulatorVersion(
-                        database_id=orm_simulator.id,
-                        git_commit_hash=orm_simulator.git_commit_hash,
-                        git_repo_url=orm_simulator.git_repo_url,
-                        git_branch=orm_simulator.git_branch,
-                    )
-                )
+                simulator_versions.append(orm_simulator.to_simulator_version())
             return simulator_versions
 
     @override
@@ -282,6 +263,7 @@ class DatabaseServiceSQL(DatabaseService):
                 jobref_simulator_id=jobref_simulator_id,
                 jobref_simulation_id=jobref_simulation_id,
                 jobref_parca_dataset_id=jobref_parca_dataset_id,
+                start_time=datetime.datetime.now(),
             )
             session.add(orm_hpc_run)
             await session.flush()
@@ -310,6 +292,14 @@ class DatabaseServiceSQL(DatabaseService):
             if orm_hpc_job is None:
                 return None
             return orm_hpc_job.to_hpc_run()
+
+    @override
+    async def delete_hpcrun(self, hpcrun_id: int) -> None:
+        async with self.async_sessionmaker() as session, session.begin():
+            hpcrun: ORMHpcRun | None = await self._get_orm_hpcrun(session, hpcrun_id=hpcrun_id)
+            if hpcrun is None:
+                raise Exception(f"HpcRun with id {hpcrun_id} not found in the database")
+            await session.delete(hpcrun)
 
     @override
     async def get_or_insert_parca_dataset(self, parca_dataset_request: ParcaDatasetRequest) -> ParcaDataset:

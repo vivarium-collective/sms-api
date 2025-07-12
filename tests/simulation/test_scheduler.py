@@ -6,7 +6,7 @@ from nats.aio.client import Client as NATSClient
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.config import get_settings
-from sms_api.simulation.database_service import DatabaseService
+from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.models import (
     EcoliSimulation,
@@ -18,7 +18,7 @@ from sms_api.simulation.models import (
 )
 
 
-async def insert_job(database_service: DatabaseService) -> tuple[EcoliSimulation, SlurmJob, HpcRun]:
+async def insert_job(database_service: DatabaseServiceSQL) -> tuple[EcoliSimulation, SlurmJob, HpcRun]:
     latest_commit_hash = str(uuid.uuid4())
     repo_url = "https://github.com/some/repo"
     main_branch = "main"
@@ -57,7 +57,7 @@ async def insert_job(database_service: DatabaseService) -> tuple[EcoliSimulation
 
 @pytest.mark.asyncio
 async def test_messaging(
-    nats_subscriber_client: NATSClient, nats_producer_client: NATSClient, database_service: DatabaseService
+    nats_subscriber_client: NATSClient, nats_producer_client: NATSClient, database_service: DatabaseServiceSQL
 ) -> None:
     scheduler = JobScheduler(nats_client=nats_subscriber_client, database_service=database_service)
     await scheduler.subscribe()

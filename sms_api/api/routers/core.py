@@ -51,7 +51,6 @@ from sms_api.simulation.models import (
     SimulatorVersion,
     WorkerEvent,
 )
-from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 logger = logging.getLogger(__name__)
 setup_logging(logger)
@@ -76,7 +75,7 @@ async def get_latest_simulator(
     git_repo_url: str = Query(default="https://github.com/vivarium-collective/vEcoli"),
     git_branch: str = Query(default="messages"),
 ) -> Simulator:
-    hpc_service = SimulationServiceHpc()
+    hpc_service = get_simulation_service()
     if hpc_service is None:
         logger.error("HPC service is not initialized")
         raise HTTPException(status_code=500, detail="HPC service is not initialized")
@@ -188,7 +187,7 @@ async def run_parameter_calculator(
 
 @config.router.post(
     path="/simulation/parca/versions",
-    response_model=ParcaDataset,
+    response_model=list[ParcaDataset],
     operation_id="get-parca-versions",
     tags=["Simulations"],
     summary="Run a parameter calculation",
@@ -313,7 +312,7 @@ async def get_result_chunks(
 @config.router.post(
     path="/simulation/results",
     response_class=FileResponse,
-    operation_id="get-simulation-results",
+    operation_id="get-simulation-results-file",
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_service), Depends(get_ssh_service)],
 )

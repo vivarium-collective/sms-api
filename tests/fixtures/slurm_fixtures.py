@@ -23,8 +23,10 @@ async def ssh_service() -> AsyncGenerator[SSHService]:
 
 @pytest_asyncio.fixture(scope="session")
 async def slurm_service(ssh_service: SSHService) -> AsyncGenerator[SlurmService]:
+    # saved_ssh_service = get_ssh_service()
     slurm_service = SlurmService(ssh_service=ssh_service)
     yield slurm_service
+    # set_ssh_service(saved_ssh_service)
     # slurm_service.close()  # nothing to close, ssh_session is closed in ssh_service.close()
 
 
