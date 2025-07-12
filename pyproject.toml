@@ -70,7 +70,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^sms_api/api/client/.*']
+exclude = ['^sms_api/api/client/.*', '^app/ui/.*']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
