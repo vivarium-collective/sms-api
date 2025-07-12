@@ -225,7 +225,7 @@ class SimulationServiceHpc(SimulationService):
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
                     #SBATCH --time=30:00
-                    #SBATCH --cpus-per-task 2
+                    #SBATCH --cpus-per-task 3
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
                     #SBATCH --qos={settings.slurm_qos}
