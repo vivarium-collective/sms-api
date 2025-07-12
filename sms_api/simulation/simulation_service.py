@@ -14,6 +14,7 @@ from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
+    VECOLI_REPO_NAME,
     get_apptainer_image_file,
     get_experiment_path,
     get_parca_dataset_dir,
@@ -116,26 +117,12 @@ class SimulationServiceHpc(SimulationService):
             key_path=Path(settings.slurm_submit_key_path),
         )
 
-        # return_code, stdout, stderr = await ssh_service.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
-        # if return_code != 0:
-        #     raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
-        # latest_commit_hash = stdout.strip("\n")[:7]
-        latest_commit_hash = await self.get_latest_commit_hash(
-            ssh_service=ssh_service, git_repo_url=git_repo_url, git_branch=git_branch
-        )
-
-        if latest_commit_hash != git_commit_hash:
-            raise ValueError(
-                f"Provided git commit hash {git_commit_hash} does not match "
-                f"the latest commit hash {latest_commit_hash} for branch {git_branch} of repository {git_repo_url}"
-            )
-
         software_version_path = Path(settings.hpc_repo_base_path) / git_commit_hash
         test_cmd = f"test -d {software_version_path!s}"
         dir_cmd = f"mkdir -p {software_version_path!s} && cd {software_version_path!s}"
-        clone_cmd = f"git clone --depth 1 --branch {git_branch} {git_repo_url}"
+        clone_cmd = f"git clone --branch {git_branch} --single-branch {git_repo_url} {VECOLI_REPO_NAME}"
         # skip if directory exists, otherwise create it and clone the repo
-        command = f"{test_cmd} || ({dir_cmd} && {clone_cmd})"
+        command = f"{test_cmd} || ({dir_cmd} && {clone_cmd} && cd {VECOLI_REPO_NAME} && git checkout {git_commit_hash})"
         return_code, stdout, stderr = await ssh_service.run_command(command=command)
         if return_code != 0:
             raise RuntimeError(
