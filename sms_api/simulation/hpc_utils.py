@@ -10,6 +10,8 @@ from sms_api.simulation.models import (
     SimulatorVersion,
 )
 
+VECOLI_REPO_NAME = "vEcoli"
+
 
 def get_slurm_log_file(slurm_job_name: str) -> Path:
     settings = get_settings()
@@ -25,7 +27,7 @@ def get_slurm_submit_file(slurm_job_name: str) -> Path:
 
 def get_vEcoli_repo_dir(simulator_version: SimulatorVersion) -> Path:
     settings = get_settings()
-    return Path(settings.hpc_repo_base_path) / simulator_version.git_commit_hash / "vEcoli"
+    return Path(settings.hpc_repo_base_path) / simulator_version.git_commit_hash / VECOLI_REPO_NAME
 
 
 def get_parca_dataset_dirname(parca_dataset: ParcaDataset) -> str:
