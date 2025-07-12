@@ -187,7 +187,7 @@ async def run_parameter_calculator(
 
 @config.router.post(
     path="/simulation/parca/versions",
-    response_model=ParcaDataset,
+    response_model=list[ParcaDataset],
     operation_id="get-parca-versions",
     tags=["Simulations"],
     summary="Run a parameter calculation",

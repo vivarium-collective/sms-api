@@ -30,11 +30,16 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[ParcaDataset]:
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[list['ParcaDataset']]:
     if response.status_code == 200:
-        response_200 = ParcaDataset.from_dict(response.json())
+        response_200 = []
+        _response_200 = response.json()
+        for response_200_item_data in (_response_200):
+            response_200_item = ParcaDataset.from_dict(response_200_item_data)
 
 
+
+            response_200.append(response_200_item)
 
         return response_200
     if client.raise_on_unexpected_status:
@@ -43,7 +48,7 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[ParcaDataset]:
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[list['ParcaDataset']]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -56,7 +61,7 @@ def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Response[ParcaDataset]:
+) -> Response[list['ParcaDataset']]:
     """ Run a parameter calculation
 
     Raises:
@@ -64,7 +69,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ParcaDataset]
+        Response[list['ParcaDataset']]
      """
 
 
@@ -82,7 +87,7 @@ def sync(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Optional[ParcaDataset]:
+) -> Optional[list['ParcaDataset']]:
     """ Run a parameter calculation
 
     Raises:
@@ -90,7 +95,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ParcaDataset
+        list['ParcaDataset']
      """
 
 
@@ -103,7 +108,7 @@ async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Response[ParcaDataset]:
+) -> Response[list['ParcaDataset']]:
     """ Run a parameter calculation
 
     Raises:
@@ -111,7 +116,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ParcaDataset]
+        Response[list['ParcaDataset']]
      """
 
 
@@ -129,7 +134,7 @@ async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Optional[ParcaDataset]:
+) -> Optional[list['ParcaDataset']]:
     """ Run a parameter calculation
 
     Raises:
@@ -137,7 +142,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ParcaDataset
+        list['ParcaDataset']
      """
 
 

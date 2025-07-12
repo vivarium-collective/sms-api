@@ -112,7 +112,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ParcaDataset"
+                items:
+                  $ref: "#/components/schemas/ParcaDataset"
+                type: array
+                title: Response Get-Parca-Versions
   /core/simulation/submit:
     post:
       tags:
@@ -190,7 +193,7 @@ paths:
           required: false
           schema:
             type: string
-            default: 89f34d7
+            default: 305f5c8
             title: Git Commit Hash
       requestBody:
         required: true
