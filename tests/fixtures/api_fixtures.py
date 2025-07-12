@@ -33,7 +33,7 @@ async def latest_commit_hash() -> str:
         await write_latest_commit()
     with open(latest_commit_path) as fp:
         latest_commit = fp.read()
-    return latest_commit
+    return latest_commit.strip()
 
 
 @pytest_asyncio.fixture(scope="function")
