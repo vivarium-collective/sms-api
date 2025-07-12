@@ -43,7 +43,13 @@ def get_server_url(dev: bool = True) -> ServerMode:
 config = RouterConfig(router=APIRouter(), prefix="/antibiotic", dependencies=[])
 
 
-@config.router.get("/simulation/run", operation_id="get-antibiotics-simulator-versions", tags=["Simulations"])
+@config.router.get(
+    path="/simulation/run",
+    response_model=EcoliExperiment,
+    operation_id="get-antibiotics-simulator-versions",
+    tags=["Simulations"],
+    summary="Run vEcoli simulation with antibiotics (not yet implemented)",
+)
 async def run_antibiotics(background_tasks: BackgroundTasks, request: EcoliSimulationRequest) -> EcoliExperiment:
     hpc_service = get_simulation_service()
     if hpc_service is None:
