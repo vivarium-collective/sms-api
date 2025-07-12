@@ -3,11 +3,12 @@ import time
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.figure import Figure
 from tqdm import tqdm
 
 
 class EcoliSim:
-    def __init__(self, endpoint_url="http://localhost:8000/simulate", seed=None):
+    def __init__(self, endpoint_url: str = "http://localhost:8000/simulate", seed: int | None = None) -> None:
         self.endpoint_url = endpoint_url
         self.simulated_time = 40  # minutes
         self.dt = 0.2  # minutes
@@ -19,7 +20,7 @@ class EcoliSim:
     # 1. SINGLE CELL SIM #
     ######################
 
-    def simulate_single_cell(self):
+    def simulate_single_cell(self) -> None:
         self.mass_fractions = {}
         base = np.exp(self.time_points / self.simulated_time)
 
@@ -29,7 +30,7 @@ class EcoliSim:
 
         print("[EcoliSim] Single cell simulation complete.")
 
-    def display_single_cell_mass_fractions(self):
+    def display_single_cell_mass_fractions(self) -> Figure:
         fig, ax = plt.subplots(figsize=(8, 6))
         for comp, values in self.mass_fractions.items():
             ax.plot(self.time_points, values, label=comp)
@@ -46,7 +47,7 @@ class EcoliSim:
     # 2. MULTI-CELL SIM  #
     ######################
 
-    def simulate_multiple_cells(self, n_cells=10):
+    def simulate_multiple_cells(self, n_cells: int = 10) -> None:
         self.multi_cell_total_mass = []
 
         for _ in range(n_cells):
@@ -57,7 +58,7 @@ class EcoliSim:
 
         print(f"[EcoliSim] Simulated {n_cells} cells for total mass trajectories.")
 
-    def display_multi_cell_total_masses(self):
+    def display_multi_cell_total_masses(self) -> Figure:
         fig, ax = plt.subplots(figsize=(8, 5))
         for i, mass in enumerate(self.multi_cell_total_mass):
             ax.plot(self.time_points, mass, alpha=0.6, label=f"Cell {i + 1}")
@@ -73,12 +74,12 @@ class EcoliSim:
     # 3. MIC CURVE SIM   #
     ######################
 
-    def simulate_cell_survival(self, dose):
+    def simulate_cell_survival(self, dose: float) -> bool:
         time.sleep(self.rng.uniform(0.01, 0.03))  # simulate delay
-        survival_chance = np.exp(-0.3 * dose)
+        survival_chance: float = np.exp(-0.3 * dose)
         return self.rng.random() < survival_chance
 
-    def simulate_batch_survival(self, dose, n_cells):
+    def simulate_batch_survival(self, dose: float, n_cells: int) -> float:
         with concurrent.futures.ThreadPoolExecutor() as executor:
             results = list(
                 tqdm(
@@ -91,14 +92,14 @@ class EcoliSim:
             )
         return sum(results) / n_cells
 
-    def measure_mic_curve(self, doses, n_cells=100):
+    def measure_mic_curve(self, doses: list[float], n_cells: int = 100) -> None:
         self.mic_results = {}
         print("[EcoliSim] Starting MIC curve simulation...")
         for dose in doses:
             self.mic_results[dose] = self.simulate_batch_survival(dose, n_cells)
         print("[EcoliSim] MIC curve simulation complete.")
 
-    def display_mic_curve(self):
+    def display_mic_curve(self) -> Figure:
         doses = sorted(self.mic_results.keys())
         survivals = [self.mic_results[d] for d in doses]
 
