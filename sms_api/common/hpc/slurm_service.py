@@ -17,7 +17,7 @@ class SlurmService:
     async def get_job_status_squeue(self, job_ids: list[int] | None = None) -> list[SlurmJob]:
         command = f'squeue -u $USER --noheader --format="{SlurmJob.get_squeue_format_string()}"'
         if job_ids is not None:
-            job_ids_str = ",".join(map(str, job_ids))
+            job_ids_str = ",".join(map(str, job_ids)) if len(job_ids) > 1 else str(job_ids[0])
             command = command + f" -j {job_ids_str}"
         return_code, stdout, stderr = await self.ssh_service.run_command(command=command)
         if return_code != 0:
@@ -36,7 +36,7 @@ class SlurmService:
             f'sacct -u $USER --parsable --delimiter="|" --noheader --format="{SlurmJob.get_sacct_format_string()}"'
         )
         if job_ids is not None:
-            job_ids_str = ",".join(map(str, job_ids))
+            job_ids_str = ",".join(map(str, job_ids)) if len(job_ids) > 1 else str(job_ids[0])
             command = command + f" -j {job_ids_str}"
         return_code, stdout, stderr = await self.ssh_service.run_command(command=command)
         if return_code != 0:

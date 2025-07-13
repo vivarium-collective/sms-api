@@ -589,7 +589,7 @@ class DatabaseServiceSQL(DatabaseService):
             orm_hpcrun: ORMHpcRun | None = await self._get_orm_hpcrun(session, hpcrun_id=hpcrun_id)
             if orm_hpcrun is None:
                 raise Exception(f"HpcRun with id {hpcrun_id} not found in the database")
-            orm_hpcrun.status = JobStatusDB(new_slurm_job.job_state)
+            orm_hpcrun.status = JobStatusDB(new_slurm_job.job_state.lower())
             if new_slurm_job.start_time is not None and new_slurm_job.start_time != orm_hpcrun.start_time:
                 orm_hpcrun.start_time = datetime.datetime.fromisoformat(new_slurm_job.start_time)
             if new_slurm_job.end_time is not None and new_slurm_job.end_time != orm_hpcrun.end_time:
