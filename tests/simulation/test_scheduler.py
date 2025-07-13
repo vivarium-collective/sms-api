@@ -40,12 +40,8 @@ async def insert_job(database_service: DatabaseServiceSQL) -> tuple[EcoliSimulat
         job_id=1,
         name="name",
         account="acct",
-        batch_flag=False,
-        batch_host="host",
-        cluster="cluster",
-        command="run a sim",
         user_name="user",
-        job_state=["Running"],
+        job_state="Running",
     )
 
     hpcrun = await database_service.insert_hpcrun(
