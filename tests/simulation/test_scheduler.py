@@ -15,9 +15,10 @@ from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
     HpcRun,
+    JobStatus,
     JobType,
     ParcaDatasetRequest,
-    WorkerEvent, JobStatus,
+    WorkerEvent,
 )
 
 
@@ -98,7 +99,9 @@ async def test_job_scheduler(
     slurm_service: SlurmService,
     slurm_template_hello_10s: str,
 ) -> None:
-    scheduler = JobScheduler(nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service)
+    scheduler = JobScheduler(
+        nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service
+    )
     await scheduler.subscribe()
     await scheduler.start_polling(interval_seconds=1)
 
