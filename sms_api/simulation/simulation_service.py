@@ -14,6 +14,7 @@ from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
+    VECOLI_REPO_NAME,
     get_apptainer_image_file,
     get_experiment_path,
     get_parca_dataset_dir,
@@ -116,26 +117,12 @@ class SimulationServiceHpc(SimulationService):
             key_path=Path(settings.slurm_submit_key_path),
         )
 
-        # return_code, stdout, stderr = await ssh_service.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
-        # if return_code != 0:
-        #     raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
-        # latest_commit_hash = stdout.strip("\n")[:7]
-        latest_commit_hash = await self.get_latest_commit_hash(
-            ssh_service=ssh_service, git_repo_url=git_repo_url, git_branch=git_branch
-        )
-
-        if latest_commit_hash != git_commit_hash:
-            raise ValueError(
-                f"Provided git commit hash {git_commit_hash} does not match "
-                f"the latest commit hash {latest_commit_hash} for branch {git_branch} of repository {git_repo_url}"
-            )
-
         software_version_path = Path(settings.hpc_repo_base_path) / git_commit_hash
         test_cmd = f"test -d {software_version_path!s}"
         dir_cmd = f"mkdir -p {software_version_path!s} && cd {software_version_path!s}"
-        clone_cmd = f"git clone --depth 1 --branch {git_branch} {git_repo_url}"
+        clone_cmd = f"git clone --branch {git_branch} --single-branch {git_repo_url} {VECOLI_REPO_NAME}"
         # skip if directory exists, otherwise create it and clone the repo
-        command = f"{test_cmd} || ({dir_cmd} && {clone_cmd})"
+        command = f"{test_cmd} || ({dir_cmd} && {clone_cmd} && cd {VECOLI_REPO_NAME} && git checkout {git_commit_hash})"
         return_code, stdout, stderr = await ssh_service.run_command(command=command)
         if return_code != 0:
             raise RuntimeError(
@@ -238,7 +225,7 @@ class SimulationServiceHpc(SimulationService):
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
                     #SBATCH --time=30:00
-                    #SBATCH --cpus-per-task 2
+                    #SBATCH --cpus-per-task 3
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
                     #SBATCH --qos={settings.slurm_qos}
@@ -319,6 +306,7 @@ class SimulationServiceHpc(SimulationService):
         experiment_path = get_experiment_path(ecoli_simulation=ecoli_simulation)
         experiment_path_parent = experiment_path.parent
         experiment_id = experiment_path.name
+        hpc_sim_config_file = settings.hpc_sim_config_file
         remote_vEcoli_repo_path = get_vEcoli_repo_dir(simulator_version=simulator_version)
         apptainer_image_path = get_apptainer_image_file(simulator_version=simulator_version)
 
@@ -383,6 +371,7 @@ class SimulationServiceHpc(SimulationService):
                     git -C ./configs diff HEAD >> ./source-info/git_diff.txt
                     singularity run $binds $image uv run \\
                          --env-file /vEcoli/.env /vEcoli/ecoli/experiments/ecoli_master_sim.py \\
+                         --config /vEcoli/configs/{hpc_sim_config_file} \\
                          --generations 1 --emitter parquet --emitter_arg out_dir='/out' \\
                          --experiment_id {experiment_id} \\
                          --daughter_outdir "/out/{experiment_id}" \\
@@ -423,10 +412,13 @@ class SimulationServiceHpc(SimulationService):
             key_path=Path(settings.slurm_submit_key_path),
         )
         slurm_service = SlurmService(ssh_service=ssh_service)
-        job_ids: list[SlurmJob] = await slurm_service.get_job_status(job_id=slurmjobid)
+        job_ids: list[SlurmJob] = await slurm_service.get_job_status_squeue(job_ids=[slurmjobid])
         if len(job_ids) == 0:
-            return None
-        elif len(job_ids) == 1:
+            job_ids = await slurm_service.get_job_status_sacct(job_ids=[slurmjobid])
+            if len(job_ids) == 0:
+                logger.warning(f"No job found with ID {slurmjobid} in both squeue and sacct.")
+                return None
+        if len(job_ids) == 1:
             return job_ids[0]
         else:
             raise RuntimeError(f"Multiple jobs found with ID {slurmjobid}: {job_ids}")

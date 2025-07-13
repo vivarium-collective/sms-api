@@ -1,11 +1,13 @@
 import logging
+from pathlib import Path
 from typing import Any
 
 import nats
 from fastapi import HTTPException
-from nats.aio.client import Client as NATSClient
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 from sms_api.log_config import setup_logging
 from sms_api.simulation.data_service import DataService, DataServiceHpc
@@ -69,10 +71,19 @@ def get_simulation_service() -> SimulationService | None:
     return global_simulation_service
 
 
-# ------ nats client (standalone) -----------------------------
+# ------ job scheduler (standalone) -----------------------------
 
-global_nats_client: NATSClient | None = None
 global_job_scheduler: JobScheduler | None = None
+
+
+def set_job_scheduler(job_scheduler: JobScheduler | None) -> None:
+    global global_job_scheduler
+    global_job_scheduler = job_scheduler
+
+
+def get_job_scheduler() -> JobScheduler | None:
+    global global_job_scheduler
+    return global_job_scheduler
 
 
 # ------ data service (standalone or pytest) ------------------
@@ -134,12 +145,17 @@ async def init_standalone(enable_ssl: bool = True) -> None:
     database = DatabaseServiceSQL(engine)
     set_database_service(database)
 
-    global global_nats_client
-    global global_job_scheduler
-    global_nats_client = await nats.connect(_settings.nats_url)
-    global_job_scheduler = JobScheduler(nats_client=global_nats_client, database_service=database)
+    settings = get_settings()
+    ssh_service = SSHService(
+        hostname=settings.slurm_submit_host,
+        username=settings.slurm_submit_user,
+        key_path=Path(settings.slurm_submit_key_path),
+    )
+    slurm_service = SlurmService(ssh_service=ssh_service)
 
-    await global_job_scheduler.subscribe()
+    nats_client = await nats.connect(_settings.nats_url)
+    job_scheduler = JobScheduler(nats_client=nats_client, database_service=database, slurm_service=slurm_service)
+    set_job_scheduler(job_scheduler)
 
 
 async def shutdown_standalone() -> None:
@@ -155,7 +171,7 @@ async def shutdown_standalone() -> None:
     set_database_service(None)
     set_data_service(None)
 
-    global global_nats_client
-    if global_nats_client:
-        await global_nats_client.close()
-        global_nats_client = None
+    job_scheduler = get_job_scheduler()
+    if job_scheduler:
+        await job_scheduler.close()
+        set_job_scheduler(None)

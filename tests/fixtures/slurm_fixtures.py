@@ -31,7 +31,7 @@ async def slurm_service(ssh_service: SSHService) -> AsyncGenerator[SlurmService]
 
 
 @pytest.fixture(scope="session")
-def slurm_template_hello() -> str:
+def slurm_template_hello_TEMPLATE() -> str:
     settings = get_settings()
     partition = settings.slurm_partition
     qos = settings.slurm_qos
@@ -59,6 +59,21 @@ def slurm_template_hello() -> str:
         #For example:
         #rm some_temp_file.txt
         echo "Hello, world! to stdout"
+        sleep SLEEP_TIME
         echo "Hello, world! to file" > hello.txt
         """)
+    return template
+
+
+@pytest.fixture(scope="session")
+def slurm_template_hello_1s(slurm_template_hello_TEMPLATE: str) -> str:
+    template = slurm_template_hello_TEMPLATE
+    template = template.replace("SLEEP_TIME", "1")
+    return template
+
+
+@pytest.fixture(scope="session")
+def slurm_template_hello_10s(slurm_template_hello_TEMPLATE: str) -> str:
+    template = slurm_template_hello_TEMPLATE
+    template = template.replace("SLEEP_TIME", "10")
     return template

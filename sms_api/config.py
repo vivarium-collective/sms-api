@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     hpc_parca_base_path: str = ""
     hpc_repo_base_path: str = ""
     hpc_sim_base_path: str = ""
+    hpc_sim_config_file: str = "publish.json"
 
     nats_url: str = ""
     nats_worker_event_subject: str = "worker.events"
@@ -74,8 +75,8 @@ class Settings(BaseSettings):
     nats_emitter_magic_word: str = "emitter-magic-word"
 
     dev_mode: str = "0"
-    app_dir: str = "app"
-    assets_dir: str = "assets"
+    app_dir: str = f"{REPO_ROOT}/app"
+    assets_dir: str = f"{REPO_ROOT}/assets"
 
 
 @lru_cache

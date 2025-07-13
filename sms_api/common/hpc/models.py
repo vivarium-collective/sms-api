@@ -4,33 +4,17 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
 
-class NumericSlurmValue(BaseModel):
-    infinite: Optional[bool] = None
-    number: Optional[int] = None
-    set: Optional[bool] = None
-
-
-class ExitCode(BaseModel):
-    status: list[str]
-    return_code: NumericSlurmValue
-
-
 class SlurmJob(BaseModel):
-    job_id: int
-    name: str
-    account: str
-    batch_flag: bool
-    batch_host: str
-    cluster: str
-    command: str
-    user_name: str
-    job_state: list[str]
-    exit_code: Optional[ExitCode] = None
-    node_count: Optional[NumericSlurmValue] = None
-    cpus: Optional[NumericSlurmValue] = None
-    array_job_id: Optional[NumericSlurmValue] = None
-    array_task_id: Optional[NumericSlurmValue] = None
-    array_max_tasks: Optional[NumericSlurmValue] = None
+    #                                 --squeue--   --sacct--
+    job_id: int  #                       %i          jobid
+    name: str  #                         %j          jobname
+    account: str  #                      %a          account
+    user_name: str  #                    %u          user
+    job_state: str  #                    %T          state
+    start_time: Optional[str] = None  #              start
+    end_time: Optional[str] = None  #                end
+    elapsed: Optional[str] = None  #                elapsed
+    exit_code: Optional[str] = None  #                exitcode
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -50,4 +34,42 @@ class SlurmJob(BaseModel):
         """Check if the job is done based on its state."""
         if not self.job_state:
             return False
-        return any(u.upper() in ["COMPLETED", "FAILED"] for u in self.job_state)
+        return self.job_state.upper() in ["COMPLETED", "FAILED"]
+
+    @staticmethod
+    def get_sacct_format_string() -> str:
+        return "jobid,jobname,account,user,state,start,end,elapsed,exitcode"
+
+    @classmethod
+    def from_sacct_formatted_output(cls, line: str) -> "SlurmJob":
+        # Split the line by delimiter
+        fields = line.strip().split("|")
+        # Map fields to model attributes
+        return cls(
+            job_id=int(fields[0]),
+            name=fields[1],
+            account=fields[2],
+            user_name=fields[3],
+            job_state=fields[4],
+            start_time=fields[5],
+            end_time=fields[6],
+            elapsed=fields[7],
+            exit_code=fields[8],
+        )
+
+    @staticmethod
+    def get_squeue_format_string() -> str:
+        return "%i|%j|%a|%u|%T"
+
+    @classmethod
+    def from_squeue_formatted_output(cls, line: str) -> "SlurmJob":
+        # Split the line by delimiter
+        fields = line.strip().split("|")
+        # Map fields to model attributes
+        return cls(
+            job_id=int(fields[0]),
+            name=fields[1],
+            account=fields[2],
+            user_name=fields[3],
+            job_state=fields[4],
+        )

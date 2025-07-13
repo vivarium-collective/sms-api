@@ -34,6 +34,7 @@ from sms_api.common.gateway.models import ServerMode
 from sms_api.common.gateway.utils import format_marimo_appname
 from sms_api.config import get_settings
 from sms_api.dependencies import (
+    get_job_scheduler,
     init_standalone,
     shutdown_standalone,
 )
@@ -85,7 +86,18 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("Development Mode is currently engaged!!!", stacklevel=1)
         start_standalone.keywords["enable_ssl"] = True
     await start_standalone()
-    yield
+
+    # --- JobScheduler setup ---
+    job_scheduler = get_job_scheduler()
+    if not job_scheduler:
+        raise RuntimeError("JobScheduler is not initialized. Please check your configuration.")
+    await job_scheduler.subscribe()
+    await job_scheduler.start_polling(interval_seconds=5)  # configurable interval
+
+    try:
+        yield
+    finally:
+        await job_scheduler.close()
     await shutdown_standalone()
 
 

@@ -5,7 +5,7 @@ namespace: sms-api-rke
 
 images:
   - name: ghcr.io/biosimulations/sms-api
-    newTag: 0.2.2
+    newTag: 0.2.3
   - name: docker.io/library/mongo
     newTag: 8.0.4
 
@@ -16,8 +16,7 @@ replicas:
     name: mongodb
 
 resources:
-  - api-ingress.yaml
-  - marimo-ingress.yaml
+  - ingress.yaml
   - api-pvc.yaml
   - nats-svc.yaml
   - vivarium-home-pv.yaml
