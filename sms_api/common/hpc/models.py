@@ -5,13 +5,13 @@ from pydantic import BaseModel, ConfigDict
 
 
 class SlurmJob(BaseModel):
-    # --squeue--   --sacct--
-    job_id: int  #    %i          jobid
-    name: str  #    %j          jobname
-    account: str  #    %a          account
-    user_name: str  #    %u          user
-    job_state: str  #    %T          state
-    start_time: Optional[str] = None  #                start
+    #                                 --squeue--   --sacct--
+    job_id: int  #                       %i          jobid
+    name: str  #                         %j          jobname
+    account: str  #                      %a          account
+    user_name: str  #                    %u          user
+    job_state: str  #                    %T          state
+    start_time: Optional[str] = None  #              start
     end_time: Optional[str] = None  #                end
     elapsed: Optional[str] = None  #                elapsed
     exit_code: Optional[str] = None  #                exitcode
@@ -34,7 +34,7 @@ class SlurmJob(BaseModel):
         """Check if the job is done based on its state."""
         if not self.job_state:
             return False
-        return any(u.upper() in ["COMPLETED", "FAILED"] for u in self.job_state)
+        return self.job_state.upper() in ["COMPLETED", "FAILED"]
 
     @staticmethod
     def get_sacct_format_string() -> str:

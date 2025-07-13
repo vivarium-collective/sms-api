@@ -412,10 +412,13 @@ class SimulationServiceHpc(SimulationService):
             key_path=Path(settings.slurm_submit_key_path),
         )
         slurm_service = SlurmService(ssh_service=ssh_service)
-        job_ids: list[SlurmJob] = await slurm_service.get_job_status(job_id=slurmjobid)
+        job_ids: list[SlurmJob] = await slurm_service.get_job_status_squeue(job_ids=[slurmjobid])
         if len(job_ids) == 0:
-            return None
-        elif len(job_ids) == 1:
+            job_ids = await slurm_service.get_job_status_sacct(job_ids=[slurmjobid])
+            if len(job_ids) == 0:
+                logger.warning(f"No job found with ID {slurmjobid} in both squeue and sacct.")
+                return None
+        if len(job_ids) == 1:
             return job_ids[0]
         else:
             raise RuntimeError(f"Multiple jobs found with ID {slurmjobid}: {job_ids}")

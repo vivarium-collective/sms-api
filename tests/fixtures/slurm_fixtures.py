@@ -59,6 +59,7 @@ def slurm_template_hello() -> str:
         #For example:
         #rm some_temp_file.txt
         echo "Hello, world! to stdout"
+        sleep 1
         echo "Hello, world! to file" > hello.txt
         """)
     return template
