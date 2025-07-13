@@ -75,8 +75,8 @@ class Settings(BaseSettings):
     nats_emitter_magic_word: str = "emitter-magic-word"
 
     dev_mode: str = "0"
-    app_dir: str = "app"
-    assets_dir: str = "assets"
+    app_dir: str = ""
+    assets_dir: str = ""
 
 
 @lru_cache
