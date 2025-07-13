@@ -5,7 +5,7 @@ from httpx import ASGITransport, AsyncClient
 from sms_api.common.gateway.models import ServerMode
 
 server_urls = [ServerMode.DEV, ServerMode.PROD]
-current_version = "0.2.2"
+current_version = "0.2.3"
 
 
 @pytest.mark.asyncio
