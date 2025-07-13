@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import InstrumentedAttribute
 from typing_extensions import override
 
+from sms_api.common.hpc.models import SlurmJob
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
@@ -115,6 +116,16 @@ class DatabaseService(ABC):
 
     @abstractmethod
     async def list_simulations(self) -> list[EcoliSimulation]:
+        pass
+
+    @abstractmethod
+    async def list_running_hpcruns(self) -> list[HpcRun]:
+        """Return all HpcRun jobs with status RUNNING."""
+        pass
+
+    @abstractmethod
+    async def update_hpcrun_status(self, hpcrun_id: int, new_slurm_job: SlurmJob) -> None:
+        """Update the status of a given HpcRun job."""
         pass
 
     @abstractmethod
@@ -563,6 +574,27 @@ class DatabaseServiceSQL(DatabaseService):
                 simulations.append(simulation)
 
             return simulations
+
+    @override
+    async def list_running_hpcruns(self) -> list[HpcRun]:
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMHpcRun).where(ORMHpcRun.status == JobStatusDB.RUNNING)
+            result: Result[tuple[ORMHpcRun]] = await session.execute(stmt)
+            orm_hpcruns = result.scalars().all()
+            return [orm_hpcrun.to_hpc_run() for orm_hpcrun in orm_hpcruns]
+
+    @override
+    async def update_hpcrun_status(self, hpcrun_id: int, new_slurm_job: SlurmJob) -> None:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_hpcrun: ORMHpcRun | None = await self._get_orm_hpcrun(session, hpcrun_id=hpcrun_id)
+            if orm_hpcrun is None:
+                raise Exception(f"HpcRun with id {hpcrun_id} not found in the database")
+            orm_hpcrun.status = JobStatusDB(new_slurm_job.job_state)
+            if new_slurm_job.start_time is not None and new_slurm_job.start_time != orm_hpcrun.start_time:
+                orm_hpcrun.start_time = datetime.datetime.fromisoformat(new_slurm_job.start_time)
+            if new_slurm_job.end_time is not None and new_slurm_job.end_time != orm_hpcrun.end_time:
+                orm_hpcrun.end_time = datetime.datetime.fromisoformat(new_slurm_job.end_time)
+            await session.flush()
 
     @override
     async def close(self) -> None:
