@@ -16,8 +16,7 @@ replicas:
     name: mongodb
 
 resources:
-  - api-ingress.yaml
-  - marimo-ingress.yaml
+  - ingress.yaml
   - api-pvc.yaml
   - nats-svc.yaml
   - vivarium-home-pv.yaml
