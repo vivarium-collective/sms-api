@@ -14,7 +14,10 @@ from .ecoli_simulation import EcoliSimulation
 from .ecoli_simulation_request import EcoliSimulationRequest
 from .ecoli_simulation_request_variant_config import EcoliSimulationRequestVariantConfig
 from .ecoli_simulation_request_variant_config_additional_property import EcoliSimulationRequestVariantConfigAdditionalProperty
+from .hpc_run import HpcRun
 from .http_validation_error import HTTPValidationError
+from .job_status import JobStatus
+from .job_type import JobType
 from .parca_dataset import ParcaDataset
 from .parca_dataset_request import ParcaDatasetRequest
 from .parca_dataset_request_parca_config import ParcaDatasetRequestParcaConfig
@@ -27,6 +30,7 @@ from .simulator import Simulator
 from .simulator_version import SimulatorVersion
 from .validation_error import ValidationError
 from .worker_event import WorkerEvent
+from .worker_event_mass import WorkerEventMass
 
 __all__ = (
     "AntibioticSimulation",
@@ -43,7 +47,10 @@ __all__ = (
     "EcoliSimulationRequest",
     "EcoliSimulationRequestVariantConfig",
     "EcoliSimulationRequestVariantConfigAdditionalProperty",
+    "HpcRun",
     "HTTPValidationError",
+    "JobStatus",
+    "JobType",
     "ParcaDataset",
     "ParcaDatasetRequest",
     "ParcaDatasetRequestParcaConfig",
@@ -56,4 +63,5 @@ __all__ = (
     "SimulatorVersion",
     "ValidationError",
     "WorkerEvent",
+    "WorkerEventMass",
 )

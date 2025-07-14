@@ -7,59 +7,43 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response, UNSET
 from ... import errors
 
-from ...models.http_validation_error import HTTPValidationError
-from ...models.simulator import Simulator
-from ...models.simulator_version import SimulatorVersion
+from ...models.registered_simulators import RegisteredSimulators
 from typing import cast
 
 
 
 def _get_kwargs(
-    *,
-    body: Simulator,
-
+    
 ) -> dict[str, Any]:
-    headers: dict[str, Any] = {}
+    
 
+    
 
-
-
-
+    
 
     _kwargs: dict[str, Any] = {
-        "method": "post",
-        "url": "/core/simulator/upload",
+        "method": "get",
+        "url": "/core/simulator/versions",
     }
 
-    _kwargs["json"] = body.to_dict()
 
-
-    headers["Content-Type"] = "application/json"
-
-    _kwargs["headers"] = headers
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[HTTPValidationError, SimulatorVersion]]:
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[RegisteredSimulators]:
     if response.status_code == 200:
-        response_200 = SimulatorVersion.from_dict(response.json())
+        response_200 = RegisteredSimulators.from_dict(response.json())
 
 
 
         return response_200
-    if response.status_code == 422:
-        response_422 = HTTPValidationError.from_dict(response.json())
-
-
-
-        return response_422
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[HTTPValidationError, SimulatorVersion]]:
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[RegisteredSimulators]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -71,26 +55,21 @@ def _build_response(*, client: Union[AuthenticatedClient, Client], response: htt
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Simulator,
 
-) -> Response[Union[HTTPValidationError, SimulatorVersion]]:
-    """ Upload a new simulator (vEcoli) version.
-
-    Args:
-        body (Simulator):
+) -> Response[RegisteredSimulators]:
+    """ get the list of available simulator versions
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, SimulatorVersion]]
+        Response[RegisteredSimulators]
      """
 
 
     kwargs = _get_kwargs(
-        body=body,
-
+        
     )
 
     response = client.get_httpx_client().request(
@@ -102,52 +81,42 @@ def sync_detailed(
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Simulator,
 
-) -> Optional[Union[HTTPValidationError, SimulatorVersion]]:
-    """ Upload a new simulator (vEcoli) version.
-
-    Args:
-        body (Simulator):
+) -> Optional[RegisteredSimulators]:
+    """ get the list of available simulator versions
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, SimulatorVersion]
+        RegisteredSimulators
      """
 
 
     return sync_detailed(
         client=client,
-body=body,
 
     ).parsed
 
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Simulator,
 
-) -> Response[Union[HTTPValidationError, SimulatorVersion]]:
-    """ Upload a new simulator (vEcoli) version.
-
-    Args:
-        body (Simulator):
+) -> Response[RegisteredSimulators]:
+    """ get the list of available simulator versions
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, SimulatorVersion]]
+        Response[RegisteredSimulators]
      """
 
 
     kwargs = _get_kwargs(
-        body=body,
-
+        
     )
 
     response = await client.get_async_httpx_client().request(
@@ -159,25 +128,20 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Simulator,
 
-) -> Optional[Union[HTTPValidationError, SimulatorVersion]]:
-    """ Upload a new simulator (vEcoli) version.
-
-    Args:
-        body (Simulator):
+) -> Optional[RegisteredSimulators]:
+    """ get the list of available simulator versions
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, SimulatorVersion]
+        RegisteredSimulators
      """
 
 
     return (await asyncio_detailed(
         client=client,
-body=body,
 
     )).parsed

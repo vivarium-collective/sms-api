@@ -22,9 +22,9 @@ def _get_kwargs(
     headers: dict[str, Any] = {}
 
 
+    
 
-
-
+    
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -74,7 +74,7 @@ def sync_detailed(
     body: EcoliSimulationRequest,
 
 ) -> Response[Union[EcoliExperiment, HTTPValidationError]]:
-    """ Run Vecoli Simulation
+    """ Run a vEcoli simulation
 
     Args:
         body (EcoliSimulationRequest):
@@ -105,7 +105,7 @@ def sync(
     body: EcoliSimulationRequest,
 
 ) -> Optional[Union[EcoliExperiment, HTTPValidationError]]:
-    """ Run Vecoli Simulation
+    """ Run a vEcoli simulation
 
     Args:
         body (EcoliSimulationRequest):
@@ -131,7 +131,7 @@ async def asyncio_detailed(
     body: EcoliSimulationRequest,
 
 ) -> Response[Union[EcoliExperiment, HTTPValidationError]]:
-    """ Run Vecoli Simulation
+    """ Run a vEcoli simulation
 
     Args:
         body (EcoliSimulationRequest):
@@ -162,7 +162,7 @@ async def asyncio(
     body: EcoliSimulationRequest,
 
 ) -> Optional[Union[EcoliExperiment, HTTPValidationError]]:
-    """ Run Vecoli Simulation
+    """ Run a vEcoli simulation
 
     Args:
         body (EcoliSimulationRequest):

@@ -26,7 +26,7 @@ def _get_kwargs(
     headers: dict[str, Any] = {}
 
 
-
+    
 
     params: dict[str, Any] = {}
 
@@ -39,8 +39,8 @@ def _get_kwargs(
 
 
     _kwargs: dict[str, Any] = {
-        "method": "post",
-        "url": "/core/simulation/results",
+        "method": "get",
+        "url": "/core/simulation/run/results/file",
         "params": params,
     }
 
@@ -90,7 +90,7 @@ def sync_detailed(
     database_id: Union[Unset, int] = UNSET,
 
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """ Get Results
+    """ Get simulation results as a zip file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
@@ -127,7 +127,7 @@ def sync(
     database_id: Union[Unset, int] = UNSET,
 
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """ Get Results
+    """ Get simulation results as a zip file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
@@ -159,7 +159,7 @@ async def asyncio_detailed(
     database_id: Union[Unset, int] = UNSET,
 
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """ Get Results
+    """ Get simulation results as a zip file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
@@ -196,7 +196,7 @@ async def asyncio(
     database_id: Union[Unset, int] = UNSET,
 
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """ Get Results
+    """ Get simulation results as a zip file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.

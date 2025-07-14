@@ -21,9 +21,9 @@ def _get_kwargs(
     git_branch: Union[Unset, str] = 'messages',
 
 ) -> dict[str, Any]:
+    
 
-
-
+    
 
     params: dict[str, Any] = {}
 
@@ -80,7 +80,7 @@ def sync_detailed(
     git_branch: Union[Unset, str] = 'messages',
 
 ) -> Response[Union[HTTPValidationError, Simulator]]:
-    """ Get Latest Simulator
+    """ Get the latest simulator version
 
     Args:
         git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-
@@ -115,7 +115,7 @@ def sync(
     git_branch: Union[Unset, str] = 'messages',
 
 ) -> Optional[Union[HTTPValidationError, Simulator]]:
-    """ Get Latest Simulator
+    """ Get the latest simulator version
 
     Args:
         git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-
@@ -145,7 +145,7 @@ async def asyncio_detailed(
     git_branch: Union[Unset, str] = 'messages',
 
 ) -> Response[Union[HTTPValidationError, Simulator]]:
-    """ Get Latest Simulator
+    """ Get the latest simulator version
 
     Args:
         git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-
@@ -180,7 +180,7 @@ async def asyncio(
     git_branch: Union[Unset, str] = 'messages',
 
 ) -> Optional[Union[HTTPValidationError, Simulator]]:
-    """ Get Latest Simulator
+    """ Get the latest simulator version
 
     Args:
         git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-

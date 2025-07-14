@@ -22,9 +22,9 @@ def _get_kwargs(
     num_events: Union[None, Unset, int] = UNSET,
 
 ) -> dict[str, Any]:
+    
 
-
-
+    
 
     params: dict[str, Any] = {}
 
@@ -43,7 +43,7 @@ def _get_kwargs(
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/core/simulation/status",
+        "url": "/core/simulation/run/events",
         "params": params,
     }
 
@@ -51,11 +51,16 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[HTTPValidationError, WorkerEvent]]:
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[HTTPValidationError, list['WorkerEvent']]]:
     if response.status_code == 200:
-        response_200 = WorkerEvent.from_dict(response.json())
+        response_200 = []
+        _response_200 = response.json()
+        for response_200_item_data in (_response_200):
+            response_200_item = WorkerEvent.from_dict(response_200_item_data)
 
 
+
+            response_200.append(response_200_item)
 
         return response_200
     if response.status_code == 422:
@@ -70,7 +75,7 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[HTTPValidationError, WorkerEvent]]:
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[HTTPValidationError, list['WorkerEvent']]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -85,8 +90,8 @@ def sync_detailed(
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
 
-) -> Response[Union[HTTPValidationError, WorkerEvent]]:
-    """ Get Simulation Status
+) -> Response[Union[HTTPValidationError, list['WorkerEvent']]]:
+    """ Get the worker events for a simulation by its ID
 
     Args:
         simulation_id (int):
@@ -97,7 +102,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, WorkerEvent]]
+        Response[Union[HTTPValidationError, list['WorkerEvent']]]
      """
 
 
@@ -119,8 +124,8 @@ def sync(
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
 
-) -> Optional[Union[HTTPValidationError, WorkerEvent]]:
-    """ Get Simulation Status
+) -> Optional[Union[HTTPValidationError, list['WorkerEvent']]]:
+    """ Get the worker events for a simulation by its ID
 
     Args:
         simulation_id (int):
@@ -131,7 +136,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, WorkerEvent]
+        Union[HTTPValidationError, list['WorkerEvent']]
      """
 
 
@@ -148,8 +153,8 @@ async def asyncio_detailed(
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
 
-) -> Response[Union[HTTPValidationError, WorkerEvent]]:
-    """ Get Simulation Status
+) -> Response[Union[HTTPValidationError, list['WorkerEvent']]]:
+    """ Get the worker events for a simulation by its ID
 
     Args:
         simulation_id (int):
@@ -160,7 +165,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, WorkerEvent]]
+        Response[Union[HTTPValidationError, list['WorkerEvent']]]
      """
 
 
@@ -182,8 +187,8 @@ async def asyncio(
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
 
-) -> Optional[Union[HTTPValidationError, WorkerEvent]]:
-    """ Get Simulation Status
+) -> Optional[Union[HTTPValidationError, list['WorkerEvent']]]:
+    """ Get the worker events for a simulation by its ID
 
     Args:
         simulation_id (int):
@@ -194,7 +199,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, WorkerEvent]
+        Union[HTTPValidationError, list['WorkerEvent']]
      """
 
 

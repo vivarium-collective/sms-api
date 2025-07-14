@@ -7,34 +7,39 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response, UNSET
 from ... import errors
 
-from ...models.registered_simulators import RegisteredSimulators
+from ...models.parca_dataset import ParcaDataset
 from typing import cast
 
 
 
 def _get_kwargs(
-
+    
 ) -> dict[str, Any]:
+    
 
+    
 
-
-
-
+    
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/core/simulator/versions",
+        "url": "/core/simulation/parca/versions",
     }
 
 
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[RegisteredSimulators]:
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[list['ParcaDataset']]:
     if response.status_code == 200:
-        response_200 = RegisteredSimulators.from_dict(response.json())
+        response_200 = []
+        _response_200 = response.json()
+        for response_200_item_data in (_response_200):
+            response_200_item = ParcaDataset.from_dict(response_200_item_data)
 
 
+
+            response_200.append(response_200_item)
 
         return response_200
     if client.raise_on_unexpected_status:
@@ -43,7 +48,7 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[RegisteredSimulators]:
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[list['ParcaDataset']]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -56,20 +61,20 @@ def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Response[RegisteredSimulators]:
-    """ get the list of available simulator versions
+) -> Response[list['ParcaDataset']]:
+    """ Get list of parca calculations
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[RegisteredSimulators]
+        Response[list['ParcaDataset']]
      """
 
 
     kwargs = _get_kwargs(
-
+        
     )
 
     response = client.get_httpx_client().request(
@@ -82,15 +87,15 @@ def sync(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Optional[RegisteredSimulators]:
-    """ get the list of available simulator versions
+) -> Optional[list['ParcaDataset']]:
+    """ Get list of parca calculations
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        RegisteredSimulators
+        list['ParcaDataset']
      """
 
 
@@ -103,20 +108,20 @@ async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Response[RegisteredSimulators]:
-    """ get the list of available simulator versions
+) -> Response[list['ParcaDataset']]:
+    """ Get list of parca calculations
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[RegisteredSimulators]
+        Response[list['ParcaDataset']]
      """
 
 
     kwargs = _get_kwargs(
-
+        
     )
 
     response = await client.get_async_httpx_client().request(
@@ -129,15 +134,15 @@ async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Optional[RegisteredSimulators]:
-    """ get the list of available simulator versions
+) -> Optional[list['ParcaDataset']]:
+    """ Get list of parca calculations
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        RegisteredSimulators
+        list['ParcaDataset']
      """
 
 

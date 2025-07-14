@@ -7,28 +7,28 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response, UNSET
 from ... import errors
 
-from ...models.ecoli_experiment import EcoliExperiment
-from ...models.ecoli_simulation_request import EcoliSimulationRequest
 from ...models.http_validation_error import HTTPValidationError
+from ...models.simulator import Simulator
+from ...models.simulator_version import SimulatorVersion
 from typing import cast
 
 
 
 def _get_kwargs(
     *,
-    body: EcoliSimulationRequest,
+    body: Simulator,
 
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
 
 
+    
 
-
-
+    
 
     _kwargs: dict[str, Any] = {
-        "method": "get",
-        "url": "/antibiotic/simulation/run",
+        "method": "post",
+        "url": "/core/simulator/upload",
     }
 
     _kwargs["json"] = body.to_dict()
@@ -40,9 +40,9 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[EcoliExperiment, HTTPValidationError]]:
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[HTTPValidationError, SimulatorVersion]]:
     if response.status_code == 200:
-        response_200 = EcoliExperiment.from_dict(response.json())
+        response_200 = SimulatorVersion.from_dict(response.json())
 
 
 
@@ -59,7 +59,7 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[EcoliExperiment, HTTPValidationError]]:
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[HTTPValidationError, SimulatorVersion]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -71,20 +71,20 @@ def _build_response(*, client: Union[AuthenticatedClient, Client], response: htt
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: EcoliSimulationRequest,
+    body: Simulator,
 
-) -> Response[Union[EcoliExperiment, HTTPValidationError]]:
-    """ Run vEcoli simulation with antibiotics (not yet implemented)
+) -> Response[Union[HTTPValidationError, SimulatorVersion]]:
+    """ Upload a new simulator (vEcoli) version.
 
     Args:
-        body (EcoliSimulationRequest):
+        body (Simulator):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[EcoliExperiment, HTTPValidationError]]
+        Response[Union[HTTPValidationError, SimulatorVersion]]
      """
 
 
@@ -102,20 +102,20 @@ def sync_detailed(
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: EcoliSimulationRequest,
+    body: Simulator,
 
-) -> Optional[Union[EcoliExperiment, HTTPValidationError]]:
-    """ Run vEcoli simulation with antibiotics (not yet implemented)
+) -> Optional[Union[HTTPValidationError, SimulatorVersion]]:
+    """ Upload a new simulator (vEcoli) version.
 
     Args:
-        body (EcoliSimulationRequest):
+        body (Simulator):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[EcoliExperiment, HTTPValidationError]
+        Union[HTTPValidationError, SimulatorVersion]
      """
 
 
@@ -128,20 +128,20 @@ body=body,
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: EcoliSimulationRequest,
+    body: Simulator,
 
-) -> Response[Union[EcoliExperiment, HTTPValidationError]]:
-    """ Run vEcoli simulation with antibiotics (not yet implemented)
+) -> Response[Union[HTTPValidationError, SimulatorVersion]]:
+    """ Upload a new simulator (vEcoli) version.
 
     Args:
-        body (EcoliSimulationRequest):
+        body (Simulator):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[EcoliExperiment, HTTPValidationError]]
+        Response[Union[HTTPValidationError, SimulatorVersion]]
      """
 
 
@@ -159,20 +159,20 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: EcoliSimulationRequest,
+    body: Simulator,
 
-) -> Optional[Union[EcoliExperiment, HTTPValidationError]]:
-    """ Run vEcoli simulation with antibiotics (not yet implemented)
+) -> Optional[Union[HTTPValidationError, SimulatorVersion]]:
+    """ Upload a new simulator (vEcoli) version.
 
     Args:
-        body (EcoliSimulationRequest):
+        body (Simulator):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[EcoliExperiment, HTTPValidationError]
+        Union[HTTPValidationError, SimulatorVersion]
      """
 
 
