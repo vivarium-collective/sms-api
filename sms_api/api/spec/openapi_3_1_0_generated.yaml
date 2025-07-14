@@ -281,7 +281,7 @@ paths:
           required: false
           schema:
             type: string
-            default: 5eecb06
+            default: "8968017"
             title: Git Commit Hash
       requestBody:
         required: true
@@ -545,6 +545,9 @@ components:
         slurmjobid:
           type: integer
           title: Slurmjobid
+        correlation_id:
+          type: string
+          title: Correlation Id
         job_type:
           $ref: "#/components/schemas/JobType"
         ref_id:
@@ -573,6 +576,7 @@ components:
       required:
         - database_id
         - slurmjobid
+        - correlation_id
         - job_type
         - ref_id
       title: HpcRun
@@ -825,11 +829,11 @@ components:
         app_dir:
           type: string
           title: App Dir
-          default: /Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app
+          default: /Users/jimschaff/Documents/workspace/sms-api/app
         assets_dir:
           type: string
           title: Assets Dir
-          default: /Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets
+          default: /Users/jimschaff/Documents/workspace/sms-api/assets
       additionalProperties: false
       type: object
       title: Settings
