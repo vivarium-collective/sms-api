@@ -50,6 +50,26 @@ def get_experiment_path(ecoli_simulation: EcoliSimulation) -> Path:
     return Path(settings.hpc_sim_base_path) / experiment_dirname
 
 
+def get_correlation_id(ecoli_simulation: EcoliSimulation, random_string: str) -> str:
+    """
+    Generate a correlation ID for the EcoliSimulation based on its database ID and git commit hash.
+    """
+    return f"{ecoli_simulation.database_id}_{ecoli_simulation.sim_request.simulator.git_commit_hash}_{random_string}"
+
+
+def parse_correlation_id(correlation_id: str) -> tuple[int, str, str]:
+    """
+    Extract the simulation database ID and git commit hash from the correlation ID.
+    """
+    parts = correlation_id.split("_")
+    if len(parts) != 3:
+        raise ValueError(f"Invalid correlation ID format: {correlation_id}")
+    simulation_id = int(parts[0])
+    simulator_commit_hash = parts[1]
+    random_string = parts[2]
+    return simulation_id, simulator_commit_hash, random_string
+
+
 def get_apptainer_image_file(simulator_version: SimulatorVersion) -> Path:
     settings = get_settings()
     hpc_image_remote_path = Path(settings.hpc_image_base_path)

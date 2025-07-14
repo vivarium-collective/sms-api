@@ -25,6 +25,7 @@ class JobStatus(StrEnum):
 class HpcRun(BaseModel):
     database_id: int
     slurmjobid: int  # Slurm job ID if applicable
+    correlation_id: str  # to correlate with the WorkerEvent, if applicable ("N/A" if not applicable)
     job_type: JobType
     ref_id: int  # primary key of the object this HPC run is associated with (sim, parca, etc.)
     status: JobStatus | None = None
@@ -103,11 +104,35 @@ class EcoliExperiment(BaseModel):
 class WorkerEvent(BaseModel):
     database_id: int | None = None  # Unique identifier for the worker event (created by the database)
     created_at: str | None = None  # ISO format datetime string (created by the database)
-    hpcrun_id: int  # Unique identifier for the simulation job
+    hpcrun_id: int | None = None  # ID of the HpcRun this event is associated with (known in context of database)
+
+    correlation_id: str  # to correlate with the HpcRun job - see hpc_utils.get_correlation_id()
     sequence_number: int  # Sequence number provided by the message producer (emitter)
-    sim_data: list[tuple[str, str, float]]  # Simulation data with label/path/value
-    global_time: float | None = None  # Global time of the simulation, if applicable
-    error_message: str | None = None
+    mass: dict[str, float]  # mass from the simulation
+    bulk: list[int]  # Bulk data from the simulation
+    bulk_index: list[str] | None = None  # Labels for the bulk data, if applicable
+    time: float  # Global time of the simulation
+
+    @classmethod
+    def from_message_payload(cls, worker_event_message_payload: "WorkerEventMessagePayload") -> "WorkerEvent":
+        """Create a WorkerEvent from a WorkerEventMessagePayload."""
+        return cls(
+            correlation_id=worker_event_message_payload.correlation_id,
+            sequence_number=worker_event_message_payload.sequence_number,
+            mass=worker_event_message_payload.mass,
+            bulk=worker_event_message_payload.bulk,
+            bulk_index=worker_event_message_payload.bulk_index,
+            time=worker_event_message_payload.time,
+        )
+
+
+class WorkerEventMessagePayload(BaseModel):
+    correlation_id: str  # to correlate with the HpcRun job - see hpc_utils.get_correlation_id()
+    sequence_number: int  # Sequence number provided by the message producer (emitter)
+    time: float  # global time of the simulation
+    mass: dict[str, float]  # Unique identifier for the simulation job
+    bulk: list[int]  # Bulk data for the simulation
+    bulk_index: list[str] | None = None  # Labels for the bulk data, if applicable
 
 
 class RequestedObservables(BaseModel):

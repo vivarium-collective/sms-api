@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import random
+import string
 import time
 
 from fastapi import BackgroundTasks, HTTPException
@@ -8,7 +10,7 @@ from sms_api.common.gateway.models import RouterConfig
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.hpc_utils import get_experiment_id
+from sms_api.simulation.hpc_utils import get_correlation_id, get_experiment_id
 from sms_api.simulation.models import (
     EcoliExperiment,
     EcoliSimulationRequest,
@@ -80,16 +82,12 @@ async def get_simulator_versions() -> RegisteredSimulators:
 
 async def upload_simulator(
     commit_hash: str,
-    git_repo_url: str | None = None,
-    git_branch: str | None = None,
+    git_repo_url: str,
+    git_branch: str,
     simulation_service_slurm: SimulationService | SimulationServiceHpc | None = None,
     database_service: DatabaseService | None = None,
     background_tasks: BackgroundTasks | None = None,
 ) -> SimulatorVersion:
-    # TODO: for now, just hardcode this
-    main_branch = git_branch or "messages"
-    repo_url = git_repo_url or "https://github.com/vivarium-collective/vEcoli"
-
     if not simulation_service_slurm:
         simulation_service_slurm = get_simulation_service()
     if simulation_service_slurm is None:
@@ -101,13 +99,13 @@ async def upload_simulator(
         logger.exception("Simulation database service is not initialized")
         raise HTTPException(status_code=404, detail="Simulation database service is not initialized")
 
-    # check if the latest commit is already installed
+    # check if the simulator version is already installed
     simulator: SimulatorVersion | None = None
     for _simulator in await database_service.list_simulators():
         if (
             _simulator.git_commit_hash == commit_hash
-            and _simulator.git_repo_url == repo_url
-            and _simulator.git_branch == main_branch
+            and _simulator.git_repo_url == git_repo_url
+            and _simulator.git_branch == git_branch
         ):
             simulator = _simulator
             break
@@ -115,7 +113,7 @@ async def upload_simulator(
     # insert the latest commit into the database
     if simulator is None:
         simulator = await database_service.insert_simulator(
-            git_commit_hash=commit_hash, git_repo_url=repo_url, git_branch=main_branch
+            git_commit_hash=commit_hash, git_repo_url=git_repo_url, git_branch=git_branch
         )
 
         async def dispatch_job() -> None:
@@ -126,9 +124,12 @@ async def upload_simulator(
                 git_branch=simulator.git_branch,
             )
             # build the image
-            job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
+            build_slurmjobid = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
             await database_service.insert_hpcrun(
-                slurmjobid=job_id, job_type=JobType.BUILD_IMAGE, ref_id=simulator.database_id
+                slurmjobid=build_slurmjobid,
+                job_type=JobType.BUILD_IMAGE,
+                ref_id=simulator.database_id,
+                correlation_id="N/A",
             )
 
         if background_tasks is not None:
@@ -158,13 +159,23 @@ async def run_parca(
         raise HTTPException(status_code=404, detail="Simulation database service is not initialized")
 
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=parca_config or {})
-    parca_dataset = await database_service.get_or_insert_parca_dataset(parca_dataset_request=parca_dataset_request)
+    parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
+
+    async def dispatch_job() -> None:
+        # run parca
+        parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
+        _hpc_run = await database_service.insert_hpcrun(
+            slurmjobid=parca_slurmjobid,
+            job_type=JobType.PARCA,
+            ref_id=parca_dataset.database_id,
+            correlation_id="N/A",
+        )
 
     # submit run parca
     if background_tasks is not None:
-        background_tasks.add_task(simulation_service_slurm.submit_parca_job, parca_dataset=parca_dataset)
+        background_tasks.add_task(dispatch_job)
     else:
-        await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
+        await dispatch_job()
     return parca_dataset
 
 
@@ -204,8 +215,10 @@ async def run_simulation(
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
     async def dispatch_job() -> None:
+        random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311 doesn't need to be secure
+        correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string_7_hex)
         sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
-            ecoli_simulation=simulation, database_service=database_service
+            ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
         )
         start_time = time.time()
         while start_time + 60 > time.time():
@@ -214,7 +227,10 @@ async def run_simulation(
                 break
             await asyncio.sleep(5)
         _hpcrun = await database_service.insert_hpcrun(
-            slurmjobid=sim_slurmjobid, job_type=JobType.SIMULATION, ref_id=simulation.database_id
+            slurmjobid=sim_slurmjobid,
+            job_type=JobType.SIMULATION,
+            ref_id=simulation.database_id,
+            correlation_id=correlation_id,
         )
 
     if background_tasks:
@@ -273,7 +289,7 @@ async def simulation_roundtrip(
     ##################
 
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config={"param1": 5})
-    parca_dataset = await database_service.get_or_insert_parca_dataset(parca_dataset_request=parca_dataset_request)
+    parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     # run parca
     parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
@@ -294,12 +310,19 @@ async def simulation_roundtrip(
     )
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
+    random_string = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311. doesn't need to be secure
+    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string)
     sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
-        ecoli_simulation=simulation, database_service=database_service
+        ecoli_simulation=simulation,
+        database_service=database_service,
+        correlation_id=correlation_id,
     )
 
     _ = await database_service.insert_hpcrun(
-        slurmjobid=sim_slurmjobid, job_type=JobType.SIMULATION, ref_id=simulation.database_id
+        slurmjobid=sim_slurmjobid,
+        job_type=JobType.SIMULATION,
+        ref_id=simulation.database_id,
+        correlation_id=correlation_id,
     )
 
     start_time = time.time()

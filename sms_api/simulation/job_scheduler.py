@@ -3,13 +3,14 @@ import logging
 from typing import Any
 
 import nats
+from async_lru import alru_cache
 from nats.aio.client import Client as NATSClient
 from nats.aio.msg import Msg
 
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import JobStatus, WorkerEvent
+from sms_api.simulation.models import JobStatus, WorkerEvent, WorkerEventMessagePayload
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,10 @@ class JobScheduler:
         self.slurm_service = slurm_service
         self._stop_event = asyncio.Event()
 
+    @alru_cache
+    async def get_hpcrun_by_correlation_id(self, correlation_id: str) -> int | None:
+        return await self.database_service.get_hpcrun_id_by_correlation_id(correlation_id=correlation_id)
+
     async def subscribe(self) -> None:
         subject = get_settings().nats_worker_event_subject
         logger.info(f"Subscribing to NATS messages for subject '{subject}'")
@@ -35,8 +40,13 @@ class JobScheduler:
             subject = msg.subject
             data = msg.data.decode("utf-8")
             logger.debug(f"Received message on subject '{subject}': {data}")
-            worker_event = WorkerEvent.model_validate_json(data)
-            _updated_worker_event = await self.database_service.insert_worker_event(worker_event)
+            worker_event_message_payload = WorkerEventMessagePayload.model_validate_json(data)
+            worker_event = WorkerEvent.from_message_payload(worker_event_message_payload=worker_event_message_payload)
+            hpcrun_id = await self.get_hpcrun_by_correlation_id(correlation_id=worker_event.correlation_id)
+            if hpcrun_id is None:
+                logger.error(f"No HpcRun found for correlation ID {worker_event.correlation_id}. Skipping event.")
+                return
+            _updated_worker_event = await self.database_service.insert_worker_event(worker_event, hpcrun_id=hpcrun_id)
 
         await self.nats_client.subscribe(subject=subject, cb=message_handler)
         if self.nats_client.is_connected:

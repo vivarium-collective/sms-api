@@ -1,4 +1,6 @@
 import asyncio
+import random
+import string
 import tempfile
 import uuid
 from pathlib import Path
@@ -10,6 +12,7 @@ from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
+from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.models import (
     EcoliSimulation,
@@ -32,7 +35,7 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
     )
 
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config={"param1": 5})
-    parca_dataset = await database_service.get_or_insert_parca_dataset(parca_dataset_request=parca_dataset_request)
+    parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     simulation_request = EcoliSimulationRequest(
         simulator=simulator,
@@ -48,8 +51,13 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
         job_state="RUNNING",
     )
 
+    random_string = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311. doesn't need to be secure
+    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string)
     hpcrun = await database_service.insert_hpcrun(
-        slurmjobid=slurm_job.job_id, job_type=JobType.SIMULATION, ref_id=simulation.database_id
+        slurmjobid=slurm_job.job_id,
+        job_type=JobType.SIMULATION,
+        ref_id=simulation.database_id,
+        correlation_id=correlation_id,
     )
 
     return simulation, slurm_job, hpcrun
@@ -76,8 +84,10 @@ async def test_messaging(
     worker_event = WorkerEvent(
         database_id=simulation.database_id,
         sequence_number=sequence_number,
-        sim_data=[("mass", "path__to__mass", 1.0)],
-        hpcrun_id=hpc_run.database_id,
+        correlation_id=hpc_run.correlation_id,
+        time=0.1,
+        mass={"water": 1.0, "glucose": 0.5},
+        bulk=[0, 1, 2, 3, 4, 5],
     )
 
     # send worker messages to the broker

@@ -1,10 +1,13 @@
 import asyncio
+import random
+import string
 import time
 
 import pytest
 
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
+from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import EcoliSimulationRequest, JobType, ParcaDatasetRequest, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 
@@ -56,7 +59,7 @@ async def test_simulate(
     assert slurm_job_build.name.startswith(f"build-image-{latest_commit_hash}-")
 
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config={"param1": 5})
-    parca_dataset = await database_service.get_or_insert_parca_dataset(parca_dataset_request=parca_dataset_request)
+    parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     # run parca
     parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
@@ -81,13 +84,18 @@ async def test_simulate(
     )
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
+    random_string = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311. doesn't need to be secure
+    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string)
     sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
-        ecoli_simulation=simulation, database_service=database_service
+        ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
     )
     assert sim_slurmjobid is not None
 
     hpcrun = await database_service.insert_hpcrun(
-        slurmjobid=sim_slurmjobid, job_type=JobType.SIMULATION, ref_id=simulation.database_id
+        slurmjobid=sim_slurmjobid,
+        job_type=JobType.SIMULATION,
+        ref_id=simulation.database_id,
+        correlation_id=correlation_id,
     )
     assert hpcrun is not None
     assert hpcrun.slurmjobid == sim_slurmjobid

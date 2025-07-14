@@ -27,7 +27,7 @@ class ConcreteSimulationService(SimulationService):
 
     @override
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
         raise NotImplementedError
 

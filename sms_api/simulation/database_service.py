@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 class DatabaseService(ABC):
     @abstractmethod
-    async def insert_worker_event(self, worker_event: WorkerEvent) -> WorkerEvent:
+    async def insert_worker_event(self, worker_event: WorkerEvent, hpcrun_id: int) -> WorkerEvent:
         pass
 
     @abstractmethod
@@ -61,7 +61,7 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def insert_hpcrun(self, slurmjobid: int, job_type: JobType, ref_id: int) -> HpcRun:
+    async def insert_hpcrun(self, slurmjobid: int, job_type: JobType, ref_id: int, correlation_id: str) -> HpcRun:
         """
         :param slurmjobid: (`int`) slurm job id for the associated `job_type`.
         :param job_type: (`JobType`) job type to be run. Choose one of the following:
@@ -83,11 +83,15 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def get_hpcrun_id_by_correlation_id(self, correlation_id: str) -> int | None:
+        pass
+
+    @abstractmethod
     async def delete_hpcrun(self, hpcrun_id: int) -> None:
         pass
 
     @abstractmethod
-    async def get_or_insert_parca_dataset(self, parca_dataset_request: ParcaDatasetRequest) -> ParcaDataset:
+    async def insert_parca_dataset(self, parca_dataset_request: ParcaDatasetRequest) -> ParcaDataset:
         pass
 
     @abstractmethod
@@ -260,7 +264,7 @@ class DatabaseServiceSQL(DatabaseService):
             return simulator_versions
 
     @override
-    async def insert_hpcrun(self, slurmjobid: int, job_type: JobType, ref_id: int | None = None) -> HpcRun:
+    async def insert_hpcrun(self, slurmjobid: int, job_type: JobType, ref_id: int, correlation_id: str) -> HpcRun:
         jobref_simulation_id = ref_id if job_type == JobType.SIMULATION else None
         # jobref_parca_dataset_id = None if job_type == JobType.PARCA else None
         # jobref_simulator_id = None if job_type == JobType.BUILD_IMAGE else None
@@ -275,6 +279,7 @@ class DatabaseServiceSQL(DatabaseService):
                 jobref_simulation_id=jobref_simulation_id,
                 jobref_parca_dataset_id=jobref_parca_dataset_id,
                 start_time=datetime.datetime.now(),
+                correlation_id=correlation_id,
             )
             session.add(orm_hpc_run)
             await session.flush()
@@ -313,7 +318,7 @@ class DatabaseServiceSQL(DatabaseService):
             await session.delete(hpcrun)
 
     @override
-    async def get_or_insert_parca_dataset(self, parca_dataset_request: ParcaDatasetRequest) -> ParcaDataset:
+    async def insert_parca_dataset(self, parca_dataset_request: ParcaDatasetRequest) -> ParcaDataset:
         async with self.async_sessionmaker() as session, session.begin():
             simulator_id = parca_dataset_request.simulator_version.database_id
             stmt1 = (
@@ -329,52 +334,38 @@ class DatabaseServiceSQL(DatabaseService):
             result1: Result[tuple[ORMParcaDataset]] = await session.execute(stmt1)
             existing_orm_parca_dataset: ORMParcaDataset | None = result1.scalars().one_or_none()
             if existing_orm_parca_dataset is not None:
-                simulator_version: SimulatorVersion | None = await self.get_simulator(
-                    existing_orm_parca_dataset.simulator_id
-                )
-                if simulator_version is None:
-                    raise Exception(
-                        f"Simulator with id {existing_orm_parca_dataset.simulator_id} not found in the database"
-                    )
-                return ParcaDataset(
-                    database_id=existing_orm_parca_dataset.id,
-                    parca_dataset_request=ParcaDatasetRequest(
-                        simulator_version=simulator_version,
-                        parca_config=existing_orm_parca_dataset.parca_config,
-                    ),
-                    remote_archive_path=existing_orm_parca_dataset.remote_archive_path,
-                )
-            else:
-                # did not find the parca dataset, so insert it
-                orm_simulator: ORMSimulator | None = await self._get_orm_simulator(session, simulator_id=simulator_id)
-                if orm_simulator is None:
-                    raise Exception(f"Simulator with id {simulator_id} not found in the database")
-                orm_parca_dataset = ORMParcaDataset(
-                    simulator_id=orm_simulator.id,
-                    parca_config=parca_dataset_request.parca_config,
-                    parca_config_hash=parca_dataset_request.config_hash,
-                )
-                session.add(orm_parca_dataset)
-                await session.flush()  # Ensure the ORM object is inserted and has an ID
-                # Ensure the ORM object is inserted and has an ID
-                orm_parca_dataset_id = orm_parca_dataset.id
-                # Prepare the ParcaDataset object to return
-                simulator_version = SimulatorVersion(
-                    database_id=orm_simulator.id,
-                    git_commit_hash=orm_simulator.git_commit_hash,
-                    git_repo_url=orm_simulator.git_repo_url,
-                    git_branch=orm_simulator.git_branch,
-                )
-                parca_dataset_request = ParcaDatasetRequest(
-                    simulator_version=simulator_version,
-                    parca_config=orm_parca_dataset.parca_config,
-                )
-                parca_dataset = ParcaDataset(
-                    database_id=orm_parca_dataset_id,
-                    parca_dataset_request=parca_dataset_request,
-                    remote_archive_path=None,
-                )
-                return parca_dataset
+                raise RuntimeError("Parca Dataset with the same configuration already exists in the database")
+
+            # did not find the parca dataset, so insert it
+            orm_simulator: ORMSimulator | None = await self._get_orm_simulator(session, simulator_id=simulator_id)
+            if orm_simulator is None:
+                raise Exception(f"Simulator with id {simulator_id} not found in the database")
+            orm_parca_dataset = ORMParcaDataset(
+                simulator_id=orm_simulator.id,
+                parca_config=parca_dataset_request.parca_config,
+                parca_config_hash=parca_dataset_request.config_hash,
+            )
+            session.add(orm_parca_dataset)
+            await session.flush()  # Ensure the ORM object is inserted and has an ID
+            # Ensure the ORM object is inserted and has an ID
+            orm_parca_dataset_id = orm_parca_dataset.id
+            # Prepare the ParcaDataset object to return
+            simulator_version = SimulatorVersion(
+                database_id=orm_simulator.id,
+                git_commit_hash=orm_simulator.git_commit_hash,
+                git_repo_url=orm_simulator.git_repo_url,
+                git_branch=orm_simulator.git_branch,
+            )
+            parca_dataset_request = ParcaDatasetRequest(
+                simulator_version=simulator_version,
+                parca_config=orm_parca_dataset.parca_config,
+            )
+            parca_dataset = ParcaDataset(
+                database_id=orm_parca_dataset_id,
+                parca_dataset_request=parca_dataset_request,
+                remote_archive_path=None,
+            )
+            return parca_dataset
 
     @override
     async def get_parca_dataset(self, parca_dataset_id: int) -> ParcaDataset | None:
@@ -433,9 +424,9 @@ class DatabaseServiceSQL(DatabaseService):
             return parca_datasets
 
     @override
-    async def insert_worker_event(self, worker_event: WorkerEvent) -> WorkerEvent:
+    async def insert_worker_event(self, worker_event: WorkerEvent, hpcrun_id: int) -> WorkerEvent:
         async with self.async_sessionmaker() as session, session.begin():
-            orm_worker_event = ORMWorkerEvent.from_worker_event(worker_event)
+            orm_worker_event = ORMWorkerEvent.from_worker_event(worker_event, hpcrun_id=hpcrun_id)
             session.add(orm_worker_event)
             await session.flush()  # Ensure the ORM object is inserted and has an ID
 
@@ -595,6 +586,14 @@ class DatabaseServiceSQL(DatabaseService):
             if new_slurm_job.end_time is not None and new_slurm_job.end_time != orm_hpcrun.end_time:
                 orm_hpcrun.end_time = datetime.datetime.fromisoformat(new_slurm_job.end_time)
             await session.flush()
+
+    @override
+    async def get_hpcrun_id_by_correlation_id(self, correlation_id: str) -> int | None:
+        async with self.async_sessionmaker() as session, session.begin():
+            stmt = select(ORMHpcRun.id).where(ORMHpcRun.correlation_id == correlation_id).limit(1)
+            result: Result[tuple[int]] = await session.execute(stmt)
+            orm_hpcrun_id: int | None = result.scalar_one_or_none()
+            return orm_hpcrun_id
 
     @override
     async def close(self) -> None:

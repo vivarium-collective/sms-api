@@ -64,6 +64,7 @@ class ORMHpcRun(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
     job_type: Mapped[JobTypeDB] = mapped_column(nullable=False)
+    correlation_id: Mapped[str] = mapped_column(nullable=False, index=True)
     slurmjobid: Mapped[int] = mapped_column(nullable=True)
     start_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
     end_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
@@ -82,6 +83,7 @@ class ORMHpcRun(Base):
         return HpcRun(
             database_id=self.id,
             slurmjobid=self.slurmjobid,
+            correlation_id=self.correlation_id,
             job_type=self.job_type.to_job_type(),
             ref_id=ref_id,
             status=self.status.to_job_status(),
@@ -121,31 +123,39 @@ class ORMWorkerEvent(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
+    correlation_id: Mapped[str] = mapped_column(nullable=False, index=True)
     sequence_number: Mapped[int] = mapped_column(nullable=False, index=True)
-    sim_data: Mapped[list[tuple[str, str, float]]] = mapped_column(JSONB, nullable=False)
-    global_time: Mapped[Optional[float]] = mapped_column(nullable=True)
-    error_message: Mapped[Optional[str]] = mapped_column(nullable=True)
+    mass: Mapped[dict[str, float]] = mapped_column(JSONB, nullable=False)
+    bulk: Mapped[list[int]] = mapped_column(JSONB, nullable=False)
+    bulk_index: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    time: Mapped[float] = mapped_column(nullable=True)
     hpcrun_id: Mapped[int] = mapped_column(ForeignKey("hpcrun.id"), nullable=False, index=True)
 
     @classmethod
-    def from_worker_event(cls, worker_event: "WorkerEvent") -> "ORMWorkerEvent":
+    def from_worker_event(cls, worker_event: "WorkerEvent", hpcrun_id: int) -> "ORMWorkerEvent":
         return cls(
+            # database_id=self.id,                 # populated in the database
+            # created_at=str(self.created_at),     # populated in the database
+            hpcrun_id=hpcrun_id,
+            correlation_id=worker_event.correlation_id,
             sequence_number=worker_event.sequence_number,
-            sim_data=worker_event.sim_data,
-            global_time=worker_event.global_time,
-            error_message=worker_event.error_message,
-            hpcrun_id=worker_event.hpcrun_id,
+            mass=worker_event.mass,
+            bulk=worker_event.bulk,
+            bulk_index=worker_event.bulk_index,
+            time=worker_event.time,
         )
 
     def to_worker_event(self) -> WorkerEvent:
         return WorkerEvent(
             database_id=self.id,
             created_at=str(self.created_at),
-            sequence_number=self.sequence_number,
-            sim_data=self.sim_data,
-            global_time=self.global_time,
-            error_message=self.error_message,
             hpcrun_id=self.hpcrun_id,
+            correlation_id=self.correlation_id,
+            sequence_number=self.sequence_number,
+            mass=self.mass,
+            bulk=self.bulk,
+            bulk_index=self.bulk_index,
+            time=self.time,
         )
 
 
