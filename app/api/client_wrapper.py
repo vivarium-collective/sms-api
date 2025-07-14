@@ -1,9 +1,9 @@
 import httpx
 
 from sms_api.api.client import Client
-from sms_api.api.client.api.simulations.get_parca_versions import sync_detailed as get_parca_versions_sync
-from sms_api.api.client.api.simulations.run_simulation import sync_detailed as run_simulation_sync
-from sms_api.api.client.api.simulators.get_core_simulator_version import sync_detailed as get_simulators_sync
+from sms_api.api.client.api.simulations_parca.get_parca_versions import sync_detailed as get_parca_versions_sync
+from sms_api.api.client.api.simulations_v_ecoli.run_simulation import sync_detailed as run_simulation_sync
+from sms_api.api.client.api.simulators.get_simulator_versions import sync_detailed as get_simulators_sync
 from sms_api.api.client.models import (
     EcoliExperiment,
     EcoliSimulationRequest,

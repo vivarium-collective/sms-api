@@ -5,7 +5,7 @@ from typing import cast
 import pytest
 
 from sms_api.api.client import Client
-from sms_api.api.client.api.simulators.insert_core_simulator_version import asyncio as insert_core_simulator_version
+from sms_api.api.client.api.simulators.insert_simulator_version import asyncio as insert_simulator_version
 from sms_api.api.client.models import HTTPValidationError
 from sms_api.api.client.models.simulator import Simulator as SimulatorDto
 from sms_api.api.client.models.simulator_version import SimulatorVersion as SimulatorVersionDto
@@ -28,7 +28,7 @@ async def test_insert_simulator_version(
     simulator_dto = SimulatorDto(
         git_commit_hash=expected_commit_hash, git_repo_url=expected_git_repo_url, git_branch=expected_git_branch
     )
-    response: HTTPValidationError | SimulatorVersionDto | None = await insert_core_simulator_version(
+    response: HTTPValidationError | SimulatorVersionDto | None = await insert_simulator_version(
         client=in_memory_api_client, body=simulator_dto
     )
     assert type(response) is SimulatorVersionDto

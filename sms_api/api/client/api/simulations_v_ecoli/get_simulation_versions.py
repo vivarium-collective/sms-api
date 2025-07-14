@@ -7,7 +7,7 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response, UNSET
 from ... import errors
 
-from ...models.parca_dataset import ParcaDataset
+from ...models.ecoli_simulation import EcoliSimulation
 from typing import cast
 
 
@@ -22,20 +22,20 @@ def _get_kwargs(
 
 
     _kwargs: dict[str, Any] = {
-        "method": "post",
-        "url": "/core/simulation/parca/versions",
+        "method": "get",
+        "url": "/core/simulation/run/versions",
     }
 
 
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[list['ParcaDataset']]:
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[list['EcoliSimulation']]:
     if response.status_code == 200:
         response_200 = []
         _response_200 = response.json()
         for response_200_item_data in (_response_200):
-            response_200_item = ParcaDataset.from_dict(response_200_item_data)
+            response_200_item = EcoliSimulation.from_dict(response_200_item_data)
 
 
 
@@ -48,7 +48,7 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[list['ParcaDataset']]:
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[list['EcoliSimulation']]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -61,15 +61,15 @@ def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Response[list['ParcaDataset']]:
-    """ Run a parameter calculation
+) -> Response[list['EcoliSimulation']]:
+    """ Get list of vEcoli simulations
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[list['ParcaDataset']]
+        Response[list['EcoliSimulation']]
      """
 
 
@@ -87,15 +87,15 @@ def sync(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Optional[list['ParcaDataset']]:
-    """ Run a parameter calculation
+) -> Optional[list['EcoliSimulation']]:
+    """ Get list of vEcoli simulations
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        list['ParcaDataset']
+        list['EcoliSimulation']
      """
 
 
@@ -108,15 +108,15 @@ async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Response[list['ParcaDataset']]:
-    """ Run a parameter calculation
+) -> Response[list['EcoliSimulation']]:
+    """ Get list of vEcoli simulations
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[list['ParcaDataset']]
+        Response[list['EcoliSimulation']]
      """
 
 
@@ -134,15 +134,15 @@ async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
 
-) -> Optional[list['ParcaDataset']]:
-    """ Run a parameter calculation
+) -> Optional[list['EcoliSimulation']]:
+    """ Get list of vEcoli simulations
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        list['ParcaDataset']
+        list['EcoliSimulation']
      """
 
 

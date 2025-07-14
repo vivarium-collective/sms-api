@@ -7,53 +7,42 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response, UNSET
 from ... import errors
 
+from ...models.ecoli_experiment import EcoliExperiment
+from ...models.ecoli_simulation_request import EcoliSimulationRequest
 from ...models.http_validation_error import HTTPValidationError
-from ...models.worker_event import WorkerEvent
-from ...types import UNSET, Unset
 from typing import cast
-from typing import cast, Union
-from typing import Union
 
 
 
 def _get_kwargs(
     *,
-    simulation_id: int,
-    num_events: Union[None, Unset, int] = UNSET,
+    body: EcoliSimulationRequest,
 
 ) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
 
 
 
 
-    params: dict[str, Any] = {}
-
-    params["simulation_id"] = simulation_id
-
-    json_num_events: Union[None, Unset, int]
-    if isinstance(num_events, Unset):
-        json_num_events = UNSET
-    else:
-        json_num_events = num_events
-    params["num_events"] = json_num_events
-
-
-    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
 
     _kwargs: dict[str, Any] = {
-        "method": "get",
-        "url": "/core/simulation/status",
-        "params": params,
+        "method": "post",
+        "url": "/core/simulation/run",
     }
 
+    _kwargs["json"] = body.to_dict()
 
+
+    headers["Content-Type"] = "application/json"
+
+    _kwargs["headers"] = headers
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[HTTPValidationError, WorkerEvent]]:
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[EcoliExperiment, HTTPValidationError]]:
     if response.status_code == 200:
-        response_200 = WorkerEvent.from_dict(response.json())
+        response_200 = EcoliExperiment.from_dict(response.json())
 
 
 
@@ -70,7 +59,7 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[HTTPValidationError, WorkerEvent]]:
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[EcoliExperiment, HTTPValidationError]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -82,28 +71,25 @@ def _build_response(*, client: Union[AuthenticatedClient, Client], response: htt
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    simulation_id: int,
-    num_events: Union[None, Unset, int] = UNSET,
+    body: EcoliSimulationRequest,
 
-) -> Response[Union[HTTPValidationError, WorkerEvent]]:
-    """ Get Simulation Status
+) -> Response[Union[EcoliExperiment, HTTPValidationError]]:
+    """ Run a vEcoli simulation
 
     Args:
-        simulation_id (int):
-        num_events (Union[None, Unset, int]):
+        body (EcoliSimulationRequest):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, WorkerEvent]]
+        Response[Union[EcoliExperiment, HTTPValidationError]]
      """
 
 
     kwargs = _get_kwargs(
-        simulation_id=simulation_id,
-num_events=num_events,
+        body=body,
 
     )
 
@@ -116,57 +102,51 @@ num_events=num_events,
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
-    simulation_id: int,
-    num_events: Union[None, Unset, int] = UNSET,
+    body: EcoliSimulationRequest,
 
-) -> Optional[Union[HTTPValidationError, WorkerEvent]]:
-    """ Get Simulation Status
+) -> Optional[Union[EcoliExperiment, HTTPValidationError]]:
+    """ Run a vEcoli simulation
 
     Args:
-        simulation_id (int):
-        num_events (Union[None, Unset, int]):
+        body (EcoliSimulationRequest):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, WorkerEvent]
+        Union[EcoliExperiment, HTTPValidationError]
      """
 
 
     return sync_detailed(
         client=client,
-simulation_id=simulation_id,
-num_events=num_events,
+body=body,
 
     ).parsed
 
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    simulation_id: int,
-    num_events: Union[None, Unset, int] = UNSET,
+    body: EcoliSimulationRequest,
 
-) -> Response[Union[HTTPValidationError, WorkerEvent]]:
-    """ Get Simulation Status
+) -> Response[Union[EcoliExperiment, HTTPValidationError]]:
+    """ Run a vEcoli simulation
 
     Args:
-        simulation_id (int):
-        num_events (Union[None, Unset, int]):
+        body (EcoliSimulationRequest):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, WorkerEvent]]
+        Response[Union[EcoliExperiment, HTTPValidationError]]
      """
 
 
     kwargs = _get_kwargs(
-        simulation_id=simulation_id,
-num_events=num_events,
+        body=body,
 
     )
 
@@ -179,28 +159,25 @@ num_events=num_events,
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
-    simulation_id: int,
-    num_events: Union[None, Unset, int] = UNSET,
+    body: EcoliSimulationRequest,
 
-) -> Optional[Union[HTTPValidationError, WorkerEvent]]:
-    """ Get Simulation Status
+) -> Optional[Union[EcoliExperiment, HTTPValidationError]]:
+    """ Run a vEcoli simulation
 
     Args:
-        simulation_id (int):
-        num_events (Union[None, Unset, int]):
+        body (EcoliSimulationRequest):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, WorkerEvent]
+        Union[EcoliExperiment, HTTPValidationError]
      """
 
 
     return (await asyncio_detailed(
         client=client,
-simulation_id=simulation_id,
-num_events=num_events,
+body=body,
 
     )).parsed
