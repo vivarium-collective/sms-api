@@ -24,24 +24,42 @@ def _():
     # 3. pin {simulator_id: ..., parca_id: ...}
     # 4. run simulation using #3
 
+    import json
     from pprint import pp
 
-    from httpx import AsyncClient, QueryParams, Client
     import marimo as mo
+    import polars as pl
+    from altair import Chart
     from fastapi import HTTPException
+    from httpx import AsyncClient, QueryParams, Client
 
-    from sms_api.simulation.models import SimulatorVersion, EcoliSimulationRequest, EcoliExperiment
+    from sms_api.simulation.models import (
+        SimulatorVersion,
+        EcoliSimulationRequest,
+        EcoliExperiment,
+        WorkerEvent,
+        ParcaDataset
+    )
     from app.api.simulations import EcoliSim
+    from app.api.plots import plot_from_dfs
+    from app.api.client_wrapper import ClientWrapper
 
 
     base_url = "http://localhost:8888/core"
+    client = ClientWrapper(base_url=base_url)
     return (
+        Chart,
         Client,
+        EcoliExperiment,
         EcoliSim,
         EcoliSimulationRequest,
-        HTTPException,
+        ParcaDataset,
+        WorkerEvent,
         base_url,
+        client,
+        json,
         mo,
+        pl,
     )
 
 
@@ -72,101 +90,158 @@ def _(mo):
 
 
 @app.cell
-def _():
-    return
-
-
-@app.cell
-def _(Client, EcoliSimulationRequest, HTTPException, base_url, mo):
+def _(
+    Client,
+    EcoliExperiment,
+    EcoliSimulationRequest,
+    ParcaDataset,
+    base_url,
+    client,
+    json,
+    mo,
+):
     # -- API Client calls -- #
     @mo.cache
-    def on_get_latest_simulator():
+    def on_get_parcas() -> list[ParcaDataset]:
         with Client() as client:
             try:
-                response = client.get(url=f"{base_url}/simulator/latest")
+                response = client.get(f"{base_url}/simulation/parca/versions")
                 response.raise_for_status()
                 return response.json()
             except:
-                raise HTTPException("Could not get the simulator versions.")
+                raise Exception(f"Could not get the parca datasets.")
 
 
-    @mo.cache
-    def on_get_simulators():
+    def on_run_simulation(request: EcoliSimulationRequest) -> EcoliExperiment:
+        with Client() as client:
+            payload = json.loads(request.model_dump_json())  # use the param, not global
+            try:
+                response = client.post(f"{base_url}/simulation/run", json=payload)
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
+                raise Exception(e)
+
+
+    def on_get_status(simulation_id: int) -> dict:
+        client.get_simulation_status(simulation_id=simulation_id)
+
+
+    def on_get_events(simulation_id: int) -> list[dict]:
         with Client() as client:
             try:
-                response = client.get(url=f"{base_url}/simulator/versions")
+                response = client.get(f"{base_url}/simulation/run/events")
                 response.raise_for_status()
                 return response.json()
             except:
-                raise HTTPException("Could not get the simulator versions.")
+                raise Exception(f"Could not get the simulation status using simulation_id: {simulation_id}.")
 
-
-    def on_run_simulation(request: EcoliSimulationRequest):
-        with Client() as client:
-            # Create an instance of the API class
-            try:
-                response = client.post(url=f"{base_url}/simulation/run", json=request.model_dump())
-                response.raise_for_status()
-                return response.json()
-            except:
-                raise HTTPException("Could not get the simulator versions.")
-
-    return on_get_latest_simulator, on_get_simulators
+    return on_get_events, on_get_parcas, on_run_simulation
 
 
 @app.cell
-def _(on_get_latest_simulator):
-    latest_simulator = on_get_latest_simulator()
-    latest_simulator
+def _(on_get_parcas):
+    parcas = on_get_parcas()
+    request_payload = {
+        'parca_dataset_id': parcas[-1]['database_id'],
+        'simulator': parcas[-1]['parca_dataset_request']['simulator_version'],
+        'variant_config': {
+            "named_parameters": {"param1": 0.5, "param2": 0.5}
+        }
+    }
+
+    return (request_payload,)
+
+
+@app.cell
+def _():
+    # param_name = mo.ui.text(placeholder="Parameter Name")
+    # variant_config = mo.ui.dictionary({"parameter": param_name})
     return
+
+
+@app.cell
+def _(EcoliSimulationRequest, request_payload):
+    simulation_request = EcoliSimulationRequest(**request_payload)
+    return (simulation_request,)
 
 
 @app.cell
 def _(mo):
-    get_simulators_button = mo.ui.run_button(label="Get simulators")
-    get_simulators_button
-    return (get_simulators_button,)
+    run_simulation_button = mo.ui.run_button(label="Run Simulation")
+    run_simulation_button
+    return (run_simulation_button,)
 
 
 @app.cell
-def _(get_simulators_button, mo, on_get_simulators):
-    simulators_table = None
-    if get_simulators_button.value:
-        simulators = on_get_simulators()
-        simulators_table = mo.ui.table(data=simulators["versions"])
-        print(simulators)
-
-    simulators_table
-    return
-
-
-@app.cell
-def _(mo):
-    run_sim_button = mo.ui.run_button(label="Run Simulation")
-    run_sim_button
-    return
-
-
-@app.cell
-def _(mo):
-    simulation_request = mo.ui.dictionary()
-    return
-
-
-@app.cell
-async def _(
-    handlers,
-    parca_versions,
-    run_sim_button_button,
-    simulator_versions,
+def _(
+    EcoliExperiment,
+    on_run_simulation,
+    run_simulation_button,
+    simulation_request,
 ):
-    experiment = None
-    if run_sim_button_button.value:
-        experiment = await handlers.run_simulation(
-            simulator=simulator_versions.versions[0], parca_dataset=parca_versions[0]
-        )
+    experiment: EcoliExperiment | None = None
+    if run_simulation_button.value:
+        experiment = on_run_simulation(request=simulation_request)
+    return (experiment,)
 
+
+@app.cell
+def _(experiment: "EcoliExperiment | None", mo):
+    experiment_table = mo.ui.table(data=[experiment])
+    experiment_table
+    return
+
+
+@app.cell
+def _(experiment: "EcoliExperiment | None"):
     experiment
+    return
+
+
+@app.cell
+def _(mo):
+    check_status_button = mo.ui.run_button(label="Check Simulation Status")
+    check_status_button
+    return (check_status_button,)
+
+
+@app.cell
+def _(
+    check_status_button,
+    experiment: "EcoliExperiment | None",
+    on_get_events,
+):
+    simulation_events = None
+    if experiment is not None and check_status_button.value:
+        simulation_events = on_get_events(simulation_id=experiment['simulation']['database_id'])
+
+    simulation_events
+    return (simulation_events,)
+
+
+@app.cell
+def _(Chart, WorkerEvent, pl, plot_from_df):
+    # 1. get simulation events
+    # 2. index needed cols as necessary
+    # 3. load #2 into a polars df
+    # 4. call plot
+
+    def plot_data(worker_event: WorkerEvent) -> Chart:
+        df = pl.DataFrame(data=worker_event.sim_data)
+        return plot_from_df(dataframe=df)
+
+    return
+
+
+@app.cell
+def update_data(mo, pl, simulation_events):
+    # Simulate receiving new data (in practice, stream this in)
+    new_data = None
+    if simulation_events is not None:
+        new_data = pl.DataFrame(simulation_events[-1]['sim_data'])
+        # Append to growing stateful history
+        mo.state.df_history = mo.state.df_history.vstack(new_data, in_place=False)
     return
 
 
