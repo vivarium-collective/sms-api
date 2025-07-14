@@ -281,7 +281,7 @@ paths:
           required: false
           schema:
             type: string
-            default: "8968017"
+            default: 78c6310
             title: Git Commit Hash
       requestBody:
         required: true
@@ -545,9 +545,6 @@ components:
         slurmjobid:
           type: integer
           title: Slurmjobid
-        correlation_id:
-          type: string
-          title: Correlation Id
         job_type:
           $ref: "#/components/schemas/JobType"
         ref_id:
@@ -576,7 +573,6 @@ components:
       required:
         - database_id
         - slurmjobid
-        - correlation_id
         - job_type
         - ref_id
       title: HpcRun
@@ -829,11 +825,11 @@ components:
         app_dir:
           type: string
           title: App Dir
-          default: /Users/jimschaff/Documents/workspace/sms-api/app
+          default: /Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app
         assets_dir:
           type: string
           title: Assets Dir
-          default: /Users/jimschaff/Documents/workspace/sms-api/assets
+          default: /Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets
       additionalProperties: false
       type: object
       title: Settings
@@ -915,41 +911,35 @@ components:
             - type: "null"
           title: Created At
         hpcrun_id:
-          anyOf:
-            - type: integer
-            - type: "null"
+          type: integer
           title: Hpcrun Id
-        correlation_id:
-          type: string
-          title: Correlation Id
         sequence_number:
           type: integer
           title: Sequence Number
-        mass:
-          additionalProperties:
-            type: number
-          type: object
-          title: Mass
-        bulk:
+        sim_data:
           items:
-            type: integer
+            prefixItems:
+              - type: string
+              - type: string
+              - type: number
+            type: array
+            maxItems: 3
+            minItems: 3
           type: array
-          title: Bulk
-        bulk_index:
+          title: Sim Data
+        global_time:
           anyOf:
-            - items:
-                type: string
-              type: array
+            - type: number
             - type: "null"
-          title: Bulk Index
-        time:
-          type: number
-          title: Time
+          title: Global Time
+        error_message:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Error Message
       type: object
       required:
-        - correlation_id
+        - hpcrun_id
         - sequence_number
-        - mass
-        - bulk
-        - time
+        - sim_data
       title: WorkerEvent
