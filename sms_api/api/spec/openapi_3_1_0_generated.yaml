@@ -7,8 +7,8 @@ paths:
     get:
       tags:
         - Simulators
-      summary: Get Latest Simulator
-      operationId: latest-simulator-hash
+      summary: Get the latest simulator version
+      operationId: get-latest-simulator
       parameters:
         - name: git_repo_url
           in: query
@@ -42,7 +42,7 @@ paths:
       tags:
         - Simulators
       summary: get the list of available simulator versions
-      operationId: get-core-simulator-version
+      operationId: get-simulator-versions
       responses:
         "200":
           description: Successful Response
@@ -55,7 +55,7 @@ paths:
       tags:
         - Simulators
       summary: Upload a new simulator (vEcoli) version.
-      operationId: insert-core-simulator-version
+      operationId: insert-simulator-version
       requestBody:
         content:
           application/json:
@@ -78,7 +78,7 @@ paths:
   /core/simulation/parca:
     post:
       tags:
-        - Simulations
+        - Simulations - Parca
       summary: Run a parameter calculation
       operationId: run-parca
       requestBody:
@@ -101,10 +101,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
   /core/simulation/parca/versions:
-    post:
+    get:
       tags:
-        - Simulations
-      summary: Run a parameter calculation
+        - Simulations - Parca
+      summary: Get list of parca calculations
       operationId: get-parca-versions
       responses:
         "200":
@@ -116,36 +116,11 @@ paths:
                   $ref: "#/components/schemas/ParcaDataset"
                 type: array
                 title: Response Get-Parca-Versions
-  /core/simulation/submit:
-    post:
-      tags:
-        - Simulations
-      summary: Submit to the db a single vEcoli simulation with given parameter overrides.
-      operationId: submit-simulation
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/EcoliSimulationRequest"
-        required: true
-      responses:
-        "200":
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EcoliSimulation"
-        "422":
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
   /core/simulation/run:
     post:
       tags:
-        - Simulations
-      summary: Run Vecoli Simulation
+        - Simulations - vEcoli
+      summary: Run a vEcoli simulation
       operationId: run-simulation
       requestBody:
         content:
@@ -166,11 +141,98 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
-  /core/simulation/results/chunks:
-    post:
+  /core/simulation/run/versions:
+    get:
       tags:
-        - Simulations
-      summary: Get Result Chunks
+        - Simulations - vEcoli
+      summary: Get list of vEcoli simulations
+      operationId: get-simulation-versions
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/EcoliSimulation"
+                type: array
+                title: Response Get-Simulation-Versions
+  /core/simulation/run/status:
+    get:
+      tags:
+        - Simulations - vEcoli
+      summary: Get the simulation status record by its ID
+      operationId: get-simulation-status
+      parameters:
+        - name: simulation_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            title: Simulation Id
+        - name: num_events
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: integer
+              - type: "null"
+            title: Num Events
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HpcRun"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /core/simulation/run/events:
+    get:
+      tags:
+        - Simulations - vEcoli
+      summary: Get the worker events for a simulation by its ID
+      operationId: get-simulation-worker-events
+      parameters:
+        - name: simulation_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            title: Simulation Id
+        - name: num_events
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: integer
+              - type: "null"
+            title: Num Events
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkerEvent"
+                title: Response Get-Simulation-Worker-Events
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /core/simulation/run/results/chunks:
+    get:
+      tags:
+        - Simulations - vEcoli
+      summary: Get simulation results in chunks
       operationId: get-simulation-results
       parameters:
         - name: experiment_id
@@ -193,7 +255,7 @@ paths:
           required: false
           schema:
             type: string
-            default: 305f5c8
+            default: 5eecb06
             title: Git Commit Hash
       requestBody:
         required: true
@@ -213,11 +275,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
-  /core/simulation/results:
-    post:
+  /core/simulation/run/results/file:
+    get:
       tags:
-        - Simulations
-      summary: Get Results
+        - Simulations - vEcoli
+      summary: Get simulation results as a zip file
       operationId: get-simulation-results-file
       parameters:
         - name: experiment_id
@@ -252,45 +314,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
-  /core/simulation/status:
-    get:
-      tags:
-        - Simulations
-      summary: Get Simulation Status
-      operationId: get-simulation-status
-      parameters:
-        - name: simulation_id
-          in: query
-          required: true
-          schema:
-            type: integer
-            title: Simulation Id
-        - name: num_events
-          in: query
-          required: false
-          schema:
-            anyOf:
-              - type: integer
-              - type: "null"
-            title: Num Events
-      responses:
-        "200":
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WorkerEvent"
-        "422":
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
   /antibiotic/simulation/run:
     get:
       tags:
         - Simulations
-      summary: Run Antibiotics
+      summary: Run vEcoli simulation with antibiotics (not yet implemented)
       operationId: get-antibiotics-simulator-versions
       requestBody:
         content:
@@ -483,6 +511,61 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    HpcRun:
+      properties:
+        database_id:
+          type: integer
+          title: Database Id
+        slurmjobid:
+          type: integer
+          title: Slurmjobid
+        job_type:
+          $ref: "#/components/schemas/JobType"
+        ref_id:
+          type: integer
+          title: Ref Id
+        status:
+          anyOf:
+            - $ref: "#/components/schemas/JobStatus"
+            - type: "null"
+        start_time:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Start Time
+        end_time:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: End Time
+        error_message:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Error Message
+      type: object
+      required:
+        - database_id
+        - slurmjobid
+        - job_type
+        - ref_id
+      title: HpcRun
+    JobStatus:
+      type: string
+      enum:
+        - waiting
+        - queued
+        - running
+        - completed
+        - failed
+      title: JobStatus
+    JobType:
+      type: string
+      enum:
+        - simulation
+        - parca
+        - build_image
+      title: JobType
     ParcaDataset:
       properties:
         database_id:
@@ -689,6 +772,10 @@ components:
           type: string
           title: Hpc Sim Base Path
           default: ""
+        hpc_sim_config_file:
+          type: string
+          title: Hpc Sim Config File
+          default: publish.json
         nats_url:
           type: string
           title: Nats Url
@@ -712,11 +799,11 @@ components:
         app_dir:
           type: string
           title: App Dir
-          default: app
+          default: /Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app
         assets_dir:
           type: string
           title: Assets Dir
-          default: assets
+          default: /Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets
       additionalProperties: false
       type: object
       title: Settings

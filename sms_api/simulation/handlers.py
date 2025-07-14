@@ -204,27 +204,24 @@ async def run_simulation(
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
     async def dispatch_job() -> None:
-        sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
-            ecoli_simulation=simulation, database_service=database_service
-        )
-        start_time = time.time()
-        while start_time + 60 > time.time():
-            sim_slurmjob = await simulation_service_slurm.get_slurm_job_status(slurmjobid=sim_slurmjobid)
-            if sim_slurmjob is not None and sim_slurmjob.is_done():
-                break
-            await asyncio.sleep(5)
-        _hpcrun = await database_service.insert_hpcrun(
-            slurmjobid=sim_slurmjobid, job_type=JobType.SIMULATION, ref_id=simulation.database_id
-        )
+        try:
+            sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service
+            )
+            _hpcrun = await database_service.insert_hpcrun(
+                slurmjobid=sim_slurmjobid, job_type=JobType.SIMULATION, ref_id=simulation.database_id
+            )
+        except Exception:
+            raise Exception("There was an error dispatching hpc run.")
 
     if background_tasks:
         background_tasks.add_task(dispatch_job)
     else:
         await dispatch_job()
-
     experiment_id = get_experiment_id(
         router_config=router_config, simulation=simulation, sim_request=simulation_request
     )
+
     return EcoliExperiment(experiment_id=experiment_id, simulation=simulation)
 
 

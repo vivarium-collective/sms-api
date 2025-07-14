@@ -39,13 +39,11 @@ clean:
 .PHONY: test
 test: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
-	@make write-latest-commit
 	@poetry run pytest -ra --cov --cov-config=pyproject.toml --cov-report=xml
 
 .PHONY: logtest
 logtest: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
-	@make write-latest-commit
 	@poetry run pytest \
 		--cov \
 		--cov-config=pyproject.toml \
