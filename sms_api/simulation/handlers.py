@@ -218,8 +218,8 @@ async def run_simulation(
         background_tasks.add_task(dispatch_job)
     else:
         await dispatch_job()
-
     experiment_id = get_experiment_id(
         router_config=router_config, simulation=simulation, sim_request=simulation_request
     )
+
     return EcoliExperiment(experiment_id=experiment_id, simulation=simulation)

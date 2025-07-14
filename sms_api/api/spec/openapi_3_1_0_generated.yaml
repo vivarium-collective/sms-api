@@ -142,32 +142,6 @@ paths:
                   $ref: "#/components/schemas/ParcaDataset"
                 type: array
                 title: Response Get-Parca-Versions
-  /core/simulation/parca/status:
-    get:
-      tags:
-        - Simulations - Parca
-      summary: Get parca calculation status by its ID
-      operationId: get-parca-status
-      parameters:
-        - name: parca_id
-          in: query
-          required: true
-          schema:
-            type: integer
-            title: Parca Id
-      responses:
-        "200":
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HpcRun"
-        "422":
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
   /core/simulation/run:
     post:
       tags:
@@ -307,7 +281,7 @@ paths:
           required: false
           schema:
             type: string
-            default: "8968017"
+            default: 5eecb06
             title: Git Commit Hash
       requestBody:
         required: true
@@ -571,9 +545,6 @@ components:
         slurmjobid:
           type: integer
           title: Slurmjobid
-        correlation_id:
-          type: string
-          title: Correlation Id
         job_type:
           $ref: "#/components/schemas/JobType"
         ref_id:
@@ -602,7 +573,6 @@ components:
       required:
         - database_id
         - slurmjobid
-        - correlation_id
         - job_type
         - ref_id
       title: HpcRun
@@ -855,11 +825,11 @@ components:
         app_dir:
           type: string
           title: App Dir
-          default: /Users/jimschaff/Documents/workspace/sms-api/app
+          default: /Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app
         assets_dir:
           type: string
           title: Assets Dir
-          default: /Users/jimschaff/Documents/workspace/sms-api/assets
+          default: /Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets
       additionalProperties: false
       type: object
       title: Settings
