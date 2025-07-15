@@ -56,89 +56,17 @@ def plot_mass_fractions(dataframes: list[pl.DataFrame] | None = None) -> mo.ui.a
     title = "Biomass components (average fraction of total dry mass)"
     chart: alt.Chart = (
         alt.Chart(melted_df)
+        .transform_calculate(SubmassName="substring(datum.Submass, 0, indexof(datum.Submass, ' ('))")
         .mark_line()
         .encode(
             x=alt.X("Time (min):Q", title="Time (min)"),
             y=alt.Y("Mass (normalized by t = 0 min):Q"),
-            color=alt.Color("Submass:N", scale=alt.Scale(range=COLORS)),
+            color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
         )
         .properties(title=title)
     )
 
     return mo.ui.altair_chart(chart)
-
-
-def plot_from_dfs(
-    dataframes: list[pl.DataFrame] | None = None,
-    *,
-    labels: list[str] | None = None,
-) -> alt.Chart | None:
-    """Plot mass fraction summary from a list of Polars DataFrames (historical simulations).
-
-    Args:
-        dataframes (list[pl.DataFrame]): List of DataFrames with time and mass columns.
-        labels (list[str] | None): Optional labels for each dataframe/simulation.
-    """
-    if not len(dataframes):  # type: ignore[arg-type]
-        return None
-
-    mass_columns = {
-        "Protein": "listeners__mass__protein_mass",
-        "tRNA": "listeners__mass__tRna_mass",
-        "rRNA": "listeners__mass__rRna_mass",
-        "mRNA": "listeners__mass__mRna_mass",
-        "DNA": "listeners__mass__dna_mass",
-        "Small Mol.s": "listeners__mass__smallMolecule_mass",
-        "Dry": "listeners__mass__dry_mass",
-    }
-
-    all_melted: list[pl.DataFrame] = []
-    labels = labels or [f"sim_{i}" for i in range(len(dataframes))]  # type: ignore[arg-type]
-
-    for label, df in zip(labels, dataframes):  # type: ignore[arg-type]
-        # Compute average mass fractions
-        fractions = {k: (df[v] / df["listeners__mass__dry_mass"]).mean() for k, v in mass_columns.items()}
-
-        # Prepare normalized time and mass columns
-        # new_columns = {
-        #     "Time (min)": (df["time"] - df["time"].min()) / 60,
-        #     **{f"{k} ({fractions[k]:.3f})": df[v] / df[v][0] for k, v in mass_columns.items()},
-        # }
-
-        new_columns = {
-            "Time (min)": (df["time"] - df["time"].min()) / 60,
-            **{
-                f"{k} ({fractions[k]:.3f})": df[v_str] / df[v_str][0]  # type: ignore[str-bytes-safe]
-                for k, v in mass_columns.items()
-                if (v_str := v.decode() if isinstance(v, bytes) else v)
-            },
-        }
-
-        mass_fold_change_df = pl.DataFrame(new_columns)
-
-        melted = mass_fold_change_df.melt(
-            id_vars="Time (min)",
-            variable_name="Submass",
-            value_name="Mass (normalized by t = 0 min)",
-        ).with_columns(pl.lit(label).alias("Simulation"))
-
-        all_melted.append(melted)
-
-    final_df = pl.concat(all_melted, how="vertical")
-
-    chart: alt.Chart = (
-        alt.Chart(final_df)
-        .mark_line()
-        .encode(
-            x=alt.X("Time (min):Q", title="Time (min)"),
-            y=alt.Y("Mass (normalized by t = 0 min):Q"),
-            color=alt.Color("Submass:N", scale=alt.Scale(range=COLORS)),
-            strokeDash=alt.StrokeDash("Simulation:N"),
-        )
-        .properties(title="Mass components across simulations (fractions in legend)")
-    )
-
-    return chart
 
 
 def plot_mic_curve(mic_curve: dict[str, list[float]], title: str = "MIC Curve: Survival vs. Antibiotic Dose") -> None:
