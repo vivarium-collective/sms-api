@@ -24,8 +24,10 @@ def _():
     # 3. pin {simulator_id: ..., parca_id: ...}
     # 4. run simulation using #3
 
+    import os
     import json
     from pprint import pp
+    from pathlib import Path
 
     import marimo as mo
     import polars as pl
@@ -54,13 +56,43 @@ def _():
         EcoliSim,
         EcoliSimulationRequest,
         ParcaDataset,
+        Path,
         WorkerEvent,
         base_url,
-        client,
         json,
         mo,
         pl,
+        plot_from_dfs,
     )
+
+
+@app.cell
+def _(mo):
+    plot_button = mo.ui.run_button(label="Plot Mass Fractions")
+    plot_button
+    return (plot_button,)
+
+
+@app.cell
+def _(Path):
+    chunks_dir = Path("assets/tests/test_history").iterdir()
+    return (chunks_dir,)
+
+
+@app.cell
+def _(chunks_dir, pl, plot_button, plot_from_dfs):
+    dataframes = []
+    if plot_button.value:
+        try:
+            import time
+            time.sleep(0.22)  # simulate worker event stream
+            df_i = pl.read_parquet(next(chunks_dir))
+            dataframes.append(df_i)
+        except StopIteration:
+            print('Done.')
+
+    plot_from_dfs(dataframes=dataframes)
+    return
 
 
 @app.cell
@@ -96,7 +128,6 @@ def _(
     EcoliSimulationRequest,
     ParcaDataset,
     base_url,
-    client,
     json,
     mo,
 ):
@@ -116,7 +147,10 @@ def _(
         with Client() as client:
             payload = json.loads(request.model_dump_json())  # use the param, not global
             try:
-                response = client.post(f"{base_url}/simulation/run", json=payload)
+                response = client.post(
+                    url=f"{base_url}/simulation/run",
+                    json=payload
+                )
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
@@ -124,23 +158,35 @@ def _(
 
 
     def on_get_status(simulation_id: int) -> dict:
-        client.get_simulation_status(simulation_id=simulation_id)
+        with Client() as client:
+            try:
+                response = client.post(
+                    url=f"{base_url}/simulation/status",
+                    params={"simulation_id": simulation_id}
+                )
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
+                raise Exception(e)
 
 
     def on_get_events(simulation_id: int) -> list[dict]:
         with Client() as client:
             try:
-                response = client.get(f"{base_url}/simulation/run/events")
+                response = client.get(
+                    url=f"{base_url}/simulation/run/events",
+                    params={"simulation_id": simulation_id}
+                )
                 response.raise_for_status()
                 return response.json()
             except:
                 raise Exception(f"Could not get the simulation status using simulation_id: {simulation_id}.")
 
-    return on_get_events, on_get_parcas, on_run_simulation
+    return on_get_events, on_get_parcas, on_get_status, on_run_simulation
 
 
 @app.cell
-def _(on_get_parcas):
+def _(EcoliSimulationRequest, on_get_parcas):
     parcas = on_get_parcas()
     request_payload = {
         'parca_dataset_id': parcas[-1]['database_id'],
@@ -149,8 +195,9 @@ def _(on_get_parcas):
             "named_parameters": {"param1": 0.5, "param2": 0.5}
         }
     }
-
-    return (request_payload,)
+    simulation_request = EcoliSimulationRequest(**request_payload)
+    simulation_request
+    return (simulation_request,)
 
 
 @app.cell
@@ -158,12 +205,6 @@ def _():
     # param_name = mo.ui.text(placeholder="Parameter Name")
     # variant_config = mo.ui.dictionary({"parameter": param_name})
     return
-
-
-@app.cell
-def _(EcoliSimulationRequest, request_payload):
-    simulation_request = EcoliSimulationRequest(**request_payload)
-    return (simulation_request,)
 
 
 @app.cell
@@ -211,13 +252,23 @@ def _(
     check_status_button,
     experiment: "EcoliExperiment | None",
     on_get_events,
+    on_get_status,
 ):
     simulation_events = None
+    simulation_status = None
     if experiment is not None and check_status_button.value:
-        simulation_events = on_get_events(simulation_id=experiment['simulation']['database_id'])
+        simulation_id = experiment['simulation']['database_id']
+        simulation_status = on_get_status(simulation_id=simulation_id)
+        simulation_events = on_get_events(simulation_id=simulation_id)
 
     simulation_events
-    return (simulation_events,)
+    return simulation_events, simulation_status
+
+
+@app.cell
+def _(simulation_status):
+    simulation_status
+    return
 
 
 @app.cell

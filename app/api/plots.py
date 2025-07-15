@@ -16,17 +16,68 @@ COLORS = [
 ]
 
 
+def plot_from_dataframes(dataframes: list[pl.DataFrame]) -> alt.Chart:
+    """Plot normalized biomass component mass fractions from a list of Polars DataFrames."""
+    if not dataframes:
+        raise ValueError("No dataframes provided")
+
+    # Concatenate all simulation results
+    mass_data = pl.concat(dataframes, how="vertical_relaxed")
+
+    # Assumes single-cell data
+    mass_columns = {
+        "Protein": "listeners__mass__protein_mass",
+        "tRNA": "listeners__mass__tRna_mass",
+        "rRNA": "listeners__mass__rRna_mass",
+        "mRNA": "listeners__mass__mRna_mass",
+        "DNA": "listeners__mass__dna_mass",
+        "Small Mol": "listeners__mass__smallMolecule_mass",
+        "Dry": "listeners__mass__dry_mass",
+    }
+
+    # Compute average mass fractions
+    fractions = {k: (mass_data[v] / mass_data["listeners__mass__dry_mass"]).mean() for k, v in mass_columns.items()}
+
+    # Build new normalized dataframe
+    new_columns = {
+        "Time (min)": (mass_data["time"] - mass_data["time"].min()) / 60,
+        **{f"{k} ({fractions[k]:.3f})": mass_data[v] / mass_data[v][0] for k, v in mass_columns.items()},
+    }
+    mass_fold_change_df = pl.DataFrame(new_columns)
+
+    # Melt for Altair plotting
+    melted_df = mass_fold_change_df.melt(
+        id_vars="Time (min)",
+        variable_name="Submass",
+        value_name="Mass (normalized by t = 0 min)",
+    )
+
+    chart = (
+        alt.Chart(melted_df)
+        .mark_line()
+        .encode(
+            x=alt.X("Time (min):Q", title="Time (min)"),
+            y=alt.Y("Mass (normalized by t = 0 min):Q"),
+            color=alt.Color("Submass:N", scale=alt.Scale(range=COLORS)),
+        )
+        .properties(title="Biomass components (average fraction of total dry mass in parentheses)")
+    )
+    return chart
+
+
 def plot_from_dfs(
-    dataframes: list[pl.DataFrame],
+    dataframes: list[pl.DataFrame] | None = None,
     *,
     labels: list[str] | None = None,
-) -> alt.Chart:
+) -> alt.Chart | None:
     """Plot mass fraction summary from a list of Polars DataFrames (historical simulations).
 
     Args:
         dataframes (list[pl.DataFrame]): List of DataFrames with time and mass columns.
         labels (list[str] | None): Optional labels for each dataframe/simulation.
     """
+    if not len(dataframes):
+        return None
 
     mass_columns = {
         "Protein": "listeners__mass__protein_mass",
