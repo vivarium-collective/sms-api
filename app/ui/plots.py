@@ -43,48 +43,28 @@ def _():
         ParcaDataset
     )
     from app.api.simulations import EcoliSim
-    from app.api.plots import plot_mass_fractions
+    from app.api.plots import plot_mass_fractions, MASS_COLUMNS, get_masses_dataframe, get_parquet_mass_data
     from app.api.client_wrapper import ClientWrapper
 
 
     base_url = "http://localhost:8888/core"
     client = ClientWrapper(base_url=base_url)
-    return Path, mo, os, pl, plot_mass_fractions
+    return (
+        MASS_COLUMNS,
+        Path,
+        get_masses_dataframe,
+        get_parquet_mass_data,
+        mo,
+        pl,
+        plot_mass_fractions,
+    )
 
 
 @app.cell
-def _(Path, os, pl):
-    # this block should simulate the worker events coming in, where in this example, each chunk file can represent
-    #    a chunk of worker events being streamed
-
-
-    mass_columns = {
-        "Protein": "listeners__mass__protein_mass",
-        "tRNA": "listeners__mass__tRna_mass",
-        "rRNA": "listeners__mass__rRna_mass",
-        "mRNA": "listeners__mass__mRna_mass",
-        "DNA": "listeners__mass__dna_mass",
-        "Small Mol.s": "listeners__mass__smallMolecule_mass",
-        "Dry": "listeners__mass__dry_mass",
-        "Time": "time"
-    }
-
+def _(MASS_COLUMNS, Path, get_masses_dataframe, get_parquet_mass_data):
     chunks_dir = Path("assets/tests/test_history")
-    chunk_paths = iter(sorted(
-        [str(chunks_dir / fname) for fname in os.listdir(chunks_dir)],
-        key=lambda p: int(p.split("/")[-1].removesuffix(".pq"))
-    ))
-    # Get just the column names
-    mass_column_names = list(mass_columns.values())
-
-    # Read and select only the desired columns from each file
-    chunk_data = [
-        pl.read_parquet(fp).select(mass_column_names)
-        for fp in chunk_paths
-    ]
-
-    # Concatenate into a single DataFrame
-    simulation_df = pl.concat(chunk_data)
+    mass_data = get_parquet_mass_data(chunks_dir, MASS_COLUMNS)
+    simulation_df = get_masses_dataframe(mass_data)
     return (simulation_df,)
 
 

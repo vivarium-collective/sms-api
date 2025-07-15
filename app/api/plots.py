@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from typing import cast
 
 import altair as alt
@@ -15,6 +17,41 @@ COLORS = [
     "#8c564b",  # brown
     "#e377c2",  # pink
 ]
+
+MASS_COLUMNS = {
+    "Protein": "listeners__mass__protein_mass",
+    "tRNA": "listeners__mass__tRna_mass",
+    "rRNA": "listeners__mass__rRna_mass",
+    "mRNA": "listeners__mass__mRna_mass",
+    "DNA": "listeners__mass__dna_mass",
+    "Small Mol.s": "listeners__mass__smallMolecule_mass",
+    "Dry": "listeners__mass__dry_mass",
+    "Time": "time",
+}
+
+
+def get_parquet_mass_data(chunks_dir: Path, mass_columns: dict[str, str]) -> list[pl.DataFrame]:
+    """Return a list of dataframes for each chunk parquet file (.pq) within a given `chunks_dir` containing
+    only the data needed to plot mass fractions.
+    """
+    chunk_paths = iter(
+        sorted(
+            [str(chunks_dir / fname) for fname in os.listdir(chunks_dir)],
+            key=lambda p: int(p.split("/")[-1].removesuffix(".pq")),
+        )
+    )
+    # Get just the column names
+    mass_column_names = list(mass_columns.values())
+
+    # Read and select only the desired columns from each file
+    return [pl.read_parquet(fp).select(mass_column_names) for fp in chunk_paths]
+
+
+def get_masses_dataframe(data: list[pl.DataFrame]) -> pl.DataFrame:
+    """Concatenate a list of mass listener dataframes into a single simulation
+    dataframe.
+    """
+    return pl.concat(data)
 
 
 def plot_mass_fractions(dataframes: list[pl.DataFrame] | None = None) -> mo.ui.altair_chart | None:
