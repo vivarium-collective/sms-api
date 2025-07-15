@@ -3,7 +3,7 @@ from typing import override
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import EcoliSimulation, ParcaDataset, SimulatorVersion
+from sms_api.simulation.models import EcoliSimulation, ParcaDataset, ParcaDatasetRequest, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationService
 
 
@@ -27,7 +27,7 @@ class ConcreteSimulationService(SimulationService):
 
     @override
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
         raise NotImplementedError
 
@@ -78,3 +78,24 @@ class SimulationServiceMockCloneAndBuild(ConcreteSimulationService):
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
         self.submit_build_args = (simulator_version,)
         return self.expected_build_slurm_job_id
+
+
+class SimulationServiceMockParca(ConcreteSimulationService):
+    clone_repo_args: tuple[str, str, str] = ("", "", "")
+    submit_parca_args: tuple[ParcaDataset] = (
+        ParcaDataset(
+            database_id=0,
+            parca_dataset_request=ParcaDatasetRequest(
+                simulator_version=SimulatorVersion(database_id=0, git_branch="", git_repo_url="", git_commit_hash=""),
+                parca_config={},
+            ),
+        ),
+    )
+    expected_slurmjobid: int
+
+    def __init__(self, expected_slurmjobid: int) -> None:
+        self.expected_slurmjobid = expected_slurmjobid
+
+    @override
+    async def submit_parca_job(self, parca_dataset: ParcaDataset) -> int:
+        return self.expected_slurmjobid

@@ -14,10 +14,12 @@ spec:
       labels:
         app: api
     spec:
-      securityContext:
-        runAsUser: 17163
-        runAsGroup: 10000
-        fsGroup: 10000
+      nodeSelector:
+        vlan: internal
+      #      securityContext:
+      #        runAsUser: 17163
+      #        runAsGroup: 10000
+      #        fsGroup: 10000
       containers:
         - name: api
           image: ghcr.io/biosimulations/sms-api:latest
@@ -53,12 +55,16 @@ spec:
                 secretKeyRef:
                   name: shared-secrets
                   key: postgres-port
+            - name: SLURM_SUBMIT_KEY_PATH
+              value: "/run/secrets/slurm_submit_key_file/ssh-privatekey"
           volumeMounts:
             - name: api-cache-pvc
               mountPath: /app/scratch
             - name: vivarium-home-pvc
               mountPath: /home/FCAM/svc_vivarium
               subPath: svc_vivarium
+            - name: slurm-submit-key-file
+              mountPath: /run/secrets/slurm_submit_key_file
       volumes:
         - name: api-cache-pvc
           persistentVolumeClaim:
@@ -66,6 +72,13 @@ spec:
         - name: vivarium-home-pvc
           persistentVolumeClaim:
             claimName: vivarium-home-pvc
+        - name: slurm-submit-key-file
+          secret:
+            defaultMode: 256 # 0400
+            items:
+              - key: ssh-privatekey
+                path: ssh-privatekey
+            secretName: ssh-secret
       imagePullSecrets:
         - name: ghcr-secret
 

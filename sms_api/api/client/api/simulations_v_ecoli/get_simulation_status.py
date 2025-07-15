@@ -7,18 +7,19 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response, UNSET
 from ... import errors
 
+from ...models.hpc_run import HpcRun
 from ...models.http_validation_error import HTTPValidationError
-from ...models.simulator import Simulator
 from ...types import UNSET, Unset
 from typing import cast
+from typing import cast, Union
 from typing import Union
 
 
 
 def _get_kwargs(
     *,
-    git_repo_url: Union[Unset, str] = 'https://github.com/vivarium-collective/vEcoli',
-    git_branch: Union[Unset, str] = 'messages',
+    simulation_id: int,
+    num_events: Union[None, Unset, int] = UNSET,
 
 ) -> dict[str, Any]:
 
@@ -27,9 +28,14 @@ def _get_kwargs(
 
     params: dict[str, Any] = {}
 
-    params["git_repo_url"] = git_repo_url
+    params["simulation_id"] = simulation_id
 
-    params["git_branch"] = git_branch
+    json_num_events: Union[None, Unset, int]
+    if isinstance(num_events, Unset):
+        json_num_events = UNSET
+    else:
+        json_num_events = num_events
+    params["num_events"] = json_num_events
 
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
@@ -37,7 +43,7 @@ def _get_kwargs(
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/core/simulator/latest",
+        "url": "/core/simulation/run/status",
         "params": params,
     }
 
@@ -45,9 +51,9 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[HTTPValidationError, Simulator]]:
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[HTTPValidationError, HpcRun]]:
     if response.status_code == 200:
-        response_200 = Simulator.from_dict(response.json())
+        response_200 = HpcRun.from_dict(response.json())
 
 
 
@@ -64,7 +70,7 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[HTTPValidationError, Simulator]]:
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[HTTPValidationError, HpcRun]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -76,29 +82,28 @@ def _build_response(*, client: Union[AuthenticatedClient, Client], response: htt
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    git_repo_url: Union[Unset, str] = 'https://github.com/vivarium-collective/vEcoli',
-    git_branch: Union[Unset, str] = 'messages',
+    simulation_id: int,
+    num_events: Union[None, Unset, int] = UNSET,
 
-) -> Response[Union[HTTPValidationError, Simulator]]:
-    """ Get Latest Simulator
+) -> Response[Union[HTTPValidationError, HpcRun]]:
+    """ Get the simulation status record by its ID
 
     Args:
-        git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-
-            collective/vEcoli'.
-        git_branch (Union[Unset, str]):  Default: 'messages'.
+        simulation_id (int):
+        num_events (Union[None, Unset, int]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, Simulator]]
+        Response[Union[HTTPValidationError, HpcRun]]
      """
 
 
     kwargs = _get_kwargs(
-        git_repo_url=git_repo_url,
-git_branch=git_branch,
+        simulation_id=simulation_id,
+num_events=num_events,
 
     )
 
@@ -111,59 +116,57 @@ git_branch=git_branch,
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
-    git_repo_url: Union[Unset, str] = 'https://github.com/vivarium-collective/vEcoli',
-    git_branch: Union[Unset, str] = 'messages',
+    simulation_id: int,
+    num_events: Union[None, Unset, int] = UNSET,
 
-) -> Optional[Union[HTTPValidationError, Simulator]]:
-    """ Get Latest Simulator
+) -> Optional[Union[HTTPValidationError, HpcRun]]:
+    """ Get the simulation status record by its ID
 
     Args:
-        git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-
-            collective/vEcoli'.
-        git_branch (Union[Unset, str]):  Default: 'messages'.
+        simulation_id (int):
+        num_events (Union[None, Unset, int]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, Simulator]
+        Union[HTTPValidationError, HpcRun]
      """
 
 
     return sync_detailed(
         client=client,
-git_repo_url=git_repo_url,
-git_branch=git_branch,
+simulation_id=simulation_id,
+num_events=num_events,
 
     ).parsed
 
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    git_repo_url: Union[Unset, str] = 'https://github.com/vivarium-collective/vEcoli',
-    git_branch: Union[Unset, str] = 'messages',
+    simulation_id: int,
+    num_events: Union[None, Unset, int] = UNSET,
 
-) -> Response[Union[HTTPValidationError, Simulator]]:
-    """ Get Latest Simulator
+) -> Response[Union[HTTPValidationError, HpcRun]]:
+    """ Get the simulation status record by its ID
 
     Args:
-        git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-
-            collective/vEcoli'.
-        git_branch (Union[Unset, str]):  Default: 'messages'.
+        simulation_id (int):
+        num_events (Union[None, Unset, int]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, Simulator]]
+        Response[Union[HTTPValidationError, HpcRun]]
      """
 
 
     kwargs = _get_kwargs(
-        git_repo_url=git_repo_url,
-git_branch=git_branch,
+        simulation_id=simulation_id,
+num_events=num_events,
 
     )
 
@@ -176,29 +179,28 @@ git_branch=git_branch,
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
-    git_repo_url: Union[Unset, str] = 'https://github.com/vivarium-collective/vEcoli',
-    git_branch: Union[Unset, str] = 'messages',
+    simulation_id: int,
+    num_events: Union[None, Unset, int] = UNSET,
 
-) -> Optional[Union[HTTPValidationError, Simulator]]:
-    """ Get Latest Simulator
+) -> Optional[Union[HTTPValidationError, HpcRun]]:
+    """ Get the simulation status record by its ID
 
     Args:
-        git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-
-            collective/vEcoli'.
-        git_branch (Union[Unset, str]):  Default: 'messages'.
+        simulation_id (int):
+        num_events (Union[None, Unset, int]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, Simulator]
+        Union[HTTPValidationError, HpcRun]
      """
 
 
     return (await asyncio_detailed(
         client=client,
-git_repo_url=git_repo_url,
-git_branch=git_branch,
+simulation_id=simulation_id,
+num_events=num_events,
 
     )).parsed

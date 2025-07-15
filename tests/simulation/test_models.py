@@ -27,7 +27,7 @@ async def test_save_request_to_mongo(database_service: DatabaseServiceSQL) -> No
         simulator_version=simulator_version,
         parca_config={"param1": 5},
     )
-    parca_dataset = await database_service.get_or_insert_parca_dataset(parca_dataset_request=parca_dataset_request)
+    parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     ecoli_sim_request = EcoliSimulationRequest(
         simulator=simulator_version,

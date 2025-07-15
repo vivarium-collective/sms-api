@@ -49,7 +49,7 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
         pass
 
@@ -162,7 +162,6 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
                     #SBATCH --qos={settings.slurm_qos}
-                    #SBATCH --wait
                     #SBATCH --output={slurm_log_file}
                     #SBATCH --nodelist={settings.slurm_node_list}
 
@@ -229,7 +228,6 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
                     #SBATCH --qos={settings.slurm_qos}
-                    #SBATCH --wait
                     #SBATCH --output={slurm_log_file}
                     #SBATCH --nodelist={settings.slurm_node_list}
 
@@ -272,7 +270,7 @@ class SimulationServiceHpc(SimulationService):
 
     @override
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
         settings = get_settings()
         ssh_service = SSHService(
@@ -327,7 +325,6 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
                     #SBATCH --qos={settings.slurm_qos}
-                    #SBATCH --wait
                     #SBATCH --output={slurm_log_file}
                     #SBATCH --nodelist={settings.slurm_node_list}
 
@@ -368,10 +365,20 @@ class SimulationServiceHpc(SimulationService):
                     #     TAIL_PID=$(pgrep -P $SCRAPE_PID tail)
                     # fi
 
+                    # create custom config file mapped to /out/configs/ directory
+                    #  copy the template config file from the remote vEcoli repo
+                    #  replace CORRELATION_ID_REPLACE_ME with the correlation_id
+                    #
+                    config_template_file={remote_vEcoli_repo_path!s}/configs/{hpc_sim_config_file}
+                    mkdir -p {experiment_path_parent!s}/configs
+                    config_file={experiment_path_parent!s}/configs/{hpc_sim_config_file}_{experiment_id}.json
+                    cp $config_template_file $config_file
+                    sed -i "s/CORRELATION_ID_REPLACE_ME/{correlation_id}/g" $config_file
+
                     git -C ./configs diff HEAD >> ./source-info/git_diff.txt
                     singularity run $binds $image uv run \\
                          --env-file /vEcoli/.env /vEcoli/ecoli/experiments/ecoli_master_sim.py \\
-                         --config /vEcoli/configs/{hpc_sim_config_file} \\
+                         --config /out/configs/{hpc_sim_config_file}_{experiment_id}.json \\
                          --generations 1 --emitter parquet --emitter_arg out_dir='/out' \\
                          --experiment_id {experiment_id} \\
                          --daughter_outdir "/out/{experiment_id}" \\

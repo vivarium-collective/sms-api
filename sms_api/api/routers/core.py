@@ -27,7 +27,6 @@ from sms_api.dependencies import (
     get_postgres_engine,
     get_simulation_service,
 )
-from sms_api.log_config import setup_logging
 from sms_api.simulation.data_service import DataServiceHpc
 from sms_api.simulation.handlers import (
     get_parca_datasets,
@@ -53,7 +52,6 @@ from sms_api.simulation.models import (
 )
 
 logger = logging.getLogger(__name__)
-setup_logging(logger)
 
 LATEST_COMMIT = read_latest_commit()
 
@@ -114,6 +112,32 @@ async def get_simulator_versions() -> RegisteredSimulators:
     except Exception as e:
         logger.exception("Error getting list of simulation versions")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/simulator/status",
+    response_model=HpcRun,
+    operation_id="get-simulator-status",
+    tags=["Simulators"],
+    summary="Get simulator container build status by its ID",
+)
+async def get_simulator_status(simulator_id: int) -> HpcRun | None:
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Simulation database service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+
+    try:
+        simulation_hpcrun: HpcRun | None = await db_service.get_hpcrun_by_ref(
+            ref_id=simulator_id, job_type=JobType.BUILD_IMAGE
+        )
+    except Exception as e:
+        logger.exception(f"Error fetching simulation results for simulator container build with id: {simulator_id}.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if simulation_hpcrun is None:
+        raise HTTPException(status_code=404, detail=f"Simulator container build with id {simulator_id} not found.")
+    return simulation_hpcrun
 
 
 @config.router.post(
@@ -218,6 +242,30 @@ async def get_parcas() -> list[ParcaDataset]:
     except Exception as e:
         logger.exception("Error running PARCA")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/simulation/parca/status",
+    response_model=HpcRun,
+    operation_id="get-parca-status",
+    tags=["Simulations - Parca"],
+    summary="Get parca calculation status by its ID",
+)
+async def get_parca_status(parca_id: int) -> HpcRun | None:
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Simulation database service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+
+    try:
+        simulation_hpcrun: HpcRun | None = await db_service.get_hpcrun_by_ref(ref_id=parca_id, job_type=JobType.PARCA)
+    except Exception as e:
+        logger.exception(f"Error fetching simulation results for parca id: {parca_id}.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if simulation_hpcrun is None:
+        raise HTTPException(status_code=404, detail=f"Parca with id {parca_id} not found.")
+    return simulation_hpcrun
 
 
 @config.router.post(

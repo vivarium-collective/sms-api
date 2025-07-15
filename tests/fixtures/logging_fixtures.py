@@ -1,11 +1,6 @@
-import logging
-
 import pytest
-
-from sms_api.log_config import setup_logging
 
 
 @pytest.fixture(scope="session", autouse=True)
 def configure_logging() -> None:
-    logger = logging.getLogger("test")
-    setup_logging(logger)
+    import sms_api.dependencies  # noqa: F401. to ensure logging is configured before any tests run

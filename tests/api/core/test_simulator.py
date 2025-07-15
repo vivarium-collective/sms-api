@@ -4,9 +4,12 @@ from typing import cast
 
 import pytest
 
+import sms_api
 from sms_api.api.client import Client
-from sms_api.api.client.api.simulators.insert_core_simulator_version import asyncio as insert_core_simulator_version
-from sms_api.api.client.models import HTTPValidationError
+from sms_api.api.client.api.simulators.get_simulator_status import asyncio as get_simulator_status_async
+from sms_api.api.client.api.simulators.get_simulator_versions import asyncio as get_simulator_versions_async
+from sms_api.api.client.api.simulators.insert_simulator_version import asyncio as insert_simulator_version_async
+from sms_api.api.client.models import HpcRun, HTTPValidationError, RegisteredSimulators
 from sms_api.api.client.models.simulator import Simulator as SimulatorDto
 from sms_api.api.client.models.simulator_version import SimulatorVersion as SimulatorVersionDto
 from sms_api.api.client.types import UNSET
@@ -28,12 +31,24 @@ async def test_insert_simulator_version(
     simulator_dto = SimulatorDto(
         git_commit_hash=expected_commit_hash, git_repo_url=expected_git_repo_url, git_branch=expected_git_branch
     )
-    response: HTTPValidationError | SimulatorVersionDto | None = await insert_core_simulator_version(
+    response: HTTPValidationError | SimulatorVersionDto | None = await insert_simulator_version_async(
         client=in_memory_api_client, body=simulator_dto
     )
     assert type(response) is SimulatorVersionDto
     returned_simulator_version_dto: SimulatorVersionDto = response
     assert type(returned_simulator_version_dto) is SimulatorVersionDto
+
+    registered_simulators = await get_simulator_versions_async(client=in_memory_api_client)
+    assert type(registered_simulators) is RegisteredSimulators
+    assert len(registered_simulators.versions) == 1
+
+    simulator_status = await get_simulator_status_async(
+        client=in_memory_api_client, simulator_id=returned_simulator_version_dto.database_id
+    )
+    assert type(simulator_status) is HpcRun
+    assert simulator_status.status == sms_api.api.client.models.job_status.JobStatus.RUNNING
+    assert simulator_status.job_type == sms_api.api.client.models.job_type.JobType.BUILD_IMAGE
+    assert simulator_status.ref_id == returned_simulator_version_dto.database_id
 
     # wait for background tasks to complete
     await asyncio.sleep(2)

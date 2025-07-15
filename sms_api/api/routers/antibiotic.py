@@ -18,7 +18,6 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from sms_api.api.routers.core import run_vecoli_simulation
 from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.dependencies import get_simulation_service
-from sms_api.log_config import setup_logging
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
     EcoliExperiment,
@@ -26,7 +25,6 @@ from sms_api.simulation.models import (
 )
 
 logger = logging.getLogger(__name__)
-setup_logging(logger)
 
 LATEST_COMMIT = read_latest_commit()
 

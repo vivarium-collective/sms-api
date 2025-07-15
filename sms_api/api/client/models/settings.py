@@ -60,13 +60,14 @@ class Settings:
             hpc_parca_base_path (Union[Unset, str]):  Default: ''.
             hpc_repo_base_path (Union[Unset, str]):  Default: ''.
             hpc_sim_base_path (Union[Unset, str]):  Default: ''.
+            hpc_sim_config_file (Union[Unset, str]):  Default: 'publish.json'.
             nats_url (Union[Unset, str]):  Default: ''.
             nats_worker_event_subject (Union[Unset, str]):  Default: 'worker.events'.
             nats_emitter_url (Union[Unset, str]):  Default: ''.
             nats_emitter_magic_word (Union[Unset, str]):  Default: 'emitter-magic-word'.
             dev_mode (Union[Unset, str]):  Default: '0'.
-            app_dir (Union[Unset, str]):  Default: 'app'.
-            assets_dir (Union[Unset, str]):  Default: 'assets'.
+            app_dir (Union[Unset, str]):  Default: '/Users/jimschaff/Documents/workspace/sms-api/app'.
+            assets_dir (Union[Unset, str]):  Default: '/Users/jimschaff/Documents/workspace/sms-api/assets'.
      """
 
     storage_bucket: Union[Unset, str] = 'files.biosimulations.dev'
@@ -103,13 +104,14 @@ class Settings:
     hpc_parca_base_path: Union[Unset, str] = ''
     hpc_repo_base_path: Union[Unset, str] = ''
     hpc_sim_base_path: Union[Unset, str] = ''
+    hpc_sim_config_file: Union[Unset, str] = 'publish.json'
     nats_url: Union[Unset, str] = ''
     nats_worker_event_subject: Union[Unset, str] = 'worker.events'
     nats_emitter_url: Union[Unset, str] = ''
     nats_emitter_magic_word: Union[Unset, str] = 'emitter-magic-word'
     dev_mode: Union[Unset, str] = '0'
-    app_dir: Union[Unset, str] = 'app'
-    assets_dir: Union[Unset, str] = 'assets'
+    app_dir: Union[Unset, str] = '/Users/jimschaff/Documents/workspace/sms-api/app'
+    assets_dir: Union[Unset, str] = '/Users/jimschaff/Documents/workspace/sms-api/assets'
 
 
 
@@ -189,6 +191,8 @@ class Settings:
         hpc_repo_base_path = self.hpc_repo_base_path
 
         hpc_sim_base_path = self.hpc_sim_base_path
+
+        hpc_sim_config_file = self.hpc_sim_config_file
 
         nats_url = self.nats_url
 
@@ -277,6 +281,8 @@ class Settings:
             field_dict["hpc_repo_base_path"] = hpc_repo_base_path
         if hpc_sim_base_path is not UNSET:
             field_dict["hpc_sim_base_path"] = hpc_sim_base_path
+        if hpc_sim_config_file is not UNSET:
+            field_dict["hpc_sim_config_file"] = hpc_sim_config_file
         if nats_url is not UNSET:
             field_dict["nats_url"] = nats_url
         if nats_worker_event_subject is not UNSET:
@@ -383,6 +389,8 @@ class Settings:
 
         hpc_sim_base_path = d.pop("hpc_sim_base_path", UNSET)
 
+        hpc_sim_config_file = d.pop("hpc_sim_config_file", UNSET)
+
         nats_url = d.pop("nats_url", UNSET)
 
         nats_worker_event_subject = d.pop("nats_worker_event_subject", UNSET)
@@ -432,6 +440,7 @@ class Settings:
             hpc_parca_base_path=hpc_parca_base_path,
             hpc_repo_base_path=hpc_repo_base_path,
             hpc_sim_base_path=hpc_sim_base_path,
+            hpc_sim_config_file=hpc_sim_config_file,
             nats_url=nats_url,
             nats_worker_event_subject=nats_worker_event_subject,
             nats_emitter_url=nats_emitter_url,

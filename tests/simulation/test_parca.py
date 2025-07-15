@@ -56,7 +56,7 @@ async def test_parca(
     assert slurm_job_build.name.startswith(f"build-image-{latest_commit_hash}-")
 
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config={"param1": 5})
-    parca_dataset = await database_service.get_or_insert_parca_dataset(parca_dataset_request=parca_dataset_request)
+    parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     # run parca
     job_id = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
