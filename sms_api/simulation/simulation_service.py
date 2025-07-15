@@ -162,7 +162,6 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
                     #SBATCH --qos={settings.slurm_qos}
-                    #SBATCH --wait
                     #SBATCH --output={slurm_log_file}
                     #SBATCH --nodelist={settings.slurm_node_list}
 
@@ -229,7 +228,6 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
                     #SBATCH --qos={settings.slurm_qos}
-                    #SBATCH --wait
                     #SBATCH --output={slurm_log_file}
                     #SBATCH --nodelist={settings.slurm_node_list}
 
@@ -327,7 +325,6 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
                     #SBATCH --qos={settings.slurm_qos}
-                    #SBATCH --wait
                     #SBATCH --output={slurm_log_file}
                     #SBATCH --nodelist={settings.slurm_node_list}
 
