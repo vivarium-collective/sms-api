@@ -8,7 +8,6 @@ from fastapi import BackgroundTasks, HTTPException
 
 from sms_api.common.gateway.models import RouterConfig
 from sms_api.dependencies import get_database_service, get_simulation_service
-from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id, get_experiment_id
 from sms_api.simulation.models import (
@@ -24,7 +23,6 @@ from sms_api.simulation.models import (
 from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
 
 logger = logging.getLogger(__name__)
-setup_logging(logger)
 
 # -- roundtrip job handlers that both call the services and return the relative endpoint's DTO -- #
 

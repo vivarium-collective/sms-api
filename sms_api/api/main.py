@@ -38,11 +38,9 @@ from sms_api.dependencies import (
     init_standalone,
     shutdown_standalone,
 )
-from sms_api.log_config import setup_logging
 from sms_api.version import __version__
 
 logger = logging.getLogger(__name__)
-setup_logging(logger)
 
 
 APP_VERSION = __version__

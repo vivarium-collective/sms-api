@@ -27,7 +27,6 @@ from sms_api.dependencies import (
     get_postgres_engine,
     get_simulation_service,
 )
-from sms_api.log_config import setup_logging
 from sms_api.simulation.data_service import DataServiceHpc
 from sms_api.simulation.handlers import (
     get_parca_datasets,
@@ -53,7 +52,6 @@ from sms_api.simulation.models import (
 )
 
 logger = logging.getLogger(__name__)
-setup_logging(logger)
 
 LATEST_COMMIT = read_latest_commit()
 
