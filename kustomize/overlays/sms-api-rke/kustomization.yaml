@@ -24,5 +24,6 @@ resources:
   - mongodb-pvc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
+  - secret-ssh.yaml
   - ../../config/sms-api-rke
   - ../../base

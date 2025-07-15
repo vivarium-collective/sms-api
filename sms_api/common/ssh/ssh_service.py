@@ -21,7 +21,9 @@ class SSHService:
         self.key_path = key_path
 
     async def run_command(self, command: str) -> tuple[int, str, str]:
-        async with asyncssh.connect(host=self.hostname, username=self.username, client_keys=[self.key_path]) as conn:
+        async with asyncssh.connect(
+            host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=None
+        ) as conn:
             try:
                 logger.info(f"Running ssh command: {command}")
                 result: SSHCompletedProcess = await conn.run(command, check=True)
@@ -44,7 +46,9 @@ class SSHService:
                 raise RuntimeError(f"failed to send command {command}, error {str(exc)[:100]}") from exc
 
     async def scp_upload(self, local_file: Path, remote_path: Path) -> None:
-        async with asyncssh.connect(host=self.hostname, username=self.username, client_keys=[self.key_path]) as conn:
+        async with asyncssh.connect(
+            host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=None
+        ) as conn:
             try:
                 await asyncssh.scp(srcpaths=local_file, dstpath=(conn, remote_path))
                 logger.info(msg=f"sent file {local_file} to {remote_path}")
@@ -55,7 +59,9 @@ class SSHService:
                 ) from exc
 
     async def scp_download(self, local_file: Path, remote_path: Path) -> None:
-        async with asyncssh.connect(host=self.hostname, username=self.username, client_keys=[self.key_path]) as conn:
+        async with asyncssh.connect(
+            host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=None
+        ) as conn:
             try:
                 await asyncssh.scp(srcpaths=(conn, remote_path), dstpath=local_file)
                 logger.info(msg=f"retrieved remote file {remote_path} to {local_file}")
