@@ -1,8 +1,6 @@
-import asyncio
 import logging
 import random
 import string
-import time
 
 from fastapi import BackgroundTasks, HTTPException
 
@@ -37,15 +35,6 @@ def verify_simulator_payload(simulator: Simulator) -> None:
     #     raise HTTPException(
     #         status_code=404, detail="You must be authorized to upload a simulator from any branch other than main."
     #     )
-
-
-async def get_slurm_job_status(simulation_service_slurm: SimulationService, slurm_job_id: int) -> None:
-    start_time = time.time()
-    while start_time + 60 > time.time():
-        slurm_job = await simulation_service_slurm.get_slurm_job_status(slurmjobid=slurm_job_id)
-        if slurm_job is not None and slurm_job.is_done():
-            break
-        await asyncio.sleep(5)
 
 
 async def get_latest_simulator(
@@ -218,12 +207,6 @@ async def run_simulation(
         sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
             ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
         )
-        start_time = time.time()
-        while start_time + 60 > time.time():
-            sim_slurmjob = await simulation_service_slurm.get_slurm_job_status(slurmjobid=sim_slurmjobid)
-            if sim_slurmjob is not None and sim_slurmjob.is_done():
-                break
-            await asyncio.sleep(5)
         _hpcrun = await database_service.insert_hpcrun(
             slurmjobid=sim_slurmjobid,
             job_type=JobType.SIMULATION,
@@ -239,97 +222,4 @@ async def run_simulation(
     experiment_id = get_experiment_id(
         router_config=router_config, simulation=simulation, sim_request=simulation_request
     )
-    return EcoliExperiment(experiment_id=experiment_id, simulation=simulation)
-
-
-async def simulation_roundtrip(
-    config: RouterConfig,
-    simulation_service_slurm: SimulationService,
-    database_service: DatabaseService,
-    latest_commit_hash: str,
-) -> EcoliExperiment:
-    # TODO: for now, just hardcode this
-    main_branch = "messages"
-    repo_url = "https://github.com/vivarium-collective/vEcoli"
-
-    # check if the latest commit is already installed
-    simulator: SimulatorVersion | None = None
-    for _simulator in await database_service.list_simulators():
-        if (
-            _simulator.git_commit_hash == latest_commit_hash
-            and _simulator.git_repo_url == repo_url
-            and _simulator.git_branch == main_branch
-        ):
-            simulator = _simulator
-            break
-
-    # insert the latest commit into the database
-    if simulator is None:
-        simulator = await database_service.insert_simulator(
-            git_commit_hash=latest_commit_hash, git_repo_url=repo_url, git_branch=main_branch
-        )
-
-    # clone the repository if needed
-    await simulation_service_slurm.clone_repository_if_needed(
-        git_commit_hash=simulator.git_commit_hash, git_repo_url=simulator.git_repo_url, git_branch=simulator.git_branch
-    )
-
-    # build the image
-    build_job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
-
-    start_time = time.time()
-    while start_time + 60 > time.time():
-        slurm_job_build = await simulation_service_slurm.get_slurm_job_status(slurmjobid=build_job_id)
-        if slurm_job_build is not None and slurm_job_build.is_done():
-            break
-        await asyncio.sleep(5)
-
-    ##################
-
-    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config={"param1": 5})
-    parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
-
-    # run parca
-    parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
-
-    start_time = time.time()
-    while start_time + 60 > time.time():
-        slurm_job_parca = await simulation_service_slurm.get_slurm_job_status(slurmjobid=parca_slurmjobid)
-        if slurm_job_parca is not None and slurm_job_parca.is_done():
-            break
-        await asyncio.sleep(5)
-
-    ###################
-
-    simulation_request = EcoliSimulationRequest(
-        simulator=simulator,
-        parca_dataset_id=parca_dataset.database_id,
-        variant_config={"named_parameters": {"param1": 0.5, "param2": 0.5}},
-    )
-    simulation = await database_service.insert_simulation(sim_request=simulation_request)
-
-    random_string = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311. doesn't need to be secure
-    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string)
-    sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
-        ecoli_simulation=simulation,
-        database_service=database_service,
-        correlation_id=correlation_id,
-    )
-
-    _ = await database_service.insert_hpcrun(
-        slurmjobid=sim_slurmjobid,
-        job_type=JobType.SIMULATION,
-        ref_id=simulation.database_id,
-        correlation_id=correlation_id,
-    )
-
-    start_time = time.time()
-    while start_time + 60 > time.time():
-        sim_slurmjob = await simulation_service_slurm.get_slurm_job_status(slurmjobid=sim_slurmjobid)
-        if sim_slurmjob is not None and sim_slurmjob.is_done():
-            break
-        await asyncio.sleep(5)
-
-    experiment_id = get_experiment_id(router_config=config, simulation=simulation, sim_request=simulation_request)
-
     return EcoliExperiment(experiment_id=experiment_id, simulation=simulation)
