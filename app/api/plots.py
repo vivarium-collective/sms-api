@@ -1,6 +1,7 @@
 from typing import cast
 
 import altair as alt
+import marimo as mo
 import numpy as np
 import polars as pl
 from matplotlib import pyplot as plt
@@ -16,10 +17,10 @@ COLORS = [
 ]
 
 
-def plot_from_dataframes(dataframes: list[pl.DataFrame]) -> alt.Chart:
+def plot_mass_fractions(dataframes: list[pl.DataFrame] | None = None) -> mo.ui.altair_chart | None:
     """Plot normalized biomass component mass fractions from a list of Polars DataFrames."""
     if not dataframes:
-        raise ValueError("No dataframes provided")
+        return None
 
     # Concatenate all simulation results
     mass_data = pl.concat(dataframes, how="vertical_relaxed")
@@ -41,7 +42,7 @@ def plot_from_dataframes(dataframes: list[pl.DataFrame]) -> alt.Chart:
     # Build new normalized dataframe
     new_columns = {
         "Time (min)": (mass_data["time"] - mass_data["time"].min()) / 60,
-        **{f"{k} ({fractions[k]:.3f})": mass_data[v] / mass_data[v][0] for k, v in mass_columns.items()},
+        **{f"{k} ({fractions[k]:.3f})": mass_data[v] / mass_data[v][0] for k, v in mass_columns.items()},  # type: ignore[str-bytes-safe]
     }
     mass_fold_change_df = pl.DataFrame(new_columns)
 
@@ -52,7 +53,8 @@ def plot_from_dataframes(dataframes: list[pl.DataFrame]) -> alt.Chart:
         value_name="Mass (normalized by t = 0 min)",
     )
 
-    chart = (
+    title = "Biomass components (average fraction of total dry mass)"
+    chart: alt.Chart = (
         alt.Chart(melted_df)
         .mark_line()
         .encode(
@@ -60,9 +62,10 @@ def plot_from_dataframes(dataframes: list[pl.DataFrame]) -> alt.Chart:
             y=alt.Y("Mass (normalized by t = 0 min):Q"),
             color=alt.Color("Submass:N", scale=alt.Scale(range=COLORS)),
         )
-        .properties(title="Biomass components (average fraction of total dry mass in parentheses)")
+        .properties(title=title)
     )
-    return chart
+
+    return mo.ui.altair_chart(chart)
 
 
 def plot_from_dfs(
@@ -76,7 +79,7 @@ def plot_from_dfs(
         dataframes (list[pl.DataFrame]): List of DataFrames with time and mass columns.
         labels (list[str] | None): Optional labels for each dataframe/simulation.
     """
-    if not len(dataframes):
+    if not len(dataframes):  # type: ignore[arg-type]
         return None
 
     mass_columns = {
@@ -90,9 +93,9 @@ def plot_from_dfs(
     }
 
     all_melted: list[pl.DataFrame] = []
-    labels = labels or [f"sim_{i}" for i in range(len(dataframes))]
+    labels = labels or [f"sim_{i}" for i in range(len(dataframes))]  # type: ignore[arg-type]
 
-    for label, df in zip(labels, dataframes):
+    for label, df in zip(labels, dataframes):  # type: ignore[arg-type]
         # Compute average mass fractions
         fractions = {k: (df[v] / df["listeners__mass__dry_mass"]).mean() for k, v in mass_columns.items()}
 
@@ -105,7 +108,7 @@ def plot_from_dfs(
         new_columns = {
             "Time (min)": (df["time"] - df["time"].min()) / 60,
             **{
-                f"{k} ({fractions[k]:.3f})": df[v_str] / df[v_str][0]
+                f"{k} ({fractions[k]:.3f})": df[v_str] / df[v_str][0]  # type: ignore[str-bytes-safe]
                 for k, v in mass_columns.items()
                 if (v_str := v.decode() if isinstance(v, bytes) else v)
             },
@@ -123,7 +126,7 @@ def plot_from_dfs(
 
     final_df = pl.concat(all_melted, how="vertical")
 
-    chart = (
+    chart: alt.Chart = (
         alt.Chart(final_df)
         .mark_line()
         .encode(

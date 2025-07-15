@@ -43,7 +43,7 @@ def _():
         ParcaDataset
     )
     from app.api.simulations import EcoliSim
-    from app.api.plots import plot_from_dfs
+    from app.api.plots import plot_mass_fractions
     from app.api.client_wrapper import ClientWrapper
 
 
@@ -61,37 +61,79 @@ def _():
         base_url,
         json,
         mo,
+        os,
         pl,
-        plot_from_dfs,
+        plot_mass_fractions,
     )
 
 
 @app.cell
+def _(Path, os, pl):
+    # this block should simulate the worker events coming in, where in this example, each chunk file can represent
+    #    a chunk of worker events being streamed
+
+
+    mass_columns = {
+        "Protein": "listeners__mass__protein_mass",
+        "tRNA": "listeners__mass__tRna_mass",
+        "rRNA": "listeners__mass__rRna_mass",
+        "mRNA": "listeners__mass__mRna_mass",
+        "DNA": "listeners__mass__dna_mass",
+        "Small Mol.s": "listeners__mass__smallMolecule_mass",
+        "Dry": "listeners__mass__dry_mass",
+        "Time": "time"
+    }
+
+    chunks_dir = Path("assets/tests/test_history")
+    chunk_paths = iter(sorted(
+        [str(chunks_dir / fname) for fname in os.listdir(chunks_dir)],
+        key=lambda p: int(p.split("/")[-1].removesuffix(".pq"))
+    ))
+    # Get just the column names
+    mass_column_names = list(mass_columns.values())
+
+    # Read and select only the desired columns from each file
+    chunk_data = [
+        pl.read_parquet(fp).select(mass_column_names)
+        for fp in chunk_paths
+    ]
+
+    # Concatenate into a single DataFrame
+    simulation_df = pl.concat(chunk_data)
+    return (simulation_df,)
+
+
+@app.cell
 def _(mo):
-    plot_button = mo.ui.run_button(label="Plot Mass Fractions")
-    plot_button
-    return (plot_button,)
+    if not hasattr(mo.state, "dataframes"):
+        mo.state.dataframes = []
+    if not hasattr(mo.state, "current_index"):
+        mo.state.current_index = 0
+
+    step_size = 10  # number of rows to append per button press
+    plt_button = mo.ui.run_button(label="Plot Mass Fractions")
+    return plt_button, step_size
 
 
 @app.cell
-def _(Path):
-    chunks_dir = Path("assets/tests/test_history").iterdir()
-    return (chunks_dir,)
+def _(mo, pl, plot_mass_fractions, plt_button, simulation_df, step_size):
+    if plt_button.value:
+        next_index = mo.state.current_index
+        end_index = min(next_index + step_size, simulation_df.height)
+        if next_index < simulation_df.height:
+            mo.state.dataframes.append(simulation_df.slice(next_index, end_index - next_index))
+            mo.state.current_index = end_index
 
+    # Display chart
+    def display_chart():
+        if mo.state.dataframes:
+            combined_df = pl.concat(mo.state.dataframes)
+            chart = plot_mass_fractions(dataframes=[combined_df])
+            return mo.vstack([plt_button, chart])
+        else:
+            return mo.vstack([plt_button, mo.md("Press the button to start streaming.")])
 
-@app.cell
-def _(chunks_dir, pl, plot_button, plot_from_dfs):
-    dataframes = []
-    if plot_button.value:
-        try:
-            import time
-            time.sleep(0.22)  # simulate worker event stream
-            df_i = pl.read_parquet(next(chunks_dir))
-            dataframes.append(df_i)
-        except StopIteration:
-            print('Done.')
-
-    plot_from_dfs(dataframes=dataframes)
+    display_chart()
     return
 
 
