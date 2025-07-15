@@ -23,7 +23,7 @@ T = TypeVar("T", bound="HpcRun")
 
 @_attrs_define
 class HpcRun:
-    """ 
+    """
         Attributes:
             database_id (int):
             slurmjobid (int):

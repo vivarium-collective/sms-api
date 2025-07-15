@@ -18,7 +18,7 @@ T = TypeVar("T", bound="WorkerEventMass")
 
 @_attrs_define
 class WorkerEventMass:
-    """ 
+    """
      """
 
     additional_properties: dict[str, float] = _attrs_field(init=False, factory=dict)
@@ -28,7 +28,7 @@ class WorkerEventMass:
 
 
     def to_dict(self) -> dict[str, Any]:
-        
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
 
