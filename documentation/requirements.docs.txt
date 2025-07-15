@@ -1,0 +1,7 @@
+sphinx_rtd_theme
+mock
+pygments>=2.4.1
+nbsphinx
+numpy
+pandoc
+sphinx>3

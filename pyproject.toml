@@ -62,6 +62,9 @@ openapi-python-client = "^0.25.2"
 mkdocs = "^1.4.2"
 mkdocs-material = "^9.2.7"
 mkdocstrings = {extras = ["python"], version = "^0.26.1"}
+sphinx = "^8.2.3"
+sphinx-autodoc-typehints = "^3.2.0"
+sphinx-rtd-theme = "^3.0.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -186,7 +189,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*"]
+exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*"]
 
 [tool.ruff.format]
 preview = true

@@ -50,14 +50,11 @@ def _():
     base_url = "http://localhost:8888/core"
     client = ClientWrapper(base_url=base_url)
     return (
-        Chart,
         Client,
         EcoliExperiment,
-        EcoliSim,
         EcoliSimulationRequest,
         ParcaDataset,
         Path,
-        WorkerEvent,
         base_url,
         json,
         mo,
@@ -304,83 +301,11 @@ def _(
         simulation_events = on_get_events(simulation_id=simulation_id)
 
     simulation_events
-    return simulation_events, simulation_status
-
-
-@app.cell
-def _(simulation_status):
-    simulation_status
-    return
-
-
-@app.cell
-def _(Chart, WorkerEvent, pl, plot_from_df):
-    # 1. get simulation events
-    # 2. index needed cols as necessary
-    # 3. load #2 into a polars df
-    # 4. call plot
-
-    def plot_data(worker_event: WorkerEvent) -> Chart:
-        df = pl.DataFrame(data=worker_event.sim_data)
-        return plot_from_df(dataframe=df)
-
-    return
-
-
-@app.cell
-def update_data(mo, pl, simulation_events):
-    # Simulate receiving new data (in practice, stream this in)
-    new_data = None
-    if simulation_events is not None:
-        new_data = pl.DataFrame(simulation_events[-1]['sim_data'])
-        # Append to growing stateful history
-        mo.state.df_history = mo.state.df_history.vstack(new_data, in_place=False)
     return
 
 
 @app.cell
 def _():
-    # fig1 = None
-    # if simulation_run_button.value:
-    #     simulator_version = select_simulator(simulator_versions.versions, latest_simulator, simulators.selected_key)
-    #     print(f"Running with simulator version: {simulator_version}")
-    #     sim1 = EcoliSim()
-    #     sim1.simulate_single_cell()
-    #     fig1 = sim1.display_single_cell_mass_fractions()
-    #
-    # fig1
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        r"""
-    ### Batch simulation
-
-    This runs the variants workflow
-    """
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    sim2_n_cells = mo.ui.slider(1, 50, value=10, label="Number of Cells")
-    sim2_run_button = mo.ui.run_button(label="Run Simulation")
-
-    mo.vstack([sim2_n_cells, sim2_run_button])
-    return sim2_n_cells, sim2_run_button
-
-
-@app.cell
-def _(EcoliSim, sim2_n_cells, sim2_run_button):
-    fig2 = None
-    if sim2_run_button.value:
-        sim2 = EcoliSim()
-        sim2.simulate_multiple_cells(n_cells=sim2_n_cells.value)
-        fig2 = sim2.display_multi_cell_total_masses()
-    fig2
     return
 
 
