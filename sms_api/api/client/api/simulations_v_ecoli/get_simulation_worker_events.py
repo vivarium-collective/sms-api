@@ -20,6 +20,7 @@ def _get_kwargs(
     *,
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
+    prev_sequence_number: Union[None, Unset, int] = UNSET,
 
 ) -> dict[str, Any]:
 
@@ -36,6 +37,13 @@ def _get_kwargs(
     else:
         json_num_events = num_events
     params["num_events"] = json_num_events
+
+    json_prev_sequence_number: Union[None, Unset, int]
+    if isinstance(prev_sequence_number, Unset):
+        json_prev_sequence_number = UNSET
+    else:
+        json_prev_sequence_number = prev_sequence_number
+    params["prev_sequence_number"] = json_prev_sequence_number
 
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
@@ -89,6 +97,7 @@ def sync_detailed(
     client: Union[AuthenticatedClient, Client],
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
+    prev_sequence_number: Union[None, Unset, int] = UNSET,
 
 ) -> Response[Union[HTTPValidationError, list['WorkerEvent']]]:
     """ Get the worker events for a simulation by its ID
@@ -96,6 +105,7 @@ def sync_detailed(
     Args:
         simulation_id (int):
         num_events (Union[None, Unset, int]):
+        prev_sequence_number (Union[None, Unset, int]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -109,6 +119,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         simulation_id=simulation_id,
 num_events=num_events,
+prev_sequence_number=prev_sequence_number,
 
     )
 
@@ -123,6 +134,7 @@ def sync(
     client: Union[AuthenticatedClient, Client],
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
+    prev_sequence_number: Union[None, Unset, int] = UNSET,
 
 ) -> Optional[Union[HTTPValidationError, list['WorkerEvent']]]:
     """ Get the worker events for a simulation by its ID
@@ -130,6 +142,7 @@ def sync(
     Args:
         simulation_id (int):
         num_events (Union[None, Unset, int]):
+        prev_sequence_number (Union[None, Unset, int]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -144,6 +157,7 @@ def sync(
         client=client,
 simulation_id=simulation_id,
 num_events=num_events,
+prev_sequence_number=prev_sequence_number,
 
     ).parsed
 
@@ -152,6 +166,7 @@ async def asyncio_detailed(
     client: Union[AuthenticatedClient, Client],
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
+    prev_sequence_number: Union[None, Unset, int] = UNSET,
 
 ) -> Response[Union[HTTPValidationError, list['WorkerEvent']]]:
     """ Get the worker events for a simulation by its ID
@@ -159,6 +174,7 @@ async def asyncio_detailed(
     Args:
         simulation_id (int):
         num_events (Union[None, Unset, int]):
+        prev_sequence_number (Union[None, Unset, int]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -172,6 +188,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         simulation_id=simulation_id,
 num_events=num_events,
+prev_sequence_number=prev_sequence_number,
 
     )
 
@@ -186,6 +203,7 @@ async def asyncio(
     client: Union[AuthenticatedClient, Client],
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
+    prev_sequence_number: Union[None, Unset, int] = UNSET,
 
 ) -> Optional[Union[HTTPValidationError, list['WorkerEvent']]]:
     """ Get the worker events for a simulation by its ID
@@ -193,6 +211,7 @@ async def asyncio(
     Args:
         simulation_id (int):
         num_events (Union[None, Unset, int]):
+        prev_sequence_number (Union[None, Unset, int]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -207,5 +226,6 @@ async def asyncio(
         client=client,
 simulation_id=simulation_id,
 num_events=num_events,
+prev_sequence_number=prev_sequence_number,
 
     )).parsed

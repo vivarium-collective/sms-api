@@ -20,7 +20,7 @@ def _get_kwargs(
     body: BodyGetSimulationResults,
     experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
     database_id: int,
-    git_commit_hash: Union[Unset, str] = '8968017',
+    git_commit_hash: Union[Unset, str] = '78c6310',
 
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
@@ -86,7 +86,7 @@ def sync_detailed(
     body: BodyGetSimulationResults,
     experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
     database_id: int,
-    git_commit_hash: Union[Unset, str] = '8968017',
+    git_commit_hash: Union[Unset, str] = '78c6310',
 
 ) -> Response[Union[Any, HTTPValidationError]]:
     """ Get simulation results in chunks
@@ -94,7 +94,7 @@ def sync_detailed(
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
         database_id (int): Database Id returned from /submit-simulation
-        git_commit_hash (Union[Unset, str]):  Default: '8968017'.
+        git_commit_hash (Union[Unset, str]):  Default: '78c6310'.
         body (BodyGetSimulationResults):
 
     Raises:
@@ -126,7 +126,7 @@ def sync(
     body: BodyGetSimulationResults,
     experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
     database_id: int,
-    git_commit_hash: Union[Unset, str] = '8968017',
+    git_commit_hash: Union[Unset, str] = '78c6310',
 
 ) -> Optional[Union[Any, HTTPValidationError]]:
     """ Get simulation results in chunks
@@ -134,7 +134,7 @@ def sync(
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
         database_id (int): Database Id returned from /submit-simulation
-        git_commit_hash (Union[Unset, str]):  Default: '8968017'.
+        git_commit_hash (Union[Unset, str]):  Default: '78c6310'.
         body (BodyGetSimulationResults):
 
     Raises:
@@ -161,7 +161,7 @@ async def asyncio_detailed(
     body: BodyGetSimulationResults,
     experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
     database_id: int,
-    git_commit_hash: Union[Unset, str] = '8968017',
+    git_commit_hash: Union[Unset, str] = '78c6310',
 
 ) -> Response[Union[Any, HTTPValidationError]]:
     """ Get simulation results in chunks
@@ -169,7 +169,7 @@ async def asyncio_detailed(
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
         database_id (int): Database Id returned from /submit-simulation
-        git_commit_hash (Union[Unset, str]):  Default: '8968017'.
+        git_commit_hash (Union[Unset, str]):  Default: '78c6310'.
         body (BodyGetSimulationResults):
 
     Raises:
@@ -201,7 +201,7 @@ async def asyncio(
     body: BodyGetSimulationResults,
     experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
     database_id: int,
-    git_commit_hash: Union[Unset, str] = '8968017',
+    git_commit_hash: Union[Unset, str] = '78c6310',
 
 ) -> Optional[Union[Any, HTTPValidationError]]:
     """ Get simulation results in chunks
@@ -209,7 +209,7 @@ async def asyncio(
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
         database_id (int): Database Id returned from /submit-simulation
-        git_commit_hash (Union[Unset, str]):  Default: '8968017'.
+        git_commit_hash (Union[Unset, str]):  Default: '78c6310'.
         body (BodyGetSimulationResults):
 
     Raises:

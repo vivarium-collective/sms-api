@@ -264,6 +264,14 @@ paths:
               - type: integer
               - type: "null"
             title: Num Events
+        - name: prev_sequence_number
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: integer
+              - type: "null"
+            title: Prev Sequence Number
       responses:
         "200":
           description: Successful Response
@@ -860,6 +868,10 @@ components:
           type: string
           title: Assets Dir
           default: /Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets
+        marimo_api_server:
+          type: string
+          title: Marimo Api Server
+          default: ""
       additionalProperties: false
       type: object
       title: Settings

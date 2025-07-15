@@ -361,7 +361,9 @@ async def get_simulation_status(
     summary="Get the worker events for a simulation by its ID",
 )
 async def get_simulation_worker_events(
-    simulation_id: int = Query(...), num_events: int | None = Query(default=None)
+    simulation_id: int = Query(...),
+    num_events: int | None = Query(default=None),
+    prev_sequence_number: int | None = Query(default=None),
 ) -> list[WorkerEvent]:
     sim_service = get_simulation_service()
     if sim_service is None:
@@ -377,7 +379,10 @@ async def get_simulation_worker_events(
             ref_id=simulation_id, job_type=JobType.SIMULATION
         )
         if simulation_hpcrun:
-            worker_events = await db_service.list_worker_events(hpcrun_id=simulation_hpcrun.database_id)
+            worker_events = await db_service.list_worker_events(
+                hpcrun_id=simulation_hpcrun.database_id,
+                prev_sequence_number=prev_sequence_number,
+            )
             return worker_events[:num_events] if num_events else worker_events
         else:
             return []
