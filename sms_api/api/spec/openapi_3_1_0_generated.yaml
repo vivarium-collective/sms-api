@@ -50,6 +50,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RegisteredSimulators"
+  /core/simulator/status:
+    get:
+      tags:
+        - Simulators
+      summary: Get simulator container build status by its ID
+      operationId: get-simulator-status
+      parameters:
+        - name: simulator_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            title: Simulator Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HpcRun"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /core/simulator/upload:
     post:
       tags:
@@ -116,6 +142,32 @@ paths:
                   $ref: "#/components/schemas/ParcaDataset"
                 type: array
                 title: Response Get-Parca-Versions
+  /core/simulation/parca/status:
+    get:
+      tags:
+        - Simulations - Parca
+      summary: Get parca calculation status by its ID
+      operationId: get-parca-status
+      parameters:
+        - name: parca_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            title: Parca Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HpcRun"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /core/simulation/run:
     post:
       tags:

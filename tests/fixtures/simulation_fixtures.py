@@ -5,7 +5,7 @@ import pytest_asyncio
 
 from sms_api.dependencies import get_simulation_service, set_simulation_service
 from sms_api.simulation.simulation_service import SimulationServiceHpc
-from tests.fixtures.simulation_service_mocks import SimulationServiceMockCloneAndBuild
+from tests.fixtures.simulation_service_mocks import SimulationServiceMockCloneAndBuild, SimulationServiceMockParca
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -42,5 +42,29 @@ def simulation_service_mock_clone_and_build(
     set_simulation_service(simulation_service_mock_clone_and_build)
 
     yield simulation_service_mock_clone_and_build
+
+    set_simulation_service(saved_simulation_service)
+
+
+@pytest.fixture
+def expected_parca_database_id() -> int:
+    """
+    Fixture to provide the expected Slurm job ID for build jobs.
+    """
+    return 12345
+
+
+@pytest.fixture(scope="function")
+def simulation_service_mock_parca(
+    expected_build_slurm_job_id: int,
+) -> Generator[SimulationServiceMockParca, None, None]:
+    """
+    Fixture to provide a mock simulation service that submits a parca job.
+    """
+    saved_simulation_service = get_simulation_service()
+    simulation_service_mock_parca = SimulationServiceMockParca(expected_slurmjobid=expected_build_slurm_job_id)
+    set_simulation_service(simulation_service_mock_parca)
+
+    yield simulation_service_mock_parca
 
     set_simulation_service(saved_simulation_service)
