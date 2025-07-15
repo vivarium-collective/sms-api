@@ -381,7 +381,7 @@ class SimulationServiceHpc(SimulationService):
                     git -C ./configs diff HEAD >> ./source-info/git_diff.txt
                     singularity run $binds $image uv run \\
                          --env-file /vEcoli/.env /vEcoli/ecoli/experiments/ecoli_master_sim.py \\
-                         --config /out/configs/{hpc_sim_config_file} \\
+                         --config /out/configs/{hpc_sim_config_file}_{experiment_id}.json \\
                          --generations 1 --emitter parquet --emitter_arg out_dir='/out' \\
                          --experiment_id {experiment_id} \\
                          --daughter_outdir "/out/{experiment_id}" \\
