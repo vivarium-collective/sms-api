@@ -286,9 +286,14 @@ def _(EcoliSimulationRequest, ParcaDataset, parca_datasets):
 
 @app.cell
 def _(mo):
-    run_simulation_button = mo.ui.run_button(label="Run Simulation")
-    run_simulation_button
-    return (run_simulation_button,)
+    # run_simulation_button = mo.ui.run_button(label=f"{mo.icon('lucide:rocket')} Run Simulation", kind="success")
+    # run_simulation_button
+
+    run_simulation_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:genomic')} Run Simulation", kind="success")
+    get_events_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:installing')} Get Simulation Events")
+
+    mo.vstack([run_simulation_button, get_events_button])
+    return get_events_button, run_simulation_button
 
 
 @app.cell
@@ -329,10 +334,10 @@ def _(
 
 
 @app.cell
-def _(mo):
-    get_events_button = mo.ui.run_button(label="Get Simulation Events")
-    get_events_button
-    return (get_events_button,)
+def _():
+    # get_events_button = mo.ui.run_button(label="Get Simulation Events")
+    # get_events_button
+    return
 
 
 @app.cell
@@ -389,7 +394,7 @@ def _(mo):
         mo.state.current_index = 0
 
     step_size = 10  # number of rows to append per button press
-    plt_button = mo.ui.run_button(label="Plot Mass Fractions")
+    plt_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:neural-network')} Plot Mass Fractions")
     return plt_button, step_size
 
 
