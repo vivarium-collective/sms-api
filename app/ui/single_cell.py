@@ -21,6 +21,7 @@ def _(mo):
 def _():
     import os
     import json
+    import asyncio
     from pprint import pp
     from pathlib import Path
     from contextlib import contextmanager
@@ -63,6 +64,7 @@ def _():
         Timeout,
         WorkerEvent,
         alt,
+        asyncio,
         contextmanager,
         display_dto,
         get_settings,
@@ -291,8 +293,7 @@ def _(mo):
 
 @app.cell
 def _():
-    # TODO: concat run simulation button with plot in vstack
-    # TODO: set up polling
+    # [] TODO: concat run simulation button with plot in vstack
     return
 
 
@@ -328,8 +329,54 @@ def _(
 
 
 @app.cell
-def _(get_events_dataframe, on_get_worker_events, simulation_id):
+def _(mo):
+    get_events_button = mo.ui.run_button(label="Get Simulation Events")
+    get_events_button
+    return (get_events_button,)
+
+
+@app.cell
+async def _(
+    ApiResource,
+    api_client,
+    asyncio,
+    format_endpoint_url,
+    get_events_button,
+    on_get_worker_events,
+    simulation_id,
+):
+    # poll this repeatedly with a generator?
     worker_events = on_get_worker_events(simulation_id)
+
+
+    async def poll_events(buffer: float = 1.0):
+        asyncio.sleep(buffer)
+        yield on_get_worker_events(simulation_id)
+
+    if get_events_button.value:
+        max_duration = 50
+        iteration = 0
+        status = "waiting"
+        event_generator = poll_events()
+        while iteration < max_duration:
+            with api_client() as client:
+                try:
+                    url = format_endpoint_url(ApiResource.SIMULATION, 'run', 'status')
+                    resp = client.get(url=url, params={"simulation_id": simulation_id})
+                    status = resp.json()['status']
+                except:
+                    print(f'Could not get status for iteration: {iteration}')
+                    iteration += 1
+                    continue
+                print(f'Status for iteration: {iteration}: {status}')
+                worker_events = await anext(event_generator)
+                iteration += 1
+    return (worker_events,)
+
+
+@app.cell
+def _(get_events_dataframe, worker_events):
+    # compile dataframe of all current events
     simulation_events_df = get_events_dataframe(worker_events)
     return (simulation_events_df,)
 
