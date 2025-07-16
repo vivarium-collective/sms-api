@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     dev_mode: str = "0"
     app_dir: str = f"{REPO_ROOT}/app"
     assets_dir: str = f"{REPO_ROOT}/assets"
+    marimo_api_server: str = ""
 
 
 @lru_cache

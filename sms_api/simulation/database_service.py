@@ -438,7 +438,13 @@ class DatabaseServiceSQL(DatabaseService):
     async def list_worker_events(self, hpcrun_id: int, prev_sequence_number: int | None = None) -> list[WorkerEvent]:
         async with self.async_sessionmaker() as session, session.begin():
             stmt = (
-                select(ORMWorkerEvent)
+                select(
+                    ORMWorkerEvent.mass,
+                    ORMWorkerEvent.sequence_number,
+                    ORMWorkerEvent.id,
+                    ORMWorkerEvent.time,
+                    ORMWorkerEvent.hpcrun_id,
+                )
                 .where(
                     and_(
                         ORMWorkerEvent.hpcrun_id == hpcrun_id,
@@ -447,12 +453,12 @@ class DatabaseServiceSQL(DatabaseService):
                 )
                 .order_by(ORMWorkerEvent.sequence_number)
             )
-            result: Result[tuple[ORMWorkerEvent]] = await session.execute(stmt)
-            orm_worker_events = result.scalars().all()
+            result: Result[tuple[dict[str, float], int, int, float, int]] = await session.execute(stmt)
+            orm_worker_events = result.all()
 
             worker_events: list[WorkerEvent] = []
             for orm_worker_event in orm_worker_events:
-                worker_events.append(orm_worker_event.to_worker_event())
+                worker_events.append(ORMWorkerEvent.from_query_results(orm_worker_event.tuple()))
             return worker_events
 
     @override

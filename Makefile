@@ -39,13 +39,11 @@ clean:
 .PHONY: test
 test: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
-	@make write-latest-commit
 	@poetry run pytest -ra --cov --cov-config=pyproject.toml --cov-report=xml
 
 .PHONY: logtest
 logtest: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
-	@make write-latest-commit
 	@poetry run pytest \
 		--cov \
 		--cov-config=pyproject.toml \
@@ -69,6 +67,10 @@ docs-test: ## Test if documentation can be built without warnings or errors
 .PHONY: docs
 docs: ## Build and serve the documentation
 	@poetry run mkdocs serve
+
+PHONY: generate-docs
+generate-docs: ## Build and serve the documentation
+	@cd documentation && poetry run make clean && poetry run sphinx-apidoc -o source ../sms_api && poetry run make html
 
 .PHONY: help
 help:
@@ -222,7 +224,7 @@ workflow:
 .PHONY: generate-client
 generate-client:
 	@make spec
-	@./scripts/generate-api-client.sh
+	@poetry run ./scripts/generate-api-client.sh
 
 .PHONY: pguri
 pguri:

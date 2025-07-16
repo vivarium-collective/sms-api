@@ -1,7 +1,111 @@
+import os
+from pathlib import Path
 from typing import cast
 
+import altair as alt
+import marimo as mo
 import numpy as np
+import polars as pl
 from matplotlib import pyplot as plt
+
+COLORS = [
+    "#1f77b4",  # blue
+    "#ff7f0e",  # orange
+    "#2ca02c",  # green
+    "#d62728",  # red
+    "#9467bd",  # purple
+    "#8c564b",  # brown
+    "#e377c2",  # pink
+]
+
+MASS_COLUMNS = {
+    "Protein": "listeners__mass__protein_mass",
+    "tRNA": "listeners__mass__tRna_mass",
+    "rRNA": "listeners__mass__rRna_mass",
+    "mRNA": "listeners__mass__mRna_mass",
+    "DNA": "listeners__mass__dna_mass",
+    "Small Mol.s": "listeners__mass__smallMolecule_mass",
+    "Dry": "listeners__mass__dry_mass",
+    "Time": "time",
+}
+
+MAPPING = {column_name: column_name.split("__")[-1] for column_name in MASS_COLUMNS.values()}
+
+
+def get_parquet_mass_data(chunks_dir: Path, mass_columns: dict[str, str]) -> list[pl.DataFrame]:
+    """Return a list of dataframes for each chunk parquet file (.pq) within a given `chunks_dir` containing
+    only the data needed to plot mass fractions.
+    """
+    chunk_paths = iter(
+        sorted(
+            [str(chunks_dir / fname) for fname in os.listdir(chunks_dir)],
+            key=lambda p: int(p.split("/")[-1].removesuffix(".pq")),
+        )
+    )
+    # Get just the column names
+    mass_column_names = list(mass_columns.values())
+
+    # Read and select only the desired columns from each file
+    return [pl.read_parquet(fp).select(mass_column_names) for fp in chunk_paths]
+
+
+def get_masses_dataframe(data: list[pl.DataFrame]) -> pl.DataFrame:
+    """Concatenate a list of mass listener dataframes into a single simulation
+    dataframe.
+    """
+    return pl.concat(data)
+
+
+def plot_mass_fractions(dataframes: list[pl.DataFrame] | None = None) -> mo.ui.altair_chart | None:
+    """Plot normalized biomass component mass fractions from a list of Polars DataFrames."""
+    if not dataframes:
+        return None
+
+    # Concatenate all simulation results
+    mass_data = pl.concat(dataframes, how="vertical_relaxed")
+
+    # Assumes single-cell data
+    mass_columns = {
+        "Protein": "listeners__mass__protein_mass",
+        "tRNA": "listeners__mass__tRna_mass",
+        "rRNA": "listeners__mass__rRna_mass",
+        "mRNA": "listeners__mass__mRna_mass",
+        "DNA": "listeners__mass__dna_mass",
+        "Small Mol": "listeners__mass__smallMolecule_mass",
+        "Dry": "listeners__mass__dry_mass",
+    }
+
+    # Compute average mass fractions
+    fractions = {k: (mass_data[v] / mass_data["listeners__mass__dry_mass"]).mean() for k, v in mass_columns.items()}
+
+    # Build new normalized dataframe
+    new_columns = {
+        "Time (min)": (mass_data["time"] - mass_data["time"].min()) / 60,
+        **{f"{k} ({fractions[k]:.3f})": mass_data[v] / mass_data[v][0] for k, v in mass_columns.items()},  # type: ignore[str-bytes-safe]
+    }
+    mass_fold_change_df = pl.DataFrame(new_columns)
+
+    # Melt for Altair plotting
+    melted_df = mass_fold_change_df.melt(
+        id_vars="Time (min)",
+        variable_name="Submass",
+        value_name="Mass (normalized by t = 0 min)",
+    )
+
+    title = "Biomass components (average fraction of total dry mass)"
+    chart: alt.Chart = (
+        alt.Chart(melted_df)
+        .transform_calculate(SubmassName="substring(datum.Submass, 0, indexof(datum.Submass, ' ('))")
+        .mark_line()
+        .encode(
+            x=alt.X("Time (min):Q", title="Time (min)"),
+            y=alt.Y("Mass (normalized by t = 0 min):Q"),
+            color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
+        )
+        .properties(title=title)
+    )
+
+    return mo.ui.altair_chart(chart)
 
 
 def plot_mic_curve(mic_curve: dict[str, list[float]], title: str = "MIC Curve: Survival vs. Antibiotic Dose") -> None:

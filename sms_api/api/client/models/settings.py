@@ -66,8 +66,9 @@ class Settings:
             nats_emitter_url (Union[Unset, str]):  Default: ''.
             nats_emitter_magic_word (Union[Unset, str]):  Default: 'emitter-magic-word'.
             dev_mode (Union[Unset, str]):  Default: '0'.
-            app_dir (Union[Unset, str]):  Default: '/Users/jimschaff/Documents/workspace/sms-api/app'.
-            assets_dir (Union[Unset, str]):  Default: '/Users/jimschaff/Documents/workspace/sms-api/assets'.
+            app_dir (Union[Unset, str]):  Default: '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app'.
+            assets_dir (Union[Unset, str]):  Default: '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets'.
+            marimo_api_server (Union[Unset, str]):  Default: ''.
      """
 
     storage_bucket: Union[Unset, str] = 'files.biosimulations.dev'
@@ -110,8 +111,9 @@ class Settings:
     nats_emitter_url: Union[Unset, str] = ''
     nats_emitter_magic_word: Union[Unset, str] = 'emitter-magic-word'
     dev_mode: Union[Unset, str] = '0'
-    app_dir: Union[Unset, str] = '/Users/jimschaff/Documents/workspace/sms-api/app'
-    assets_dir: Union[Unset, str] = '/Users/jimschaff/Documents/workspace/sms-api/assets'
+    app_dir: Union[Unset, str] = '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app'
+    assets_dir: Union[Unset, str] = '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets'
+    marimo_api_server: Union[Unset, str] = ''
 
 
 
@@ -208,6 +210,8 @@ class Settings:
 
         assets_dir = self.assets_dir
 
+        marimo_api_server = self.marimo_api_server
+
 
         field_dict: dict[str, Any] = {}
 
@@ -297,6 +301,8 @@ class Settings:
             field_dict["app_dir"] = app_dir
         if assets_dir is not UNSET:
             field_dict["assets_dir"] = assets_dir
+        if marimo_api_server is not UNSET:
+            field_dict["marimo_api_server"] = marimo_api_server
 
         return field_dict
 
@@ -405,6 +411,8 @@ class Settings:
 
         assets_dir = d.pop("assets_dir", UNSET)
 
+        marimo_api_server = d.pop("marimo_api_server", UNSET)
+
         settings = cls(
             storage_bucket=storage_bucket,
             storage_endpoint_url=storage_endpoint_url,
@@ -448,6 +456,7 @@ class Settings:
             dev_mode=dev_mode,
             app_dir=app_dir,
             assets_dir=assets_dir,
+            marimo_api_server=marimo_api_server,
         )
 
         return settings

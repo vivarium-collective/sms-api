@@ -3,9 +3,42 @@ import enum
 import hashlib
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel as _BaseModel
+from pydantic import Field
+
+
+@dataclass
+class FlexData:
+    _data: dict[str, Any] = field(default_factory=dict)
+
+    def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
+        self._data = kwargs
+
+    def __getattr__(self, item):  # type: ignore[no-untyped-def]
+        return self._data[item]
+
+    def __getitem__(self, item):  # type: ignore[no-untyped-def]
+        return self._data[item]
+
+    def keys(self):  # type: ignore[no-untyped-def]
+        return self._data.keys()
+
+    def dict(self) -> dict[str, Any]:
+        return self._data
+
+
+class Payload(FlexData):
+    pass
+
+
+class BaseModel(_BaseModel):
+    def as_payload(self) -> Payload:
+        serialized = json.loads(self.model_dump_json())
+        return Payload(**serialized)  # type: ignore[no-untyped-call]
 
 
 class JobType(enum.Enum):

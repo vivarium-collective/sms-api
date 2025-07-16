@@ -9,8 +9,8 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.simulator_version import SimulatorVersion
   from ..models.parca_dataset_request_parca_config import ParcaDatasetRequestParcaConfig
+  from ..models.simulator_version import SimulatorVersion
 
 
 
@@ -37,8 +37,8 @@ class ParcaDatasetRequest:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.simulator_version import SimulatorVersion
         from ..models.parca_dataset_request_parca_config import ParcaDatasetRequestParcaConfig
+        from ..models.simulator_version import SimulatorVersion
         simulator_version = self.simulator_version.to_dict()
 
         parca_config = self.parca_config.to_dict()
@@ -57,8 +57,8 @@ class ParcaDatasetRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.simulator_version import SimulatorVersion
         from ..models.parca_dataset_request_parca_config import ParcaDatasetRequestParcaConfig
+        from ..models.simulator_version import SimulatorVersion
         d = dict(src_dict)
         simulator_version = SimulatorVersion.from_dict(d.pop("simulator_version"))
 

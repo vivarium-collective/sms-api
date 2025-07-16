@@ -1,5 +1,6 @@
 import datetime
 import enum
+import logging
 from typing import Optional
 
 from sqlalchemy import ForeignKey, func
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from sms_api.simulation.models import HpcRun, JobStatus, JobType, SimulatorVersion, WorkerEvent
+
+logger = logging.getLogger(__name__)
 
 
 class JobStatusDB(enum.Enum):
@@ -156,6 +159,22 @@ class ORMWorkerEvent(Base):
             bulk=self.bulk,
             bulk_index=self.bulk_index,
             time=self.time,
+        )
+
+    @staticmethod
+    def from_query_results(record: tuple[dict[str, float], int, int, float, int]) -> WorkerEvent:
+        mass_data, sequence_number, record_id, event_time, hpcrun_id = record
+
+        # ORMWorkerEvent.mass, ORMWorkerEvent.sequence_number, ORMWorkerEvent.id, ORMWorkerEvent.time
+        return WorkerEvent(
+            database_id=record_id,
+            correlation_id="",
+            sequence_number=sequence_number,
+            mass=mass_data,
+            bulk=[],
+            bulk_index=[],
+            time=event_time,
+            hpcrun_id=hpcrun_id,
         )
 
 
