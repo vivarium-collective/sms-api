@@ -1,41 +1,39 @@
-# sms-api
+# sms-api: Simulating Microbial Systems
 
-[![Release](https://img.shields.io/github/v/release/vivarium-collective/sms-api)](https://img.shields.io/github/v/release/vivarium-collective/sms-api)
+[![Documentation](https://img.shields.io/badge/documentation-online-blue.svg)](https://sms-api.readthedocs.io/en/latest/)
+[![Swagger UI](https://img.shields.io/badge/swagger_docs-Swagger_UI-green?logo=swagger)](https://sms.cam.uchc.edu/docs)
 [![Build status](https://img.shields.io/github/actions/workflow/status/vivarium-collective/sms-api/main.yml?branch=main)](https://github.com/vivarium-collective/sms-api/actions/workflows/main.yml?query=branch%3Amain)
 [![codecov](https://codecov.io/gh/vivarium-collective/sms-api/branch/main/graph/badge.svg)](https://codecov.io/gh/vivarium-collective/sms-api)
 [![Commit activity](https://img.shields.io/github/commit-activity/m/vivarium-collective/sms-api)](https://img.shields.io/github/commit-activity/m/vivarium-collective/sms-api)
-[![License](https://img.shields.io/github/license/vivarium-collective/sms-api)](https://img.shields.io/github/license/vivarium-collective/sms-api)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
-This is the api server for Vivarium simulation services.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/vivarium-collective/sms-api/simulation-roundtrip/sms-api/documentation/source/_static/wholecellecoli.png" />
+</p>
 
 - **Github repository**: <https://github.com/vivarium-collective/sms-api/>
-- **Documentation** <https://vivarium-collective.github.io/sms-api/>
+- **Documentation** <https://sms-api.readthedocs.io/en/latest/>
 
-## Getting started with your project
+#### SMS API (otherwise known as _Atlantis API_):
 
-First, create a repository on GitHub with the same name as this project, and then run the following commands:
+Design, run, and analyze reproducible simulations of dynamic cellular processes in Escherichia coli. SMS API uses the vEcoli model. Please refer to [the vEcoli documentation](https://covertlab.github.io/vEcoli/) for more details.
 
-```bash
-git init -b main
-git add .
-git commit -m "init commit"
-git remote add origin git@github.com:vivarium-collective/sms-api.git
-git push -u origin main
-```
+## Getting Started
 
-Finally, install the environment and the pre-commit hooks with
+### The SMS API uniquely acts as both a server _and_ client:
 
-```bash
-make install
-```
+This project uses FastAPI, Uvicorn, and Marimo to serve a REST API as well as host Marimo user interfaces. For more information
+on Marimo, please [refer to their documentation](https://docs.marimo.io/).
 
-You are now ready to start development on your project!
-The CI/CD pipeline will be triggered when you open a pull request, merge to main, or when you create a new release.
+#### Server:
 
-To finalize the set-up for publishing to PyPI or Artifactory, see [here](https://fpgmaas.github.io/cookiecutter-poetry/features/publishing/#set-up-for-pypi).
-For activating the automatic documentation with MkDocs, see [here](https://fpgmaas.github.io/cookiecutter-poetry/features/mkdocs/#enabling-the-documentation-on-github).
-To enable the code coverage reports, see [here](https://fpgmaas.github.io/cookiecutter-poetry/features/codecov/).
+A kubernetes cluster containing an ASGI application (FastAPI) is hosted and available at [https://sms.cam.uchc.edu/](https://sms.cam.uchc.edu/)
+An API router of endpoints is assigned for each API in this project's scope and available by name in the request url. For example the
+primary single-cell API ("core") endpoints are hosted at [https://sms.cam.uchc.edu/core](https://sms.cam.uchc.edu/core). Other APIs include
+the Antibiotic and Biomanufacturing.
 
----
+#### Client:
 
-Repository initiated with [fpgmaas/cookiecutter-poetry](https://github.com/fpgmaas/cookiecutter-poetry).
+This project uses the Marimo web app functionality to act as a client to the aforementioned server. There is a client for each
+API router (or simply, API). This ui is accessible by navigating to [https://sms.cam.uchc.edu/](https://sms.cam.uchc.edu/). Please contact
+our organization for authentication, if needed.

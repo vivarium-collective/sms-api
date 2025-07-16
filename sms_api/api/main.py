@@ -126,7 +126,7 @@ server = marimo.create_asgi_app()
 app_names: list[str] = []
 
 for filename in sorted(os.listdir(ui_dir)):
-    if filename.endswith(".py") and "plots" not in filename:
+    if filename.endswith(".py") and "plots" not in filename and not filename.startswith("wip"):
         app_name = format_marimo_appname(os.path.splitext(filename)[0])
         app_path = os.path.join(ui_dir, filename)
         server = server.with_app(path=f"/{app_name}", root=app_path)
