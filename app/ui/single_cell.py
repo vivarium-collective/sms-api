@@ -22,6 +22,7 @@ def _():
     import os
     import json
     import asyncio
+    import time
     from pprint import pp
     from pathlib import Path
     from contextlib import contextmanager
@@ -70,6 +71,7 @@ def _():
         get_settings,
         mo,
         pl,
+        pp,
     )
 
 
@@ -161,7 +163,8 @@ def _(WorkerEvent, alt, mo, pl):
                 df_event = pl.DataFrame({key: event.mass[key] for key in selected_keys})
                 df_event = df_event.with_columns(pl.lit(event.time).alias("time"))
                 dataframes.append(df_event)
-        return pl.concat(dataframes, how="vertical_relaxed").sort("time")
+            return pl.concat(dataframes, how="vertical_relaxed").sort("time")
+        return dataframes
 
     def plot_mass_fractions_from_worker_events(df: pl.DataFrame | None = None) -> mo.ui.altair_chart | None:
         """Plot normalized biomass component mass fractions from a list of Polars DataFrames."""
@@ -290,7 +293,7 @@ def _(mo):
     # run_simulation_button
 
     run_simulation_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:genomic')} Run Simulation", kind="success")
-    get_events_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:installing')} Get Simulation Events")
+    get_events_button = mo.ui.run_button(label=f"{mo.icon('svg-spinners:pulse-3')} Get Simulation Events")
 
     mo.vstack([run_simulation_button, get_events_button])
     return get_events_button, run_simulation_button
@@ -348,22 +351,28 @@ async def _(
     format_endpoint_url,
     get_events_button,
     on_get_worker_events,
+    pp,
     simulation_id,
 ):
     # poll this repeatedly with a generator?
     worker_events = on_get_worker_events(simulation_id)
 
 
-    async def poll_events(buffer: float = 1.0):
-        asyncio.sleep(buffer)
-        yield on_get_worker_events(simulation_id)
+    async def poll_events(buffer: float = 1.8):
+        await asyncio.sleep(buffer)
+        return on_get_worker_events(simulation_id)
+
+    def log_events(status, iteration, worker_events):
+        print(f'Status:\n  {status}\nIteration:\n  {iteration}\nEvents:\n')
+        pp(worker_events)
+        print(f'---\n')
 
     if get_events_button.value:
         max_duration = 50
         iteration = 0
         status = "waiting"
-        event_generator = poll_events()
         while iteration < max_duration:
+            # get status
             with api_client() as client:
                 try:
                     url = format_endpoint_url(ApiResource.SIMULATION, 'run', 'status')
@@ -373,9 +382,13 @@ async def _(
                     print(f'Could not get status for iteration: {iteration}')
                     iteration += 1
                     continue
-                print(f'Status for iteration: {iteration}: {status}')
-                worker_events = await anext(event_generator)
-                iteration += 1
+            worker_events = await poll_events()
+            if len(worker_events):
+                log_events(status, iteration, worker_events)
+            else:
+                print(f'Status: {status}\n---')
+            iteration += 1
+
     return (worker_events,)
 
 
@@ -394,7 +407,7 @@ def _(mo):
         mo.state.current_index = 0
 
     step_size = 10  # number of rows to append per button press
-    plt_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:neural-network')} Plot Mass Fractions")
+    plt_button = mo.ui.run_button(label=f"{mo.icon('svg-spinners:blocks-wave')} Plot Mass Fractions")
     return plt_button, step_size
 
 
