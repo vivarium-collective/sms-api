@@ -87,7 +87,6 @@ async def test_messaging(
         correlation_id=hpc_run.correlation_id,
         time=0.1,
         mass={"water": 1.0, "glucose": 0.5},
-        bulk=[0, 1, 2, 3, 4, 5],
     )
 
     # send worker messages to the broker
