@@ -8,7 +8,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/vivarium-collective/sms-api/simulation-roundtrip/sms-api/documentation/source/_static/wholecellecoli.png" />
+  <img src="https://raw.githubusercontent.com/vivarium-collective/sms-api/main/sms-api/documentation/source/_static/wholecellecoli.png" />
 </p>
 
 - **Github repository**: <https://github.com/vivarium-collective/sms-api/>
