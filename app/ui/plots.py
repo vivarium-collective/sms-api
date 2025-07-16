@@ -202,6 +202,8 @@ def _(WorkerEvent, alt, mo, pl):
 @app.cell
 def _(
     ApiResource,
+    EcoliExperiment,
+    EcoliSimulationRequest,
     HTTPStatusError,
     ParcaDataset,
     WorkerEvent,
@@ -210,7 +212,6 @@ def _(
     mo,
 ):
     # -- client calls to the API, returning the appropriate DTOs (all with the 'on_' prefix) -- #
-
     @mo.cache
     def on_get_parcas() -> list[ParcaDataset]:
         try:
@@ -219,6 +220,17 @@ def _(
                 resp = client.get(url=url)
                 resp.raise_for_status()
                 return [ParcaDataset(**dataset) for dataset in resp.json()]
+        except HTTPStatusError as e:
+            raise HTTPStatusError(message=str(e))
+
+    def on_run_simulation(request: EcoliSimulationRequest) -> EcoliExperiment:
+        try:
+            with api_client() as client:
+                url = format_endpoint_url(ApiResource.SIMULATION, 'run')
+                request_payload = request.as_payload().dict()
+                resp = client.post(url=url, json=request_payload)
+                resp.raise_for_status()
+                return EcoliExperiment(**resp.json())
         except HTTPStatusError as e:
             raise HTTPStatusError(message=str(e))
 
@@ -232,7 +244,6 @@ def _(
         except HTTPStatusError as e:
             raise HTTPStatusError(message=str(e))
 
-
     try:
         parca_datasets = on_get_parcas()
     except ValueError as e:
@@ -242,21 +253,8 @@ def _(
 
 
 @app.cell
-def _(
-    EcoliExperiment,
-    EcoliSimulationRequest,
-    ParcaDataset,
-    SIMULATION_TEST_ID,
-):
-    # TODO: simulation id comes from simulation run DTO (EcoliExperiment)
-    # placeholder: simulation_id = experiment.database_id
-
-    def get_simulation_id(experiment: EcoliExperiment | None = None) -> int:
-        if experiment:
-            return experiment.simulation.database_id
-        else:
-            return SIMULATION_TEST_ID
-
+def _(EcoliSimulationRequest, ParcaDataset, parca_datasets):
+    # build the request
 
     def extract_simulation_request(
         parca_datasets: list[ParcaDataset],
@@ -270,22 +268,40 @@ def _(
             simulator=active_parca_dataset.parca_dataset_request.simulator_version,
             variant_config=variant_config or {"named_parameters": {"param1": 0.5, "param2": 0.5}}
         )
-    return extract_simulation_request, get_simulation_id
 
-
-@app.cell
-def _(extract_simulation_request, parca_datasets):
-    request = extract_simulation_request(parca_datasets)
-    request
+    request: EcoliSimulationRequest = extract_simulation_request(parca_datasets)
     return
 
 
 @app.cell
-def _(get_events_dataframe, get_simulation_id, on_get_worker_events):
-    simulation_id = get_simulation_id()
+def _(EcoliExperiment):
+    # run the simulation
+    experiment: EcoliExperiment | None = None  # on_run_simulation()
+    return (experiment,)
+
+
+@app.cell
+def _(
+    EcoliExperiment,
+    SIMULATION_TEST_ID,
+    experiment: "EcoliExperiment | None",
+):
+    # -- data prep helpers -- #
+
+    # TODO: simulation id comes from simulation run DTO (EcoliExperiment)
+    # placeholder: simulation_id = experiment.database_id
+    def get_simulation_id(experiment: EcoliExperiment | None = None) -> int:
+        return experiment.simulation.database_id if experiment else SIMULATION_TEST_ID
+
+    simulation_id = get_simulation_id(experiment)
+    return (simulation_id,)
+
+
+@app.cell
+def _(get_events_dataframe, on_get_worker_events, simulation_id):
     worker_events = on_get_worker_events(simulation_id)
-    simulation_df = get_events_dataframe(worker_events)
-    return (simulation_df,)
+    simulation_events_df = get_events_dataframe(worker_events)
+    return (simulation_events_df,)
 
 
 @app.cell
@@ -306,14 +322,14 @@ def _(
     pl,
     plot_mass_fractions_from_worker_events,
     plt_button,
-    simulation_df,
+    simulation_events_df,
     step_size,
 ):
     if plt_button.value:
         next_index = mo.state.current_index
-        end_index = min(next_index + step_size, simulation_df.height)
-        if next_index < simulation_df.height:
-            mo.state.dataframes.append(simulation_df.slice(next_index, end_index - next_index))
+        end_index = min(next_index + step_size, simulation_events_df.height)
+        if next_index < simulation_events_df.height:
+            mo.state.dataframes.append(simulation_events_df.slice(next_index, end_index - next_index))
             mo.state.current_index = end_index
 
     # Display chart
