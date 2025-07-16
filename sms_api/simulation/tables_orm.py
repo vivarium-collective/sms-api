@@ -162,9 +162,8 @@ class ORMWorkerEvent(Base):
         )
 
     @staticmethod
-    def from_query_results(record: tuple[dict[str, float], int, int, float]) -> WorkerEvent:
-        logger.info(f"RECORD: {record}")
-        mass_data, sequence_number, record_id, event_time = record
+    def from_query_results(record: tuple[dict[str, float], int, int, float, int]) -> WorkerEvent:
+        mass_data, sequence_number, record_id, event_time, hpcrun_id = record
 
         # ORMWorkerEvent.mass, ORMWorkerEvent.sequence_number, ORMWorkerEvent.id, ORMWorkerEvent.time
         return WorkerEvent(
@@ -175,6 +174,7 @@ class ORMWorkerEvent(Base):
             bulk=[],
             bulk_index=[],
             time=event_time,
+            hpcrun_id=hpcrun_id,
         )
 
 

@@ -29,6 +29,8 @@ MASS_COLUMNS = {
     "Time": "time",
 }
 
+MAPPING = {column_name: column_name.split("__")[-1] for column_name in MASS_COLUMNS.values()}
+
 
 def get_parquet_mass_data(chunks_dir: Path, mass_columns: dict[str, str]) -> list[pl.DataFrame]:
     """Return a list of dataframes for each chunk parquet file (.pq) within a given `chunks_dir` containing
@@ -52,6 +54,58 @@ def get_masses_dataframe(data: list[pl.DataFrame]) -> pl.DataFrame:
     dataframe.
     """
     return pl.concat(data)
+
+
+def plot_mass_fractions_from_worker_events(dataframes: list[pl.DataFrame] | None = None) -> mo.ui.altair_chart | None:
+    """Plot normalized biomass component mass fractions from a list of Polars DataFrames."""
+    if not dataframes:
+        return None
+
+    # Concatenate all simulation results
+    mass_data = pl.concat(dataframes, how="vertical_relaxed")
+
+    # Assumes single-cell data
+    mass_columns = {
+        "Protein": "protein_mass",
+        "tRNA": "tRna_mass",
+        "rRNA": "rRna_mass",
+        "mRNA": "mRna_mass",
+        "DNA": "dna_mass",
+        "Small Mol": "smallMolecule_mass",
+        "Dry": "dry_mass",
+    }
+
+    # Compute average mass fractions
+    fractions = {k: (mass_data[v] / mass_data["dry_mass"]).mean() for k, v in mass_columns.items()}
+
+    # Build new normalized dataframe
+    new_columns = {
+        "Time (min)": (mass_data["time"] - mass_data["time"].min()) / 60,
+        **{f"{k} ({fractions[k]:.3f})": mass_data[v] / mass_data[v][0] for k, v in mass_columns.items()},  # type: ignore[str-bytes-safe]
+    }
+    mass_fold_change_df = pl.DataFrame(new_columns)
+
+    # Melt for Altair plotting
+    melted_df = mass_fold_change_df.melt(
+        id_vars="Time (min)",
+        variable_name="Submass",
+        value_name="Mass (normalized by t = 0 min)",
+    )
+
+    title = "Biomass components (average fraction of total dry mass)"
+    chart: alt.Chart = (
+        alt.Chart(melted_df)
+        .transform_calculate(SubmassName="substring(datum.Submass, 0, indexof(datum.Submass, ' ('))")
+        .mark_line()
+        .encode(
+            x=alt.X("Time (min):Q", title="Time (min)"),
+            y=alt.Y("Mass (normalized by t = 0 min):Q"),
+            color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
+        )
+        .properties(title=title)
+    )
+
+    return mo.ui.altair_chart(chart)
 
 
 def plot_mass_fractions(dataframes: list[pl.DataFrame] | None = None) -> mo.ui.altair_chart | None:
