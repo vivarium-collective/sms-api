@@ -122,7 +122,7 @@ def _(WorkerEvent, alt, mo, pl):
         mass_fold_change_df = pl.DataFrame(new_columns)
         # Melt for Altair plotting
         melted_df = mass_fold_change_df.melt(
-            id_vars="Time",
+            id_vars="Time (min)",
             variable_name="Submass",
             value_name="Mass (normalized by t = 0 min)",
         )
