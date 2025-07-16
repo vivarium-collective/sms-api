@@ -45,7 +45,7 @@ config = RouterConfig(router=APIRouter(), prefix="/antibiotic", dependencies=[])
     path="/simulation/run",
     response_model=EcoliExperiment,
     operation_id="get-antibiotics-simulator-versions",
-    tags=["Simulations"],
+    tags=["Simulations - Antibiotics"],
     summary="Run vEcoli simulation with antibiotics (not yet implemented)",
 )
 async def run_antibiotics(background_tasks: BackgroundTasks, request: EcoliSimulationRequest) -> EcoliExperiment:

@@ -374,33 +374,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
-  /antibiotic/simulation/run:
-    get:
-      tags:
-        - Simulations
-      summary: Run vEcoli simulation with antibiotics (not yet implemented)
-      operationId: get-antibiotics-simulator-versions
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/EcoliSimulationRequest"
-        required: true
-      responses:
-        "200":
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EcoliExperiment"
-        "422":
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
   /:
     get:
+      tags:
+        - SMS API
       summary: Home
       operationId: home__get
       responses:
@@ -411,6 +388,8 @@ paths:
               schema: {}
   /health:
     get:
+      tags:
+        - SMS API
       summary: Check Health
       operationId: check_health_health_get
       responses:
@@ -425,6 +404,8 @@ paths:
                 title: Response Check Health Health Get
   /version:
     get:
+      tags:
+        - SMS API
       summary: Get Version
       operationId: get_version_version_get
       responses:

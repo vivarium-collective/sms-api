@@ -12,8 +12,8 @@ from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
-  from ..models.settings import Settings
   from ..models.requested_observables import RequestedObservables
+  from ..models.settings import Settings
 
 
 
@@ -40,8 +40,8 @@ class BodyGetSimulationResults:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.settings import Settings
         from ..models.requested_observables import RequestedObservables
+        from ..models.settings import Settings
         observable_names = self.observable_names.to_dict()
 
         settings: Union[None, Unset, dict[str, Any]]
@@ -67,8 +67,8 @@ class BodyGetSimulationResults:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.settings import Settings
         from ..models.requested_observables import RequestedObservables
+        from ..models.settings import Settings
         d = dict(src_dict)
         observable_names = RequestedObservables.from_dict(d.pop("observable_names"))
 

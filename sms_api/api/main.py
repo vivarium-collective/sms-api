@@ -67,7 +67,8 @@ APP_ORIGINS = [
 #     {"url": ServerMode.PORT_FORWARD_DEV, "description": "Local port-forward"},
 # ]
 APP_SERVERS = None
-APP_ROUTERS = ["core", "antibiotic"]
+APP_ROUTERS = ["core"]  # for now, just referencing core
+# APP_ROUTERS = ["core", "antibiotic"]
 assets_dir = Path(get_settings().assets_dir)
 ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
 
@@ -137,19 +138,19 @@ templates = Jinja2Templates(directory=templates_dir)
 # -- app-level endpoints -- #
 
 
-@app.get("/")
+@app.get("/", tags=["SMS API"])
 async def home(request: Request) -> templating._TemplateResponse:
     return templates.TemplateResponse(
         request, "home.html", {"request": request, "app_names": app_names, "marimo_path_prefix": "/ws"}
     )
 
 
-@app.get("/health")
+@app.get("/health", tags=["SMS API"])
 async def check_health() -> dict[str, str]:
     return {"docs": f"{ACTIVE_URL}{app.docs_url}", "version": APP_VERSION}
 
 
-@app.get("/version")
+@app.get("/version", tags=["SMS API"])
 async def get_version() -> str:
     return APP_VERSION
 

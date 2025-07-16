@@ -64,17 +64,13 @@ clean-build: ## clean build artifacts
 docs-test: ## Test if documentation can be built without warnings or errors
 	@poetry run mkdocs build -s
 
-# .PHONY: docs
-# docs: ## Build and serve the documentation
-# 	@poetry run mkdocs serve
-
-PHONY: docs
+.PHONY: docs
 docs: ## Build and serve the documentation
-	@cd documentation; \
-	poetry run make clean; \
-	poetry run sphinx-apidoc -o source ../sms_api; \
-	poetry run make html
+	@poetry run mkdocs serve
 
+PHONY: generate-docs
+generate-docs: ## Build and serve the documentation
+	@cd documentation && poetry run make clean && poetry run sphinx-apidoc -o source ../sms_api && poetry run make html
 
 .PHONY: help
 help:
@@ -228,7 +224,7 @@ workflow:
 .PHONY: generate-client
 generate-client:
 	@make spec
-	@./scripts/generate-api-client.sh
+	@poetry run ./scripts/generate-api-client.sh
 
 .PHONY: pguri
 pguri:
