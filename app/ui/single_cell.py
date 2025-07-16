@@ -319,19 +319,7 @@ def _(JobStatus, alt, mo, pl):
     get_chart, set_chart = mo.state(mo.ui.altair_chart(alt.Chart().mark_line().encode()))
     get_status, set_status = mo.state(JobStatus.WAITING)
     get_events, set_events = mo.state([])
-
-    columns = [
-        "Protein",
-        "tRNA",
-        "rRNA",
-        "mRNA",
-        "DNA",
-        "Small",
-        "Dry",
-        "Time (min)"
-    ]
-    initial_data = dict(zip(columns, [1 for col in columns]))
-    get_events_df, set_events_df = mo.state(pl.DataFrame(data=initial_data))
+    get_events_df, set_events_df = mo.state(pl.DataFrame())
     get_simulation_id, set_simulation_id = mo.state(None)
 
     # iteratively slice the events df by 10 TODO: is this needed anymore?
