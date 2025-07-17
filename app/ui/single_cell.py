@@ -37,6 +37,7 @@ def _():
     import marimo as mo
     import polars as pl
     import altair as alt
+    import plotly.graph_objs as go
     from altair import Chart
     from fastapi import HTTPException
     from httpx import AsyncClient, QueryParams, Client, HTTPStatusError, Timeout
@@ -53,6 +54,7 @@ def _():
     from sms_api.config import get_settings
     from app.api.simulations import EcoliSim
     from app.api.client_wrapper import ClientWrapper
+
 
 
     logger = logging.getLogger(__file__)
@@ -77,6 +79,7 @@ def _():
         asyncio,
         contextmanager,
         get_settings,
+        go,
         mo,
         pl,
         time,
@@ -222,6 +225,47 @@ def _(WorkerEvent, alt, mo, pl):
 
 
 @app.cell
+def _(go, pl):
+    MASS_COMPONENTS = [
+        ("Protein", "protein_mass"),
+        ("tRNA", "tRna_mass"),
+        ("rRNA", "rRna_mass"),
+        ("mRNA", "mRna_mass"),
+        ("DNA", "dna_mass"),
+        ("Small Mol", "smallMolecule_mass"),
+        ("Dry", "dry_mass"),
+    ]
+
+    def create_mass_fractions_figurewidget() -> go.FigureWidget:
+        fig = go.FigureWidget()
+        for name, _ in MASS_COMPONENTS:
+            fig.add_scatter(x=[], y=[], mode="lines", name=name)
+        fig.update_layout(
+            title="Biomass components (normalized by t = 0 min)",
+            xaxis_title="Time (min)",
+            yaxis_title="Mass (normalized)",
+        )
+        return fig
+
+    def update_mass_fractions_figurewidget(fig: go.FigureWidget, df: pl.DataFrame) -> None:
+        if df.is_empty():
+            for trace in fig.data:
+                trace.x = []
+                trace.y = []
+            return
+        time_min = ((df["time"] - df["time"].min()) / 60).to_list()
+        for i, (name, col) in enumerate(MASS_COMPONENTS):
+            if col in df.columns:
+                y = (df[col] / df[col][0]).to_list()
+                fig.data[i].x = time_min
+                fig.data[i].y = y
+    return (
+        create_mass_fractions_figurewidget,
+        update_mass_fractions_figurewidget,
+    )
+
+
+@app.cell
 def _(
     ApiResource,
     EcoliExperiment,
@@ -231,10 +275,8 @@ def _(
     WorkerEvent,
     api_client,
     format_endpoint_url,
-    mo,
 ):
     # -- client calls to the API, returning the appropriate DTOs (all with the 'on_' prefix) -- #
-    @mo.cache
     def on_get_parcas() -> list[ParcaDataset]:
         try:
             with api_client() as client:
@@ -311,12 +353,13 @@ def _(EcoliSimulationRequest, ParcaDataset, parca_datasets):
 
 
 @app.cell
-def _(JobStatus, alt, mo, pl):
+def _(JobStatus, alt, create_mass_fractions_figurewidget, mo, pl):
     # set mutable state attributes (hooks, really)
     get_dataframes, set_dataframes = mo.state([])
     get_current_index, set_current_index = mo.state(0)
     get_is_polling, set_is_polling = mo.state(False)
     get_chart, set_chart = mo.state(mo.ui.altair_chart(alt.Chart().mark_line().encode()))
+    figure_widget = create_mass_fractions_figurewidget()
     get_status, set_status = mo.state(JobStatus.WAITING)
     get_events, set_events = mo.state([])
     get_events_df, set_events_df = mo.state(pl.DataFrame())
@@ -325,6 +368,7 @@ def _(JobStatus, alt, mo, pl):
     # iteratively slice the events df by 10 TODO: is this needed anymore?
     step_size = 10
     return (
+        figure_widget,
         get_chart,
         get_current_index,
         get_dataframes,
@@ -414,6 +458,7 @@ def _(get_events, get_events_dataframe, set_events_df):
 @app.cell
 def _(
     JobStatus,
+    figure_widget,
     get_current_index,
     get_dataframes,
     get_events_dataframe,
@@ -433,6 +478,7 @@ def _(
     simulation_id,
     step_size,
     time,
+    update_mass_fractions_figurewidget,
 ):
     def update_data_index():
         next_index = get_current_index()
@@ -451,7 +497,7 @@ def _(
             combined_df = pl.concat(current_dataframes)
         chart = plot_mass_fractions_from_worker_events(combined_df)
         # return mo.vstack([plt_button, mo.md("Press the button to start polling and plotting.")])
-        return chart
+        return chart, combined_df
 
     def on_poll(buffer: float | None = None):
         # if polling is turned on, get latest event data
@@ -473,7 +519,10 @@ def _(
             set_events_df(simulation_events_df)
             update_data_index()
 
-            set_chart(render_chart())
+            altair_chart, combined_df = render_chart()
+            set_chart(altair_chart)
+
+            update_mass_fractions_figurewidget(fig=figure_widget, df=combined_df)
 
             # bitflip polling
             # set_is_polling(False)
@@ -484,6 +533,7 @@ def _(
 
 @app.cell
 def _(
+    figure_widget,
     get_chart,
     get_is_polling,
     mo,
@@ -500,7 +550,7 @@ def _(
         refresh = mo.ui.refresh(label="Refreshing data...", default_interval=1, on_change=lambda _: on_poll())
 
     # ui stack with run button and latest render
-    stack_items = [run_simulation_button, latest_chart]
+    stack_items = [run_simulation_button, figure_widget]
     if refresh is not None:
         stack_items.append(refresh)
     return (stack_items,)

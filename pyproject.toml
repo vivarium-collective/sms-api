@@ -43,6 +43,8 @@ vl-convert-python = "^1.8.0"
 tqdm = "^4.67.1"
 seaborn = "^0.13.2"
 python-dateutil = "^2.9.0.post0"
+anywidget = "^0.9.18"
+plotly = "5.24.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
