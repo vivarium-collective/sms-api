@@ -29,23 +29,19 @@ class WorkerEvent:
             correlation_id (str):
             sequence_number (int):
             mass (WorkerEventMass):
-            bulk (list[int]):
             time (float):
             database_id (Union[None, Unset, int]):
             created_at (Union[None, Unset, str]):
             hpcrun_id (Union[None, Unset, int]):
-            bulk_index (Union[None, Unset, list[str]]):
      """
 
     correlation_id: str
     sequence_number: int
     mass: 'WorkerEventMass'
-    bulk: list[int]
     time: float
     database_id: Union[None, Unset, int] = UNSET
     created_at: Union[None, Unset, str] = UNSET
     hpcrun_id: Union[None, Unset, int] = UNSET
-    bulk_index: Union[None, Unset, list[str]] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -59,10 +55,6 @@ class WorkerEvent:
         sequence_number = self.sequence_number
 
         mass = self.mass.to_dict()
-
-        bulk = self.bulk
-
-
 
         time = self.time
 
@@ -84,16 +76,6 @@ class WorkerEvent:
         else:
             hpcrun_id = self.hpcrun_id
 
-        bulk_index: Union[None, Unset, list[str]]
-        if isinstance(self.bulk_index, Unset):
-            bulk_index = UNSET
-        elif isinstance(self.bulk_index, list):
-            bulk_index = self.bulk_index
-
-
-        else:
-            bulk_index = self.bulk_index
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -101,7 +83,6 @@ class WorkerEvent:
             "correlation_id": correlation_id,
             "sequence_number": sequence_number,
             "mass": mass,
-            "bulk": bulk,
             "time": time,
         })
         if database_id is not UNSET:
@@ -110,8 +91,6 @@ class WorkerEvent:
             field_dict["created_at"] = created_at
         if hpcrun_id is not UNSET:
             field_dict["hpcrun_id"] = hpcrun_id
-        if bulk_index is not UNSET:
-            field_dict["bulk_index"] = bulk_index
 
         return field_dict
 
@@ -128,9 +107,6 @@ class WorkerEvent:
         mass = WorkerEventMass.from_dict(d.pop("mass"))
 
 
-
-
-        bulk = cast(list[int], d.pop("bulk"))
 
 
         time = d.pop("time")
@@ -165,34 +141,14 @@ class WorkerEvent:
         hpcrun_id = _parse_hpcrun_id(d.pop("hpcrun_id", UNSET))
 
 
-        def _parse_bulk_index(data: object) -> Union[None, Unset, list[str]]:
-            if data is None:
-                return data
-            if isinstance(data, Unset):
-                return data
-            try:
-                if not isinstance(data, list):
-                    raise TypeError()
-                bulk_index_type_0 = cast(list[str], data)
-
-                return bulk_index_type_0
-            except: # noqa: E722
-                pass
-            return cast(Union[None, Unset, list[str]], data)
-
-        bulk_index = _parse_bulk_index(d.pop("bulk_index", UNSET))
-
-
         worker_event = cls(
             correlation_id=correlation_id,
             sequence_number=sequence_number,
             mass=mass,
-            bulk=bulk,
             time=time,
             database_id=database_id,
             created_at=created_at,
             hpcrun_id=hpcrun_id,
-            bulk_index=bulk_index,
         )
 
 

@@ -949,18 +949,6 @@ components:
             type: number
           type: object
           title: Mass
-        bulk:
-          items:
-            type: integer
-          type: array
-          title: Bulk
-        bulk_index:
-          anyOf:
-            - items:
-                type: string
-              type: array
-            - type: "null"
-          title: Bulk Index
         time:
           type: number
           title: Time
@@ -969,6 +957,5 @@ components:
         - correlation_id
         - sequence_number
         - mass
-        - bulk
         - time
       title: WorkerEvent

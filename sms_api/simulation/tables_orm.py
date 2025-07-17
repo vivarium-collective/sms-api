@@ -129,7 +129,7 @@ class ORMWorkerEvent(Base):
     correlation_id: Mapped[str] = mapped_column(nullable=False, index=True)
     sequence_number: Mapped[int] = mapped_column(nullable=False, index=True)
     mass: Mapped[dict[str, float]] = mapped_column(JSONB, nullable=False)
-    bulk: Mapped[list[int]] = mapped_column(JSONB, nullable=False)
+    bulk: Mapped[Optional[list[int]]] = mapped_column(JSONB, nullable=True)
     bulk_index: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
     time: Mapped[float] = mapped_column(nullable=True)
     hpcrun_id: Mapped[int] = mapped_column(ForeignKey("hpcrun.id"), nullable=False, index=True)
@@ -143,8 +143,8 @@ class ORMWorkerEvent(Base):
             correlation_id=worker_event.correlation_id,
             sequence_number=worker_event.sequence_number,
             mass=worker_event.mass,
-            bulk=worker_event.bulk,
-            bulk_index=worker_event.bulk_index,
+            bulk=None,
+            bulk_index=None,
             time=worker_event.time,
         )
 
@@ -156,8 +156,6 @@ class ORMWorkerEvent(Base):
             correlation_id=self.correlation_id,
             sequence_number=self.sequence_number,
             mass=self.mass,
-            bulk=self.bulk,
-            bulk_index=self.bulk_index,
             time=self.time,
         )
 
@@ -171,8 +169,6 @@ class ORMWorkerEvent(Base):
             correlation_id="",
             sequence_number=sequence_number,
             mass=mass_data,
-            bulk=[],
-            bulk_index=[],
             time=event_time,
             hpcrun_id=hpcrun_id,
         )

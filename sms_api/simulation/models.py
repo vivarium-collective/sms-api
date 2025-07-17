@@ -142,8 +142,6 @@ class WorkerEvent(BaseModel):
     correlation_id: str  # to correlate with the HpcRun job - see hpc_utils.get_correlation_id()
     sequence_number: int  # Sequence number provided by the message producer (emitter)
     mass: dict[str, float]  # mass from the simulation
-    bulk: list[int]  # Bulk data from the simulation
-    bulk_index: list[str] | None = None  # Labels for the bulk data, if applicable
     time: float  # Global time of the simulation
 
     @classmethod
@@ -153,8 +151,6 @@ class WorkerEvent(BaseModel):
             correlation_id=worker_event_message_payload.correlation_id,
             sequence_number=worker_event_message_payload.sequence_number,
             mass=worker_event_message_payload.mass,
-            bulk=worker_event_message_payload.bulk,
-            bulk_index=worker_event_message_payload.bulk_index,
             time=worker_event_message_payload.time,
         )
 
@@ -164,8 +160,8 @@ class WorkerEventMessagePayload(BaseModel):
     sequence_number: int  # Sequence number provided by the message producer (emitter)
     time: float  # global time of the simulation
     mass: dict[str, float]  # Unique identifier for the simulation job
-    bulk: list[int]  # Bulk data for the simulation
-    bulk_index: list[str] | None = None  # Labels for the bulk data, if applicable
+    bulk: list[int] | None  # Bulk data for the simulation (ignored by the database)
+    bulk_index: list[str] | None = None  # Labels for the bulk data, if applicable (ignored by the database)
 
 
 class RequestedObservables(BaseModel):
