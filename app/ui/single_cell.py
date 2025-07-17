@@ -203,7 +203,7 @@ def _(WorkerEvent, alt, mo, pl):
         melted_df = mass_fold_change_df.melt(
             id_vars="Time (min)",
             variable_name="Submass",
-            value_name="Mass (normalized by t = 0 min)",
+            value_name="Normalized Mass",
         )
         title = "Biomass components (average fraction of total dry mass)"
         chart: alt.Chart = mo.ui.altair_chart(
@@ -212,7 +212,7 @@ def _(WorkerEvent, alt, mo, pl):
             .mark_line()
             .encode(
                 x=alt.X("Time (min):Q", title="Time (min)"),
-                y=alt.Y("Mass (normalized by t = 0 min):Q"),
+                y=alt.Y("Normalized Mass:Q"),
                 color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
             )
             .properties(title=title)
@@ -348,7 +348,7 @@ def _(JobStatus, alt, mo, pl):
 @app.cell
 def _(mo):
     # set and display run button
-    run_simulation_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:genomic')} Run Simulation {mo.icon('svg-spinners:blocks-wave')}", kind="success")
+    run_simulation_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:genomic')} Run Simulation", kind="success")
     return (run_simulation_button,)
 
 
@@ -497,7 +497,12 @@ def _(
 
     refresh = None
     if get_is_polling():
-        refresh = mo.ui.refresh(label="Refreshing data...", default_interval=1, on_change=lambda _: on_poll())
+        refresh = mo.ui.refresh(
+            label="Refreshing data...",
+            options=[1.0, 5.0, 10.0],
+            default_interval=5.0,
+            on_change=lambda _: on_poll()
+        )
 
     # ui stack with run button and latest render
     stack_items = [run_simulation_button, latest_chart]
