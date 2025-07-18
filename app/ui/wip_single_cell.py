@@ -227,10 +227,45 @@ def _(WorkerEvent, alt, mo, pl):
             legend_selection=True
         )
         return chart
+
+
+    def get_mass_fractions_df(df: pl.DataFrame | None = None) -> mo.ui.altair_chart | None:
+        """Plot normalized biomass component mass fractions from a list of Polars DataFrames."""
+        if df.is_empty():
+            return None
+        # Concatenate all simulation results
+        mass_data = df
+        # Assumes single-cell data
+        mass_columns = {
+            "Protein": "listeners__mass__protein_mass",
+            "tRNA": "listeners__mass__tRna_mass",
+            "rRNA": "listeners__mass__rRna_mass",
+            "mRNA": "listeners__mass__mRna_mass",
+            "DNA": "listeners__mass__dna_mass",
+            "Small Mol.s": "listeners__mass__smallMolecule_mass",
+            "Dry": "listeners__mass__dry_mass"
+        }
+        # Compute average mass fractions
+        fractions = {k: (mass_data[v] / mass_data["listeners__mass__dry_mass"]).mean() for k, v in mass_columns.items()}
+        # Build new normalized dataframe
+        new_columns = {
+            # "Time (min)": (mass_data["time"] - mass_data["time"].min()) / 60,
+            "Time (min)": (mass_data["time"] - mass_data["time"].min()) / 60,
+            **{f"{k} ({fractions[k]:.3f})": mass_data[v] / mass_data[v][0] for k, v in mass_columns.items()},  # type: ignore[str-bytes-safe]
+        }
+        mass_fold_change_df = pl.DataFrame(new_columns)
+        # Melt for Altair plotting
+        melted_df = mass_fold_change_df.melt(
+            id_vars="Time (min)",
+            variable_name="Submass",
+            value_name="Normalized Mass",
+        )
+        return melted_df
     return (
         COLORS,
         MASS_COLUMNS,
         get_events_dataframe,
+        get_mass_fractions_df,
         plot_mass_fractions_from_worker_events,
     )
 
@@ -772,7 +807,7 @@ def _(getFrames, mo):
     frames = list(range(len(getFrames())))
     x_slider = mo.ui.slider(label="Choose duration", start=frames[0], stop=frames[-1], step=1, value=frames[-1], include_input=True)
     x_slider
-    return (x_slider,)
+    return
 
 
 @app.cell
@@ -791,32 +826,25 @@ def _():
 
 
 @app.cell
-def _(COLORS, alt, getFrames, mo, pl, x_slider):
-    allData = pl.concat(getFrames())
-    selectedData = allData.slice(1, x_slider.value)
-    chart: alt.Chart = mo.ui.altair_chart(
-        alt.Chart(selectedData)
+def _(COLORS, alt, getDf, get_mass_fractions_df):
+    # USE THIS RENDERING RATHER THAN RERENDER PLOT ITERATIVELY
+
+    massFractionsDf = get_mass_fractions_df(df=getDf())
+    (massFractionsDf.plot.line()
+        .transform_calculate(SubmassName="substring(datum.Submass, 0, indexof(datum.Submass, ' ('))")
         .mark_line()
         .encode(
-            x=alt.X("time"),
+            x=alt.X("Time (min):Q", title="Time (min)"),
             y=alt.Y("Normalized Mass:Q"),
             color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
-        ),
-        chart_selection=True,
-        legend_selection=True
+        )
     )
-    return (selectedData,)
+    return (massFractionsDf,)
 
 
 @app.cell
-def _(selectedData):
-    selectedData.plot.line(x='time', y='listeners__mass__protein_mass').encode()
-    return
-
-
-@app.cell
-def _(selectedData):
-    selectedData.columns
+def _(massFractionsDf):
+    massFractionsDf
     return
 
 
