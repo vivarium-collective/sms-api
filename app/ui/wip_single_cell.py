@@ -228,6 +228,7 @@ def _(WorkerEvent, alt, mo, pl):
         )
         return chart
     return (
+        COLORS,
         MASS_COLUMNS,
         get_events_dataframe,
         plot_mass_fractions_from_worker_events,
@@ -719,7 +720,7 @@ def _(generateChart, getDf, setChart):
 @app.cell
 def _(getChart):
     currentChart = getChart()
-    return
+    return (currentChart,)
 
 
 @app.cell
@@ -749,12 +750,12 @@ def _(dur_slider, mo, ncells_slider, variant_config, variant_stack):
 
 
 @app.cell
-def _(getBtnRow, getDf, mo, settings_tab, time):
+def _(currentChart, getBtnRow, getDf, mo, settings_tab, time):
     tabs = mo.ui.tabs({
         f'{mo.icon("bi:measuring-cup")}': mo.ui.data_explorer(getDf()),
-        f'{mo.icon("bx:bar-chart-square")}': mo.lazy(getDf().plot.line(x='time')),
+        f'{mo.icon("bx:bar-chart-square")}': mo.lazy(currentChart),
         f'{mo.icon("bi:sliders")}': settings_tab
-    }, on_change=lambda _: time.sleep(0.22))
+    }, on_change=lambda _: time.sleep(0.11))
 
     btnStack = mo.hstack(getBtnRow(), justify="start")
     return (tabs,)
@@ -767,13 +768,60 @@ def _(tabs):
 
 
 @app.cell
-def _():
+def _(getFrames, mo):
+    frames = list(range(len(getFrames())))
+    x_slider = mo.ui.slider(label="Choose duration", start=frames[0], stop=frames[-1], step=1, value=frames[-1], include_input=True)
+    x_slider
+    return (x_slider,)
+
+
+@app.cell
+def _(getFrames, mo):
+    def getUpperBound():
+        return list(range(len(getFrames())))[-1]
+
+    getSlider, setSlider = mo.state(getUpperBound())
     return
 
 
 @app.cell
 def _():
     # eventsDf.plot.line(x='time')
+    return
+
+
+@app.cell
+def _(COLORS, alt, getFrames, mo, pl, x_slider):
+    allData = pl.concat(getFrames())
+    selectedData = allData.slice(1, x_slider.value)
+    chart: alt.Chart = mo.ui.altair_chart(
+        alt.Chart(selectedData)
+        .mark_line()
+        .encode(
+            x=alt.X("time"),
+            y=alt.Y("Normalized Mass:Q"),
+            color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
+        ),
+        chart_selection=True,
+        legend_selection=True
+    )
+    return (selectedData,)
+
+
+@app.cell
+def _(selectedData):
+    selectedData.plot.line(x='time', y='listeners__mass__protein_mass').encode()
+    return
+
+
+@app.cell
+def _(selectedData):
+    selectedData.columns
+    return
+
+
+@app.cell
+def _():
     return
 
 
