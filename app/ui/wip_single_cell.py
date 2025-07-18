@@ -637,7 +637,6 @@ def _(MASS_COLUMNS, mo, pl):
     getVariantConfig, setVariantConfig = mo.state(None)
     return (
         getBtnRow,
-        getChart,
         getDf,
         getFrames,
         getPolling,
@@ -753,9 +752,20 @@ def _(generateChart, getDf, setChart):
 
 
 @app.cell
-def _(getChart):
-    currentChart = getChart()
-    return (currentChart,)
+def _(COLORS, alt, getDf, get_mass_fractions_df, setChart):
+    # currentChart = getChart()
+    massFractionsDf = get_mass_fractions_df(df=getDf())
+    chart = (massFractionsDf.plot.line()
+        .transform_calculate(SubmassName="substring(datum.Submass, 0, indexof(datum.Submass, ' ('))")
+        .mark_line()
+        .encode(
+            x=alt.X("Time (min):Q", title="Time (min)"),
+            y=alt.Y("Normalized Mass:Q"),
+            color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
+        )
+    )
+    setChart(chart)
+    return (chart,)
 
 
 @app.cell
@@ -785,15 +795,24 @@ def _(dur_slider, mo, ncells_slider, variant_config, variant_stack):
 
 
 @app.cell
-def _(currentChart, getBtnRow, getDf, mo, settings_tab, time):
+def _(chart, getBtnRow, getDf, mo, settings_tab, time):
+    explorer = mo.ui.data_explorer(getDf())
     tabs = mo.ui.tabs({
         f'{mo.icon("bi:measuring-cup")}': mo.ui.data_explorer(getDf()),
-        f'{mo.icon("bx:bar-chart-square")}': mo.lazy(currentChart),
+        f'{mo.icon("bx:bar-chart-square")}': mo.lazy(chart),
         f'{mo.icon("bi:sliders")}': settings_tab
-    }, on_change=lambda _: time.sleep(0.11))
+    }, on_change=lambda _: time.sleep(0.11)).style({
+        "width": "1000px",  # fixed width
+        "height": "100px", # fixed height
+        "minHeight": "400px",  # optional, enforces layout space
+        "display": "block",
+        "overflow": "hidden",
+        "transition": "opacity 0.3s ease-in-out",
+        "opacity": "1"
+    })
 
     btnStack = mo.hstack(getBtnRow(), justify="start")
-    return (tabs,)
+    return explorer, tabs
 
 
 @app.cell
@@ -829,8 +848,8 @@ def _():
 def _(COLORS, alt, getDf, get_mass_fractions_df):
     # USE THIS RENDERING RATHER THAN RERENDER PLOT ITERATIVELY
 
-    massFractionsDf = get_mass_fractions_df(df=getDf())
-    (massFractionsDf.plot.line()
+    fractionsDf = get_mass_fractions_df(df=getDf())
+    chrt = (fractionsDf.plot.line()
         .transform_calculate(SubmassName="substring(datum.Submass, 0, indexof(datum.Submass, ' ('))")
         .mark_line()
         .encode(
@@ -839,12 +858,19 @@ def _(COLORS, alt, getDf, get_mass_fractions_df):
             color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
         )
     )
-    return (massFractionsDf,)
+    chrt
+    return
 
 
 @app.cell
-def _(massFractionsDf):
-    massFractionsDf
+def _(chart):
+    chart
+    return
+
+
+@app.cell
+def _(explorer):
+    explorer
     return
 
 
