@@ -12,6 +12,8 @@ spec:
       labels:
         app: haproxy-ssh
     spec:
+      nodeSelector:
+        vlan: internal
       containers:
         - name: haproxy
           image: haproxy:2.9
