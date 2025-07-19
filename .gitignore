@@ -173,3 +173,4 @@ datamount/
 test_history/
 sms_api/api/_main.py
 poetry.lock
+/assets/dev/config/sms_known_hosts

@@ -5,7 +5,7 @@ namespace: sms-api-local
 
 images:
   - name: ghcr.io/biosimulations/sms-api
-    newTag: 0.2.4
+    newTag: 0.2.5
   - name: docker.io/library/mongo
     newTag: 8.0.4
 
@@ -19,6 +19,7 @@ resources:
   - ingress.yaml
   - api-pvc.yaml
   - nats-svc.yaml
+  - haproxy-ssh-svc.yaml
   - vivarium-home-pv.yaml
   - vivarium-home-pvc.yaml
   - mongodb-pvc.yaml

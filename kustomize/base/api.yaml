@@ -65,6 +65,9 @@ spec:
               subPath: svc_vivarium
             - name: slurm-submit-key-file
               mountPath: /run/secrets/slurm_submit_key_file
+            - name: ssh-known-hosts
+              mountPath: /run/secrets/ssh-known-hosts
+              readOnly: true
       volumes:
         - name: api-cache-pvc
           persistentVolumeClaim:
@@ -79,6 +82,9 @@ spec:
               - key: ssh-privatekey
                 path: ssh-privatekey
             secretName: ssh-secret
+        - name: ssh-known-hosts
+          configMap:
+            name: ssh-known-hosts
       imagePullSecrets:
         - name: ghcr-secret
 

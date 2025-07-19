@@ -14,15 +14,17 @@ class SSHService:
     hostname: str
     username: str
     key_path: Path
+    known_hosts: str | None
 
-    def __init__(self, hostname: str, username: str, key_path: Path):
+    def __init__(self, hostname: str, username: str, key_path: Path, known_hosts: Path | None = None) -> None:
         self.hostname = hostname
         self.username = username
         self.key_path = key_path
+        self.known_hosts = str(known_hosts) if known_hosts else None
 
     async def run_command(self, command: str) -> tuple[int, str, str]:
         async with asyncssh.connect(
-            host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=None
+            host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=self.known_hosts
         ) as conn:
             try:
                 logger.info(f"Running ssh command: {command}")
@@ -47,7 +49,7 @@ class SSHService:
 
     async def scp_upload(self, local_file: Path, remote_path: Path) -> None:
         async with asyncssh.connect(
-            host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=None
+            host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=self.known_hosts
         ) as conn:
             try:
                 await asyncssh.scp(srcpaths=local_file, dstpath=(conn, remote_path))
@@ -60,7 +62,7 @@ class SSHService:
 
     async def scp_download(self, local_file: Path, remote_path: Path) -> None:
         async with asyncssh.connect(
-            host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=None
+            host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=self.known_hosts
         ) as conn:
             try:
                 await asyncssh.scp(srcpaths=(conn, remote_path), dstpath=local_file)
@@ -81,4 +83,5 @@ def get_ssh_service(settings: Settings | None = None) -> SSHService:
         hostname=ssh_settings.slurm_submit_host,
         username=ssh_settings.slurm_submit_user,
         key_path=Path(ssh_settings.slurm_submit_key_path),
+        known_hosts=Path(ssh_settings.slurm_submit_known_hosts) if ssh_settings.slurm_submit_known_hosts else None,
     )

@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: haproxy-ssh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: haproxy-ssh
+  template:
+    metadata:
+      labels:
+        app: haproxy-ssh
+    spec:
+      containers:
+        - name: haproxy
+          image: haproxy:2.9
+          ports:
+            - containerPort: 22
+          volumeMounts:
+            - name: config
+              mountPath: /usr/local/etc/haproxy/haproxy.cfg
+              subPath: haproxy.cfg
+          securityContext:
+            capabilities:
+              add: ["NET_BIND_SERVICE"] # allows binding to port 22
+      volumes:
+        - name: config
+          configMap:
+            name: haproxy-config

@@ -115,6 +115,7 @@ class SimulationServiceHpc(SimulationService):
             hostname=settings.slurm_submit_host,
             username=settings.slurm_submit_user,
             key_path=Path(settings.slurm_submit_key_path),
+            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
         )
 
         software_version_path = Path(settings.hpc_repo_base_path) / git_commit_hash
@@ -136,6 +137,7 @@ class SimulationServiceHpc(SimulationService):
             hostname=settings.slurm_submit_host,
             username=settings.slurm_submit_user,
             key_path=Path(settings.slurm_submit_key_path),
+            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
         )
         slurm_service = SlurmService(ssh_service=ssh_service)
 
@@ -203,6 +205,7 @@ class SimulationServiceHpc(SimulationService):
             hostname=settings.slurm_submit_host,
             username=settings.slurm_submit_user,
             key_path=Path(settings.slurm_submit_key_path),
+            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
         )
         slurm_service = SlurmService(ssh_service=ssh_service)
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
@@ -277,6 +280,7 @@ class SimulationServiceHpc(SimulationService):
             hostname=settings.slurm_submit_host,
             username=settings.slurm_submit_user,
             key_path=Path(settings.slurm_submit_key_path),
+            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
         )
         if database_service is None:
             raise RuntimeError("DatabaseService is not available. Cannot submit EcoliSimulation job.")
@@ -417,6 +421,7 @@ class SimulationServiceHpc(SimulationService):
             hostname=settings.slurm_submit_host,
             username=settings.slurm_submit_user,
             key_path=Path(settings.slurm_submit_key_path),
+            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
         )
         slurm_service = SlurmService(ssh_service=ssh_service)
         job_ids: list[SlurmJob] = await slurm_service.get_job_status_squeue(job_ids=[slurmjobid])
