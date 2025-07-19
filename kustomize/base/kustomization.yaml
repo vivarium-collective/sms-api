@@ -5,3 +5,4 @@ resources:
   - api.yaml
   - mongodb.yaml
   - nats.yaml
+  - haproxy-ssh.yaml
