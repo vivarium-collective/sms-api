@@ -150,6 +150,7 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         hostname=settings.slurm_submit_host,
         username=settings.slurm_submit_user,
         key_path=Path(settings.slurm_submit_key_path),
+        known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
     )
     slurm_service = SlurmService(ssh_service=ssh_service)
 

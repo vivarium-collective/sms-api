@@ -12,10 +12,12 @@ from sms_api.config import get_settings
 
 @pytest_asyncio.fixture(scope="session")
 async def ssh_service() -> AsyncGenerator[SSHService]:
+    settings = get_settings()
     ssh_service = SSHService(
-        hostname=get_settings().slurm_submit_host,
-        username=get_settings().slurm_submit_user,
-        key_path=Path(get_settings().slurm_submit_key_path),
+        hostname=settings.slurm_submit_host,
+        username=settings.slurm_submit_user,
+        key_path=Path(settings.slurm_submit_key_path),
+        known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
     )
     yield ssh_service
     await ssh_service.close()
