@@ -1,7 +1,11 @@
 import marimo
 
 __generated_with = "0.14.11"
-app = marimo.App(width="medium", app_title="Atlantis - Single Cell")
+app = marimo.App(
+    width="medium",
+    app_title="Atlantis - Single Cell",
+    layout_file="layouts/single_cell.grid.json",
+)
 
 
 @app.cell
@@ -311,16 +315,27 @@ def _(EcoliSimulationRequest, ParcaDataset, parca_datasets):
 
 
 @app.cell
-def _(JobStatus, alt, mo, pl):
+def _(alt, mo, pl):
+    def default_chart():
+        return mo.ui.altair_chart(
+            alt.Chart(pl.DataFrame({"Time": 0.0, "Normalized Mass": 0.0})).mark_line().encode(x='Time', y='Normalized Mass')
+        )
+    return (default_chart,)
+
+
+@app.cell
+def _(JobStatus, default_chart, mo, pl):
     # set mutable state attributes (hooks, really)
     get_dataframes, set_dataframes = mo.state([])
     get_current_index, set_current_index = mo.state(0)
     get_is_polling, set_is_polling = mo.state(False)
-    get_chart, set_chart = mo.state(mo.ui.altair_chart(alt.Chart().mark_line().encode()))
+    # get_chart, set_chart = mo.state(mo.ui.altair_chart(alt.Chart(pl.DataFrame({"time": 0.0})).mark_line().encode()))
+    get_chart, set_chart = mo.state(default_chart())
     get_status, set_status = mo.state(JobStatus.WAITING)
     get_events, set_events = mo.state([])
     get_events_df, set_events_df = mo.state(pl.DataFrame())
     get_simulation_id, set_simulation_id = mo.state(None)
+    get_stopped, set_stopped = mo.state(False)
 
     # iteratively slice the events df by 10 TODO: is this needed anymore?
     step_size = 10
@@ -333,6 +348,7 @@ def _(JobStatus, alt, mo, pl):
         get_is_polling,
         get_simulation_id,
         get_status,
+        get_stopped,
         set_chart,
         set_current_index,
         set_dataframes,
@@ -341,15 +357,25 @@ def _(JobStatus, alt, mo, pl):
         set_is_polling,
         set_simulation_id,
         set_status,
+        set_stopped,
         step_size,
     )
 
 
 @app.cell
-def _(mo):
-    # set and display run button
+def _(mo, set_is_polling, set_stopped):
+    def stop_simulation():
+        set_is_polling(False)
+        set_stopped(True)
+
+    # set and display run/stop buttons
     run_simulation_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:genomic')} Run Simulation", kind="success")
-    return (run_simulation_button,)
+    stop_simulation_button = mo.ui.run_button(
+        label=f"{mo.icon('pajamas:stop')} Stop Simulation",
+        kind="danger",
+        on_change=lambda _: stop_simulation()
+    )
+    return run_simulation_button, stop_simulation_button
 
 
 @app.cell
@@ -484,12 +510,15 @@ def _(
 
 @app.cell
 def _(
+    default_chart,
     get_chart,
     get_is_polling,
+    get_stopped,
     mo,
     on_poll,
     run_simulation_button,
     set_chart,
+    stop_simulation_button,
 ):
     # set latest render
     latest_chart = get_chart()
@@ -498,31 +527,71 @@ def _(
     refresh = None
     if get_is_polling():
         refresh = mo.ui.refresh(
-            label="Refreshing data...",
+            label="Refreshing data...Select 'off' to pause",
             options=[1.0, 5.0, 10.0],
             default_interval=5.0,
             on_change=lambda _: on_poll()
         )
 
+    spinner = None
+    if not get_stopped() and latest_chart is None:
+        spinner = mo.status.spinner(title="Fetching data...")
+
     # ui stack with run button and latest render
-    stack_items = [run_simulation_button, latest_chart]
+    stack_items = [
+        mo.hstack([run_simulation_button, stop_simulation_button], justify="start"),
+        # latest_chart
+    ]
+
+    # case: polling is started
     if refresh is not None:
+        stack_items.append(latest_chart)
         stack_items.append(refresh)
+
+    # case: polling is started but chart is none
+    if spinner is not None:
+        stack_items.append(spinner)
+
+    if get_stopped():
+        refresh = None
+        latest_chart = default_chart()
+        set_chart(latest_chart)
+        stack_items.append(mo.ui.text_area("Simulation Stopped.").callout(kind="danger"))
     return (stack_items,)
+
+
 @app.cell
-def _(get_events_df, mo):
-    mo.accordion({
+def _(get_events_df, get_is_polling, mo, stack_items):
+    data_explorer = mo.accordion({
         "Explore Data": mo.ui.data_explorer(get_events_df())
     })
+    if get_is_polling():
+        stack_items.append(data_explorer)
     return
-
-
-@app.cell
 
 
 @app.cell
 def _(mo, stack_items):
     mo.vstack(stack_items)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.sidebar(
+        [
+            mo.md("# SMS API"),
+            mo.nav_menu({
+                "https://sms-api.readthedocs.io/en/latest/": f"{mo.icon('pajamas:doc-text')} Documentation",
+                "https://github.com/vivarium-collective/sms-api": f"{mo.icon('pajamas:github')} GitHub"
+            }, orientation="vertical"),
+        ]
+    )
+    return
+
+
+@app.cell
+def _():
     return
 
 
