@@ -1,7 +1,7 @@
 import marimo
 
-__generated_with = "0.14.10"
-app = marimo.App(width="medium")
+__generated_with = "0.14.11"
+app = marimo.App(width="medium", app_title="Atlantis - Single Cell")
 
 
 @app.cell
@@ -509,6 +509,15 @@ def _(
     if refresh is not None:
         stack_items.append(refresh)
     return (stack_items,)
+@app.cell
+def _(get_events_df, mo):
+    mo.accordion({
+        "Explore Data": mo.ui.data_explorer(get_events_df())
+    })
+    return
+
+
+@app.cell
 
 
 @app.cell
