@@ -236,5 +236,15 @@ pguri:
 py:
 	@poetry run python -m asyncio
 
+.PHONY: set-wip
+set-wip:
+	@module=$(ui); \
+	cp app/ui/$$module.py app/ui/wip_$$module.py; \
+	echo Set WIP at app/ui/wip_$$module.py
+
+.PHONY: transfer-wip
+transfer-wip:
+	@module=$(ui); \
+	cp app/ui/wip_$$module.py app/ui/$$module.py
 
 .DEFAULT_GOAL := help

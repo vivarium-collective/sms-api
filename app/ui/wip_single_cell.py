@@ -4,7 +4,7 @@ __generated_with = "0.14.11"
 app = marimo.App(
     width="medium",
     app_title="Atlantis - Single Cell",
-    layout_file="layouts/wip_single_cell.grid.json",
+    layout_file="layouts/single_cell.grid.json",
 )
 
 
@@ -38,7 +38,6 @@ def _():
     from enum import StrEnum
     from typing import Generator
 
-    import numpy as np
     import marimo as mo
     import polars as pl
     import altair as alt
@@ -75,7 +74,6 @@ def _():
         HTTPStatusError,
         JobStatus,
         ParcaDataset,
-        Path,
         StrEnum,
         Timeout,
         WorkerEvent,
@@ -84,7 +82,6 @@ def _():
         contextmanager,
         get_settings,
         mo,
-        os,
         pl,
         time,
     )
@@ -189,16 +186,16 @@ def _(WorkerEvent, alt, mo, pl):
         mass_data = df
         # Assumes single-cell data
         mass_columns = {
-            "Protein": "listeners__mass__protein_mass",
-            "tRNA": "listeners__mass__tRna_mass",
-            "rRNA": "listeners__mass__rRna_mass",
-            "mRNA": "listeners__mass__mRna_mass",
-            "DNA": "listeners__mass__dna_mass",
-            "Small Mol.s": "listeners__mass__smallMolecule_mass",
-            "Dry": "listeners__mass__dry_mass"
+            "Protein": "protein_mass",
+            "tRNA": "tRna_mass",
+            "rRNA": "rRna_mass",
+            "mRNA": "mRna_mass",
+            "DNA": "dna_mass",
+            "Small Mol": "smallMolecule_mass",
+            "Dry": "dry_mass",
         }
         # Compute average mass fractions
-        fractions = {k: (mass_data[v] / mass_data["listeners__mass__dry_mass"]).mean() for k, v in mass_columns.items()}
+        fractions = {k: (mass_data[v] / mass_data["dry_mass"]).mean() for k, v in mass_columns.items()}
         # Build new normalized dataframe
         new_columns = {
             # "Time (min)": (mass_data["time"] - mass_data["time"].min()) / 60,
@@ -222,52 +219,10 @@ def _(WorkerEvent, alt, mo, pl):
                 y=alt.Y("Normalized Mass:Q"),
                 color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
             )
-            .properties(title=title),
-            chart_selection=True,
-            legend_selection=True
+            .properties(title=title)
         )
         return chart
-
-
-    def get_mass_fractions_df(df: pl.DataFrame | None = None) -> mo.ui.altair_chart | None:
-        """Plot normalized biomass component mass fractions from a list of Polars DataFrames."""
-        if df.is_empty():
-            return None
-        # Concatenate all simulation results
-        mass_data = df
-        # Assumes single-cell data
-        mass_columns = {
-            "Protein": "listeners__mass__protein_mass",
-            "tRNA": "listeners__mass__tRna_mass",
-            "rRNA": "listeners__mass__rRna_mass",
-            "mRNA": "listeners__mass__mRna_mass",
-            "DNA": "listeners__mass__dna_mass",
-            "Small Mol.s": "listeners__mass__smallMolecule_mass",
-            "Dry": "listeners__mass__dry_mass"
-        }
-        # Compute average mass fractions
-        fractions = {k: (mass_data[v] / mass_data["listeners__mass__dry_mass"]).mean() for k, v in mass_columns.items()}
-        # Build new normalized dataframe
-        new_columns = {
-            # "Time (min)": (mass_data["time"] - mass_data["time"].min()) / 60,
-            "Time (min)": (mass_data["time"] - mass_data["time"].min()) / 60,
-            **{f"{k} ({fractions[k]:.3f})": mass_data[v] / mass_data[v][0] for k, v in mass_columns.items()},  # type: ignore[str-bytes-safe]
-        }
-        mass_fold_change_df = pl.DataFrame(new_columns)
-        # Melt for Altair plotting
-        melted_df = mass_fold_change_df.melt(
-            id_vars="Time (min)",
-            variable_name="Submass",
-            value_name="Normalized Mass",
-        )
-        return melted_df
-    return (
-        COLORS,
-        MASS_COLUMNS,
-        get_events_dataframe,
-        get_mass_fractions_df,
-        plot_mass_fractions_from_worker_events,
-    )
+    return get_events_dataframe, plot_mass_fractions_from_worker_events
 
 
 @app.cell
@@ -325,12 +280,17 @@ def _(
             except HTTPStatusError as e:
                 raise HTTPStatusError(message=str(e))
 
-    # try:
-    #     parca_datasets = on_get_parcas()
-    # except ValueError as e:
-    #     print(e)
-    #     parca_datasets = None
-    return on_get_simulation_status, on_get_worker_events, on_run_simulation
+    try:
+        parca_datasets = on_get_parcas()
+    except ValueError as e:
+        print(e)
+        parca_datasets = None
+    return (
+        on_get_simulation_status,
+        on_get_worker_events,
+        on_run_simulation,
+        parca_datasets,
+    )
 
 
 @app.cell
@@ -355,21 +315,32 @@ def _(EcoliSimulationRequest, ParcaDataset, parca_datasets):
 
 
 @app.cell
-def _(JobStatus, alt, mo, pl):
+def _(alt, mo, pl):
+    def default_chart():
+        return mo.ui.altair_chart(
+            alt.Chart(pl.DataFrame({"Time": 0.0, "Normalized Mass": 0.0})).mark_line().encode(x='Time', y='Normalized Mass')
+        )
+    return (default_chart,)
+
+
+@app.cell
+def _(JobStatus, default_chart, mo, pl):
     # set mutable state attributes (hooks, really)
     get_dataframes, set_dataframes = mo.state([])
     get_current_index, set_current_index = mo.state(0)
     get_is_polling, set_is_polling = mo.state(False)
-    get_chart, set_chart = mo.state(mo.ui.altair_chart(alt.Chart().mark_line().encode()))
+    # get_chart, set_chart = mo.state(mo.ui.altair_chart(alt.Chart(pl.DataFrame({"time": 0.0})).mark_line().encode()))
+    get_chart, set_chart = mo.state(default_chart())
     get_status, set_status = mo.state(JobStatus.WAITING)
     get_events, set_events = mo.state([])
     get_events_df, set_events_df = mo.state(pl.DataFrame())
     get_simulation_id, set_simulation_id = mo.state(None)
-    get_is_running, set_is_running = mo.state(False)
+    get_stopped, set_stopped = mo.state(False)
 
     # iteratively slice the events df by 10 TODO: is this needed anymore?
     step_size = 10
     return (
+        get_chart,
         get_current_index,
         get_dataframes,
         get_events,
@@ -377,37 +348,34 @@ def _(JobStatus, alt, mo, pl):
         get_is_polling,
         get_simulation_id,
         get_status,
+        get_stopped,
+        set_chart,
         set_current_index,
         set_dataframes,
         set_events,
         set_events_df,
         set_is_polling,
-        set_is_running,
         set_simulation_id,
         set_status,
+        set_stopped,
         step_size,
     )
 
 
 @app.cell
-def _(set_is_polling, set_is_running):
-    def on_stop():
+def _(mo, set_is_polling, set_stopped):
+    def stop_simulation():
         set_is_polling(False)
-        set_is_running(False)
-    return (on_stop,)
+        set_stopped(True)
 
-
-@app.cell
-def _(mo, on_stop):
-    # set and display run button
+    # set and display run/stop buttons
     run_simulation_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:genomic')} Run Simulation", kind="success")
-    pause_simulation_button = mo.ui.run_button(label=f"{mo.icon('formkit:pause', size=16, inline=False)}", kind="warn")
-    stop_simulation_button = mo.ui.run_button(label=f"{mo.icon('formkit:stop', size=16, inline=False)}", kind="danger", on_change=lambda _: on_stop())
-    return (
-        pause_simulation_button,
-        run_simulation_button,
-        stop_simulation_button,
+    stop_simulation_button = mo.ui.run_button(
+        label=f"{mo.icon('pajamas:stop')} Stop Simulation",
+        kind="danger",
+        on_change=lambda _: stop_simulation()
     )
+    return run_simulation_button, stop_simulation_button
 
 
 @app.cell
@@ -418,12 +386,10 @@ async def _(
     request: "EcoliSimulationRequest",
     run_simulation_button,
     set_is_polling,
-    set_is_running,
 ):
     # run the simulation
     experiment: EcoliExperiment | None = None  # on_run_simulation()
     if run_simulation_button.value:
-        set_is_running(True)
         experiment = on_run_simulation(request)
         await asyncio.sleep(0.45)
         # set polling
@@ -471,11 +437,6 @@ def _(get_events, get_events_dataframe, set_events_df):
     return
 
 
-@app.class_definition
-class FailedJobError(Exception):
-    pass
-
-
 @app.cell
 def _(
     JobStatus,
@@ -484,10 +445,12 @@ def _(
     get_events_dataframe,
     get_events_df,
     get_is_polling,
+    get_status,
     on_get_simulation_status,
     on_get_worker_events,
     pl,
     plot_mass_fractions_from_worker_events,
+    set_chart,
     set_current_index,
     set_dataframes,
     set_events,
@@ -514,363 +477,116 @@ def _(
             combined_df = pl.concat(current_dataframes)
         chart = plot_mass_fractions_from_worker_events(combined_df)
         # return mo.vstack([plt_button, mo.md("Press the button to start polling and plotting.")])
-        print(f'got combined df: {combined_df}')
         return chart
 
     def on_poll(buffer: float | None = None):
-        try:
-            # if polling is turned on, get latest event data
-            if get_is_polling():
-                # small buffer -- let it breathe!
-                time.sleep(buffer or 1.1)
-                # get latest status to make sure its still running
-                latest_status = on_get_simulation_status(simulation_id=simulation_id)
-                if latest_status == JobStatus.FAILED:
-                    raise FailedJobError("The job has failed.")
-                elif latest_status == JobStatus.COMPLETED:
-                    print('Simulation has completed.')
-                    set_status(latest_status)
-                    return
-
-                set_status(latest_status)
-
-                worker_events = on_get_worker_events(simulation_id)
-                simulation_events_df = get_events_dataframe(worker_events)
-
-                # set latest event data (TODO: what's the endpoint?)
-                set_events(worker_events)
-                set_events_df(simulation_events_df)
-                # update_data_index()
-
-                # set_chart(render_chart())
-
-                # bitflip polling
-                # set_is_polling(False)
+        # if polling is turned on, get latest event data
+        if get_is_polling():
+            # small buffer -- let it breathe!
+            time.sleep(buffer or 1.1)
+            # get latest status to make sure its still running
+            latest_status = on_get_simulation_status(simulation_id=simulation_id)
+            if get_status() == JobStatus.FAILED:
+                raise ValueError("The job has failed.")
             else:
-                print(f'Not polling')
-        except FailedJobError as e:
-            raise FailedJobError(e)
+                # if it's running, set the latest status
+                set_status(latest_status)
+            worker_events = on_get_worker_events(simulation_id)
+            simulation_events_df = get_events_dataframe(worker_events)
 
-    return on_poll, render_chart
+            # set latest event data (TODO: what's the endpoint?)
+            set_events(worker_events)
+            set_events_df(simulation_events_df)
+            update_data_index()
+
+            set_chart(render_chart())
+
+            # bitflip polling
+            # set_is_polling(False)
+        else:
+            print(f'Not polling')
+    return (on_poll,)
 
 
 @app.cell
 def _(
-    JobStatus,
+    default_chart,
+    get_chart,
     get_is_polling,
-    get_status,
+    get_stopped,
     mo,
     on_poll,
-    pause_simulation_button,
     run_simulation_button,
-    set_is_polling,
-    set_is_running,
+    set_chart,
     stop_simulation_button,
 ):
-    latest_status = get_status()
-    if latest_status == JobStatus.FAILED or latest_status == JobStatus.COMPLETED:
-        print('Stopping simulation')
-        # refresh = None
-        set_is_polling(False)
-        set_is_running(False)
+    # set latest render
+    latest_chart = get_chart()
+    set_chart(latest_chart)
 
     refresh = None
     if get_is_polling():
         refresh = mo.ui.refresh(
-            label="Refreshing data...",
-            options=[0.25, 0.5, 1.0, 5.0, 10.0],
-            default_interval=0.25,
+            label="Refreshing data...Select 'off' to pause",
+            options=[1.0, 5.0, 10.0],
+            default_interval=5.0,
             on_change=lambda _: on_poll()
         )
 
+    spinner = None
+    if not get_stopped() and latest_chart is None:
+        spinner = mo.status.spinner(title="Fetching data...")
+
     # ui stack with run button and latest render
-    hstack_items = [run_simulation_button, pause_simulation_button, stop_simulation_button]
+    stack_items = [
+        mo.hstack([run_simulation_button, stop_simulation_button], justify="start"),
+        # latest_chart
+    ]
+
+    # case: polling is started
     if refresh is not None:
-        hstack_items.append(refresh)
-    button_hstack = mo.hstack(hstack_items, justify="start")
-    return (button_hstack,)
+        stack_items.append(latest_chart)
+        stack_items.append(refresh)
+
+    # case: polling is started but chart is none
+    if spinner is not None:
+        stack_items.append(spinner)
+
+    if get_stopped():
+        refresh = None
+        latest_chart = default_chart()
+        set_chart(latest_chart)
+        stack_items.append(mo.ui.text_area("Simulation Stopped.").callout(kind="danger"))
+    return (stack_items,)
 
 
 @app.cell
-def _(button_hstack):
-    button_hstack
-    return
-
-
-@app.cell
-def _(render_chart):
-    # set latest render
-    latest_chart = render_chart()
-    latest_chart
-    return
-
-
-@app.cell
-def _(get_events_df, mo):
-    mo.accordion({
+def _(get_events_df, get_is_polling, mo, stack_items):
+    data_explorer = mo.accordion({
         "Explore Data": mo.ui.data_explorer(get_events_df())
     })
+    if get_is_polling():
+        stack_items.append(data_explorer)
     return
 
 
 @app.cell
-def _(Path, os):
-    outdir = Path('assets/tests/test_history/')
-    pqpaths = iter([outdir / fname for fname in os.listdir(outdir)])
-    return (pqpaths,)
+def _(mo, stack_items):
+    mo.vstack(stack_items)
+    return
 
 
 @app.cell
-def _(MASS_COLUMNS, mo, pl):
-    getPolling, setPolling = mo.state(None)
-    getRowIndex, setRowIndex = mo.state(1)
-    getFrames, setFrames = mo.state([])
-    getDf, setDf = mo.state(pl.DataFrame(
-                dict(zip(
-                    list(MASS_COLUMNS.values()),
-                    [1.0 for _ in MASS_COLUMNS]
-                ))
-            ))
-    getCond, setCond = mo.state(False)
-    getBtnRow, setBtnRow = mo.state([])
-    getChart, setChart = mo.state(None)
-    getVariantConfig, setVariantConfig = mo.state(None)
-    return (
-        getBtnRow,
-        getDf,
-        getFrames,
-        getPolling,
-        getRowIndex,
-        getVariantConfig,
-        setBtnRow,
-        setChart,
-        setCond,
-        setDf,
-        setFrames,
-        setPolling,
-        setRowIndex,
-        setVariantConfig,
+def _(mo):
+    mo.sidebar(
+        [
+            mo.md("# SMS API"),
+            mo.nav_menu({
+                "https://sms-api.readthedocs.io/en/latest/": f"{mo.icon('pajamas:doc-text')} Documentation",
+                "https://github.com/vivarium-collective/sms-api": f"{mo.icon('pajamas:github')} GitHub"
+            }, orientation="vertical"),
+        ]
     )
-
-
-@app.cell
-def _(MASS_COLUMNS, pl, pqpaths):
-    def get_chunk():
-        _df = pl.read_parquet(next(pqpaths))
-        return _df.select(*list(MASS_COLUMNS.values()))
-
-    df = get_chunk()
-    return (df,)
-
-
-@app.cell
-def _(mo, setBtnRow, setPolling):
-    start = mo.ui.run_button(label='Start', kind='success', on_change=lambda _: setPolling(True))
-    stop = mo.ui.run_button(label='Stop', kind='danger', on_change=lambda _: setPolling(False))
-    count = mo.ui.refresh(label="Fetching data...", default_interval=1.0, options=[0.11, 1.0, 5.0])
-
-    btns = [start, stop]
-    setBtnRow(btns)
-    return btns, count, stop
-
-
-@app.cell
-def _(getPolling, setCond):
-    if getPolling() == False:
-        setCond(True)
-
-    getPolling()
-    return
-
-
-@app.cell
-def _(
-    btns,
-    count,
-    df,
-    getBtnRow,
-    getFrames,
-    getPolling,
-    getRowIndex,
-    mo,
-    pl,
-    setBtnRow,
-    setDf,
-    setFrames,
-    setRowIndex,
-    stop,
-):
-    if getPolling() == True:
-        currentBtns = getBtnRow()
-        if len(currentBtns) < 3:
-            setBtnRow([*getBtnRow(), count])
-        iRow = getRowIndex()
-        print(f'Fetching networking data ;) which is for chunk row:\n{iRow}\n....')
-        # await asyncio.sleep(5.0)
-        currentFrames = getFrames()
-        rowDf = df.slice(iRow, 1)
-        currentFrames.append(rowDf)
-        setFrames(currentFrames)
-        setRowIndex(iRow + 1)
-        # await asyncio.sleep(0.8)
-        # setChart(generateChart(getDf()))
-        setDf(pl.concat(getFrames()))
-
-    if getPolling() == False:
-        setBtnRow(btns)
-
-    mo.stop(stop.value, 'Stopped!')
-    return
-
-
-@app.cell
-def _(getBtnRow, mo):
-    mo.hstack(getBtnRow(), justify="start")
-    return
-
-
-@app.cell
-def _(getFrames, pl, plot_mass_fractions_from_worker_events):
-    def generateChart(df):
-        return plot_mass_fractions_from_worker_events(
-            pl.concat([df, *getFrames()])
-        )
-    return (generateChart,)
-
-
-@app.cell
-def _(stop):
-    if stop.value:
-        print('stop')
-    return
-
-
-@app.cell
-def _(generateChart, getDf, setChart):
-    setChart(generateChart(getDf()))
-    return
-
-
-@app.cell
-def _(COLORS, alt, getDf, get_mass_fractions_df, setChart):
-    # currentChart = getChart()
-    massFractionsDf = get_mass_fractions_df(df=getDf())
-    chart = (massFractionsDf.plot.line()
-        .transform_calculate(SubmassName="substring(datum.Submass, 0, indexof(datum.Submass, ' ('))")
-        .mark_line()
-        .encode(
-            x=alt.X("Time (min):Q", title="Time (min)"),
-            y=alt.Y("Normalized Mass:Q"),
-            color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
-        )
-    )
-    setChart(chart)
-    return (chart,)
-
-
-@app.cell
-def _(getVariantConfig, mo, setVariantConfig):
-    ncells_slider = mo.ui.slider(start=0, stop=10_000, step=1.0)
-    dur_slider = mo.ui.slider(start=0.1, stop=10_000, step=0.1)
-
-    if not getVariantConfig():
-        setVariantConfig([])
-
-    add_param_button = mo.ui.run_button(label='+', on_change=lambda _: setVariantConfig([*getVariantConfig(), {}]))
-    variant_config = mo.ui.array(getVariantConfig())
-    variant_stack = mo.hstack([variant_config, add_param_button], justify="start")
-    return dur_slider, ncells_slider, variant_config, variant_stack
-
-
-@app.cell
-def _(dur_slider, mo, ncells_slider, variant_config, variant_stack):
-    settings_tab = mo.vstack([
-        mo.md(f'#### Number of Cells: {ncells_slider.value} | Duration: {dur_slider.value} | Variant Config: {variant_config.value}'),
-        mo.accordion(items=dict(zip(
-            ['Number of Cells', 'Duration', 'Variant Config'],
-            [ncells_slider, dur_slider, variant_stack]
-        )))
-    ])
-    return (settings_tab,)
-
-
-@app.cell
-def _(chart, getBtnRow, getDf, mo, settings_tab, time):
-    explorer = mo.ui.data_explorer(getDf())
-    tabs = mo.ui.tabs({
-        f'{mo.icon("bi:measuring-cup")}': mo.ui.data_explorer(getDf()),
-        f'{mo.icon("bx:bar-chart-square")}': mo.lazy(chart),
-        f'{mo.icon("bi:sliders")}': settings_tab
-    }, on_change=lambda _: time.sleep(0.11)).style({
-        "width": "1000px",  # fixed width
-        "height": "100px", # fixed height
-        "minHeight": "400px",  # optional, enforces layout space
-        "display": "block",
-        "overflow": "hidden",
-        "transition": "opacity 0.3s ease-in-out",
-        "opacity": "1"
-    })
-
-    btnStack = mo.hstack(getBtnRow(), justify="start")
-    return explorer, tabs
-
-
-@app.cell
-def _(tabs):
-    tabs
-    return
-
-
-@app.cell
-def _(getFrames, mo):
-    frames = list(range(len(getFrames())))
-    x_slider = mo.ui.slider(label="Choose duration", start=frames[0], stop=frames[-1], step=1, value=frames[-1], include_input=True)
-    x_slider
-    return
-
-
-@app.cell
-def _(getFrames, mo):
-    def getUpperBound():
-        return list(range(len(getFrames())))[-1]
-
-    getSlider, setSlider = mo.state(getUpperBound())
-    return
-
-
-@app.cell
-def _():
-    # eventsDf.plot.line(x='time')
-    return
-
-
-@app.cell
-def _(COLORS, alt, getDf, get_mass_fractions_df):
-    # USE THIS RENDERING RATHER THAN RERENDER PLOT ITERATIVELY
-
-    fractionsDf = get_mass_fractions_df(df=getDf())
-    chrt = (fractionsDf.plot.line()
-        .transform_calculate(SubmassName="substring(datum.Submass, 0, indexof(datum.Submass, ' ('))")
-        .mark_line()
-        .encode(
-            x=alt.X("Time (min):Q", title="Time (min)"),
-            y=alt.Y("Normalized Mass:Q"),
-            color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
-        )
-    )
-    chrt
-    return
-
-
-@app.cell
-def _(chart):
-    chart
-    return
-
-
-@app.cell
-def _(explorer):
-    explorer
     return
 
 
