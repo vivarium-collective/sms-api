@@ -9,6 +9,15 @@ app = marimo.App(
 
 
 @app.cell
+def _():
+    # /// script
+    # [tool.marimo.display]
+    # theme = "dark"
+    # ///
+    return
+
+
+@app.cell
 def _(mo):
     mo.md(
         r"""
@@ -85,6 +94,25 @@ def _():
         pl,
         time,
     )
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        f"""
+    ### How to use this tool:
+
+    - *_Run_*: Click the "Run Simulation" button to run a single-generation simulation of the vEcoli whole-cell model.
+    - *_Pause_*: Click the dropdown menu to the left of the refresh button and select "off". The simulation will still run, but data retrieval will be paused.
+    - *_Stop_*: Click the "Stop Simulation" button to stop the data retrieval and refresh the experiment. WARNING: Your simulation will be lost.
+    """
+    )
+    return
+
+
+@app.cell
+def _():
+    return
 
 
 @app.cell
@@ -369,10 +397,15 @@ def _(mo, set_is_polling, set_stopped):
         set_stopped(True)
 
     # set and display run/stop buttons
-    run_simulation_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:genomic')} Run Simulation", kind="success")
+    run_simulation_button = mo.ui.run_button(
+        label=f"{mo.icon('mdi:bacteria-outline')} Start",
+        kind="success",
+        tooltip="Run Simulation"
+    )
     stop_simulation_button = mo.ui.run_button(
-        label=f"{mo.icon('pajamas:stop')} Stop Simulation",
+        label=f"{mo.icon('pajamas:stop')} Stop",
         kind="danger",
+        tooltip="Stop Simulation",
         on_change=lambda _: stop_simulation()
     )
     return run_simulation_button, stop_simulation_button
@@ -528,7 +561,7 @@ def _(
     refresh = None
     if get_is_polling():
         refresh = mo.ui.refresh(
-            label="Refreshing data...Select 'off' to pause",
+            label="Refreshing data...",
             options=[1.0, 5.0, 10.0],
             default_interval=5.0,
             on_change=lambda _: on_poll()
@@ -539,8 +572,9 @@ def _(
         spinner = mo.status.spinner(title="Fetching data...")
 
     # ui stack with run button and latest render
+    button_stack = [run_simulation_button, stop_simulation_button]
     stack_items = [
-        mo.hstack([run_simulation_button, stop_simulation_button], justify="start"),
+        mo.hstack(button_stack, justify="start"),
         # latest_chart
     ]
 
@@ -548,6 +582,7 @@ def _(
     if refresh is not None:
         stack_items.append(refresh)
 
+    # case: there are worker events: render chart!!
     if len(current_events):
         stack_items.append(latest_chart)
 
@@ -560,7 +595,7 @@ def _(
         latest_chart = default_chart()
         set_chart(latest_chart)
         stack_items.append(mo.ui.text_area("Simulation Stopped.").callout(kind="danger"))
-    return (stack_items,)
+    return latest_chart, refresh, spinner, stack_items
 
 
 @app.cell
@@ -570,12 +605,6 @@ def _(get_events_df, get_is_polling, mo, stack_items):
     })
     if get_is_polling():
         stack_items.append(data_explorer)
-    return
-
-
-@app.cell
-def _(mo, stack_items):
-    mo.vstack(stack_items)
     return
 
 
@@ -595,22 +624,73 @@ def _(mo):
 
 
 @app.cell
-def _(current_events):
-    if not len(current_events):
-        print('No events yet!')
-    return
-
-
-@app.cell
 def _(mo):
     menu_content = {
-        "https://sms-api.readthedocs.io/en/latest/": f"{mo.icon('pajamas:doc-text')} Documentation",
+        "https://sms-api.readthedocs.io/en/latest/": f"{mo.icon('pajamas:doc-text')} SMS API Docs",
         "https://github.com/vivarium-collective/sms-api": f"{mo.icon('pajamas:github')} SMS API GitHub",
         "https://covertlab.github.io/vEcoli/": f"{mo.icon('cil:fingerprint')} vEcoli"
 
     }
 
     mo.nav_menu(menu_content, orientation="horizontal")
+    return
+
+
+@app.cell
+def _():
+    # original working bundled ui stack
+    # ui_stack = mo.vstack(stack_items)
+    # ui_stack
+    return
+
+
+@app.cell
+def _(get_events, get_events_df, latest_chart, mo):
+    tabs = mo.ui.tabs({
+        f"{mo.icon('material-symbols:help-outline-rounded')} Help": mo.md(f"""
+            ### How to use this tool:
+
+            - *_Run_*: Click the "Run Simulation" button to run a single-generation simulation of the vEcoli whole-cell model.
+            - *_Pause_*: Click the dropdown menu to the left of the refresh button and select "off". The simulation will still run, but data retrieval will be paused.
+            - *_Stop_*: Click the "Stop Simulation" button to stop the data retrieval and refresh the experiment. WARNING: Your simulation will be lost.
+        """),
+        f"{mo.icon('material-symbols:graph-3')} Explore": mo.ui.data_explorer(get_events_df()),
+        f"{mo.icon('codicon:graph-line')} Visualize": latest_chart if len(get_events()) else "Start the simulation. Results will display here.",
+        f"{mo.icon('icon-park-twotone:experiment')} Configure": mo.md("PARAMS/VARIANT CONFIGS HERE"),
+    })
+    tabs
+    return
+
+
+@app.cell
+def _(mo, run_simulation_button, stop_simulation_button):
+    btn_items = [run_simulation_button, stop_simulation_button]
+    btn_stack = mo.hstack(btn_items, justify="start")
+    return (btn_stack,)
+
+
+@app.cell
+def _(btn_stack, get_stopped, mo, refresh, spinner):
+    row_items = [btn_stack]
+    if refresh is not None:
+        row_items.append(refresh)
+    if spinner is not None:
+        row_items.append(spinner)
+
+    if get_stopped():
+        row_items.append(mo.ui.text_area("Simulation Stopped.").callout(kind="danger"))
+    return (row_items,)
+
+
+@app.cell
+def _(mo, row_items):
+    row_stack = mo.vstack(row_items)
+    return (row_stack,)
+
+
+@app.cell
+def _(row_stack):
+    row_stack
     return
 
 
