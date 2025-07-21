@@ -1,13 +1,13 @@
 {
     "type": "grid",
     "data": {
-        "columns": 23,
+        "columns": 24,
         "rowHeight": 20,
-        "maxWidth": 1600,
+        "maxWidth": 1400,
         "bordered": true,
         "cells": [
             {
-                "position": [0, 0, 14, 7]
+                "position": [0, 0, 17, 7]
             },
             {
                 "position": null
@@ -55,7 +55,7 @@
                 "position": null
             },
             {
-                "position": null
+                "position": [0, 8, 24, 77]
             },
             {
                 "position": null
@@ -64,67 +64,7 @@
                 "position": null
             },
             {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": [5, 28, 5, 4]
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": [0, 9, 4, 22]
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": null
-            },
-            {
-                "position": [5, 9, 14, 19]
-            },
-            {
-                "position": null
-            },
-            {
-                "position": [0, 37, 23, 36]
+                "position": [19, 0, 5, 3]
             },
             {
                 "position": null

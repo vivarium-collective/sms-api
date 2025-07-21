@@ -4,7 +4,7 @@ __generated_with = "0.14.11"
 app = marimo.App(
     width="medium",
     app_title="Atlantis - Single Cell",
-    layout_file="layouts/single_cell.grid.json",
+    layout_file="layouts/wip_single_cell.grid.json",
 )
 
 
@@ -434,7 +434,7 @@ def _(get_events, get_events_dataframe, set_events_df):
     current_events = get_events()
     latest_events_df = get_events_dataframe(current_events)
     set_events_df(latest_events_df)
-    return
+    return (current_events,)
 
 
 @app.cell
@@ -510,6 +510,7 @@ def _(
 
 @app.cell
 def _(
+    current_events,
     default_chart,
     get_chart,
     get_is_polling,
@@ -545,8 +546,10 @@ def _(
 
     # case: polling is started
     if refresh is not None:
-        stack_items.append(latest_chart)
         stack_items.append(refresh)
+
+    if len(current_events):
+        stack_items.append(latest_chart)
 
     # case: polling is started but chart is none
     if spinner is not None:
@@ -578,7 +581,7 @@ def _(mo, stack_items):
 
 @app.cell
 def _(mo):
-    mo.sidebar(
+    sidenav = mo.sidebar(
         [
             mo.md("# SMS API"),
             mo.nav_menu({
@@ -587,6 +590,27 @@ def _(mo):
             }, orientation="vertical"),
         ]
     )
+    sidenav
+    return
+
+
+@app.cell
+def _(current_events):
+    if not len(current_events):
+        print('No events yet!')
+    return
+
+
+@app.cell
+def _(mo):
+    menu_content = {
+        "https://sms-api.readthedocs.io/en/latest/": f"{mo.icon('pajamas:doc-text')} Documentation",
+        "https://github.com/vivarium-collective/sms-api": f"{mo.icon('pajamas:github')} SMS API GitHub",
+        "https://covertlab.github.io/vEcoli/": f"{mo.icon('cil:fingerprint')} vEcoli"
+
+    }
+
+    mo.nav_menu(menu_content, orientation="horizontal")
     return
 
 
