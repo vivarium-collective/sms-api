@@ -172,7 +172,8 @@ mongoup:
 
 .PHONY: natsup
 natsup:
-	@docker run -d --name nats --rm -p 4222:4222 nats
+	@[ -z "$(port)" ] && port=30050 || port=$(port); \
+	docker run -d --name nats --rm -p $$port:$$port nats
 
 # this command should run psql -h localhost -p 65432 -U alexanderpatrie sms
 .PHONY: pingpg
@@ -236,5 +237,16 @@ pguri:
 py:
 	@poetry run python -m asyncio
 
+.PHONY: set-wip
+set-wip:
+	@module=$(ui); \
+	cp app/ui/$$module.py app/ui/wip_$$module.py; \
+	echo Set WIP at app/ui/wip_$$module.py
+
+.PHONY: transfer-wip
+transfer-wip:
+	@module=$(ui); \
+	cp app/ui/wip_$$module.py app/ui/$$module.py; \
+	cp app/ui/layouts/wip_$$module.grid.json app/ui/layouts/$$module.grid.json
 
 .DEFAULT_GOAL := help

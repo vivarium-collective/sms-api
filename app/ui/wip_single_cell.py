@@ -1,7 +1,20 @@
 import marimo
 
-__generated_with = "0.14.10"
-app = marimo.App(width="medium")
+__generated_with = "0.14.11"
+app = marimo.App(
+    width="medium",
+    app_title="Atlantis - Single Cell",
+    layout_file="layouts/wip_single_cell.grid.json",
+)
+
+
+@app.cell
+def _():
+    # /// script
+    # [tool.marimo.display]
+    # theme = "dark"
+    # ///
+    return
 
 
 @app.cell
@@ -31,7 +44,7 @@ def _():
     from pprint import pp, pformat
     from pathlib import Path
     from contextlib import contextmanager
-    from enum import StrEnum
+    from enum import StrEnum, Enum
     from typing import Generator
 
     import marimo as mo
@@ -66,6 +79,7 @@ def _():
         Client,
         EcoliExperiment,
         EcoliSimulationRequest,
+        Enum,
         Generator,
         HTTPStatusError,
         JobStatus,
@@ -76,10 +90,8 @@ def _():
         alt,
         asyncio,
         contextmanager,
-        display_dto,
         get_settings,
         mo,
-        pformat,
         pl,
         time,
     )
@@ -205,7 +217,7 @@ def _(WorkerEvent, alt, mo, pl):
         melted_df = mass_fold_change_df.melt(
             id_vars="Time (min)",
             variable_name="Submass",
-            value_name="Mass (normalized by t = 0 min)",
+            value_name="Normalized Mass",
         )
         title = "Biomass components (average fraction of total dry mass)"
         chart: alt.Chart = mo.ui.altair_chart(
@@ -214,7 +226,7 @@ def _(WorkerEvent, alt, mo, pl):
             .mark_line()
             .encode(
                 x=alt.X("Time (min):Q", title="Time (min)"),
-                y=alt.Y("Mass (normalized by t = 0 min):Q"),
+                y=alt.Y("Normalized Mass:Q"),
                 color=alt.Color("SubmassName:N", scale=alt.Scale(range=COLORS), legend=alt.Legend(labelFontSize=14)),
             )
             .properties(title=title)
@@ -313,16 +325,29 @@ def _(EcoliSimulationRequest, ParcaDataset, parca_datasets):
 
 
 @app.cell
-def _(JobStatus, alt, mo, pl):
+def _(alt, mo, pl):
+    def default_chart():
+        return mo.ui.altair_chart(
+            alt.Chart(pl.DataFrame({"Time": 0.0, "Normalized Mass": 0.0})).mark_line().encode(x='Time', y='Normalized Mass')
+        )
+    return (default_chart,)
+
+
+@app.cell
+def _(JobStatus, default_chart, mo, pl):
     # set mutable state attributes (hooks, really)
     get_dataframes, set_dataframes = mo.state([])
     get_current_index, set_current_index = mo.state(0)
     get_is_polling, set_is_polling = mo.state(False)
-    get_chart, set_chart = mo.state(mo.ui.altair_chart(alt.Chart().mark_line().encode()))
+    # get_chart, set_chart = mo.state(mo.ui.altair_chart(alt.Chart(pl.DataFrame({"time": 0.0})).mark_line().encode()))
+    get_chart, set_chart = mo.state(default_chart())
     get_status, set_status = mo.state(JobStatus.WAITING)
     get_events, set_events = mo.state([])
     get_events_df, set_events_df = mo.state(pl.DataFrame())
     get_simulation_id, set_simulation_id = mo.state(None)
+    get_stopped, set_stopped = mo.state(False)
+    get_counter, set_counter = mo.state(0)
+    get_paused, set_paused = mo.state(False)
 
     # iteratively slice the events df by 10 TODO: is this needed anymore?
     step_size = 10
@@ -335,7 +360,9 @@ def _(JobStatus, alt, mo, pl):
         get_is_polling,
         get_simulation_id,
         get_status,
+        get_stopped,
         set_chart,
+        set_counter,
         set_current_index,
         set_dataframes,
         set_events,
@@ -343,15 +370,30 @@ def _(JobStatus, alt, mo, pl):
         set_is_polling,
         set_simulation_id,
         set_status,
+        set_stopped,
         step_size,
     )
 
 
 @app.cell
-def _(mo):
-    # set and display run button
-    run_simulation_button = mo.ui.run_button(label=f"{mo.icon('eos-icons:genomic')} Run Simulation {mo.icon('svg-spinners:blocks-wave')}", kind="success")
-    return (run_simulation_button,)
+def _(mo, set_is_polling, set_stopped):
+    def stop_simulation():
+        set_is_polling(False)
+        set_stopped(True)
+
+    # set and display run/stop buttons
+    run_simulation_button = mo.ui.run_button(
+        label=f"{mo.icon('mdi:bacteria-outline')} Start",
+        kind="success",
+        tooltip="Run Simulation"
+    )
+    stop_simulation_button = mo.ui.run_button(
+        label=f"{mo.icon('pajamas:stop')} Stop",
+        kind="danger",
+        tooltip="Stop Simulation",
+        on_change=lambda _: stop_simulation()
+    )
+    return run_simulation_button, stop_simulation_button
 
 
 @app.cell
@@ -410,7 +452,7 @@ def _(get_events, get_events_dataframe, set_events_df):
     current_events = get_events()
     latest_events_df = get_events_dataframe(current_events)
     set_events_df(latest_events_df)
-    return
+    return (current_events,)
 
 
 @app.cell
@@ -427,6 +469,7 @@ def _(
     pl,
     plot_mass_fractions_from_worker_events,
     set_chart,
+    set_counter,
     set_current_index,
     set_dataframes,
     set_events,
@@ -455,11 +498,11 @@ def _(
         # return mo.vstack([plt_button, mo.md("Press the button to start polling and plotting.")])
         return chart
 
-    def on_poll(buffer: float | None = None):
+    def on_poll(icounter: int | None = None):
         # if polling is turned on, get latest event data
         if get_is_polling():
             # small buffer -- let it breathe!
-            time.sleep(buffer or 1.1)
+            time.sleep(1.1)
             # get latest status to make sure its still running
             latest_status = on_get_simulation_status(simulation_id=simulation_id)
             if get_status() == JobStatus.FAILED:
@@ -477,8 +520,8 @@ def _(
 
             set_chart(render_chart())
 
-            # bitflip polling
-            # set_is_polling(False)
+            if icounter:
+                set_counter(icounter)
         else:
             print(f'Not polling')
     return (on_poll,)
@@ -486,14 +529,16 @@ def _(
 
 @app.cell
 def _(
-    display_dto,
-    experiment: "EcoliExperiment | None",
+    current_events,
+    default_chart,
     get_chart,
     get_is_polling,
+    get_stopped,
     mo,
     on_poll,
     run_simulation_button,
     set_chart,
+    stop_simulation_button,
 ):
     # set latest render
     latest_chart = get_chart()
@@ -501,322 +546,222 @@ def _(
 
     refresh = None
     if get_is_polling():
-        refresh = mo.ui.refresh(label="Refreshing data...", default_interval=1, on_change=lambda _: on_poll())
+        refresh = mo.ui.refresh(
+            label="Refreshing data...",
+            options=[1.0, 5.0, 10.0],
+            default_interval=5.0,
+            on_change=lambda _: on_poll(_)
+        )
+
+    spinner = None
+    if not get_stopped() and latest_chart is None:
+        spinner = mo.status.spinner(title="Fetching data...")
 
     # ui stack with run button and latest render
-    stack_items = [run_simulation_button, display_dto(experiment), latest_chart]
+    button_stack = [run_simulation_button, stop_simulation_button]
+    stack_items = [
+        mo.hstack(button_stack, justify="start"),
+        # latest_chart
+    ]
+
+    # case: polling is started
     if refresh is not None:
         stack_items.append(refresh)
-    return (stack_items,)
+
+    # case: there are worker events: render chart!!
+    if len(current_events):
+        stack_items.append(latest_chart)
+
+    # case: polling is started but chart is none
+    if spinner is not None:
+        stack_items.append(spinner)
+
+    if get_stopped():
+        refresh = None
+        latest_chart = default_chart()
+        set_chart(latest_chart)
+        stack_items.append(mo.ui.text_area("Simulation Stopped.").callout(kind="danger"))
+    return latest_chart, refresh, spinner, stack_items
 
 
 @app.cell
-def _(mo, stack_items):
-    mo.vstack(stack_items)
-    return
-
-
-@app.cell
-def _():
-    # worker_events: list[WorkerEvent] = on_get_worker_events(simulation_id)
-    #
-    # # get initial events dataframe TODO: we must ensure that this is always the freshest call
-    # simulation_events_df = get_events_dataframe(worker_events)
-    #
-    # def set_step_index(worker_events: list[WorkerEvent], simulation_events_df: pl.DataFrame) -> None:
-    #     if len(worker_events):
-    #         next_index = mo.state.current_index
-    #         end_index = min(next_index + step_size, simulation_events_df.height)
-    #         if next_index < simulation_events_df.height:
-    #             mo.state.dataframes.append(simulation_events_df.slice(next_index, end_index - next_index))
-    #             mo.state.current_index = end_index
-    #     return None
-    #
-    # async def poll_events(buffer: float = 1.8) -> list[WorkerEvent]:
-    #     await asyncio.sleep(buffer)
-    #     return on_get_worker_events(simulation_id)
-    #
-    # def log_events(status, iteration, worker_events) -> None:
-    #     print(f'Status:\n  {status}\nIteration:\n  {iteration}\nEvents:\n')
-    #     pp(worker_events)
-    #     print(f'---\n')
-    #
-    # # set initial step index
-    # set_step_index(worker_events, simulation_events_df)
-    #
-    # # main polling
-    # if experiment is not None:
-    #     buffer = 1.1
-    #     max_timeout = 50
-    #     iteration = 0
-    #     status = JobStatus.WAITING
-    #
-    #     # get status
-    #     while not status == JobStatus.COMPLETED and iteration < max_timeout:
-    #         try:
-    #             status = on_get_simulation_status(simulation_id=simulation_id)
-    #         except:
-    #             print(f'Could not get status for iteration: {iteration}')
-    #             iteration += 1
-    #             continue
-    #
-    #         # update data and step index
-    #         worker_events = await poll_events()
-    #         simulation_events_df = get_events_dataframe(worker_events)
-    #         set_step_index(worker_events, simulation_events_df)
-    #
-    #         # increment timer
-    #         iteration += 1
-    #
-    #         # logging
-    #         if not len(worker_events):
-    #             print(f'No events at iteration: {iteration}\nStatus: {status}\n---')
-    #         else:
-    #             log_events(status, iteration, worker_events)
-    #
-    #
-    #         await asyncio.sleep(buffer)
-    return
-
-
-@app.cell
-def _():
-    # compile dataframe of all current events
-    # simulation_events_df = get_events_dataframe(worker_events)
-    return
-
-
-@app.cell
-def _():
-    # if not hasattr(mo.state, "dataframes"):
-    #     mo.state.dataframes = []
-    # if not hasattr(mo.state, "current_index"):
-    #     mo.state.current_index = 0
-    #
-    # step_size = 10  # number of rows to append per button press
-    # plt_button = mo.ui.run_button(label=f"{mo.icon('svg-spinners:blocks-wave')} Plot Mass Fractions", kind="danger")
-    return
-
-
-@app.cell
-def _():
-    # if plt_button.value:
-    #     next_index = mo.state.current_index
-    #     end_index = min(next_index + step_size, simulation_events_df.height)
-    #     if next_index < simulation_events_df.height:
-    #         mo.state.dataframes.append(simulation_events_df.slice(next_index, end_index - next_index))
-    #         mo.state.current_index = end_index
-    #
-    # # Display chart
-    # def display_chart():
-    #     if mo.state.dataframes:
-    #         combined_df = pl.concat(mo.state.dataframes)
-    #         chart = plot_mass_fractions_from_worker_events(combined_df)
-    #         return mo.vstack([plt_button, chart])
-    #     else:
-    #         return mo.vstack([plt_button, mo.md("Press the button to start streaming.")])
-    #
-    # display_chart()
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
+def _(get_events_df, get_is_polling, mo, stack_items):
+    data_explorer = mo.accordion({
+        "Explore Data": mo.ui.data_explorer(get_events_df())
+    })
+    if get_is_polling():
+        stack_items.append(data_explorer)
     return
 
 
 @app.cell
 def _(mo):
-    mo.md(r"""#### Get status for any simulation""")
+    # notebook (edit-mode) specific
+    sidenav = mo.sidebar(
+        [
+            mo.md("# SMS API"),
+            mo.nav_menu({
+                "https://sms-api.readthedocs.io/en/latest/": f"{mo.icon('pajamas:doc-text')} Documentation",
+                "https://github.com/vivarium-collective/sms-api": f"{mo.icon('pajamas:github')} GitHub"
+            }, orientation="vertical"),
+        ]
+    )
+
+    # app menu content (upper-right-hand)
+    menu_content = {
+        "https://sms-api.readthedocs.io/en/latest/": f"{mo.icon('pajamas:doc-text')} SMS API Docs",
+        "https://github.com/vivarium-collective/sms-api": f"{mo.icon('pajamas:github')} SMS API GitHub",
+        "https://covertlab.github.io/vEcoli/": f"{mo.icon('cil:fingerprint')} vEcoli"
+
+    }
+    nav = mo.nav_menu(menu_content, orientation="horizontal")
+    nav
     return
 
 
 @app.cell
-def _(mo):
-    get_status_header = mo.md(f"### Get Simulation Status")
-    form = mo.ui.text_area(placeholder="Enter simulation id", full_width=False).form()
-    mo.vstack([get_status_header, form])
-    return (form,)
+def _():
+    # original working bundled ui stack
+    # ui_stack = mo.vstack(stack_items)
+    # ui_stack
+    return
 
 
 @app.cell
-def _(form, mo, on_get_simulation_status, pformat):
-    requested_sim_status = None
-    sim_id = None
-    if form.value is not None:
-        sim_id = int(form.value)
-        requested_sim_status = on_get_simulation_status(simulation_id=sim_id)
-    mo.md(f"""
-    ### Status for Simulation ID: `{sim_id}`
+def _(get_events, get_events_df, latest_chart, mo):
+    how_to = mo.md(f"""
+            ### **How to use this tool**:
+            - _Explore_: Explore the available simulation data in real-time and create customized analysis plots
+            - _Visualize_: Visualize the simulation data in real time as a mass fraction plot.
+            - _Configure_: Parameterize and configure the simulation. _(Coming Soon)_
+            - _{mo.icon('pepicons-pop:refresh')}_: Click the dropdown menu to the left of the refresh button and select "off". The simulation will still run, but data retrieval will be paused.
+        """).callout(kind="info")
 
-    ```python
-    {pformat(requested_sim_status)}
-    ```
+
+    params = mo.md(f"""
+        #### Duration
+        {mo.ui.slider(start=1, stop=2800, show_value=True, value=2800)}
     """)
+
+    tabs = mo.ui.tabs({
+        f"{mo.icon('material-symbols:graph-3')} Explore": mo.ui.data_explorer(get_events_df()),
+        f"{mo.icon('codicon:graph-line')} Visualize": latest_chart if len(get_events()) else mo.md("Start the simulation. Results will display here.").callout("info"),
+        f"{mo.icon('icon-park-twotone:experiment')} Configure": params,
+        f"{mo.icon('material-symbols:help-outline-rounded')} Help": how_to
+    })
+
+    how_to_display = mo.accordion({
+        f"{mo.icon('material-symbols:help-outline-rounded')}": how_to
+    })
+    tabs
+    return
+
+
+@app.cell
+def _(
+    Enum,
+    mo,
+    refresh,
+    run_simulation_button,
+    spinner,
+    stop_simulation_button,
+):
+    # -- buttons --
+
+    btn_items = [run_simulation_button, stop_simulation_button]
+    btn_stack = mo.hstack(btn_items, justify="start")
+
+    class NotificationType(Enum):
+        RUNNING: tuple[str, str] = ("processing simulation...", "success")
+        PAUSED: tuple[str, str] = ("paused simulation...", "warn")
+        STOPPED: tuple[str, str] = ("stopped simulation.", "danger")
+        WAITING: tuple[str, str] = ("Press Start to run a simulation!", "info")
+
+    def notification(_type: NotificationType) -> mo.md:
+        msg, kind = _type.value
+        v = f"...{msg}" if not kind == NotificationType.RUNNING else f"{msg}..."
+        return mo.md(v).callout(kind=kind)
+
+    row_items = [btn_stack]
+    if refresh is not None:
+        row_items.append(refresh)
+        # if not get_counter() == refresh.value:
+        #     set_counter(refresh.value)
+        # else:
+        #     set_paused(True)
+
+    ui_items = []
+    # if get_stopped():  # set ui notifications (really, button status)
+    #     ui_items.append(notification(NotificationType.STOPPED))
+    # if get_is_polling():
+    #     ui_items.append(notification(NotificationType.RUNNING))
+    if spinner is not None:
+        ui_items.append(spinner)
+    ui_items.insert(0, mo.hstack(row_items, justify="start"))
+
+    # if get_paused():
+    #     ui_items.append(notification(NotificationType.PAUSED))
+    return NotificationType, notification, ui_items
+
+
+@app.cell
+def _(mo, ui_items):
+    row_stack = mo.vstack(ui_items)
+    row_stack
+    return
+
+
+@app.cell
+def _(NotificationType, get_is_polling, get_stopped, notification):
+    notification_type = notification(NotificationType.WAITING)
+    if get_stopped():  # set ui notifications (really, button status)
+        notification_type = notification(NotificationType.STOPPED)
+    if get_is_polling():
+        notification_type = notification(NotificationType.RUNNING)
+
+    notification_type
     return
 
 
 @app.cell
 def _(mo):
-    mo.md(r"""### Get an array of events for any simulation""")
+    get_now, set_now = mo.state(None)
+    get_wall, set_wall = mo.state(0.0)
+    return get_now, get_wall, set_now, set_wall
+
+
+@app.cell
+def _(
+    get_now,
+    run_simulation_button,
+    set_now,
+    set_wall,
+    stop_simulation_button,
+    time,
+):
+    if run_simulation_button.value:
+        set_now(time.time())
+
+    if stop_simulation_button.value:
+        dur = time.time() - get_now()
+        set_wall(dur)
     return
 
 
 @app.cell
-def _(mo):
-    get_events_header = mo.md(f"### Get Simulation Events")
-    events_form = mo.ui.text_area(placeholder="Enter simulation id", full_width=False).form()
-    mo.vstack([get_events_header, events_form])
-    return (events_form,)
-
-
-@app.cell
-def _(events_form, mo, on_get_worker_events, pformat):
-    requested_sim_events = None
-    sim_id_ = None
-    if events_form.value is not None:
-        sim_id_ = int(events_form.value)
-        requested_sim_events = on_get_worker_events(simulation_id=sim_id_)
-    mo.md(f"""
-    ### Events for Simulation ID: `{sim_id_}`
-
-    ```python
-    {pformat(requested_sim_events)}
-    ```
-    """)
+def _(get_wall):
+    get_wall()
     return
 
 
 @app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
-    # get_events_button = mo.ui.run_button(label="Get Simulation Events")
-    # get_events_button
+def _(spinner):
+    spinner
     return
 
 
 @app.cell
 def _():
-    # worker_events: list[WorkerEvent] = on_get_worker_events(simulation_id)
-    #
-    # async def poll_events(buffer: float = 1.8) -> list[WorkerEvent]:
-    #     await asyncio.sleep(buffer)
-    #     return on_get_worker_events(simulation_id)
-    #
-    # def log_events(status, iteration, worker_events) -> None:
-    #     print(f'Status:\n  {status}\nIteration:\n  {iteration}\nEvents:\n')
-    #     pp(worker_events)
-    #     print(f'---\n')
-    #
-    # def display_chart(plt_button) -> mo.Html:
-    #     if mo.state.dataframes:
-    #         combined_df = pl.concat(mo.state.dataframes)
-    #         chart = plot_mass_fractions_from_worker_events(combined_df)
-    #         return mo.vstack([plt_button, chart])
-    #     else:
-    #         return mo.vstack([plt_button, mo.md("Press the button to start streaming.")])
-    #
-    # expected_times_fp = Path(os.path.dirname(__file__)).parent.parent / "assets/expected_times.json"
-    # if experiment is not None:
-    #     max_duration = 20
-    #     iteration = 0
-    #     status = "waiting"
-    #     with open(str(expected_times_fp), 'r') as fp:
-    #         expected_times = json.load(fp)
-    #     for iteration in mo.status.progress_bar(
-    #         expected_times,
-    #         title="Loading",
-    #         subtitle="Please wait",
-    #         show_eta=True,
-    #         show_rate=True
-    #     ):
-    #         # get status
-    #         with api_client() as client:
-    #             try:
-    #                 url = format_endpoint_url(ApiResource.SIMULATION, 'run', 'status')
-    #                 resp = client.get(url=url, params={"simulation_id": simulation_id})
-    #                 status = resp.json()['status']
-    #                 if status == "completed":
-    #                     print(f"Simulation Complete at iteration: {iteration}!\n")
-    #                     break
-    #             except:
-    #                 print(f'Could not get status for iteration: {iteration}')
-    #                 continue
-    #         worker_events = await poll_events()
-    #         if len(worker_events):
-    #             log_events(status, iteration, worker_events)
-    #
-    #         else:
-    #             print(f'No events\nStatus: {status}\n---')
-    #         display_chart(plt_button)
-    #         await asyncio.sleep(1.0)
-
-    ############original###################
-    # if get_events_button.value:
-    #     max_duration = 20
-    #     iteration = 0
-    #     status = "waiting"
-    #     for _ in mo.status.progress_bar(
-    #         range(max_duration),
-    #         title="Loading",
-    #         subtitle="Please wait",
-    #         show_eta=True,
-    #         show_rate=True
-    #     ):
-    #         while iteration < max_duration:
-    #             # get status
-    #             with api_client() as client:
-    #                 try:
-    #                     url = format_endpoint_url(ApiResource.SIMULATION, 'run', 'status')
-    #                     resp = client.get(url=url, params={"simulation_id": simulation_id})
-    #                     status = resp.json()['status']
-    #                 except:
-    #                     print(f'Could not get status for iteration: {iteration}')
-    #                     iteration += 1
-    #                     continue
-    #             worker_events = await poll_events()
-    #             if len(worker_events):
-    #                 log_events(status, iteration, worker_events)
-    #             else:
-    #                 print(f'Status: {status}\n---')
-    #             iteration += 1
-    #             time.sleep(1.0)
-    #######################################
-
-    # simulation_events_df = get_events_dataframe(worker_events)
-    #
-    # if not hasattr(mo.state, "dataframes"):
-    #     mo.state.dataframes = []
-    # if not hasattr(mo.state, "current_index"):
-    #     mo.state.current_index = 0
-    #
-    # step_size = 10  # number of rows to append per button press
-    #
-    # if len(worker_events):
-    #     next_index = mo.state.current_index
-    #     end_index = min(next_index + step_size, simulation_events_df.height)
-    #     if next_index < simulation_events_df.height:
-    #         mo.state.dataframes.append(simulation_events_df.slice(next_index, end_index - next_index))
-    #         mo.state.current_index = end_index
     return
 
 
