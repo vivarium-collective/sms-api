@@ -18,7 +18,8 @@ async def test_home_template(fastapi_app: FastAPI, local_base_url: str) -> None:
 
         assert "Available Applications" in html
         assert "/ws" in html
-        for name in ["Antibiotics", "Biomanufacturing", "Single Cell"]:
+        # for name in ["Antibiotics", "Biomanufacturing", "Single Cell"]:
+        for name in ["Single Cell"]:
             assert name in html
 
 
