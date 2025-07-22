@@ -27,8 +27,8 @@ jobs:
         run: echo "${{ secrets.REPO_ADMIN_GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.REPO_ADMIN_GH_USERNAME }}" --password-stdin
 
       - name: Make script executable
-        run: chmod +x ./kustomize/scripts/build_and_push.sh
+        run: chmod +x ./assets/workflows/deploy.sh
 
       - name: Run build and push script
         run: |
-          ./kustomize/scripts/build_and_push.sh "${{ inputs.version }}"
+          ./assets/workflows/deploy.sh "${{ inputs.version }}"
