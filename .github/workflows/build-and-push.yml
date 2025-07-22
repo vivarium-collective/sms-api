@@ -11,6 +11,7 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    environment: deployment
     permissions:
       contents: read
       packages: write # Required for pushing to ghcr.io
