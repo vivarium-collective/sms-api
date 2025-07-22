@@ -246,6 +246,7 @@ set-wip:
 .PHONY: transfer-wip
 transfer-wip:
 	@module=$(ui); \
-	cp app/ui/wip_$$module.py app/ui/$$module.py
+	cp app/ui/wip_$$module.py app/ui/$$module.py; \
+	cp app/ui/layouts/wip_$$module.grid.json app/ui/layouts/$$module.grid.json
 
 .DEFAULT_GOAL := help
