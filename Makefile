@@ -172,7 +172,8 @@ mongoup:
 
 .PHONY: natsup
 natsup:
-	@docker run -d --name nats --rm -p 4222:4222 nats
+	@[ -z "$(port)" ] && port=30050 || port=$(port); \
+	docker run -d --name nats --rm -p $$port:$$port nats
 
 # this command should run psql -h localhost -p 65432 -U alexanderpatrie sms
 .PHONY: pingpg
