@@ -1,14 +1,14 @@
 import os
 import tempfile
 import time
-import uuid
+from collections.abc import Generator
 from textwrap import dedent
-from typing import Generator
-from testcontainers.core.container import DockerContainer
 
 import pytest
+from testcontainers.core.container import DockerContainer  # type: ignore [import-untyped]
 
 parent_dir = os.path.dirname(__file__)
+
 
 @pytest.fixture(scope="session")
 def nginx_conf_path() -> str:
@@ -51,9 +51,11 @@ def simple_path1_nginx() -> Generator[tuple[int, str, str], None, None]:
         with open(config_path, "w") as f:
             f.write(config_contents)
 
-        with DockerContainer("nginx:1.25") \
-                .with_exposed_ports(8080) \
-                .with_volume_mapping(config_path, "/etc/nginx/nginx.conf") as nginx:
+        with (
+            DockerContainer("nginx:1.25")
+            .with_exposed_ports(8080)
+            .with_volume_mapping(config_path, "/etc/nginx/nginx.conf") as nginx
+        ):
             host = nginx.get_container_host_ip()
             port = int(nginx.get_exposed_port(8080))
             time.sleep(2)
@@ -85,9 +87,11 @@ def simple_path2_nginx() -> Generator[tuple[int, str, str], None, None]:
         with open(config_path, "w") as f:
             f.write(config_contents)
 
-        with DockerContainer("nginx:1.25") \
-                .with_exposed_ports(8080) \
-                .with_volume_mapping(config_path, "/etc/nginx/nginx.conf") as nginx:
+        with (
+            DockerContainer("nginx:1.25")
+            .with_exposed_ports(8080)
+            .with_volume_mapping(config_path, "/etc/nginx/nginx.conf") as nginx
+        ):
             host = nginx.get_container_host_ip()
             port = int(nginx.get_exposed_port(8080))
             time.sleep(2)
