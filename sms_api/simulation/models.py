@@ -166,3 +166,7 @@ class WorkerEventMessagePayload(BaseModel):
 
 class RequestedObservables(BaseModel):
     items: list[str] = Field(default_factory=list)
+
+
+class SimulationObservables(BaseModel):
+    observable_ids: list[str]
