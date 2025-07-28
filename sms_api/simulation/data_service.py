@@ -1,8 +1,10 @@
+import io
 import logging
 import os
 import re
 import tempfile
-from abc import ABC, abstractmethod
+from abc import ABC
+from enum import StrEnum
 from pathlib import Path
 
 import numpy
@@ -27,6 +29,68 @@ TEST_CHUNK_PATH = TEST_CHUNK_DIR / "1200.pq"
 TEST_EXPERIMENT_ID = "experiment_96bb7a2_id_1_20250620-181422"
 
 
+class SerializationFormat(StrEnum):
+    BYTES = "bytes"
+    JSON = "json"
+
+
+f = __file__
+
+# -- data service for uchc hpc -- #
+
+
+def get_local_experiment_dirpath() -> Path:
+    return Path(
+        "/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/.mount/prod/sims/experiment_78c6310_id_149_20250723-112814/history/experiment_id=experiment_78c6310_id_149_20250723-1112814/variant=0/lineage_seed=0/generation=1/agent_id=0"
+    )
+
+
+def get_experiment_dirpath(experiment_id: str) -> Path:
+    """Get the remote (uchc hpc) dirpath of a given simulation's chunked parquet outputs"""
+    return Path(
+        f"/home/FCAM/svc_vivarium/prod/sims/{experiment_id}/history/experiment_id={experiment_id}/variant=0/lineage_seed=0/generation=1/agent_id=0"
+    )
+
+
+def serialize_df(df: pl.DataFrame, fmt: str = "json") -> str | bytes:
+    return df.serialize(format=fmt)
+
+
+def hydrate_df(serialized: bytes | str) -> pl.DataFrame:
+    if isinstance(serialized, bytes):
+        buff = io.BytesIO(serialized)
+        buff_format = "bytes"
+    else:
+        buff = io.StringIO(serialized)
+        buff_format = "json"
+    return pl.DataFrame.deserialize(buff, format=buff_format)
+
+
+def get_simulation_outputs(
+    experiment_id: str | None = None, observable_names: list[str] | None = None, experiment_dirpath: Path | None = None
+) -> pl.LazyFrame:
+    # get experiment dirpath
+    experiment_dirpath = experiment_dirpath or get_experiment_dirpath(experiment_id)
+    lf = pl.scan_parquet(experiment_dirpath)
+    if observable_names is not None:
+        return lf.select(*observable_names)
+    return lf
+
+
+def read_tsv(path: Path) -> pl.LazyFrame:
+    return pl.scan_csv(path, separator="\t")
+
+
+def test_data_service():
+    experiment_id = "experiment_78c6310_id_149_20250723-112814"
+    experiment_dirpath = get_local_experiment_dirpath()
+    selected_observables = ["bulk"]
+    lf = get_lazy_results(experiment_dirpath=experiment_dirpath, observable_names=None)
+
+
+######################## Existing implementation ############################
+
+
 class DataService(ABC):
     settings: Settings
 
@@ -37,33 +101,15 @@ class DataService(ABC):
     def ssh_service(self) -> SSHService:
         return get_ssh_service(settings=self.settings)
 
-    @abstractmethod
-    def get_remote_chunk_path(
-        self, db_id: int, commit_hash: str, chunk_id: int, namespace: Namespace | None = None
-    ) -> Path:
-        pass
-
-    @abstractmethod
-    async def download_chunk(self, remote_chunk_path: Path, local_dirpath: Path | None = None) -> Path:
-        pass
-
-    @abstractmethod
-    async def get_simulation_chunk_paths(self, experiment_id: str, namespace: Namespace) -> list[Path]:
-        pass
-
-    @abstractmethod
-    async def read_simulation_chunks(self, experiment_id: str, namespace: Namespace) -> tuple[Path, pl.LazyFrame]:
-        pass
-
     def scan_simulation_chunks(self, chunks_dirpath: Path) -> pl.LazyFrame:
         return pl.scan_parquet(f"{chunks_dirpath!s}/*.pq", rechunk=True)
 
-    @abstractmethod
-    async def close(self) -> None:
+    async def close(self):
         pass
 
 
 class DataServiceHpc(DataService):
+    # -- scp imp. -- #
     @override
     def get_remote_chunk_path(
         self, db_id: int, commit_hash: str, chunk_id: int, namespace: Namespace | None = None
@@ -103,7 +149,7 @@ class DataServiceHpc(DataService):
         filenames = [Path(os.path.join(chunks_dir, fname)) for fname in re.findall(r"(\d+\.pq)", stdout)]
         return filenames
 
-    async def read_simulation_chunks(self, experiment_id: str, namespace: Namespace) -> tuple[Path, pl.LazyFrame]:
+    async def download_simulation_chunks(self, experiment_id: str, namespace: Namespace) -> tuple[Path, pl.LazyFrame]:
         # TODO: instead use a session so as to not iteratively reauth
         local_chunks_dir = Path(await mkdtemp(dir="datamount", prefix=experiment_id))
         for chunkpath in await self.get_simulation_chunk_paths(experiment_id, namespace):
@@ -112,7 +158,7 @@ class DataServiceHpc(DataService):
 
         return local_chunks_dir, self.scan_simulation_chunks(local_chunks_dir)
 
-    async def read_chunks(self, experiment_id: str, namespace: Namespace) -> Path:
+    async def download_chunks(self, experiment_id: str, namespace: Namespace) -> Path:
         # TODO: instead use a session so as to not iteratively reauth
         local_chunks_dir = Path(await mkdtemp(dir="datamount", prefix=experiment_id))
         for chunkpath in await self.get_simulation_chunk_paths(experiment_id, namespace):

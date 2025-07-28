@@ -6,7 +6,6 @@ from .antibiotic_simulation_request_antibiotics_config import AntibioticSimulati
 from .antibiotic_simulation_request_antibiotics_config_additional_property import AntibioticSimulationRequestAntibioticsConfigAdditionalProperty
 from .antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
 from .antibiotic_simulation_request_variant_config_additional_property import AntibioticSimulationRequestVariantConfigAdditionalProperty
-from .body_get_simulation_results import BodyGetSimulationResults
 from .check_health_health_get_response_check_health_health_get import CheckHealthHealthGetResponseCheckHealthHealthGet
 from .ecoli_experiment import EcoliExperiment
 from .ecoli_experiment_metadata import EcoliExperimentMetadata
@@ -22,10 +21,7 @@ from .parca_dataset import ParcaDataset
 from .parca_dataset_request import ParcaDatasetRequest
 from .parca_dataset_request_parca_config import ParcaDatasetRequestParcaConfig
 from .registered_simulators import RegisteredSimulators
-from .requested_observables import RequestedObservables
-from .settings import Settings
-from .settings_storage_tensorstore_driver import SettingsStorageTensorstoreDriver
-from .settings_storage_tensorstore_kvstore_driver import SettingsStorageTensorstoreKvstoreDriver
+from .simulation_observables import SimulationObservables
 from .simulator import Simulator
 from .simulator_version import SimulatorVersion
 from .validation_error import ValidationError
@@ -39,7 +35,6 @@ __all__ = (
     "AntibioticSimulationRequestAntibioticsConfigAdditionalProperty",
     "AntibioticSimulationRequestVariantConfig",
     "AntibioticSimulationRequestVariantConfigAdditionalProperty",
-    "BodyGetSimulationResults",
     "CheckHealthHealthGetResponseCheckHealthHealthGet",
     "EcoliExperiment",
     "EcoliExperimentMetadata",
@@ -55,10 +50,7 @@ __all__ = (
     "ParcaDatasetRequest",
     "ParcaDatasetRequestParcaConfig",
     "RegisteredSimulators",
-    "RequestedObservables",
-    "Settings",
-    "SettingsStorageTensorstoreDriver",
-    "SettingsStorageTensorstoreKvstoreDriver",
+    "SimulationObservables",
     "Simulator",
     "SimulatorVersion",
     "ValidationError",

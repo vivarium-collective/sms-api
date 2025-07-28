@@ -31,10 +31,12 @@ check: ## Run code quality tools.
 
 .PHONY: clean
 clean:
+	@poetry cache clear PyPI --all && poetry cache clear _default_cache --all
 	@rm -rf .pytest_cache
 	@rm -rf .mypy_cache
 	@rm -rf .ruff_cache
 	@find . -name '__pycache__' -exec rm -r {} + -o -name '*.pyc' -delete
+	@poetry lock --no-cache
 
 .PHONY: test
 test: ## Test the code with pytest

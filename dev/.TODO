@@ -1,0 +1,4 @@
+[] Change slurm job calls from ecoli_master_sim.py to nextflow directly
+[] Formalize inclusion of nextflow in API
+[] Wall time for simulation runs in UI
+[] Multiprocessing?
