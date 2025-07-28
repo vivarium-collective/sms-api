@@ -36,7 +36,6 @@ class AntibioticSimulationRequest:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.simulator_version import SimulatorVersion
         from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.antibiotic_simulation_request_antibiotics_config import (
             AntibioticSimulationRequestAntibioticsConfig,
@@ -66,7 +65,6 @@ class AntibioticSimulationRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.simulator_version import SimulatorVersion
         from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.antibiotic_simulation_request_antibiotics_config import (
             AntibioticSimulationRequestAntibioticsConfig,

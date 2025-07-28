@@ -37,8 +37,6 @@ class EcoliExperiment:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.ecoli_experiment_metadata import EcoliExperimentMetadata
-        from ..models.ecoli_simulation import EcoliSimulation
         from ..models.antibiotic_simulation import AntibioticSimulation
 
         experiment_id = self.experiment_id
@@ -70,8 +68,6 @@ class EcoliExperiment:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.ecoli_experiment_metadata import EcoliExperimentMetadata
-        from ..models.ecoli_simulation import EcoliSimulation
         from ..models.antibiotic_simulation import AntibioticSimulation
 
         d = dict(src_dict)
