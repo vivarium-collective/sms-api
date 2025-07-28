@@ -11,23 +11,19 @@
 - endpoint to send sql like queries to parquet files back to client
 """
 
+import json
 import logging
-import shutil
-import tempfile
-from pathlib import Path
 
-import polars as pl
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import FileResponse, ORJSONResponse
+from fastapi.responses import ORJSONResponse
 
-from sms_api.common.gateway.models import Namespace, RouterConfig, ServerMode
-from sms_api.common.ssh.ssh_service import get_ssh_service
+from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.dependencies import (
     get_database_service,
     get_postgres_engine,
     get_simulation_service,
 )
-from sms_api.simulation.data_service import DataServiceHpc
+from sms_api.simulation import data_service
 from sms_api.simulation.handlers import (
     get_parca_datasets,
     run_parca,
@@ -45,7 +41,7 @@ from sms_api.simulation.models import (
     ParcaDataset,
     ParcaDatasetRequest,
     RegisteredSimulators,
-    RequestedObservables,
+    SimulationObservables,
     Simulator,
     SimulatorVersion,
     WorkerEvent,
@@ -391,69 +387,44 @@ async def get_simulation_worker_events(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(
-    path="/simulation/run/results/chunks",
+@config.router.post(
+    path="/simulation/run/results",
     response_class=ORJSONResponse,
     operation_id="get-simulation-results",
     tags=["Simulations - vEcoli"],
-    dependencies=[Depends(get_simulation_service), Depends(get_ssh_service)],
-    summary="Get simulation results in chunks",
+    summary="Get requested simulation results as json string",
 )
-async def get_result_chunks(
-    background_tasks: BackgroundTasks,
-    observable_names: RequestedObservables,
-    experiment_id: str = Query(default="experiment_96bb7a2_id_1_20250620-181422"),
-    database_id: int = Query(description="Database Id returned from /submit-simulation"),
-    git_commit_hash: str = Query(default=LATEST_COMMIT),
-) -> ORJSONResponse:
-    sim_service = get_simulation_service()
-    if sim_service is None:
-        logger.error("Simulation service is not initialized")
-        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
-    ssh_service = get_ssh_service()
-    if ssh_service is None:
-        logger.error("SSH service is not initialized")
-        raise HTTPException(status_code=500, detail="SSH service is not initialized")
+async def get_results(
+    observable_names: list[str] | None = None, experiment_id: str | None = None, database_id: int | None = None
+):  # -> Response:
+    simulation_id = experiment_id or database_id
     try:
-        service = DataServiceHpc()
-
-        local_dir, lazy_frame = await service.read_simulation_chunks(experiment_id, Namespace.TEST)
-        background_tasks.add_task(shutil.rmtree, local_dir)
-        selected_cols = observable_names.items if len(observable_names.items) else ["bulk", "^listeners__mass.*"]
-        data = (
-            lazy_frame.select(
-                pl.col(selected_cols)  # regex pattern to match columns starting with this prefix
+        experiment_dirpath = (
+            data_service.get_experiment_dirpath(experiment_id)
+            if experiment_id
+            else data_service.get_local_experiment_dirpath()
+        )
+        requested_observables = observable_names or None
+        return ORJSONResponse(
+            data_service.get_simulation_outputs(
+                experiment_dirpath=experiment_dirpath, observable_names=requested_observables
             )
             .collect()
-            .to_dict()
+            .write_json(),
+            media_type="application/json",
         )
-        return ORJSONResponse(content=data)
     except Exception as e:
-        logger.exception(f"Error fetching simulation results for id: {database_id}.")
+        logger.exception(f"Error fetching simulation results for id: {simulation_id}.")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.get(
-    path="/simulation/run/results/file",
-    response_class=FileResponse,
-    operation_id="get-simulation-results-file",
+    path="/simulation/observables",
+    response_model=SimulationObservables,
+    operation_id="get-simulation-observables",
     tags=["Simulations - vEcoli"],
-    dependencies=[Depends(get_simulation_service), Depends(get_ssh_service)],
-    summary="Get simulation results as a zip file",
 )
-async def get_results(
-    background_tasks: BackgroundTasks,
-    experiment_id: str = Query(default="experiment_96bb7a2_id_1_20250620-181422"),
-    database_id: int = Query(default_factory=int, description="Database Id of simulation"),
-) -> FileResponse:
-    try:
-        service = DataServiceHpc()
-        local_dir = await service.read_chunks(experiment_id, Namespace.TEST)
-        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-            zip_path = Path(tmp.name)
-            shutil.make_archive(str(zip_path.with_suffix("")), "zip", root_dir=local_dir)
-            background_tasks.add_task(shutil.rmtree, local_dir)
-        return FileResponse(path=zip_path, filename=f"{experiment_id}_chunks.zip", media_type="application/zip")
-    except Exception as e:
-        logger.exception(f"Error fetching simulation results for id: {database_id}.")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+async def get_observables() -> SimulationObservables:
+    with open("assets/expected_columns.json") as f:
+        expected_columns = json.load(f)
+    return SimulationObservables(observable_ids=expected_columns)

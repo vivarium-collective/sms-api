@@ -6,27 +6,25 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
 from typing import cast
-from typing import Union
 
 
 
 
 
 
-T = TypeVar("T", bound="RequestedObservables")
+T = TypeVar("T", bound="SimulationObservables")
 
 
 
 @_attrs_define
-class RequestedObservables:
-    """
+class SimulationObservables:
+    """ 
         Attributes:
-            items (Union[Unset, list[str]]):
+            observable_ids (list[str]):
      """
 
-    items: Union[Unset, list[str]] = UNSET
+    observable_ids: list[str]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -34,9 +32,7 @@ class RequestedObservables:
 
 
     def to_dict(self) -> dict[str, Any]:
-        items: Union[Unset, list[str]] = UNSET
-        if not isinstance(self.items, Unset):
-            items = self.items
+        observable_ids = self.observable_ids
 
 
 
@@ -44,9 +40,8 @@ class RequestedObservables:
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
+            "observable_ids": observable_ids,
         })
-        if items is not UNSET:
-            field_dict["items"] = items
 
         return field_dict
 
@@ -55,16 +50,16 @@ class RequestedObservables:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        items = cast(list[str], d.pop("items", UNSET))
+        observable_ids = cast(list[str], d.pop("observable_ids"))
 
 
-        requested_observables = cls(
-            items=items,
+        simulation_observables = cls(
+            observable_ids=observable_ids,
         )
 
 
-        requested_observables.additional_properties = d
-        return requested_observables
+        simulation_observables.additional_properties = d
+        return simulation_observables
 
     @property
     def additional_keys(self) -> list[str]:

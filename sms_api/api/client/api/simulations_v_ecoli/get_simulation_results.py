@@ -7,20 +7,19 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response, UNSET
 from ... import errors
 
-from ...models.body_get_simulation_results import BodyGetSimulationResults
 from ...models.http_validation_error import HTTPValidationError
 from ...types import UNSET, Unset
 from typing import cast
+from typing import cast, Union
 from typing import Union
 
 
 
 def _get_kwargs(
     *,
-    body: BodyGetSimulationResults,
-    experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
-    database_id: int,
-    git_commit_hash: Union[Unset, str] = '78c6310',
+    body: Union[None, list[str]],
+    experiment_id: Union[None, Unset, str] = UNSET,
+    database_id: Union[None, Unset, int] = UNSET,
 
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
@@ -30,23 +29,37 @@ def _get_kwargs(
 
     params: dict[str, Any] = {}
 
-    params["experiment_id"] = experiment_id
+    json_experiment_id: Union[None, Unset, str]
+    if isinstance(experiment_id, Unset):
+        json_experiment_id = UNSET
+    else:
+        json_experiment_id = experiment_id
+    params["experiment_id"] = json_experiment_id
 
-    params["database_id"] = database_id
-
-    params["git_commit_hash"] = git_commit_hash
+    json_database_id: Union[None, Unset, int]
+    if isinstance(database_id, Unset):
+        json_database_id = UNSET
+    else:
+        json_database_id = database_id
+    params["database_id"] = json_database_id
 
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
 
     _kwargs: dict[str, Any] = {
-        "method": "get",
-        "url": "/core/simulation/run/results/chunks",
+        "method": "post",
+        "url": "/core/simulation/run/results",
         "params": params,
     }
 
-    _kwargs["json"] = body.to_dict()
+    _kwargs["json"]: Union[None, list[str]]
+    if isinstance(body, list):
+        _kwargs["json"] = body
+
+
+    else:
+        _kwargs["json"] = body
 
 
     headers["Content-Type"] = "application/json"
@@ -83,19 +96,17 @@ def _build_response(*, client: Union[AuthenticatedClient, Client], response: htt
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: BodyGetSimulationResults,
-    experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
-    database_id: int,
-    git_commit_hash: Union[Unset, str] = '78c6310',
+    body: Union[None, list[str]],
+    experiment_id: Union[None, Unset, str] = UNSET,
+    database_id: Union[None, Unset, int] = UNSET,
 
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """ Get simulation results in chunks
+    """ Get requested simulation results as json string
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
-        database_id (int): Database Id returned from /submit-simulation
-        git_commit_hash (Union[Unset, str]):  Default: '78c6310'.
-        body (BodyGetSimulationResults):
+        experiment_id (Union[None, Unset, str]):
+        database_id (Union[None, Unset, int]):
+        body (Union[None, list[str]]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -110,7 +121,6 @@ def sync_detailed(
         body=body,
 experiment_id=experiment_id,
 database_id=database_id,
-git_commit_hash=git_commit_hash,
 
     )
 
@@ -123,19 +133,17 @@ git_commit_hash=git_commit_hash,
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: BodyGetSimulationResults,
-    experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
-    database_id: int,
-    git_commit_hash: Union[Unset, str] = '78c6310',
+    body: Union[None, list[str]],
+    experiment_id: Union[None, Unset, str] = UNSET,
+    database_id: Union[None, Unset, int] = UNSET,
 
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """ Get simulation results in chunks
+    """ Get requested simulation results as json string
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
-        database_id (int): Database Id returned from /submit-simulation
-        git_commit_hash (Union[Unset, str]):  Default: '78c6310'.
-        body (BodyGetSimulationResults):
+        experiment_id (Union[None, Unset, str]):
+        database_id (Union[None, Unset, int]):
+        body (Union[None, list[str]]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -151,26 +159,23 @@ def sync(
 body=body,
 experiment_id=experiment_id,
 database_id=database_id,
-git_commit_hash=git_commit_hash,
 
     ).parsed
 
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: BodyGetSimulationResults,
-    experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
-    database_id: int,
-    git_commit_hash: Union[Unset, str] = '78c6310',
+    body: Union[None, list[str]],
+    experiment_id: Union[None, Unset, str] = UNSET,
+    database_id: Union[None, Unset, int] = UNSET,
 
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """ Get simulation results in chunks
+    """ Get requested simulation results as json string
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
-        database_id (int): Database Id returned from /submit-simulation
-        git_commit_hash (Union[Unset, str]):  Default: '78c6310'.
-        body (BodyGetSimulationResults):
+        experiment_id (Union[None, Unset, str]):
+        database_id (Union[None, Unset, int]):
+        body (Union[None, list[str]]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -185,7 +190,6 @@ async def asyncio_detailed(
         body=body,
 experiment_id=experiment_id,
 database_id=database_id,
-git_commit_hash=git_commit_hash,
 
     )
 
@@ -198,19 +202,17 @@ git_commit_hash=git_commit_hash,
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: BodyGetSimulationResults,
-    experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
-    database_id: int,
-    git_commit_hash: Union[Unset, str] = '78c6310',
+    body: Union[None, list[str]],
+    experiment_id: Union[None, Unset, str] = UNSET,
+    database_id: Union[None, Unset, int] = UNSET,
 
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """ Get simulation results in chunks
+    """ Get requested simulation results as json string
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
-        database_id (int): Database Id returned from /submit-simulation
-        git_commit_hash (Union[Unset, str]):  Default: '78c6310'.
-        body (BodyGetSimulationResults):
+        experiment_id (Union[None, Unset, str]):
+        database_id (Union[None, Unset, int]):
+        body (Union[None, list[str]]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -226,6 +228,5 @@ async def asyncio(
 body=body,
 experiment_id=experiment_id,
 database_id=database_id,
-git_commit_hash=git_commit_hash,
 
     )).parsed
