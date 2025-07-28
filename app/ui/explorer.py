@@ -1,111 +1,142 @@
 import marimo
 
-__generated_with = "0.14.11"
+__generated_with = "0.14.13"
 app = marimo.App(width="medium")
 
 
 @app.cell
 def _():
-    import marimo as mo
-    mo._runtime.context.get_context().marimo_config["runtime"]["output_max_bytes"] = 10000000000
+    import json 
+
+    import orjson
+    import httpx
+    import marimo as mo 
+    import polars as pl 
+
+    def get_data_size(X: bytes) -> float:
+        n_bytes = len(X)
+        return n_bytes / (1024 * 1024)
+    return httpx, json, mo, orjson, pl
+
+
+@app.cell
+def _(mo):
+    get_results, set_results = mo.state(None)
+    return get_results, set_results
+
+
+@app.cell
+def _(httpx, json, orjson, pl, set_results):
+    async def on_get_results(selected_observables: list[str] | None = None):
+        url = "http://localhost:8888/core/simulation/run/results"
+        headers = {
+            "Content-Type": "application/json",
+            "accept": "*/*"
+        }
+        data = json.dumps(selected_observables) if selected_observables else None 
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(130.0)) as client:
+                resp = await client.post(
+                    url=url,
+                    headers=headers, 
+                    data=data
+                )
+                resp.raise_for_status()
+            set_results(
+                pl.LazyFrame(
+                    orjson.loads(resp.json())
+                ).collect()
+            )
+        except:
+            raise Exception("Something went wrong!")
+    return (on_get_results,)
+
+
+@app.cell
+def _():
+    # set number of requested observables
+    # get_num_obs, set_num_obs = mo.state(0)
     return
 
 
 @app.cell
 def _():
-    import abc 
-    import os 
-    import asyncssh
-    import logging
-    import re
-    from asyncssh import SSHCompletedProcess
-    from pathlib import Path 
-
-    import polars as pl
-    import altair as alt 
-    import numpy as np
-
-    from sms_api.config import get_settings
-    from sms_api.common.gateway.models import Namespace
-    from sms_api.common.ssh.ssh_service import get_ssh_service
-    from sms_api.simulation.models import BaseModel
-
-    logger = logging.getLogger(__file__)
-    settings = get_settings()
-
-    results_dir_root = Path(__file__).parent.parent.parent / "results"
-    return Path, pl
-
-
-@app.cell
-def _(Path, pl):
-    def get_experiment_dirpath(experiment_id: str) -> Path:
-        """Get the remote (uchc hpc) dirpath of a given simulation's chunked parquet outputs"""
-        return Path(f"/home/FCAM/svc_vivarium/prod/sims/{experiment_id}/history/experiment_id={experiment_id}/variant=0/lineage_seed=0/generation=1/agent_id=0")
-
-
-    def get_local_experiment_dirpath() -> Path:
-        return Path('/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/results/prod/experiment_78c6310_id_149_20250723-112814/history/experiment_id=experiment_78c6310_id_149_20250723-1112814/variant=0/lineage_seed=0/generation=1/agent_id=0')
-
-    def serialize_df(df: pl.DataFrame) -> bytes:
-        return df.serialize(format='json')
-
-    def hydrate_df(serialized: bytes | str) -> pl.DataFrame:
-        import io
-        if isinstance(serialized, bytes):
-            buff = io.BytesIO(serialized) 
-            buff_format = "bytes"
-        else:
-            buff = io.StringIO(serialized)
-            buff_format = "json"
-        return pl.DataFrame.deserialize(buff, format=buff_format)
-    
-    def get_results(experiment_id: str | None = None, observable_names: list[str] | None = None, experiment_dirpath: Path | None = None) -> pl.LazyFrame:
-        # get experiment dirpath
-        experiment_dirpath = experiment_dirpath or get_experiment_dirpath(experiment_id)
-        lf = pl.scan_parquet(experiment_dirpath)
-        if observable_names is not None:
-            return lf.select(*observable_names)
-        return lf
-
-    # def collect(experiment_id: str | None = None, observable_names: list[str] | None = None, experiment_dirpath: Path | None = None) ->:
-    #     pass
-
-    return get_local_experiment_dirpath, get_results, hydrate_df, serialize_df
-
-
-@app.cell
-def _(get_local_experiment_dirpath, get_results):
-    experiment_id = "experiment_78c6310_id_149_20250723-112814"
-    experiment_dirpath = get_local_experiment_dirpath()
-    selected_observables = ["bulk"]
-    lf = get_results(experiment_dirpath=experiment_dirpath, observable_names=selected_observables)
-    return (lf,)
-
-
-@app.cell
-def _(lf):
-    df = lf.collect()
+    # add_obs_btn = mo.ui.run_button(label="+", on_change=lambda _: set_num_obs(get_num_obs() + 1))
+    # rm_obs_btn = mo.ui.run_button(label="-", on_change=lambda _: set_num_obs(get_num_obs() - 1))
+    # observable = mo.ui.text(placeholder="Observable Name")
     return
 
 
 @app.cell
-def _(pl):
-    data = pl.DataFrame({'x': 11.11, 'y': 22, 'z': 0.3})
-    return (data,)
+def _():
+    # selected = [observable] * get_num_obs()
+    return
 
 
 @app.cell
-def _(data, serialize_df):
-    serialized = serialize_df(data, )
-    serialized
-    return (serialized,)
+def _():
+    # observables = mo.ui.array(selected, label="Selected Observables")
+    # mo.hstack([observables, add_obs_btn, rm_obs_btn], justify="start")
+    return
 
 
 @app.cell
-def _(hydrate_df, serialized):
-    dataframe = hydrate_df(serialized)
-    dataframe
+def _():
+    # data = json.dumps(observables.value) if observables.value else None
+    return
+
+
+@app.cell
+def _(json):
+    url = "http://localhost:8888/core/simulation/run/results"
+    headers = {
+        "Content-Type": "application/json",
+        "accept": "*/*"
+    }
+    selected_observables = ["time", "listeners__mass__cell_mass"]
+    data = json.dumps(selected_observables)
+    return (selected_observables,)
+
+
+@app.cell
+def _(mo):
+    plot = mo.ui.run_button(label=f"{mo.icon('carbon:qq-plot')}")
+    plot
+    return (plot,)
+
+
+@app.cell
+async def _(on_get_results, plot, selected_observables):
+    if plot.value:
+        await on_get_results(selected_observables)
+    return
+
+
+@app.cell
+def _(get_results):
+    results = get_results()
+    return (results,)
+
+
+@app.cell
+def _(pl, results):
+    df = pl.DataFrame(results)
+    return (df,)
+
+
+@app.cell
+def _(df, results, selected_observables):
+    chart = None 
+    if results is not None:
+        xaxis, yaxis = selected_observables
+        chart = df.plot.line(x=xaxis, y=yaxis)
+    chart
+    return
+
+
+@app.cell
+def _(results):
+    results
     return
 
 
