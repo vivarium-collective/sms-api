@@ -21,7 +21,7 @@ from sms_api.simulation.models import (
     JobStatus,
     JobType,
     ParcaDatasetRequest,
-    WorkerEvent,
+    WorkerEvent, WorkerEventMessagePayload,
 )
 
 
@@ -81,18 +81,18 @@ async def test_messaging(
 
     # get the initial state of a job
     sequence_number = 1
-    worker_event = WorkerEvent(
-        database_id=simulation.database_id,
+    worker_event = WorkerEventMessagePayload(
         sequence_number=sequence_number,
         correlation_id=hpc_run.correlation_id,
         time=0.1,
         mass={"water": 1.0, "glucose": 0.5},
+        bulk=None,
     )
 
     # send worker messages to the broker
     await nats_producer_client.publish(
         subject=get_settings().nats_worker_event_subject,
-        payload=worker_event.model_dump_json(exclude_unset=True, exclude_none=True).encode("utf-8"),
+        payload=worker_event.model_dump_json(exclude_unset=True).encode("utf-8"),
     )
     # get the updated state of the job
     await asyncio.sleep(0.1)
