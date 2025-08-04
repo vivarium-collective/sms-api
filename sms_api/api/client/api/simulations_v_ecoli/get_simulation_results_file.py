@@ -15,18 +15,13 @@ from typing import cast, Union
 from typing import Union
 
 
-
 def _get_kwargs(
     *,
-    body: Union['Settings', None],
-    experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
+    body: Union["Settings", None],
+    experiment_id: Union[Unset, str] = "experiment_96bb7a2_id_1_20250620-181422",
     database_id: Union[Unset, int] = UNSET,
-
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
-
-
-
 
     params: dict[str, Any] = {}
 
@@ -34,9 +29,7 @@ def _get_kwargs(
 
     params["database_id"] = database_id
 
-
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
-
 
     _kwargs: dict[str, Any] = {
         "method": "get",
@@ -50,21 +43,20 @@ def _get_kwargs(
     else:
         _kwargs["json"] = body
 
-
     headers["Content-Type"] = "application/json"
 
     _kwargs["headers"] = headers
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[Any, HTTPValidationError]]:
+def _parse_response(
+    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
+) -> Optional[Union[Any, HTTPValidationError]]:
     if response.status_code == 200:
         response_200 = cast(Any, None)
         return response_200
     if response.status_code == 422:
         response_422 = HTTPValidationError.from_dict(response.json())
-
-
 
         return response_422
     if client.raise_on_unexpected_status:
@@ -73,7 +65,9 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[Any, HTTPValidationError]]:
+def _build_response(
+    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
+) -> Response[Union[Any, HTTPValidationError]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -85,12 +79,11 @@ def _build_response(*, client: Union[AuthenticatedClient, Client], response: htt
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union['Settings', None],
-    experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
+    body: Union["Settings", None],
+    experiment_id: Union[Unset, str] = "experiment_96bb7a2_id_1_20250620-181422",
     database_id: Union[Unset, int] = UNSET,
-
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """ Get simulation results as a zip file
+    """Get simulation results as a zip file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
@@ -103,14 +96,12 @@ def sync_detailed(
 
     Returns:
         Response[Union[Any, HTTPValidationError]]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         body=body,
-experiment_id=experiment_id,
-database_id=database_id,
-
+        experiment_id=experiment_id,
+        database_id=database_id,
     )
 
     response = client.get_httpx_client().request(
@@ -119,15 +110,15 @@ database_id=database_id,
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union['Settings', None],
-    experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
+    body: Union["Settings", None],
+    experiment_id: Union[Unset, str] = "experiment_96bb7a2_id_1_20250620-181422",
     database_id: Union[Unset, int] = UNSET,
-
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """ Get simulation results as a zip file
+    """Get simulation results as a zip file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
@@ -140,26 +131,24 @@ def sync(
 
     Returns:
         Union[Any, HTTPValidationError]
-     """
-
+    """
 
     return sync_detailed(
         client=client,
-body=body,
-experiment_id=experiment_id,
-database_id=database_id,
-
+        body=body,
+        experiment_id=experiment_id,
+        database_id=database_id,
     ).parsed
+
 
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union['Settings', None],
-    experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
+    body: Union["Settings", None],
+    experiment_id: Union[Unset, str] = "experiment_96bb7a2_id_1_20250620-181422",
     database_id: Union[Unset, int] = UNSET,
-
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """ Get simulation results as a zip file
+    """Get simulation results as a zip file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
@@ -172,31 +161,27 @@ async def asyncio_detailed(
 
     Returns:
         Response[Union[Any, HTTPValidationError]]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         body=body,
-experiment_id=experiment_id,
-database_id=database_id,
-
+        experiment_id=experiment_id,
+        database_id=database_id,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union['Settings', None],
-    experiment_id: Union[Unset, str] = 'experiment_96bb7a2_id_1_20250620-181422',
+    body: Union["Settings", None],
+    experiment_id: Union[Unset, str] = "experiment_96bb7a2_id_1_20250620-181422",
     database_id: Union[Unset, int] = UNSET,
-
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """ Get simulation results as a zip file
+    """Get simulation results as a zip file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
@@ -209,13 +194,13 @@ async def asyncio(
 
     Returns:
         Union[Any, HTTPValidationError]
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        client=client,
-body=body,
-experiment_id=experiment_id,
-database_id=database_id,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            client=client,
+            body=body,
+            experiment_id=experiment_id,
+            database_id=database_id,
+        )
+    ).parsed

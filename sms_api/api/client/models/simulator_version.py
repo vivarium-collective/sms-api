@@ -14,24 +14,19 @@ from typing import Union
 import datetime
 
 
-
-
-
-
 T = TypeVar("T", bound="SimulatorVersion")
-
 
 
 @_attrs_define
 class SimulatorVersion:
     """
-        Attributes:
-            git_commit_hash (str):
-            git_repo_url (str):
-            git_branch (str):
-            database_id (int):
-            created_at (Union[None, Unset, datetime.datetime]):
-     """
+    Attributes:
+        git_commit_hash (str):
+        git_repo_url (str):
+        git_branch (str):
+        database_id (int):
+        created_at (Union[None, Unset, datetime.datetime]):
+    """
 
     git_commit_hash: str
     git_repo_url: str
@@ -39,10 +34,6 @@ class SimulatorVersion:
     database_id: int
     created_at: Union[None, Unset, datetime.datetime] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         git_commit_hash = self.git_commit_hash
@@ -61,7 +52,6 @@ class SimulatorVersion:
         else:
             created_at = self.created_at
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
@@ -74,8 +64,6 @@ class SimulatorVersion:
             field_dict["created_at"] = created_at
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
@@ -98,15 +86,12 @@ class SimulatorVersion:
                     raise TypeError()
                 created_at_type_0 = isoparse(data)
 
-
-
                 return created_at_type_0
-            except: # noqa: E722
+            except:  # noqa: E722
                 pass
             return cast(Union[None, Unset, datetime.datetime], data)
 
         created_at = _parse_created_at(d.pop("created_at", UNSET))
-
 
         simulator_version = cls(
             git_commit_hash=git_commit_hash,
@@ -115,7 +100,6 @@ class SimulatorVersion:
             database_id=database_id,
             created_at=created_at,
         )
-
 
         simulator_version.additional_properties = d
         return simulator_version

@@ -15,18 +15,12 @@ from typing import cast, Union
 from typing import Union
 
 
-
 def _get_kwargs(
     *,
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
     prev_sequence_number: Union[None, Unset, int] = UNSET,
-
 ) -> dict[str, Any]:
-
-
-
-
     params: dict[str, Any] = {}
 
     params["simulation_id"] = simulation_id
@@ -45,9 +39,7 @@ def _get_kwargs(
         json_prev_sequence_number = prev_sequence_number
     params["prev_sequence_number"] = json_prev_sequence_number
 
-
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
-
 
     _kwargs: dict[str, Any] = {
         "method": "get",
@@ -55,26 +47,23 @@ def _get_kwargs(
         "params": params,
     }
 
-
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[HTTPValidationError, list['WorkerEvent']]]:
+def _parse_response(
+    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
+) -> Optional[Union[HTTPValidationError, list["WorkerEvent"]]]:
     if response.status_code == 200:
         response_200 = []
         _response_200 = response.json()
-        for response_200_item_data in (_response_200):
+        for response_200_item_data in _response_200:
             response_200_item = WorkerEvent.from_dict(response_200_item_data)
-
-
 
             response_200.append(response_200_item)
 
         return response_200
     if response.status_code == 422:
         response_422 = HTTPValidationError.from_dict(response.json())
-
-
 
         return response_422
     if client.raise_on_unexpected_status:
@@ -83,7 +72,9 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[HTTPValidationError, list['WorkerEvent']]]:
+def _build_response(
+    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
+) -> Response[Union[HTTPValidationError, list["WorkerEvent"]]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -98,9 +89,8 @@ def sync_detailed(
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
     prev_sequence_number: Union[None, Unset, int] = UNSET,
-
-) -> Response[Union[HTTPValidationError, list['WorkerEvent']]]:
-    """ Get the worker events for a simulation by its ID
+) -> Response[Union[HTTPValidationError, list["WorkerEvent"]]]:
+    """Get the worker events for a simulation by its ID
 
     Args:
         simulation_id (int):
@@ -113,14 +103,12 @@ def sync_detailed(
 
     Returns:
         Response[Union[HTTPValidationError, list['WorkerEvent']]]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         simulation_id=simulation_id,
-num_events=num_events,
-prev_sequence_number=prev_sequence_number,
-
+        num_events=num_events,
+        prev_sequence_number=prev_sequence_number,
     )
 
     response = client.get_httpx_client().request(
@@ -129,15 +117,15 @@ prev_sequence_number=prev_sequence_number,
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
     prev_sequence_number: Union[None, Unset, int] = UNSET,
-
-) -> Optional[Union[HTTPValidationError, list['WorkerEvent']]]:
-    """ Get the worker events for a simulation by its ID
+) -> Optional[Union[HTTPValidationError, list["WorkerEvent"]]]:
+    """Get the worker events for a simulation by its ID
 
     Args:
         simulation_id (int):
@@ -150,16 +138,15 @@ def sync(
 
     Returns:
         Union[HTTPValidationError, list['WorkerEvent']]
-     """
-
+    """
 
     return sync_detailed(
         client=client,
-simulation_id=simulation_id,
-num_events=num_events,
-prev_sequence_number=prev_sequence_number,
-
+        simulation_id=simulation_id,
+        num_events=num_events,
+        prev_sequence_number=prev_sequence_number,
     ).parsed
+
 
 async def asyncio_detailed(
     *,
@@ -167,9 +154,8 @@ async def asyncio_detailed(
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
     prev_sequence_number: Union[None, Unset, int] = UNSET,
-
-) -> Response[Union[HTTPValidationError, list['WorkerEvent']]]:
-    """ Get the worker events for a simulation by its ID
+) -> Response[Union[HTTPValidationError, list["WorkerEvent"]]]:
+    """Get the worker events for a simulation by its ID
 
     Args:
         simulation_id (int):
@@ -182,21 +168,18 @@ async def asyncio_detailed(
 
     Returns:
         Response[Union[HTTPValidationError, list['WorkerEvent']]]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         simulation_id=simulation_id,
-num_events=num_events,
-prev_sequence_number=prev_sequence_number,
-
+        num_events=num_events,
+        prev_sequence_number=prev_sequence_number,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     *,
@@ -204,9 +187,8 @@ async def asyncio(
     simulation_id: int,
     num_events: Union[None, Unset, int] = UNSET,
     prev_sequence_number: Union[None, Unset, int] = UNSET,
-
-) -> Optional[Union[HTTPValidationError, list['WorkerEvent']]]:
-    """ Get the worker events for a simulation by its ID
+) -> Optional[Union[HTTPValidationError, list["WorkerEvent"]]]:
+    """Get the worker events for a simulation by its ID
 
     Args:
         simulation_id (int):
@@ -219,13 +201,13 @@ async def asyncio(
 
     Returns:
         Union[HTTPValidationError, list['WorkerEvent']]
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        client=client,
-simulation_id=simulation_id,
-num_events=num_events,
-prev_sequence_number=prev_sequence_number,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            client=client,
+            simulation_id=simulation_id,
+            num_events=num_events,
+            prev_sequence_number=prev_sequence_number,
+        )
+    ).parsed

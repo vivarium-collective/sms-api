@@ -12,42 +12,35 @@ from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
-  from ..models.ecoli_experiment_metadata import EcoliExperimentMetadata
-  from ..models.ecoli_simulation import EcoliSimulation
-  from ..models.antibiotic_simulation import AntibioticSimulation
-
-
-
+    from ..models.ecoli_experiment_metadata import EcoliExperimentMetadata
+    from ..models.ecoli_simulation import EcoliSimulation
+    from ..models.antibiotic_simulation import AntibioticSimulation
 
 
 T = TypeVar("T", bound="EcoliExperiment")
 
 
-
 @_attrs_define
 class EcoliExperiment:
     """
-        Attributes:
-            experiment_id (str):
-            simulation (Union['AntibioticSimulation', 'EcoliSimulation']):
-            last_updated (Union[Unset, str]):
-            metadata (Union[Unset, EcoliExperimentMetadata]):
-     """
+    Attributes:
+        experiment_id (str):
+        simulation (Union['AntibioticSimulation', 'EcoliSimulation']):
+        last_updated (Union[Unset, str]):
+        metadata (Union[Unset, EcoliExperimentMetadata]):
+    """
 
     experiment_id: str
-    simulation: Union['AntibioticSimulation', 'EcoliSimulation']
+    simulation: Union["AntibioticSimulation", "EcoliSimulation"]
     last_updated: Union[Unset, str] = UNSET
-    metadata: Union[Unset, 'EcoliExperimentMetadata'] = UNSET
+    metadata: Union[Unset, "EcoliExperimentMetadata"] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.ecoli_experiment_metadata import EcoliExperimentMetadata
         from ..models.ecoli_simulation import EcoliSimulation
         from ..models.antibiotic_simulation import AntibioticSimulation
+
         experiment_id = self.experiment_id
 
         simulation: dict[str, Any]
@@ -56,13 +49,11 @@ class EcoliExperiment:
         else:
             simulation = self.simulation.to_dict()
 
-
         last_updated = self.last_updated
 
         metadata: Union[Unset, dict[str, Any]] = UNSET
         if not isinstance(self.metadata, Unset):
             metadata = self.metadata.to_dict()
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -77,49 +68,40 @@ class EcoliExperiment:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.ecoli_experiment_metadata import EcoliExperimentMetadata
         from ..models.ecoli_simulation import EcoliSimulation
         from ..models.antibiotic_simulation import AntibioticSimulation
+
         d = dict(src_dict)
         experiment_id = d.pop("experiment_id")
 
-        def _parse_simulation(data: object) -> Union['AntibioticSimulation', 'EcoliSimulation']:
+        def _parse_simulation(data: object) -> Union["AntibioticSimulation", "EcoliSimulation"]:
             try:
                 if not isinstance(data, dict):
                     raise TypeError()
                 simulation_type_0 = EcoliSimulation.from_dict(data)
 
-
-
                 return simulation_type_0
-            except: # noqa: E722
+            except:  # noqa: E722
                 pass
             if not isinstance(data, dict):
                 raise TypeError()
             simulation_type_1 = AntibioticSimulation.from_dict(data)
 
-
-
             return simulation_type_1
 
         simulation = _parse_simulation(d.pop("simulation"))
-
 
         last_updated = d.pop("last_updated", UNSET)
 
         _metadata = d.pop("metadata", UNSET)
         metadata: Union[Unset, EcoliExperimentMetadata]
-        if isinstance(_metadata,  Unset):
+        if isinstance(_metadata, Unset):
             metadata = UNSET
         else:
             metadata = EcoliExperimentMetadata.from_dict(_metadata)
-
-
-
 
         ecoli_experiment = cls(
             experiment_id=experiment_id,
@@ -127,7 +109,6 @@ class EcoliExperiment:
             last_updated=last_updated,
             metadata=metadata,
         )
-
 
         ecoli_experiment.additional_properties = d
         return ecoli_experiment

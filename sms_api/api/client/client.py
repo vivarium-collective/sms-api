@@ -5,9 +5,6 @@ from attrs import define, field, evolve
 import httpx
 
 
-
-
-
 @define
 class Client:
     """A class for keeping track of data related to the API
@@ -36,6 +33,7 @@ class Client:
             status code that was not documented in the source OpenAPI document. Can also be provided as a keyword
             argument to the constructor.
     """
+
     raise_on_unexpected_status: bool = field(default=False, kw_only=True)
     _base_url: str = field(alias="base_url")
     _cookies: dict[str, str] = field(factory=dict, kw_only=True, alias="cookies")

@@ -13,18 +13,11 @@ from ...models.parca_dataset_request import ParcaDatasetRequest
 from typing import cast
 
 
-
 def _get_kwargs(
     *,
     body: ParcaDatasetRequest,
-
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
-
-
-
-
-
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -33,24 +26,21 @@ def _get_kwargs(
 
     _kwargs["json"] = body.to_dict()
 
-
     headers["Content-Type"] = "application/json"
 
     _kwargs["headers"] = headers
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Union[HTTPValidationError, ParcaDataset]]:
+def _parse_response(
+    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
+) -> Optional[Union[HTTPValidationError, ParcaDataset]]:
     if response.status_code == 200:
         response_200 = ParcaDataset.from_dict(response.json())
-
-
 
         return response_200
     if response.status_code == 422:
         response_422 = HTTPValidationError.from_dict(response.json())
-
-
 
         return response_422
     if client.raise_on_unexpected_status:
@@ -59,7 +49,9 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Union[HTTPValidationError, ParcaDataset]]:
+def _build_response(
+    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
+) -> Response[Union[HTTPValidationError, ParcaDataset]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -72,9 +64,8 @@ def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     body: ParcaDatasetRequest,
-
 ) -> Response[Union[HTTPValidationError, ParcaDataset]]:
-    """ Run a parameter calculation
+    """Run a parameter calculation
 
     Args:
         body (ParcaDatasetRequest):
@@ -85,12 +76,10 @@ def sync_detailed(
 
     Returns:
         Response[Union[HTTPValidationError, ParcaDataset]]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         body=body,
-
     )
 
     response = client.get_httpx_client().request(
@@ -99,13 +88,13 @@ def sync_detailed(
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
     body: ParcaDatasetRequest,
-
 ) -> Optional[Union[HTTPValidationError, ParcaDataset]]:
-    """ Run a parameter calculation
+    """Run a parameter calculation
 
     Args:
         body (ParcaDatasetRequest):
@@ -116,22 +105,20 @@ def sync(
 
     Returns:
         Union[HTTPValidationError, ParcaDataset]
-     """
-
+    """
 
     return sync_detailed(
         client=client,
-body=body,
-
+        body=body,
     ).parsed
+
 
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     body: ParcaDatasetRequest,
-
 ) -> Response[Union[HTTPValidationError, ParcaDataset]]:
-    """ Run a parameter calculation
+    """Run a parameter calculation
 
     Args:
         body (ParcaDatasetRequest):
@@ -142,27 +129,23 @@ async def asyncio_detailed(
 
     Returns:
         Response[Union[HTTPValidationError, ParcaDataset]]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         body=body,
-
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
     body: ParcaDatasetRequest,
-
 ) -> Optional[Union[HTTPValidationError, ParcaDataset]]:
-    """ Run a parameter calculation
+    """Run a parameter calculation
 
     Args:
         body (ParcaDatasetRequest):
@@ -173,11 +156,11 @@ async def asyncio(
 
     Returns:
         Union[HTTPValidationError, ParcaDataset]
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        client=client,
-body=body,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            client=client,
+            body=body,
+        )
+    ).parsed

@@ -7,41 +7,25 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 
-
-
-
-
-
 T = TypeVar("T", bound="CheckHealthHealthGetResponseCheckHealthHealthGet")
-
 
 
 @_attrs_define
 class CheckHealthHealthGetResponseCheckHealthHealthGet:
-    """
-     """
+    """ """
 
     additional_properties: dict[str, str] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        check_health_health_get_response_check_health_health_get = cls(
-        )
-
+        check_health_health_get_response_check_health_health_get = cls()
 
         check_health_health_get_response_check_health_health_get.additional_properties = d
         return check_health_health_get_response_check_health_health_get

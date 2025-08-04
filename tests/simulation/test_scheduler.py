@@ -21,7 +21,7 @@ from sms_api.simulation.models import (
     JobStatus,
     JobType,
     ParcaDatasetRequest,
-    WorkerEvent, WorkerEventMessagePayload,
+    WorkerEventMessagePayload,
 )
 
 

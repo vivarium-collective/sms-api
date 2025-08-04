@@ -11,57 +11,40 @@ from typing import cast
 from typing import Union
 
 
-
-
-
-
 T = TypeVar("T", bound="RequestedObservables")
-
 
 
 @_attrs_define
 class RequestedObservables:
     """
-        Attributes:
-            items (Union[Unset, list[str]]):
-     """
+    Attributes:
+        items (Union[Unset, list[str]]):
+    """
 
     items: Union[Unset, list[str]] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         items: Union[Unset, list[str]] = UNSET
         if not isinstance(self.items, Unset):
             items = self.items
 
-
-
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-        })
+        field_dict.update({})
         if items is not UNSET:
             field_dict["items"] = items
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
         items = cast(list[str], d.pop("items", UNSET))
 
-
         requested_observables = cls(
             items=items,
         )
-
 
         requested_observables.additional_properties = d
         return requested_observables
