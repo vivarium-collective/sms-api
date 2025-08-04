@@ -12,112 +12,105 @@ from ..types import UNSET, Unset
 from typing import Union
 
 
-
-
-
-
 T = TypeVar("T", bound="Settings")
-
 
 
 @_attrs_define
 class Settings:
     """
-        Attributes:
-            storage_bucket (Union[Unset, str]):  Default: 'files.biosimulations.dev'.
-            storage_endpoint_url (Union[Unset, str]):  Default: 'https://storage.googleapis.com'.
-            storage_region (Union[Unset, str]):  Default: 'us-east4'.
-            storage_tensorstore_driver (Union[Unset, SettingsStorageTensorstoreDriver]):  Default:
-                SettingsStorageTensorstoreDriver.ZARR3.
-            storage_tensorstore_kvstore_driver (Union[Unset, SettingsStorageTensorstoreKvstoreDriver]):  Default:
-                SettingsStorageTensorstoreKvstoreDriver.GCS.
-            temporal_service_url (Union[Unset, str]):  Default: 'localhost:7233'.
-            storage_local_cache_dir (Union[Unset, str]):  Default: './local_cache'.
-            storage_gcs_credentials_file (Union[Unset, str]):  Default: ''.
-            mongodb_uri (Union[Unset, str]):  Default: 'mongodb://localhost:27017'.
-            mongodb_database (Union[Unset, str]):  Default: 'biosimulations'.
-            mongodb_collection_omex (Union[Unset, str]):  Default: 'BiosimOmex'.
-            mongodb_collection_sims (Union[Unset, str]):  Default: 'BiosimSims'.
-            mongodb_collection_compare (Union[Unset, str]):  Default: 'BiosimCompare'.
-            postgres_user (Union[Unset, str]):  Default: '<USER>'.
-            postgres_password (Union[Unset, str]):  Default: '<PASSWORD>'.
-            postgres_database (Union[Unset, str]):  Default: 'sms'.
-            postgres_host (Union[Unset, str]):  Default: 'localhost'.
-            postgres_port (Union[Unset, int]):  Default: 5432.
-            postgres_pool_size (Union[Unset, int]):  Default: 10.
-            postgres_max_overflow (Union[Unset, int]):  Default: 5.
-            postgres_pool_timeout (Union[Unset, int]):  Default: 30.
-            postgres_pool_recycle (Union[Unset, int]):  Default: 1800.
-            slurm_submit_host (Union[Unset, str]):  Default: ''.
-            slurm_submit_user (Union[Unset, str]):  Default: ''.
-            slurm_submit_key_path (Union[Unset, str]):  Default: ''.
-            slurm_partition (Union[Unset, str]):  Default: ''.
-            slurm_node_list (Union[Unset, str]):  Default: ''.
-            slurm_qos (Union[Unset, str]):  Default: ''.
-            slurm_log_base_path (Union[Unset, str]):  Default: ''.
-            slurm_base_path (Union[Unset, str]):  Default: ''.
-            hpc_image_base_path (Union[Unset, str]):  Default: ''.
-            hpc_parca_base_path (Union[Unset, str]):  Default: ''.
-            hpc_repo_base_path (Union[Unset, str]):  Default: ''.
-            hpc_sim_base_path (Union[Unset, str]):  Default: ''.
-            hpc_sim_config_file (Union[Unset, str]):  Default: 'publish.json'.
-            nats_url (Union[Unset, str]):  Default: ''.
-            nats_worker_event_subject (Union[Unset, str]):  Default: 'worker.events'.
-            nats_emitter_url (Union[Unset, str]):  Default: ''.
-            nats_emitter_magic_word (Union[Unset, str]):  Default: 'emitter-magic-word'.
-            dev_mode (Union[Unset, str]):  Default: '0'.
-            app_dir (Union[Unset, str]):  Default: '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app'.
-            assets_dir (Union[Unset, str]):  Default: '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets'.
-            marimo_api_server (Union[Unset, str]):  Default: ''.
-     """
+    Attributes:
+        storage_bucket (Union[Unset, str]):  Default: 'files.biosimulations.dev'.
+        storage_endpoint_url (Union[Unset, str]):  Default: 'https://storage.googleapis.com'.
+        storage_region (Union[Unset, str]):  Default: 'us-east4'.
+        storage_tensorstore_driver (Union[Unset, SettingsStorageTensorstoreDriver]):  Default:
+            SettingsStorageTensorstoreDriver.ZARR3.
+        storage_tensorstore_kvstore_driver (Union[Unset, SettingsStorageTensorstoreKvstoreDriver]):  Default:
+            SettingsStorageTensorstoreKvstoreDriver.GCS.
+        temporal_service_url (Union[Unset, str]):  Default: 'localhost:7233'.
+        storage_local_cache_dir (Union[Unset, str]):  Default: './local_cache'.
+        storage_gcs_credentials_file (Union[Unset, str]):  Default: ''.
+        mongodb_uri (Union[Unset, str]):  Default: 'mongodb://localhost:27017'.
+        mongodb_database (Union[Unset, str]):  Default: 'biosimulations'.
+        mongodb_collection_omex (Union[Unset, str]):  Default: 'BiosimOmex'.
+        mongodb_collection_sims (Union[Unset, str]):  Default: 'BiosimSims'.
+        mongodb_collection_compare (Union[Unset, str]):  Default: 'BiosimCompare'.
+        postgres_user (Union[Unset, str]):  Default: '<USER>'.
+        postgres_password (Union[Unset, str]):  Default: '<PASSWORD>'.
+        postgres_database (Union[Unset, str]):  Default: 'sms'.
+        postgres_host (Union[Unset, str]):  Default: 'localhost'.
+        postgres_port (Union[Unset, int]):  Default: 5432.
+        postgres_pool_size (Union[Unset, int]):  Default: 10.
+        postgres_max_overflow (Union[Unset, int]):  Default: 5.
+        postgres_pool_timeout (Union[Unset, int]):  Default: 30.
+        postgres_pool_recycle (Union[Unset, int]):  Default: 1800.
+        slurm_submit_host (Union[Unset, str]):  Default: ''.
+        slurm_submit_user (Union[Unset, str]):  Default: ''.
+        slurm_submit_key_path (Union[Unset, str]):  Default: ''.
+        slurm_partition (Union[Unset, str]):  Default: ''.
+        slurm_node_list (Union[Unset, str]):  Default: ''.
+        slurm_qos (Union[Unset, str]):  Default: ''.
+        slurm_log_base_path (Union[Unset, str]):  Default: ''.
+        slurm_base_path (Union[Unset, str]):  Default: ''.
+        hpc_image_base_path (Union[Unset, str]):  Default: ''.
+        hpc_parca_base_path (Union[Unset, str]):  Default: ''.
+        hpc_repo_base_path (Union[Unset, str]):  Default: ''.
+        hpc_sim_base_path (Union[Unset, str]):  Default: ''.
+        hpc_sim_config_file (Union[Unset, str]):  Default: 'publish.json'.
+        nats_url (Union[Unset, str]):  Default: ''.
+        nats_worker_event_subject (Union[Unset, str]):  Default: 'worker.events'.
+        nats_emitter_url (Union[Unset, str]):  Default: ''.
+        nats_emitter_magic_word (Union[Unset, str]):  Default: 'emitter-magic-word'.
+        dev_mode (Union[Unset, str]):  Default: '0'.
+        app_dir (Union[Unset, str]):  Default: '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app'.
+        assets_dir (Union[Unset, str]):  Default: '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets'.
+        marimo_api_server (Union[Unset, str]):  Default: ''.
+    """
 
-    storage_bucket: Union[Unset, str] = 'files.biosimulations.dev'
-    storage_endpoint_url: Union[Unset, str] = 'https://storage.googleapis.com'
-    storage_region: Union[Unset, str] = 'us-east4'
+    storage_bucket: Union[Unset, str] = "files.biosimulations.dev"
+    storage_endpoint_url: Union[Unset, str] = "https://storage.googleapis.com"
+    storage_region: Union[Unset, str] = "us-east4"
     storage_tensorstore_driver: Union[Unset, SettingsStorageTensorstoreDriver] = SettingsStorageTensorstoreDriver.ZARR3
-    storage_tensorstore_kvstore_driver: Union[Unset, SettingsStorageTensorstoreKvstoreDriver] = SettingsStorageTensorstoreKvstoreDriver.GCS
-    temporal_service_url: Union[Unset, str] = 'localhost:7233'
-    storage_local_cache_dir: Union[Unset, str] = './local_cache'
-    storage_gcs_credentials_file: Union[Unset, str] = ''
-    mongodb_uri: Union[Unset, str] = 'mongodb://localhost:27017'
-    mongodb_database: Union[Unset, str] = 'biosimulations'
-    mongodb_collection_omex: Union[Unset, str] = 'BiosimOmex'
-    mongodb_collection_sims: Union[Unset, str] = 'BiosimSims'
-    mongodb_collection_compare: Union[Unset, str] = 'BiosimCompare'
-    postgres_user: Union[Unset, str] = '<USER>'
-    postgres_password: Union[Unset, str] = '<PASSWORD>'
-    postgres_database: Union[Unset, str] = 'sms'
-    postgres_host: Union[Unset, str] = 'localhost'
+    storage_tensorstore_kvstore_driver: Union[Unset, SettingsStorageTensorstoreKvstoreDriver] = (
+        SettingsStorageTensorstoreKvstoreDriver.GCS
+    )
+    temporal_service_url: Union[Unset, str] = "localhost:7233"
+    storage_local_cache_dir: Union[Unset, str] = "./local_cache"
+    storage_gcs_credentials_file: Union[Unset, str] = ""
+    mongodb_uri: Union[Unset, str] = "mongodb://localhost:27017"
+    mongodb_database: Union[Unset, str] = "biosimulations"
+    mongodb_collection_omex: Union[Unset, str] = "BiosimOmex"
+    mongodb_collection_sims: Union[Unset, str] = "BiosimSims"
+    mongodb_collection_compare: Union[Unset, str] = "BiosimCompare"
+    postgres_user: Union[Unset, str] = "<USER>"
+    postgres_password: Union[Unset, str] = "<PASSWORD>"
+    postgres_database: Union[Unset, str] = "sms"
+    postgres_host: Union[Unset, str] = "localhost"
     postgres_port: Union[Unset, int] = 5432
     postgres_pool_size: Union[Unset, int] = 10
     postgres_max_overflow: Union[Unset, int] = 5
     postgres_pool_timeout: Union[Unset, int] = 30
     postgres_pool_recycle: Union[Unset, int] = 1800
-    slurm_submit_host: Union[Unset, str] = ''
-    slurm_submit_user: Union[Unset, str] = ''
-    slurm_submit_key_path: Union[Unset, str] = ''
-    slurm_partition: Union[Unset, str] = ''
-    slurm_node_list: Union[Unset, str] = ''
-    slurm_qos: Union[Unset, str] = ''
-    slurm_log_base_path: Union[Unset, str] = ''
-    slurm_base_path: Union[Unset, str] = ''
-    hpc_image_base_path: Union[Unset, str] = ''
-    hpc_parca_base_path: Union[Unset, str] = ''
-    hpc_repo_base_path: Union[Unset, str] = ''
-    hpc_sim_base_path: Union[Unset, str] = ''
-    hpc_sim_config_file: Union[Unset, str] = 'publish.json'
-    nats_url: Union[Unset, str] = ''
-    nats_worker_event_subject: Union[Unset, str] = 'worker.events'
-    nats_emitter_url: Union[Unset, str] = ''
-    nats_emitter_magic_word: Union[Unset, str] = 'emitter-magic-word'
-    dev_mode: Union[Unset, str] = '0'
-    app_dir: Union[Unset, str] = '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app'
-    assets_dir: Union[Unset, str] = '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets'
-    marimo_api_server: Union[Unset, str] = ''
-
-
-
-
+    slurm_submit_host: Union[Unset, str] = ""
+    slurm_submit_user: Union[Unset, str] = ""
+    slurm_submit_key_path: Union[Unset, str] = ""
+    slurm_partition: Union[Unset, str] = ""
+    slurm_node_list: Union[Unset, str] = ""
+    slurm_qos: Union[Unset, str] = ""
+    slurm_log_base_path: Union[Unset, str] = ""
+    slurm_base_path: Union[Unset, str] = ""
+    hpc_image_base_path: Union[Unset, str] = ""
+    hpc_parca_base_path: Union[Unset, str] = ""
+    hpc_repo_base_path: Union[Unset, str] = ""
+    hpc_sim_base_path: Union[Unset, str] = ""
+    hpc_sim_config_file: Union[Unset, str] = "publish.json"
+    nats_url: Union[Unset, str] = ""
+    nats_worker_event_subject: Union[Unset, str] = "worker.events"
+    nats_emitter_url: Union[Unset, str] = ""
+    nats_emitter_magic_word: Union[Unset, str] = "emitter-magic-word"
+    dev_mode: Union[Unset, str] = "0"
+    app_dir: Union[Unset, str] = "/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app"
+    assets_dir: Union[Unset, str] = "/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets"
+    marimo_api_server: Union[Unset, str] = ""
 
     def to_dict(self) -> dict[str, Any]:
         storage_bucket = self.storage_bucket
@@ -130,11 +123,9 @@ class Settings:
         if not isinstance(self.storage_tensorstore_driver, Unset):
             storage_tensorstore_driver = self.storage_tensorstore_driver.value
 
-
         storage_tensorstore_kvstore_driver: Union[Unset, str] = UNSET
         if not isinstance(self.storage_tensorstore_kvstore_driver, Unset):
             storage_tensorstore_kvstore_driver = self.storage_tensorstore_kvstore_driver.value
-
 
         temporal_service_url = self.temporal_service_url
 
@@ -212,11 +203,9 @@ class Settings:
 
         marimo_api_server = self.marimo_api_server
 
-
         field_dict: dict[str, Any] = {}
 
-        field_dict.update({
-        })
+        field_dict.update({})
         if storage_bucket is not UNSET:
             field_dict["storage_bucket"] = storage_bucket
         if storage_endpoint_url is not UNSET:
@@ -306,8 +295,6 @@ class Settings:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
@@ -319,23 +306,19 @@ class Settings:
 
         _storage_tensorstore_driver = d.pop("storage_tensorstore_driver", UNSET)
         storage_tensorstore_driver: Union[Unset, SettingsStorageTensorstoreDriver]
-        if isinstance(_storage_tensorstore_driver,  Unset):
+        if isinstance(_storage_tensorstore_driver, Unset):
             storage_tensorstore_driver = UNSET
         else:
             storage_tensorstore_driver = SettingsStorageTensorstoreDriver(_storage_tensorstore_driver)
 
-
-
-
         _storage_tensorstore_kvstore_driver = d.pop("storage_tensorstore_kvstore_driver", UNSET)
         storage_tensorstore_kvstore_driver: Union[Unset, SettingsStorageTensorstoreKvstoreDriver]
-        if isinstance(_storage_tensorstore_kvstore_driver,  Unset):
+        if isinstance(_storage_tensorstore_kvstore_driver, Unset):
             storage_tensorstore_kvstore_driver = UNSET
         else:
-            storage_tensorstore_kvstore_driver = SettingsStorageTensorstoreKvstoreDriver(_storage_tensorstore_kvstore_driver)
-
-
-
+            storage_tensorstore_kvstore_driver = SettingsStorageTensorstoreKvstoreDriver(
+                _storage_tensorstore_kvstore_driver
+            )
 
         temporal_service_url = d.pop("temporal_service_url", UNSET)
 

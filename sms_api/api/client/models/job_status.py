@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"

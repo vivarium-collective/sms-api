@@ -10,31 +10,22 @@ from typing import cast
 from typing import cast, Union
 
 
-
-
-
-
 T = TypeVar("T", bound="ValidationError")
-
 
 
 @_attrs_define
 class ValidationError:
     """
-        Attributes:
-            loc (list[Union[int, str]]):
-            msg (str):
-            type_ (str):
-     """
+    Attributes:
+        loc (list[Union[int, str]]):
+        msg (str):
+        type_ (str):
+    """
 
     loc: list[Union[int, str]]
     msg: str
     type_: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         loc = []
@@ -43,12 +34,9 @@ class ValidationError:
             loc_item = loc_item_data
             loc.append(loc_item)
 
-
-
         msg = self.msg
 
         type_ = self.type_
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -60,21 +48,19 @@ class ValidationError:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
         loc = []
         _loc = d.pop("loc")
-        for loc_item_data in (_loc):
+        for loc_item_data in _loc:
+
             def _parse_loc_item(data: object) -> Union[int, str]:
                 return cast(Union[int, str], data)
 
             loc_item = _parse_loc_item(loc_item_data)
 
             loc.append(loc_item)
-
 
         msg = d.pop("msg")
 
@@ -85,7 +71,6 @@ class ValidationError:
             msg=msg,
             type_=type_,
         )
-
 
         validation_error.additional_properties = d
         return validation_error

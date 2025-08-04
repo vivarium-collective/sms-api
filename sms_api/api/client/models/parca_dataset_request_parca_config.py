@@ -9,46 +9,30 @@ from ..types import UNSET, Unset
 from typing import cast, Union
 
 
-
-
-
-
 T = TypeVar("T", bound="ParcaDatasetRequestParcaConfig")
-
 
 
 @_attrs_define
 class ParcaDatasetRequestParcaConfig:
-    """
-     """
+    """ """
 
     additional_properties: dict[str, Union[float, int, str]] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-
         field_dict: dict[str, Any] = {}
         for prop_name, prop in self.additional_properties.items():
-
             field_dict[prop_name] = prop
 
-
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        parca_dataset_request_parca_config = cls(
-        )
-
+        parca_dataset_request_parca_config = cls()
 
         additional_properties = {}
         for prop_name, prop_dict in d.items():
+
             def _parse_additional_property(data: object) -> Union[float, int, str]:
                 return cast(Union[float, int, str], data)
 

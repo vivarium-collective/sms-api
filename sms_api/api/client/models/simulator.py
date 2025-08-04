@@ -7,32 +7,22 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 
-
-
-
-
-
 T = TypeVar("T", bound="Simulator")
-
 
 
 @_attrs_define
 class Simulator:
     """
-        Attributes:
-            git_commit_hash (str):
-            git_repo_url (str):
-            git_branch (str):
-     """
+    Attributes:
+        git_commit_hash (str):
+        git_repo_url (str):
+        git_branch (str):
+    """
 
     git_commit_hash: str
     git_repo_url: str
     git_branch: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         git_commit_hash = self.git_commit_hash
@@ -40,7 +30,6 @@ class Simulator:
         git_repo_url = self.git_repo_url
 
         git_branch = self.git_branch
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -51,8 +40,6 @@ class Simulator:
         })
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
@@ -68,7 +55,6 @@ class Simulator:
             git_repo_url=git_repo_url,
             git_branch=git_branch,
         )
-
 
         simulator.additional_properties = d
         return simulator

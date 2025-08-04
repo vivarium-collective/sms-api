@@ -8,22 +8,11 @@ from ...types import Response, UNSET
 from ... import errors
 
 
-
-
-def _get_kwargs(
-
-) -> dict[str, Any]:
-
-
-
-
-
-
+def _get_kwargs() -> dict[str, Any]:
     _kwargs: dict[str, Any] = {
         "method": "get",
         "url": "/",
     }
-
 
     return _kwargs
 
@@ -49,9 +38,8 @@ def _build_response(*, client: Union[AuthenticatedClient, Client], response: htt
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-
 ) -> Response[Any]:
-    """ Home
+    """Home
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -59,12 +47,9 @@ def sync_detailed(
 
     Returns:
         Response[Any]
-     """
+    """
 
-
-    kwargs = _get_kwargs(
-
-    )
+    kwargs = _get_kwargs()
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -76,9 +61,8 @@ def sync_detailed(
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-
 ) -> Response[Any]:
-    """ Home
+    """Home
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -86,15 +70,10 @@ async def asyncio_detailed(
 
     Returns:
         Response[Any]
-     """
+    """
 
+    kwargs = _get_kwargs()
 
-    kwargs = _get_kwargs(
-
-    )
-
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)

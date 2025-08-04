@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     mongodb_collection_compare: str = "BiosimCompare"
 
     postgres_user: str = "<USER>"
-    postgres_password: str = "<PASSWORD>"
+    postgres_password: str = ""
     postgres_database: str = "sms"
     postgres_host: str = "localhost"
     postgres_port: int = 5432

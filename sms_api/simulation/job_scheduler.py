@@ -37,16 +37,23 @@ class JobScheduler:
         logger.info(f"Subscribing to NATS messages for subject '{subject}'")
 
         async def message_handler(msg: Msg) -> Any:
-            subject = msg.subject
-            data = msg.data.decode("utf-8")
-            logger.debug(f"Received message on subject '{subject}': {data}")
-            worker_event_message_payload = WorkerEventMessagePayload.model_validate_json(data)
-            worker_event = WorkerEvent.from_message_payload(worker_event_message_payload=worker_event_message_payload)
-            hpcrun_id = await self.get_hpcrun_by_correlation_id(correlation_id=worker_event.correlation_id)
-            if hpcrun_id is None:
-                logger.error(f"No HpcRun found for correlation ID {worker_event.correlation_id}. Skipping event.")
-                return
-            _updated_worker_event = await self.database_service.insert_worker_event(worker_event, hpcrun_id=hpcrun_id)
+            try:
+                subject = msg.subject
+                data = msg.data.decode("utf-8")
+                logger.debug(f"Received message on subject '{subject}': {data}")
+                worker_event_message_payload = WorkerEventMessagePayload.model_validate_json(data)
+                worker_event = WorkerEvent.from_message_payload(
+                    worker_event_message_payload=worker_event_message_payload
+                )
+                hpcrun_id = await self.get_hpcrun_by_correlation_id(correlation_id=worker_event.correlation_id)
+                if hpcrun_id is None:
+                    logger.error(f"No HpcRun found for correlation ID {worker_event.correlation_id}. Skipping event.")
+                    return
+                _updated_worker_event = await self.database_service.insert_worker_event(
+                    worker_event, hpcrun_id=hpcrun_id
+                )
+            except Exception:
+                logger.exception(f"Exception while handling NATS message: {data}")
 
         await self.nats_client.subscribe(subject=subject, cb=message_handler)
         if self.nats_client.is_connected:

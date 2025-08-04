@@ -11,23 +11,21 @@ POSTGRES_PORT=5432
 # "postgresql://sms:$$pw@localhost:$(port)/sms?sslmode=disable""postgresql://sms:$$pw@localhost:$(port)/sms?sslmode=disable"
 
 .PHONY: install
-install: ## Install the poetry environment and install the pre-commit hooks
-	@echo "🚀 Creating virtual environment using pyenv and poetry"
-	@poetry install
-	@ poetry run pre-commit install
-	@poetry shell
+install: ## Install the uv environment and install the pre-commit hooks
+	@echo "🚀 Creating virtual environment using uv"
+	@uv sync
+	@uv run pre-commit install
 
 .PHONY: check
 check: ## Run code quality tools.
-	@poetry run pre-commit gc
-	@echo "🚀 Checking Poetry lock file consistency with 'pyproject.toml': Running poetry check --lock"
-	@poetry check --lock
+	@echo "🚀 Checking lock file consistency with 'pyproject.toml'"
+	@uv lock --locked
 	@echo "🚀 Linting code: Running pre-commit"
-	@poetry run pre-commit run -a
+	@uv run pre-commit run -a
 	@echo "🚀 Static type checking: Running mypy"
-	@poetry run mypy
+	@uv run mypy
 	@echo "🚀 Checking for obsolete dependencies: Running deptry"
-	@poetry run deptry .
+	@uv run deptry .
 
 .PHONY: clean
 clean:
@@ -39,12 +37,12 @@ clean:
 .PHONY: test
 test: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
-	@poetry run pytest -ra --cov --cov-config=pyproject.toml --cov-report=xml
+	@uv run python -m pytest -ra --cov --cov-config=pyproject.toml --cov-report=xml
 
 .PHONY: logtest
 logtest: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
-	@poetry run pytest \
+	@uv run python -m pytest \
 		--cov \
 		--cov-config=pyproject.toml \
 		--cov-report=xml \
@@ -52,29 +50,31 @@ logtest: ## Test the code with pytest
 		--log-file-level=ERROR
 
 .PHONY: build
-build: clean-build ## Build wheel file using poetry
+build: clean-build ## Build wheel file
 	@echo "🚀 Creating wheel file"
-	@poetry build
+	@uvx --from build pyproject-build --installer uv
 
 .PHONY: clean-build
-clean-build: ## clean build artifacts
-	@rm -rf dist
+clean-build: ## Clean build artifacts
+	@echo "🚀 Removing build artifacts"
+	@uv run python -c "import shutil; import os; shutil.rmtree('dist') if os.path.exists('dist') else None"
 
 .PHONY: docs-test
 docs-test: ## Test if documentation can be built without warnings or errors
-	@poetry run mkdocs build -s
+	@uv run mkdocs build -s
 
 .PHONY: docs
 docs: ## Build and serve the documentation
-	@poetry run mkdocs serve
+	@uv run mkdocs serve
 
 PHONY: generate-docs
 generate-docs: ## Build and serve the documentation
-	@cd documentation && poetry run make clean && poetry run sphinx-apidoc -o source ../sms_api && poetry run make html
+	@cd documentation && uv run make clean && uv run sphinx-apidoc -o source ../sms_api && uv run make html
 
 .PHONY: help
 help:
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@uv run python -c "import re; \
+	[[print(f'\033[36m{m[0]:<20}\033[0m {m[1]}') for m in re.findall(r'^([a-zA-Z_-]+):.*?## (.*)$$', open(makefile).read(), re.M)] for makefile in ('$(MAKEFILE_LIST)').strip().split()]"
 
 .PHONY: new-build
 new-build:
@@ -82,7 +82,7 @@ new-build:
 
 .PHONY: check-minikube
 check-minikube:
-	@is_minikube=$$(poetry run python -c "import os; print(str('minikube' in os.getenv('KUBECONFIG', '')).lower())"); \
+	@is_minikube=$$(uv run python -c "import os; print(str('minikube' in os.getenv('KUBECONFIG', '')).lower())"); \
 	if [ $$is_minikube = "true" ]; then \
 		echo "You're using minikube"; \
 	else \
@@ -92,7 +92,7 @@ check-minikube:
 
 .PHONY: spec
 spec:
-	@poetry run python ./sms_api/api/openapi_spec.py
+	@uv run python ./sms_api/api/openapi_spec.py
 
 .PHONY: new
 new:
@@ -109,7 +109,7 @@ whichkube:
 .PHONY: gateway
 gateway:
 	@make spec
-	@poetry run uvicorn sms_api.api.main:app \
+	@uv run uvicorn sms_api.api.main:app \
 		--env-file assets/dev/config/.dev_env \
 		--host 0.0.0.0 \
 		--port ${LOCAL_GATEWAY_PORT} \
@@ -117,7 +117,7 @@ gateway:
 
 .PHONY: edit-app
 edit-app:
-	@poetry run marimo edit app/ui/$(ui).py
+	@uv run marimo edit app/ui/$(ui).py
 
 .PHONY: pginit
 pginit:
@@ -189,7 +189,7 @@ pingdb:
 
 .PHONY: write-latest-commit
 write-latest-commit:
-	@poetry run python sms_api/latest_commit.py
+	@uv run python sms_api/latest_commit.py
 
 .PHONY: get-latest-simulator
 get-latest-simulator:
@@ -212,7 +212,7 @@ latest-simulator:
 
 .PHONY: test-mod
 testmod:
-	@poetry run pytest -s $(m)
+	@uv run python -m pytest -s $(m)
 
 .PHONY: run-workflow
 workflow:
@@ -225,17 +225,17 @@ workflow:
 .PHONY: generate-client
 generate-client:
 	@make spec
-	@poetry run ./scripts/generate-api-client.sh
+	@uv run ./scripts/generate-api-client.sh
 
 .PHONY: pguri
 pguri:
 	@pg_user=sms; \
-	pg_password=$$(poetry run python -c "import dotenv;import os;dotenv.load_dotenv('assets/dev/config/.dev_env');print(os.getenv('POSTGRES_PASSWORD'))"); \
+	pg_password=$$(uv run python -c "import dotenv;import os;dotenv.load_dotenv('assets/dev/config/.dev_env');print(os.getenv('POSTGRES_PASSWORD'))"); \
 	echo postgresql://${POSTGRES_USER}:$$pg_password@${LOCAL_POSTGRES_HOST}:${LOCAL_POSTGRES_PORT}/${POSTGRES_DB}
 
 .PHONY: py
 py:
-	@poetry run python -m asyncio
+	@uv run python -m asyncio
 
 .PHONY: set-wip
 set-wip:

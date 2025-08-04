@@ -12,36 +12,29 @@ from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
-  from ..models.antibiotic_simulation_request import AntibioticSimulationRequest
-
-
-
+    from ..models.antibiotic_simulation_request import AntibioticSimulationRequest
 
 
 T = TypeVar("T", bound="AntibioticSimulation")
 
 
-
 @_attrs_define
 class AntibioticSimulation:
     """
-        Attributes:
-            database_id (int):
-            sim_request (AntibioticSimulationRequest):
-            slurmjob_id (Union[None, Unset, int]):
-     """
+    Attributes:
+        database_id (int):
+        sim_request (AntibioticSimulationRequest):
+        slurmjob_id (Union[None, Unset, int]):
+    """
 
     database_id: int
-    sim_request: 'AntibioticSimulationRequest'
+    sim_request: "AntibioticSimulationRequest"
     slurmjob_id: Union[None, Unset, int] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
         from ..models.antibiotic_simulation_request import AntibioticSimulationRequest
+
         database_id = self.database_id
 
         sim_request = self.sim_request.to_dict()
@@ -51,7 +44,6 @@ class AntibioticSimulation:
             slurmjob_id = UNSET
         else:
             slurmjob_id = self.slurmjob_id
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -64,18 +56,14 @@ class AntibioticSimulation:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.antibiotic_simulation_request import AntibioticSimulationRequest
+
         d = dict(src_dict)
         database_id = d.pop("database_id")
 
         sim_request = AntibioticSimulationRequest.from_dict(d.pop("sim_request"))
-
-
-
 
         def _parse_slurmjob_id(data: object) -> Union[None, Unset, int]:
             if data is None:
@@ -86,13 +74,11 @@ class AntibioticSimulation:
 
         slurmjob_id = _parse_slurmjob_id(d.pop("slurmjob_id", UNSET))
 
-
         antibiotic_simulation = cls(
             database_id=database_id,
             sim_request=sim_request,
             slurmjob_id=slurmjob_id,
         )
-
 
         antibiotic_simulation.additional_properties = d
         return antibiotic_simulation

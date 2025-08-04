@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class SettingsStorageTensorstoreDriver(str, Enum):
     N5 = "n5"
     ZARR = "zarr"

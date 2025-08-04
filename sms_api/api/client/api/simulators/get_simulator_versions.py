@@ -11,30 +11,20 @@ from ...models.registered_simulators import RegisteredSimulators
 from typing import cast
 
 
-
-def _get_kwargs(
-
-) -> dict[str, Any]:
-
-
-
-
-
-
+def _get_kwargs() -> dict[str, Any]:
     _kwargs: dict[str, Any] = {
         "method": "get",
         "url": "/core/simulator/versions",
     }
 
-
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[RegisteredSimulators]:
+def _parse_response(
+    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
+) -> Optional[RegisteredSimulators]:
     if response.status_code == 200:
         response_200 = RegisteredSimulators.from_dict(response.json())
-
-
 
         return response_200
     if client.raise_on_unexpected_status:
@@ -43,7 +33,9 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[RegisteredSimulators]:
+def _build_response(
+    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
+) -> Response[RegisteredSimulators]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -55,9 +47,8 @@ def _build_response(*, client: Union[AuthenticatedClient, Client], response: htt
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-
 ) -> Response[RegisteredSimulators]:
-    """ get the list of available simulator versions
+    """get the list of available simulator versions
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -65,12 +56,9 @@ def sync_detailed(
 
     Returns:
         Response[RegisteredSimulators]
-     """
+    """
 
-
-    kwargs = _get_kwargs(
-
-    )
+    kwargs = _get_kwargs()
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -78,12 +66,12 @@ def sync_detailed(
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
-
 ) -> Optional[RegisteredSimulators]:
-    """ get the list of available simulator versions
+    """get the list of available simulator versions
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -91,20 +79,18 @@ def sync(
 
     Returns:
         RegisteredSimulators
-     """
-
+    """
 
     return sync_detailed(
         client=client,
-
     ).parsed
+
 
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-
 ) -> Response[RegisteredSimulators]:
-    """ get the list of available simulator versions
+    """get the list of available simulator versions
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -112,25 +98,20 @@ async def asyncio_detailed(
 
     Returns:
         Response[RegisteredSimulators]
-     """
+    """
 
+    kwargs = _get_kwargs()
 
-    kwargs = _get_kwargs(
-
-    )
-
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
-
 ) -> Optional[RegisteredSimulators]:
-    """ get the list of available simulator versions
+    """get the list of available simulator versions
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -138,10 +119,10 @@ async def asyncio(
 
     Returns:
         RegisteredSimulators
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        client=client,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            client=client,
+        )
+    ).parsed

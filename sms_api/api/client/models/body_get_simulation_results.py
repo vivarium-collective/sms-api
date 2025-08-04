@@ -12,36 +12,29 @@ from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
-  from ..models.requested_observables import RequestedObservables
-  from ..models.settings import Settings
-
-
-
+    from ..models.requested_observables import RequestedObservables
+    from ..models.settings import Settings
 
 
 T = TypeVar("T", bound="BodyGetSimulationResults")
 
 
-
 @_attrs_define
 class BodyGetSimulationResults:
     """
-        Attributes:
-            observable_names (RequestedObservables):
-            settings (Union['Settings', None, Unset]):
-     """
+    Attributes:
+        observable_names (RequestedObservables):
+        settings (Union['Settings', None, Unset]):
+    """
 
-    observable_names: 'RequestedObservables'
-    settings: Union['Settings', None, Unset] = UNSET
+    observable_names: "RequestedObservables"
+    settings: Union["Settings", None, Unset] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.requested_observables import RequestedObservables
         from ..models.settings import Settings
+
         observable_names = self.observable_names.to_dict()
 
         settings: Union[None, Unset, dict[str, Any]]
@@ -51,7 +44,6 @@ class BodyGetSimulationResults:
             settings = self.settings.to_dict()
         else:
             settings = self.settings
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -63,19 +55,15 @@ class BodyGetSimulationResults:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.requested_observables import RequestedObservables
         from ..models.settings import Settings
+
         d = dict(src_dict)
         observable_names = RequestedObservables.from_dict(d.pop("observable_names"))
 
-
-
-
-        def _parse_settings(data: object) -> Union['Settings', None, Unset]:
+        def _parse_settings(data: object) -> Union["Settings", None, Unset]:
             if data is None:
                 return data
             if isinstance(data, Unset):
@@ -85,21 +73,17 @@ class BodyGetSimulationResults:
                     raise TypeError()
                 settings_type_0 = Settings.from_dict(data)
 
-
-
                 return settings_type_0
-            except: # noqa: E722
+            except:  # noqa: E722
                 pass
-            return cast(Union['Settings', None, Unset], data)
+            return cast(Union["Settings", None, Unset], data)
 
         settings = _parse_settings(d.pop("settings", UNSET))
-
 
         body_get_simulation_results = cls(
             observable_names=observable_names,
             settings=settings,
         )
-
 
         body_get_simulation_results.additional_properties = d
         return body_get_simulation_results

@@ -13,28 +13,23 @@ from typing import cast, Union
 from typing import Union
 
 
-
-
-
-
 T = TypeVar("T", bound="HpcRun")
-
 
 
 @_attrs_define
 class HpcRun:
     """
-        Attributes:
-            database_id (int):
-            slurmjobid (int):
-            correlation_id (str):
-            job_type (JobType):
-            ref_id (int):
-            status (Union[JobStatus, None, Unset]):
-            start_time (Union[None, Unset, str]):
-            end_time (Union[None, Unset, str]):
-            error_message (Union[None, Unset, str]):
-     """
+    Attributes:
+        database_id (int):
+        slurmjobid (int):
+        correlation_id (str):
+        job_type (JobType):
+        ref_id (int):
+        status (Union[JobStatus, None, Unset]):
+        start_time (Union[None, Unset, str]):
+        end_time (Union[None, Unset, str]):
+        error_message (Union[None, Unset, str]):
+    """
 
     database_id: int
     slurmjobid: int
@@ -46,10 +41,6 @@ class HpcRun:
     end_time: Union[None, Unset, str] = UNSET
     error_message: Union[None, Unset, str] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         database_id = self.database_id
@@ -88,7 +79,6 @@ class HpcRun:
         else:
             error_message = self.error_message
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
@@ -109,8 +99,6 @@ class HpcRun:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
@@ -121,9 +109,6 @@ class HpcRun:
         correlation_id = d.pop("correlation_id")
 
         job_type = JobType(d.pop("job_type"))
-
-
-
 
         ref_id = d.pop("ref_id")
 
@@ -137,15 +122,12 @@ class HpcRun:
                     raise TypeError()
                 status_type_0 = JobStatus(data)
 
-
-
                 return status_type_0
-            except: # noqa: E722
+            except:  # noqa: E722
                 pass
             return cast(Union[JobStatus, None, Unset], data)
 
         status = _parse_status(d.pop("status", UNSET))
-
 
         def _parse_start_time(data: object) -> Union[None, Unset, str]:
             if data is None:
@@ -156,7 +138,6 @@ class HpcRun:
 
         start_time = _parse_start_time(d.pop("start_time", UNSET))
 
-
         def _parse_end_time(data: object) -> Union[None, Unset, str]:
             if data is None:
                 return data
@@ -166,7 +147,6 @@ class HpcRun:
 
         end_time = _parse_end_time(d.pop("end_time", UNSET))
 
-
         def _parse_error_message(data: object) -> Union[None, Unset, str]:
             if data is None:
                 return data
@@ -175,7 +155,6 @@ class HpcRun:
             return cast(Union[None, Unset, str], data)
 
         error_message = _parse_error_message(d.pop("error_message", UNSET))
-
 
         hpc_run = cls(
             database_id=database_id,
@@ -188,7 +167,6 @@ class HpcRun:
             end_time=end_time,
             error_message=error_message,
         )
-
 
         hpc_run.additional_properties = d
         return hpc_run

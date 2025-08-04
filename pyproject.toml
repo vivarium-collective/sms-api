@@ -1,75 +1,94 @@
-[tool.poetry]
+[project]
 name = "sms_api"
 version = "0.2.5"
 description = "This is the api server for Vivarium simulation services."
-authors = ["Alex Patrie <alexanderpatrie@gmail.com>"]
-repository = "https://github.com/vivarium-collective/sms-api"
-documentation = "https://vivarium-collective.github.io/sms-api/"
+authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }]
+requires-python = ">=3.12,<4.0"
 readme = "README.md"
-packages = [
-    {include = "sms_api"},
-    {include = "tests"},
-    {include = "app"}
+dependencies = [
+    "uvicorn>=0.34.3,<0.35",
+    "dotenv>=0.9.9,<0.10",
+    "fastapi>=0.115.12,<0.116",
+    "pydantic>=2.11.5,<3",
+    "asyncssh>=2.21.0,<3",
+    "pydantic-settings>=2.9.1,<3",
+    "pyyaml>=6.0.2,<7",
+    "typing-extensions>=4.14.0,<5",
+    "pymongo>=4.13.0,<5",
+    "sqlalchemy[asyncio]>=2.0.41,<3",
+    "asyncpg>=0.30.0,<0.31",
+    "nats-py>=2.10.0,<3",
+    "alembic>=1.16.2,<2",
+    "async-lru>=2.0.5,<3",
+    "httpx>=0.28.1,<0.29",
+    "polars-lts-cpu[pyarrow]>=1.31.0,<2",
+    "python-multipart>=0.0.20,<0.0.21",
+    "marimo>=0.14.10,<0.15",
+    "numpy>=2.3.1,<3",
+    "duckdb>=1.3.1,<2",
+    "altair>=5.5.0,<6",
+    "sqlglot>=26.33.0,<27",
+    "ruff>=0.12.2,<0.13",
+    "nbformat>=5.10.4,<6",
+    "vegafusion>=2.0.2,<3",
+    "vl-convert-python>=1.8.0,<2",
+    "tqdm>=4.67.1,<5",
+    "seaborn>=0.13.2,<0.14",
+    "python-dateutil>=2.9.0.post0,<3",
+    "anywidget>=0.9.18,<0.10",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.12,<4.0"
-uvicorn = "^0.34.3"
-dotenv = "^0.9.9"
-fastapi = "^0.115.12"
-pydantic = "^2.11.5"
-asyncssh = "^2.21.0"
-pydantic-settings = "^2.9.1"
-pyyaml = "^6.0.2"
-typing-extensions = "^4.14.0"
-pymongo = "^4.13.0"
-sqlalchemy = {extras = ["asyncio"], version = "^2.0.41"}
-asyncpg = "^0.30.0"
-nats-py = "^2.10.0"
-alembic = "^1.16.2"
-async-lru = "^2.0.5"
-httpx = "^0.28.1"
-polars-lts-cpu = {version = "^1.31.0", extras = ["pyarrow"]}
-python-multipart = "^0.0.20"
-marimo = "^0.14.10"
-numpy = "^2.3.1"
-duckdb = "^1.3.1"
-altair = "^5.5.0"
-sqlglot = "^26.33.0"
-ruff = "^0.12.2"
-nbformat = "^5.10.4"
-vegafusion = "^2.0.2"
-vl-convert-python = "^1.8.0"
-tqdm = "^4.67.1"
-seaborn = "^0.13.2"
-python-dateutil = "^2.9.0.post0"
-anywidget = "^0.9.18"
+[project.urls]
+Repository = "https://github.com/vivarium-collective/sms-api"
+Documentation = "https://vivarium-collective.github.io/sms-api/"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.5"
-pytest-cov = "^4.0.0"
-deptry = "^0.16.2"
-mypy = "^1.5.1"
-pre-commit = "^3.4.0"
-tox = "^4.11.1"
-types-requests = "^2.32.0.20250602"
-types-pyyaml = "^6.0.12.20250516"
-pytest-asyncio = "^1.0.0"
-testcontainers = {extras = ["nats", "postgres"], version = "^4.10.0"}
-types-tqdm = "^4.67.0.20250516"
-openapi-python-client = "^0.25.2"
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5,<9",
+    "pytest-cov>=4.0.0,<5",
+    "deptry>=0.16.2,<0.17",
+    "mypy>=1.5.1,<2",
+    "pre-commit>=3.4.0,<4",
+    "tox>=4.11.1,<5",
+    "types-requests>=2.32.0.20250602,<3",
+    "types-pyyaml>=6.0.12.20250516,<7",
+    "pytest-asyncio>=1.0.0,<2",
+    "testcontainers[nats, postgres]>=4.10.0,<5",
+    "types-tqdm>=4.67.0.20250516,<5",
+    "openapi-python-client>=0.25.2,<0.26",
+]
+docs = [
+    "mkdocs>=1.4.2,<2",
+    "mkdocs-material>=9.2.7,<10",
+    "mkdocstrings[python]>=0.26.1,<0.27",
+    "sphinx>=8.2.3,<9",
+    "sphinx-autodoc-typehints>=3.2.0,<4",
+    "sphinx-rtd-theme>=3.0.2,<4",
+]
 
-[tool.poetry.group.docs.dependencies]
-mkdocs = "^1.4.2"
-mkdocs-material = "^9.2.7"
-mkdocstrings = {extras = ["python"], version = "^0.26.1"}
-sphinx = "^8.2.3"
-sphinx-autodoc-typehints = "^3.2.0"
-sphinx-rtd-theme = "^3.0.2"
+[tool.uv]
+default-groups = [
+    "dev",
+    "docs",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "sms_api",
+    "tests",
+    "app",
+]
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "sms_api",
+    "tests",
+    "app",
+]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
@@ -88,6 +107,8 @@ ignore = ["DEP002", "DEP003", "DEP004"]
 target-version = "py39"
 line-length = 120
 fix = true
+
+[tool.ruff.lint]
 select = [
     # flake8-2020
     "YTT",

@@ -9,44 +9,36 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.simulator_version import SimulatorVersion
-  from ..models.ecoli_simulation_request_variant_config import EcoliSimulationRequestVariantConfig
-
-
-
+    from ..models.simulator_version import SimulatorVersion
+    from ..models.ecoli_simulation_request_variant_config import EcoliSimulationRequestVariantConfig
 
 
 T = TypeVar("T", bound="EcoliSimulationRequest")
 
 
-
 @_attrs_define
 class EcoliSimulationRequest:
     """
-        Attributes:
-            simulator (SimulatorVersion):
-            parca_dataset_id (int):
-            variant_config (EcoliSimulationRequestVariantConfig):
-     """
+    Attributes:
+        simulator (SimulatorVersion):
+        parca_dataset_id (int):
+        variant_config (EcoliSimulationRequestVariantConfig):
+    """
 
-    simulator: 'SimulatorVersion'
+    simulator: "SimulatorVersion"
     parca_dataset_id: int
-    variant_config: 'EcoliSimulationRequestVariantConfig'
+    variant_config: "EcoliSimulationRequestVariantConfig"
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.simulator_version import SimulatorVersion
         from ..models.ecoli_simulation_request_variant_config import EcoliSimulationRequestVariantConfig
+
         simulator = self.simulator.to_dict()
 
         parca_dataset_id = self.parca_dataset_id
 
         variant_config = self.variant_config.to_dict()
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -58,31 +50,23 @@ class EcoliSimulationRequest:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.simulator_version import SimulatorVersion
         from ..models.ecoli_simulation_request_variant_config import EcoliSimulationRequestVariantConfig
+
         d = dict(src_dict)
         simulator = SimulatorVersion.from_dict(d.pop("simulator"))
-
-
-
 
         parca_dataset_id = d.pop("parca_dataset_id")
 
         variant_config = EcoliSimulationRequestVariantConfig.from_dict(d.pop("variant_config"))
-
-
-
 
         ecoli_simulation_request = cls(
             simulator=simulator,
             parca_dataset_id=parca_dataset_id,
             variant_config=variant_config,
         )
-
 
         ecoli_simulation_request.additional_properties = d
         return ecoli_simulation_request

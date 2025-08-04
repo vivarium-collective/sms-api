@@ -61,20 +61,21 @@ def _():
         WorkerEvent,
         ParcaDataset,
         BaseModel,
-        JobStatus
+        JobStatus,
     )
     from sms_api.config import get_settings
     from app.api.simulations import EcoliSim
     from app.api.client_wrapper import ClientWrapper
 
-
     logger = logging.getLogger(__file__)
 
     def display_dto(dto: BaseModel | None = None) -> mo.Html | None:
         from pprint import pformat
+
         if not dto:
             return None
         return mo.md(f"```python\n{pformat(dto.dict())}\n```")
+
     return (
         Client,
         EcoliExperiment,
@@ -110,7 +111,6 @@ def _(Client, Generator, StrEnum, Timeout, contextmanager, get_settings):
             api_server_url = "http://localhost:8000"
         return f"{api_server_url}/core"
 
-
     @contextmanager
     def api_client(base_url: str | None = None, timeout: int | None = None) -> Generator[Client, None, None]:
         """
@@ -122,17 +122,12 @@ def _(Client, Generator, StrEnum, Timeout, contextmanager, get_settings):
                 print(resp.json())
         ```
         """
-        with Client(
-            base_url=base_url or get_base_url(),
-            timeout=Timeout(timeout or 22.0)
-        ) as client:
+        with Client(base_url=base_url or get_base_url(), timeout=Timeout(timeout or 22.0)) as client:
             yield client
-
 
     class ApiResource(StrEnum):
         SIMULATOR = "simulator"
         SIMULATION = "simulation"
-
 
     def format_endpoint_url(resource: ApiResource, *subpaths):
         base_url = get_base_url()
@@ -168,7 +163,6 @@ def _(WorkerEvent, alt, mo, pl):
     }
 
     MAPPING = {column_name: column_name.split("__")[-1] for column_name in MASS_COLUMNS.values()}
-
 
     def select_keys(
         data: dict[str, int | float | list[int] | dict[str, float]], keys: list[str]
@@ -232,6 +226,7 @@ def _(WorkerEvent, alt, mo, pl):
             .properties(title=title)
         )
         return chart
+
     return get_events_dataframe, plot_mass_fractions_from_worker_events
 
 
@@ -252,7 +247,7 @@ def _(
     def on_get_parcas() -> list[ParcaDataset]:
         try:
             with api_client() as client:
-                url = format_endpoint_url(ApiResource.SIMULATION, 'parca', 'versions')
+                url = format_endpoint_url(ApiResource.SIMULATION, "parca", "versions")
                 resp = client.get(url=url)
                 resp.raise_for_status()
                 return [ParcaDataset(**dataset) for dataset in resp.json()]
@@ -262,7 +257,7 @@ def _(
     def on_run_simulation(request: EcoliSimulationRequest) -> EcoliExperiment:
         try:
             with api_client() as client:
-                url = format_endpoint_url(ApiResource.SIMULATION, 'run')
+                url = format_endpoint_url(ApiResource.SIMULATION, "run")
                 request_payload = request.as_payload().dict()
                 resp = client.post(url=url, json=request_payload)
                 resp.raise_for_status()
@@ -273,7 +268,7 @@ def _(
     def on_get_worker_events(simulation_id: int) -> list[WorkerEvent]:
         try:
             with api_client() as client:
-                url = format_endpoint_url(ApiResource.SIMULATION, 'run', 'events')
+                url = format_endpoint_url(ApiResource.SIMULATION, "run", "events")
                 resp = client.get(url=url, params={"simulation_id": simulation_id})
                 resp.raise_for_status()
                 return [WorkerEvent(**event) for event in resp.json()]
@@ -283,9 +278,9 @@ def _(
     def on_get_simulation_status(simulation_id: int) -> str:
         with api_client() as client:
             try:
-                url = format_endpoint_url(ApiResource.SIMULATION, 'run', 'status')
+                url = format_endpoint_url(ApiResource.SIMULATION, "run", "status")
                 resp = client.get(url=url, params={"simulation_id": simulation_id})
-                status = resp.json()['status']
+                status = resp.json()["status"]
                 return status
             except HTTPStatusError as e:
                 raise HTTPStatusError(message=str(e))
@@ -309,15 +304,15 @@ def _(EcoliSimulationRequest, ParcaDataset, parca_datasets):
 
     def extract_simulation_request(
         parca_datasets: list[ParcaDataset],
-        variant_config: dict[str, dict[str, float]] | None = None  # TODO: formalize this
+        variant_config: dict[str, dict[str, float]] | None = None,  # TODO: formalize this
     ) -> EcoliSimulationRequest:
         if not len(parca_datasets):
-            raise ValueError('There are no datasets uploaded')
+            raise ValueError("There are no datasets uploaded")
         active_parca_dataset: ParcaDataset = parca_datasets[-1]
         return EcoliSimulationRequest(
             parca_dataset_id=active_parca_dataset.database_id,
             simulator=active_parca_dataset.parca_dataset_request.simulator_version,
-            variant_config=variant_config or {"named_parameters": {"param1": 0.5, "param2": 0.5}}
+            variant_config=variant_config or {"named_parameters": {"param1": 0.5, "param2": 0.5}},
         )
 
     request: EcoliSimulationRequest = extract_simulation_request(parca_datasets)
@@ -328,8 +323,11 @@ def _(EcoliSimulationRequest, ParcaDataset, parca_datasets):
 def _(alt, mo, pl):
     def default_chart():
         return mo.ui.altair_chart(
-            alt.Chart(pl.DataFrame({"Time": 0.0, "Normalized Mass": 0.0})).mark_line().encode(x='Time', y='Normalized Mass')
+            alt.Chart(pl.DataFrame({"Time": 0.0, "Normalized Mass": 0.0}))
+            .mark_line()
+            .encode(x="Time", y="Normalized Mass")
         )
+
     return (default_chart,)
 
 
@@ -383,15 +381,13 @@ def _(mo, set_is_polling, set_stopped):
 
     # set and display run/stop buttons
     run_simulation_button = mo.ui.run_button(
-        label=f"{mo.icon('mdi:bacteria-outline')} Start",
-        kind="success",
-        tooltip="Run Simulation"
+        label=f"{mo.icon('mdi:bacteria-outline')} Start", kind="success", tooltip="Run Simulation"
     )
     stop_simulation_button = mo.ui.run_button(
         label=f"{mo.icon('pajamas:stop')} Stop",
         kind="danger",
         tooltip="Stop Simulation",
-        on_change=lambda _: stop_simulation()
+        on_change=lambda _: stop_simulation(),
     )
     return run_simulation_button, stop_simulation_button
 
@@ -523,7 +519,8 @@ def _(
             if icounter:
                 set_counter(icounter)
         else:
-            print(f'Not polling')
+            print(f"Not polling")
+
     return (on_poll,)
 
 
@@ -547,10 +544,7 @@ def _(
     refresh = None
     if get_is_polling():
         refresh = mo.ui.refresh(
-            label="Refreshing data...",
-            options=[1.0, 5.0, 10.0],
-            default_interval=5.0,
-            on_change=lambda _: on_poll(_)
+            label="Refreshing data...", options=[1.0, 5.0, 10.0], default_interval=5.0, on_change=lambda _: on_poll(_)
         )
 
     spinner = None
@@ -586,9 +580,7 @@ def _(
 
 @app.cell
 def _(get_events_df, get_is_polling, mo, stack_items):
-    data_explorer = mo.accordion({
-        "Explore Data": mo.ui.data_explorer(get_events_df())
-    })
+    data_explorer = mo.accordion({"Explore Data": mo.ui.data_explorer(get_events_df())})
     if get_is_polling():
         stack_items.append(data_explorer)
     return
@@ -597,22 +589,22 @@ def _(get_events_df, get_is_polling, mo, stack_items):
 @app.cell
 def _(mo):
     # notebook (edit-mode) specific
-    sidenav = mo.sidebar(
-        [
-            mo.md("# SMS API"),
-            mo.nav_menu({
+    sidenav = mo.sidebar([
+        mo.md("# SMS API"),
+        mo.nav_menu(
+            {
                 "https://sms-api.readthedocs.io/en/latest/": f"{mo.icon('pajamas:doc-text')} Documentation",
-                "https://github.com/vivarium-collective/sms-api": f"{mo.icon('pajamas:github')} GitHub"
-            }, orientation="vertical"),
-        ]
-    )
+                "https://github.com/vivarium-collective/sms-api": f"{mo.icon('pajamas:github')} GitHub",
+            },
+            orientation="vertical",
+        ),
+    ])
 
     # app menu content (upper-right-hand)
     menu_content = {
         "https://sms-api.readthedocs.io/en/latest/": f"{mo.icon('pajamas:doc-text')} SMS API Docs",
         "https://github.com/vivarium-collective/sms-api": f"{mo.icon('pajamas:github')} SMS API GitHub",
-        "https://covertlab.github.io/vEcoli/": f"{mo.icon('cil:fingerprint')} vEcoli"
-
+        "https://covertlab.github.io/vEcoli/": f"{mo.icon('cil:fingerprint')} vEcoli",
     }
     nav = mo.nav_menu(menu_content, orientation="horizontal")
     nav
@@ -634,9 +626,8 @@ def _(get_events, get_events_df, latest_chart, mo):
             - _Explore_: Explore the available simulation data in real-time and create customized analysis plots
             - _Visualize_: Visualize the simulation data in real time as a mass fraction plot.
             - _Configure_: Parameterize and configure the simulation. _(Coming Soon)_
-            - _{mo.icon('pepicons-pop:refresh')}_: Click the dropdown menu to the left of the refresh button and select "off". The simulation will still run, but data retrieval will be paused.
+            - _{mo.icon("pepicons-pop:refresh")}_: Click the dropdown menu to the left of the refresh button and select "off". The simulation will still run, but data retrieval will be paused.
         """).callout(kind="info")
-
 
     params = mo.md(f"""
         #### Duration
@@ -645,14 +636,14 @@ def _(get_events, get_events_df, latest_chart, mo):
 
     tabs = mo.ui.tabs({
         f"{mo.icon('material-symbols:graph-3')} Explore": mo.ui.data_explorer(get_events_df()),
-        f"{mo.icon('codicon:graph-line')} Visualize": latest_chart if len(get_events()) else mo.md("Start the simulation. Results will display here.").callout("info"),
+        f"{mo.icon('codicon:graph-line')} Visualize": latest_chart
+        if len(get_events())
+        else mo.md("Start the simulation. Results will display here.").callout("info"),
         f"{mo.icon('icon-park-twotone:experiment')} Configure": params,
-        f"{mo.icon('material-symbols:help-outline-rounded')} Help": how_to
+        f"{mo.icon('material-symbols:help-outline-rounded')} Help": how_to,
     })
 
-    how_to_display = mo.accordion({
-        f"{mo.icon('material-symbols:help-outline-rounded')}": how_to
-    })
+    how_to_display = mo.accordion({f"{mo.icon('material-symbols:help-outline-rounded')}": how_to})
     tabs
     return
 

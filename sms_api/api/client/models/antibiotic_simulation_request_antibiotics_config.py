@@ -9,52 +9,45 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.antibiotic_simulation_request_antibiotics_config_additional_property import AntibioticSimulationRequestAntibioticsConfigAdditionalProperty
-
-
-
+    from ..models.antibiotic_simulation_request_antibiotics_config_additional_property import (
+        AntibioticSimulationRequestAntibioticsConfigAdditionalProperty,
+    )
 
 
 T = TypeVar("T", bound="AntibioticSimulationRequestAntibioticsConfig")
 
 
-
 @_attrs_define
 class AntibioticSimulationRequestAntibioticsConfig:
-    """
-     """
+    """ """
 
-    additional_properties: dict[str, 'AntibioticSimulationRequestAntibioticsConfigAdditionalProperty'] = _attrs_field(init=False, factory=dict)
-
-
-
-
+    additional_properties: dict[str, "AntibioticSimulationRequestAntibioticsConfigAdditionalProperty"] = _attrs_field(
+        init=False, factory=dict
+    )
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.antibiotic_simulation_request_antibiotics_config_additional_property import AntibioticSimulationRequestAntibioticsConfigAdditionalProperty
+        from ..models.antibiotic_simulation_request_antibiotics_config_additional_property import (
+            AntibioticSimulationRequestAntibioticsConfigAdditionalProperty,
+        )
 
         field_dict: dict[str, Any] = {}
         for prop_name, prop in self.additional_properties.items():
             field_dict[prop_name] = prop.to_dict()
 
-
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.antibiotic_simulation_request_antibiotics_config_additional_property import AntibioticSimulationRequestAntibioticsConfigAdditionalProperty
-        d = dict(src_dict)
-        antibiotic_simulation_request_antibiotics_config = cls(
+        from ..models.antibiotic_simulation_request_antibiotics_config_additional_property import (
+            AntibioticSimulationRequestAntibioticsConfigAdditionalProperty,
         )
 
+        d = dict(src_dict)
+        antibiotic_simulation_request_antibiotics_config = cls()
 
         additional_properties = {}
         for prop_name, prop_dict in d.items():
             additional_property = AntibioticSimulationRequestAntibioticsConfigAdditionalProperty.from_dict(prop_dict)
-
-
 
             additional_properties[prop_name] = additional_property
 
@@ -65,10 +58,10 @@ class AntibioticSimulationRequestAntibioticsConfig:
     def additional_keys(self) -> list[str]:
         return list(self.additional_properties.keys())
 
-    def __getitem__(self, key: str) -> 'AntibioticSimulationRequestAntibioticsConfigAdditionalProperty':
+    def __getitem__(self, key: str) -> "AntibioticSimulationRequestAntibioticsConfigAdditionalProperty":
         return self.additional_properties[key]
 
-    def __setitem__(self, key: str, value: 'AntibioticSimulationRequestAntibioticsConfigAdditionalProperty') -> None:
+    def __setitem__(self, key: str, value: "AntibioticSimulationRequestAntibioticsConfigAdditionalProperty") -> None:
         self.additional_properties[key] = value
 
     def __delitem__(self, key: str) -> None:

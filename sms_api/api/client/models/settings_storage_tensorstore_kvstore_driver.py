@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class SettingsStorageTensorstoreKvstoreDriver(str, Enum):
     FILE = "file"
     GCS = "gcs"

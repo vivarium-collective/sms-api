@@ -14,40 +14,31 @@ from typing import Union
 import datetime
 
 if TYPE_CHECKING:
-  from ..models.simulator_version import SimulatorVersion
-
-
-
+    from ..models.simulator_version import SimulatorVersion
 
 
 T = TypeVar("T", bound="RegisteredSimulators")
 
 
-
 @_attrs_define
 class RegisteredSimulators:
     """
-        Attributes:
-            versions (list['SimulatorVersion']):
-            timestamp (Union[None, Unset, datetime.datetime]):
-     """
+    Attributes:
+        versions (list['SimulatorVersion']):
+        timestamp (Union[None, Unset, datetime.datetime]):
+    """
 
-    versions: list['SimulatorVersion']
+    versions: list["SimulatorVersion"]
     timestamp: Union[None, Unset, datetime.datetime] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
         from ..models.simulator_version import SimulatorVersion
+
         versions = []
         for versions_item_data in self.versions:
             versions_item = versions_item_data.to_dict()
             versions.append(versions_item)
-
-
 
         timestamp: Union[None, Unset, str]
         if isinstance(self.timestamp, Unset):
@@ -56,7 +47,6 @@ class RegisteredSimulators:
             timestamp = self.timestamp.isoformat()
         else:
             timestamp = self.timestamp
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -68,21 +58,17 @@ class RegisteredSimulators:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.simulator_version import SimulatorVersion
+
         d = dict(src_dict)
         versions = []
         _versions = d.pop("versions")
-        for versions_item_data in (_versions):
+        for versions_item_data in _versions:
             versions_item = SimulatorVersion.from_dict(versions_item_data)
 
-
-
             versions.append(versions_item)
-
 
         def _parse_timestamp(data: object) -> Union[None, Unset, datetime.datetime]:
             if data is None:
@@ -94,21 +80,17 @@ class RegisteredSimulators:
                     raise TypeError()
                 timestamp_type_0 = isoparse(data)
 
-
-
                 return timestamp_type_0
-            except: # noqa: E722
+            except:  # noqa: E722
                 pass
             return cast(Union[None, Unset, datetime.datetime], data)
 
         timestamp = _parse_timestamp(d.pop("timestamp", UNSET))
 
-
         registered_simulators = cls(
             versions=versions,
             timestamp=timestamp,
         )
-
 
         registered_simulators.additional_properties = d
         return registered_simulators
