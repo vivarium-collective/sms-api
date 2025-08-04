@@ -28,17 +28,17 @@ def verify_service(service: DatabaseService | DataService | SimulationService | 
 
 # ------- postgres database service (standalone or pytest) ------
 
-global_postgres_engine: AsyncEngine | None = None
+global_db_engine: AsyncEngine | None = None
 
 
-def set_postgres_engine(engine: AsyncEngine | None) -> None:
-    global global_postgres_engine
-    global_postgres_engine = engine
+def set_db_engine(engine: AsyncEngine | None) -> None:
+    global global_db_engine
+    global_db_engine = engine
 
 
-def get_postgres_engine() -> AsyncEngine | None:
-    global global_postgres_engine
-    return global_postgres_engine
+def get_db_engine() -> AsyncEngine | None:
+    global global_db_engine
+    return global_db_engine
 
 
 # ------- simulation database service (standalone or pytest) ------
@@ -140,7 +140,7 @@ async def init_standalone(enable_ssl: bool = True) -> None:
     )
     logging.warning("calling create_db() to initialize the database tables")
     await create_db(engine)
-    set_postgres_engine(engine)
+    set_db_engine(engine)
 
     database = DatabaseServiceSQL(engine)
     set_database_service(database)
@@ -164,7 +164,7 @@ async def shutdown_standalone() -> None:
     if mongodb_service:
         await mongodb_service.close()
 
-    engine = get_postgres_engine()
+    engine = get_db_engine()
     if engine:
         await engine.dispose()
 
