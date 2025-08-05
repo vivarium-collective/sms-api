@@ -1,7 +1,16 @@
+from enum import StrEnum
+
 import numpy
 import numpy as np
 import orjson
 import polars as pl
+
+
+class OutputDomain(StrEnum):
+    ANALYSIS = "analysis"
+    PARQUET = "history"
+    STATE = "daughter_states"
+    PARAMETERS = "parca"
 
 
 class SerializedArray:

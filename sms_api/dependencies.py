@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
-from sms_api.data.parquet_service import ParquetService
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.job_scheduler import JobScheduler
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 setup_logging(logger)
 
 
-def verify_service(service: DatabaseService | ParquetService | SimulationService | None) -> None:
+def verify_service(service: DatabaseService | SimulationService | None) -> None:
     if service is None:
         logger.error(f"{service.__module__} is not initialized")
         raise HTTPException(status_code=500, detail=f"{service.__module__} is not initialized")

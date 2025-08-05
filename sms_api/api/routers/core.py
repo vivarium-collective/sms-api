@@ -21,16 +21,23 @@
 
 [ ] (/simulation/state)[exp_id, observables, n_timesteps] <- get serialized JSON of any .json files whose generation
     was configured by enabling the "save" option in simulation (save times)
+
+***We should implement the /download... endpoint for each router as
+    this is a way to easily configure filepaths as they pertain to
+    hive partitioning: single simulations will always have the same hive partitioning, etc.
 """
 
+import io
 import logging
 import mimetypes
+import zipfile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.data.analysis_service import AnalysisService
+from sms_api.data.parquet_service import ParquetService
 from sms_api.dependencies import (
     get_database_service,
     get_db_engine,
@@ -410,11 +417,13 @@ async def get_simulation_worker_events(
     path="/download/analysis",
     response_class=FileResponse,
     operation_id="download-analysis-file",
-    tags=["Simulations - vEcoli"],
+    tags=["Data"],
     summary="Download a file that was generated from a simulation analysis module",
 )
 async def download_analysis_file(
-    experiment_id: str = Query(..., description="Experiment ID for the simulation (config.json)."),
+    experiment_id: str = Query(
+        example="sms_single", description="Experiment ID for the simulation (from config.json)."
+    ),
     filename: str = Query(example="ptools_rna.txt"),
 ) -> FileResponse:
     try:
@@ -423,6 +432,71 @@ async def download_analysis_file(
         mimetype, _ = mimetypes.guess_type(filepath)
 
         return FileResponse(path=filepath, media_type=mimetype or "application/octet-stream", filename=filepath.name)
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/download/chunk",
+    response_class=FileResponse,
+    operation_id="download-chunk",
+    tags=["Data"],
+    summary="Download a single file that was generated from the parquet emitter",
+)
+async def download_chunk(
+    experiment_id: str = Query(
+        example="sms_single", description="Experiment ID for the simulation (from config.json)."
+    ),
+    chunk_id: int = Query(example=800),
+) -> FileResponse:
+    try:
+        service = ParquetService()
+        pq_dir = service.get_parquet_dir(experiment_id)
+        chunk_path = pq_dir / f"{chunk_id}.pq"
+
+        return FileResponse(path=chunk_path, media_type="application/x-parquet", filename=chunk_path.name)
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/download/parquet",
+    response_class=StreamingResponse,
+    operation_id="download-parquet",
+    tags=["Data"],
+    summary="Download zip file containing pqs that were generated from the parquet emitter",
+)
+async def download_parquet(
+    experiment_id: str = Query(
+        example="sms_single", description="Experiment ID for the simulation (from config.json)."
+    ),
+    chunk_ids: list[int] | None = None,
+) -> StreamingResponse:
+    try:
+        service = ParquetService()
+        pq_dir = service.get_parquet_dir(experiment_id)
+
+        files = [pq_dir / f"{chunk_id}.pq" for chunk_id in chunk_ids] if chunk_ids else list(pq_dir.iterdir())
+        # if chunk_ids:
+        #     files = [pq_dir / f"{chunk_id}.pq" for chunk_id in chunk_ids]
+        # else:
+        #     files = list(pq_dir.iterdir())
+
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for file in files:
+                if file.exists():
+                    zipf.write(file, arcname=file.name)
+
+        zip_buffer.seek(0)
+
+        return StreamingResponse(
+            zip_buffer,
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={experiment_id}.zip"},
+        )
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e

@@ -8,44 +8,28 @@ from ...types import Response, UNSET
 from ... import errors
 
 from ...models.http_validation_error import HTTPValidationError
-from ...models.settings import Settings
-from ...types import UNSET, Unset
 from typing import cast
-from typing import cast, Union
-from typing import Union
 
 
 def _get_kwargs(
     *,
-    body: Union["Settings", None],
-    experiment_id: Union[Unset, str] = "experiment_96bb7a2_id_1_20250620-181422",
-    database_id: Union[Unset, int] = UNSET,
+    experiment_id: str,
+    filename: str,
 ) -> dict[str, Any]:
-    headers: dict[str, Any] = {}
-
     params: dict[str, Any] = {}
 
     params["experiment_id"] = experiment_id
 
-    params["database_id"] = database_id
+    params["filename"] = filename
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/core/simulation/run/results/file",
+        "url": "/core/download/analysis",
         "params": params,
     }
 
-    _kwargs["json"]: Union[None, dict[str, Any]]
-    if isinstance(body, Settings):
-        _kwargs["json"] = body.to_dict()
-    else:
-        _kwargs["json"] = body
-
-    headers["Content-Type"] = "application/json"
-
-    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -79,16 +63,14 @@ def _build_response(
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union["Settings", None],
-    experiment_id: Union[Unset, str] = "experiment_96bb7a2_id_1_20250620-181422",
-    database_id: Union[Unset, int] = UNSET,
+    experiment_id: str,
+    filename: str,
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """Get simulation results as a zip file
+    """Download a file that was generated from a simulation analysis module
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
-        database_id (Union[Unset, int]): Database Id of simulation
-        body (Union['Settings', None]):
+        experiment_id (str): Experiment ID for the simulation (from config.json).
+        filename (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -99,9 +81,8 @@ def sync_detailed(
     """
 
     kwargs = _get_kwargs(
-        body=body,
         experiment_id=experiment_id,
-        database_id=database_id,
+        filename=filename,
     )
 
     response = client.get_httpx_client().request(
@@ -114,16 +95,14 @@ def sync_detailed(
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union["Settings", None],
-    experiment_id: Union[Unset, str] = "experiment_96bb7a2_id_1_20250620-181422",
-    database_id: Union[Unset, int] = UNSET,
+    experiment_id: str,
+    filename: str,
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """Get simulation results as a zip file
+    """Download a file that was generated from a simulation analysis module
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
-        database_id (Union[Unset, int]): Database Id of simulation
-        body (Union['Settings', None]):
+        experiment_id (str): Experiment ID for the simulation (from config.json).
+        filename (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -135,25 +114,22 @@ def sync(
 
     return sync_detailed(
         client=client,
-        body=body,
         experiment_id=experiment_id,
-        database_id=database_id,
+        filename=filename,
     ).parsed
 
 
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union["Settings", None],
-    experiment_id: Union[Unset, str] = "experiment_96bb7a2_id_1_20250620-181422",
-    database_id: Union[Unset, int] = UNSET,
+    experiment_id: str,
+    filename: str,
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """Get simulation results as a zip file
+    """Download a file that was generated from a simulation analysis module
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
-        database_id (Union[Unset, int]): Database Id of simulation
-        body (Union['Settings', None]):
+        experiment_id (str): Experiment ID for the simulation (from config.json).
+        filename (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -164,9 +140,8 @@ async def asyncio_detailed(
     """
 
     kwargs = _get_kwargs(
-        body=body,
         experiment_id=experiment_id,
-        database_id=database_id,
+        filename=filename,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -177,16 +152,14 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union["Settings", None],
-    experiment_id: Union[Unset, str] = "experiment_96bb7a2_id_1_20250620-181422",
-    database_id: Union[Unset, int] = UNSET,
+    experiment_id: str,
+    filename: str,
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """Get simulation results as a zip file
+    """Download a file that was generated from a simulation analysis module
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'experiment_96bb7a2_id_1_20250620-181422'.
-        database_id (Union[Unset, int]): Database Id of simulation
-        body (Union['Settings', None]):
+        experiment_id (str): Experiment ID for the simulation (from config.json).
+        filename (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -199,8 +172,7 @@ async def asyncio(
     return (
         await asyncio_detailed(
             client=client,
-            body=body,
             experiment_id=experiment_id,
-            database_id=database_id,
+            filename=filename,
         )
     ).parsed

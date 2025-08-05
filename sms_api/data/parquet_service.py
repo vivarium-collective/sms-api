@@ -10,6 +10,7 @@ import polars as pl
 from anyio import mkdtemp
 
 from sms_api.common.gateway.models import Namespace
+from sms_api.common.gateway.utils import get_simulation_outdir
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import Settings, get_settings
 from sms_api.simulation.hpc_utils import (
@@ -29,7 +30,71 @@ def scan_simulation_chunks(chunks_dirpath: Path) -> pl.LazyFrame:
     return pl.scan_parquet(f"{chunks_dirpath!s}/*.pq", rechunk=True)
 
 
-class ParquetService(ABC):
+class ParquetService:
+    settings: Settings
+
+    def __init__(self, settings: Settings | None = None) -> None:
+        self.settings = settings or get_settings()
+
+    def get_parquet_dir(
+        self,
+        experiment_id: str,
+        variant: int | None = None,
+        lineage_seed: int | None = None,
+        generation: int | None = None,
+        agent_id: int | None = None,
+    ) -> Path:
+        outdir = get_simulation_outdir(experiment_id)
+        chunks_dir = outdir / "history"
+        pq_dir = (
+            chunks_dir
+            / f"experiment_id={experiment_id}"
+            / f"variant={variant or 0}"
+            / f"lineage_seed={lineage_seed or 0}"
+            / f"generation={generation or 1}"
+            / f"agent_id={agent_id or 0}"
+        )
+        if not pq_dir.exists():
+            raise FileNotFoundError(f"Could not find parquet outputs at {pq_dir}")
+        return pq_dir
+
+    def get_parquet_path(
+        self,
+        experiment_id: str,
+        chunk_id: int,
+        variant: int | None = None,
+        lineage_seed: int | None = None,
+        generation: int | None = None,
+        agent_id: int | None = None,
+    ) -> Path:
+        pq_dir = self.get_parquet_dir(experiment_id, variant, lineage_seed, generation, agent_id)
+        pq_path = pq_dir / f"{chunk_id}.pq"
+        if not pq_path.exists():
+            raise FileNotFoundError(f"Could not find parquet output at {pq_path}")
+        return pq_path
+
+    def load_output_chunks(
+        self,
+        experiment_id: str,
+        observables: list[str] | None = None,
+        lazy: bool = False,
+        variant: int | None = None,
+        lineage_seed: int | None = None,
+        generation: int | None = None,
+        agent_id: int | None = None,
+    ) -> pl.DataFrame | pl.LazyFrame:
+        pq_dir = self.get_parquet_dir(experiment_id, variant, lineage_seed, generation, agent_id)
+        lf = pl.scan_parquet(pq_dir)
+        if lazy:
+            return lf
+
+        if observables:
+            return lf.select(observables).collect()
+        else:
+            return lf.collect()
+
+
+class RemoteParquetService(ABC):
     settings: Settings
 
     def __init__(self, settings: Settings | None = None) -> None:
@@ -56,7 +121,7 @@ class ParquetService(ABC):
         pass
 
 
-class ParquetServiceHpc(ParquetService):
+class ParquetServiceHpc(RemoteParquetService):
     @property
     def ssh_service(self) -> SSHService:
         return get_ssh_service(settings=self.settings)

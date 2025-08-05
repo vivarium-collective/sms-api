@@ -291,7 +291,7 @@ paths:
   /core/download/analysis:
     get:
       tags:
-      - Simulations - vEcoli
+      - Data
       summary: Download a file that was generated from a simulation analysis module
       operationId: download-analysis-file
       parameters:
@@ -300,9 +300,10 @@ paths:
         required: true
         schema:
           type: string
-          description: Experiment ID for the simulation (config.json).
+          description: Experiment ID for the simulation (from config.json).
           title: Experiment Id
-        description: Experiment ID for the simulation (config.json).
+        description: Experiment ID for the simulation (from config.json).
+        example: sms_single
       - name: filename
         in: query
         required: true
@@ -310,6 +311,74 @@ paths:
           type: string
           title: Filename
         example: ptools_rna.txt
+      responses:
+        '200':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /core/download/chunk:
+    get:
+      tags:
+      - Data
+      summary: Download a single file that was generated from the parquet emitter
+      operationId: download-chunk
+      parameters:
+      - name: experiment_id
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Experiment ID for the simulation (from config.json).
+          title: Experiment Id
+        description: Experiment ID for the simulation (from config.json).
+        example: sms_single
+      - name: chunk_id
+        in: query
+        required: true
+        schema:
+          type: integer
+          title: Chunk Id
+        example: 800
+      responses:
+        '200':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /core/download/parquet:
+    get:
+      tags:
+      - Data
+      summary: Download zip file containing pqs that were generated from the parquet
+        emitter
+      operationId: download-parquet
+      parameters:
+      - name: experiment_id
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Experiment ID for the simulation (from config.json).
+          title: Experiment Id
+        description: Experiment ID for the simulation (from config.json).
+        example: sms_single
+      - name: chunk_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Chunk Ids
       responses:
         '200':
           description: Successful Response

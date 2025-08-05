@@ -4,6 +4,7 @@ from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import HpcRun, JobType
 
 REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
+PINNED_OUTDIR = REPO_DIR / "out" / "sms_single"
 
 
 def get_simulation_outdir(experiment_id: str) -> Path:
