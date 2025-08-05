@@ -13,8 +13,8 @@ from typing import Union
 
 if TYPE_CHECKING:
     from ..models.ecoli_experiment_metadata import EcoliExperimentMetadata
-    from ..models.ecoli_simulation import EcoliSimulation
     from ..models.antibiotic_simulation import AntibioticSimulation
+    from ..models.ecoli_simulation import EcoliSimulation
 
 
 T = TypeVar("T", bound="EcoliExperiment")
@@ -38,8 +38,8 @@ class EcoliExperiment:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.ecoli_experiment_metadata import EcoliExperimentMetadata
-        from ..models.ecoli_simulation import EcoliSimulation
         from ..models.antibiotic_simulation import AntibioticSimulation
+        from ..models.ecoli_simulation import EcoliSimulation
 
         experiment_id = self.experiment_id
 
@@ -71,8 +71,8 @@ class EcoliExperiment:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.ecoli_experiment_metadata import EcoliExperimentMetadata
-        from ..models.ecoli_simulation import EcoliSimulation
         from ..models.antibiotic_simulation import AntibioticSimulation
+        from ..models.ecoli_simulation import EcoliSimulation
 
         d = dict(src_dict)
         experiment_id = d.pop("experiment_id")

@@ -2,12 +2,10 @@ import datetime
 from typing import cast
 
 import pytest
-from sqlalchemy import TIMESTAMP, Column, ForeignKey, Integer, MetaData, Sequence, String, Table, func, insert, select
+from sqlalchemy import TIMESTAMP, Column, ForeignKey, Integer, MetaData, String, Table, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 meta_obj = MetaData()
-
-users_table_seq = Sequence(name="users_seq", metadata=meta_obj)
 
 users_table = Table(
     "users",
@@ -39,15 +37,6 @@ async def test_async(async_db_engine: AsyncEngine) -> None:
 
     name = "John Doe"
     email = "my_email"
-
-    async with async_db_engine.begin() as conn:
-        # directly call nextval on the sequence to ensure it starts at 1 and compare current value
-        result = await conn.execute(users_table_seq.next_value())
-        val = result.scalar_one()
-        assert val == 1
-        result = await conn.execute(users_table_seq.next_value())
-        val = result.scalar_one()
-        assert val == 2
 
     async with async_db_engine.begin() as conn:
         statement = insert(users_table).values(name=name, email=email)

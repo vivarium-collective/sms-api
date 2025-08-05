@@ -16,9 +16,7 @@ dependencies = [
     "typing-extensions>=4.14.0,<5",
     "pymongo>=4.13.0,<5",
     "sqlalchemy[asyncio]>=2.0.41,<3",
-    "asyncpg>=0.30.0,<0.31",
     "nats-py>=2.10.0,<3",
-    "alembic>=1.16.2,<2",
     "async-lru>=2.0.5,<3",
     "httpx>=0.28.1,<0.29",
     "polars-lts-cpu[pyarrow]>=1.31.0,<2",
@@ -36,6 +34,7 @@ dependencies = [
     "seaborn>=0.13.2,<0.14",
     "python-dateutil>=2.9.0.post0,<3",
     "anywidget>=0.9.18,<0.10",
+    "aiosqlite>=0.21.0",
 ]
 
 [project.urls]
@@ -53,7 +52,7 @@ dev = [
     "types-requests>=2.32.0.20250602,<3",
     "types-pyyaml>=6.0.12.20250516,<7",
     "pytest-asyncio>=1.0.0,<2",
-    "testcontainers[nats, postgres]>=4.10.0,<5",
+    "testcontainers[nats]>=4.10.0,<5",
     "types-tqdm>=4.67.0.20250516,<5",
     "openapi-python-client>=0.25.2,<0.26",
 ]

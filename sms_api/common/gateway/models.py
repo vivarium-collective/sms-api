@@ -28,7 +28,6 @@ class RouterConfig:
 class ServiceType(StrEnum):
     SIMULATION = "simulation"
     MONGO = "mongo"
-    POSTGRES = "postgres"
     AUTH = "auth"
 
 

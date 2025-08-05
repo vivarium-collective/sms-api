@@ -19,7 +19,6 @@ from tests.fixtures.nats_fixtures import (  # noqa: F401
     nats_producer_client,
     nats_subscriber_client,
 )
-from tests.fixtures.postgres_fixtures import async_db_engine, database_service, postgres_url  # noqa: F401
 from tests.fixtures.simulation_fixtures import (  # noqa: F401
     expected_build_slurm_job_id,
     expected_parca_database_id,
@@ -34,3 +33,4 @@ from tests.fixtures.slurm_fixtures import (  # noqa: F401
     slurm_template_hello_TEMPLATE,
     ssh_service,
 )
+from tests.fixtures.sqlite_fixtures import async_db_engine, database_service  # noqa: F401

@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 
 from sqlalchemy import ForeignKey, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -103,7 +103,7 @@ class ORMParcaDataset(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
     simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
-    parca_config: Mapped[dict[str, int | float | str]] = mapped_column(JSONB, nullable=False)
+    parca_config: Mapped[dict[str, int | float | str]] = mapped_column(JSON, nullable=False)
     parca_config_hash: Mapped[str] = mapped_column(nullable=False)
     remote_archive_path: Mapped[Optional[str]] = mapped_column(nullable=True)
 
@@ -116,7 +116,7 @@ class ORMSimulation(Base):
 
     simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
     parca_dataset_id: Mapped[int] = mapped_column(ForeignKey("parca_dataset.id"), nullable=False, index=True)
-    variant_config: Mapped[dict[str, dict[str, int | float | str]]] = mapped_column(JSONB, nullable=False)
+    variant_config: Mapped[dict[str, dict[str, int | float | str]]] = mapped_column(JSON, nullable=False)
     variant_config_hash: Mapped[str] = mapped_column(nullable=False)
 
 
@@ -128,9 +128,9 @@ class ORMWorkerEvent(Base):
 
     correlation_id: Mapped[str] = mapped_column(nullable=False, index=True)
     sequence_number: Mapped[int] = mapped_column(nullable=False, index=True)
-    mass: Mapped[dict[str, float]] = mapped_column(JSONB, nullable=False)
-    bulk: Mapped[Optional[list[int]]] = mapped_column(JSONB, nullable=True)
-    bulk_index: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    mass: Mapped[dict[str, float]] = mapped_column(JSON, nullable=False)
+    bulk: Mapped[Optional[list[int]]] = mapped_column(JSON, nullable=True)
+    bulk_index: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     time: Mapped[float] = mapped_column(nullable=True)
     hpcrun_id: Mapped[int] = mapped_column(ForeignKey("hpcrun.id"), nullable=False, index=True)
 
