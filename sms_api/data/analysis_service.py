@@ -1,11 +1,8 @@
 import logging
-import os
-from abc import ABC
 from pathlib import Path
 
-from sms_api.config import Settings, get_settings
 from sms_api.common.gateway.utils import get_simulation_outdir
-
+from sms_api.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -37,6 +34,4 @@ def test_get_file_path() -> None:
     filename = "ptools_rna.txt"
     fp = svc.get_file_path(expid, filename)
     print(fp)
-    print(f'Exists: {fp.exists()}')
-
-
+    print(f"Exists: {fp.exists()}")

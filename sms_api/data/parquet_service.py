@@ -1,4 +1,3 @@
-import abc
 import logging
 import os
 import re
@@ -37,9 +36,7 @@ class ParquetService(ABC):
         self.settings = settings or get_settings()
 
     @abstractmethod
-    def get_chunk_path(
-            self, db_id: int, commit_hash: str, chunk_id: int
-    ) -> Path:
+    def get_chunk_path(self, db_id: int, commit_hash: str, chunk_id: int) -> Path:
         pass
 
     @abstractmethod
@@ -65,9 +62,7 @@ class ParquetServiceHpc(ParquetService):
         return get_ssh_service(settings=self.settings)
 
     @override
-    def get_chunk_path(
-        self, db_id: int, commit_hash: str, chunk_id: int, namespace: Namespace | None = None
-    ) -> Path:
+    def get_chunk_path(self, db_id: int, commit_hash: str, chunk_id: int, namespace: Namespace | None = None) -> Path:
         results_fname = f"{chunk_id}.pq"
 
         # get remote dirpath
