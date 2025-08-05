@@ -69,12 +69,12 @@ async def select_and_update_objects(
 
 
 @pytest.mark.asyncio
-async def test_async(async_postgres_engine: AsyncEngine) -> None:
+async def test_async(async_db_engine: AsyncEngine) -> None:
     # async_sessionmaker: a factory for new AsyncSession objects.
     # expire_on_commit - don't expire objects after transaction commit
-    async_session = async_sessionmaker(async_postgres_engine, expire_on_commit=False)
+    async_session = async_sessionmaker(async_db_engine, expire_on_commit=False)
 
-    async with async_postgres_engine.begin() as conn:
+    async with async_db_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     await insert_objects(async_session)

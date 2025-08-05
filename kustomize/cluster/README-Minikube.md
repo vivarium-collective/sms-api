@@ -13,7 +13,6 @@
 | Certificate Manager with Let's Encrypt | for automatic refresh of SSL certificates                          |
 | Nginx Ingress controller               | for reverse proxies and CORS handling                              |
 | Persistent Volumes/Claims              | to map NFS mounts to pods                                          |
-| CloudNativePG                          | for PostgreSQL database management                                 |
 
 # local minikube config
 
@@ -92,14 +91,6 @@ brew install cmctl
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml
 cmctl check api
 ```
-
-### Install CloudNativePG
-
-```aiignore
-kubectl apply --server-side -f cnpg-operator/cnpg-1.26.0.yaml
-```
-
-### Install the PostgreSQL database cluster
 
 ```aiignore
 

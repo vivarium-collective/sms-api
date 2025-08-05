@@ -26,19 +26,19 @@ def verify_service(service: DatabaseService | DataService | SimulationService | 
         raise HTTPException(status_code=500, detail=f"{service.__module__} is not initialized")
 
 
-# ------- postgres database service (standalone or pytest) ------
+# ------- sqlalchemy database service (standalone or pytest) ------
 
-global_postgres_engine: AsyncEngine | None = None
-
-
-def set_postgres_engine(engine: AsyncEngine | None) -> None:
-    global global_postgres_engine
-    global_postgres_engine = engine
+global_db_engine: AsyncEngine | None = None
 
 
-def get_postgres_engine() -> AsyncEngine | None:
-    global global_postgres_engine
-    return global_postgres_engine
+def set_db_engine(engine: AsyncEngine | None) -> None:
+    global global_db_engine
+    global_db_engine = engine
+
+
+def get_db_engine() -> AsyncEngine | None:
+    global global_db_engine
+    return global_db_engine
 
 
 # ------- simulation database service (standalone or pytest) ------
@@ -117,30 +117,14 @@ async def init_standalone(enable_ssl: bool = True) -> None:
     set_simulation_service(SimulationServiceHpc())
     set_data_service(DataServiceHpc())
 
-    PG_USER = _settings.postgres_user
-    PG_PSWD = _settings.postgres_password
-    PG_DATABASE = _settings.postgres_database
-    PG_HOST = _settings.postgres_host
-    PG_PORT = _settings.postgres_port
-    PG_POOL_SIZE = _settings.postgres_pool_size
-    PG_MAX_OVERFLOW = _settings.postgres_max_overflow
-    PG_POOL_TIMEOUT = _settings.postgres_pool_timeout
-    PG_POOL_RECYCLE = _settings.postgres_pool_recycle
-    if not PG_USER or not PG_PSWD or not PG_DATABASE or not PG_HOST or not PG_PORT:
-        raise ValueError("Postgres connection settings are not properly configured.")
-    postgres_url = f"postgresql+asyncpg://{PG_USER}:{PG_PSWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
+    sqlite_url = f"sqlite+aiosqlite:///{_settings.sqlite_dbfile}"
     engine = get_async_engine(
-        url=postgres_url,
-        enable_ssl=enable_ssl,
+        url=sqlite_url,
         echo=True,
-        pool_size=PG_POOL_SIZE,
-        max_overflow=PG_MAX_OVERFLOW,
-        pool_timeout=PG_POOL_TIMEOUT,
-        pool_recycle=PG_POOL_RECYCLE,
     )
     logging.warning("calling create_db() to initialize the database tables")
     await create_db(engine)
-    set_postgres_engine(engine)
+    set_db_engine(engine)
 
     database = DatabaseServiceSQL(engine)
     set_database_service(database)
@@ -164,7 +148,7 @@ async def shutdown_standalone() -> None:
     if mongodb_service:
         await mongodb_service.close()
 
-    engine = get_postgres_engine()
+    engine = get_db_engine()
     if engine:
         await engine.dispose()
 

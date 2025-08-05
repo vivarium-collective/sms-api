@@ -9,6 +9,7 @@ from ..types import UNSET, Unset
 from ..models.settings_storage_tensorstore_driver import SettingsStorageTensorstoreDriver
 from ..models.settings_storage_tensorstore_kvstore_driver import SettingsStorageTensorstoreKvstoreDriver
 from ..types import UNSET, Unset
+from typing import cast, Union
 from typing import Union
 
 
@@ -34,18 +35,11 @@ class Settings:
         mongodb_collection_omex (Union[Unset, str]):  Default: 'BiosimOmex'.
         mongodb_collection_sims (Union[Unset, str]):  Default: 'BiosimSims'.
         mongodb_collection_compare (Union[Unset, str]):  Default: 'BiosimCompare'.
-        postgres_user (Union[Unset, str]):  Default: '<USER>'.
-        postgres_password (Union[Unset, str]):  Default: '<PASSWORD>'.
-        postgres_database (Union[Unset, str]):  Default: 'sms'.
-        postgres_host (Union[Unset, str]):  Default: 'localhost'.
-        postgres_port (Union[Unset, int]):  Default: 5432.
-        postgres_pool_size (Union[Unset, int]):  Default: 10.
-        postgres_max_overflow (Union[Unset, int]):  Default: 5.
-        postgres_pool_timeout (Union[Unset, int]):  Default: 30.
-        postgres_pool_recycle (Union[Unset, int]):  Default: 1800.
+        sqlite_dbfile (Union[Unset, str]):  Default: './sms.db'.
         slurm_submit_host (Union[Unset, str]):  Default: ''.
         slurm_submit_user (Union[Unset, str]):  Default: ''.
         slurm_submit_key_path (Union[Unset, str]):  Default: ''.
+        slurm_submit_known_hosts (Union[None, Unset, str]):
         slurm_partition (Union[Unset, str]):  Default: ''.
         slurm_node_list (Union[Unset, str]):  Default: ''.
         slurm_qos (Union[Unset, str]):  Default: ''.
@@ -61,8 +55,8 @@ class Settings:
         nats_emitter_url (Union[Unset, str]):  Default: ''.
         nats_emitter_magic_word (Union[Unset, str]):  Default: 'emitter-magic-word'.
         dev_mode (Union[Unset, str]):  Default: '0'.
-        app_dir (Union[Unset, str]):  Default: '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app'.
-        assets_dir (Union[Unset, str]):  Default: '/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets'.
+        app_dir (Union[Unset, str]):  Default: '/Users/jimschaff/Documents/workspace/sms-api/app'.
+        assets_dir (Union[Unset, str]):  Default: '/Users/jimschaff/Documents/workspace/sms-api/assets'.
         marimo_api_server (Union[Unset, str]):  Default: ''.
     """
 
@@ -81,18 +75,11 @@ class Settings:
     mongodb_collection_omex: Union[Unset, str] = "BiosimOmex"
     mongodb_collection_sims: Union[Unset, str] = "BiosimSims"
     mongodb_collection_compare: Union[Unset, str] = "BiosimCompare"
-    postgres_user: Union[Unset, str] = "<USER>"
-    postgres_password: Union[Unset, str] = "<PASSWORD>"
-    postgres_database: Union[Unset, str] = "sms"
-    postgres_host: Union[Unset, str] = "localhost"
-    postgres_port: Union[Unset, int] = 5432
-    postgres_pool_size: Union[Unset, int] = 10
-    postgres_max_overflow: Union[Unset, int] = 5
-    postgres_pool_timeout: Union[Unset, int] = 30
-    postgres_pool_recycle: Union[Unset, int] = 1800
+    sqlite_dbfile: Union[Unset, str] = "./sms.db"
     slurm_submit_host: Union[Unset, str] = ""
     slurm_submit_user: Union[Unset, str] = ""
     slurm_submit_key_path: Union[Unset, str] = ""
+    slurm_submit_known_hosts: Union[None, Unset, str] = UNSET
     slurm_partition: Union[Unset, str] = ""
     slurm_node_list: Union[Unset, str] = ""
     slurm_qos: Union[Unset, str] = ""
@@ -108,8 +95,8 @@ class Settings:
     nats_emitter_url: Union[Unset, str] = ""
     nats_emitter_magic_word: Union[Unset, str] = "emitter-magic-word"
     dev_mode: Union[Unset, str] = "0"
-    app_dir: Union[Unset, str] = "/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/app"
-    assets_dir: Union[Unset, str] = "/Users/alexanderpatrie/Desktop/repos/ecoli/sms-api/assets"
+    app_dir: Union[Unset, str] = "/Users/jimschaff/Documents/workspace/sms-api/app"
+    assets_dir: Union[Unset, str] = "/Users/jimschaff/Documents/workspace/sms-api/assets"
     marimo_api_server: Union[Unset, str] = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -143,29 +130,19 @@ class Settings:
 
         mongodb_collection_compare = self.mongodb_collection_compare
 
-        postgres_user = self.postgres_user
-
-        postgres_password = self.postgres_password
-
-        postgres_database = self.postgres_database
-
-        postgres_host = self.postgres_host
-
-        postgres_port = self.postgres_port
-
-        postgres_pool_size = self.postgres_pool_size
-
-        postgres_max_overflow = self.postgres_max_overflow
-
-        postgres_pool_timeout = self.postgres_pool_timeout
-
-        postgres_pool_recycle = self.postgres_pool_recycle
+        sqlite_dbfile = self.sqlite_dbfile
 
         slurm_submit_host = self.slurm_submit_host
 
         slurm_submit_user = self.slurm_submit_user
 
         slurm_submit_key_path = self.slurm_submit_key_path
+
+        slurm_submit_known_hosts: Union[None, Unset, str]
+        if isinstance(self.slurm_submit_known_hosts, Unset):
+            slurm_submit_known_hosts = UNSET
+        else:
+            slurm_submit_known_hosts = self.slurm_submit_known_hosts
 
         slurm_partition = self.slurm_partition
 
@@ -232,30 +209,16 @@ class Settings:
             field_dict["mongodb_collection_sims"] = mongodb_collection_sims
         if mongodb_collection_compare is not UNSET:
             field_dict["mongodb_collection_compare"] = mongodb_collection_compare
-        if postgres_user is not UNSET:
-            field_dict["postgres_user"] = postgres_user
-        if postgres_password is not UNSET:
-            field_dict["postgres_password"] = postgres_password
-        if postgres_database is not UNSET:
-            field_dict["postgres_database"] = postgres_database
-        if postgres_host is not UNSET:
-            field_dict["postgres_host"] = postgres_host
-        if postgres_port is not UNSET:
-            field_dict["postgres_port"] = postgres_port
-        if postgres_pool_size is not UNSET:
-            field_dict["postgres_pool_size"] = postgres_pool_size
-        if postgres_max_overflow is not UNSET:
-            field_dict["postgres_max_overflow"] = postgres_max_overflow
-        if postgres_pool_timeout is not UNSET:
-            field_dict["postgres_pool_timeout"] = postgres_pool_timeout
-        if postgres_pool_recycle is not UNSET:
-            field_dict["postgres_pool_recycle"] = postgres_pool_recycle
+        if sqlite_dbfile is not UNSET:
+            field_dict["sqlite_dbfile"] = sqlite_dbfile
         if slurm_submit_host is not UNSET:
             field_dict["slurm_submit_host"] = slurm_submit_host
         if slurm_submit_user is not UNSET:
             field_dict["slurm_submit_user"] = slurm_submit_user
         if slurm_submit_key_path is not UNSET:
             field_dict["slurm_submit_key_path"] = slurm_submit_key_path
+        if slurm_submit_known_hosts is not UNSET:
+            field_dict["slurm_submit_known_hosts"] = slurm_submit_known_hosts
         if slurm_partition is not UNSET:
             field_dict["slurm_partition"] = slurm_partition
         if slurm_node_list is not UNSET:
@@ -336,29 +299,22 @@ class Settings:
 
         mongodb_collection_compare = d.pop("mongodb_collection_compare", UNSET)
 
-        postgres_user = d.pop("postgres_user", UNSET)
-
-        postgres_password = d.pop("postgres_password", UNSET)
-
-        postgres_database = d.pop("postgres_database", UNSET)
-
-        postgres_host = d.pop("postgres_host", UNSET)
-
-        postgres_port = d.pop("postgres_port", UNSET)
-
-        postgres_pool_size = d.pop("postgres_pool_size", UNSET)
-
-        postgres_max_overflow = d.pop("postgres_max_overflow", UNSET)
-
-        postgres_pool_timeout = d.pop("postgres_pool_timeout", UNSET)
-
-        postgres_pool_recycle = d.pop("postgres_pool_recycle", UNSET)
+        sqlite_dbfile = d.pop("sqlite_dbfile", UNSET)
 
         slurm_submit_host = d.pop("slurm_submit_host", UNSET)
 
         slurm_submit_user = d.pop("slurm_submit_user", UNSET)
 
         slurm_submit_key_path = d.pop("slurm_submit_key_path", UNSET)
+
+        def _parse_slurm_submit_known_hosts(data: object) -> Union[None, Unset, str]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, str], data)
+
+        slurm_submit_known_hosts = _parse_slurm_submit_known_hosts(d.pop("slurm_submit_known_hosts", UNSET))
 
         slurm_partition = d.pop("slurm_partition", UNSET)
 
@@ -410,18 +366,11 @@ class Settings:
             mongodb_collection_omex=mongodb_collection_omex,
             mongodb_collection_sims=mongodb_collection_sims,
             mongodb_collection_compare=mongodb_collection_compare,
-            postgres_user=postgres_user,
-            postgres_password=postgres_password,
-            postgres_database=postgres_database,
-            postgres_host=postgres_host,
-            postgres_port=postgres_port,
-            postgres_pool_size=postgres_pool_size,
-            postgres_max_overflow=postgres_max_overflow,
-            postgres_pool_timeout=postgres_pool_timeout,
-            postgres_pool_recycle=postgres_pool_recycle,
+            sqlite_dbfile=sqlite_dbfile,
             slurm_submit_host=slurm_submit_host,
             slurm_submit_user=slurm_submit_user,
             slurm_submit_key_path=slurm_submit_key_path,
+            slurm_submit_known_hosts=slurm_submit_known_hosts,
             slurm_partition=slurm_partition,
             slurm_node_list=slurm_node_list,
             slurm_qos=slurm_qos,

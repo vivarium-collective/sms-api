@@ -24,7 +24,7 @@ from sms_api.common.gateway.models import Namespace, RouterConfig, ServerMode
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.dependencies import (
     get_database_service,
-    get_postgres_engine,
+    get_db_engine,
     get_simulation_service,
 )
 from sms_api.simulation.data_service import DataServiceHpc
@@ -73,7 +73,7 @@ config = RouterConfig(router=APIRouter(), prefix="/core", dependencies=[])
     response_model=Simulator,
     operation_id="get-latest-simulator",
     tags=["Simulators"],
-    dependencies=[Depends(get_database_service), Depends(get_postgres_engine)],
+    dependencies=[Depends(get_database_service), Depends(get_db_engine)],
     summary="Get the latest simulator version",
 )
 async def get_latest_simulator(
@@ -98,7 +98,7 @@ async def get_latest_simulator(
     response_model=RegisteredSimulators,
     operation_id="get-simulator-versions",
     tags=["Simulators"],
-    dependencies=[Depends(get_database_service), Depends(get_postgres_engine)],
+    dependencies=[Depends(get_database_service), Depends(get_db_engine)],
     summary="get the list of available simulator versions",
 )
 async def get_simulator_versions() -> RegisteredSimulators:
@@ -145,7 +145,7 @@ async def get_simulator_status(simulator_id: int) -> HpcRun | None:
     response_model=SimulatorVersion,
     operation_id="insert-simulator-version",
     tags=["Simulators"],
-    dependencies=[Depends(get_database_service), Depends(get_postgres_engine)],
+    dependencies=[Depends(get_database_service), Depends(get_db_engine)],
     summary="Upload a new simulator (vEcoli) version.",
 )
 async def insert_simulator_version(

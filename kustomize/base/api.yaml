@@ -30,34 +30,13 @@ spec:
             - configMapRef:
                 name: api-config
           env:
-            - name: POSTGRES_USER
-              valueFrom:
-                secretKeyRef:
-                  name: shared-secrets
-                  key: postgres-user
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: shared-secrets
-                  key: postgres-password
-            - name: POSTGRES_DATABASE
-              valueFrom:
-                secretKeyRef:
-                  name: shared-secrets
-                  key: postgres-database
-            - name: POSTGRES_HOST
-              valueFrom:
-                secretKeyRef:
-                  name: shared-secrets
-                  key: postgres-host
-            - name: POSTGRES_PORT
-              valueFrom:
-                secretKeyRef:
-                  name: shared-secrets
-                  key: postgres-port
             - name: SLURM_SUBMIT_KEY_PATH
               value: "/run/secrets/slurm_submit_key_file/ssh-privatekey"
+            - name: SQLITE_DBPATH
+              value: "/app/sqlite/sms-api.db"
           volumeMounts:
+            - name: api-sqlite-pvc
+              mountPath: /app/sqlite
             - name: api-cache-pvc
               mountPath: /app/scratch
             - name: vivarium-home-pvc
@@ -69,6 +48,9 @@ spec:
               mountPath: /run/secrets/ssh-known-hosts
               readOnly: true
       volumes:
+        - name: api-sqlite-pvc
+          persistentVolumeClaim:
+            claimName: api-sqlite-pvc
         - name: api-cache-pvc
           persistentVolumeClaim:
             claimName: api-cache-pvc
