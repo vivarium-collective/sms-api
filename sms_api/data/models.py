@@ -1,7 +1,6 @@
-import pickle
-
 import numpy
 import numpy as np
+import orjson
 import polars as pl
 
 
@@ -13,10 +12,10 @@ class SerializedArray:
 
     def serialize(self, arr: numpy.ndarray) -> bytes:
         self.shape = arr.shape
-        return pickle.dumps(numpy.ravel(arr, order="C"))
+        return orjson.dumps(numpy.ravel(arr, order="C").tolist())
 
     def deserialize(self) -> numpy.ndarray:
-        arr: np.ndarray = pickle.loads(self._value)
+        arr: np.ndarray = np.array(orjson.loads(self._value))
         return arr.reshape(self.shape)
 
     @property

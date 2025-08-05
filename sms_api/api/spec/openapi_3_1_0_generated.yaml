@@ -288,83 +288,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /core/simulation/run/results/chunks:
+  /core/download/analysis:
     get:
       tags:
       - Simulations - vEcoli
-      summary: Get simulation results in chunks
-      operationId: get-simulation-results
+      summary: Download a file that was generated from a simulation analysis module
+      operationId: download-analysis-file
       parameters:
       - name: experiment_id
         in: query
-        required: false
+        required: true
         schema:
           type: string
-          default: experiment_96bb7a2_id_1_20250620-181422
+          description: Experiment ID for the simulation (config.json).
           title: Experiment Id
-      - name: database_id
+        description: Experiment ID for the simulation (config.json).
+      - name: filename
         in: query
         required: true
         schema:
-          type: integer
-          description: Database Id returned from /submit-simulation
-          title: Database Id
-        description: Database Id returned from /submit-simulation
-      - name: git_commit_hash
-        in: query
-        required: false
-        schema:
           type: string
-          default: 78c6310
-          title: Git Commit Hash
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Body_get-simulation-results'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/simulation/run/results/file:
-    get:
-      tags:
-      - Simulations - vEcoli
-      summary: Get simulation results as a zip file
-      operationId: get-simulation-results-file
-      parameters:
-      - name: experiment_id
-        in: query
-        required: false
-        schema:
-          type: string
-          default: experiment_96bb7a2_id_1_20250620-181422
-          title: Experiment Id
-      - name: database_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          description: Database Id of simulation
-          title: Database Id
-        description: Database Id of simulation
-      requestBody:
-        content:
-          application/json:
-            schema:
-              anyOf:
-              - $ref: '#/components/schemas/Settings'
-              - type: 'null'
-              title: Settings
+          title: Filename
+        example: ptools_rna.txt
       responses:
         '200':
           description: Successful Response
@@ -468,18 +413,6 @@ components:
       - parca_dataset_id
       - variant_config
       title: AntibioticSimulationRequest
-    Body_get-simulation-results:
-      properties:
-        observable_names:
-          $ref: '#/components/schemas/RequestedObservables'
-        settings:
-          anyOf:
-          - $ref: '#/components/schemas/Settings'
-          - type: 'null'
-      type: object
-      required:
-      - observable_names
-      title: Body_get-simulation-results
     EcoliExperiment:
       properties:
         experiment_id:
@@ -662,173 +595,6 @@ components:
       required:
       - versions
       title: RegisteredSimulators
-    RequestedObservables:
-      properties:
-        items:
-          items:
-            type: string
-          type: array
-          title: Items
-      type: object
-      title: RequestedObservables
-    Settings:
-      properties:
-        storage_bucket:
-          type: string
-          title: Storage Bucket
-          default: files.biosimulations.dev
-        storage_endpoint_url:
-          type: string
-          title: Storage Endpoint Url
-          default: https://storage.googleapis.com
-        storage_region:
-          type: string
-          title: Storage Region
-          default: us-east4
-        storage_tensorstore_driver:
-          type: string
-          enum:
-          - zarr
-          - n5
-          - zarr3
-          title: Storage Tensorstore Driver
-          default: zarr3
-        storage_tensorstore_kvstore_driver:
-          type: string
-          enum:
-          - file
-          - s3
-          - gcs
-          title: Storage Tensorstore Kvstore Driver
-          default: gcs
-        temporal_service_url:
-          type: string
-          title: Temporal Service Url
-          default: localhost:7233
-        storage_local_cache_dir:
-          type: string
-          title: Storage Local Cache Dir
-          default: ./local_cache
-        storage_gcs_credentials_file:
-          type: string
-          title: Storage Gcs Credentials File
-          default: ''
-        mongodb_uri:
-          type: string
-          title: Mongodb Uri
-          default: mongodb://localhost:27017
-        mongodb_database:
-          type: string
-          title: Mongodb Database
-          default: biosimulations
-        mongodb_collection_omex:
-          type: string
-          title: Mongodb Collection Omex
-          default: BiosimOmex
-        mongodb_collection_sims:
-          type: string
-          title: Mongodb Collection Sims
-          default: BiosimSims
-        mongodb_collection_compare:
-          type: string
-          title: Mongodb Collection Compare
-          default: BiosimCompare
-        sqlite_dbfile:
-          type: string
-          title: Sqlite Dbfile
-          default: ./sms.db
-        slurm_submit_host:
-          type: string
-          title: Slurm Submit Host
-          default: ''
-        slurm_submit_user:
-          type: string
-          title: Slurm Submit User
-          default: ''
-        slurm_submit_key_path:
-          type: string
-          title: Slurm Submit Key Path
-          default: ''
-        slurm_submit_known_hosts:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Slurm Submit Known Hosts
-        slurm_partition:
-          type: string
-          title: Slurm Partition
-          default: ''
-        slurm_node_list:
-          type: string
-          title: Slurm Node List
-          default: ''
-        slurm_qos:
-          type: string
-          title: Slurm Qos
-          default: ''
-        slurm_log_base_path:
-          type: string
-          title: Slurm Log Base Path
-          default: ''
-        slurm_base_path:
-          type: string
-          title: Slurm Base Path
-          default: ''
-        hpc_image_base_path:
-          type: string
-          title: Hpc Image Base Path
-          default: ''
-        hpc_parca_base_path:
-          type: string
-          title: Hpc Parca Base Path
-          default: ''
-        hpc_repo_base_path:
-          type: string
-          title: Hpc Repo Base Path
-          default: ''
-        hpc_sim_base_path:
-          type: string
-          title: Hpc Sim Base Path
-          default: ''
-        hpc_sim_config_file:
-          type: string
-          title: Hpc Sim Config File
-          default: publish.json
-        nats_url:
-          type: string
-          title: Nats Url
-          default: ''
-        nats_worker_event_subject:
-          type: string
-          title: Nats Worker Event Subject
-          default: worker.events
-        nats_emitter_url:
-          type: string
-          title: Nats Emitter Url
-          default: ''
-        nats_emitter_magic_word:
-          type: string
-          title: Nats Emitter Magic Word
-          default: emitter-magic-word
-        dev_mode:
-          type: string
-          title: Dev Mode
-          default: '0'
-        app_dir:
-          type: string
-          title: App Dir
-          default: /Users/jimschaff/Documents/workspace/sms-api/app
-        assets_dir:
-          type: string
-          title: Assets Dir
-          default: /Users/jimschaff/Documents/workspace/sms-api/assets
-        marimo_api_server:
-          type: string
-          title: Marimo Api Server
-          default: ''
-      additionalProperties: false
-      type: object
-      title: Settings
     Simulator:
       properties:
         git_commit_hash:
