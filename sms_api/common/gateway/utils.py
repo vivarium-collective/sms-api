@@ -1,5 +1,16 @@
+from pathlib import Path
+
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import HpcRun, JobType
+
+REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
+
+
+def get_simulation_outdir(experiment_id: str) -> Path:
+    outdir = REPO_DIR / "out" / experiment_id
+    if not outdir.exists():
+        raise FileNotFoundError(f"{outdir} does not exist. Try running a simulation first.")
+    return outdir
 
 
 def format_version(major: int) -> str:
