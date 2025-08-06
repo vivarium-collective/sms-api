@@ -19,7 +19,7 @@ spec:
       securityContext:
         runAsUser: 17163
         runAsGroup: 10000
-        fsGroup: 10269
+        fsGroup: 10000
       containers:
         - name: api
           image: ghcr.io/biosimulations/sms-api:latest
