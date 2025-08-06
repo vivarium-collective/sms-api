@@ -7,7 +7,9 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: longhorn
+  storageClassName: longhorn-static
   resources:
     requests:
       storage: 10Gi
+  # This volume is manually administered in the longhorn UI (including a persistent volume called api-sqlite-static-pv)
+  volumeName: api-sqlite-static-pv
