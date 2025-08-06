@@ -16,10 +16,10 @@ spec:
     spec:
       nodeSelector:
         vlan: internal
-      #      securityContext:
-      #        runAsUser: 17163
-      #        runAsGroup: 10000
-      #        fsGroup: 10000
+      securityContext:
+        runAsUser: 17163
+        runAsGroup: 10000
+        fsGroup: 10269
       containers:
         - name: api
           image: ghcr.io/biosimulations/sms-api:latest
