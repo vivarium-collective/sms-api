@@ -1,8 +1,13 @@
-# SMS REST API Documentation
+# SMS REST API Documentation (Complete endpoints available at `https://sms.cam.uchc.edu/docs` via the Swagger UI)
 
 ## Base Url:
 ### `https://sms.cam.uchc.edu`
 
+
+## PLEASE NOTE:
+The only simulation experiment that is accessible from the following `/core/download/` endpoints is
+a "pinned" simulation with corresponding outputs whose `experiment_id` is `"sms_single"`. Generalized
+functionality is actively being deployed and will change this in the future.
 
 ## Endpoints:
 ### - (`GET`) `/core/download/analysis`: Download any analysis file generated during a simulation workflow.
