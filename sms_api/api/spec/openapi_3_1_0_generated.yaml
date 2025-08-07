@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.7
+  version: 0.2.8
 paths:
   /core/simulator/latest:
     get:
@@ -353,7 +353,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
   /core/download/parquet:
-    get:
+    post:
       tags:
       - Data
       summary: Download zip file containing pqs that were generated from the parquet
@@ -369,16 +369,12 @@ paths:
           title: Experiment Id
         description: Experiment ID for the simulation (from config.json).
         example: sms_single
-      - name: chunk_ids
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: array
-            items:
-              type: integer
-          - type: 'null'
-          title: Chunk Ids
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Chunks'
       responses:
         '200':
           description: Successful Response
@@ -482,6 +478,15 @@ components:
       - parca_dataset_id
       - variant_config
       title: AntibioticSimulationRequest
+    Chunks:
+      properties:
+        ids:
+          items:
+            type: integer
+          type: array
+          title: Ids
+      type: object
+      title: Chunks
     EcoliExperiment:
       properties:
         experiment_id:

@@ -30,10 +30,13 @@
 import io
 import logging
 import mimetypes
+import os
+import tempfile
 import zipfile
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 
 from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.data.analysis_service import AnalysisService
@@ -461,42 +464,40 @@ async def download_chunk(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(
+@config.router.post(
     path="/download/parquet",
-    response_class=StreamingResponse,
+    response_class=FileResponse,
     operation_id="download-parquet",
     tags=["Data"],
     summary="Download zip file containing pqs that were generated from the parquet emitter",
 )
 async def download_parquet(
+    background_tasks: BackgroundTasks,
+    # chunks: Chunks,
     experiment_id: str = Query(
         example="sms_single", description="Experiment ID for the simulation (from config.json)."
     ),
-    chunk_ids: list[int] | None = None,
-) -> StreamingResponse:
+) -> FileResponse:
     try:
         service = ParquetService()
         pq_dir = service.get_parquet_dir(experiment_id)
 
-        files = [pq_dir / f"{chunk_id}.pq" for chunk_id in chunk_ids] if chunk_ids else list(pq_dir.iterdir())
-        # if chunk_ids:
-        #     files = [pq_dir / f"{chunk_id}.pq" for chunk_id in chunk_ids]
-        # else:
-        #     files = list(pq_dir.iterdir())
+        files = list(pq_dir.iterdir())
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
             for file in files:
                 if file.exists():
                     zipf.write(file, arcname=file.name)
-
         zip_buffer.seek(0)
 
-        return StreamingResponse(
-            zip_buffer,
-            media_type="application/zip",
-            headers={"Content-Disposition": f"attachment; filename={experiment_id}.zip"},
-        )
+        tmpdir = tempfile.TemporaryDirectory()
+        background_tasks.add_task(tmpdir.cleanup)
+        filepath = Path(os.path.join(tmpdir.name, f"{experiment_id}.zip"))
+        with open(filepath, "wb") as f:
+            f.write(zip_buffer.getvalue())
+
+        return FileResponse(path=filepath, media_type="application/octet-stream", filename=filepath.name)
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e

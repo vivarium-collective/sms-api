@@ -13,6 +13,7 @@
 
 - **Github repository**: <https://github.com/vivarium-collective/sms-api/>
 - **Documentation** <https://sms-api.readthedocs.io/en/latest/>
+- **REST API Documentation**: [View Docs](./sms_api/api/README.md)
 
 #### SMS API (otherwise known as _Atlantis API_):
 
