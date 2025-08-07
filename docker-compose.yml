@@ -1,0 +1,30 @@
+services:
+  gateway:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile-api
+    image: ghcr.io/biosimulations/sms-api:0.2.8
+    container_name: gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks:
+      - smsnet
+
+  nats:
+    platform: linux/amd64
+    image: nats:latest
+    container_name: nats
+    restart: unless-stopped
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+      - "6222:6222"
+      - "30050:30050"
+    networks:
+      - smsnet
+
+networks:
+  smsnet:
+    driver: bridge

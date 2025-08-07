@@ -10,7 +10,6 @@ from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 from sms_api.log_config import setup_logging
-from sms_api.simulation.data_service import DataService, DataServiceHpc
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 setup_logging(logger)
 
 
-def verify_service(service: DatabaseService | DataService | SimulationService | None) -> None:
+def verify_service(service: DatabaseService | SimulationService | None) -> None:
     if service is None:
         logger.error(f"{service.__module__} is not initialized")
         raise HTTPException(status_code=500, detail=f"{service.__module__} is not initialized")
@@ -86,21 +85,6 @@ def get_job_scheduler() -> JobScheduler | None:
     return global_job_scheduler
 
 
-# ------ data service (standalone or pytest) ------------------
-
-global_data_service: DataService | None = None
-
-
-def set_data_service(data_service: DataService | None) -> None:
-    global global_data_service
-    global_data_service = data_service
-
-
-def get_data_service() -> DataService | None:
-    global global_data_service
-    return global_data_service
-
-
 # ------ initialized standalone application (standalone) ------
 
 
@@ -115,7 +99,6 @@ async def init_standalone(enable_ssl: bool = True) -> None:
 
     # set services that don't require params (currently using hpc)
     set_simulation_service(SimulationServiceHpc())
-    set_data_service(DataServiceHpc())
 
     sqlite_url = f"sqlite+aiosqlite:///{_settings.sqlite_dbfile}"
     engine = get_async_engine(
@@ -154,7 +137,6 @@ async def shutdown_standalone() -> None:
 
     set_simulation_service(None)
     set_database_service(None)
-    set_data_service(None)
 
     job_scheduler = get_job_scheduler()
     if job_scheduler:

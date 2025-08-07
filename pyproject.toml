@@ -1,6 +1,6 @@
 [project]
 name = "sms_api"
-version = "0.2.7"
+version = "0.2.8"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }]
 requires-python = ">=3.12,<4.0"
@@ -35,6 +35,7 @@ dependencies = [
     "python-dateutil>=2.9.0.post0,<3",
     "anywidget>=0.9.18,<0.10",
     "aiosqlite>=0.21.0",
+    "orjson>=3.11.1",
 ]
 
 [project.urls]
