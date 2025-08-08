@@ -16,8 +16,8 @@ ALLOWED_COMMANDS = {
     "scancel": ["/usr/bin/scancel"],
 }
 
-async def handle_client(reader: StreamReader, writer: StreamWriter) -> None:
 
+async def handle_client(reader: StreamReader, writer: StreamWriter) -> None:
     try:
         if IS_LINUX:
             sock = writer.get_extra_info("socket")
@@ -57,6 +57,7 @@ async def handle_client(reader: StreamReader, writer: StreamWriter) -> None:
     finally:
         writer.close()
 
+
 async def main(socket_path: str) -> None:
     if os.path.exists(socket_path):
         os.remove(socket_path)
@@ -64,6 +65,7 @@ async def main(socket_path: str) -> None:
     os.chmod(socket_path, 0o700)
     async with server:
         await server.serve_forever()
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2 or sys.argv[1] in ("-h", "--help"):

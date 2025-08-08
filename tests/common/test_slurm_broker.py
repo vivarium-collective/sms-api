@@ -1,14 +1,15 @@
-from typing import Generator
-
-import pytest
-import subprocess
-import tempfile
 import os
 import socket
-import time
+import subprocess
 import sys
+import tempfile
+import time
+from collections.abc import Generator
 
-SOCKET_PATH = "/tmp/slurm_broker.sock"
+import pytest
+
+SOCKET_PATH = "slurm_broker.sock"
+
 
 @pytest.fixture(scope="module")
 def broker_and_fake_sbatch() -> Generator[str, None, None]:
@@ -17,7 +18,7 @@ def broker_and_fake_sbatch() -> Generator[str, None, None]:
     fake_sbatch = os.path.join(tempdir.name, "sbatch")
     with open(fake_sbatch, "w") as f:
         f.write("#!/bin/sh\necho FAKE_SBATCH_OK\n")
-    os.chmod(fake_sbatch, 0o755)
+    os.chmod(fake_sbatch, 0o500)
 
     # Patch ALLOWED_COMMANDS in the broker to use our fake sbatch
     broker_path = os.path.abspath("../fixtures/scripts/slurm_broker.py")
@@ -26,7 +27,7 @@ def broker_and_fake_sbatch() -> Generator[str, None, None]:
     env["FAKE_SBATCH"] = fake_sbatch
 
     # Start the broker as a subprocess
-    proc = subprocess.Popen(
+    proc = subprocess.Popen(  # noqa: S603
         [sys.executable, broker_path, SOCKET_PATH],
         env=env,
     )
