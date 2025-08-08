@@ -1,4 +1,5 @@
 import os
+import pathlib
 import socket
 import subprocess
 import sys
@@ -25,7 +26,7 @@ def broker_and_fake_sbatch(socket_path: str) -> Generator[str, None, None]:
         os.chmod(fake_sbatch, 0o500)
 
         # Patch ALLOWED_COMMANDS in the broker to use our fake sbatch
-        broker_path = os.path.abspath("../fixtures/scripts/slurm_broker.py")
+        broker_path = str(pathlib.Path(__file__).parent.parent / "fixtures" / "scripts" / "slurm_broker.py")
         env = os.environ.copy()
         env["PYTHONPATH"] = os.getcwd()
         env["FAKE_SBATCH"] = fake_sbatch
