@@ -24,7 +24,6 @@ ALLOWED_COMMANDS = {
 }
 
 async def handle_client(reader: StreamReader, writer: StreamWriter) -> None:
-
     try:
         sock = writer.get_extra_info("socket")
         ucred = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
