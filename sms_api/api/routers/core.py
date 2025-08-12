@@ -427,10 +427,15 @@ async def download_analysis_file(
         service = AnalysisService()
         filepath = service.get_file_path(experiment_id, filename)
         mimetype, _ = mimetypes.guess_type(filepath)
-        logger.info(f"Downloading {filename} to {filepath}")
         if filename.endswith(".txt") or filename.endswith(".tsv"):
             df = pd.read_csv(filepath, sep="\t", index_col=0)
-            df.columns = [f"${col}" for col in df.columns]
+            cols = []
+            for i, col in enumerate(df.columns):
+                if i == 0:
+                    cols.append(f"${col}")
+                else:
+                    cols.append(col)
+            df.columns = cols
             tmp = tempfile.TemporaryDirectory()
             background_tasks.add_task(tmp.cleanup)
             fp = Path(tmp.name) / filename

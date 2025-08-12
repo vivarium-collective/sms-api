@@ -5,7 +5,8 @@ namespace: sms-api-local
 
 images:
   - name: ghcr.io/biosimulations/sms-api
-    newTag: 0.2.8
+    newTag: 0.2.9-dev
+    # STABLE: newTag: 0.2.8
   - name: docker.io/library/mongo
     newTag: 8.0.4
 
