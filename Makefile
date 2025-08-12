@@ -215,6 +215,14 @@ exec-api:
 	@[ -z "$(tag)" ] && tag=0.2.8 || tag=$(tag); \
 	docker run --rm --name sms -p 8000:8000 --platform linux/amd64 --entrypoint /usr/bin/env -it ghcr.io/biosimulations/sms-api:$$tag bash
 
+.PHONY: run-api
+run-api:
+	@docker run --rm --name api -p 8000:8000 --platform linux/amd64 --entrypoint /usr/bin/env -it sms-api:latest bash
+
+.PHONY: api
+api:
+	@docker rmi -f sms-api:latest && docker compose build api && make run-api
+
 .DEFAULT_GOAL := help
 
 # pull in nextflow/java in sms api container

@@ -1,0 +1,74 @@
+# Use the official Python image from the Docker Hub
+FROM python:3.12-slim-bookworm AS base
+
+ARG APP_UID=17163
+ARG APP_GID=10000
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    procps \
+    nano \
+    curl \
+    software-properties-common \
+    wget \
+    openjdk-17-jdk \
+    python3-dev \
+    git \
+    openssh-client \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# curl -s https://get.nextflow.io | bash && mv nextflow /usr/local/bin/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Install uv from the GitHub Container Registry
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# create user/group
+RUN groupadd -g $APP_GID appgroup && \
+    useradd -m -u $APP_UID -g $APP_GID appuser
+USER appuser
+
+ENV APP_DIR=/app/app \
+    ASSETS_DIR=/app/assets \
+    LOCAL_BIN=/home/appuser/.local/bin \
+    NEXTFLOW_DIR=/home/appuser/.local/bin/nextflow \
+    VECOLI_DIR=/home/appuser/vEcoli
+
+RUN mkdir -p $LOCAL_BIN \
+    && curl -L https://www.nextflow.io/releases/v25.04.6/nextflow \
+         -o $NEXTFLOW_DIR \
+    && chmod +x $NEXTFLOW_DIR \
+    && git clone https://github.com/CovertLab/vEcoli.git $VECOLI_DIR \
+    && chown -R appuser:appgroup /home/appuser
+
+ENV PATH="$PATH:$LOCAL_BIN"
+
+# Set the working directory
+WORKDIR /app
+
+# Copy only the necessary files
+COPY uv.lock /app/uv.lock
+COPY pyproject.toml /app/pyproject.toml
+
+# Install dependencies
+RUN uv sync --frozen --no-install-project
+
+# Copy the rest of the application code
+COPY . /app
+
+# Sync the project
+RUN uv sync --frozen
+
+# Declare the volume for local cache storage
+VOLUME ["/app/scratch"]
+
+# Expose the port FastAPI will run on
+EXPOSE 8000
+
+# Command to run the application
+CMD ["uv", "run", "uvicorn", "sms_api.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

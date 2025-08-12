@@ -1,10 +1,10 @@
 services:
-  gateway:
+  api:
     platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile-api
-    image: ghcr.io/biosimulations/sms-api:0.2.8
+    image: sms-api:latest
     container_name: gateway
     restart: unless-stopped
     ports:
