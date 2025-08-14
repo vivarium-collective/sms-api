@@ -36,7 +36,9 @@ test: ## Test the code with pytest
 logtest: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
 	@uv run python -m pytest \
+		-ras \
 		--cov \
+		--cache-clear \
 		--cov-config=pyproject.toml \
 		--cov-report=xml \
 		--log-file=tests/.pytest.log \

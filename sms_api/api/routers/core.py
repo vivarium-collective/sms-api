@@ -418,9 +418,9 @@ async def get_simulation_worker_events(
 async def download_analysis_file(
     background_tasks: BackgroundTasks,
     experiment_id: str = Query(
-        example="sms_single", description="Experiment ID for the simulation (from config.json)."
+        examples=["sms_single"], description="Experiment ID for the simulation (from config.json)."
     ),
-    filename: str = Query(example="ptools_rna.txt"),
+    filename: str = Query(examples=["ptools_rna.txt"]),
 ) -> FileResponse:
     try:
         service = AnalysisService()
@@ -441,9 +441,9 @@ async def download_analysis_file(
 )
 async def download_chunk(
     experiment_id: str = Query(
-        example="sms_single", description="Experiment ID for the simulation (from config.json)."
+        examples=["sms_single"], description="Experiment ID for the simulation (from config.json)."
     ),
-    chunk_id: int = Query(example=800),
+    chunk_id: int = Query(examples=[800]),
 ) -> FileResponse:
     try:
         service = ParquetService()
@@ -467,7 +467,7 @@ async def download_parquet(
     background_tasks: BackgroundTasks,
     # chunks: Chunks,
     experiment_id: str = Query(
-        example="sms_single", description="Experiment ID for the simulation (from config.json)."
+        examples=["sms_single"], description="Experiment ID for the simulation (from config.json)."
     ),
 ) -> FileResponse:
     try:
