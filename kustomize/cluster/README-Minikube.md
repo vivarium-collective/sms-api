@@ -95,8 +95,6 @@ cmctl check api
 ```aiignore
 
 ```
-
-````bash
 # Configure minikube networking for local development
 
 ### set up DNS entries for ingress routing
@@ -126,6 +124,12 @@ kubectl kustomize overlays/sms-api-local | kubectl apply --dry-run=client --vali
 
 ```bash
 kubectl kustomize overlays/sms-api-local | kubectl apply -f -
+```
+
+OR for production:
+
+```bash
+kubectl kustomize overlays/sms-api-rke | kubectl apply -f -
 ```
 
 ### create sealed secrets (see [scripts/README.md](scripts/README.md))

@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     app_dir: str = f"{REPO_ROOT}/app"
     assets_dir: str = f"{REPO_ROOT}/assets"
     marimo_api_server: str = ""
+    hpc_user: str = ""
+    hpc_group: str = ""
+    deployment: str = "prod"
 
 
 @lru_cache

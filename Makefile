@@ -1,6 +1,6 @@
 LOCAL_GATEWAY_PORT=8888
 
-LATEST_COMMIT_PATH=assets/latest_commit.txt
+LATEST_COMMIT_PATH=assets/simulation/model/latest_commit.txt
 
 
 .PHONY: install
@@ -205,15 +205,23 @@ transfer-wip:
 	cp app/ui/wip_$$module.py app/ui/$$module.py; \
 	cp app/ui/layouts/wip_$$module.grid.json app/ui/layouts/$$module.grid.json
 
-.PHONY: push-api
-push-api:
-	@[ -z "$(tag)" ] && tag=0.2.8 || tag=$(tag); \
+.PHONY: deploy-api
+deploy-api:
+	@[ -z "$(tag)" ] && tag=0.2.9-dev || tag=$(tag); \
 	./kustomize/scripts/build_and_push.sh $$tag
 
 .PHONY: exec-api
 exec-api:
 	@[ -z "$(tag)" ] && tag=0.2.8 || tag=$(tag); \
 	docker run --rm --name sms -p 8000:8000 --platform linux/amd64 --entrypoint /usr/bin/env -it ghcr.io/biosimulations/sms-api:$$tag bash
+
+.PHONY: run-api
+run-api:
+	@docker run --rm --name api -p 8000:8000 --platform linux/amd64 --entrypoint /usr/bin/env -it sms-api:latest bash
+
+.PHONY: api
+api:
+	@docker rmi -f sms-api:latest && docker compose build api && make run-api
 
 .DEFAULT_GOAL := help
 

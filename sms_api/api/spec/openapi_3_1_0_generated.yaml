@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.8
+  version: 0.2.9-dev
 paths:
   /core/simulator/latest:
     get:
@@ -369,12 +369,6 @@ paths:
           title: Experiment Id
         description: Experiment ID for the simulation (from config.json).
         example: sms_single
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Chunks'
       responses:
         '200':
           description: Successful Response
@@ -478,15 +472,6 @@ components:
       - parca_dataset_id
       - variant_config
       title: AntibioticSimulationRequest
-    Chunks:
-      properties:
-        ids:
-          items:
-            type: integer
-          type: array
-          title: Ids
-      type: object
-      title: Chunks
     EcoliExperiment:
       properties:
         experiment_id:

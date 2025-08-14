@@ -14,12 +14,21 @@ class AnalysisService:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
 
-    def get_file_path(self, experiment_id: str, filename: str) -> Path:
+    def get_file_path(self, experiment_id: str, filename: str, remote: bool = True) -> Path:
         """Fetches the filepath of a specified simulation analysis output as defined by simulation config.json"""
         if "." not in filename:
             raise ValueError("You must pass the filename including extension")
 
-        outdir = get_simulation_outdir(experiment_id)
+        if int(self.settings.dev_mode):
+            remote = False
+
+        outdir = get_simulation_outdir(
+            experiment_id=experiment_id,
+            remote=remote,
+            group=self.settings.hpc_group,
+            user=self.settings.hpc_user,
+            deployment=self.settings.deployment if len(self.settings.deployment) else "prod",
+        )
         analysis_dir = outdir / "analyses"
         for root, _, filenames in analysis_dir.walk():
             for f in filenames:
