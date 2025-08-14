@@ -1,6 +1,6 @@
 LOCAL_GATEWAY_PORT=8888
 
-LATEST_COMMIT_PATH=assets/simulation/latest_commit.txt
+LATEST_COMMIT_PATH=assets/simulation/model/latest_commit.txt
 
 
 .PHONY: install
@@ -207,7 +207,7 @@ transfer-wip:
 
 .PHONY: deploy-api
 deploy-api:
-	@[ -z "$(tag)" ] && tag=0.2.8 || tag=$(tag); \
+	@[ -z "$(tag)" ] && tag=0.2.9-dev || tag=$(tag); \
 	./kustomize/scripts/build_and_push.sh $$tag
 
 .PHONY: exec-api

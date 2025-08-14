@@ -7,8 +7,32 @@ REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
 PINNED_OUTDIR = REPO_DIR / "out" / "sms_single"
 
 
-def get_simulation_outdir(experiment_id: str) -> Path:
-    outdir = REPO_DIR / "out" / experiment_id
+def get_pinned_outdir() -> Path:
+    return get_remote_simulation_outdir(experiment_id="sms_single")
+
+
+def get_remote_simulation_outdir(
+    experiment_id: str, group: str | None = None, user: str | None = None, deployment: str | None = None
+) -> Path:
+    return Path(f"/home/{group or 'FCAM'}/{user or 'svc_vivarium'}/{deployment or 'prod'}/sims/{experiment_id}")
+
+
+def get_local_simulation_outdir(experiment_id: str) -> Path:
+    return REPO_DIR / "out" / experiment_id
+
+
+def get_simulation_outdir(experiment_id: str, remote: bool = True, **kwargs: str) -> Path:
+    """
+    :param experiment_id: Simulation experiment id.
+    :param remote: If ``True``, use the base path of `/home/<GROUP>/<USER>`. Defaults to ``True``.
+    :param kwargs: ``"group", "user", "deployment"``
+    :return: Path to the simulation outdir.
+    """
+    outdir = (
+        get_remote_simulation_outdir(experiment_id=experiment_id, **kwargs)
+        if remote
+        else get_local_simulation_outdir(experiment_id=experiment_id)
+    )
     if not outdir.exists():
         raise FileNotFoundError(f"{outdir} does not exist. Try running a simulation first.")
     return outdir

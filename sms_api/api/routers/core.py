@@ -35,7 +35,6 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-import pandas as pd
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
@@ -427,20 +426,6 @@ async def download_analysis_file(
         service = AnalysisService()
         filepath = service.get_file_path(experiment_id, filename)
         mimetype, _ = mimetypes.guess_type(filepath)
-        if filename.endswith(".txt") or filename.endswith(".tsv"):
-            df = pd.read_csv(filepath, sep="\t", index_col=0)
-            cols = []
-            for i, col in enumerate(df.columns):
-                if i == 0:
-                    cols.append(f"${col}")
-                else:
-                    cols.append(col)
-            df.columns = cols
-            tmp = tempfile.TemporaryDirectory()
-            background_tasks.add_task(tmp.cleanup)
-            fp = Path(tmp.name) / filename
-            df.to_csv(fp, sep="\t")
-            return FileResponse(path=fp, media_type=mimetype or "application/octet-stream", filename=fp.name)
         return FileResponse(path=filepath, media_type=mimetype or "application/octet-stream", filename=filepath.name)
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
