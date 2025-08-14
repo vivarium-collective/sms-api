@@ -28,7 +28,7 @@ async def fastapi_app() -> FastAPI:
 @pytest_asyncio.fixture(scope="session")
 async def latest_commit_hash() -> str:
     assets_dir = Path(get_settings().assets_dir)
-    latest_commit_path = assets_dir / "latest_commit.txt"
+    latest_commit_path = assets_dir / "simulation" / "latest_commit.txt"
     if not os.path.exists(latest_commit_path):
         await write_latest_commit()
     with open(latest_commit_path) as fp:
