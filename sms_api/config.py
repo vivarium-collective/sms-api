@@ -45,6 +45,8 @@ class Settings(BaseSettings):
 
     sqlite_dbfile: str = "./sms.db"  # SQLite database URL for local development
 
+    is_local_hpc: bool = False
+
     slurm_submit_host: str = ""
     slurm_submit_user: str = ""  # "svc_vivarium"
     slurm_submit_key_path: str = ""  # "/Users/jimschaff/.ssh/id_rsa"

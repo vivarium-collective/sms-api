@@ -42,9 +42,7 @@ ENV APP_DIR=/app/app \
 RUN mkdir -p $LOCAL_BIN \
     && curl -L https://www.nextflow.io/releases/v25.04.6/nextflow \
          -o $NEXTFLOW_DIR \
-    && chmod +x $NEXTFLOW_DIR \
-    && git clone https://github.com/CovertLab/vEcoli.git $VECOLI_DIR \
-    && chown -R appuser:appgroup /home/appuser
+    && chmod +x $NEXTFLOW_DIR
 
 ENV PATH="$PATH:$LOCAL_BIN"
 
@@ -55,9 +53,13 @@ WORKDIR /app
 COPY sms-api/uv.lock /app/uv.lock
 COPY sms-api/pyproject.toml /app/pyproject.toml
 COPY sms-api/README.md /app/README.md
+COPY vEcoli /app/vEcoli
 
-# Install dependencies
+# Install dependencies (for sms-api)
 RUN uv sync --frozen --no-install-project
+
+# in separate virtual environement, using uv, install vEcoli dependencies
+RUN uv sync --frozen --no-install-project --project vEcoli ???
 
 # Copy the rest of the application code
 COPY . /app

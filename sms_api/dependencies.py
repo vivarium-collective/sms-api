@@ -6,7 +6,7 @@ import nats
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.hpc.slurm_service import SlurmService, SlurmServiceLocalHPC, SlurmServiceRemoteHPC
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 from sms_api.log_config import setup_logging
@@ -38,6 +38,21 @@ def set_db_engine(engine: AsyncEngine | None) -> None:
 def get_db_engine() -> AsyncEngine | None:
     global global_db_engine
     return global_db_engine
+
+
+# ------- slurm service (standalone or pytest) ------
+
+global_slurm_service: SlurmService | None = None
+
+
+def set_slurm_service(slurm_service: SlurmService | None) -> None:
+    global global_slurm_service
+    global_slurm_service = slurm_service
+
+
+def get_slurm_service() -> SlurmService | None:
+    global global_slurm_service
+    return global_slurm_service
 
 
 # ------- simulation database service (standalone or pytest) ------
@@ -113,17 +128,33 @@ async def init_standalone(enable_ssl: bool = True) -> None:
     set_database_service(database)
 
     settings = get_settings()
-    ssh_service = SSHService(
-        hostname=settings.slurm_submit_host,
-        username=settings.slurm_submit_user,
-        key_path=Path(settings.slurm_submit_key_path),
-        known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-    )
-    slurm_service = SlurmService(ssh_service=ssh_service)
 
-    nats_client = await nats.connect(_settings.nats_url)
-    job_scheduler = JobScheduler(nats_client=nats_client, database_service=database, slurm_service=slurm_service)
-    set_job_scheduler(job_scheduler)
+    if settings.is_local_hpc:
+        logger.info("Using local HPC simulation service")
+        set_slurm_service(SlurmServiceLocalHPC())
+        nats_client = None
+        slurm_service = get_slurm_service()
+        job_scheduler = JobScheduler(nats_client=nats_client, database_service=database, slurm_service=slurm_service)
+        set_job_scheduler(job_scheduler)
+    else:
+        logger.info("Using remote HPC simulation service")
+        # verify that all required settings are set
+        if not settings.slurm_submit_host or not settings.slurm_submit_user or not settings.slurm_submit_key_path:
+            raise HTTPException(
+                status_code=500,
+                detail="Slurm submit host, user, and key path must be set in the configuration",
+            )
+        ssh_service = SSHService(
+            hostname=settings.slurm_submit_host,
+            username=settings.slurm_submit_user,
+            key_path=Path(settings.slurm_submit_key_path),
+            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
+        )
+        set_slurm_service(SlurmServiceRemoteHPC(ssh_service=ssh_service))
+
+        nats_client = await nats.connect(_settings.nats_url)
+        job_scheduler = JobScheduler(nats_client=nats_client, database_service=database, slurm_service=slurm_service)
+        set_job_scheduler(job_scheduler)
 
 
 async def shutdown_standalone() -> None:

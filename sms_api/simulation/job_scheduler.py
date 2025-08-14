@@ -2,7 +2,6 @@ import asyncio
 import logging
 from typing import Any
 
-import nats
 from async_lru import alru_cache
 from nats.aio.client import Client as NATSClient
 from nats.aio.msg import Msg
@@ -18,11 +17,11 @@ logger = logging.getLogger(__name__)
 class JobScheduler:
     database_service: DatabaseService
     slurm_service: SlurmService
-    nats_client: NATSClient
+    nats_client: NATSClient | None = None
     _polling_task: asyncio.Task[None] | None = None
     _stop_event: asyncio.Event
 
-    def __init__(self, nats_client: NATSClient, database_service: DatabaseService, slurm_service: SlurmService):
+    def __init__(self, nats_client: NATSClient | None, database_service: DatabaseService, slurm_service: SlurmService):
         self.nats_client = nats_client
         self.database_service = database_service
         self.slurm_service = slurm_service
@@ -33,6 +32,13 @@ class JobScheduler:
         return await self.database_service.get_hpcrun_id_by_correlation_id(correlation_id=correlation_id)
 
     async def subscribe(self) -> None:
+        if get_settings().is_local_hpc:
+            logger.info("not subscribing to NATS messages, NATS client is not initialized")
+            return
+
+        if self.nats_client is None:
+            raise RuntimeError("NATS is not available. Cannot submit EcoliSimulation job.")
+
         subject = get_settings().nats_worker_event_subject
         logger.info(f"Subscribing to NATS messages for subject '{subject}'")
 
@@ -62,8 +68,6 @@ class JobScheduler:
             logger.error("NATS client is not connected.")
 
     async def start_polling(self, interval_seconds: int = 30) -> None:
-        if self.nats_client is None:
-            self.nats_client = await nats.connect(self.nats_url)
         if self._polling_task is not None and not self._polling_task.done():
             logger.warning("Polling task already running.")
             return
@@ -115,4 +119,6 @@ class JobScheduler:
     async def close(self) -> None:
         await self.stop_polling()
         logger.debug("Closing NATS client connection")
-        await self.nats_client.close()
+
+        if self.nats_client is not None:
+            await self.nats_client.close()
