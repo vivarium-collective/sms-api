@@ -424,7 +424,7 @@ async def download_analysis_file(
 ) -> FileResponse:
     try:
         service = AnalysisService()
-        filepath = service.get_file_path(experiment_id, filename)
+        filepath = service.get_file_path(experiment_id, filename, remote=True)
         mimetype, _ = mimetypes.guess_type(filepath)
         return FileResponse(path=filepath, media_type=mimetype or "application/octet-stream", filename=filepath.name)
     except Exception as e:

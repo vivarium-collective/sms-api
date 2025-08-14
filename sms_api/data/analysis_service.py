@@ -19,6 +19,9 @@ class AnalysisService:
         if "." not in filename:
             raise ValueError("You must pass the filename including extension")
 
+        if int(self.settings.dev_mode):
+            remote = False
+
         outdir = get_simulation_outdir(
             experiment_id=experiment_id,
             remote=remote,
