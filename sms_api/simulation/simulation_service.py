@@ -12,6 +12,7 @@ from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import get_settings
+from sms_api.dependencies import get_slurm_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
     VECOLI_REPO_NAME,
@@ -33,7 +34,6 @@ class SimulationService(ABC):
     @abstractmethod
     async def get_latest_commit_hash(
         self,
-        ssh_service: SSHService | None = None,
         git_repo_url: str = "https://github.com/CovertLab/vEcoli",
         git_branch: str = "master",
     ) -> str:
@@ -83,7 +83,6 @@ class SimulationServiceHpc(SimulationService):
     @override
     async def get_latest_commit_hash(
         self,
-        ssh_service: SSHService | None = None,
         git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
         git_branch: str = "messages",
     ) -> str:
@@ -91,6 +90,10 @@ class SimulationServiceHpc(SimulationService):
         :rtype: `str`
         :return: The last 7 characters of the latest commit hash.
         """
+        ssh_service = get_ssh_service()
+        if ssh_service is None:
+            raise RuntimeError("SSHService is not available. Cannot get latest commit hash.")
+
         svc = ssh_service or get_ssh_service()
         return_code, stdout, stderr = await svc.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
         if return_code != 0:
@@ -133,13 +136,7 @@ class SimulationServiceHpc(SimulationService):
     @override
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
         settings = get_settings()
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        slurm_service = SlurmService(ssh_service=ssh_service)
+        slurm_service = get_slurm_service()
 
         random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
         slurm_job_name = f"build-image-{simulator_version.git_commit_hash}-{random_suffix}"
