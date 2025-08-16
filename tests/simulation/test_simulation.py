@@ -5,6 +5,7 @@ import time
 
 import pytest
 
+from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
@@ -18,7 +19,10 @@ repo_url = "https://github.com/vivarium-collective/vEcoli"
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_simulate(
-    simulation_service_slurm: SimulationServiceHpc, database_service: DatabaseServiceSQL, latest_commit_hash: str
+    slurm_service_remote: SlurmService,
+    simulation_service_remote: SimulationServiceHpc,
+    database_service: DatabaseServiceSQL,
+    latest_commit_hash: str,
 ) -> None:
     # check if the latest commit is already installed
     simulator: SimulatorVersion | None = None
@@ -38,17 +42,17 @@ async def test_simulate(
         )
 
     # clone the repository if needed
-    await simulation_service_slurm.clone_repository_if_needed(
+    await simulation_service_remote.clone_repository_if_needed(
         git_commit_hash=simulator.git_commit_hash, git_repo_url=simulator.git_repo_url, git_branch=simulator.git_branch
     )
 
     # build the image
-    build_job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
+    build_job_id = await simulation_service_remote.submit_build_image_job(simulator_version=simulator)
     assert build_job_id is not None
 
     start_time = time.time()
     while start_time + 60 > time.time():
-        slurm_job_build = await simulation_service_slurm.get_slurm_job_status(slurmjobid=build_job_id)
+        slurm_job_build = await slurm_service_remote.get_job_status(slurmjobid=build_job_id)
         if slurm_job_build is not None and slurm_job_build.is_done():
             break
         await asyncio.sleep(5)
@@ -62,12 +66,12 @@ async def test_simulate(
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     # run parca
-    parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
+    parca_slurmjobid = await simulation_service_remote.submit_parca_job(parca_dataset=parca_dataset)
     assert parca_slurmjobid is not None
 
     start_time = time.time()
     while start_time + 60 > time.time():
-        slurm_job_parca = await simulation_service_slurm.get_slurm_job_status(slurmjobid=parca_slurmjobid)
+        slurm_job_parca = await slurm_service_remote.get_job_status(slurmjobid=parca_slurmjobid)
         if slurm_job_parca is not None and slurm_job_parca.is_done():
             break
         await asyncio.sleep(5)
@@ -86,7 +90,7 @@ async def test_simulate(
 
     random_string = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311 doesn't need to be secure
     correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string)
-    sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
+    sim_slurmjobid = await simulation_service_remote.submit_ecoli_simulation_job(
         ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
     )
     assert sim_slurmjobid is not None
@@ -104,7 +108,7 @@ async def test_simulate(
 
     start_time = time.time()
     while start_time + 60 > time.time():
-        sim_slurmjob = await simulation_service_slurm.get_slurm_job_status(slurmjobid=sim_slurmjobid)
+        sim_slurmjob = await slurm_service_remote.get_job_status(slurmjobid=sim_slurmjobid)
         if sim_slurmjob is not None and sim_slurmjob.is_done():
             break
         await asyncio.sleep(5)

@@ -7,7 +7,6 @@ from textwrap import dedent
 
 from typing_extensions import override
 
-from sms_api.common.hpc.models import SlurmJob
 from sms_api.config import get_settings
 from sms_api.dependencies import get_slurm_service
 from sms_api.simulation.database_service import DatabaseService
@@ -203,23 +202,6 @@ class SimulationServiceLocalHPC(SimulationService):
                 local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid
-
-    @override
-    async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
-        slurm_service = get_slurm_service()
-        if slurm_service is None:
-            raise RuntimeError("SlurmService is not available. Cannot get Slurm job status.")
-
-        job_ids: list[SlurmJob] = await slurm_service.get_job_status_squeue(job_ids=[slurmjobid])
-        if len(job_ids) == 0:
-            job_ids = await slurm_service.get_job_status_sacct(job_ids=[slurmjobid])
-            if len(job_ids) == 0:
-                logger.warning(f"No job found with ID {slurmjobid} in both squeue and sacct.")
-                return None
-        if len(job_ids) == 1:
-            return job_ids[0]
-        else:
-            raise RuntimeError(f"Multiple jobs found with ID {slurmjobid}: {job_ids}")
 
     @override
     async def close(self) -> None:

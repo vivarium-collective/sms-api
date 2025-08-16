@@ -8,11 +8,9 @@ from textwrap import dedent
 
 from typing_extensions import override
 
-from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import get_settings
-from sms_api.dependencies import get_slurm_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
     VECOLI_REPO_NAME,
@@ -54,10 +52,6 @@ class SimulationService(ABC):
         pass
 
     @abstractmethod
-    async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
-        pass
-
-    @abstractmethod
     async def clone_repository_if_needed(
         self,
         git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
@@ -79,6 +73,10 @@ class SimulationService(ABC):
 
 class SimulationServiceHpc(SimulationService):
     _latest_commit_hash: str | None = None
+    slurm_service: SlurmService
+
+    def __init__(self, slurm_service: SlurmService) -> None:
+        self.slurm_service = slurm_service
 
     @override
     async def get_latest_commit_hash(
@@ -136,7 +134,6 @@ class SimulationServiceHpc(SimulationService):
     @override
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
         settings = get_settings()
-        slurm_service = get_slurm_service()
 
         random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
         slurm_job_name = f"build-image-{simulator_version.git_commit_hash}-{random_suffix}"
@@ -190,7 +187,7 @@ class SimulationServiceHpc(SimulationService):
                 f.write(script_content)
 
             # submit the build script to slurm
-            slurm_jobid = await slurm_service.submit_job(
+            slurm_jobid = await self.slurm_service.submit_job(
                 local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid
@@ -198,13 +195,7 @@ class SimulationServiceHpc(SimulationService):
     @override
     async def submit_parca_job(self, parca_dataset: ParcaDataset) -> int:
         settings = get_settings()
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        slurm_service = SlurmService(ssh_service=ssh_service)
+
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
 
         random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
@@ -263,7 +254,7 @@ class SimulationServiceHpc(SimulationService):
                 f.write(script_content)
 
             # submit the build script to slurm
-            slurm_jobid = await slurm_service.submit_job(
+            slurm_jobid = await self.slurm_service.submit_job(
                 local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid
@@ -273,14 +264,6 @@ class SimulationServiceHpc(SimulationService):
         self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
         settings = get_settings()
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        if database_service is None:
-            raise RuntimeError("DatabaseService is not available. Cannot submit EcoliSimulation job.")
 
         if ecoli_simulation.sim_request is None:
             raise ValueError("EcoliSimulation must have a sim_request set to submit a job.")
@@ -291,7 +274,6 @@ class SimulationServiceHpc(SimulationService):
         if parca_dataset is None:
             raise ValueError(f"ParcaDataset with ID {ecoli_simulation.sim_request.parca_dataset_id} not found.")
 
-        slurm_service = SlurmService(ssh_service=ssh_service)
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
 
         random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
@@ -406,31 +388,10 @@ class SimulationServiceHpc(SimulationService):
                 f.write(script_content)
 
             # submit the build script to slurm
-            slurm_jobid = await slurm_service.submit_job(
+            slurm_jobid = await self.slurm_service.submit_job(
                 local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid
-
-    @override
-    async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
-        settings = get_settings()
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        slurm_service = SlurmService(ssh_service=ssh_service)
-        job_ids: list[SlurmJob] = await slurm_service.get_job_status_squeue(job_ids=[slurmjobid])
-        if len(job_ids) == 0:
-            job_ids = await slurm_service.get_job_status_sacct(job_ids=[slurmjobid])
-            if len(job_ids) == 0:
-                logger.warning(f"No job found with ID {slurmjobid} in both squeue and sacct.")
-                return None
-        if len(job_ids) == 1:
-            return job_ids[0]
-        else:
-            raise RuntimeError(f"Multiple jobs found with ID {slurmjobid}: {job_ids}")
 
     @override
     async def close(self) -> None:

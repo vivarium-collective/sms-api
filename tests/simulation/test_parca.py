@@ -3,6 +3,7 @@ import time
 
 import pytest
 
+from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import ParcaDatasetRequest, SimulatorVersion
@@ -15,7 +16,10 @@ repo_url = "https://github.com/vivarium-collective/vEcoli"
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_parca(
-    simulation_service_slurm: SimulationServiceHpc, database_service: DatabaseServiceSQL, latest_commit_hash: str
+    slurm_service_remote: SlurmService,
+    simulation_service_remote: SimulationServiceHpc,
+    database_service: DatabaseServiceSQL,
+    latest_commit_hash: str,
 ) -> None:
     # check if the latest commit is already installed
     simulator: SimulatorVersion | None = None
@@ -35,17 +39,17 @@ async def test_parca(
         )
 
     # clone the repository if needed
-    await simulation_service_slurm.clone_repository_if_needed(
+    await simulation_service_remote.clone_repository_if_needed(
         git_commit_hash=simulator.git_commit_hash, git_repo_url=simulator.git_repo_url, git_branch=simulator.git_branch
     )
 
     # build the image
-    job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
+    job_id = await simulation_service_remote.submit_build_image_job(simulator_version=simulator)
     assert job_id is not None
 
     start_time = time.time()
     while start_time + 60 > time.time():
-        slurm_job_build = await simulation_service_slurm.get_slurm_job_status(slurmjobid=job_id)
+        slurm_job_build = await slurm_service_remote.get_job_status(slurmjobid=job_id)
         if slurm_job_build is not None and slurm_job_build.is_done():
             break
         await asyncio.sleep(5)
@@ -59,12 +63,12 @@ async def test_parca(
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     # run parca
-    job_id = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
+    job_id = await simulation_service_remote.submit_parca_job(parca_dataset=parca_dataset)
     assert job_id is not None
 
     start_time = time.time()
     while start_time + 60 > time.time():
-        slurm_job_parca = await simulation_service_slurm.get_slurm_job_status(slurmjobid=job_id)
+        slurm_job_parca = await slurm_service_remote.get_job_status(slurmjobid=job_id)
         if slurm_job_parca is not None and slurm_job_parca.is_done():
             break
         await asyncio.sleep(5)

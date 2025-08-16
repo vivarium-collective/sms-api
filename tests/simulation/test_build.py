@@ -3,6 +3,7 @@ import time
 
 import pytest
 
+from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
@@ -24,7 +25,10 @@ async def test_latest_repo_installed(ssh_service: SSHService, latest_commit_hash
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_build(
-    simulation_service_slurm: SimulationServiceHpc, database_service: DatabaseServiceSQL, latest_commit_hash: str
+    slurm_service_remote: SlurmService,
+    simulation_service_remote: SimulationServiceHpc,
+    database_service: DatabaseServiceSQL,
+    latest_commit_hash: str,
 ) -> None:
     # insert the latest commit into the database
     simulator = await database_service.insert_simulator(
@@ -32,17 +36,17 @@ async def test_build(
     )
 
     # clone the repository if needed
-    await simulation_service_slurm.clone_repository_if_needed(
+    await simulation_service_remote.clone_repository_if_needed(
         git_commit_hash=simulator.git_commit_hash, git_repo_url=simulator.git_repo_url, git_branch=simulator.git_branch
     )
 
     # build the image
-    job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
+    job_id = await simulation_service_remote.submit_build_image_job(simulator_version=simulator)
     assert job_id is not None
 
     start_time = time.time()
     while start_time + 60 > time.time():
-        slurm_job = await simulation_service_slurm.get_slurm_job_status(slurmjobid=job_id)
+        slurm_job = await slurm_service_remote.get_job_status(slurmjobid=job_id)
         if slurm_job is not None and slurm_job.is_done():
             break
         await asyncio.sleep(5)

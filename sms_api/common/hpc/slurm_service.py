@@ -20,6 +20,18 @@ class SlurmService(ABC):
     async def get_job_status_sacct(self, job_ids: list[int] | None = None) -> list[SlurmJob]:
         pass
 
+    async def get_job_status(self, slurmjobid: int) -> SlurmJob | None:
+        job_ids: list[SlurmJob] = await self.get_job_status_squeue(job_ids=[slurmjobid])
+        if len(job_ids) == 0:
+            job_ids = await self.get_job_status_sacct(job_ids=[slurmjobid])
+            if len(job_ids) == 0:
+                logger.warning(f"No job found with ID {slurmjobid} in both squeue and sacct.")
+                return None
+        if len(job_ids) == 1:
+            return job_ids[0]
+        else:
+            raise RuntimeError(f"Multiple jobs found with ID {slurmjobid}: {job_ids}")
+
     @abstractmethod
     async def submit_job(self, local_sbatch_file: Path, remote_sbatch_file: Path) -> int:
         pass

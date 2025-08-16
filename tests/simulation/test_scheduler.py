@@ -69,10 +69,10 @@ async def test_messaging(
     nats_subscriber_client: NATSClient,
     nats_producer_client: NATSClient,
     database_service: DatabaseServiceSQL,
-    slurm_service: SlurmService,
+    slurm_service_remote: SlurmService,
 ) -> None:
     scheduler = JobScheduler(
-        nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service
+        nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service_remote
     )
     await scheduler.subscribe()
 
@@ -107,17 +107,17 @@ async def test_messaging(
 async def test_job_scheduler(
     nats_subscriber_client: NATSClient,
     database_service: DatabaseServiceSQL,
-    slurm_service: SlurmService,
+    slurm_service_remote: SlurmService,
     slurm_template_hello_10s: str,
 ) -> None:
     scheduler = JobScheduler(
-        nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service
+        nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service_remote
     )
     await scheduler.subscribe()
     await scheduler.start_polling(interval_seconds=1)
 
     # Submit a toy slurm job which takes 10 seconds to run
-    _all_jobs_before_submit: list[SlurmJob] = await slurm_service.get_job_status_squeue()
+    _all_jobs_before_submit: list[SlurmJob] = await slurm_service_remote.get_job_status_squeue()
     settings = get_settings()
     remote_path = Path(settings.slurm_log_base_path)
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -128,7 +128,7 @@ async def test_job_scheduler(
             f.write(slurm_template_hello_10s)
 
         remote_sbatch_file = remote_path / local_sbatch_file.name
-        job_id: int = await slurm_service.submit_job(
+        job_id: int = await slurm_service_remote.submit_job(
             local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
         )
 

@@ -1,7 +1,5 @@
 from typing import override
 
-from sms_api.common.hpc.models import SlurmJob
-from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import EcoliSimulation, ParcaDataset, ParcaDatasetRequest, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationService
@@ -11,7 +9,6 @@ class ConcreteSimulationService(SimulationService):
     @override
     async def get_latest_commit_hash(
         self,
-        ssh_service: SSHService | None = None,
         git_repo_url: str = "https://github.com/CovertLab/vEcoli",
         git_branch: str = "master",
     ) -> str:
@@ -29,10 +26,6 @@ class ConcreteSimulationService(SimulationService):
     async def submit_ecoli_simulation_job(
         self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
-        raise NotImplementedError
-
-    @override
-    async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
         raise NotImplementedError
 
     @override

@@ -24,7 +24,7 @@ async def ssh_service() -> AsyncGenerator[SSHService]:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def slurm_service(ssh_service: SSHService) -> AsyncGenerator[SlurmService]:
+async def slurm_service_remote(ssh_service: SSHService) -> AsyncGenerator[SlurmService]:
     # saved_ssh_service = get_ssh_service()
     slurm_service = SlurmServiceRemoteHPC(ssh_service=ssh_service)
     yield slurm_service

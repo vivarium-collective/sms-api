@@ -24,10 +24,10 @@ from tests.fixtures.simulation_fixtures import (  # noqa: F401
     expected_parca_database_id,
     simulation_service_mock_clone_and_build,
     simulation_service_mock_parca,
-    simulation_service_slurm,
+    simulation_service_remote,
 )
 from tests.fixtures.slurm_fixtures import (  # noqa: F401
-    slurm_service,
+    slurm_service_remote,
     slurm_template_hello_1s,
     slurm_template_hello_10s,
     slurm_template_hello_TEMPLATE,

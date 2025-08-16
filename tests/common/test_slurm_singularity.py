@@ -7,6 +7,7 @@ import pytest
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 
 slurm_broker_py_contents = dedent("""
@@ -138,7 +139,7 @@ echo "Hello, world! to stdout"
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_singularity_slurm(slurm_service: SlurmService) -> None:
+async def test_singularity_slurm(ssh_service: SSHService, slurm_service_remote: SlurmService) -> None:
     with tempfile.TemporaryDirectory() as tmpdir_str:
         tmpdir = Path(tmpdir_str)
 
@@ -147,8 +148,8 @@ async def test_singularity_slurm(slurm_service: SlurmService) -> None:
         with open(singularity_def_file, "w") as f:
             f.write(singularity_def_contents)
         # Build the singularity image remotely using ssh
-        await slurm_service.ssh_service.scp_upload(local_file=singularity_def_file, remote_path=Path("slurm_test.def"))
-        await slurm_service.ssh_service.run_command(
+        await ssh_service.scp_upload(local_file=singularity_def_file, remote_path=Path("slurm_test.def"))
+        await ssh_service.run_command(
             command="ssh mantis-039 singularity build --ignore-fakeroot-command --force slurm_test.sif slurm_test.def"
         )
 
@@ -158,31 +159,30 @@ async def test_singularity_slurm(slurm_service: SlurmService) -> None:
             f.write(sbatch_file_contents)
 
         # 2. Submit the job
-        slurmjobid = await slurm_service.submit_job(
+        slurmjobid = await slurm_service_remote.submit_job(
             local_sbatch_file=sbatch_file, remote_sbatch_file=Path("slurm_test.sbatch")
         )
         # sleep for a few seconds to allow the job to be scheduled
         # await asyncio.sleep(5)
 
         # 5. Wait for the job to finish
-        slurm_jobs: list[SlurmJob] = []
+        slurm_job: SlurmJob | None = None
         for _ in range(60):
-            slurm_jobs = await slurm_service.get_job_status(job_ids=[slurmjobid])
-            print(slurm_jobs)
-            if not slurm_jobs or slurm_jobs[0].job_state in ("COMPLETED", "FAILED", "CANCELLED"):
+            slurm_job = await slurm_service_remote.get_job_status(slurmjobid=slurmjobid)
+            print(slurm_job)
+            if not slurm_job or slurm_job.job_state in ("COMPLETED", "FAILED", "CANCELLED"):
                 break
             time.sleep(1)
 
-        assert slurm_jobs
-        assert len(slurm_jobs) == 1
-        assert slurm_jobs[0].job_id == slurmjobid
-        assert slurm_jobs[0].job_state == "COMPLETED", (
-            f"Job {slurmjobid} did not complete successfully, state: {slurm_jobs[0].job_state}"
+        assert slurm_job
+        assert slurm_job.job_id == slurmjobid
+        assert slurm_job.job_state == "COMPLETED", (
+            f"Job {slurmjobid} did not complete successfully, state: {slurm_job.job_state}"
         )
 
         # 6. Check the output
         output_file = tmpdir / "slurm_test.out"
-        await slurm_service.ssh_service.scp_download(local_file=output_file, remote_path=Path("slurm_test.out"))
+        await ssh_service.scp_download(local_file=output_file, remote_path=Path("slurm_test.out"))
 
         assert output_file.exists()
         with open(output_file) as f:
