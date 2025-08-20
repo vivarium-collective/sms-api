@@ -466,12 +466,14 @@ async def download_parquet(
     experiment_id: str = Query(
         example="sms_single", description="Experiment ID for the simulation (from config.json)."
     ),
+    filename: str | None = Query(default=None, description="Name you wish to assign to the downloaded zip file"),
 ) -> FileResponse:
     try:
         service = ParquetService()
         pq_dir = service.get_parquet_dir(experiment_id)
         buffer = get_zip_buffer(pq_dir)
-        filepath = write_zip_buffer(buffer, experiment_id, background_tasks)
+        fname = filename or experiment_id
+        filepath = write_zip_buffer(buffer, fname, background_tasks)
 
         return FileResponse(path=filepath, media_type="application/octet-stream", filename=filepath.name)
     except Exception as e:
@@ -495,8 +497,9 @@ async def download_example_file(
     if data_type not in allowed_data_types:
         raise Exception(f"data_type {data_type} is not supported.")
     try:
+        filename = f"example_simulation_{data_type}"
         if data_type == "timeseries":
-            return await download_parquet(background_tasks, experiment_id)
+            return await download_parquet(background_tasks, experiment_id, filename=filename)
 
         suffix = "analyses/variant=0/lineage_seed=0/generation=1/agent_id=0/plots"
         data_dir = get_simulation_outdir(experiment_id="sms_single")
@@ -504,7 +507,7 @@ async def download_example_file(
             data_dir = get_local_simulation_outdir(experiment_id="sms_single")
         data_dir = data_dir / suffix
         buffer = get_zip_buffer(data_dir)
-        filepath = write_zip_buffer(buffer, experiment_id, background_tasks)
+        filepath = write_zip_buffer(buffer, f"example_simulation_{data_type}", background_tasks)
 
         return FileResponse(path=filepath, media_type="application/octet-stream", filename=filepath.name)
 

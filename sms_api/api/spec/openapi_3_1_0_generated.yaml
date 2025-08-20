@@ -369,6 +369,16 @@ paths:
           title: Experiment Id
         description: Experiment ID for the simulation (from config.json).
         example: sms_single
+      - name: filename
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Name you wish to assign to the downloaded zip file
+          title: Filename
+        description: Name you wish to assign to the downloaded zip file
       responses:
         '200':
           description: Successful Response
