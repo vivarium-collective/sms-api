@@ -25,14 +25,14 @@ USER appuser
 WORKDIR /app
 
 # Copy only the necessary files
-COPY uv.lock /app/uv.lock
-COPY pyproject.toml /app/pyproject.toml
+COPY --chown=appuser:appgroup uv.lock /app/uv.lock
+COPY --chown=appuser:appgroup pyproject.toml /app/pyproject.toml
 
 # Install dependencies
 RUN uv sync --frozen --no-install-project
 
 # Copy the rest of the application code
-COPY . /app
+COPY --chown=appuser:appgroup . /app
 
 # Sync the project
 RUN uv sync --frozen
