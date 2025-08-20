@@ -189,8 +189,8 @@ generate-client:
 	@make spec
 	@uv run ./scripts/generate-api-client.sh
 
-.PHONY: py
-py:
+.PHONY: apy
+apy:
 	@uv run python -m asyncio
 
 .PHONY: set-wip
