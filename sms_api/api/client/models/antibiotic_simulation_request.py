@@ -11,9 +11,9 @@ from typing import cast
 from typing import Union
 
 if TYPE_CHECKING:
+    from ..models.antibiotic_simulation_request_antibiotics_config import AntibioticSimulationRequestAntibioticsConfig
     from ..models.simulator_version import SimulatorVersion
     from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
-    from ..models.antibiotic_simulation_request_antibiotics_config import AntibioticSimulationRequestAntibioticsConfig
 
 
 T = TypeVar("T", bound="AntibioticSimulationRequest")
@@ -36,11 +36,11 @@ class AntibioticSimulationRequest:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.simulator_version import SimulatorVersion
-        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.antibiotic_simulation_request_antibiotics_config import (
             AntibioticSimulationRequestAntibioticsConfig,
         )
+        from ..models.simulator_version import SimulatorVersion
+        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
 
         simulator = self.simulator.to_dict()
 
@@ -66,11 +66,11 @@ class AntibioticSimulationRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.simulator_version import SimulatorVersion
-        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.antibiotic_simulation_request_antibiotics_config import (
             AntibioticSimulationRequestAntibioticsConfig,
         )
+        from ..models.simulator_version import SimulatorVersion
+        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
 
         d = dict(src_dict)
         simulator = SimulatorVersion.from_dict(d.pop("simulator"))

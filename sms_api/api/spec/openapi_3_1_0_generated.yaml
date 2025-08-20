@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.9-dev
+  version: 0.2.11-dev
 paths:
   /core/simulator/latest:
     get:
@@ -369,6 +369,34 @@ paths:
           title: Experiment Id
         description: Experiment ID for the simulation (from config.json).
         example: sms_single
+      responses:
+        '200':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /core/download/example:
+    get:
+      tags:
+      - Data
+      summary: Download either parquet or analysis outputs as a zip file generated
+        by the example simulation.
+      operationId: download-example-files
+      parameters:
+      - name: data_type
+        in: query
+        required: false
+        schema:
+          type: string
+          description: Either 'analysis' or 'timeseries'
+          examples:
+          - analysis
+          default: analysis
+          title: Data Type
+        description: Either 'analysis' or 'timeseries'
       responses:
         '200':
           description: Successful Response
