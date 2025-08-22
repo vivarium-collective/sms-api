@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.11-dev
+  version: 0.2.12-dev
 paths:
   /core/simulator/latest:
     get:
@@ -416,7 +416,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /core/download/ptools:
+  /ptools/ptools/data:
     get:
       tags:
       - Data

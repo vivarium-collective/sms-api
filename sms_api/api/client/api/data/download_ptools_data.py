@@ -34,7 +34,7 @@ def _get_kwargs(
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/core/download/ptools",
+        "url": "/ptools/ptools/data",
         "params": params,
     }
 
