@@ -10,8 +10,22 @@ from .antibiotic_simulation_request_variant_config import AntibioticSimulationRe
 from .antibiotic_simulation_request_variant_config_additional_property import (
     AntibioticSimulationRequestVariantConfigAdditionalProperty,
 )
-from .biocyc_data_dto import BiocycDataDTO
-from .biocyc_data_dto_data import BiocycDataDTOData
+from .biocyc_component import BiocycComponent
+from .biocyc_component_pgdb import BiocycComponentPgdb
+from .biocyc_compound import BiocycCompound
+from .biocyc_compound_cml import BiocycCompoundCml
+from .biocyc_compound_parent import BiocycCompoundParent
+from .biocyc_compound_parent_additional_property import BiocycCompoundParentAdditionalProperty
+from .biocyc_data import BiocycData
+from .biocyc_data_data import BiocycDataData
+from .biocyc_data_request import BiocycDataRequest
+from .biocyc_reaction import BiocycReaction
+from .biocyc_reaction_ec_number import BiocycReactionEcNumber
+from .biocyc_reaction_enzymatic_reaction import BiocycReactionEnzymaticReaction
+from .biocyc_reaction_left_item import BiocycReactionLeftItem
+from .biocyc_reaction_parent import BiocycReactionParent
+from .biocyc_reaction_parent_additional_property import BiocycReactionParentAdditionalProperty
+from .biocyc_reaction_right_item import BiocycReactionRightItem
 from .check_health_health_get_response_check_health_health_get import CheckHealthHealthGetResponseCheckHealthHealthGet
 from .ecoli_experiment import EcoliExperiment
 from .ecoli_experiment_metadata import EcoliExperimentMetadata
@@ -42,8 +56,22 @@ __all__ = (
     "AntibioticSimulationRequestAntibioticsConfigAdditionalProperty",
     "AntibioticSimulationRequestVariantConfig",
     "AntibioticSimulationRequestVariantConfigAdditionalProperty",
-    "BiocycDataDTO",
-    "BiocycDataDTOData",
+    "BiocycComponent",
+    "BiocycComponentPgdb",
+    "BiocycCompound",
+    "BiocycCompoundCml",
+    "BiocycCompoundParent",
+    "BiocycCompoundParentAdditionalProperty",
+    "BiocycData",
+    "BiocycDataData",
+    "BiocycDataRequest",
+    "BiocycReaction",
+    "BiocycReactionEcNumber",
+    "BiocycReactionEnzymaticReaction",
+    "BiocycReactionLeftItem",
+    "BiocycReactionParent",
+    "BiocycReactionParentAdditionalProperty",
+    "BiocycReactionRightItem",
     "CheckHealthHealthGetResponseCheckHealthHealthGet",
     "EcoliExperiment",
     "EcoliExperimentMetadata",

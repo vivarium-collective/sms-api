@@ -166,9 +166,3 @@ class WorkerEventMessagePayload(BaseModel):
 
 class RequestedObservables(BaseModel):
     items: list[str] = Field(default_factory=list)
-
-
-class BiocycDataDTO(BaseModel):
-    obj_id: str
-    org_id: str
-    data: dict[str, Any]

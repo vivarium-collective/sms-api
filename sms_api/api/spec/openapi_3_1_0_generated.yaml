@@ -431,6 +431,7 @@ paths:
           description: Object ID of the component you wish to fetch
           title: Object Id
         description: Object ID of the component you wish to fetch
+        example: --TRANS-ACENAPHTHENE-12-DIOL
       - name: organism_id
         in: query
         required: false
@@ -438,13 +439,27 @@ paths:
           type: string
           default: ECOLI
           title: Organism Id
+      - name: raw
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: If True, return an object containing both the BioCyc component
+            and the request params/data
+          default: false
+          title: Raw
+        description: If True, return an object containing both the BioCyc component
+          and the request params/data
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BiocycDataDTO'
+                anyOf:
+                - $ref: '#/components/schemas/BiocycData'
+                - $ref: '#/components/schemas/BiocycComponent'
+                title: Response Download-Ptools-Data
         '422':
           description: Validation Error
           content:
@@ -545,7 +560,65 @@ components:
       - parca_dataset_id
       - variant_config
       title: AntibioticSimulationRequest
-    BiocycDataDTO:
+    BiocycComponent:
+      properties:
+        id:
+          type: string
+          title: Id
+        pgdb:
+          additionalProperties: true
+          type: object
+          title: Pgdb
+        data:
+          anyOf:
+          - $ref: '#/components/schemas/BiocycCompound'
+          - $ref: '#/components/schemas/BiocycReaction'
+          title: Data
+      type: object
+      required:
+      - id
+      - pgdb
+      - data
+      title: BiocycComponent
+    BiocycCompound:
+      properties:
+        id:
+          type: string
+          title: Id
+        orgid:
+          type: string
+          title: Orgid
+        frameid:
+          type: string
+          title: Frameid
+        detail:
+          type: string
+          title: Detail
+        parent:
+          additionalProperties:
+            additionalProperties:
+              type: string
+            type: object
+          type: object
+          title: Parent
+        cml:
+          additionalProperties: true
+          type: object
+          title: Cml
+        cls:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cls
+      type: object
+      required:
+      - id
+      - orgid
+      - frameid
+      - detail
+      - cml
+      title: BiocycCompound
+    BiocycData:
       properties:
         obj_id:
           type: string
@@ -557,12 +630,75 @@ components:
           additionalProperties: true
           type: object
           title: Data
+        request:
+          additionalProperties: true
+          type: object
+          title: Request
+        dest_dirpath:
+          anyOf:
+          - type: string
+            format: path
+          - type: 'null'
+          title: Dest Dirpath
       type: object
       required:
       - obj_id
       - org_id
       - data
-      title: BiocycDataDTO
+      - request
+      title: BiocycData
+    BiocycReaction:
+      properties:
+        id:
+          type: string
+          title: Id
+        orgid:
+          type: string
+          title: Orgid
+        frameid:
+          type: string
+          title: Frameid
+        detail:
+          type: string
+          title: Detail
+        parent:
+          additionalProperties:
+            additionalProperties:
+              type: string
+            type: object
+          type: object
+          title: Parent
+        ec_number:
+          additionalProperties: true
+          type: object
+          title: Ec Number
+        right:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Right
+        enzymatic_reaction:
+          additionalProperties: true
+          type: object
+          title: Enzymatic Reaction
+        left:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Left
+      type: object
+      required:
+      - id
+      - orgid
+      - frameid
+      - detail
+      - ec_number
+      - right
+      - enzymatic_reaction
+      - left
+      title: BiocycReaction
     EcoliExperiment:
       properties:
         experiment_id:

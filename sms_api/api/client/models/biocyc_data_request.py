@@ -6,67 +6,29 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from typing import cast
 
-if TYPE_CHECKING:
-    from ..models.biocyc_data_dto_data import BiocycDataDTOData
-
-
-T = TypeVar("T", bound="BiocycDataDTO")
+T = TypeVar("T", bound="BiocycDataRequest")
 
 
 @_attrs_define
-class BiocycDataDTO:
-    """
-    Attributes:
-        obj_id (str):
-        org_id (str):
-        data (BiocycDataDTOData):
-    """
+class BiocycDataRequest:
+    """ """
 
-    obj_id: str
-    org_id: str
-    data: "BiocycDataDTOData"
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.biocyc_data_dto_data import BiocycDataDTOData
-
-        obj_id = self.obj_id
-
-        org_id = self.org_id
-
-        data = self.data.to_dict()
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "obj_id": obj_id,
-            "org_id": org_id,
-            "data": data,
-        })
 
         return field_dict
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.biocyc_data_dto_data import BiocycDataDTOData
-
         d = dict(src_dict)
-        obj_id = d.pop("obj_id")
+        biocyc_data_request = cls()
 
-        org_id = d.pop("org_id")
-
-        data = BiocycDataDTOData.from_dict(d.pop("data"))
-
-        biocyc_data_dto = cls(
-            obj_id=obj_id,
-            org_id=org_id,
-            data=data,
-        )
-
-        biocyc_data_dto.additional_properties = d
-        return biocyc_data_dto
+        biocyc_data_request.additional_properties = d
+        return biocyc_data_request
 
     @property
     def additional_keys(self) -> list[str]:
