@@ -416,7 +416,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ptools/ptools/data:
+  /ptools/component:
     get:
       tags:
       - Data

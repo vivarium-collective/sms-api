@@ -29,10 +29,9 @@ config = RouterConfig(router=APIRouter(), prefix="/ptools", dependencies=[])
 
 
 @config.router.get(
-    path="/data",
+    path="/component",
     operation_id="download-ptools-data",
     tags=["Data"],
-    # response_model=BiocycComponent,
     summary="Download data for a given component from the Pathway Tools REST API",
 )
 async def download_ptools_data(

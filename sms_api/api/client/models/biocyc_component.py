@@ -10,9 +10,9 @@ from typing import cast
 from typing import cast, Union
 
 if TYPE_CHECKING:
+    from ..models.biocyc_compound import BiocycCompound
     from ..models.biocyc_component_pgdb import BiocycComponentPgdb
     from ..models.biocyc_reaction import BiocycReaction
-    from ..models.biocyc_compound import BiocycCompound
 
 
 T = TypeVar("T", bound="BiocycComponent")
@@ -33,9 +33,9 @@ class BiocycComponent:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.biocyc_compound import BiocycCompound
         from ..models.biocyc_component_pgdb import BiocycComponentPgdb
         from ..models.biocyc_reaction import BiocycReaction
-        from ..models.biocyc_compound import BiocycCompound
 
         id = self.id
 
@@ -59,9 +59,9 @@ class BiocycComponent:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.biocyc_compound import BiocycCompound
         from ..models.biocyc_component_pgdb import BiocycComponentPgdb
         from ..models.biocyc_reaction import BiocycReaction
-        from ..models.biocyc_compound import BiocycCompound
 
         d = dict(src_dict)
         id = d.pop("id")
