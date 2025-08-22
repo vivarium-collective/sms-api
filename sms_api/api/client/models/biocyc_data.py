@@ -12,8 +12,8 @@ from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..models.biocyc_data_data import BiocycDataData
     from ..models.biocyc_data_request import BiocycDataRequest
+    from ..models.biocyc_data_data import BiocycDataData
 
 
 T = TypeVar("T", bound="BiocycData")
@@ -38,8 +38,8 @@ class BiocycData:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.biocyc_data_data import BiocycDataData
         from ..models.biocyc_data_request import BiocycDataRequest
+        from ..models.biocyc_data_data import BiocycDataData
 
         obj_id = self.obj_id
 
@@ -70,8 +70,8 @@ class BiocycData:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.biocyc_data_data import BiocycDataData
         from ..models.biocyc_data_request import BiocycDataRequest
+        from ..models.biocyc_data_data import BiocycDataData
 
         d = dict(src_dict)
         obj_id = d.pop("obj_id")

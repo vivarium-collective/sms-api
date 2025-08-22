@@ -11,8 +11,8 @@ from typing import cast
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
     from ..models.antibiotic_simulation_request_antibiotics_config import AntibioticSimulationRequestAntibioticsConfig
+    from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
     from ..models.simulator_version import SimulatorVersion
 
 
@@ -36,10 +36,10 @@ class AntibioticSimulationRequest:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.antibiotic_simulation_request_antibiotics_config import (
             AntibioticSimulationRequestAntibioticsConfig,
         )
+        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.simulator_version import SimulatorVersion
 
         simulator = self.simulator.to_dict()
@@ -66,10 +66,10 @@ class AntibioticSimulationRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.antibiotic_simulation_request_antibiotics_config import (
             AntibioticSimulationRequestAntibioticsConfig,
         )
+        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.simulator_version import SimulatorVersion
 
         d = dict(src_dict)
