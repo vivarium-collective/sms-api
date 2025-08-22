@@ -96,14 +96,14 @@ build-backend = "hatchling.build"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^sms_api/api/client/.*', '^app/ui/.*']
+exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov-report=html"
 
 [tool.deptry]
-exclude = [".venv/*"]
+exclude = [".venv/*", "home/*"]
 ignore = ["DEP002", "DEP003", "DEP004"]
 
 [tool.ruff]
@@ -145,6 +145,7 @@ select = [
     "TRY",
 ]
 ignore = [
+    # "DEP001",
 #    # A001 Variable `sum` is shadowing a Python builtin
 #    "A001",
 #    # B008 Do not perform function call `Body` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
