@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 from collections.abc import Collection
 from dataclasses import asdict, dataclass
@@ -8,6 +9,32 @@ from typing import Any
 import numpy
 import numpy as np
 import orjson
+
+
+@dataclass
+class Credentials:
+    username: str | None = None
+    password: str | None = None
+    config: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, str | None]:
+        d = asdict(self)
+        d.pop("config", None)
+        return d
+
+
+@dataclass
+class BiocycCredentials(Credentials):
+    def to_dict(self) -> dict[str, str | None]:
+        return {"email": self.username, "password": self.password}
+
+    @classmethod
+    def from_env(cls, env_fp: pathlib.Path, config: dict[str, Any] | None = None) -> "BiocycCredentials":
+        import dotenv
+
+        dotenv.load_dotenv(env_fp)
+        print("loading", env_fp)
+        return cls(username=os.getenv("BIOCYC_EMAIL"), password=os.getenv("BIOCYC_PASSWORD"), config=config)
 
 
 @dataclass

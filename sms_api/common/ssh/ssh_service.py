@@ -47,12 +47,12 @@ class SSHService:
                 logger.exception(msg=f"failed to send command {command}, stderr {str(exc)[:100]}", exc_info=exc)
                 raise RuntimeError(f"failed to send command {command}, error {str(exc)[:100]}") from exc
 
-    async def scp_upload(self, local_file: Path, remote_path: Path) -> None:
+    async def scp_upload(self, local_file: Path, remote_path: Path, **kwargs) -> None:  # type: ignore[no-untyped-def]
         async with asyncssh.connect(
             host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=self.known_hosts
         ) as conn:
             try:
-                await asyncssh.scp(srcpaths=local_file, dstpath=(conn, remote_path))
+                await asyncssh.scp(srcpaths=local_file, dstpath=(conn, remote_path), **kwargs)
                 logger.info(msg=f"sent file {local_file} to {remote_path}")
             except asyncssh.Error as exc:
                 logger.exception(msg=f"failed to send file {local_file} to {remote_path}", exc_info=exc)
