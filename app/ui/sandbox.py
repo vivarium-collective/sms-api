@@ -26,6 +26,54 @@ async def upload_ptools_files(local_analysis_dirpath=None):
 
 
 @app.cell
+async def _():
+    from pathlib import Path
+    import polars as pl
+
+    from sms_api.common.ssh.ssh_service import get_ssh_service
+
+    parquet_dirpath = Path(
+        "/Users/alexanderpatrie/sms/sms-api/home/FCAM/svc_vivarium/prod/sims/sms_single/history/experiment_id=sms_single/variant=0/lineage_seed=0/generation=1/agent_id=0"
+    )
+
+    local_metadata_filepath = Path(
+        "/Users/alexanderpatrie/sms/sms-api/home/FCAM/svc_vivarium/prod/sims/sms_single/analyses/variant=0/lineage_seed=0/generation=1/agent_id=0/plots/metadata.json"
+    )
+    remote_metdata_filepath = Path(
+        "/home/FCAM/svc_vivarium/prod/sims/sms_single/analyses/variant=0/lineage_seed=0/generation=1/agent_id=0/plots/metadata.json"
+    )
+
+    ssh = get_ssh_service()
+
+    await ssh.scp_upload(local_file=local_metadata_filepath, remote_path=remote_metdata_filepath)
+    return local_metadata_filepath, parquet_dirpath, pl
+
+
+@app.cell
+def _(local_metadata_filepath):
+    local_metadata_filepath.exists()
+    return
+
+
+@app.cell
+def _(parquet_dirpath, pl):
+    times = pl.scan_parquet(parquet_dirpath).select("time").collect()
+    return (times,)
+
+
+@app.cell
+def _(times):
+    dir(times)
+    return
+
+
+@app.cell
+def _(times):
+    times.to_numpy().max()
+    return
+
+
+@app.cell
 def _():
     return
 

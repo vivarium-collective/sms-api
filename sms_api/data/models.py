@@ -1,9 +1,40 @@
+import json
+import pathlib
+from collections.abc import Collection
+from dataclasses import asdict, dataclass
 from enum import StrEnum
+from typing import Any
 
 import numpy
 import numpy as np
 import orjson
-import polars as pl
+
+
+@dataclass
+class BiocycData:
+    obj_id: str
+    org_id: str
+    data: dict[str, Any]
+    request: dict[str, Collection[str]]
+    dest_dirpath: pathlib.Path | None = None
+
+    @property
+    def filepath(self) -> pathlib.Path:
+        dest_fp = self.dest_dirpath or pathlib.Path("assets/biocyc")
+        return dest_fp / f"{self.obj_id}.json"
+
+    def to_dict(self) -> dict[str, str | dict[str, Any] | dict[str, str] | pathlib.Path | None]:
+        return asdict(self)
+
+    def export(self, fp: pathlib.Path | None = None) -> None:
+        try:
+            exp = self.to_dict()
+            fp = fp or self.filepath
+            with open(fp, "w") as f:
+                json.dump(exp, f, indent=4)
+            print(f"Successfully wrote: {fp}")
+        except OSError:
+            print(f"Could not write for {self.obj_id}")
 
 
 class OutputDomain(StrEnum):
@@ -34,17 +65,3 @@ class SerializedArray:
     @value.setter
     def value(self, value: np.ndarray) -> None:
         self._value = self.serialize(value)
-
-
-def serialize_dataframe(df: pl.DataFrame) -> dict[str, SerializedArray]:
-    dataframe = {}
-    cols = df.columns
-    for i, col in enumerate(df.iter_columns()):
-        dataframe[cols[i]] = SerializedArray(col.to_numpy())
-    return dataframe
-
-
-def test_serialize_dataframe() -> None:
-    df = pl.DataFrame(dict(zip(["x", "y", "z"], [numpy.random.random((1111,)) for _ in range(3)])))
-    data = serialize_dataframe(df)
-    print(data)

@@ -67,19 +67,3 @@ class AnalysisService:
                 if fp.exists():
                     paths.append(fp)
         return paths
-
-
-def test_get_file_paths() -> None:
-    svc = AnalysisService()
-    expid = "sms_single"
-    paths = svc.get_file_paths(experiment_id=expid)
-    print(paths)
-
-
-def test_get_file_path() -> None:
-    svc = AnalysisService()
-    expid = "sms_single"
-    filename = "ptools_rna.txt"
-    fp = svc.get_file_path(expid, filename)
-    print(fp)
-    print(f"Exists: {fp.exists()}")

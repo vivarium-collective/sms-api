@@ -4,13 +4,20 @@ from pathlib import Path
 
 import httpx
 import pytest_asyncio
+import requests
 from fastapi import FastAPI
 from httpx import ASGITransport
 
 from sms_api.api.client import Client
 from sms_api.api.main import app
 from sms_api.config import get_settings
+from sms_api.data.biocyc_service import login_biocyc
 from sms_api.latest_commit import write_latest_commit
+
+
+@pytest_asyncio.fixture(scope="session")
+async def session() -> requests.Session:
+    return login_biocyc()
 
 
 @pytest_asyncio.fixture(scope="function")
