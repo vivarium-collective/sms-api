@@ -18,8 +18,8 @@ async def upload_to_hpc(
     remote: Path | None = None,
     remote_dest: HpcDirectory | None = None,
     namespace: Namespace | None = None,
-    **kwargs,
-) -> None:  # type: ignore[no-untyped-def]
+    **kwargs: bool | str,
+) -> None:
     if not remote:
         ns = namespace or Namespace.PRODUCTION
         filename = local.parts[-1]

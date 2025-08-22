@@ -416,6 +416,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /core/download/ptools:
+    get:
+      tags:
+      - Data
+      summary: Download data for a given component from the Pathway Tools REST API
+      operationId: download-ptools-data
+      parameters:
+      - name: object_id
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Object ID of the component you wish to fetch
+          title: Object Id
+        description: Object ID of the component you wish to fetch
+      - name: organism_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ECOLI
+          title: Organism Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BiocycDataDTO'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /:
     get:
       tags:
@@ -510,6 +545,24 @@ components:
       - parca_dataset_id
       - variant_config
       title: AntibioticSimulationRequest
+    BiocycDataDTO:
+      properties:
+        obj_id:
+          type: string
+          title: Obj Id
+        org_id:
+          type: string
+          title: Org Id
+        data:
+          additionalProperties: true
+          type: object
+          title: Data
+      type: object
+      required:
+      - obj_id
+      - org_id
+      - data
+      title: BiocycDataDTO
     EcoliExperiment:
       properties:
         experiment_id:

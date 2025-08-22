@@ -10,6 +10,8 @@ from .antibiotic_simulation_request_variant_config import AntibioticSimulationRe
 from .antibiotic_simulation_request_variant_config_additional_property import (
     AntibioticSimulationRequestVariantConfigAdditionalProperty,
 )
+from .biocyc_data_dto import BiocycDataDTO
+from .biocyc_data_dto_data import BiocycDataDTOData
 from .check_health_health_get_response_check_health_health_get import CheckHealthHealthGetResponseCheckHealthHealthGet
 from .ecoli_experiment import EcoliExperiment
 from .ecoli_experiment_metadata import EcoliExperimentMetadata
@@ -40,6 +42,8 @@ __all__ = (
     "AntibioticSimulationRequestAntibioticsConfigAdditionalProperty",
     "AntibioticSimulationRequestVariantConfig",
     "AntibioticSimulationRequestVariantConfigAdditionalProperty",
+    "BiocycDataDTO",
+    "BiocycDataDTOData",
     "CheckHealthHealthGetResponseCheckHealthHealthGet",
     "EcoliExperiment",
     "EcoliExperimentMetadata",

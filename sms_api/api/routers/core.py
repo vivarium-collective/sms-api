@@ -37,6 +37,7 @@ from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.common.gateway.utils import get_local_simulation_outdir, get_simulation_outdir
 from sms_api.data.analysis_service import AnalysisService
+from sms_api.data.biocyc_service import BiocycService
 from sms_api.data.parquet_service import ParquetService
 from sms_api.dependencies import (
     get_database_service,
@@ -52,6 +53,7 @@ from sms_api.simulation.handlers import (
 )
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
+    BiocycDataDTO,
     EcoliExperiment,
     EcoliSimulation,
     EcoliSimulationRequest,
@@ -513,4 +515,28 @@ async def download_example_file(
 
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/download/ptools",
+    operation_id="download-ptools-data",
+    tags=["Data"],
+    response_model=BiocycDataDTO,
+    summary="Download data for a given component from the Pathway Tools REST API",
+)
+async def download_ptools_data(
+    object_id: str = Query(..., description="Object ID of the component you wish to fetch"),
+    organism_id: str = Query(default="ECOLI"),
+) -> BiocycDataDTO:
+    try:
+        biocyc_svc = BiocycService()
+        response_data = biocyc_svc.get_data(obj_id=object_id, org_id=organism_id)
+        return BiocycDataDTO(
+            org_id=response_data.org_id,
+            obj_id=response_data.obj_id,
+            data=response_data.data,
+        )
+    except Exception as e:
+        logger.exception("Error.")
         raise HTTPException(status_code=500, detail=str(e)) from e
