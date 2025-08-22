@@ -2,6 +2,8 @@ LOCAL_GATEWAY_PORT=8888
 
 LATEST_COMMIT_PATH=assets/simulation/model/latest_commit.txt
 
+CURRENT_VERSION := $(shell uv run python -c "from sms_api import version;print(f'{version.__version__}')")
+
 
 .PHONY: install
 install: ## Install the uv environment and install the pre-commit hooks
@@ -205,9 +207,9 @@ transfer-wip:
 	cp app/ui/wip_$$module.py app/ui/$$module.py; \
 	cp app/ui/layouts/wip_$$module.grid.json app/ui/layouts/$$module.grid.json
 
-.PHONY: deploy-api
-deploy-api:
-	@[ -z "$(tag)" ] && tag=0.2.9-dev || tag=$(tag); \
+.PHONY: image
+image:
+	@[ -z "$(tag)" ] && tag=$(CURRENT_VERSION) || tag=$(tag); \
 	./kustomize/scripts/build_and_push.sh $$tag
 
 .PHONY: exec-api
