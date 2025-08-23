@@ -5,7 +5,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel as _BaseModel
 from pydantic import Field
@@ -103,7 +103,11 @@ class ParcaDataset(BaseModel):
 class EcoliSimulationRequest(BaseModel):
     simulator: SimulatorVersion
     parca_dataset_id: int
-    variant_config: dict[str, dict[str, int | float | str]]
+    variant_config: dict[str, dict[str, int | float | str]] = Field(
+        default={"named_parameters": {"param1": 0.5, "param2": 0.5}}
+    )  # TODO: remove this eventually in favor of overrides
+    config_id: str | None = None
+    config_overrides: Optional[dict[str, Any]] = None
 
     @property
     def variant_config_hash(self) -> str:
@@ -113,13 +117,23 @@ class EcoliSimulationRequest(BaseModel):
         return hashlib.md5(json.encode()).hexdigest()  # noqa: S324 insecure hash `md5` is okay for caching
 
 
+class EcoliWorkflowRequest(EcoliSimulationRequest):
+    """
+    :param config_id: (str) filename (without '.json') of the given sim config
+    :param config_overrides: (Optional[dict[str, Any]]) overrides any key within the file found at {config_id}.json
+    """
+
+    config_id: str | None = None
+    config_overrides: Optional[dict[str, Any]] = None
+
+
 class AntibioticSimulationRequest(EcoliSimulationRequest):
     antibiotics_config: dict[str, dict[str, int | float | str]] = Field(default_factory=dict)
 
 
 class EcoliSimulation(BaseModel):
     database_id: int
-    sim_request: EcoliSimulationRequest
+    sim_request: EcoliSimulationRequest | EcoliWorkflowRequest
     slurmjob_id: int | None = None
 
 

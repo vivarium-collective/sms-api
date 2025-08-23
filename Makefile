@@ -225,6 +225,10 @@ run-api:
 api:
 	@docker rmi -f sms-api:latest && docker compose build api && make run-api
 
+.PHONY: available_simulation_configs
+available_simulation_configs:
+	@[ -z "$(hpc_dest)" ] && echo "You must enter an hpc dest" && exit 1 || ls -1 *.json > $(hpc_dest)
+
 .DEFAULT_GOAL := help
 
 # pull in nextflow/java in sms api container

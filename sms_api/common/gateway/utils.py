@@ -1,5 +1,7 @@
+import json
 import warnings
 from pathlib import Path
+from typing import Any
 
 from sms_api.common.gateway.models import Namespace
 from sms_api.simulation.database_service import DatabaseService
@@ -77,3 +79,27 @@ def format_marimo_appname(appname: str) -> str:
 
 def get_remote_outdir(experiment_id: str, namespace: Namespace | None = None) -> Path:
     return Path(f"/home/FCAM/svc_vivarium/{namespace or Namespace.PRODUCTION}/sims/{experiment_id}")
+
+
+def write_remote_config(
+    config: dict[str, Any] | str | Any,
+    fname: str,
+    simulator_hash: str | None = None,
+    **overrides: Any,
+) -> tuple[int, Path | None]:
+    if isinstance(config, str):
+        config = json.loads(config)
+    if simulator_hash is None:
+        saved_latest = Path("assets/simulation/model/latest_commit.txt")
+        try:
+            with open(str(saved_latest)) as f:
+                simulator_hash = f.readline().strip()
+        except FileNotFoundError as e:
+            warnings.warn(f"The hardcoded file doesnt exist in this repo: {e}", stacklevel=2)
+            return (1, None)
+    fpath = Path(f"/home/FCAM/svc_vivarium/prod/repos/{simulator_hash}/vEcoli/configs/{fname}.json")
+    if overrides:
+        config.update(overrides)
+    with open(fpath, "w") as f:
+        json.dump(config, f, indent=1)
+    return (0, fpath)

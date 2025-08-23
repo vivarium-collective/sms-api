@@ -193,6 +193,71 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /core/simulation/workflow:
+    post:
+      tags:
+      - Simulations - vEcoli
+      summary: Dispatches a nextflow-powered vEcoli simulation workflow
+      operationId: run-simulation-workflow
+      parameters:
+      - name: config_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Config Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EcoliWorkflowRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EcoliExperiment'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /core/simulation/configs:
+    get:
+      tags:
+      - Simulations - vEcoli
+      summary: Get Available Config Ids
+      operationId: get-available-configs
+      parameters:
+      - name: simulator_hash
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Simulator Hash
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                title: Response Get-Available-Configs
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /core/simulation/run/versions:
     get:
       tags:
@@ -544,6 +609,10 @@ components:
             type: object
           type: object
           title: Variant Config
+          default:
+            named_parameters:
+              param1: 0.5
+              param2: 0.5
         antibiotics_config:
           additionalProperties:
             additionalProperties:
@@ -558,7 +627,6 @@ components:
       required:
       - simulator
       - parca_dataset_id
-      - variant_config
       title: AntibioticSimulationRequest
     BiocycComponent:
       properties:
@@ -728,7 +796,10 @@ components:
           type: integer
           title: Database Id
         sim_request:
-          $ref: '#/components/schemas/EcoliSimulationRequest'
+          anyOf:
+          - $ref: '#/components/schemas/EcoliSimulationRequest'
+          - $ref: '#/components/schemas/EcoliWorkflowRequest'
+          title: Sim Request
         slurmjob_id:
           anyOf:
           - type: integer
@@ -756,12 +827,57 @@ components:
             type: object
           type: object
           title: Variant Config
+          default:
+            named_parameters:
+              param1: 0.5
+              param2: 0.5
       type: object
       required:
       - simulator
       - parca_dataset_id
-      - variant_config
       title: EcoliSimulationRequest
+    EcoliWorkflowRequest:
+      properties:
+        simulator:
+          $ref: '#/components/schemas/SimulatorVersion'
+        parca_dataset_id:
+          type: integer
+          title: Parca Dataset Id
+        variant_config:
+          additionalProperties:
+            additionalProperties:
+              anyOf:
+              - type: integer
+              - type: number
+              - type: string
+            type: object
+          type: object
+          title: Variant Config
+          default:
+            named_parameters:
+              param1: 0.5
+              param2: 0.5
+        config_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Config Id
+        config_overrides:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Config Overrides
+      type: object
+      required:
+      - simulator
+      - parca_dataset_id
+      title: EcoliWorkflowRequest
+      description: ':param config_id: (str) filename (without ''.json'') of the given
+        sim config
+
+        :param config_overrides: (Optional[dict[str, Any]]) overrides any key within
+        the file found at {config_id}.json'
     HTTPValidationError:
       properties:
         detail:

@@ -35,6 +35,12 @@ from .ecoli_simulation_request_variant_config import EcoliSimulationRequestVaria
 from .ecoli_simulation_request_variant_config_additional_property import (
     EcoliSimulationRequestVariantConfigAdditionalProperty,
 )
+from .ecoli_workflow_request import EcoliWorkflowRequest
+from .ecoli_workflow_request_config_overrides_type_0 import EcoliWorkflowRequestConfigOverridesType0
+from .ecoli_workflow_request_variant_config import EcoliWorkflowRequestVariantConfig
+from .ecoli_workflow_request_variant_config_additional_property import (
+    EcoliWorkflowRequestVariantConfigAdditionalProperty,
+)
 from .hpc_run import HpcRun
 from .http_validation_error import HTTPValidationError
 from .job_status import JobStatus
@@ -79,6 +85,10 @@ __all__ = (
     "EcoliSimulationRequest",
     "EcoliSimulationRequestVariantConfig",
     "EcoliSimulationRequestVariantConfigAdditionalProperty",
+    "EcoliWorkflowRequest",
+    "EcoliWorkflowRequestConfigOverridesType0",
+    "EcoliWorkflowRequestVariantConfig",
+    "EcoliWorkflowRequestVariantConfigAdditionalProperty",
     "HpcRun",
     "HTTPValidationError",
     "JobStatus",

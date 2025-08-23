@@ -13,6 +13,7 @@ from typing import Union
 
 if TYPE_CHECKING:
     from ..models.ecoli_simulation_request import EcoliSimulationRequest
+    from ..models.ecoli_workflow_request import EcoliWorkflowRequest
 
 
 T = TypeVar("T", bound="EcoliSimulation")
@@ -23,21 +24,26 @@ class EcoliSimulation:
     """
     Attributes:
         database_id (int):
-        sim_request (EcoliSimulationRequest):
+        sim_request (Union['EcoliSimulationRequest', 'EcoliWorkflowRequest']):
         slurmjob_id (Union[None, Unset, int]):
     """
 
     database_id: int
-    sim_request: "EcoliSimulationRequest"
+    sim_request: Union["EcoliSimulationRequest", "EcoliWorkflowRequest"]
     slurmjob_id: Union[None, Unset, int] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.ecoli_simulation_request import EcoliSimulationRequest
+        from ..models.ecoli_workflow_request import EcoliWorkflowRequest
 
         database_id = self.database_id
 
-        sim_request = self.sim_request.to_dict()
+        sim_request: dict[str, Any]
+        if isinstance(self.sim_request, EcoliSimulationRequest):
+            sim_request = self.sim_request.to_dict()
+        else:
+            sim_request = self.sim_request.to_dict()
 
         slurmjob_id: Union[None, Unset, int]
         if isinstance(self.slurmjob_id, Unset):
@@ -59,11 +65,27 @@ class EcoliSimulation:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.ecoli_simulation_request import EcoliSimulationRequest
+        from ..models.ecoli_workflow_request import EcoliWorkflowRequest
 
         d = dict(src_dict)
         database_id = d.pop("database_id")
 
-        sim_request = EcoliSimulationRequest.from_dict(d.pop("sim_request"))
+        def _parse_sim_request(data: object) -> Union["EcoliSimulationRequest", "EcoliWorkflowRequest"]:
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                sim_request_type_0 = EcoliSimulationRequest.from_dict(data)
+
+                return sim_request_type_0
+            except:  # noqa: E722
+                pass
+            if not isinstance(data, dict):
+                raise TypeError()
+            sim_request_type_1 = EcoliWorkflowRequest.from_dict(data)
+
+            return sim_request_type_1
+
+        sim_request = _parse_sim_request(d.pop("sim_request"))
 
         def _parse_slurmjob_id(data: object) -> Union[None, Unset, int]:
             if data is None:

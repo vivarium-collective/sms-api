@@ -11,11 +11,11 @@ from typing import cast
 from typing import Union
 
 if TYPE_CHECKING:
+    from ..models.biocyc_reaction_right_item import BiocycReactionRightItem
     from ..models.biocyc_reaction_ec_number import BiocycReactionEcNumber
     from ..models.biocyc_reaction_enzymatic_reaction import BiocycReactionEnzymaticReaction
-    from ..models.biocyc_reaction_left_item import BiocycReactionLeftItem
-    from ..models.biocyc_reaction_right_item import BiocycReactionRightItem
     from ..models.biocyc_reaction_parent import BiocycReactionParent
+    from ..models.biocyc_reaction_left_item import BiocycReactionLeftItem
 
 
 T = TypeVar("T", bound="BiocycReaction")
@@ -48,11 +48,11 @@ class BiocycReaction:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.biocyc_reaction_right_item import BiocycReactionRightItem
         from ..models.biocyc_reaction_ec_number import BiocycReactionEcNumber
         from ..models.biocyc_reaction_enzymatic_reaction import BiocycReactionEnzymaticReaction
-        from ..models.biocyc_reaction_left_item import BiocycReactionLeftItem
-        from ..models.biocyc_reaction_right_item import BiocycReactionRightItem
         from ..models.biocyc_reaction_parent import BiocycReactionParent
+        from ..models.biocyc_reaction_left_item import BiocycReactionLeftItem
 
         id = self.id
 
@@ -99,11 +99,11 @@ class BiocycReaction:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.biocyc_reaction_right_item import BiocycReactionRightItem
         from ..models.biocyc_reaction_ec_number import BiocycReactionEcNumber
         from ..models.biocyc_reaction_enzymatic_reaction import BiocycReactionEnzymaticReaction
-        from ..models.biocyc_reaction_left_item import BiocycReactionLeftItem
-        from ..models.biocyc_reaction_right_item import BiocycReactionRightItem
         from ..models.biocyc_reaction_parent import BiocycReactionParent
+        from ..models.biocyc_reaction_left_item import BiocycReactionLeftItem
 
         d = dict(src_dict)
         id = d.pop("id")

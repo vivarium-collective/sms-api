@@ -11,9 +11,9 @@ from typing import cast
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..models.antibiotic_simulation_request_antibiotics_config import AntibioticSimulationRequestAntibioticsConfig
-    from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
     from ..models.simulator_version import SimulatorVersion
+    from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
+    from ..models.antibiotic_simulation_request_antibiotics_config import AntibioticSimulationRequestAntibioticsConfig
 
 
 T = TypeVar("T", bound="AntibioticSimulationRequest")
@@ -25,28 +25,30 @@ class AntibioticSimulationRequest:
     Attributes:
         simulator (SimulatorVersion):
         parca_dataset_id (int):
-        variant_config (AntibioticSimulationRequestVariantConfig):
+        variant_config (Union[Unset, AntibioticSimulationRequestVariantConfig]):
         antibiotics_config (Union[Unset, AntibioticSimulationRequestAntibioticsConfig]):
     """
 
     simulator: "SimulatorVersion"
     parca_dataset_id: int
-    variant_config: "AntibioticSimulationRequestVariantConfig"
+    variant_config: Union[Unset, "AntibioticSimulationRequestVariantConfig"] = UNSET
     antibiotics_config: Union[Unset, "AntibioticSimulationRequestAntibioticsConfig"] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.simulator_version import SimulatorVersion
+        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.antibiotic_simulation_request_antibiotics_config import (
             AntibioticSimulationRequestAntibioticsConfig,
         )
-        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
-        from ..models.simulator_version import SimulatorVersion
 
         simulator = self.simulator.to_dict()
 
         parca_dataset_id = self.parca_dataset_id
 
-        variant_config = self.variant_config.to_dict()
+        variant_config: Union[Unset, dict[str, Any]] = UNSET
+        if not isinstance(self.variant_config, Unset):
+            variant_config = self.variant_config.to_dict()
 
         antibiotics_config: Union[Unset, dict[str, Any]] = UNSET
         if not isinstance(self.antibiotics_config, Unset):
@@ -57,8 +59,9 @@ class AntibioticSimulationRequest:
         field_dict.update({
             "simulator": simulator,
             "parca_dataset_id": parca_dataset_id,
-            "variant_config": variant_config,
         })
+        if variant_config is not UNSET:
+            field_dict["variant_config"] = variant_config
         if antibiotics_config is not UNSET:
             field_dict["antibiotics_config"] = antibiotics_config
 
@@ -66,18 +69,23 @@ class AntibioticSimulationRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.simulator_version import SimulatorVersion
+        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
         from ..models.antibiotic_simulation_request_antibiotics_config import (
             AntibioticSimulationRequestAntibioticsConfig,
         )
-        from ..models.antibiotic_simulation_request_variant_config import AntibioticSimulationRequestVariantConfig
-        from ..models.simulator_version import SimulatorVersion
 
         d = dict(src_dict)
         simulator = SimulatorVersion.from_dict(d.pop("simulator"))
 
         parca_dataset_id = d.pop("parca_dataset_id")
 
-        variant_config = AntibioticSimulationRequestVariantConfig.from_dict(d.pop("variant_config"))
+        _variant_config = d.pop("variant_config", UNSET)
+        variant_config: Union[Unset, AntibioticSimulationRequestVariantConfig]
+        if isinstance(_variant_config, Unset):
+            variant_config = UNSET
+        else:
+            variant_config = AntibioticSimulationRequestVariantConfig.from_dict(_variant_config)
 
         _antibiotics_config = d.pop("antibiotics_config", UNSET)
         antibiotics_config: Union[Unset, AntibioticSimulationRequestAntibioticsConfig]

@@ -25,17 +25,42 @@
 ***We should implement the /download... endpoint for each router as
     this is a way to easily configure filepaths as they pertain to
     hive partitioning: single simulations will always have the same hive partitioning, etc.
+
+
+Example Simulation Workflow Request:
+{
+  "simulator": {
+      "git_commit_hash": "78c6310",
+      "git_repo_url": "https://github.com/vivarium-collective/vEcoli",
+      "git_branch": "messages",
+      "database_id": 1,
+      "created_at": "2025-08-20T16:38:11"
+    },
+  "parca_dataset_id": 1,
+  "variant_config": {
+    "named_parameters": {
+      "param1": 0.5,
+      "param2": 0.5
+    }
+  },
+  "config_id": null,
+  "config_overrides": {
+    "additionalProp1": {}
+  }
+}
 """
 
+import json
 import logging
 import mimetypes
+from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
-from sms_api.common.gateway.utils import get_local_simulation_outdir, get_simulation_outdir
+from sms_api.common.gateway.utils import REPO_DIR, get_local_simulation_outdir, get_simulation_outdir
 from sms_api.data.analysis_service import AnalysisService
 from sms_api.data.parquet_service import ParquetService
 from sms_api.dependencies import (
@@ -47,6 +72,7 @@ from sms_api.simulation.handlers import (
     get_parca_datasets,
     run_parca,
     run_simulation,
+    run_workflow,
     upload_simulator,
     verify_simulator_payload,
 )
@@ -55,6 +81,7 @@ from sms_api.simulation.models import (
     EcoliExperiment,
     EcoliSimulation,
     EcoliSimulationRequest,
+    EcoliWorkflowRequest,
     HpcRun,
     JobType,
     ParcaDataset,
@@ -68,6 +95,33 @@ from sms_api.simulation.models import (
 logger = logging.getLogger(__name__)
 
 LATEST_COMMIT = read_latest_commit()
+
+EXAMPLE_WF_PAYLOAD = """
+{
+  "simulator": {
+      "git_commit_hash": "78c6310",
+      "git_repo_url": "https://github.com/vivarium-collective/vEcoli",
+      "git_branch": "messages",
+      "database_id": 1,
+      "created_at": "2025-08-20T16:38:11"
+    },
+  "parca_dataset_id": 1,
+  "variant_config": {
+    "named_parameters": {
+      "param1": 0.5,
+      "param2": 0.5
+    }
+  },
+  "config_id": "sms_single",
+  "config_overrides": {
+    "additionalProp1": {}
+  }
+}
+"""
+
+
+def example_workflow_request() -> EcoliWorkflowRequest:
+    return EcoliWorkflowRequest(**json.loads(EXAMPLE_WF_PAYLOAD))
 
 
 def get_server_url(dev: bool = True) -> ServerMode:
@@ -314,6 +368,58 @@ async def run_vecoli_simulation(
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/simulation/workflow",
+    operation_id="run-simulation-workflow",
+    response_model=EcoliExperiment,
+    tags=["Simulations - vEcoli"],
+    dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
+    summary="Dispatches a nextflow-powered vEcoli simulation workflow",
+)
+async def run_simulation_workflow(
+    background_tasks: BackgroundTasks,
+    sim_request: EcoliWorkflowRequest = Body(example=example_workflow_request()),
+    config_id: str | None = Query(default=None),
+) -> EcoliExperiment:
+    if config_id is None and sim_request.config_id is None:
+        raise Exception("Either config_id or sim_request must be specified")
+
+    if config_id is not None:
+        sim_request.config_id = config_id
+
+    sim_service = get_simulation_service()
+    if sim_service is None:
+        logger.error("Simulation service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Database service is not initialized")
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+
+    try:
+        return await run_workflow(
+            simulation_request=sim_request,
+            database_service=db_service,
+            simulation_service_slurm=sim_service,
+            router_config=config,
+            background_tasks=background_tasks,
+        )
+    except Exception as e:
+        logger.exception("Error running vEcoli simulation")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(path="/simulation/configs", operation_id="get-available-configs", tags=["Simulations - vEcoli"])
+async def get_available_config_ids(simulator_hash: str | None = Query(default=None)) -> list[str]:
+    fname = "available_configs.txt"
+    path = Path("/home/FCAM/svc_vivarium/prod") / fname  # currently 78c6310 (8/22/25)
+    if not path.exists():
+        path = Path(f"{REPO_DIR}/assets/simulation") / fname
+    with open(path) as fp:
+        available = [lin.strip().replace(".json", "") for lin in fp.readlines()]
+    return available
 
 
 @config.router.get(
