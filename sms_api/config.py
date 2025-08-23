@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     hpc_group: str = ""
     deployment: str = "prod"
 
+    # external services
+    biocyc_email: str = ""
+    biocyc_password: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

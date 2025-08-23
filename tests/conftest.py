@@ -2,11 +2,11 @@ import pytest  # noqa: F401
 import pytest_asyncio  # noqa: F401
 
 from tests.fixtures.api_fixtures import (  # noqa: F401
+    biocyc_service,
     fastapi_app,
     in_memory_api_client,
     latest_commit_hash,
     local_base_url,
-    session,
 )
 from tests.fixtures.mongodb_fixtures import (  # noqa: F401
     mongo_test_client,

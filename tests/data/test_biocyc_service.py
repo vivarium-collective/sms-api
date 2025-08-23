@@ -1,13 +1,12 @@
 import pytest
-import requests
 
-from sms_api.data.biocyc_service import get_biocyc_data
+from sms_api.data.biocyc_service import BiocycService
 
 
 @pytest.mark.asyncio
-async def test_get_biocyc_data(session: requests.Session) -> None:
+async def test_get_biocyc_data(biocyc_service: BiocycService) -> None:
     orgid = "ECOLI"
     objid = "6PFRUCTPHOS-RXN"
-    data = get_biocyc_data(session, orgid, objid)
+    data = biocyc_service.get_data(obj_id=objid, org_id=orgid)
     assert data is not None
     print(data)

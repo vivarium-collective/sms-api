@@ -5,14 +5,20 @@ import pandas as pd
 import requests
 import xmltodict
 
-from sms_api.data.models import BiocycCredentials, BiocycData
+from sms_api.config import Settings, get_settings
+from sms_api.data.models import BiocycData
 
 
 class BiocycService:
+    settings: Settings
     session: requests.Session
 
-    def __init__(self, creds: BiocycCredentials | None = None):
-        self.session = login_biocyc(creds)
+    def __init__(self, settings: Settings | None = None):
+        self.settings = settings or get_settings()
+        self.session = login_biocyc(biocyc_email=self.settings.biocyc_email, pw=self.settings.biocyc_password)
+
+    def __del__(self) -> None:
+        self.session.close()
 
     def get_data(self, obj_id: str, org_id: str | None = None) -> BiocycData:
         return get_biocyc_data(session=self.session, objid=obj_id, orgid=org_id or "ECOLI")
@@ -24,17 +30,14 @@ class BiocycService:
         return load_flat(csv_filename)
 
 
-def login_biocyc(creds: BiocycCredentials | None = None) -> requests.Session:
-    s = requests.Session()  # create session
-    # email = os.getenv("BIOCYC_EMAIL")
-    # pw = os.getenv("BIOCYC_PASSWORD")
-    credentials = (
-        creds.to_dict()
-        if creds is not None
-        else {"email": "cellulararchitect@protonmail.com", "password": "Cellman0451"}
-    )
-    resp = s.post("https://websvc.biocyc.org/credentials/login/", data=credentials)
-    resp.raise_for_status()
+def login_biocyc(biocyc_email: str, pw: str) -> requests.Session:
+    s = requests.Session()
+    try:
+        creds = {"email": biocyc_email, "password": pw}
+        resp = s.post("https://websvc.biocyc.org/credentials/login/", data=creds)
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        raise requests.exceptions.HTTPError(f"Biocyc login failed: {e}")
     return s
 
 
