@@ -15,6 +15,7 @@ from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
     VECOLI_REPO_NAME,
+    build_workflow_sbatch,
     get_apptainer_image_file,
     get_experiment_path,
     get_parca_dataset_dir,
@@ -49,6 +50,12 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def submit_ecoli_simulation_job(
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
+    ) -> int:
+        pass
+
+    @abstractmethod
+    async def submit_vecoli_job(
         self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
         pass
@@ -406,6 +413,68 @@ class SimulationServiceHpc(SimulationService):
 
                     echo "Simulation run completed. data saved to {experiment_path!s}."
                     """)
+                f.write(script_content)
+
+            # submit the build script to slurm
+            slurm_jobid = await slurm_service.submit_job(
+                local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+            )
+            return slurm_jobid
+
+    @override
+    async def submit_vecoli_job(
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
+    ) -> int:
+        """Dispatches a nextflow-powered vEcoli simulation workflow
+        as in (/vEcoli/runscripts/workflow.py --config <CONFIG_JSON_PATH>)
+        """
+        # if not isinstance(ecoli_simulation.sim_request, EcoliWorkflowRequest):
+        #     raise TypeError("You must pass a simulation workflow request (EcoliWorkflowRequest)")
+
+        settings = get_settings()
+        ssh_service = SSHService(
+            hostname=settings.slurm_submit_host,
+            username=settings.slurm_submit_user,
+            key_path=Path(settings.slurm_submit_key_path),
+            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
+        )
+        if database_service is None:
+            raise RuntimeError("DatabaseService is not available. Cannot submit EcoliSimulation job.")
+
+        if ecoli_simulation.sim_request is None:
+            raise ValueError("EcoliSimulation must have a sim_request set to submit a job.")
+
+        parca_dataset = await database_service.get_parca_dataset(
+            parca_dataset_id=ecoli_simulation.sim_request.parca_dataset_id
+        )
+        if parca_dataset is None:
+            raise ValueError(f"ParcaDataset with ID {ecoli_simulation.sim_request.parca_dataset_id} not found.")
+
+        slurm_service = SlurmService(ssh_service=ssh_service)
+        simulator_version = parca_dataset.parca_dataset_request.simulator_version
+
+        random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
+        slurm_job_name = f"sim-{simulator_version.git_commit_hash}-{ecoli_simulation.database_id}-{random_suffix}"
+
+        slurm_log_file = get_slurm_log_file(slurm_job_name=slurm_job_name)
+        slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
+        apptainer_image_path = get_apptainer_image_file(simulator_version=simulator_version)
+        parca_dataset_path = get_parca_dataset_dir(parca_dataset=parca_dataset)
+        parca_parent_path = parca_dataset_path.parent
+
+        # build the submit script
+        with tempfile.TemporaryDirectory() as tmpdir:
+            local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
+            with open(local_submit_file, "w") as f:
+                script_content = build_workflow_sbatch(
+                    slurm_job_name=slurm_job_name,
+                    settings=settings,
+                    ecoli_simulation=ecoli_simulation,
+                    correlation_id=correlation_id,
+                    slurm_log_file=slurm_log_file,
+                    image_path=apptainer_image_path,
+                    parca_parent_path=parca_parent_path,
+                )
                 f.write(script_content)
 
             # submit the build script to slurm

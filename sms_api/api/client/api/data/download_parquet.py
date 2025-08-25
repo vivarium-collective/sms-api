@@ -8,16 +8,27 @@ from ...types import Response, UNSET
 from ... import errors
 
 from ...models.http_validation_error import HTTPValidationError
+from ...types import UNSET, Unset
 from typing import cast
+from typing import cast, Union
+from typing import Union
 
 
 def _get_kwargs(
     *,
     experiment_id: str,
+    filename: Union[None, Unset, str] = UNSET,
 ) -> dict[str, Any]:
     params: dict[str, Any] = {}
 
     params["experiment_id"] = experiment_id
+
+    json_filename: Union[None, Unset, str]
+    if isinstance(filename, Unset):
+        json_filename = UNSET
+    else:
+        json_filename = filename
+    params["filename"] = json_filename
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -61,11 +72,13 @@ def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     experiment_id: str,
+    filename: Union[None, Unset, str] = UNSET,
 ) -> Response[Union[Any, HTTPValidationError]]:
     """Download zip file containing pqs that were generated from the parquet emitter
 
     Args:
         experiment_id (str): Experiment ID for the simulation (from config.json).
+        filename (Union[None, Unset, str]): Name you wish to assign to the downloaded zip file
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -77,6 +90,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         experiment_id=experiment_id,
+        filename=filename,
     )
 
     response = client.get_httpx_client().request(
@@ -90,11 +104,13 @@ def sync(
     *,
     client: Union[AuthenticatedClient, Client],
     experiment_id: str,
+    filename: Union[None, Unset, str] = UNSET,
 ) -> Optional[Union[Any, HTTPValidationError]]:
     """Download zip file containing pqs that were generated from the parquet emitter
 
     Args:
         experiment_id (str): Experiment ID for the simulation (from config.json).
+        filename (Union[None, Unset, str]): Name you wish to assign to the downloaded zip file
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -107,6 +123,7 @@ def sync(
     return sync_detailed(
         client=client,
         experiment_id=experiment_id,
+        filename=filename,
     ).parsed
 
 
@@ -114,11 +131,13 @@ async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     experiment_id: str,
+    filename: Union[None, Unset, str] = UNSET,
 ) -> Response[Union[Any, HTTPValidationError]]:
     """Download zip file containing pqs that were generated from the parquet emitter
 
     Args:
         experiment_id (str): Experiment ID for the simulation (from config.json).
+        filename (Union[None, Unset, str]): Name you wish to assign to the downloaded zip file
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -130,6 +149,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         experiment_id=experiment_id,
+        filename=filename,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -141,11 +161,13 @@ async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
     experiment_id: str,
+    filename: Union[None, Unset, str] = UNSET,
 ) -> Optional[Union[Any, HTTPValidationError]]:
     """Download zip file containing pqs that were generated from the parquet emitter
 
     Args:
         experiment_id (str): Experiment ID for the simulation (from config.json).
+        filename (Union[None, Unset, str]): Name you wish to assign to the downloaded zip file
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -159,5 +181,6 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             experiment_id=experiment_id,
+            filename=filename,
         )
     ).parsed

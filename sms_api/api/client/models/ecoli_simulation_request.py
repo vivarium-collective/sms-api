@@ -6,7 +6,9 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
 from typing import cast
+from typing import Union
 
 if TYPE_CHECKING:
     from ..models.simulator_version import SimulatorVersion
@@ -22,12 +24,12 @@ class EcoliSimulationRequest:
     Attributes:
         simulator (SimulatorVersion):
         parca_dataset_id (int):
-        variant_config (EcoliSimulationRequestVariantConfig):
+        variant_config (Union[Unset, EcoliSimulationRequestVariantConfig]):
     """
 
     simulator: "SimulatorVersion"
     parca_dataset_id: int
-    variant_config: "EcoliSimulationRequestVariantConfig"
+    variant_config: Union[Unset, "EcoliSimulationRequestVariantConfig"] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -38,15 +40,18 @@ class EcoliSimulationRequest:
 
         parca_dataset_id = self.parca_dataset_id
 
-        variant_config = self.variant_config.to_dict()
+        variant_config: Union[Unset, dict[str, Any]] = UNSET
+        if not isinstance(self.variant_config, Unset):
+            variant_config = self.variant_config.to_dict()
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
             "simulator": simulator,
             "parca_dataset_id": parca_dataset_id,
-            "variant_config": variant_config,
         })
+        if variant_config is not UNSET:
+            field_dict["variant_config"] = variant_config
 
         return field_dict
 
@@ -60,7 +65,12 @@ class EcoliSimulationRequest:
 
         parca_dataset_id = d.pop("parca_dataset_id")
 
-        variant_config = EcoliSimulationRequestVariantConfig.from_dict(d.pop("variant_config"))
+        _variant_config = d.pop("variant_config", UNSET)
+        variant_config: Union[Unset, EcoliSimulationRequestVariantConfig]
+        if isinstance(_variant_config, Unset):
+            variant_config = UNSET
+        else:
+            variant_config = EcoliSimulationRequestVariantConfig.from_dict(_variant_config)
 
         ecoli_simulation_request = cls(
             simulator=simulator,

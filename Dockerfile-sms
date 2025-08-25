@@ -1,31 +1,34 @@
 # Use the official Python image from the Docker Hub
+# TODO: this image is reporting high vulnerabilities: replace it with something more specific/safer
+
 FROM python:3.12-slim-bookworm AS base
 
 ARG APP_UID=17163
 ARG APP_GID=10000
+ARG DEV_MODE=0
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    procps \
+    openssh-client \
+    openjdk-17-jdk \
     nano \
     curl \
-    software-properties-common \
-    wget \
-    openjdk-17-jdk \
-    python3-dev \
-    git \
-    openssh-client \
     sqlite3 \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# curl -s https://get.nextflow.io | bash && mv nextflow /usr/local/bin/
-
 # Set environment variables
-ENV PYTHONUNBUFFERED=1
+# ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    APP_DIR=/app/app \
+    ASSETS_DIR=/app/assets \
+    LOCAL_BIN=/home/appuser/.local/bin \
+    NEXTFLOW_DIR=/home/appuser/.local/bin/nextflow \
+    VECOLI_DIR=/home/appuser/vEcoli \
+    VECOLI_REPO_URL=https://github.com/vivarium-collective/vEcoli \
+    VECOLI_REPO_BRANCH=messages
 
-# Install uv from the GitHub Container Registry
+    # Install uv from the GitHub Container Registry
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 # create user/group
@@ -33,33 +36,29 @@ RUN groupadd -g $APP_GID appgroup && \
     useradd -m -u $APP_UID -g $APP_GID appuser
 USER appuser
 
-ENV APP_DIR=/app/app \
-    ASSETS_DIR=/app/assets \
-    LOCAL_BIN=/home/appuser/.local/bin \
-    NEXTFLOW_DIR=/home/appuser/.local/bin/nextflow \
-    VECOLI_DIR=/home/appuser/vEcoli
-
-RUN mkdir -p $LOCAL_BIN \
-    && curl -L https://www.nextflow.io/releases/v25.04.6/nextflow \
-         -o $NEXTFLOW_DIR \
-    && chmod +x $NEXTFLOW_DIR \
-    && git clone https://github.com/CovertLab/vEcoli.git $VECOLI_DIR \
-    && chown -R appuser:appgroup /home/appuser
-
-ENV PATH="$PATH:$LOCAL_BIN"
-
 # Set the working directory
 WORKDIR /app
 
+# Install/set up Nextflow and vEcoli
+RUN mkdir -p $LOCAL_BIN \
+    && curl -L https://www.nextflow.io/releases/v25.04.6/nextflow -o $NEXTFLOW_DIR \
+    && chown appuser:appgroup $NEXTFLOW_DIR \
+    && chmod +x $NEXTFLOW_DIR \
+    && mkdir -p $VECOLI_DIR \
+    && git clone --branch $VECOLI_REPO_BRANCH --depth 1 $VECOLI_REPO_URL $VECOLI_DIR \
+    && chown appuser:appgroup $VECOLI_DIR \
+    && chmod +x $VECOLI_DIR
+
 # Copy only the necessary files
-COPY uv.lock /app/uv.lock
-COPY pyproject.toml /app/pyproject.toml
+COPY --chown=appuser:appgroup uv.lock /app/uv.lock
+COPY --chown=appuser:appgroup pyproject.toml /app/pyproject.toml
+COPY --chown=appuser:appgroup assets/dev/config/.dev_env /app/assets/dev/config/.dev_env
 
 # Install dependencies
 RUN uv sync --frozen --no-install-project
 
 # Copy the rest of the application code
-COPY . /app
+COPY --chown=appuser:appgroup . /app
 
 # Sync the project
 RUN uv sync --frozen

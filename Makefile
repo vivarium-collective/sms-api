@@ -2,6 +2,8 @@ LOCAL_GATEWAY_PORT=8888
 
 LATEST_COMMIT_PATH=assets/simulation/model/latest_commit.txt
 
+CURRENT_VERSION := $(shell uv run python -c "from sms_api import version;print(f'{version.__version__}')")
+
 
 .PHONY: install
 install: ## Install the uv environment and install the pre-commit hooks
@@ -189,8 +191,8 @@ generate-client:
 	@make spec
 	@uv run ./scripts/generate-api-client.sh
 
-.PHONY: py
-py:
+.PHONY: apy
+apy:
 	@uv run python -m asyncio
 
 .PHONY: set-wip
@@ -205,15 +207,19 @@ transfer-wip:
 	cp app/ui/wip_$$module.py app/ui/$$module.py; \
 	cp app/ui/layouts/wip_$$module.grid.json app/ui/layouts/$$module.grid.json
 
-.PHONY: deploy-api
-deploy-api:
-	@[ -z "$(tag)" ] && tag=0.2.9-dev || tag=$(tag); \
+.PHONY: image
+image:
+	@[ -z "$(tag)" ] && tag=$(CURRENT_VERSION) || tag=$(tag); \
 	./kustomize/scripts/build_and_push.sh $$tag
 
 .PHONY: exec-api
 exec-api:
 	@[ -z "$(tag)" ] && tag=0.2.8 || tag=$(tag); \
 	docker run --rm --name sms -p 8000:8000 --platform linux/amd64 --entrypoint /usr/bin/env -it ghcr.io/biosimulations/sms-api:$$tag bash
+
+.PHONY: exec
+exec:
+	@docker exec -it api /bin/bash
 
 .PHONY: run-api
 run-api:
@@ -222,6 +228,17 @@ run-api:
 .PHONY: api
 api:
 	@docker rmi -f sms-api:latest && docker compose build api && make run-api
+
+.PHONY: available_simulation_configs
+available_simulation_configs:
+	@[ -z "$(hpc_dest)" ] && echo "You must enter an hpc dest" && exit 1 || ls -1 *.json > $(hpc_dest)
+
+.PHONY: compose
+compose:
+	@docker rm -f api nats; \
+	docker rmi sms-api; \
+	docker compose build; \
+	docker compose up
 
 .DEFAULT_GOAL := help
 

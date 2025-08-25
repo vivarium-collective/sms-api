@@ -1,0 +1,48 @@
+{
+    "version": "0.2.6",
+    "configurations": [
+        {
+            "name": "FastAPI Debugger",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "sms_api.api.main:app",
+                "--reload",
+                "--port",
+                "8888",
+                "--env-file",
+                "assets/dev/config/.dev_env",
+		        "--host",
+                "0.0.0.0"
+            ],
+            "jinja": true,
+            "console": "integratedTerminal",
+            "env": {
+                "KUBECONFIG": "${config:kubeconfig.prod}"  // see * at bottom for more details
+            }
+        },
+        {
+            "name": "Python: pytest with -s",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "-s",
+                "-q",
+                "${file}"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ]
+}
+
+// * you must define a settings file at sms-api/.vscode/settings.json that contains the following key/vals:
+// "kubeconfig.dev": "<LOCAL PATH TO YOUR MINIKUBE KUBECONFIG YML>",
+// "kubeconfig.prod": "<LOCAL PATH TO YOUR VXRAIL(PROD) KUBECONFIG YML>",
+// * NOTE: settings.json can take any arbitrary key vals and be used as defined above in launch.json!
