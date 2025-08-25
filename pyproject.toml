@@ -59,6 +59,8 @@ dev = [
     "types-tqdm>=4.67.0.20250516,<5",
     "openapi-python-client>=0.25.2,<0.26",
     "types-xmltodict>=0.14.0.20241009",
+    "debugpy>=1.8.16",
+    "ipdb>=0.13.13",
 ]
 docs = [
     "mkdocs>=1.4.2,<2",

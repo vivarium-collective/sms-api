@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     biocyc_email: str = ""
     biocyc_password: str = ""
 
+    remote_data_basepath: str = ""
+    local_data_basepath: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
+from textwrap import dedent
 
 from sms_api.common.gateway.models import Namespace, RouterConfig
-from sms_api.config import get_settings
+from sms_api.config import Settings, get_settings
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
@@ -128,3 +129,92 @@ def get_experiment_id(
         + "_"
         + get_experiment_dirname(simulation.database_id, sim_request.simulator.git_commit_hash)
     )
+
+
+def build_workflow_sbatch(
+    slurm_job_name: str,
+    settings: Settings,
+    ecoli_simulation: EcoliSimulation,
+    slurm_log_file: Path,
+    correlation_id: str,
+    parca_parent_path: Path,
+    image_path: Path | None = None,
+    namespace: Namespace | None = None,
+) -> str:
+    """
+    - simulator_version commit hash latest: 78c6310
+    - remote basepath: /home/FCAM/svc_vivarium
+    - vecoli_dir: /home/FCAM/svc_vivarium/prod/repos/78c6310/vEcoli
+    """
+    request = ecoli_simulation.sim_request
+    simulator_version = request.simulator
+    simulator_hash = simulator_version.git_commit_hash
+    config_id = request.config_id or "sms_single"
+
+    # define paths
+    basepath = Path(settings.slurm_base_path)
+    deployment_path = Path(f"{basepath}/{namespace or Namespace.PRODUCTION}")
+
+    remote_vecoli_dir = deployment_path / f"repos/{simulator_hash}/vEcoli"
+    apptainer_path = image_path or deployment_path / f"images/vecoli-{simulator_hash}.sif"
+    config_fp = remote_vecoli_dir / f"configs/{config_id}.json"
+    experiment_fp = get_experiment_path(ecoli_simulation=ecoli_simulation)
+    experiment_id = experiment_fp.name
+    experiment_parent_fp = experiment_fp.parent
+    hpc_sim_config_file = settings.hpc_sim_config_file
+
+    vecoli_dir, img_path, config_path, log_path, experiment_path_parent, experiment_path = [
+        fp.__str__()
+        for fp in [remote_vecoli_dir, apptainer_path, config_fp, slurm_log_file, experiment_parent_fp, experiment_fp]
+    ]
+
+    return dedent(f"""\
+    #!/bin/bash
+    #SBATCH --job-name={slurm_job_name}
+    #SBATCH --time=30:00
+    #SBATCH --cpus-per-task 2
+    #SBATCH --mem=8GB
+    #SBATCH --partition={settings.slurm_partition}
+    #SBATCH --qos={settings.slurm_qos}
+    #SBATCH --output={slurm_log_file!s}
+    #SBATCH --nodelist={settings.slurm_node_list}
+
+    set -e
+
+    # TODO: we probably want/have to change this for generalization
+    # load nextflow
+    module load nextflow
+
+    mkdir -p {experiment_path_parent!s}
+    if [ "$(ls -A {experiment_path!s})" ]; then
+        echo "Simulation output directory {experiment_path!s} is not empty. Skipping job."
+        exit 0
+    fi
+
+    binds="-B {vecoli_dir!s}:/vEcoli"
+    binds+=" -B {parca_parent_path!s}:/parca"
+    binds+=" -B {experiment_path_parent!s}:/out"
+    image="{apptainer_path!s}"
+    cd {vecoli_dir!s}
+
+    # cd {vecoli_dir}
+    # srun runscripts/container/interactive.sh -i {img_path} \
+    # -a -c "python runscripts/workflow.py --config {config_path}"
+
+    config_template_file={vecoli_dir!s}/configs/{hpc_sim_config_file}
+    mkdir -p {experiment_path_parent!s}/configs
+    config_file={experiment_path_parent!s}/configs/{hpc_sim_config_file}_{experiment_id}.json
+    cp $config_template_file $config_file
+    sed -i "s/CORRELATION_ID_REPLACE_ME/{correlation_id}/g" $config_file
+    git -C ./configs diff HEAD >> ./source-info/git_diff.txt
+
+    singularity run $binds $image uv run \\
+        /vEcoli/runscripts/workflow.py \\
+        --config /out/configs/{hpc_sim_config_file}_{experiment_id}.json
+
+    if [ ! "$(ls -A {experiment_path!s})" ]; then
+        echo "Simulation output directory {experiment_path!s} is empty. Job must have failed."
+        exit 1
+    fi
+    echo "Simulation run completed. data saved to {experiment_path!s}."
+    """)

@@ -32,6 +32,12 @@ class ConcreteSimulationService(SimulationService):
         raise NotImplementedError
 
     @override
+    async def submit_vecoli_job(
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
+    ) -> int:
+        raise NotImplementedError
+
+    @override
     async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
         raise NotImplementedError
 

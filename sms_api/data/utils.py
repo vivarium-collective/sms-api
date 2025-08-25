@@ -1,6 +1,17 @@
+from enum import StrEnum
+from pathlib import Path
+
 import polars as pl
 
+from sms_api.config import Settings, get_settings
 from sms_api.data.models import SerializedArray
+
+
+class OutputDataType(StrEnum):
+    PARQUET = "history"
+    ANALYSIS = "analyses"
+    NEXTFLOW = "nextflow"
+    SIMDATA = "parca"
 
 
 def serialize_dataframe(df: pl.DataFrame) -> dict[str, SerializedArray]:
@@ -9,3 +20,26 @@ def serialize_dataframe(df: pl.DataFrame) -> dict[str, SerializedArray]:
     for i, col in enumerate(df.iter_columns()):
         dataframe[cols[i]] = SerializedArray(col.to_numpy())
     return dataframe
+
+
+def get_variant_data_dirpath(
+    experiment_id: str,
+    data_type: OutputDataType,
+    variant: int,
+    lineage_seed: int = 0,
+    generation: int = 1,
+    agent_id: int = 0,
+    remote: bool = True,
+) -> Path:
+    settings: Settings = get_settings()
+    base_datapath = Path(settings.remote_data_basepath if remote else settings.local_data_basepath)
+    return (
+        base_datapath
+        / experiment_id
+        / data_type
+        / f"experiment_id={experiment_id}"
+        / f"variant={variant}"
+        / f"lineage_seed={lineage_seed}"
+        / f"generation={generation}"
+        / f"agent_id={agent_id}"
+    )

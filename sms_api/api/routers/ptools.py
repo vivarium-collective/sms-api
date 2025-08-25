@@ -20,11 +20,6 @@ def get_server_url(dev: bool = True) -> ServerMode:
     return ServerMode.DEV if dev else ServerMode.PROD
 
 
-# -- app components -- #
-
-# TODO: mount nfs driver
-
-
 config = RouterConfig(router=APIRouter(), prefix="/ptools", dependencies=[])
 
 
