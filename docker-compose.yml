@@ -3,25 +3,28 @@ services:
     platform: linux/amd64
     build:
       context: .
-      dockerfile: Dockerfile-api
+      dockerfile: Dockerfile-sms
     image: sms-api:latest
-    container_name: gateway
+    container_name: api
     restart: unless-stopped
     ports:
       - "8000:8000"
+    environment:
+      # the nats image locally listens on 4222
+      NATS_URL: "nats://nats:4222"
+      NATS_EMITTER_URL: "nats://nats:4222"
+      HPC_SIM_CONFIG_FILE: publish.json
+      NATS_WORKER_EVENT_SUBJECT: test.ecoli-publish
     networks:
       - smsnet
+    volumes:
+      - ./sms_api:/app/sms_api
 
   nats:
     platform: linux/amd64
     image: nats:latest
     container_name: nats
     restart: unless-stopped
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-      - "6222:6222"
-      - "30050:30050"
     networks:
       - smsnet
 

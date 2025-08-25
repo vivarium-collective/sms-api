@@ -217,6 +217,10 @@ exec-api:
 	@[ -z "$(tag)" ] && tag=0.2.8 || tag=$(tag); \
 	docker run --rm --name sms -p 8000:8000 --platform linux/amd64 --entrypoint /usr/bin/env -it ghcr.io/biosimulations/sms-api:$$tag bash
 
+.PHONY: exec
+exec:
+	@docker exec -it api /bin/bash
+
 .PHONY: run-api
 run-api:
 	@docker run --rm --name api -p 8000:8000 --platform linux/amd64 --entrypoint /usr/bin/env -it sms-api:latest bash
@@ -228,6 +232,13 @@ api:
 .PHONY: available_simulation_configs
 available_simulation_configs:
 	@[ -z "$(hpc_dest)" ] && echo "You must enter an hpc dest" && exit 1 || ls -1 *.json > $(hpc_dest)
+
+.PHONY: compose
+compose:
+	@docker rm -f api nats; \
+	docker rmi sms-api; \
+	docker compose build; \
+	docker compose up
 
 .DEFAULT_GOAL := help
 

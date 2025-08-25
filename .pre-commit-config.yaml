@@ -8,7 +8,9 @@ repos:
       - id: check-yaml
         exclude: ^kustomize/
       - id: check-json
+        exclude: (^\.devcontainer/|^\.vscode/)
       - id: pretty-format-json
+        exclude: (^\.devcontainer/|^\.vscode/)
         args: [ --autofix, --no-sort-keys ]
       - id: end-of-file-fixer
       - id: trailing-whitespace
