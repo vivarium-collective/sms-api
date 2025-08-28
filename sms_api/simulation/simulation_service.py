@@ -24,6 +24,7 @@ from sms_api.simulation.hpc_utils import (
     get_parca_dataset_dirname,
     get_slurm_log_file,
     get_slurm_submit_file,
+    get_slurmjob_name,
     get_vEcoli_repo_dir,
 )
 from sms_api.simulation.models import EcoliSimulation, EcoliWorkflowSimulation, ParcaDataset, SimulatorVersion
@@ -544,7 +545,7 @@ def slurm_script(
         echo "|<--- END <---"
         echo "                                        "
 
-        # Check if the experiment dir exists, remove if so:
+        ### Check if the experiment dir exists, remove if so:
         if [ -d {experiment_outdir} ]; then rm -rf {experiment_outdir}; fi
 
         ### configure working dir and binds
@@ -569,12 +570,6 @@ def slurm_script(
             export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
             uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/{config_id}.json
         '
-
-        # singularity run $binds $image uv run \\
-        #     --env-file /vEcoli/.env \\
-        #     --project /vEcoli \\
-        #     /vEcoli/runscripts/workflow.py \\
-        #     --config $vecoli_image_root/configs/{config_id}.json
     """)
 
 
@@ -619,8 +614,8 @@ async def submit_vecoli_job(
     experiment_dir = get_experiment_dir(experiment_id=experiment_id, env=env)
     experiment_path_parent = experiment_dir.parent
     experiment_id_dir = experiment_dir.name
-    # slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
-    slurmjob_name = "dev"
+    slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
+    # slurmjob_name = "dev"
 
     script = slurm_script(config_id=config_id, slurm_job_name=slurmjob_name, settings=env, logger=logger)
 
