@@ -24,7 +24,7 @@ cp $(which nextflow) /tmp/nextflow
 chmod +x /tmp/nextflow
 binds+=" -B /tmp/nextflow:/usr/bin/nextflow"
 binds+=" -B $JAVA_HOME:$JAVA_HOME"
-image="/home/FCAM/svc_vivarium/prod/images/vecoli-$latest_hash.sif"  
+image="/home/FCAM/svc_vivarium/prod/images/vecoli-$latest_hash.sif"
 vecoli_image_root=/vEcoli
 image_python_interpreter=/home/FCAM/svc_vivarium/workspace/vEcoli/.venv/bin/python
 

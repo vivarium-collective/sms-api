@@ -124,14 +124,14 @@ General rule: **rates and fold-effects → multiplicative**, **counts sometimes 
 | distanceBetweenRibosomesOnMRna | additive or multiplicative | small absolute ±5–20 nt, or ×[0.9,1.1] |
 | stableRnaPerTotalRnaSynthesized | multiplicative (fraction) | scale ±10–30% then clamp to [0,1] |
 
-**Start small** (±10% / ×[0.9,1.1]) for initial screening (OAT).  
+**Start small** (±10% / ×[0.9,1.1]) for initial screening (OAT).
 Use wider ranges (×0.5–2.0) only for exploratory or when you expect large uncertainty.
 
 ---
 
 ### C — Special Handling for Spline / Function Objects
 
-Your interpolate objects (`CubicSpline` instances inside the `*_params` dicts) are function objects — **don’t rewrite their knot arrays** unless you know what you’re doing.  
+Your interpolate objects (`CubicSpline` instances inside the `*_params` dicts) are function objects — **don’t rewrite their knot arrays** unless you know what you’re doing.
 Safer approaches:
 
 ---

@@ -27,58 +27,38 @@
     hive partitioning: single simulations will always have the same hive partitioning, etc.
 """
 
-import datetime
 import logging
-import mimetypes
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
 # from sms_api.api.request_examples import examples
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
-from sms_api.common.gateway.utils import REPO_DIR, get_local_simulation_outdir, get_simulation_outdir, get_simulator
-from sms_api.data.analysis_service import AnalysisService
+from sms_api.common.gateway.utils import REPO_DIR, get_simulator
 from sms_api.data.parquet_service import ParquetService
 from sms_api.dependencies import (
     get_database_service,
-    get_db_engine,
     get_simulation_service,
-)
-from sms_api.simulation.handlers import (
-    get_parca_datasets,
-    run_parca,
-    run_simulation,
-    run_workflow,
-    upload_simulator,
-    verify_simulator_payload,
 )
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
     ConfigOverrides,
-    EcoliExperiment,
     EcoliSimulation,
-    EcoliSimulationRequest,
     EcoliWorkflowRequest,
     HpcRun,
     JobType,
-    ParcaDataset,
-    ParcaDatasetRequest,
-    RegisteredSimulators,
-    SimulationConfig,
     SimulationParameters,
-    Simulator,
     SimulatorVersion,
-    WorkerEvent,
-    WorkflowConfig,
 )
 
 logger = logging.getLogger(__name__)
 
 LATEST_COMMIT = read_latest_commit()
 ROUTER_TAG = ["Simulations - vEcoli"]
+
 
 def get_server_url(dev: bool = True) -> ServerMode:
     return ServerMode.DEV if dev else ServerMode.PROD
@@ -116,11 +96,7 @@ async def run_simulation_workflow(
     # config: SimulationConfig | None = None
 ) -> Any:
     simulator: SimulatorVersion = get_simulator()
-    sim_request = EcoliWorkflowRequest(
-        config_id=config_id,
-        simulator=simulator,
-        config=config_overrides
-    )
+    sim_request = EcoliWorkflowRequest(config_id=config_id, simulator=simulator, config=config_overrides)
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
@@ -226,9 +202,7 @@ async def get_simulation_status(
     operation_id="get-wcm-parameters",
     response_model=SimulationParameters,
     tags=["Data - vEcoli"],
-    dependencies=[Depends(get_simulation_service), Depends(get_database_service)]
+    dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
 )
-async def get_wcm_parameters(
-    experiment_id: str = Query(...)
-) -> SimulationParameters:
-    pass 
+async def get_wcm_parameters(experiment_id: str = Query(...)) -> SimulationParameters:
+    pass

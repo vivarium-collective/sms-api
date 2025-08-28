@@ -36,7 +36,8 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}",
+                "KUBECONFIG": "${config:kubeconfig.prod}"
             }
         }
     ]

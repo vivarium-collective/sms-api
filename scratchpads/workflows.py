@@ -6,18 +6,17 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
-    from textwrap import dedent
-    from pathlib import Path
-    import uuid
-    import tempfile
     import random
     import string
+    import tempfile
+    import uuid
+    from pathlib import Path
+    from textwrap import dedent
 
-    from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
     from sms_api.common.hpc.slurm_service import SlurmService
+    from sms_api.common.ssh.ssh_service import SSHService
+    from sms_api.config import Settings, get_settings
     from sms_api.simulation.hpc_utils import get_slurm_submit_file
-    from sms_api.config import get_settings, Settings
-
 
     # -- sms_api.simulation.hpc_utils -- #
 
@@ -28,7 +27,6 @@ def _():
     def get_experiment_dir(experiment_id: str, env: Settings) -> Path:
         return Path(f"{env.slurm_base_path}/workspace/outputs/{experiment_id}")
 
-
     # -- simulation_service -- #
 
     def slurm_script(
@@ -36,7 +34,7 @@ def _():
         slurm_job_name: str,
         # vecoli_commit_hash: str | None = None,
         # remote_vecoli_dir: Path | None = None,
-        settings: Settings | None = None
+        settings: Settings | None = None,
     ) -> str:
         """
         :param config_id: config id selected from the dropdown of available
@@ -48,8 +46,7 @@ def _():
         remote_workspace_dir = base_path / "workspace"
         # vecoli_dir = remote_vecoli_dir or remote_workspace_dir / "vEcoli"
         vecoli_dir = remote_workspace_dir / "vEcoli"
-        config_dir = vecoli_dir / "configs"
-        slurm_log_file = base_path / f'prod/htclogs/{slurm_job_name}.out'
+        slurm_log_file = base_path / f"prod/htclogs/{slurm_job_name}.out"
 
         # latest_hash = vecoli_commit_hash or "079c43c"
         latest_hash = "079c43c"
@@ -82,7 +79,7 @@ def _():
             binds+=" -B /tmp/nextflow:/usr/bin/nextflow"
             binds+=" -B $JAVA_HOME:$JAVA_HOME"
 
-            image="/home/FCAM/svc_vivarium/prod/images/vecoli-$latest_hash.sif"  
+            image="/home/FCAM/svc_vivarium/prod/images/vecoli-$latest_hash.sif"
             vecoli_image_root=/vEcoli
 
             singularity run $binds $image uv run \\
@@ -91,11 +88,7 @@ def _():
                 --config $vecoli_image_root/configs/{config_id}.json
         """)
 
-    async def submit_slurm_script(
-        script_content: str, 
-        slurm_job_name: str, 
-        env: Settings | None = None
-    ) -> int:
+    async def submit_slurm_script(script_content: str, slurm_job_name: str, env: Settings | None = None) -> int:
         settings = env or get_settings()
         ssh_service = SSHService(
             hostname=settings.slurm_submit_host,
@@ -116,20 +109,14 @@ def _():
             )
             return slurm_jobid
 
-    async def submit_vecoli_job(
-        config_id: str, simulator_hash: str, env: Settings, expid: str | None = None
-    ) -> int:
-        experiment_id = expid or config_id + f'-{str(uuid.uuid4()).split('-')[-1]}'
+    async def submit_vecoli_job(config_id: str, simulator_hash: str, env: Settings, expid: str | None = None) -> int:
+        experiment_id = expid or config_id + f"-{str(uuid.uuid4()).split('-')[-1]}"
         experiment_dir = get_experiment_dir(experiment_id=experiment_id, env=env)
         experiment_path_parent = experiment_dir.parent
         experiment_id_dir = experiment_dir.name
         slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
 
-        script = slurm_script(
-            config_id=config_id, 
-            slurm_job_name=slurmjob_name, 
-            settings=env
-        )
+        script = slurm_script(config_id=config_id, slurm_job_name=slurmjob_name, settings=env)
 
         print(
             dedent(f"""\
@@ -141,13 +128,14 @@ def _():
 
             """)
         )
-        print(f'Slurm Script:\n{script}')
+        print(f"Slurm Script:\n{script}")
         try:
             slurmjob_id = await submit_slurm_script(script_content=script, slurm_job_name=slurmjob_name, env=env)
-            print(f'Submission Successful!!\nGenerated slurmjob ID: {slurmjob_id}')
+            print(f"Submission Successful!!\nGenerated slurmjob ID: {slurmjob_id}")
             return slurmjob_id
         except Exception as e:
-            print(f'Submission NOT Successfull: Something went wrong:\n{e}')
+            print(f"Submission NOT Successfull: Something went wrong:\n{e}")
+
     return get_settings, submit_vecoli_job
 
 
@@ -159,9 +147,11 @@ async def _(get_settings, submit_vecoli_job):
         vecoli_repo_hash = "079c43c"
         env = get_settings()
 
-        print(f'Running test submission with config id: {config_id}\n...and experiment id: {experiment_id}\n...')
-        jobid = await submit_vecoli_job(config_id=config_id, simulator_hash=vecoli_repo_hash, env=env, expid=experiment_id)
-        print(f'Got slurm jobid: {jobid}')
+        print(f"Running test submission with config id: {config_id}\n...and experiment id: {experiment_id}\n...")
+        jobid = await submit_vecoli_job(
+            config_id=config_id, simulator_hash=vecoli_repo_hash, env=env, expid=experiment_id
+        )
+        print(f"Got slurm jobid: {jobid}")
 
     await run_test()
     return

@@ -1,4 +1,6 @@
 import os
+import random
+import string
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
@@ -229,3 +231,12 @@ def add_variant_config(config: dict[str, Any]) -> dict[str, Any]:
     },
     """
     return config
+
+
+def get_slurmjob_name(experiment_id: str, simulator_hash: str = "079c43c") -> str:
+    random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
+    return f"sim-{simulator_hash}-{experiment_id}-{random_suffix}"
+
+
+def get_experiment_dir(experiment_id: str, env: Settings) -> Path:
+    return Path(f"{env.slurm_base_path}/workspace/outputs/{experiment_id}")

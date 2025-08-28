@@ -21,7 +21,7 @@ export PATH=$HOME/bin:$PATH
 
 ```bash
 java -version
-module load java/11  
+module load java/11
 ```
 
 
@@ -42,7 +42,7 @@ module load python/3.9
 python3 -m venv ~/.vecoli_venv
 source ~/.vecoli_venv/bin/activate
 pip install --upgrade pip
-pip install uv 
+pip install uv
 ```
 
 ### Step 3: Clone vEcoli repository
@@ -88,7 +88,7 @@ containerOptions = "-B /scratch/$USER/vecoli_output"
 
 5b. When running interactive containers manually, also specify the bind:
 
-```bash 
+```bash
 apptainer exec -B /scratch/$USER/vecoli_output vEcoli.sif
 ```
 
@@ -647,4 +647,3 @@ function run_singularity {
     vecoli_image_root=/vEcoli
     singularity run $binds $image uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs ${config_id}.json
 }
-    

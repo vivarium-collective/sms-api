@@ -84,7 +84,10 @@ class Settings(BaseSettings):
 
 
 @lru_cache
-def get_settings() -> Settings:
+def get_settings(env_file: Path | None = None) -> Settings:
+    if env_file is not None:
+        DEV_ENV_PATH = str(env_file)
+        load_dotenv(DEV_ENV_PATH)
     return Settings()
 
 
