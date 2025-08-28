@@ -537,7 +537,8 @@ def slurm_script(
         echo "Java path: $jv"
         echo "Nextflow path: $nf"
         cd $HOME/workspace/vEcoli
-        echo "UV Python: $(which python)"
+        echo "UV Installation: $(which uv)"
+        echo "UV Python: $(uv run which python)"
         echo "$jv" > {remote_workspace_dir!s}/test-java.txt
         echo "$nf" > {remote_workspace_dir!s}/test-nextflow.txt
         echo "|<--- END <---"
@@ -562,11 +563,18 @@ def slurm_script(
         # image="/home/FCAM/svc_vivarium/prod/images/vecoli-$latest_hash.sif"
         image=$HOME/workspace/images/vecoli-$latest_hash.sif
         vecoli_image_root=/vEcoli
-        singularity run $binds $image uv run \\
-            --env-file /vEcoli/.env \\
-            --project /vEcoli \\
-            /vEcoli/runscripts/workflow.py \\
-            --config $vecoli_image_root/configs/{config_id}.json
+
+        singularity run $binds $image bash -c '
+            export JAVA_HOME=$HOME/.local/bin/java-22
+            export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
+            uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/{config_id}.json
+        '
+
+        # singularity run $binds $image uv run \\
+        #     --env-file /vEcoli/.env \\
+        #     --project /vEcoli \\
+        #     /vEcoli/runscripts/workflow.py \\
+        #     --config $vecoli_image_root/configs/{config_id}.json
     """)
 
 
