@@ -518,35 +518,42 @@ def slurm_script(
 
         set -e
 
+        ### set up java and nextflow
         local_bin=$HOME/.local/bin
         export JAVA_HOME=$local_bin/java-22
         export NEXTFLOW=$local_bin/nextflow
-        export PATH=$JAVA_HOME/bin:$PATH:$NEXTFLOW
+        export PATH=$JAVA_HOME/bin:$PATH:$(dirname "$NEXTFLOW")
 
-        env
+        ### confirm installations/paths
+        echo "=== Environment Variables ==="
+        env | grep -E 'JAVA_HOME|PATH|NEXTFLOW'
+
+        echo "=== Checking Java and Nextflow ==="
+        jv=$(which java)
+        nf=$(which nextflow)
+        echo "Java path: $jv"
+        echo "Nextflow path: $nf"
+        echo "$jv" > {remote_workspace_dir!s}/test-java.txt
+        echo "$nf" > {remote_workspace_dir!s}/test-nextflow.txt
 
         # Check if the experiment dir exists, remove if so:
         # if [ -d {experiment_outdir} ]; then rm -rf {experiment_outdir}; fi
 
-        # source /etc/profile.d/modules.sh
-        # module load java
-        # module load nextflow
-
+        ### configure working dir and binds
         vecoli_dir={vecoli_dir!s}
         latest_hash={latest_hash}
         cd $vecoli_dir
 
-        # bind vecoli and outputs
+        ### bind vecoli and outputs dest dir
         binds="-B /home/FCAM/svc_vivarium/workspace/vEcoli:/vEcoli"
         binds+=" -B /home/FCAM/svc_vivarium/workspace/outputs:/out"
 
-        # bind java and nextflow
+        ### bind java and nextflow
         binds+=" -B $JAVA_HOME:$JAVA_HOME"
         binds+=" -B $NEXTFLOW:$NEXTFLOW"
 
         image="/home/FCAM/svc_vivarium/prod/images/vecoli-$latest_hash.sif"
         vecoli_image_root=/vEcoli
-
         singularity run $binds $image uv run \\
             --env-file $vecoli_image_root/.env \\
             $vecoli_image_root/runscripts/workflow.py \\

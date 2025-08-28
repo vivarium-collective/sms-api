@@ -2,6 +2,14 @@
     "version": "0.2.6",
     "configurations": [
         {
+            "type": "bashdb",
+            "request": "launch",
+            "name": "Bash-Debug (type in script name)",
+            "cwd": "${workspaceFolder}",
+            "program": "${command:AskForScriptName}",
+            "args": []
+        },
+        {
             "name": "FastAPI Debugger",
             "type": "debugpy",
             "request": "launch",
@@ -14,13 +22,13 @@
                 "8888",
                 "--env-file",
                 "assets/dev/config/.dev_env",
-		        "--host",
+                "--host",
                 "0.0.0.0"
             ],
             "jinja": true,
             "console": "integratedTerminal",
             "env": {
-                "KUBECONFIG": "${config:kubeconfig.prod}"  // see * at bottom for more details
+                "KUBECONFIG": "${config:kubeconfig.prod}" // see * at bottom for more details
             }
         },
         {
@@ -42,7 +50,6 @@
         }
     ]
 }
-
 // * you must define a settings file at sms-api/.vscode/settings.json that contains the following key/vals:
 // "kubeconfig.dev": "<LOCAL PATH TO YOUR MINIKUBE KUBECONFIG YML>",
 // "kubeconfig.prod": "<LOCAL PATH TO YOUR VXRAIL(PROD) KUBECONFIG YML>",
