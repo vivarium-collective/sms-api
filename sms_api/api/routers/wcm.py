@@ -29,7 +29,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -38,20 +38,23 @@ from fastapi.responses import FileResponse
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.common.gateway.utils import REPO_DIR, get_simulator
+from sms_api.config import get_settings
 from sms_api.data.parquet_service import ParquetService
 from sms_api.dependencies import (
     get_database_service,
     get_simulation_service,
 )
+from sms_api.simulation.handlers import run_workflow
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
-    ConfigOverrides,
+    EcoliExperiment,
     EcoliSimulation,
     EcoliWorkflowRequest,
     HpcRun,
     JobType,
-    SimulationParameters,
+    Overrides,
     SimulatorVersion,
+    Variants,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,7 +73,9 @@ config = RouterConfig(router=APIRouter(), prefix="/wcm", dependencies=[])
 @config.router.get(path="/simulation/configs", operation_id="get-available-configs", tags=["Simulations - vEcoli"])
 async def get_available_config_ids(simulator_hash: str | None = Query(default=None)) -> list[str]:
     fname = "available_configs.txt"
-    path = Path("/home/FCAM/svc_vivarium/prod") / fname  # currently 78c6310 (8/22/25)
+    print(simulator_hash)
+    env = get_settings()
+    path = Path(f"{env.slurm_base_path}/prod") / fname  # currently 78c6310 (8/22/25)
     if not path.exists():
         path = Path(f"{REPO_DIR}/assets/simulation") / fname
     with open(path) as fp:
@@ -88,15 +93,16 @@ async def get_available_config_ids(simulator_hash: str | None = Query(default=No
 )
 async def run_simulation_workflow(
     background_tasks: BackgroundTasks,
-    config_overrides: ConfigOverrides,
     config_id: str = Query(default="sms_single"),
-    max_duration: float = Query(default=10800.0),
-    time_step: float = Query(default=1.0),
-    # config_overrides: dict[str, Any] | None = None,
-    # config: SimulationConfig | None = None
-) -> Any:
+    config_overrides: Optional[Overrides] = None,
+    variant_config: Optional[Variants] = None,
+    # max_duration: float = Query(default=10800.0),
+    # time_step: float = Query(default=1.0),
+) -> EcoliExperiment:
     simulator: SimulatorVersion = get_simulator()
-    sim_request = EcoliWorkflowRequest(config_id=config_id, simulator=simulator, config=config_overrides)
+    sim_request = EcoliWorkflowRequest(
+        config_id=config_id, config_overrides=config_overrides, variant_config=variant_config, simulator=simulator
+    )
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
@@ -106,17 +112,16 @@ async def run_simulation_workflow(
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
 
-    # try:
-    #     return await run_workflow(
-    #         simulation_request=sim_request,
-    #         database_service=db_service,
-    #         simulation_service_slurm=sim_service,
-    #         router_config=config,
-    #         background_tasks=background_tasks,z
-    #     )
-    # except Exception as e:
-    #     logger.exception("Error running vEcoli simulation")
-    #     raise HTTPException(status_code=500, detail=str(e)) from e
+    try:
+        return await run_workflow(
+            simulation_request=sim_request,
+            simulation_service_slurm=sim_service,
+            background_tasks=background_tasks,
+            # database_service=db_service,
+        )
+    except Exception as e:
+        logger.exception("Error running vEcoli simulation")
+        raise HTTPException(status_code=500, detail=str(e)) from e
     return [simulator, sim_request]
 
 
@@ -164,7 +169,7 @@ async def get_workflow_versions() -> list[EcoliSimulation]:
         simulations: list[EcoliSimulation] = await db_service.list_simulations()
         return simulations
     except Exception as e:
-        logger.exception("Error running PARCA")
+        logger.exception("Error getting simulations")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -197,12 +202,12 @@ async def get_simulation_status(
     return simulation_hpcrun
 
 
-@config.router.post(
-    path="/parameters",
-    operation_id="get-wcm-parameters",
-    response_model=SimulationParameters,
-    tags=["Data - vEcoli"],
-    dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-)
-async def get_wcm_parameters(experiment_id: str = Query(...)) -> SimulationParameters:
-    pass
+# @config.router.post(
+#     path="/parameters",
+#     operation_id="get-wcm-parameters",
+#     response_model=SimulationParameters,
+#     tags=["Data - vEcoli"],
+#     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
+# )
+# async def get_wcm_parameters(experiment_id: str = Query(...)) -> list[str]:
+#     return [f'WCM Parameters according to {experiment_id}']

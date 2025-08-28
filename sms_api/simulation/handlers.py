@@ -5,14 +5,16 @@ import string
 from fastapi import BackgroundTasks, HTTPException
 
 from sms_api.common.gateway.models import RouterConfig
+from sms_api.common.ssh.ssh_service import get_ssh_service
+from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id, get_experiment_id
 from sms_api.simulation.models import (
     EcoliExperiment,
     EcoliSimulationRequest,
-    EcoliSimulationWorkflow,
     EcoliWorkflowRequest,
+    EcoliWorkflowSimulation,
     JobType,
     ParcaDataset,
     ParcaDatasetRequest,
@@ -20,7 +22,7 @@ from sms_api.simulation.models import (
     Simulator,
     SimulatorVersion,
 )
-from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
+from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc, submit_vecoli_job
 
 logger = logging.getLogger(__name__)
 
@@ -229,33 +231,43 @@ async def run_simulation(
 
 async def run_workflow(
     simulation_request: EcoliWorkflowRequest,
-    database_service: DatabaseService,
+    # database_service: DatabaseService,
     simulation_service_slurm: SimulationService,
-    router_config: RouterConfig,
+    # router_config: RouterConfig,
     background_tasks: BackgroundTasks | None = None,
 ) -> EcoliExperiment:
     # simulation = await database_service.insert_simulation(sim_request=simulation_request)
-    simulation = EcoliSimulationWorkflow(sim_request=simulation_request)
+    experiment_id = simulation_request.experiment_id
+    simulation = EcoliWorkflowSimulation(sim_request=simulation_request)
+    env = get_settings()
+    ssh_service = get_ssh_service()
 
     async def dispatch_job() -> None:
-        random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311 doesn't need to be secure
-        correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string_7_hex)
-        sim_slurmjobid = await simulation_service_slurm.submit_vecoli_job(
-            ecoli_simulation=simulation, database_service=database_service
+        # random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))
+        # correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string_7_hex)
+        # sim_slurmjobid = await simulation_service_slurm.submit_vecoli_job(
+        #     ecoli_simulation=simulation, database_service=database_service
+        # )
+        sim_slurmjobid = await submit_vecoli_job(
+            config_id=simulation_request.config_id,
+            simulator_hash=simulation_request.simulator.git_commit_hash,
+            env=env,
+            expid=experiment_id,
+            ssh=ssh_service,
+            logger=logger,
         )
-        _hpcrun = await database_service.insert_hpcrun(
-            slurmjobid=sim_slurmjobid,
-            job_type=JobType.SIMULATION,
-            ref_id=simulation.database_id,
-            correlation_id=correlation_id,
-        )
+        print(sim_slurmjobid)
+        # _hpcrun = await database_service.insert_hpcrun(
+        #     slurmjobid=sim_slurmjobid,
+        #     job_type=JobType.SIMULATION,
+        #     ref_id=simulation.database_id,
+        #     correlation_id=correlation_id,
+        # )
+        return None
 
     if background_tasks:
         background_tasks.add_task(dispatch_job)
     else:
         await dispatch_job()
-    experiment_id = get_experiment_id(
-        router_config=router_config, simulation=simulation, sim_request=simulation_request
-    )
 
     return EcoliExperiment(experiment_id=experiment_id, simulation=simulation)

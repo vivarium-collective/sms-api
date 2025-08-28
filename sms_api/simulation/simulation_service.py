@@ -3,7 +3,6 @@ import random
 import string
 import tempfile
 import uuid
-import warnings
 from abc import ABC, abstractmethod
 from pathlib import Path
 from textwrap import dedent
@@ -27,7 +26,7 @@ from sms_api.simulation.hpc_utils import (
     get_slurmjob_name,
     get_vEcoli_repo_dir,
 )
-from sms_api.simulation.models import EcoliSimulation, EcoliSimulationWorkflow, ParcaDataset, SimulatorVersion
+from sms_api.simulation.models import EcoliSimulation, EcoliWorkflowSimulation, ParcaDataset, SimulatorVersion
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -59,7 +58,9 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def submit_vecoli_job(
-        self, ecoli_simulation: EcoliSimulationWorkflow, database_service: DatabaseService
+        self,
+        ecoli_simulation: EcoliWorkflowSimulation,
+        # database_service: DatabaseService
     ) -> int:
         pass
 
@@ -426,23 +427,31 @@ class SimulationServiceHpc(SimulationService):
 
     @override
     async def submit_vecoli_job(
-        self, ecoli_simulation: EcoliSimulationWorkflow, database_service: DatabaseService
+        self,
+        ecoli_simulation: EcoliWorkflowSimulation,
+        # database_service: DatabaseService
     ) -> int:
         """Dispatches a nextflow-powered vEcoli simulation workflow
         as in (/vEcoli/runscripts/workflow.py --config <CONFIG_JSON_PATH>)
         """
-        # if not isinstance(ecoli_simulation.sim_request, EcoliWorkflowRequest):
-        #     raise TypeError("You must pass a simulation workflow request (EcoliWorkflowRequest)")
+        if not isinstance(ecoli_simulation, EcoliWorkflowSimulation):
+            raise TypeError("You must pass a simulation workflow request simulation (EcoliWorkflowSimulation)")
 
-        # settings = get_settings()
-        # ssh_service = SSHService(
-        #     hostname=settings.slurm_submit_host,
-        #     username=settings.slurm_submit_user,
-        #     key_path=Path(settings.slurm_submit_key_path),
-        #     known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        # )
-        warnings.warn("This method is not yet implemented!", stacklevel=1)
-        return -1
+        settings = get_settings()
+        ssh_service = SSHService(
+            hostname=settings.slurm_submit_host,
+            username=settings.slurm_submit_user,
+            key_path=Path(settings.slurm_submit_key_path),
+            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
+        )
+        return await submit_vecoli_job(
+            config_id=ecoli_simulation.sim_request.config_id,
+            simulator_hash=ecoli_simulation.sim_request.simulator.git_commit_hash,
+            env=settings,
+            expid=ecoli_simulation.sim_request.experiment_id,
+            ssh=ssh_service,
+            logger=logger,
+        )
 
     @override
     async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:

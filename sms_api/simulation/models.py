@@ -40,7 +40,7 @@ class Payload(FlexData):
 class BaseModel(_BaseModel):
     def as_payload(self) -> Payload:
         serialized = json.loads(self.model_dump_json())
-        return Payload(**serialized)  # type: ignore[no-untyped-call]
+        return Payload(**serialized)
 
 
 class JobType(enum.Enum):
@@ -102,15 +102,15 @@ class ParcaDataset(BaseModel):
     remote_archive_path: str | None = None  # Path to the dataset archive in remote storage
 
 
-class EcoliSimulationRequest(BaseModel):
-    simulator: SimulatorVersion
-    parca_dataset_id: int
-    variant_config: dict[str, dict[str, int | float | str]] = Field(
-        default={"named_parameters": {"param1": 0.5, "param2": 0.5}}
-    )  # TODO: remove this eventually in favor of overrides
-    config_id: str | None = None
-    config_overrides: Optional[dict[str, Any]] = None
+class Overrides(BaseModel):
+    config: dict[str, Any] | None = {}
 
+
+class Variants(BaseModel):
+    config: dict[str, dict[str, int | float | str]] = Field(default_factory=dict)
+
+
+class SimulationRequest(BaseModel):
     @property
     def variant_config_hash(self) -> str:
         """Generate a deep hash of the variant config hash for caching purposes."""
@@ -119,19 +119,29 @@ class EcoliSimulationRequest(BaseModel):
         return hashlib.md5(json.encode()).hexdigest()  # noqa: S324 insecure hash `md5` is okay for caching
 
 
-class ConfigOverrides(BaseModel):
-    overrides: dict[str, Any] | None = {}
+class EcoliSimulationRequest(SimulationRequest):
+    """Fits EcoliSim"""
+
+    simulator: SimulatorVersion
+    parca_dataset_id: int
+    variant_config: dict[str, dict[str, int | float | str]] = Field(
+        default={"named_parameters": {"param1": 0.5, "param2": 0.5}}
+    )  # TODO: remove this eventually in favor of overrides
 
 
-class EcoliWorkflowRequest(BaseModel):
-    """
+class EcoliWorkflowRequest(SimulationRequest):
+    """Fits Nextflow workflows
+
     :param config_id: (str) filename (without '.json') of the given sim config
     :param config_overrides: (Optional[dict[str, Any]]) overrides any key within the file found at {config_id}.json
     """
 
     config_id: str
     simulator: SimulatorVersion
-    config: ConfigOverrides
+    config_overrides: Overrides | None = None
+    variant_config: Variants | None = None
+    parca_dataset_id: int | None = None
+    experiment_id: str = Field(default=str(uuid.uuid4()).split("-")[-1])
 
 
 class AntibioticSimulationRequest(EcoliSimulationRequest):
@@ -144,20 +154,21 @@ class EcoliSimulation(BaseModel):
     slurmjob_id: int | None = None
 
 
-class EcoliSimulationWorkflow(BaseModel):
+class EcoliWorkflowSimulation(BaseModel):
     sim_request: EcoliWorkflowRequest
-    experiment_id: str = Field(default=str(uuid.uuid4()).split("-")[-1])
     database_id: int | None = None
     slurmjob_id: int | None = None
 
 
-class AntibioticSimulation(EcoliSimulation):
+class AntibioticSimulation(BaseModel):
+    database_id: int
     sim_request: AntibioticSimulationRequest
+    slurmjob_id: int | None = None
 
 
 class EcoliExperiment(BaseModel):
     experiment_id: str
-    simulation: EcoliSimulation | AntibioticSimulation
+    simulation: EcoliSimulation | EcoliWorkflowSimulation | AntibioticSimulation
     last_updated: str = Field(default_factory=lambda: str(datetime.datetime.now()))
     metadata: Mapping[str, str] = Field(default_factory=dict)
 
@@ -212,9 +223,6 @@ class SimulationConfig:
     emitter_arg: dict[str, Any] | None = None
     variants: dict[str, Any] | None = None
     analysis_options: dict[str, Any] | None = None
-    # emitter_arg: dict[str, Any] = field(default_factory=dict)
-    # variants: dict[str, Any] = field(default_factory=dict)
-    # analysis_options: dict[str, Any] = field(default_factory=dict)
     gcloud: Optional[str] = None
     agent_id: Optional[str] = None
     parallel: Optional[bool] = None
@@ -259,12 +267,6 @@ class SimulationConfig:
     initial_state_overrides: Optional[list[str]] = None
     initial_state: Optional[dict[str, Any]] = None
 
-    # def __post_init__(self) -> None:
-    #     if not len(self.parca_options.keys()):
-    #         self.parca_options = {"cpus": 2}
-    #     if not len(self.emitter_arg.keys()):
-    #         self.emitter_arg = {"out_dir": "out"}
-
     def to_json(self) -> dict[str, Any]:
         export = {}
         data = asdict(self)
@@ -278,14 +280,6 @@ class SimulationConfig:
         with open(fp) as f:
             conf = json.load(f)
         return cls(**conf)
-
-
-class WorkflowConfig:
-    def __init__(self, config_path: Path | None = None) -> None:
-        fp = config_path or Path("/Users/alexanderpatrie/sms/vEcoli/configs/sms_single.json")
-        with open(fp) as f:
-            raw = json.load(f)
-        self.config = SimulationConfig(**raw)
 
 
 class SimulationParameters(FlexData):

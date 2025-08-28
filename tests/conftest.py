@@ -7,6 +7,7 @@ from tests.fixtures.api_fixtures import (  # noqa: F401
     in_memory_api_client,
     latest_commit_hash,
     local_base_url,
+    workspace_image_hash,
 )
 from tests.fixtures.mongodb_fixtures import (  # noqa: F401
     mongo_test_client,

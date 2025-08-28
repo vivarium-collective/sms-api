@@ -50,3 +50,8 @@ async def in_memory_api_client() -> AsyncGenerator[Client, None]:
     client.set_async_httpx_client(async_client)
     yield client
     await async_client.aclose()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def workspace_image_hash() -> str:
+    return "079c43c"
