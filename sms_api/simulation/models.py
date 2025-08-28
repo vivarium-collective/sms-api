@@ -2,9 +2,11 @@ import datetime
 import enum
 import hashlib
 import json
+import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import Any, Optional
 
 from pydantic import BaseModel as _BaseModel
@@ -15,7 +17,7 @@ from pydantic import Field
 class FlexData:
     _data: dict[str, Any] = field(default_factory=dict)
 
-    def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
+    def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
         self._data = kwargs
 
     def __getattr__(self, item):  # type: ignore[no-untyped-def]
@@ -117,14 +119,19 @@ class EcoliSimulationRequest(BaseModel):
         return hashlib.md5(json.encode()).hexdigest()  # noqa: S324 insecure hash `md5` is okay for caching
 
 
-class EcoliWorkflowRequest(EcoliSimulationRequest):
+class ConfigOverrides(BaseModel):
+    overrides: dict[str, Any] | None = {}
+
+
+class EcoliWorkflowRequest(BaseModel):
     """
     :param config_id: (str) filename (without '.json') of the given sim config
     :param config_overrides: (Optional[dict[str, Any]]) overrides any key within the file found at {config_id}.json
     """
 
-    config_id: str | None = None
-    config_overrides: Optional[dict[str, Any]] = None
+    config_id: str
+    simulator: SimulatorVersion
+    config: ConfigOverrides
 
 
 class AntibioticSimulationRequest(EcoliSimulationRequest):
@@ -133,7 +140,14 @@ class AntibioticSimulationRequest(EcoliSimulationRequest):
 
 class EcoliSimulation(BaseModel):
     database_id: int
-    sim_request: EcoliSimulationRequest | EcoliWorkflowRequest
+    sim_request: EcoliSimulationRequest
+    slurmjob_id: int | None = None
+
+
+class EcoliSimulationWorkflow(BaseModel):
+    sim_request: EcoliWorkflowRequest
+    experiment_id: str = Field(default=str(uuid.uuid4()).split("-")[-1])
+    database_id: int | None = None
     slurmjob_id: int | None = None
 
 
@@ -180,3 +194,99 @@ class WorkerEventMessagePayload(BaseModel):
 
 class RequestedObservables(BaseModel):
     items: list[str] = Field(default_factory=list)
+
+
+@dataclass
+class SimulationConfig:
+    experiment_id: str | None = None
+    sim_data_path: str | None = None
+    suffix_time: bool | None = None
+    parca_options: dict[str, Any] | None = None  # field(default_factory=dict)
+    generations: int | None = None
+    n_init_sims: int | None = None
+    max_duration: float | None = None
+    initial_global_time: float | None = None
+    time_step: float | None = None
+    single_daughters: bool | None = None
+    emitter: str | None = None
+    emitter_arg: dict[str, Any] | None = None
+    variants: dict[str, Any] | None = None
+    analysis_options: dict[str, Any] | None = None
+    # emitter_arg: dict[str, Any] = field(default_factory=dict)
+    # variants: dict[str, Any] = field(default_factory=dict)
+    # analysis_options: dict[str, Any] = field(default_factory=dict)
+    gcloud: Optional[str] = None
+    agent_id: Optional[str] = None
+    parallel: Optional[bool] = None
+    divide: Optional[bool] = None
+    d_period: Optional[bool] = None
+    division_threshold: Optional[bool] = None
+    division_variable: Optional[list[str]] = None
+    chromosome_path: Optional[list[str]] = None
+    spatial_environment: Optional[bool] = None
+    fixed_media: Optional[str] = None
+    condition: Optional[str] = None
+    save: Optional[bool] = None
+    save_times: Optional[list[str]] = None
+    add_processes: Optional[list[str]] = None
+    exclude_processes: Optional[list[str]] = None
+    profile: Optional[bool] = None
+    processes: Optional[list[str]] = None
+    process_configs: Optional[dict[str, Any]] = None
+    topology: Optional[dict[str, Any]] = None
+    engine_process_reports: Optional[list[str]] = None
+    emit_paths: Optional[list[str]] = None
+    progress_bar: Optional[bool] = None
+    emit_topology: Optional[bool] = None
+    emit_processes: Optional[bool] = None
+    emit_config: Optional[bool] = None
+    emit_unique: Optional[bool] = None
+    log_updates: Optional[bool] = None
+    raw_output: Optional[bool] = None
+    description: Optional[str] = None
+    seed: Optional[int] = None
+    mar_regulon: Optional[bool] = None
+    amp_lysis: Optional[bool] = None
+    initial_state_file: Optional[str] = None
+    skip_baseline: Optional[bool] = None
+    daughter_outdir: Optional[str] = None
+    lineage_seed: Optional[int] = None
+    fail_at_max_duration: Optional[bool] = None
+    inherit_from: Optional[list[str]] = None
+    spatial_environment_config: Optional[dict[str, Any]] = None
+    swap_processes: Optional[dict[str, Any]] = None
+    flow: Optional[dict[str, Any]] = None
+    initial_state_overrides: Optional[list[str]] = None
+    initial_state: Optional[dict[str, Any]] = None
+
+    # def __post_init__(self) -> None:
+    #     if not len(self.parca_options.keys()):
+    #         self.parca_options = {"cpus": 2}
+    #     if not len(self.emitter_arg.keys()):
+    #         self.emitter_arg = {"out_dir": "out"}
+
+    def to_json(self) -> dict[str, Any]:
+        export = {}
+        data = asdict(self)
+        for attrib, attrib_val in data.items():
+            if attrib_val is not None:
+                export[attrib] = attrib_val
+        return export
+
+    @classmethod
+    def from_file(cls, fp: Path) -> "SimulationConfig":
+        with open(fp) as f:
+            conf = json.load(f)
+        return cls(**conf)
+
+
+class WorkflowConfig:
+    def __init__(self, config_path: Path | None = None) -> None:
+        fp = config_path or Path("/Users/alexanderpatrie/sms/vEcoli/configs/sms_single.json")
+        with open(fp) as f:
+            raw = json.load(f)
+        self.config = SimulationConfig(**raw)
+
+
+class SimulationParameters(FlexData):
+    pass

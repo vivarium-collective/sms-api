@@ -1,89 +1,206 @@
-import logging
-import random
-import string
-import tempfile
-import warnings
-from abc import ABC, abstractmethod
-from pathlib import Path
-from textwrap import dedent
+### Step 1: Install Nextflow (Java required)
 
-from typing_extensions import override
+#### _Where_: _HPC login node_
 
-from sms_api.common.hpc.models import SlurmJob
-from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
-from sms_api.config import get_settings
-from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.hpc_utils import (
-    VECOLI_REPO_NAME,
-    get_apptainer_image_file,
-    get_experiment_path,
-    get_parca_dataset_dir,
-    get_parca_dataset_dirname,
-    get_slurm_log_file,
-    get_slurm_submit_file,
-    get_vEcoli_repo_dir,
-)
-from sms_api.simulation.models import EcoliSimulation, EcoliSimulationWorkflow, ParcaDataset, SimulatorVersion
+1a. Check if Nextflow is installed:
+```bash
+nextflow -v
+```
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+If not installed, download Nextflow:
+
+```bash
+curl -s <https://get.nextflow.io> | bash
+chmod +x nextflow
+mkdir -p ~/bin
+mv nextflow ~/bin/
+export PATH=$HOME/bin:$PATH
+```
+
+1b. Ensure Java 8+ is available:
+
+```bash
+java -version
+module load java/11  
+```
 
 
-class SimulationService(ABC):
-    @abstractmethod
-    async def get_latest_commit_hash(
-        self,
-        ssh_service: SSHService | None = None,
-        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-        git_branch: str = "master",
-    ) -> str:
-        pass
+### Step 2: Install Python 3.9+
 
-    @abstractmethod
-    async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
-        pass
+#### _Where_: *HPC login node*
 
-    @abstractmethod
-    async def submit_parca_job(self, parca_dataset: ParcaDataset) -> int:
-        pass
+2a. Check Python version:
 
-    @abstractmethod
-    async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
-    ) -> int:
-        pass
+```bash
+python3 --version
+```
 
-    @abstractmethod
-    async def submit_vecoli_job(
-        self, ecoli_simulation: EcoliSimulationWorkflow, database_service: DatabaseService
-    ) -> int:
-        pass
+If Python <3.9, load module or use a virtual environment:
 
-    @abstractmethod
-    async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
-        pass
+```bash
+module load python/3.9
+python3 -m venv ~/.vecoli_venv
+source ~/.vecoli_venv/bin/activate
+pip install --upgrade pip
+pip install uv 
+```
 
-    @abstractmethod
-    async def clone_repository_if_needed(
-        self,
-        git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
-        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
-        git_branch: str = "messages",
-    ) -> None:
-        """
-        Clone a git repository to a remote directory and return the path to the cloned repository.
-        :param git_commit_hash: The commit hash to checkout after cloning.
-        :param repo_url: The URL of the git repository to clone.
-        :param branch: The branch to clone.
-        """
-        pass
+### Step 3: Clone vEcoli repository
 
-    @abstractmethod
-    async def close(self) -> None:
-        pass
+#### *Where: HPC login node (shared path)*
+
+3a. Choose a location accessible by all nodes (e.g., ``$HOME/repos or $SCRATCH``):
+
+```bash
+mkdir -p ~/repos
+cd ~/repos
+git clone https://github.com/vivarium-collective/vEcoli.git
+cd vEcoli
+```
+
+### Step 4: Create out_dir for simulation outputs
+
+#### *Where: HPC login node*
+
+4a. Ensure it’s on a filesystem accessible by all compute nodes:
+
+```bash
+mkdir -p /scratch/$USER/vecoli_output
+export VE_COLI_OUT_DIR=/scratch/$USER/vecoli_output
+```
+
+### Step 5: Configure Apptainer (if available)
+
+#### _Where: HPC login node_
+
+5a. Check if out_dir is automatically mounted:
+
+```bash
+apptainer exec library://ubuntu bash
+ls $VE_COLI_OUT_DIR
+```
+
+If it’s not visible, edit runscripts/nextflow/config.template:
+
+```bash
+containerOptions = "-B /scratch/$USER/vecoli_output"
+```
+
+5b. When running interactive containers manually, also specify the bind:
+
+```bash 
+apptainer exec -B /scratch/$USER/vecoli_output vEcoli.sif
+```
+
+### Step 6: Configure Nextflow
+
+#### Where: HPC login node
+
+6a. Open and edit template wf:
+```bash
+runscripts/nextflow/config.template
+```
+
+6b. Set your queue/partition for SLURM:
+
+``process.queue = "normal"  # replace with your cluster's queue``
+
+6c. If not using Apptainer, comment out/remove:
+
+``process.container = '<IMAGE_NAME>'`` \
+``apptainer.enabled = true``
+
+6d. Ensure all JSON configs have:
+
+``"build_runtime_image": false``
+
+### Step 7: Adjust SLURM submission options
+
+#### Where: HPC login node
+
+7a. Open runscripts/nextflow/template.nf and runscripts.workflow:
+
+```bash
+nano runscripts/nextflow/template.nf # continue with 7a and repeat for:
+nano runscripts/nextflow/workflow.nf
+```
+
+7b. Replace all ``--partition=QUEUE`` with your cluster queues.
+
+7c. Remove or modify any CPU generation or other cluster-specific options:
+
+``--cpus-per-task 4`` \
+``--mem=64GB``
+
+7d. If your HPC does not use SLURM, adapt the executor and submission directives to your scheduler.
+
+### Step 8: Optional – Set up Python environment inside container (if not using Apptainer)
+
+#### Where: HPC login node
+
+8a. Create venv:
+
+```bash
+python3 -m venv ~/.vecoli_venv
+source ~/.vecoli_venv/bin/activate
+pip install -r requirements.txt
+pip install uv
+```
+
+### Step 9: Submit a test Nextflow job
+
+#### Where: HPC login node
+
+9a. Create ``run_vecoli_test_sbatch.sh``:
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=vecoli_test
+#SBATCH --output=vecoli_test.%j.out
+#SBATCH --error=vecoli_test.%j.err
+#SBATCH --time=01:00
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8GB
+#SBATCH --partition=normal
+
+module load nextflow
+nextflow run runscripts/nextflow/template.nf \
+    -c runscripts/nextflow/config.template \
+    --out_dir /scratch/$USER/vecoli_output \
+    --generations 1
+```
+
+9b. Submit:
+
+```bash
+sbatch run_vecoli_test.sh
+```
+
+9c. Monitor:
+
+```bash
+squeue -u $USER
+tail -f ve coli_test.<jobid>.out
+```
+
+### Step 10: Optional – Interactive debugging
+
+#### Where: HPC login node
+
+```bash
+apptainer shell -B /scratch/$USER/vecoli_output vEcoli.sif
+python runscripts/analysis.py --config /scratch/$USER/vecoli_output/config.json
+```
+
+### Notes:
+
+- All paths (vEcoli repo, out_dir) must be accessible from all compute nodes.
+- Apptainer binds must include out_dir.
+- JSON configs must set "build_runtime_image": false.
+- Adapt SLURM or other scheduler directives as required.
 
 
+```python
 class SimulationServiceHpc(SimulationService):
     _latest_commit_hash: str | None = None
 
@@ -176,7 +293,7 @@ class SimulationServiceHpc(SimulationService):
 
                     set -e
                     env
-                    mkdir -p {apptainer_image_path.parent!s}
+                    # ALREADY DONE: mkdir -p {apptainer_image_path.parent!s}
 
                     # if the image already exists, skip the build
                     if [ -f {apptainer_image_path!s} ]; then
@@ -423,7 +540,7 @@ class SimulationServiceHpc(SimulationService):
 
     @override
     async def submit_vecoli_job(
-        self, ecoli_simulation: EcoliSimulationWorkflow, database_service: DatabaseService
+        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
         """Dispatches a nextflow-powered vEcoli simulation workflow
         as in (/vEcoli/runscripts/workflow.py --config <CONFIG_JSON_PATH>)
@@ -438,8 +555,50 @@ class SimulationServiceHpc(SimulationService):
             key_path=Path(settings.slurm_submit_key_path),
             known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
         )
-        warnings.warn("This method is not yet implemented!")
-        return -1
+        if database_service is None:
+            raise RuntimeError("DatabaseService is not available. Cannot submit EcoliSimulation job.")
+
+        if ecoli_simulation.sim_request is None:
+            raise ValueError("EcoliSimulation must have a sim_request set to submit a job.")
+
+        parca_dataset = await database_service.get_parca_dataset(
+            parca_dataset_id=ecoli_simulation.sim_request.parca_dataset_id
+        )
+        if parca_dataset is None:
+            raise ValueError(f"ParcaDataset with ID {ecoli_simulation.sim_request.parca_dataset_id} not found.")
+
+        slurm_service = SlurmService(ssh_service=ssh_service)
+        simulator_version = parca_dataset.parca_dataset_request.simulator_version
+
+        random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
+        slurm_job_name = f"sim-{simulator_version.git_commit_hash}-{ecoli_simulation.database_id}-{random_suffix}"
+
+        slurm_log_file = get_slurm_log_file(slurm_job_name=slurm_job_name)
+        slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
+        apptainer_image_path = get_apptainer_image_file(simulator_version=simulator_version)
+        parca_dataset_path = get_parca_dataset_dir(parca_dataset=parca_dataset)
+        parca_parent_path = parca_dataset_path.parent
+
+        # build the submit script
+        with tempfile.TemporaryDirectory() as tmpdir:
+            local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
+            with open(local_submit_file, "w") as f:
+                script_content = build_workflow_sbatch(
+                    slurm_job_name=slurm_job_name,
+                    settings=settings,
+                    ecoli_simulation=ecoli_simulation,
+                    correlation_id=correlation_id,
+                    slurm_log_file=slurm_log_file,
+                    image_path=apptainer_image_path,
+                    parca_parent_path=parca_parent_path,
+                )
+                f.write(script_content)
+
+            # submit the build script to slurm
+            slurm_jobid = await slurm_service.submit_job(
+                local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+            )
+            return slurm_jobid
 
     @override
     async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
@@ -465,3 +624,27 @@ class SimulationServiceHpc(SimulationService):
     @override
     async def close(self) -> None:
         pass
+```
+
+### To be run in HPC:
+
+```python
+def singularity_run_command(config_id: str, commit_hash: str = "079c43c")
+```
+
+```bash
+function run_singularity {
+    config_id="$1"
+    commit_hash="$2"
+    module load nextflow
+    workspace_dir="${HOME}/workspace"
+    vecoli_dir="${workspace_dir}/vEcoli"
+    latest_hash="079c43c"
+    binds="-B /home/FCAM/svc_vivarium/workspace/vEcoli:/vEcoli -B /home/FCAM/svc_vivarium/workspace/test_out:/out -B /path/to/nextflow:/usr/local/bin/nextflow"
+    # image="/home/FCAM/svc_vivarium/workspace/test_images/vecoli-079c43c.sif"
+    # OR (the prod destination to which the API builds images with /simulator/upload)
+    image="/home/FCAM/svc_vivarium/prod/images/vecoli-$latest_hash.sif"
+    vecoli_image_root=/vEcoli
+    singularity run $binds $image uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs ${config_id}.json
+}
+    

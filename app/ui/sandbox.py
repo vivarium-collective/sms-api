@@ -73,6 +73,46 @@ def _(times):
     return
 
 
+@app.function
+async def upload_files(local_analysis_dirpath=None):
+    import pandas as pd
+    import numpy as np
+    from pathlib import Path
+    from sms_api.common.ssh.ssh_service import get_ssh_service
+
+    analysis_dirpath = local_analysis_dirpath or Path(
+        "/Users/alexanderpatrie/sms/sms-api/home/FCAM/svc_vivarium/prod/sims/sms_perturb_growth_10800/analyses"
+    )
+    anal_files = []
+    for root, _, files in analysis_dirpath.walk():
+        for f in files:
+            filepath = root / f
+            if not filepath.parts[-1].startswith("."):
+                anal_files.append(filepath)
+    ssh = get_ssh_service()
+
+    remote_anal_dir = Path("/home/FCAM/svc_vivarium/prod/sims/sms_perturb_growth_10800/analyses")
+    # await ssh.scp_upload(local_file=analysis_dirpath, remote_path=remote_anal_dir)
+    for i, local_path in enumerate(anal_files):
+        try:
+            remote_path = (
+                Path(
+                    f"/home/FCAM/svc_vivarium/prod/sims/sms_perturb_growth_10800/analyses/variant={i}/lineage_seed=0/generation=1/agent_id=0/plots"
+                )
+                / local_path.parts[-1]
+            )
+            await ssh.scp_upload(local_file=local_path, remote_path=remote_path)
+            print(f"Uploaded path!: {remote_path}")
+        except:
+            print(f"Couldnt upload {local_path}")
+
+
+@app.cell
+def _():
+    # await upload_files()
+    return
+
+
 @app.cell
 def _():
     return

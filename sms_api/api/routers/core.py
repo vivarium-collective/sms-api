@@ -29,15 +29,14 @@
 
 import logging
 import mimetypes
-from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
-from sms_api.api.request_examples import examples
+# from sms_api.api.request_examples import examples
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
-from sms_api.common.gateway.utils import REPO_DIR, get_local_simulation_outdir, get_simulation_outdir
+from sms_api.common.gateway.utils import get_local_simulation_outdir, get_simulation_outdir
 from sms_api.data.analysis_service import AnalysisService
 from sms_api.data.parquet_service import ParquetService
 from sms_api.dependencies import (
@@ -49,7 +48,6 @@ from sms_api.simulation.handlers import (
     get_parca_datasets,
     run_parca,
     run_simulation,
-    run_workflow,
     upload_simulator,
     verify_simulator_payload,
 )
@@ -58,7 +56,6 @@ from sms_api.simulation.models import (
     EcoliExperiment,
     EcoliSimulation,
     EcoliSimulationRequest,
-    EcoliWorkflowRequest,
     HpcRun,
     JobType,
     ParcaDataset,
@@ -90,7 +87,7 @@ config = RouterConfig(router=APIRouter(), prefix="/core", dependencies=[])
     path="/simulator/latest",
     response_model=Simulator,
     operation_id="get-latest-simulator",
-    tags=["Simulators"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_database_service), Depends(get_db_engine)],
     summary="Get the latest simulator version",
 )
@@ -115,7 +112,7 @@ async def get_latest_simulator(
     path="/simulator/versions",
     response_model=RegisteredSimulators,
     operation_id="get-simulator-versions",
-    tags=["Simulators"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_database_service), Depends(get_db_engine)],
     summary="get the list of available simulator versions",
 )
@@ -136,7 +133,7 @@ async def get_simulator_versions() -> RegisteredSimulators:
     path="/simulator/status",
     response_model=HpcRun,
     operation_id="get-simulator-status",
-    tags=["Simulators"],
+    tags=["EcoliSim"],
     summary="Get simulator container build status by its ID",
 )
 async def get_simulator_status(simulator_id: int) -> HpcRun | None:
@@ -162,7 +159,7 @@ async def get_simulator_status(simulator_id: int) -> HpcRun | None:
     path="/simulator/upload",
     response_model=SimulatorVersion,
     operation_id="insert-simulator-version",
-    tags=["Simulators"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_database_service), Depends(get_db_engine)],
     summary="Upload a new simulator (vEcoli) version.",
 )
@@ -205,7 +202,7 @@ async def insert_simulator_version(
     path="/simulation/parca",
     response_model=ParcaDataset,
     operation_id="run-parca",
-    tags=["Simulations - Parca"],
+    tags=["EcoliSim"],
     summary="Run a parameter calculation",
 )
 async def run_parameter_calculator(
@@ -238,7 +235,7 @@ async def run_parameter_calculator(
     path="/simulation/parca/versions",
     response_model=list[ParcaDataset],
     operation_id="get-parca-versions",
-    tags=["Simulations - Parca"],
+    tags=["EcoliSim"],
     summary="Get list of parca calculations",
 )
 async def get_parcas() -> list[ParcaDataset]:
@@ -266,7 +263,7 @@ async def get_parcas() -> list[ParcaDataset]:
     path="/simulation/parca/status",
     response_model=HpcRun,
     operation_id="get-parca-status",
-    tags=["Simulations - Parca"],
+    tags=["EcoliSim"],
     summary="Get parca calculation status by its ID",
 )
 async def get_parca_status(parca_id: int) -> HpcRun | None:
@@ -290,7 +287,7 @@ async def get_parca_status(parca_id: int) -> HpcRun | None:
     path="/simulation/run",
     operation_id="run-simulation",
     response_model=EcoliExperiment,
-    tags=["Simulations - vEcoli"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
     summary="Run a vEcoli simulation",
 )
@@ -320,63 +317,11 @@ async def run_vecoli_simulation(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.post(
-    path="/simulation/workflow",
-    operation_id="run-simulation-workflow",
-    response_model=EcoliExperiment,
-    tags=["Simulations - vEcoli"],
-    dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-    summary="Dispatches a nextflow-powered vEcoli simulation workflow",
-)
-async def run_simulation_workflow(
-    background_tasks: BackgroundTasks,
-    sim_request: EcoliWorkflowRequest = Body(example=examples["core_simulation_workflow"]),  # noqa: B008
-    config_id: str | None = Query(default=None),
-) -> EcoliExperiment:
-    if config_id is None and sim_request.config_id is None:
-        raise Exception("Either config_id or sim_request must be specified")
-
-    if config_id is not None:
-        sim_request.config_id = config_id
-
-    sim_service = get_simulation_service()
-    if sim_service is None:
-        logger.error("Simulation service is not initialized")
-        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
-    db_service = get_database_service()
-    if db_service is None:
-        logger.error("Database service is not initialized")
-        raise HTTPException(status_code=500, detail="Database service is not initialized")
-
-    try:
-        return await run_workflow(
-            simulation_request=sim_request,
-            database_service=db_service,
-            simulation_service_slurm=sim_service,
-            router_config=config,
-            background_tasks=background_tasks,
-        )
-    except Exception as e:
-        logger.exception("Error running vEcoli simulation")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(path="/simulation/configs", operation_id="get-available-configs", tags=["Simulations - vEcoli"])
-async def get_available_config_ids(simulator_hash: str | None = Query(default=None)) -> list[str]:
-    fname = "available_configs.txt"
-    path = Path("/home/FCAM/svc_vivarium/prod") / fname  # currently 78c6310 (8/22/25)
-    if not path.exists():
-        path = Path(f"{REPO_DIR}/assets/simulation") / fname
-    with open(path) as fp:
-        available = [lin.strip().replace(".json", "") for lin in fp.readlines()]
-    return available
-
-
 @config.router.get(
     path="/simulation/run/versions",
     response_model=list[EcoliSimulation],
     operation_id="get-simulation-versions",
-    tags=["Simulations - vEcoli"],
+    tags=["EcoliSim"],
     summary="Get list of vEcoli simulations",
 )
 async def get_simulation_versions() -> list[EcoliSimulation]:
@@ -397,7 +342,7 @@ async def get_simulation_versions() -> list[EcoliSimulation]:
     path="/simulation/run/status",
     response_model=HpcRun,
     operation_id="get-simulation-status",
-    tags=["Simulations - vEcoli"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
 )
@@ -426,7 +371,7 @@ async def get_simulation_status(
     path="/simulation/run/events",
     response_model=list[WorkerEvent],
     operation_id="get-simulation-worker-events",
-    tags=["Simulations - vEcoli"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
     summary="Get the worker events for a simulation by its ID",
 )
@@ -466,7 +411,7 @@ async def get_simulation_worker_events(
     path="/download/analysis",
     response_class=FileResponse,
     operation_id="download-analysis-file",
-    tags=["Data"],
+    tags=["EcoliSim"],
     summary="Download a file that was generated from a simulation analysis module",
 )
 async def download_analysis_file(
@@ -490,7 +435,7 @@ async def download_analysis_file(
     path="/download/chunk",
     response_class=FileResponse,
     operation_id="download-chunk",
-    tags=["Data"],
+    tags=["EcoliSim"],
     summary="Download a single file that was generated from the parquet emitter",
 )
 async def download_chunk(
@@ -514,7 +459,7 @@ async def download_chunk(
     path="/download/parquet",
     response_class=FileResponse,
     operation_id="download-parquet",
-    tags=["Data"],
+    tags=["EcoliSim"],
     summary="Download zip file containing pqs that were generated from the parquet emitter",
 )
 async def download_parquet(
@@ -541,7 +486,7 @@ async def download_parquet(
     path="/download/example",
     response_class=FileResponse,
     operation_id="download-example-files",
-    tags=["Data"],
+    tags=["EcoliSim"],
     summary="Download either parquet or analysis outputs as a zip file generated by the example simulation.",
 )
 async def download_example_file(

@@ -1,3 +1,4 @@
+import datetime
 import json
 import warnings
 from pathlib import Path
@@ -5,7 +6,7 @@ from typing import Any
 
 from sms_api.common.gateway.models import Namespace
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import HpcRun, JobType
+from sms_api.simulation.models import HpcRun, JobType, SimulatorVersion
 
 REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
 PINNED_OUTDIR = REPO_DIR / "out" / "sms_single"
@@ -103,3 +104,13 @@ def write_remote_config(
     with open(fpath, "w") as f:
         json.dump(config, f, indent=1)
     return (0, fpath)
+
+
+def get_simulator() -> SimulatorVersion:
+    return SimulatorVersion(
+        git_commit_hash="079c43c",
+        git_repo_url="https://github.com/CovertLab/vEcoli",
+        git_branch="master",
+        database_id=2,
+        created_at=datetime.datetime.fromisoformat("2025-08-26T00:49:30"),
+    )

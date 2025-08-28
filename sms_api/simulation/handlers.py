@@ -11,6 +11,7 @@ from sms_api.simulation.hpc_utils import get_correlation_id, get_experiment_id
 from sms_api.simulation.models import (
     EcoliExperiment,
     EcoliSimulationRequest,
+    EcoliSimulationWorkflow,
     EcoliWorkflowRequest,
     JobType,
     ParcaDataset,
@@ -233,13 +234,14 @@ async def run_workflow(
     router_config: RouterConfig,
     background_tasks: BackgroundTasks | None = None,
 ) -> EcoliExperiment:
-    simulation = await database_service.insert_simulation(sim_request=simulation_request)
+    # simulation = await database_service.insert_simulation(sim_request=simulation_request)
+    simulation = EcoliSimulationWorkflow(sim_request=simulation_request)
 
     async def dispatch_job() -> None:
         random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311 doesn't need to be secure
         correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string_7_hex)
         sim_slurmjobid = await simulation_service_slurm.submit_vecoli_job(
-            ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
+            ecoli_simulation=simulation, database_service=database_service
         )
         _hpcrun = await database_service.insert_hpcrun(
             slurmjobid=sim_slurmjobid,

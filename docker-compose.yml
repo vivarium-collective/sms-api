@@ -19,6 +19,11 @@ services:
       - smsnet
     volumes:
       - ./sms_api:/app/sms_api
+    command: >
+      uv run uvicorn sms_api.api.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
 
   nats:
     platform: linux/amd64

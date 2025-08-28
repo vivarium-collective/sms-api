@@ -7,28 +7,37 @@ ARG APP_UID=17163
 ARG APP_GID=10000
 ARG DEV_MODE=0
 
+# Install deps for vEcoli, Nextflow, and UV
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    openssh-client \
-    openjdk-17-jdk \
+    build-essential \
+    gcc \
+    procps \
     nano \
     curl \
-    sqlite3 \
+    software-properties-common \
+    wget \
+    openjdk-17-jdk \
+    python3-dev \
     git \
+    openssh-client \
+    sqlite3 \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 # Set environment variables
-# ENV PYTHONUNBUFFERED=1
 ENV PYTHONUNBUFFERED=1 \
     APP_DIR=/app/app \
     ASSETS_DIR=/app/assets \
     LOCAL_BIN=/home/appuser/.local/bin \
     NEXTFLOW_DIR=/home/appuser/.local/bin/nextflow \
-    VECOLI_DIR=/home/appuser/vEcoli \
+    VECOLI_DIR=/home/appuser/.local/bin/vEcoli \
     VECOLI_REPO_URL=https://github.com/vivarium-collective/vEcoli \
-    VECOLI_REPO_BRANCH=messages
+    VECOLI_REPO_BRANCH=messages \
+    VECOLI_VENV=/home/appuser/.local/bin/vEcoli/.venv/bin/python \
+    API_VENV=/app/.venv/bin/python
 
-    # Install uv from the GitHub Container Registry
+# Install uv from the GitHub Container Registry
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 # create user/group
@@ -42,18 +51,24 @@ WORKDIR /app
 # Install/set up Nextflow and vEcoli
 RUN mkdir -p $LOCAL_BIN \
     && curl -L https://www.nextflow.io/releases/v25.04.6/nextflow -o $NEXTFLOW_DIR \
-    && chown appuser:appgroup $NEXTFLOW_DIR \
+    && chown -R appuser:appgroup $NEXTFLOW_DIR \
     && chmod +x $NEXTFLOW_DIR \
     && mkdir -p $VECOLI_DIR \
     && git clone --branch $VECOLI_REPO_BRANCH --depth 1 $VECOLI_REPO_URL $VECOLI_DIR \
-    && chown appuser:appgroup $VECOLI_DIR \
-    && chmod +x $VECOLI_DIR
+    && chown -R appuser:appgroup $VECOLI_DIR \
+    && chmod +x $VECOLI_DIR \
+    && chown -R appuser:appgroup $LOCAL_BIN \
+    && uv sync --project $VECOLI_DIR --frozen
+
+# Ensure Nextflow is reachable in $PATH
+ENV PATH="${PATH}:${LOCAL_BIN}" \
+    VECOLI_RUN_ALIAS="uv run --env-file ${VECOLI_DIR}/.env --project ${VECOLI_DIR}"
 
 # Copy only the necessary files
 COPY --chown=appuser:appgroup uv.lock /app/uv.lock
 COPY --chown=appuser:appgroup pyproject.toml /app/pyproject.toml
 COPY --chown=appuser:appgroup assets/dev/config/.dev_env /app/assets/dev/config/.dev_env
-
+COPY --chown=appuser:appgroup assets/deps/pathway-tools-29.0-linux-64-tier1-install /app/assets/deps/pathway-tools-29.0-linux-64-tier1-install
 # Install dependencies
 RUN uv sync --frozen --no-install-project
 

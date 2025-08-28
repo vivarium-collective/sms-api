@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 
 from sms_api.common.gateway.models import Namespace, RouterConfig
 from sms_api.config import Settings, get_settings
@@ -218,3 +219,13 @@ def build_workflow_sbatch(
     fi
     echo "Simulation run completed. data saved to {experiment_path!s}."
     """)
+
+
+def add_variant_config(config: dict[str, Any]) -> dict[str, Any]:
+    """
+    For Example:
+     {
+        "condition": {"condition": {"value":[ "basal", "with_aa", "acetate","succinate", "no_oxygen"]}}
+    },
+    """
+    return config

@@ -83,7 +83,7 @@ def get_server_url(dev: bool = True) -> ServerMode:
 # TODO: mount nfs driver
 
 
-config = RouterConfig(router=APIRouter(), prefix="/core", dependencies=[])
+config = RouterConfig(router=APIRouter(), prefix="/variants", dependencies=[])
 
 
 @config.router.get(
