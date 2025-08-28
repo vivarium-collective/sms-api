@@ -103,7 +103,7 @@ class ParcaDataset(BaseModel):
 
 
 class Overrides(BaseModel):
-    config: dict[str, Any] | None = {}
+    config: dict[str, Any] | None = None
 
 
 class Variants(BaseModel):
