@@ -135,7 +135,7 @@ async def run_simulation_workflow(
 async def get_results(
     background_tasks: BackgroundTasks,
     experiment_id: str = Query(
-        example="sms_single", description="Experiment ID for the simulation (from config.json)."
+        examples=["sms_single"], description="Experiment ID for the simulation (from config.json)."
     ),
     filename: str | None = Query(default=None, description="Name you wish to assign to the downloaded zip file"),
 ) -> FileResponse:

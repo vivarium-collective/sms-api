@@ -1,3 +1,4 @@
+import datetime
 import logging
 import random
 import string
@@ -23,7 +24,6 @@ from sms_api.simulation.hpc_utils import (
     get_parca_dataset_dirname,
     get_slurm_log_file,
     get_slurm_submit_file,
-    get_slurmjob_name,
     get_vEcoli_repo_dir,
 )
 from sms_api.simulation.models import EcoliSimulation, EcoliWorkflowSimulation, ParcaDataset, SimulatorVersion
@@ -521,10 +521,13 @@ def slurm_script(
         ### set up java and nextflow
         local_bin=$HOME/.local/bin
         export JAVA_HOME=$local_bin/java-22
-        export NEXTFLOW=$local_bin/nextflow
-        export PATH=$JAVA_HOME/bin:$PATH:$(dirname "$NEXTFLOW")
+        export PATH=$JAVA_HOME/bin:$local_bin:$PATH
+        # export NEXTFLOW=$local_bin/nextflow
+        # export PATH=$JAVA_HOME/bin:$PATH:$(dirname "$NEXTFLOW")
 
         ### confirm installations/paths
+        echo "---> START({datetime.datetime.now()}) --->"
+        echo "                                        "
         echo "=== Environment Variables ==="
         env | grep -E 'JAVA_HOME|PATH|NEXTFLOW'
 
@@ -533,30 +536,36 @@ def slurm_script(
         nf=$(which nextflow)
         echo "Java path: $jv"
         echo "Nextflow path: $nf"
+        cd $HOME/workspace/vEcoli
+        echo "UV Python: $(which python)"
         echo "$jv" > {remote_workspace_dir!s}/test-java.txt
         echo "$nf" > {remote_workspace_dir!s}/test-nextflow.txt
+        echo "|<--- END <---"
+        echo "                                        "
 
         # Check if the experiment dir exists, remove if so:
-        # if [ -d {experiment_outdir} ]; then rm -rf {experiment_outdir}; fi
+        if [ -d {experiment_outdir} ]; then rm -rf {experiment_outdir}; fi
 
         ### configure working dir and binds
         vecoli_dir={vecoli_dir!s}
         latest_hash={latest_hash}
-        cd $vecoli_dir
+        # cd $vecoli_dir
 
         ### bind vecoli and outputs dest dir
-        binds="-B /home/FCAM/svc_vivarium/workspace/vEcoli:/vEcoli"
-        binds+=" -B /home/FCAM/svc_vivarium/workspace/outputs:/out"
+        binds="-B $HOME/workspace/vEcoli:/vEcoli"
+        binds+=" -B $HOME/workspace/outputs:/out"
 
         ### bind java and nextflow
         binds+=" -B $JAVA_HOME:$JAVA_HOME"
-        binds+=" -B $NEXTFLOW:$NEXTFLOW"
+        binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
 
-        image="/home/FCAM/svc_vivarium/prod/images/vecoli-$latest_hash.sif"
+        # image="/home/FCAM/svc_vivarium/prod/images/vecoli-$latest_hash.sif"
+        image=$HOME/workspace/images/vecoli-$latest_hash.sif
         vecoli_image_root=/vEcoli
         singularity run $binds $image uv run \\
-            --env-file $vecoli_image_root/.env \\
-            $vecoli_image_root/runscripts/workflow.py \\
+            --env-file /vEcoli/.env \\
+            --project /vEcoli \\
+            /vEcoli/runscripts/workflow.py \\
             --config $vecoli_image_root/configs/{config_id}.json
     """)
 
@@ -602,7 +611,8 @@ async def submit_vecoli_job(
     experiment_dir = get_experiment_dir(experiment_id=experiment_id, env=env)
     experiment_path_parent = experiment_dir.parent
     experiment_id_dir = experiment_dir.name
-    slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
+    # slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
+    slurmjob_name = "dev"
 
     script = slurm_script(config_id=config_id, slurm_job_name=slurmjob_name, settings=env, logger=logger)
 
