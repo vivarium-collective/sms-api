@@ -27,7 +27,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.REPO_ADMIN_GH_TOKEN }}
+          password: ${{ secrets.REPO_ADMIN_GHCR_TOKEN }}
 
       - name: Make script executable
         run: chmod +x ./kustomize/scripts/build_and_push.sh
