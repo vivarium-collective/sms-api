@@ -58,8 +58,8 @@ class ParquetService:
             / f"generation={generation or 1}"
             / f"agent_id={agent_id or 0}"
         )
-        if not pq_dir.exists():
-            raise FileNotFoundError(f"Could not find parquet outputs at {pq_dir}")
+        # if not pq_dir.exists():
+        #     raise FileNotFoundError(f"Could not find parquet outputs at {pq_dir}")
         return pq_dir
 
     def get_parquet_path(

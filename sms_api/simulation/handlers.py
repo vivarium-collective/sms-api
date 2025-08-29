@@ -248,7 +248,7 @@ async def run_workflow(
     # env = get_settings()
     # ssh_service = get_ssh_service()
 
-    async def dispatch_job() -> None:
+    async def dispatch_job() -> int:
         # ORIGINAL_IMPLEMENTATION:
         # random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))
         # correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string_7_hex)
@@ -269,18 +269,22 @@ async def run_workflow(
         sim_slurmjobid = await simulation_service_slurm.submit_vecoli_job(
             ecoli_simulation=simulation, experiment_id=experiment_id
         )
-        print(sim_slurmjobid)
         # _hpcrun = await database_service.insert_hpcrun(
         #     slurmjobid=sim_slurmjobid,
         #     job_type=JobType.SIMULATION,
         #     ref_id=simulation.database_id,
         #     correlation_id=correlation_id,
         # )
-        return None
+        return sim_slurmjobid
 
+    jobid = None
     if background_tasks:
         background_tasks.add_task(dispatch_job)
     else:
-        await dispatch_job()
+        jobid = await dispatch_job()
 
-    return EcoliExperiment(experiment_id=experiment_id, simulation=simulation)
+    tag = None
+    if jobid is not None:
+        simulation.slurmjob_id = jobid
+        tag = f"{experiment_id}-{simulation.slurmjob_id}"
+    return EcoliExperiment(experiment_id=experiment_id, simulation=simulation, experiment_tag=tag)

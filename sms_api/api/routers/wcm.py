@@ -38,6 +38,7 @@ from fastapi.responses import FileResponse
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.common.gateway.utils import REPO_DIR, get_simulator
+from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.config import get_settings
 from sms_api.data.parquet_service import ParquetService
 from sms_api.dependencies import (
@@ -50,8 +51,9 @@ from sms_api.simulation.models import (
     EcoliExperiment,
     EcoliSimulation,
     EcoliWorkflowRequest,
-    HpcRun,
+    JobStatus,
     Overrides,
+    SimulationRun,
     SimulatorVersion,
     Variants,
 )
@@ -113,7 +115,7 @@ async def run_simulation_workflow(
         return await run_workflow(
             simulation_request=sim_request,
             simulation_service_slurm=sim_service,
-            background_tasks=background_tasks,
+            # background_tasks=background_tasks,
             # database_service=db_service,
         )
     except Exception as e:
@@ -123,14 +125,33 @@ async def run_simulation_workflow(
 
 @config.router.get(
     path="/simulation/run/status",
-    response_model=HpcRun,
+    response_model=SimulationRun,
     operation_id="get-simulation-status",
     tags=["Simulations - vEcoli"],
     dependencies=[Depends(get_database_service)],
-    summary="Get the simulation status record by its experiment ID",
+    summary="Get the simulation status record by its ID",
 )
-async def get_simulation_status(experiment_id: int = Query(...)) -> HpcRun:
-    raise HTTPException(status_code=501, detail="This endpoint is not yet implemented.")
+async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationRun:
+    try:
+        slurmjob_id = experiment_tag.split("-")[-1]
+        # slurmjob_id = get_jobid_by_experiment(experiment_id)
+        ssh_service = get_ssh_service()
+        statuses = await ssh_service.run_command(f"sacct -u svc_vivarium | grep {slurmjob_id}")
+        status = statuses[1].split("\n")[0].split()[-2]
+        return SimulationRun(id=experiment_tag, status=JobStatus[status])
+    except Exception as e:
+        logger.exception(
+            """Error getting simulation status.\
+                Are you sure that you've passed the experiment_tag? (not the experiment id)
+            """
+        )
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+def get_experiment_id_from_tag(experiment_tag: str) -> str:
+    parts = experiment_tag.split("-")
+    parts.remove(parts[-1])
+    return "-".join(parts)
 
 
 @config.router.post(
@@ -142,18 +163,29 @@ async def get_simulation_status(experiment_id: int = Query(...)) -> HpcRun:
 )
 async def get_results(
     background_tasks: BackgroundTasks,
-    experiment_id: str = Query(
-        examples=["sms_single"], description="Experiment ID for the simulation (from config.json)."
-    ),
+    experiment_tag: str = Query(..., description="Experiment tag for the simulation."),
+    variant_id: int = Query(default=0),
+    lineage_seed_id: int = Query(default=0),
+    generation_id: int = Query(default=1),
+    agent_id: int = Query(default=0),
     filename: str | None = Query(default=None, description="Name you wish to assign to the downloaded zip file"),
 ) -> FileResponse:
     try:
         service = ParquetService()
-        pq_dir = service.get_parquet_dir(experiment_id)
+        experiment_id = get_experiment_id_from_tag(experiment_tag)
+        pq_dir = service.get_parquet_dir(
+            experiment_id=experiment_id,
+            variant=variant_id,
+            lineage_seed=lineage_seed_id,
+            generation=generation_id,
+            agent_id=agent_id,
+        )
         buffer = get_zip_buffer(pq_dir)
         fname = filename or experiment_id
         filepath = write_zip_buffer(buffer, fname, background_tasks)
 
+        # return FileResponse(path=filepath, media_type="application/octet-stream", filename=filepath.name)
+        # return str(pq_dir)
         return FileResponse(path=filepath, media_type="application/octet-stream", filename=filepath.name)
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")

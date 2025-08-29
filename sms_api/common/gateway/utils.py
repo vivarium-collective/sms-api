@@ -29,8 +29,10 @@ def get_remote_simulation_outdir(
     :param namespace: the deployment's namespace. See ``sms_api.common.gateway.models.Namespace`` for
         more details. Defaults to ``Namespace.PRODUCTION``.
     """
+    print(namespace)
     return Path(
-        f"/home/{group or 'FCAM'}/{user or 'svc_vivarium'}/{namespace or Namespace.PRODUCTION}/sims/{experiment_id}"
+        # f"/home/{group or 'FCAM'}/{user or 'svc_vivarium'}/{namespace or Namespace.PRODUCTION}/sims/{experiment_id}"
+        f"/home/{group or 'FCAM'}/{user or 'svc_vivarium'}/workspace/outputs/{experiment_id}"
     )
 
 

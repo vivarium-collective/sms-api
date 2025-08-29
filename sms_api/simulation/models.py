@@ -68,6 +68,11 @@ class HpcRun(BaseModel):
     error_message: str | None = None  # Error message if the simulation failed
 
 
+class SimulationRun(BaseModel):
+    id: str
+    status: JobStatus
+
+
 class Simulator(BaseModel):
     git_commit_hash: str  # Git commit hash for the specific simulator version (first 7 characters)
     git_repo_url: str  # Git repository URL for the simulator
@@ -172,6 +177,7 @@ class EcoliExperiment(BaseModel):
     simulation: EcoliSimulation | EcoliWorkflowSimulation | AntibioticSimulation
     last_updated: str = Field(default_factory=lambda: str(datetime.datetime.now()))
     metadata: Mapping[str, str] = Field(default_factory=dict)
+    experiment_tag: str | None = None
 
 
 class WorkerEvent(BaseModel):

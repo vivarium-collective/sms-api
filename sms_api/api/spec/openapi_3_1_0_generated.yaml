@@ -488,22 +488,22 @@ paths:
     get:
       tags:
       - Simulations - vEcoli
-      summary: Get the simulation status record by its experiment ID
+      summary: Get the simulation status record by its ID
       operationId: get-simulation-status
       parameters:
-      - name: experiment_id
+      - name: experiment_tag
         in: query
         required: true
         schema:
-          type: integer
-          title: Experiment Id
+          type: string
+          title: Experiment Tag
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HpcRun'
+                $ref: '#/components/schemas/SimulationRun'
         '422':
           description: Validation Error
           content:
@@ -517,16 +517,42 @@ paths:
       summary: Get simulation outputs
       operationId: get-data
       parameters:
-      - name: experiment_id
+      - name: experiment_tag
         in: query
         required: true
         schema:
           type: string
-          description: Experiment ID for the simulation (from config.json).
-          examples:
-          - sms_single
-          title: Experiment Id
-        description: Experiment ID for the simulation (from config.json).
+          description: Experiment tag for the simulation.
+          title: Experiment Tag
+        description: Experiment tag for the simulation.
+      - name: variant_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Variant Id
+      - name: lineage_seed_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Lineage Seed Id
+      - name: generation_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1
+          title: Generation Id
+      - name: agent_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Agent Id
       - name: filename
         in: query
         required: false
@@ -690,6 +716,11 @@ components:
             type: string
           type: object
           title: Metadata
+        experiment_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Experiment Tag
       type: object
       required:
       - experiment_id
@@ -917,6 +948,18 @@ components:
       required:
       - versions
       title: RegisteredSimulators
+    SimulationRun:
+      properties:
+        id:
+          type: string
+          title: Id
+        status:
+          $ref: '#/components/schemas/JobStatus'
+      type: object
+      required:
+      - id
+      - status
+      title: SimulationRun
     Simulator:
       properties:
         git_commit_hash:
