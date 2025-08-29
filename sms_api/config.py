@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     sqlite_dbfile: str = "./sms.db"  # SQLite database URL for local development
 
     is_local_hpc: bool = False
+    slurm_squeue_local_command: str = "squeue"
+    slurm_sacct_local_command: str = "sacct"
+    slurm_scontrol_local_command: str = "scontrol"
+    slurm_sbatch_local_command: str = "sbatch"
+    slurm_scancel_local_command: str = "scancel"
+    slurm_sinfo_local_command: str = "sinfo"
 
     slurm_submit_host: str = ""
     slurm_submit_user: str = ""  # "svc_vivarium"

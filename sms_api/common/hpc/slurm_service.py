@@ -6,6 +6,7 @@ from typing import cast, override
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.ssh.ssh_service import SSHService
+from sms_api.config import get_settings
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -45,7 +46,8 @@ class SlurmServiceRemoteHPC(SlurmService):
 
     @override
     async def get_job_status_squeue(self, job_ids: list[int] | None = None) -> list[SlurmJob]:
-        command = f'squeue -u $USER --noheader --format="{SlurmJob.get_squeue_format_string()}"'
+        squeue = "squeue"
+        command = f'{squeue} -u $USER --noheader --format="{SlurmJob.get_squeue_format_string()}"'
         if job_ids is not None:
             job_ids_str = ",".join(map(str, job_ids)) if len(job_ids) > 1 else str(job_ids[0])
             command = command + f" -j {job_ids_str}"
@@ -63,8 +65,9 @@ class SlurmServiceRemoteHPC(SlurmService):
 
     @override
     async def get_job_status_sacct(self, job_ids: list[int] | None = None) -> list[SlurmJob]:
+        sacct = "sacct"
         command = (
-            f'sacct -u $USER --parsable --delimiter="|" --noheader --format="{SlurmJob.get_sacct_format_string()}"'
+            f'{sacct} -u $USER --parsable --delimiter="|" --noheader --format="{SlurmJob.get_sacct_format_string()}"'
         )
         if job_ids is not None:
             job_ids_str = ",".join(map(str, job_ids)) if len(job_ids) > 1 else str(job_ids[0])
@@ -89,7 +92,8 @@ class SlurmServiceRemoteHPC(SlurmService):
     @override
     async def submit_job(self, local_sbatch_file: Path, remote_sbatch_file: Path) -> int:
         await self.ssh_service.scp_upload(local_file=local_sbatch_file, remote_path=remote_sbatch_file)
-        command = f"sbatch --parsable {remote_sbatch_file}"
+        sbatch = "sbatch"
+        command = f"{sbatch} --parsable {remote_sbatch_file}"
         return_code, stdout, stderr = await self.ssh_service.run_command(command=command)
         if return_code != 0:
             raise Exception(
@@ -111,7 +115,8 @@ async def _async_run(command: list[str]) -> tuple[int, str, str]:
 class SlurmServiceLocalHPC(SlurmService):
     @override
     async def get_job_status_squeue(self, job_ids: list[int] | None = None) -> list[SlurmJob]:
-        command = f'squeue -u $USER --noheader --format="{SlurmJob.get_squeue_format_string()}"'
+        squeue = get_settings().slurm_squeue_local_command
+        command = f'{squeue} -u $USER --noheader --format="{SlurmJob.get_squeue_format_string()}"'
         if job_ids is not None:
             job_ids_str = ",".join(map(str, job_ids)) if len(job_ids) > 1 else str(job_ids[0])
             command = command + f" -j {job_ids_str}"
@@ -131,8 +136,9 @@ class SlurmServiceLocalHPC(SlurmService):
 
     @override
     async def get_job_status_sacct(self, job_ids: list[int] | None = None) -> list[SlurmJob]:
+        sacct = get_settings().slurm_sacct_local_command
         command = (
-            f'sacct -u $USER --parsable --delimiter="|" --noheader --format="{SlurmJob.get_sacct_format_string()}"'
+            f'{sacct} -u $USER --parsable --delimiter="|" --noheader --format="{SlurmJob.get_sacct_format_string()}"'
         )
         if job_ids is not None:
             job_ids_str = ",".join(map(str, job_ids)) if len(job_ids) > 1 else str(job_ids[0])
@@ -162,7 +168,8 @@ class SlurmServiceLocalHPC(SlurmService):
             remote_sbatch_file.parent.mkdir(parents=True, exist_ok=True)
             remote_sbatch_file.write_text(local_sbatch_file.read_text())
 
-        command = f"sbatch --parsable {remote_sbatch_file}"
+        sbatch = get_settings().slurm_sbatch_local_command
+        command = f"{sbatch} --parsable {remote_sbatch_file}"
         return_code, stdout, stderr = await _async_run(command=command.split())
         if return_code != 0:
             raise Exception(

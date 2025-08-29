@@ -35,3 +35,11 @@ HPC_PARCA_BASE_PATH=
 HPC_REPO_BASE_PATH=
 HPC_SIM_BASE_PATH=
 HPC_SIM_CONFIG_FILE=
+
+# for local testing without local SLURM installation, can point to scripts (e.g. squeue.sh) which use ssh.
+SLURM_SQUEUE_LOCAL_COMMAND=squeue
+SLURM_SACCT_LOCAL_COMMAND=sacct
+SLURM_SCONTROL_LOCAL_COMMAND=scontrol
+SLURM_SBATCH_LOCAL_COMMAND=sbatch
+SLURM_SCANCEL_LOCAL_COMMAND=scancel
+SLURM_SINFO_LOCAL_COMMAND=sinfo
