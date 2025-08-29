@@ -94,15 +94,13 @@ async def get_available_config_ids(simulator_hash: str | None = Query(default=No
 async def run_simulation_workflow(
     background_tasks: BackgroundTasks,
     config_id: str = Query(default="sms_single"),
-    config_overrides: Optional[Overrides] = None,
-    variant_config: Optional[Variants] = None,
+    overrides: Optional[Overrides] = None,
+    variants: Optional[Variants] = None,
     # max_duration: float = Query(default=10800.0),
     # time_step: float = Query(default=1.0),
 ) -> EcoliExperiment:
     simulator: SimulatorVersion = get_simulator()
-    sim_request = EcoliWorkflowRequest(
-        config_id=config_id, config_overrides=config_overrides, variant_config=variant_config, simulator=simulator
-    )
+    sim_request = EcoliWorkflowRequest(config_id=config_id, overrides=overrides, variants=variants, simulator=simulator)
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")

@@ -546,6 +546,7 @@ def slurm_script(
         expid={experiment_id}
         config_id={config_id}
         config_dir={config_dir!s}
+        experiment_config=$config_dir/$expid.json
         jq --arg expid "$expid" '.experiment_id = $expid' "$config_dir/$config_id.json" > "$config_dir/$expid.json"
 
         ### logging to confirm installations/paths
@@ -597,6 +598,9 @@ def slurm_script(
             export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
             uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/{experiment_id}.json
         "
+
+        ### remove unique sim config
+        rm $experiment_config
     """)
 
 

@@ -102,11 +102,13 @@ class ParcaDataset(BaseModel):
 
 
 class Overrides(BaseModel):
-    config: dict[str, Any] | None = None
+    # config: dict[str, Any] | None = None
+    config: dict[str, Any] = Field(default={})
 
 
 class Variants(BaseModel):
-    config: dict[str, dict[str, int | float | str]] = Field(default_factory=dict)
+    # config: dict[str, dict[str, int | float | str]] = Field(default_factory=dict)
+    config: dict[str, dict[str, int | float | str]] = Field(default={})
 
 
 class SimulationRequest(BaseModel):
@@ -137,8 +139,8 @@ class EcoliWorkflowRequest(SimulationRequest):
 
     config_id: str
     simulator: SimulatorVersion
-    config_overrides: Overrides | None = None
-    variant_config: Variants | None = None
+    overrides: Overrides | None = None
+    variants: Variants | None = None
     parca_dataset_id: int | None = None
     # experiment_id: str = Field(default=str(uuid.uuid4()).split("-")[-1])
 
