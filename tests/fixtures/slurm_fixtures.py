@@ -32,6 +32,17 @@ async def slurm_service_remote(ssh_service: SSHService) -> AsyncGenerator[SlurmS
     # slurm_service.close()  # nothing to close, ssh_session is closed in ssh_service.close()
 
 
+@pytest_asyncio.fixture(scope="session")
+async def slurm_service_local(ssh_service: SSHService) -> AsyncGenerator[SlurmServiceLocalHPC]:
+    if get_settings().hpc_has_local_volume:
+        slurm_service = SlurmServiceLocalHPC()
+    else:
+        slurm_service = SlurmServiceLocalHPC(ssh_service_for_testing=ssh_service)
+
+    yield slurm_service
+    # nothing to close
+
+
 @pytest.fixture(scope="session")
 def slurm_template_hello_TEMPLATE() -> str:
     settings = get_settings()

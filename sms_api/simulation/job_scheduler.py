@@ -32,7 +32,7 @@ class JobScheduler:
         return await self.database_service.get_hpcrun_id_by_correlation_id(correlation_id=correlation_id)
 
     async def subscribe(self) -> None:
-        if get_settings().is_local_hpc:
+        if not get_settings().hpc_has_messaging:
             logger.info("not subscribing to NATS messages, NATS client is not initialized")
             return
 

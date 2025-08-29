@@ -7,8 +7,8 @@ from textwrap import dedent
 
 from typing_extensions import override
 
+from sms_api.common.hpc.slurm_service import SlurmServiceLocalHPC
 from sms_api.config import get_settings
-from sms_api.dependencies import get_slurm_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
     get_apptainer_image_file,
@@ -28,6 +28,10 @@ logger.setLevel(logging.INFO)
 
 class SimulationServiceLocalHPC(SimulationService):
     _latest_commit_hash: str | None = None
+    slurm_service: SlurmServiceLocalHPC
+
+    def __init__(self, slurm_service: SlurmServiceLocalHPC) -> None:
+        self.slurm_service = slurm_service
 
     @override
     async def get_latest_commit_hash(
@@ -79,7 +83,6 @@ class SimulationServiceLocalHPC(SimulationService):
         if parca_dataset is None:
             raise ValueError(f"ParcaDataset with ID {ecoli_simulation.sim_request.parca_dataset_id} not found.")
 
-        slurm_service = get_slurm_service()
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
 
         random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
@@ -193,12 +196,7 @@ class SimulationServiceLocalHPC(SimulationService):
                     """)
                 f.write(script_content)
 
-            # submit the build script to slurm
-            slurm_service = get_slurm_service()
-            if slurm_service is None:
-                raise RuntimeError("SlurmService is not available. Cannot submit EcoliSimulation job.")
-
-            slurm_jobid = await slurm_service.submit_job(
+            slurm_jobid = await self.slurm_service.submit_job(
                 local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid

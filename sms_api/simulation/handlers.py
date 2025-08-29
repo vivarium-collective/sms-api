@@ -18,7 +18,7 @@ from sms_api.simulation.models import (
     Simulator,
     SimulatorVersion,
 )
-from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
+from sms_api.simulation.simulation_service import SimulationService, SimulationServiceRemoteHpc
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ async def upload_simulator(
     commit_hash: str,
     git_repo_url: str,
     git_branch: str,
-    simulation_service_slurm: SimulationService | SimulationServiceHpc | None = None,
+    simulation_service_slurm: SimulationService | SimulationServiceRemoteHpc | None = None,
     database_service: DatabaseService | None = None,
     background_tasks: BackgroundTasks | None = None,
 ) -> SimulatorVersion:

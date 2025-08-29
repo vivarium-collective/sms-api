@@ -113,6 +113,11 @@ async def _async_run(command: list[str]) -> tuple[int, str, str]:
 
 
 class SlurmServiceLocalHPC(SlurmService):
+    ssh_service_for_testing: SSHService | None
+
+    def __init__(self, ssh_service_for_testing: SSHService | None = None) -> None:
+        self.ssh_service_for_testing = ssh_service_for_testing
+
     @override
     async def get_job_status_squeue(self, job_ids: list[int] | None = None) -> list[SlurmJob]:
         squeue = get_settings().slurm_squeue_local_command
@@ -162,11 +167,17 @@ class SlurmServiceLocalHPC(SlurmService):
 
     @override
     async def submit_job(self, local_sbatch_file: Path, remote_sbatch_file: Path) -> int:
-        # for SlurmServiceLocalHPC, both local_sbatch_file and remote_sbatch_file are local paths, so no scp is needed,
-        # but we still want to copy to the remote_sbatch_file path for consistency
-        if local_sbatch_file != remote_sbatch_file:
-            remote_sbatch_file.parent.mkdir(parents=True, exist_ok=True)
-            remote_sbatch_file.write_text(local_sbatch_file.read_text())
+        if get_settings().hpc_has_local_volume:
+            # if both local_sbatch_file and remote_sbatch_file are local paths, no scp is needed,
+            # but we still want to copy to the remote_sbatch_file path for consistency
+            if local_sbatch_file != remote_sbatch_file:
+                remote_sbatch_file.parent.mkdir(parents=True, exist_ok=True)
+                remote_sbatch_file.write_text(local_sbatch_file.read_text())
+        else:
+            logger.warning("using local slurm service without local volume, using scp to copy sbatch file")
+            if self.ssh_service_for_testing is None:
+                raise Exception("ssh service is not configured, needed for scp in test mode")
+            await self.ssh_service_for_testing.scp_upload(local_file=local_sbatch_file, remote_path=remote_sbatch_file)
 
         sbatch = get_settings().slurm_sbatch_local_command
         command = f"{sbatch} --parsable {remote_sbatch_file}"

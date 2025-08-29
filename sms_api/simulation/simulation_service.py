@@ -92,8 +92,7 @@ class SimulationServiceRemoteHpc(SimulationService):
         if ssh_service is None:
             raise RuntimeError("SSHService is not available. Cannot get latest commit hash.")
 
-        svc = ssh_service or get_ssh_service()
-        return_code, stdout, stderr = await svc.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
+        return_code, stdout, stderr = await ssh_service.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
         if return_code != 0:
             raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
         latest_commit_hash = stdout.strip("\n")[:7]

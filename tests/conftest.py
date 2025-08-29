@@ -27,6 +27,7 @@ from tests.fixtures.simulation_fixtures import (  # noqa: F401
     simulation_service_remote,
 )
 from tests.fixtures.slurm_fixtures import (  # noqa: F401
+    slurm_service_local,
     slurm_service_remote,
     slurm_template_hello_1s,
     slurm_template_hello_10s,

@@ -127,9 +127,18 @@ async def init_standalone() -> None:
 
     settings = get_settings()
 
-    if settings.is_local_hpc:
+    ssh_service: SSHService | None = None
+    if not settings.slurm_submit_host or not settings.slurm_submit_user or not settings.slurm_submit_key_path:
+        ssh_service = SSHService(
+            hostname=settings.slurm_submit_host,
+            username=settings.slurm_submit_user,
+            key_path=Path(settings.slurm_submit_key_path),
+            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
+        )
+
+    if settings.hpc_has_local_volume:
         logger.info("Using local HPC simulation service")
-        slurm_service_local = SlurmServiceLocalHPC()
+        slurm_service_local = SlurmServiceLocalHPC(ssh_service_for_testing=ssh_service)
         set_slurm_service(slurm_service_local)
         set_simulation_service(SimulationServiceLocalHPC(slurm_service=slurm_service_local))
         nats_client = None
@@ -140,18 +149,12 @@ async def init_standalone() -> None:
     else:
         logger.info("Using remote HPC simulation service")
         # verify that all required settings are set
-        if not settings.slurm_submit_host or not settings.slurm_submit_user or not settings.slurm_submit_key_path:
+        if ssh_service is None:
             raise RuntimeError("Slurm submit host, user, and key path must be set in the configuration")
 
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
         slurm_service_remote = SlurmServiceRemoteHPC(ssh_service=ssh_service)
         set_slurm_service(slurm_service_remote)
-        set_simulation_service(SimulationServiceHpc(slurm_service=slurm_service_remote))
+        set_simulation_service(SimulationServiceRemoteHpc(slurm_service=slurm_service_remote))
         nats_client = await nats.connect(_settings.nats_url)
         job_scheduler = JobScheduler(
             nats_client=nats_client, database_service=database, slurm_service=slurm_service_remote

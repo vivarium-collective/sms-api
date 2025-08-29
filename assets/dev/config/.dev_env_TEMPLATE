@@ -36,6 +36,9 @@ HPC_REPO_BASE_PATH=
 HPC_SIM_BASE_PATH=
 HPC_SIM_CONFIG_FILE=
 
+HPC_HAS_LOCAL_VOLUME=False
+HPC_HAS_MESSAGING=True
+
 # for local testing without local SLURM installation, can point to scripts (e.g. squeue.sh) which use ssh.
 SLURM_SQUEUE_LOCAL_COMMAND=squeue
 SLURM_SACCT_LOCAL_COMMAND=sacct

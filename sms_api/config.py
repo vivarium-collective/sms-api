@@ -45,7 +45,9 @@ class Settings(BaseSettings):
 
     sqlite_dbfile: str = "./sms.db"  # SQLite database URL for local development
 
-    is_local_hpc: bool = False
+    # deployment settings for local HPC or remote HPC
+    hpc_has_local_volume: bool = True
+    hpc_has_messaging: bool = True
     slurm_squeue_local_command: str = "squeue"
     slurm_sacct_local_command: str = "sacct"
     slurm_scontrol_local_command: str = "scontrol"
