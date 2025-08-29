@@ -301,16 +301,18 @@ paths:
         schema:
           type: string
           description: Experiment ID for the simulation (from config.json).
+          examples:
+          - sms_single
           title: Experiment Id
         description: Experiment ID for the simulation (from config.json).
-        example: sms_single
       - name: filename
         in: query
         required: true
         schema:
           type: string
+          examples:
+          - ptools_rna.txt
           title: Filename
-        example: ptools_rna.txt
       responses:
         '200':
           description: Successful Response
@@ -333,16 +335,18 @@ paths:
         schema:
           type: string
           description: Experiment ID for the simulation (from config.json).
+          examples:
+          - sms_single
           title: Experiment Id
         description: Experiment ID for the simulation (from config.json).
-        example: sms_single
       - name: chunk_id
         in: query
         required: true
         schema:
           type: integer
+          examples:
+          - 800
           title: Chunk Id
-        example: 800
       responses:
         '200':
           description: Successful Response
@@ -366,9 +370,10 @@ paths:
         schema:
           type: string
           description: Experiment ID for the simulation (from config.json).
+          examples:
+          - sms_single
           title: Experiment Id
         description: Experiment ID for the simulation (from config.json).
-        example: sms_single
       - name: filename
         in: query
         required: false
@@ -479,6 +484,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /wcm/simulation/run/status:
+    get:
+      tags:
+      - Simulations - vEcoli
+      summary: Get the simulation status record by its experiment ID
+      operationId: get-simulation-status
+      parameters:
+      - name: experiment_id
+        in: query
+        required: true
+        schema:
+          type: integer
+          title: Experiment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HpcRun'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /wcm/data:
     post:
       tags:
@@ -492,9 +523,10 @@ paths:
         schema:
           type: string
           description: Experiment ID for the simulation (from config.json).
+          examples:
+          - sms_single
           title: Experiment Id
         description: Experiment ID for the simulation (from config.json).
-        example: sms_single
       - name: filename
         in: query
         required: false
@@ -530,40 +562,6 @@ paths:
                   $ref: '#/components/schemas/EcoliSimulation'
                 type: array
                 title: Response Get-Workflow-Versions
-  /wcm/simulation/status:
-    get:
-      tags:
-      - Simulations - vEcoli
-      summary: Get the simulation status record by its ID
-      operationId: get-workflow-status
-      parameters:
-      - name: simulation_id
-        in: query
-        required: true
-        schema:
-          type: integer
-          title: Simulation Id
-      - name: num_events
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Num Events
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HpcRun'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /:
     get:
       tags:
@@ -663,11 +661,11 @@ components:
       title: AntibioticSimulationRequest
     Body_run-simulation-workflow:
       properties:
-        config_overrides:
+        overrides:
           anyOf:
           - $ref: '#/components/schemas/Overrides'
           - type: 'null'
-        variant_config:
+        variants:
           anyOf:
           - $ref: '#/components/schemas/Variants'
           - type: 'null'
@@ -748,11 +746,11 @@ components:
           title: Config Id
         simulator:
           $ref: '#/components/schemas/SimulatorVersion'
-        config_overrides:
+        overrides:
           anyOf:
           - $ref: '#/components/schemas/Overrides'
           - type: 'null'
-        variant_config:
+        variants:
           anyOf:
           - $ref: '#/components/schemas/Variants'
           - type: 'null'
@@ -761,10 +759,6 @@ components:
           - type: integer
           - type: 'null'
           title: Parca Dataset Id
-        experiment_id:
-          type: string
-          title: Experiment Id
-          default: 69a7a3d78398
       type: object
       required:
       - config_id
@@ -866,11 +860,10 @@ components:
     Overrides:
       properties:
         config:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
+          additionalProperties: true
+          type: object
           title: Config
+          default: {}
       type: object
       title: Overrides
     ParcaDataset:
@@ -1001,6 +994,7 @@ components:
             type: object
           type: object
           title: Config
+          default: {}
       type: object
       title: Variants
     WorkerEvent:

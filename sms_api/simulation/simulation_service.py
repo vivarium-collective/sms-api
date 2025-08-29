@@ -593,14 +593,15 @@ def slurm_script(
         #     uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/{config_id}.json
         # '
 
+        ### remove unique sim config on exit, regardless of job outcome
+        trap 'rm -f {config_dir!s}/{experiment_id}.json' EXIT
+
+        ### run bound singularity
         singularity run $binds $image bash -c "
             export JAVA_HOME=$HOME/.local/bin/java-22
             export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
             uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/{experiment_id}.json
         "
-
-        ### remove unique sim config
-        rm $experiment_config
     """)
 
 

@@ -51,7 +51,6 @@ from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliWorkflowRequest,
     HpcRun,
-    JobType,
     Overrides,
     SimulatorVersion,
     Variants,
@@ -120,7 +119,18 @@ async def run_simulation_workflow(
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return [simulator, sim_request]
+
+
+@config.router.get(
+    path="/simulation/run/status",
+    response_model=HpcRun,
+    operation_id="get-simulation-status",
+    tags=["Simulations - vEcoli"],
+    dependencies=[Depends(get_database_service)],
+    summary="Get the simulation status record by its experiment ID",
+)
+async def get_simulation_status(experiment_id: int = Query(...)) -> HpcRun:
+    raise HTTPException(status_code=501, detail="This endpoint is not yet implemented.")
 
 
 @config.router.post(
@@ -169,35 +179,6 @@ async def get_workflow_versions() -> list[EcoliSimulation]:
     except Exception as e:
         logger.exception("Error getting simulations")
         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/simulation/status",
-    response_model=HpcRun,
-    operation_id="get-workflow-status",
-    tags=["Simulations - vEcoli"],
-    dependencies=[Depends(get_database_service)],
-    summary="Get the simulation status record by its ID",
-)
-async def get_simulation_status(
-    simulation_id: int = Query(...), num_events: int | None = Query(default=None)
-) -> HpcRun:
-    db_service = get_database_service()
-    if db_service is None:
-        logger.error("SSH service is not initialized")
-        raise HTTPException(status_code=500, detail="SSH service is not initialized")
-    # experiment_dir = Path("/home/FCAM/svc_vivarium/test/sims/experiment_96bb7a2_id_1_20250620-181422")
-    try:
-        simulation_hpcrun: HpcRun | None = await db_service.get_hpcrun_by_ref(
-            ref_id=simulation_id, job_type=JobType.SIMULATION
-        )
-    except Exception as e:
-        logger.exception(f"Error fetching simulation results for simulation id: {simulation_id}.")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-    if simulation_hpcrun is None:
-        raise HTTPException(status_code=404, detail=f"Simulation with id {simulation_id} not found.")
-    return simulation_hpcrun
 
 
 # @config.router.post(
