@@ -75,9 +75,19 @@ class Settings(BaseSettings):
     hpc_group: str = ""
     deployment: str = "prod"
 
+    # external services
+    biocyc_email: str = ""
+    biocyc_password: str = ""
+
+    remote_data_basepath: str = ""
+    local_data_basepath: str = ""
+
 
 @lru_cache
-def get_settings() -> Settings:
+def get_settings(env_file: Path | None = None) -> Settings:
+    if env_file is not None:
+        DEV_ENV_PATH = str(env_file)
+        load_dotenv(DEV_ENV_PATH)
     return Settings()
 
 

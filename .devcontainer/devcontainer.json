@@ -1,0 +1,54 @@
+{
+  "name": "SMS-API Dev",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "api",  // the service from the compose file to which you want to be launched
+  "customizations": {
+    "vscode": {
+        "settings": {
+            "python.pythonPath": "/app/.venv/bin/python"  // sms-api/.venv/bin/python
+        },
+        "extensions": [
+            "charliermarsh.ruff@2025.24.0",
+            "ms-azuretools.vscode-containers@2.1.0",
+            "ms-azuretools.vscode-docker@2.0.0",
+            "ms-kubernetes-tools.vscode-kubernetes-tools@1.3.25",
+            "ms-python.black-formatter@2025.2.0",
+            "ms-python.debugpy@2025.10.0",
+            "ms-python.mypy-type-checker@2025.2.0",
+            "ms-python.python@2025.12.0",
+            "ms-python.vscode-pylance@2025.7.1",
+            "ms-python.vscode-python-envs@1.3.12271016",
+            "ms-toolsai.jupyter@2025.7.0",
+            "ms-toolsai.jupyter-keymap@1.1.2",
+            "ms-toolsai.jupyter-renderers@1.3.0",
+            "ms-toolsai.vscode-jupyter-cell-tags@0.1.9",
+            "ms-toolsai.vscode-jupyter-slideshow@0.1.6",
+            "ms-vscode-remote.remote-containers@0.422.1",
+            "ms-vscode-remote.remote-ssh@0.120.0",
+            "ms-vscode-remote.remote-ssh-edit@0.87.0",
+            "ms-vscode.cmake-tools@1.22.6",
+            "ms-vscode.cpptools@1.27.2",
+            "ms-vscode.cpptools-extension-pack@1.3.1",
+            "ms-vscode.cpptools-themes@2.0.0",
+            "ms-vscode.live-server@0.4.15",
+            "ms-vscode.makefile-tools@0.12.17",
+            "ms-vscode.remote-explorer@0.5.0",
+            "ms-vscode.vscode-serial-monitor@0.13.250825001",
+            "nextflow.nextflow@1.5.2",
+            "redhat.vscode-yaml@1.18.0",
+            "robbowen.synthwave-vscode@0.1.20",
+            "sanchodelniglo.synthwave-80s-color-theme@2.0.0",
+            "shakram02.bash-beautify@0.1.1",
+            "shellomo.enhanced-toml@1.0.5",
+            "the0807.uv-toolkit@0.1.7",
+        ]
+    }
+  },
+  "forwardPorts": [8000],  // any ports exposed
+  "workspaceFolder": "/app", // where in container vscode will open to
+  "mounts": [
+    "source=${localWorkspaceFolder}/sms_api,target=/app/sms_api,type=bind"
+  ],
+  "remoteUser": "appuser"
+  // "postCreateCommand": "pip install -e ./sms_api" // use if you want editable mode (probably not needed)
+}

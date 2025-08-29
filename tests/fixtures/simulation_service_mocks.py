@@ -3,7 +3,13 @@ from typing import override
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import EcoliSimulation, ParcaDataset, ParcaDatasetRequest, SimulatorVersion
+from sms_api.simulation.models import (
+    EcoliSimulation,
+    EcoliWorkflowSimulation,
+    ParcaDataset,
+    ParcaDatasetRequest,
+    SimulatorVersion,
+)
 from sms_api.simulation.simulation_service import SimulationService
 
 
@@ -28,6 +34,15 @@ class ConcreteSimulationService(SimulationService):
     @override
     async def submit_ecoli_simulation_job(
         self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
+    ) -> int:
+        raise NotImplementedError
+
+    @override
+    async def submit_vecoli_job(
+        self,
+        ecoli_simulation: EcoliWorkflowSimulation,
+        experiment_id: str,
+        # database_service: DatabaseService
     ) -> int:
         raise NotImplementedError
 

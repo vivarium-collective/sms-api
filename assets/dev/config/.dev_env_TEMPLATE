@@ -35,3 +35,7 @@ HPC_PARCA_BASE_PATH=
 HPC_REPO_BASE_PATH=
 HPC_SIM_BASE_PATH=
 HPC_SIM_CONFIG_FILE=
+
+
+BIOCYC_EMAIL="myemail@website.org"
+BIOCYC_PASSWORD="my-super-secret-password!"

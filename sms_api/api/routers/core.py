@@ -27,18 +27,16 @@
     hive partitioning: single simulations will always have the same hive partitioning, etc.
 """
 
-import io
 import logging
 import mimetypes
-import os
-import tempfile
-import zipfile
-from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
+# from sms_api.api.request_examples import examples
+from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
+from sms_api.common.gateway.utils import get_local_simulation_outdir, get_simulation_outdir
 from sms_api.data.analysis_service import AnalysisService
 from sms_api.data.parquet_service import ParquetService
 from sms_api.dependencies import (
@@ -89,7 +87,7 @@ config = RouterConfig(router=APIRouter(), prefix="/core", dependencies=[])
     path="/simulator/latest",
     response_model=Simulator,
     operation_id="get-latest-simulator",
-    tags=["Simulators"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_database_service), Depends(get_db_engine)],
     summary="Get the latest simulator version",
 )
@@ -114,7 +112,7 @@ async def get_latest_simulator(
     path="/simulator/versions",
     response_model=RegisteredSimulators,
     operation_id="get-simulator-versions",
-    tags=["Simulators"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_database_service), Depends(get_db_engine)],
     summary="get the list of available simulator versions",
 )
@@ -135,7 +133,7 @@ async def get_simulator_versions() -> RegisteredSimulators:
     path="/simulator/status",
     response_model=HpcRun,
     operation_id="get-simulator-status",
-    tags=["Simulators"],
+    tags=["EcoliSim"],
     summary="Get simulator container build status by its ID",
 )
 async def get_simulator_status(simulator_id: int) -> HpcRun | None:
@@ -161,7 +159,7 @@ async def get_simulator_status(simulator_id: int) -> HpcRun | None:
     path="/simulator/upload",
     response_model=SimulatorVersion,
     operation_id="insert-simulator-version",
-    tags=["Simulators"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_database_service), Depends(get_db_engine)],
     summary="Upload a new simulator (vEcoli) version.",
 )
@@ -204,7 +202,7 @@ async def insert_simulator_version(
     path="/simulation/parca",
     response_model=ParcaDataset,
     operation_id="run-parca",
-    tags=["Simulations - Parca"],
+    tags=["EcoliSim"],
     summary="Run a parameter calculation",
 )
 async def run_parameter_calculator(
@@ -237,7 +235,7 @@ async def run_parameter_calculator(
     path="/simulation/parca/versions",
     response_model=list[ParcaDataset],
     operation_id="get-parca-versions",
-    tags=["Simulations - Parca"],
+    tags=["EcoliSim"],
     summary="Get list of parca calculations",
 )
 async def get_parcas() -> list[ParcaDataset]:
@@ -265,7 +263,7 @@ async def get_parcas() -> list[ParcaDataset]:
     path="/simulation/parca/status",
     response_model=HpcRun,
     operation_id="get-parca-status",
-    tags=["Simulations - Parca"],
+    tags=["EcoliSim"],
     summary="Get parca calculation status by its ID",
 )
 async def get_parca_status(parca_id: int) -> HpcRun | None:
@@ -289,7 +287,7 @@ async def get_parca_status(parca_id: int) -> HpcRun | None:
     path="/simulation/run",
     operation_id="run-simulation",
     response_model=EcoliExperiment,
-    tags=["Simulations - vEcoli"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
     summary="Run a vEcoli simulation",
 )
@@ -323,7 +321,7 @@ async def run_vecoli_simulation(
     path="/simulation/run/versions",
     response_model=list[EcoliSimulation],
     operation_id="get-simulation-versions",
-    tags=["Simulations - vEcoli"],
+    tags=["EcoliSim"],
     summary="Get list of vEcoli simulations",
 )
 async def get_simulation_versions() -> list[EcoliSimulation]:
@@ -344,7 +342,7 @@ async def get_simulation_versions() -> list[EcoliSimulation]:
     path="/simulation/run/status",
     response_model=HpcRun,
     operation_id="get-simulation-status",
-    tags=["Simulations - vEcoli"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
 )
@@ -373,7 +371,7 @@ async def get_simulation_status(
     path="/simulation/run/events",
     response_model=list[WorkerEvent],
     operation_id="get-simulation-worker-events",
-    tags=["Simulations - vEcoli"],
+    tags=["EcoliSim"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
     summary="Get the worker events for a simulation by its ID",
 )
@@ -395,6 +393,7 @@ async def get_simulation_worker_events(
         simulation_hpcrun: HpcRun | None = await db_service.get_hpcrun_by_ref(
             ref_id=simulation_id, job_type=JobType.SIMULATION
         )
+        logger.info(f"Simulation HPC RUN: {simulation_hpcrun}")
         if simulation_hpcrun:
             worker_events = await db_service.list_worker_events(
                 hpcrun_id=simulation_hpcrun.database_id,
@@ -412,19 +411,19 @@ async def get_simulation_worker_events(
     path="/download/analysis",
     response_class=FileResponse,
     operation_id="download-analysis-file",
-    tags=["Data"],
+    tags=["EcoliSim"],
     summary="Download a file that was generated from a simulation analysis module",
 )
 async def download_analysis_file(
     background_tasks: BackgroundTasks,
     experiment_id: str = Query(
-        example="sms_single", description="Experiment ID for the simulation (from config.json)."
+        examples=["sms_single"], description="Experiment ID for the simulation (from config.json)."
     ),
-    filename: str = Query(example="ptools_rna.txt"),
+    filename: str = Query(examples=["ptools_rna.txt"]),
 ) -> FileResponse:
     try:
         service = AnalysisService()
-        filepath = service.get_file_path(experiment_id, filename, remote=True)
+        filepath = service.get_file_path(experiment_id, filename, remote=True, logger_instance=logger)
         mimetype, _ = mimetypes.guess_type(filepath)
         return FileResponse(path=filepath, media_type=mimetype or "application/octet-stream", filename=filepath.name)
     except Exception as e:
@@ -436,14 +435,14 @@ async def download_analysis_file(
     path="/download/chunk",
     response_class=FileResponse,
     operation_id="download-chunk",
-    tags=["Data"],
+    tags=["EcoliSim"],
     summary="Download a single file that was generated from the parquet emitter",
 )
 async def download_chunk(
     experiment_id: str = Query(
-        example="sms_single", description="Experiment ID for the simulation (from config.json)."
+        examples=["sms_single"], description="Experiment ID for the simulation (from config.json)."
     ),
-    chunk_id: int = Query(example=800),
+    chunk_id: int = Query(examples=[800]),
 ) -> FileResponse:
     try:
         service = ParquetService()
@@ -460,36 +459,59 @@ async def download_chunk(
     path="/download/parquet",
     response_class=FileResponse,
     operation_id="download-parquet",
-    tags=["Data"],
+    tags=["EcoliSim"],
     summary="Download zip file containing pqs that were generated from the parquet emitter",
 )
 async def download_parquet(
     background_tasks: BackgroundTasks,
-    # chunks: Chunks,
     experiment_id: str = Query(
-        example="sms_single", description="Experiment ID for the simulation (from config.json)."
+        examples=["sms_single"], description="Experiment ID for the simulation (from config.json)."
     ),
+    filename: str | None = Query(default=None, description="Name you wish to assign to the downloaded zip file"),
 ) -> FileResponse:
     try:
         service = ParquetService()
         pq_dir = service.get_parquet_dir(experiment_id)
-
-        files = list(pq_dir.iterdir())
-
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
-            for file in files:
-                if file.exists():
-                    zipf.write(file, arcname=file.name)
-        zip_buffer.seek(0)
-
-        tmpdir = tempfile.TemporaryDirectory()
-        background_tasks.add_task(tmpdir.cleanup)
-        filepath = Path(os.path.join(tmpdir.name, f"{experiment_id}.zip"))
-        with open(filepath, "wb") as f:
-            f.write(zip_buffer.getvalue())
+        buffer = get_zip_buffer(pq_dir)
+        fname = filename or experiment_id
+        filepath = write_zip_buffer(buffer, fname, background_tasks)
 
         return FileResponse(path=filepath, media_type="application/octet-stream", filename=filepath.name)
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/download/example",
+    response_class=FileResponse,
+    operation_id="download-example-files",
+    tags=["EcoliSim"],
+    summary="Download either parquet or analysis outputs as a zip file generated by the example simulation.",
+)
+async def download_example_file(
+    background_tasks: BackgroundTasks,
+    data_type: str = Query(description="Either 'analysis' or 'timeseries'", examples=["analysis"], default="analysis"),
+) -> FileResponse:
+    experiment_id = "sms_single"
+    allowed_data_types = ["analysis", "timeseries"]
+    if data_type not in allowed_data_types:
+        raise Exception(f"data_type {data_type} is not supported.")
+    try:
+        filename = f"example_simulation_{data_type}"
+        if data_type == "timeseries":
+            return await download_parquet(background_tasks, experiment_id, filename=filename)
+
+        suffix = "analyses/variant=0/lineage_seed=0/generation=1/agent_id=0/plots"
+        data_dir = get_simulation_outdir(experiment_id="sms_single")
+        if data_dir is None:
+            data_dir = get_local_simulation_outdir(experiment_id="sms_single")
+        data_dir = data_dir / suffix
+        buffer = get_zip_buffer(data_dir)
+        filepath = write_zip_buffer(buffer, f"example_simulation_{data_type}", background_tasks)
+
+        return FileResponse(path=filepath, media_type="application/octet-stream", filename=filepath.name)
+
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e

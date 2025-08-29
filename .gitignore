@@ -212,7 +212,8 @@ marimo/_lsp/
 __marimo__/
 
 # Vscode config files
-.vscode/
+.vscode/*
+!.vscode/launch.json
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
@@ -221,6 +222,7 @@ __marimo__/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+.NOTES
 .idea/
 .dev_env
 datamount/
@@ -228,3 +230,10 @@ test_history/
 sms_api/api/_main.py
 poetry.lock
 /assets/dev/config/sms_known_hosts
+home/
+assets/deps/
+assets/simulation/configs/
+
+simulation_configs/
+notes/
+assets/simulation/model/parameters/

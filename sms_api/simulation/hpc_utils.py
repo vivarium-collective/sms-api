@@ -1,8 +1,12 @@
 import os
+import random
+import string
+import uuid
 from pathlib import Path
+from typing import Any
 
 from sms_api.common.gateway.models import Namespace, RouterConfig
-from sms_api.config import get_settings
+from sms_api.config import Settings, get_settings
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
@@ -128,3 +132,26 @@ def get_experiment_id(
         + "_"
         + get_experiment_dirname(simulation.database_id, sim_request.simulator.git_commit_hash)
     )
+
+
+def add_variant_config(config: dict[str, Any]) -> dict[str, Any]:
+    """
+    For Example:
+     {
+        "condition": {"condition": {"value":[ "basal", "with_aa", "acetate","succinate", "no_oxygen"]}}
+    },
+    """
+    return config
+
+
+def get_slurmjob_name(experiment_id: str, simulator_hash: str = "079c43c") -> str:
+    random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
+    return f"sim-{simulator_hash}-{experiment_id}-{random_suffix}"
+
+
+def get_experiment_dir(experiment_id: str, env: Settings) -> Path:
+    return Path(f"{env.slurm_base_path}/workspace/outputs/{experiment_id}")
+
+
+def create_experiment_id(config_id: str, simulator_hash: str) -> str:
+    return f"{config_id}-{simulator_hash}-{str(uuid.uuid4()).split('-')[-1]}"

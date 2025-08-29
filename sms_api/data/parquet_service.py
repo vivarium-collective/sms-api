@@ -10,7 +10,7 @@ import polars as pl
 from anyio import mkdtemp
 
 from sms_api.common.gateway.models import Namespace
-from sms_api.common.gateway.utils import get_simulation_outdir
+from sms_api.common.gateway.utils import get_local_simulation_outdir, get_simulation_outdir
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import Settings, get_settings
 from sms_api.simulation.hpc_utils import (
@@ -45,6 +45,10 @@ class ParquetService:
         agent_id: int | None = None,
     ) -> Path:
         outdir = get_simulation_outdir(experiment_id)
+        if outdir is None:
+            logger.debug(f"{outdir} was requested but does not exist. Defaulting to local dir.")
+            outdir = get_local_simulation_outdir(experiment_id=experiment_id)
+
         chunks_dir = outdir / "history"
         pq_dir = (
             chunks_dir
@@ -54,8 +58,8 @@ class ParquetService:
             / f"generation={generation or 1}"
             / f"agent_id={agent_id or 0}"
         )
-        if not pq_dir.exists():
-            raise FileNotFoundError(f"Could not find parquet outputs at {pq_dir}")
+        # if not pq_dir.exists():
+        #     raise FileNotFoundError(f"Could not find parquet outputs at {pq_dir}")
         return pq_dir
 
     def get_parquet_path(
