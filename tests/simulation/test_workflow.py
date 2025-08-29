@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 import pytest
 
@@ -14,6 +15,7 @@ async def test_submit_vecoli_job(ssh_service: SSHService, logger: logging.Logger
 
     config_id = "sms_perturb_growth"
     experiment_id = "testflow"
+    experiment_id = f"{config_id}-TEST-{str(uuid.uuid4()).split('-')[-1]}"
     vecoli_repo_hash = workspace_image_hash
     env = get_settings()
 
@@ -25,7 +27,7 @@ async def test_submit_vecoli_job(ssh_service: SSHService, logger: logging.Logger
             config_id=config_id,
             simulator_hash=vecoli_repo_hash,
             env=env,
-            expid=experiment_id,
+            experiment_id=experiment_id,
             ssh=ssh_service,
             logger=logger,
         )

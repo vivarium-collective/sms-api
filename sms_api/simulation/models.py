@@ -2,7 +2,6 @@ import datetime
 import enum
 import hashlib
 import json
-import uuid
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -141,7 +140,7 @@ class EcoliWorkflowRequest(SimulationRequest):
     config_overrides: Overrides | None = None
     variant_config: Variants | None = None
     parca_dataset_id: int | None = None
-    experiment_id: str = Field(default=str(uuid.uuid4()).split("-")[-1])
+    # experiment_id: str = Field(default=str(uuid.uuid4()).split("-")[-1])
 
 
 class AntibioticSimulationRequest(EcoliSimulationRequest):

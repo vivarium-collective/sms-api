@@ -86,7 +86,7 @@ async def get_available_config_ids(simulator_hash: str | None = Query(default=No
 @config.router.post(
     path="/simulation/run",
     operation_id="run-simulation-workflow",
-    # response_model=EcoliExperiment,
+    response_model=EcoliExperiment,
     tags=["Simulations - vEcoli"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
     summary="Dispatches a nextflow-powered vEcoli simulation workflow",

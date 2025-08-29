@@ -1,6 +1,7 @@
 import os
 import random
 import string
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -150,3 +151,7 @@ def get_slurmjob_name(experiment_id: str, simulator_hash: str = "079c43c") -> st
 
 def get_experiment_dir(experiment_id: str, env: Settings) -> Path:
     return Path(f"{env.slurm_base_path}/workspace/outputs/{experiment_id}")
+
+
+def create_experiment_id(config_id: str, simulator_hash: str) -> str:
+    return f"{config_id}-{simulator_hash}-{str(uuid.uuid4()).split('-')[-1]}"

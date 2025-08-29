@@ -3,7 +3,6 @@ import logging
 import random
 import string
 import tempfile
-import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
 from textwrap import dedent
@@ -61,6 +60,7 @@ class SimulationService(ABC):
     async def submit_vecoli_job(
         self,
         ecoli_simulation: EcoliWorkflowSimulation,
+        experiment_id: str,
         # database_service: DatabaseService
     ) -> int:
         pass
@@ -430,6 +430,7 @@ class SimulationServiceHpc(SimulationService):
     async def submit_vecoli_job(
         self,
         ecoli_simulation: EcoliWorkflowSimulation,
+        experiment_id: str,
         # database_service: DatabaseService
     ) -> int:
         """Dispatches a nextflow-powered vEcoli simulation workflow
@@ -449,7 +450,7 @@ class SimulationServiceHpc(SimulationService):
             config_id=ecoli_simulation.sim_request.config_id,
             simulator_hash=ecoli_simulation.sim_request.simulator.git_commit_hash,
             env=settings,
-            expid=ecoli_simulation.sim_request.experiment_id,
+            experiment_id=experiment_id,
             ssh=ssh_service,
             logger=logger,
         )
@@ -483,6 +484,7 @@ class SimulationServiceHpc(SimulationService):
 def slurm_script(
     config_id: str,
     slurm_job_name: str,
+    experiment_id: str,
     # vecoli_commit_hash: str | None = None,
     # remote_vecoli_dir: Path | None = None,
     settings: Settings | None = None,
@@ -501,10 +503,23 @@ def slurm_script(
     slurm_log_file = base_path / f"prod/htclogs/{slurm_job_name}.out"
     experiment_outdir = f"/home/FCAM/svc_vivarium/workspace/outputs/{config_id}"
 
-    log(f"\n>> LOGFILE: {slurm_log_file!s}", logger)
-
+    config_dir = vecoli_dir / "configs"
     # latest_hash = vecoli_commit_hash or "079c43c"
     latest_hash = "079c43c"
+
+    # --- in python script func: ---
+    # experiment_id = f'sim-{simulator_hash}-{config_id}-{uuid.uuid4()}'
+
+    # --- in slurm script: ---
+    # config_dir=$HOME/workspace/vEcoli/configs
+    # expid={experiment_id}
+    # jq --arg expid "$expid" '.experiment_id = $expid' "$config_dir/${config_id}.json" > "$config_dir/${expid}.json"
+    # ...BINDS, ETC...
+    # singularity run $binds $image bash -c '
+    #     export JAVA_HOME=$HOME/.local/bin/java-22
+    #     export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
+    #     uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/$expid.json
+    # '
 
     return dedent(f"""\
         #!/bin/bash
@@ -526,24 +541,30 @@ def slurm_script(
         # export NEXTFLOW=$local_bin/nextflow
         # export PATH=$JAVA_HOME/bin:$PATH:$(dirname "$NEXTFLOW")
 
-        ### confirm installations/paths
-        echo "---> START({datetime.datetime.now()}) --->"
-        echo "                                        "
-        echo "=== Environment Variables ==="
+        ### create request-specific config .json
+        cd $HOME/workspace/vEcoli
+        expid={experiment_id}
+        config_id={config_id}
+        config_dir={config_dir!s}
+        jq --arg expid "$expid" '.experiment_id = $expid' "$config_dir/$config_id.json" > "$config_dir/$expid.json"
+
+        ### logging to confirm installations/paths
+        echo "----> START({datetime.datetime.now()}) ---->"
+        echo "                                            "
+        echo "===== Environment Variables ====="
         env | grep -E 'JAVA_HOME|PATH|NEXTFLOW'
 
         echo "=== Checking Java and Nextflow ==="
         jv=$(which java)
         nf=$(which nextflow)
-        echo "Java path: $jv"
-        echo "Nextflow path: $nf"
-        cd $HOME/workspace/vEcoli
-        echo "UV Installation: $(which uv)"
-        echo "UV Python: $(uv run which python)"
+        echo ">> Java path: $jv"
+        echo ">> Nextflow path: $nf"
+        echo ">> UV Installation: $(which uv)"
+        echo ">> UV Python: $(uv run which python)"
         echo "$jv" > {remote_workspace_dir!s}/test-java.txt
         echo "$nf" > {remote_workspace_dir!s}/test-nextflow.txt
-        echo "|<--- END <---"
-        echo "                                        "
+        echo "|<----------------- END <-------------------"
+        echo "                                            "
 
         ### Check if the experiment dir exists, remove if so:
         if [ -d {experiment_outdir} ]; then rm -rf {experiment_outdir}; fi
@@ -565,11 +586,17 @@ def slurm_script(
         image=$HOME/workspace/images/vecoli-$latest_hash.sif
         vecoli_image_root=/vEcoli
 
-        singularity run $binds $image bash -c '
+        # singularity run $binds $image bash -c '
+        #     export JAVA_HOME=$HOME/.local/bin/java-22
+        #     export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
+        #     uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/{config_id}.json
+        # '
+
+        singularity run $binds $image bash -c "
             export JAVA_HOME=$HOME/.local/bin/java-22
             export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-            uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/{config_id}.json
-        '
+            uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/{experiment_id}.json
+        "
     """)
 
 
@@ -606,18 +633,20 @@ async def submit_vecoli_job(
     config_id: str,
     simulator_hash: str,
     env: Settings,
-    expid: str | None = None,
+    experiment_id: str,
     ssh: SSHService | None = None,
     logger: logging.Logger | None = None,
 ) -> int:
-    experiment_id = expid or config_id + f"-{str(uuid.uuid4()).split('-')[-1]}"
+    # experiment_id = expid or create_experiment_id(config_id=config_id, simulator_hash=simulator_hash)
     experiment_dir = get_experiment_dir(experiment_id=experiment_id, env=env)
     experiment_path_parent = experiment_dir.parent
     experiment_id_dir = experiment_dir.name
     slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
     # slurmjob_name = "dev"
 
-    script = slurm_script(config_id=config_id, slurm_job_name=slurmjob_name, settings=env, logger=logger)
+    script = slurm_script(
+        config_id=config_id, slurm_job_name=slurmjob_name, experiment_id=experiment_id, settings=env, logger=logger
+    )
 
     msg = dedent(f"""\
         Submitting with the following params:

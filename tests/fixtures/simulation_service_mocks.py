@@ -41,6 +41,7 @@ class ConcreteSimulationService(SimulationService):
     async def submit_vecoli_job(
         self,
         ecoli_simulation: EcoliWorkflowSimulation,
+        experiment_id: str,
         # database_service: DatabaseService
     ) -> int:
         raise NotImplementedError
