@@ -5,7 +5,7 @@ from textwrap import dedent
 import pytest
 import pytest_asyncio
 
-from sms_api.common.hpc.slurm_service import SlurmService, SlurmServiceRemoteHPC
+from sms_api.common.hpc.slurm_service import SlurmServiceLocalHPC, SlurmServiceRemoteHPC
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 
@@ -24,7 +24,7 @@ async def ssh_service() -> AsyncGenerator[SSHService]:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def slurm_service_remote(ssh_service: SSHService) -> AsyncGenerator[SlurmService]:
+async def slurm_service_remote(ssh_service: SSHService) -> AsyncGenerator[SlurmServiceRemoteHPC]:
     # saved_ssh_service = get_ssh_service()
     slurm_service = SlurmServiceRemoteHPC(ssh_service=ssh_service)
     yield slurm_service

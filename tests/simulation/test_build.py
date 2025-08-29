@@ -7,7 +7,7 @@ from sms_api.common.hpc.slurm_service import SlurmServiceRemoteHPC
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.simulation_service import SimulationServiceHpc
+from sms_api.simulation.simulation_service import SimulationServiceRemoteHpc
 
 main_branch = "messages"
 repo_url = "https://github.com/vivarium-collective/vEcoli"
@@ -26,7 +26,7 @@ async def test_latest_repo_installed(ssh_service: SSHService, latest_commit_hash
 @pytest.mark.asyncio
 async def test_build(
     slurm_service_remote: SlurmServiceRemoteHPC,
-    simulation_service_remote: SimulationServiceHpc,
+    simulation_service_remote: SimulationServiceRemoteHpc,
     database_service: DatabaseServiceSQL,
     latest_commit_hash: str,
 ) -> None:

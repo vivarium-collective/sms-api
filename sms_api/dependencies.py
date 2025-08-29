@@ -12,7 +12,8 @@ from sms_api.config import get_settings
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.job_scheduler import JobScheduler
-from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
+from sms_api.simulation.simulation_service import SimulationService, SimulationServiceRemoteHpc
+from sms_api.simulation.simulation_service_localhpc import SimulationServiceLocalHPC
 from sms_api.simulation.tables_orm import create_db
 
 logger = logging.getLogger(__name__)
@@ -130,7 +131,7 @@ async def init_standalone() -> None:
         logger.info("Using local HPC simulation service")
         slurm_service_local = SlurmServiceLocalHPC()
         set_slurm_service(slurm_service_local)
-        set_simulation_service(SimulationServiceHpc(slurm_service=slurm_service_local))
+        set_simulation_service(SimulationServiceLocalHPC(slurm_service=slurm_service_local))
         nats_client = None
         job_scheduler = JobScheduler(
             nats_client=nats_client, database_service=database, slurm_service=slurm_service_local

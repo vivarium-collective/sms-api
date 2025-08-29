@@ -10,7 +10,7 @@ from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import EcoliSimulationRequest, JobType, ParcaDatasetRequest, SimulatorVersion
-from sms_api.simulation.simulation_service import SimulationServiceHpc
+from sms_api.simulation.simulation_service import SimulationServiceRemoteHpc
 
 main_branch = "messages"
 repo_url = "https://github.com/vivarium-collective/vEcoli"
@@ -20,7 +20,7 @@ repo_url = "https://github.com/vivarium-collective/vEcoli"
 @pytest.mark.asyncio
 async def test_simulate(
     slurm_service_remote: SlurmServiceRemoteHPC,
-    simulation_service_remote: SimulationServiceHpc,
+    simulation_service_remote: SimulationServiceRemoteHpc,
     database_service: DatabaseServiceSQL,
     latest_commit_hash: str,
 ) -> None:

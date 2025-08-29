@@ -8,7 +8,7 @@ from textwrap import dedent
 
 from typing_extensions import override
 
-from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.hpc.slurm_service import SlurmServiceRemoteHPC
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
@@ -71,11 +71,11 @@ class SimulationService(ABC):
         pass
 
 
-class SimulationServiceHpc(SimulationService):
+class SimulationServiceRemoteHpc(SimulationService):
     _latest_commit_hash: str | None = None
-    slurm_service: SlurmService
+    slurm_service: SlurmServiceRemoteHPC
 
-    def __init__(self, slurm_service: SlurmService) -> None:
+    def __init__(self, slurm_service: SlurmServiceRemoteHPC) -> None:
         self.slurm_service = slurm_service
 
     @override
