@@ -10,13 +10,13 @@ from httpx import ASGITransport
 from sms_api.api.client import Client
 from sms_api.api.main import app
 from sms_api.config import get_settings
-from sms_api.data.biocyc_service import BiocycService
+
+# from sms_api.data.biocyc_service import BiocycService
 from sms_api.latest_commit import write_latest_commit
 
-
-@pytest_asyncio.fixture(scope="function")
-async def biocyc_service() -> BiocycService:
-    return BiocycService()
+# @pytest_asyncio.fixture(scope="function")
+# async def biocyc_service() -> BiocycService:
+#     return BiocycService()
 
 
 @pytest_asyncio.fixture(scope="function")
