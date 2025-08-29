@@ -5,8 +5,8 @@ namespace: sms-api-rke
 
 images:
   - name: ghcr.io/biosimulations/sms-api
-    newTag: 0.2.10-dev
-    # STABLE: newTag: 0.2.8
+    newTag: 0.2.11-dev
+    # STABLE: newTag: 0.2.10-dev
   - name: docker.io/library/mongo
     newTag: 8.0.4
 
