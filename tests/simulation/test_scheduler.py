@@ -9,7 +9,7 @@ import pytest
 from nats.aio.client import Client as NATSClient
 
 from sms_api.common.hpc.models import SlurmJob
-from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.hpc.slurm_service import SlurmServiceRemoteHPC
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
@@ -69,7 +69,7 @@ async def test_messaging(
     nats_subscriber_client: NATSClient,
     nats_producer_client: NATSClient,
     database_service: DatabaseServiceSQL,
-    slurm_service_remote: SlurmService,
+    slurm_service_remote: SlurmServiceRemoteHPC,
 ) -> None:
     scheduler = JobScheduler(
         nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service_remote
@@ -107,7 +107,7 @@ async def test_messaging(
 async def test_job_scheduler(
     nats_subscriber_client: NATSClient,
     database_service: DatabaseServiceSQL,
-    slurm_service_remote: SlurmService,
+    slurm_service_remote: SlurmServiceRemoteHPC,
     slurm_template_hello_10s: str,
 ) -> None:
     scheduler = JobScheduler(

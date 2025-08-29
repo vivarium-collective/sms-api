@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.hpc.slurm_service import SlurmServiceRemoteHPC
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
@@ -19,7 +19,7 @@ repo_url = "https://github.com/vivarium-collective/vEcoli"
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_simulate(
-    slurm_service_remote: SlurmService,
+    slurm_service_remote: SlurmServiceRemoteHPC,
     simulation_service_remote: SimulationServiceHpc,
     database_service: DatabaseServiceSQL,
     latest_commit_hash: str,

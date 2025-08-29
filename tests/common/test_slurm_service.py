@@ -5,13 +5,13 @@ from pathlib import Path
 import pytest
 
 from sms_api.common.hpc.models import SlurmJob
-from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.hpc.slurm_service import SlurmServiceRemoteHPC
 from sms_api.config import get_settings
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_slurm_job_query_squeue(slurm_service_remote: SlurmService) -> None:
+async def test_slurm_job_query_squeue(slurm_service_remote: SlurmServiceRemoteHPC) -> None:
     all_jobs: list[SlurmJob] = await slurm_service_remote.get_job_status_squeue()
     assert all_jobs is not None
     if len(all_jobs) > 0:
@@ -24,7 +24,7 @@ async def test_slurm_job_query_squeue(slurm_service_remote: SlurmService) -> Non
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_slurm_job_query_sacct(slurm_service_remote: SlurmService) -> None:
+async def test_slurm_job_query_sacct(slurm_service_remote: SlurmServiceRemoteHPC) -> None:
     all_jobs: list[SlurmJob] = await slurm_service_remote.get_job_status_sacct()
     assert all_jobs is not None
     if len(all_jobs) > 0:
@@ -37,7 +37,7 @@ async def test_slurm_job_query_sacct(slurm_service_remote: SlurmService) -> None
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_slurm_job_submit(slurm_service_remote: SlurmService, slurm_template_hello_1s: str) -> None:
+async def test_slurm_job_submit(slurm_service_remote: SlurmServiceRemoteHPC, slurm_template_hello_1s: str) -> None:
     _all_jobs_before_submit: list[SlurmJob] = await slurm_service_remote.get_job_status_squeue()
     settings = get_settings()
     remote_path = Path(settings.slurm_log_base_path)

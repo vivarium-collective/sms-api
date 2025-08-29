@@ -6,7 +6,7 @@ from textwrap import dedent
 import pytest
 
 from sms_api.common.hpc.models import SlurmJob
-from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.hpc.slurm_service import SlurmServiceRemoteHPC
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 
@@ -139,7 +139,7 @@ echo "Hello, world! to stdout"
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_singularity_slurm(ssh_service: SSHService, slurm_service_remote: SlurmService) -> None:
+async def test_singularity_slurm(ssh_service: SSHService, slurm_service_remote: SlurmServiceRemoteHPC) -> None:
     with tempfile.TemporaryDirectory() as tmpdir_str:
         tmpdir = Path(tmpdir_str)
 
