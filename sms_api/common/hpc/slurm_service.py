@@ -109,7 +109,7 @@ async def _async_run(command: list[str]) -> tuple[int, str, str]:
     )
     stdout, stderr = await proc.communicate()
     return_code = cast(int, proc.returncode)
-    return return_code, stderr.decode(), stdout.decode()
+    return return_code, stdout.decode(), stderr.decode()
 
 
 class SlurmServiceLocalHPC(SlurmService):
@@ -121,7 +121,7 @@ class SlurmServiceLocalHPC(SlurmService):
             job_ids_str = ",".join(map(str, job_ids)) if len(job_ids) > 1 else str(job_ids[0])
             command = command + f" -j {job_ids_str}"
 
-        return_code, stderr, stdout = await _async_run(command.split())
+        return_code, stdout, stderr = await _async_run(command.split())
 
         if return_code != 0:
             raise Exception(
