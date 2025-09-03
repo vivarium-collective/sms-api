@@ -28,11 +28,15 @@
 """
 
 import logging
+import os
+from collections.abc import Generator
+from io import BytesIO
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 # from sms_api.api.request_examples import examples
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
@@ -63,12 +67,45 @@ logger = logging.getLogger(__name__)
 LATEST_COMMIT = read_latest_commit()
 ROUTER_TAG = ["Simulations - vEcoli"]
 
+config = RouterConfig(router=APIRouter(), prefix="/wcm", dependencies=[])
+
 
 def get_server_url(dev: bool = True) -> ServerMode:
     return ServerMode.DEV if dev else ServerMode.PROD
 
 
-config = RouterConfig(router=APIRouter(), prefix="/wcm", dependencies=[])
+def get_experiment_id_from_tag(experiment_tag: str) -> str:
+    parts = experiment_tag.split("-")
+    parts.remove(parts[-1])
+    return "-".join(parts)
+
+
+def get_analysis_dir(outdir: Path, experiment_id: str) -> Path:
+    return outdir / experiment_id / "analyses"
+
+
+def get_analysis_paths(analysis_dir: Path) -> set[Path]:
+    paths = set()
+    for root, _, files in analysis_dir.walk():
+        for fname in files:
+            fp = root / fname
+            if fp.exists():
+                paths.add(fp)
+    return paths
+
+
+def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
+    """
+    Generator function to stream a zip file dynamically.
+    """
+    # Use BytesIO as an in-memory file-like object for chunks
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED) as zip_file:
+        for file_path, arcname in file_paths:
+            # arcname is the filename inside the zip (can handle non-unique names)
+            zip_file.write(file_path, arcname=arcname)
+    buffer.seek(0)
+    yield from buffer
 
 
 @config.router.get(path="/simulation/configs", operation_id="get-available-configs", tags=["Simulations - vEcoli"])
@@ -126,7 +163,7 @@ async def run_simulation_workflow(
 @config.router.get(
     path="/simulation/run/status",
     response_model=SimulationRun,
-    operation_id="get-simulation-status",
+    operation_id="get-vecoli-simulation-status",
     tags=["Simulations - vEcoli"],
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
@@ -148,10 +185,38 @@ async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationR
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-def get_experiment_id_from_tag(experiment_tag: str) -> str:
-    parts = experiment_tag.split("-")
-    parts.remove(parts[-1])
-    return "-".join(parts)
+@config.router.get(
+    path="/download/analysis",
+    response_class=StreamingResponse,
+    operation_id="download-analysis",
+    tags=["Data - vEcoli"],
+    description="Download all available simulation analysis outputs as a .zip file",
+)
+async def download_analysis(experiment_tag: str = Query(...)) -> StreamingResponse:
+    try:
+        # outdir = Path("/Users/alexanderpatrie/sms/vEcoli/out")
+        # experiment_id = "sms_multiseed"
+        settings = get_settings()
+        outdir = Path(settings.slurm_base_path) / "workspace" / "outputs"
+        experiment_id = get_experiment_id_from_tag(experiment_tag)
+        analysis_dir = get_analysis_dir(outdir=outdir, experiment_id=experiment_id)
+
+        file_paths = []
+        for root, _, files in analysis_dir.walk():
+            for f in files:
+                fp = root / f
+                abs_path = fp.absolute()
+                arcname = os.path.relpath(str(abs_path), analysis_dir)
+                file_paths.append((abs_path, arcname))
+
+        return StreamingResponse(
+            generate_zip(file_paths),
+            media_type="application/x-zip-compressed",
+            headers={"Content-Disposition": f"attachment; filename={experiment_id}.zip"},
+        )
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis files.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.post(
