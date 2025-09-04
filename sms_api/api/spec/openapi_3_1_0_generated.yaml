@@ -489,7 +489,7 @@ paths:
       tags:
       - Simulations - vEcoli
       summary: Get the simulation status record by its ID
-      operationId: get-simulation-status
+      operationId: get-vecoli-simulation-status
       parameters:
       - name: experiment_tag
         in: query
@@ -504,6 +504,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SimulationRun'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /wcm/download/analysis:
+    get:
+      tags:
+      - Data - vEcoli
+      summary: Download Analysis
+      description: Download all available simulation analysis outputs as a .zip file
+      operationId: download-analysis
+      parameters:
+      - name: experiment_tag
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Experiment Tag
+      responses:
+        '200':
+          description: Successful Response
         '422':
           description: Validation Error
           content:
