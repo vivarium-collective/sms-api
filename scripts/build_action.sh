@@ -20,7 +20,7 @@ echo "building and pushing images for version ${version}"
 for service in api; do
   tag="${version}"
   dockerfile="${ROOT_DIR}/Dockerfile-${service}"
-  image_name="ghcr.io/biosimulations/sms-${service}:${tag}"
+  image_name="ghcr.io/vivarium-collective/sms-${service}:${tag}"
 
   if [[ ! -f "$dockerfile" ]]; then
     echo "ERROR: Dockerfile not found: $dockerfile"
