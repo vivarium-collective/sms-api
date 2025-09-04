@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Resolve root of repo after GitHub Actions checkout
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT_DIR="${GITHUB_WORKSPACE}"
 
 # Make sure version.py exists
 VERSION_FILE="${ROOT_DIR}/sms_api/version.py"
