@@ -30,8 +30,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Make script executable
-        run: chmod +x ./kustomize/scripts/build_and_push.sh
+        run: chmod +x ./scripts/build_action.sh
 
       - name: Run build and push script
         run: |
-          ./kustomize/scripts/build_and_push.sh "${{ inputs.version }}"
+          ./scripts/build_action.sh "${{ inputs.version }}"
