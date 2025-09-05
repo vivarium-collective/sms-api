@@ -174,9 +174,9 @@ class SlurmServiceLocalHPC(SlurmService):
                 remote_sbatch_file.parent.mkdir(parents=True, exist_ok=True)
                 remote_sbatch_file.write_text(local_sbatch_file.read_text())
         else:
-            logger.warning("using local slurm service without local volume, using scp to copy sbatch file")
             if self.ssh_service_for_testing is None:
                 raise Exception("ssh service is not configured, needed for scp in test mode")
+            logger.warning("using local slurm service without local volume, using scp to copy sbatch file")
             await self.ssh_service_for_testing.scp_upload(local_file=local_sbatch_file, remote_path=remote_sbatch_file)
 
         sbatch = get_settings().slurm_sbatch_local_command

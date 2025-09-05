@@ -46,7 +46,9 @@ class Settings(BaseSettings):
     sqlite_dbfile: str = "./sms.db"  # SQLite database URL for local development
 
     # deployment settings for local HPC or remote HPC
-    hpc_has_local_volume: bool = True
+    hpc_has_local_volume: bool = False
+    hpc_has_local_slurm: bool = False
+    hpc_has_local_singularity: bool = False
     hpc_has_messaging: bool = True
     slurm_squeue_local_command: str = "squeue"
     slurm_sacct_local_command: str = "sacct"
@@ -54,6 +56,7 @@ class Settings(BaseSettings):
     slurm_sbatch_local_command: str = "sbatch"
     slurm_scancel_local_command: str = "scancel"
     slurm_sinfo_local_command: str = "sinfo"
+    singularity_local_command: str = "singularity"
 
     slurm_submit_host: str = ""
     slurm_submit_user: str = ""  # "svc_vivarium"

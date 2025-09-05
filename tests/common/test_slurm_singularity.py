@@ -1,3 +1,4 @@
+import asyncio
 import tempfile
 import time
 from pathlib import Path
@@ -6,9 +7,11 @@ from textwrap import dedent
 import pytest
 
 from sms_api.common.hpc.models import SlurmJob
-from sms_api.common.hpc.slurm_service import SlurmServiceRemoteHPC
+from sms_api.common.hpc.slurm_service import SlurmServiceRemoteHPC, SlurmServiceLocalHPC
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
+
+singularity_container_image = "slurm_test.sif"
 
 slurm_broker_py_contents = dedent("""
 import asyncio
@@ -131,15 +134,16 @@ python3 slurm_test_broker.py /tmp/slurm.sock &
 sleep 2  # wait for the broker to start
 
 # run squeue command from the singularity container to test the broker
-echo $(singularity exec --env UNIX_SOCKET_PATH=/tmp/slurm.sock slurm_test.sif squeue --help)
+echo $(singularity exec --env UNIX_SOCKET_PATH=/tmp/slurm.sock {singularity_container_image} squeue --help)
 
 echo "Hello, world! to stdout"
 """)
 
 
+
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_singularity_slurm(ssh_service: SSHService, slurm_service_remote: SlurmServiceRemoteHPC) -> None:
+async def test_singularity_slurm_remote(ssh_service: SSHService, slurm_service_remote: SlurmServiceRemoteHPC) -> None:
     with tempfile.TemporaryDirectory() as tmpdir_str:
         tmpdir = Path(tmpdir_str)
 
@@ -150,7 +154,7 @@ async def test_singularity_slurm(ssh_service: SSHService, slurm_service_remote: 
         # Build the singularity image remotely using ssh
         await ssh_service.scp_upload(local_file=singularity_def_file, remote_path=Path("slurm_test.def"))
         await ssh_service.run_command(
-            command="ssh mantis-039 singularity build --ignore-fakeroot-command --force slurm_test.sif slurm_test.def"
+            command=f"ssh mantis-039 singularity build --ignore-fakeroot-command --force {singularity_container_image} slurm_test.def"
         )
 
         # write the sbatch file to a temporary file
@@ -169,6 +173,67 @@ async def test_singularity_slurm(ssh_service: SSHService, slurm_service_remote: 
         slurm_job: SlurmJob | None = None
         for _ in range(60):
             slurm_job = await slurm_service_remote.get_job_status(slurmjobid=slurmjobid)
+            print(slurm_job)
+            if not slurm_job or slurm_job.job_state in ("COMPLETED", "FAILED", "CANCELLED"):
+                break
+            time.sleep(1)
+
+        assert slurm_job
+        assert slurm_job.job_id == slurmjobid
+        assert slurm_job.job_state == "COMPLETED", (
+            f"Job {slurmjobid} did not complete successfully, state: {slurm_job.job_state}"
+        )
+
+        # 6. Check the output
+        output_file = tmpdir / "slurm_test.out"
+        await ssh_service.scp_download(local_file=output_file, remote_path=Path("slurm_test.out"))
+
+        assert output_file.exists()
+        with open(output_file) as f:
+            output_content = f.read()
+
+        assert "Usage: squeue" in output_content, "Output file does not contain expected content"
+
+
+
+@pytest.mark.skipif(not get_settings().hpc_has_local_slurm, reason="local slurm not available (HPC_HAS_LOCAL_SLURM=False)")
+@pytest.mark.skipif(not get_settings().hpc_has_local_singularity, reason="local singularity not available (HPC_HAS_LOCAL_SINGULARITY=False)")
+@pytest.mark.skipif(not get_settings().hpc_has_local_volume, reason="local hpc volume not available (HPC_HAS_LOCAL_VOLUME=False)")
+@pytest.mark.asyncio
+async def test_singularity_slurm_local(slurm_service_local: SlurmServiceLocalHPC) -> None:
+    with tempfile.TemporaryDirectory() as tmpdir_str:
+        tmpdir = Path(tmpdir_str)
+
+        # 1. Create a singularity definition file
+        singularity_def_file = tmpdir / "slurm_test.def"
+        with open(singularity_def_file, "w") as f:
+            f.write(singularity_def_contents)
+
+        # Build the singularity image locally
+        build_command = f"{get_settings().singularity_local_command} build --ignore-fakeroot-command --force {singularity_container_image} {singularity_def_file}"
+        proc = await asyncio.create_subprocess_shell(
+            build_command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise RuntimeError(f"Failed to build singularity image: {stderr.decode()}")
+
+        # write the sbatch file to a temporary file
+        sbatch_file = tmpdir / "slurm_test.sbatch"
+        with open(sbatch_file, "w") as f:
+            f.write(sbatch_file_contents)
+
+        # 2. Submit the job
+        slurmjobid = await slurm_service_local.submit_job(
+            local_sbatch_file=sbatch_file, remote_sbatch_file=Path("slurm_test.sbatch")
+        )
+        # sleep for a few seconds to allow the job to be scheduled
+        # await asyncio.sleep(5)
+
+        # 5. Wait for the job to finish
+        slurm_job: SlurmJob | None = None
+        for _ in range(60):
+            slurm_job = await slurm_service_local.get_job_status(slurmjobid=slurmjobid)
             print(slurm_job)
             if not slurm_job or slurm_job.job_state in ("COMPLETED", "FAILED", "CANCELLED"):
                 break
