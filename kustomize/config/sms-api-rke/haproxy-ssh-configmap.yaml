@@ -9,9 +9,9 @@ data:
 
     defaults
         mode tcp
-        timeout connect 10s
-        timeout client  2m
-        timeout server  2m
+        timeout connect 60s
+        timeout client  5m
+        timeout server  5m
 
     frontend ssh_proxy
         bind *:22
