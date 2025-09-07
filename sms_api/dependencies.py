@@ -11,7 +11,7 @@ from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
-from sms_api.simulation.job_scheduler import JobScheduler
+from sms_api.simulation.job_monitor import JobMonitor
 from sms_api.simulation.simulation_service import SimulationService, SimulationServiceRemoteHpc
 from sms_api.simulation.simulation_service_localhpc import SimulationServiceLocalHPC
 from sms_api.simulation.tables_orm import create_db
@@ -86,19 +86,19 @@ def get_simulation_service() -> SimulationService | None:
     return global_simulation_service
 
 
-# ------ job scheduler (standalone) -----------------------------
+# ------ job monitor (standalone) -----------------------------
 
-global_job_scheduler: JobScheduler | None = None
-
-
-def set_job_scheduler(job_scheduler: JobScheduler | None) -> None:
-    global global_job_scheduler
-    global_job_scheduler = job_scheduler
+global_job_monitor: JobMonitor | None = None
 
 
-def get_job_scheduler() -> JobScheduler | None:
-    global global_job_scheduler
-    return global_job_scheduler
+def set_job_monitor(job_monitor: JobMonitor | None) -> None:
+    global global_job_monitor
+    global_job_monitor = job_monitor
+
+
+def get_job_monitor() -> JobMonitor | None:
+    global global_job_monitor
+    return global_job_monitor
 
 
 # ------ initialized standalone application (standalone) ------
@@ -142,10 +142,8 @@ async def init_standalone() -> None:
         set_slurm_service(slurm_service_local)
         set_simulation_service(SimulationServiceLocalHPC(slurm_service=slurm_service_local))
         nats_client = None
-        job_scheduler = JobScheduler(
-            nats_client=nats_client, database_service=database, slurm_service=slurm_service_local
-        )
-        set_job_scheduler(job_scheduler)
+        job_monitor = JobMonitor(nats_client=nats_client, database_service=database, slurm_service=slurm_service_local)
+        set_job_monitor(job_monitor)
     else:
         logger.info("Using remote HPC simulation service")
         # verify that all required settings are set
@@ -156,10 +154,8 @@ async def init_standalone() -> None:
         set_slurm_service(slurm_service_remote)
         set_simulation_service(SimulationServiceRemoteHpc(slurm_service=slurm_service_remote))
         nats_client = await nats.connect(_settings.nats_url)
-        job_scheduler = JobScheduler(
-            nats_client=nats_client, database_service=database, slurm_service=slurm_service_remote
-        )
-        set_job_scheduler(job_scheduler)
+        job_monitor = JobMonitor(nats_client=nats_client, database_service=database, slurm_service=slurm_service_remote)
+        set_job_monitor(job_monitor)
 
 
 async def shutdown_standalone() -> None:
@@ -174,7 +170,7 @@ async def shutdown_standalone() -> None:
     set_simulation_service(None)
     set_database_service(None)
 
-    job_scheduler = get_job_scheduler()
-    if job_scheduler:
-        await job_scheduler.close()
-        set_job_scheduler(None)
+    job_monitor = get_job_monitor()
+    if job_monitor:
+        await job_monitor.close()
+        set_job_monitor(None)

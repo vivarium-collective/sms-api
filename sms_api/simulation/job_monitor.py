@@ -14,7 +14,7 @@ from sms_api.simulation.models import JobStatus, WorkerEvent, WorkerEventMessage
 logger = logging.getLogger(__name__)
 
 
-class JobScheduler:
+class JobMonitor:
     database_service: DatabaseService
     slurm_service: SlurmService
     nats_client: NATSClient | None = None

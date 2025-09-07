@@ -13,7 +13,7 @@ from sms_api.common.hpc.slurm_service import SlurmServiceRemoteHPC
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
-from sms_api.simulation.job_scheduler import JobScheduler
+from sms_api.simulation.job_monitor import JobMonitor
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
@@ -71,10 +71,10 @@ async def test_messaging(
     database_service: DatabaseServiceSQL,
     slurm_service_remote: SlurmServiceRemoteHPC,
 ) -> None:
-    scheduler = JobScheduler(
+    monitor = JobMonitor(
         nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service_remote
     )
-    await scheduler.subscribe()
+    await monitor.subscribe()
 
     # Simulate a job submission and worker event handling
     simulation, slurm_job, hpc_run = await insert_job(database_service=database_service, slurmjobid=1)
@@ -104,17 +104,17 @@ async def test_messaging(
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_job_scheduler(
+async def test_job_monitor(
     nats_subscriber_client: NATSClient,
     database_service: DatabaseServiceSQL,
     slurm_service_remote: SlurmServiceRemoteHPC,
     slurm_template_hello_10s: str,
 ) -> None:
-    scheduler = JobScheduler(
+    monitor = JobMonitor(
         nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service_remote
     )
-    await scheduler.subscribe()
-    await scheduler.start_polling(interval_seconds=1)
+    await monitor.subscribe()
+    await monitor.start_polling(interval_seconds=1)
 
     # Submit a toy slurm job which takes 10 seconds to run
     _all_jobs_before_submit: list[SlurmJob] = await slurm_service_remote.get_job_status_squeue()
@@ -153,4 +153,4 @@ async def test_job_scheduler(
     assert completed_hpcrun.status == JobStatus.COMPLETED
 
     # Stop polling
-    await scheduler.stop_polling()
+    await monitor.stop_polling()
