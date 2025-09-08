@@ -26,10 +26,11 @@ services:
       --reload
 
   nats:
-    platform: linux/amd64
     image: nats:latest
     container_name: nats
-    restart: unless-stopped
+    ports:
+      - "30050:4222"   # map container port 4222 to host port 30050
+      - "8222:8222"    # optional: monitoring port
     networks:
       - smsnet
 

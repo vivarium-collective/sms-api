@@ -237,3 +237,6 @@ assets/simulation/configs/
 simulation_configs/
 notes/
 assets/simulation/model/parameters/
+libsms/
+scratchpads/
+clients/

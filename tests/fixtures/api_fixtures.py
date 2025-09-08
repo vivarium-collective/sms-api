@@ -1,6 +1,8 @@
+import datetime
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from random import randint
 
 import httpx
 import pytest_asyncio
@@ -9,10 +11,20 @@ from httpx import ASGITransport
 
 from sms_api.api.client import Client
 from sms_api.api.main import app
-from sms_api.config import get_settings
+from sms_api.api.request_examples import base_simulation
+from sms_api.common.utils import unique_id
+from sms_api.config import REPO_ROOT, get_settings
+from sms_api.data.models import ExperimentAnalysisRequest
 
 # from sms_api.data.biocyc_service import BiocycService
 from sms_api.latest_commit import write_latest_commit
+from sms_api.simulation.hpc_utils import get_slurmjob_name
+from sms_api.simulation.models import (
+    EcoliSimulationDTO,
+    ExperimentMetadata,
+    ExperimentRequest,
+    SimulationConfig,
+)
 
 # @pytest_asyncio.fixture(scope="function")
 # async def biocyc_service() -> BiocycService:
@@ -55,3 +67,88 @@ async def in_memory_api_client() -> AsyncGenerator[Client, None]:
 @pytest_asyncio.fixture(scope="session")
 async def workspace_image_hash() -> str:
     return "079c43c"
+
+
+@pytest_asyncio.fixture(scope="session")
+async def analysis_config_path() -> Path:
+    return Path(REPO_ROOT) / "assets" / "sms_multigen_analysis.json"
+
+
+@pytest_asyncio.fixture(scope="session")
+async def analysis_request() -> ExperimentAnalysisRequest:
+    return ExperimentAnalysisRequest(**{  # type: ignore[arg-type]
+        "experiment_id": "sms_multigeneration",
+        "analysis_name": f"sms_pytest_{unique_id()}",
+        "single": {},
+        "multidaughter": {},
+        "multigeneration": {
+            "replication": {},
+            "ribosome_components": {},
+            "ribosome_crowding": {},
+            "ribosome_production": {},
+            "ribosome_usage": {},
+            "rna_decay_03_high": {},
+        },
+        "multiseed": {"protein_counts_validation": {}, "ribosome_spacing": {}, "subgenerational_expression_table": {}},
+        "multivariant": {
+            "average_monomer_counts": {},
+            "cell_mass": {},
+            "doubling_time_hist": {"skip_n_gens": 1},
+            "doubling_time_line": {},
+        },
+        "multiexperiment": {},
+    })
+
+
+@pytest_asyncio.fixture(scope="session")
+async def experiment_request() -> ExperimentRequest:
+    return base_simulation
+
+
+@pytest_asyncio.fixture(scope="session")
+async def simulation_config() -> SimulationConfig:
+    return SimulationConfig(
+        experiment_id="pytest_fixture_config",
+        sim_data_path="/pytest/kb/simData.cPickle",
+        suffix_time=False,
+        parca_options={"cpus": 3},
+        generations=randint(1, 1000),  # noqa: S311
+        max_duration=10800,
+        initial_global_time=0,
+        time_step=1,
+        single_daughters=True,
+        emitter="parquet",
+        emitter_arg={"outdir": "/pytest/api_outputs"},
+    )
+
+
+@pytest_asyncio.fixture(scope="session")
+async def ecoli_simulation() -> EcoliSimulationDTO:
+    pytest_fixture = "pytest_fixture"
+    db_id = -1
+    return EcoliSimulationDTO(
+        database_id=-1,
+        name=pytest_fixture,
+        config=SimulationConfig(
+            experiment_id=pytest_fixture,
+            sim_data_path="/pytest/kb/simData.cPickle",
+            suffix_time=False,
+            parca_options={"cpus": 3},
+            generations=randint(1, 1000),  # noqa: S311
+            max_duration=10800,
+            initial_global_time=0,
+            time_step=1,
+            single_daughters=True,
+            emitter="parquet",
+            emitter_arg={"outdir": "/pytest/api_outputs"},
+        ),
+        metadata=ExperimentMetadata(root={"requester": f"{pytest_fixture}:{db_id}", "context": "pytest"}),
+        last_updated=str(datetime.datetime.now()),
+        job_name=get_slurmjob_name(experiment_id=pytest_fixture),
+        job_id=randint(10000, 1000000),  # noqa: S311
+    )
+
+
+@pytest_asyncio.fixture(scope="session")
+async def base_router() -> str:
+    return "/v1/ecoli"

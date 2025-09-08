@@ -30,3 +30,13 @@ async def test_version(fastapi_app: FastAPI, local_base_url: str) -> None:
         assert response.status_code == 200
         data = response.json()
         assert data == current_version
+
+
+@pytest.mark.asyncio
+async def test_ping(fastapi_app: FastAPI, local_base_url: str) -> None:
+    async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url=local_base_url) as client:
+        response = await client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["docs"].split("/")[-1] == "docs"
+        assert data["version"] == current_version
