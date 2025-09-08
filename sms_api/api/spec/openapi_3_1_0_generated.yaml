@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.11-dev
+  version: 0.2.12-dev
 paths:
   /core/simulator/latest:
     get:
@@ -311,11 +311,14 @@ paths:
         schema:
           type: string
           examples:
-          - ptools_rna.txt
+          - mass_fraction_summary.html
           title: Filename
       responses:
         '200':
           description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -510,13 +513,99 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/download/analysis:
+  /wcm/analysis:
     get:
       tags:
       - Data - vEcoli
-      summary: Download Analysis
+      summary: Get all available analyses for a given simulation
+      operationId: get-available-analyses
+      parameters:
+      - name: experiment_tag
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Experiment Tag
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /wcm/analysis/download:
+    get:
+      tags:
+      - Data - vEcoli
+      summary: Download a file that was generated from a simulation analysis module
+      operationId: download-analysis-output
+      parameters:
+      - name: experiment_tag
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Experiment Tag
+      - name: variant_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Variant Id
+      - name: lineage_seed_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Lineage Seed Id
+      - name: generation_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1
+          title: Generation Id
+      - name: agent_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Agent Id
+      - name: filename
+        in: query
+        required: true
+        schema:
+          type: string
+          examples:
+          - mass_fraction_summary.html
+          title: Filename
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /wcm/analyses/download:
+    get:
+      tags:
+      - Data - vEcoli
+      summary: Download Analyses
       description: Download all available simulation analysis outputs as a .zip file
-      operationId: download-analysis
+      operationId: download-analyses
       parameters:
       - name: experiment_tag
         in: query

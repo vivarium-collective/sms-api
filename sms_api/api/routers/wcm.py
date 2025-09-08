@@ -28,22 +28,25 @@
 """
 
 import logging
+import mimetypes
 import os
 from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
-# from sms_api.api.request_examples import examples
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.common.gateway.utils import REPO_DIR, get_simulator
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.config import get_settings
+
+# from sms_api.api.request_examples import examples
+from sms_api.data.analysis_service import AnalysisService
 from sms_api.data.parquet_service import ParquetService
 from sms_api.dependencies import (
     get_database_service,
@@ -186,13 +189,78 @@ async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationR
 
 
 @config.router.get(
-    path="/download/analysis",
+    path="/analysis",
+    response_model=None,
+    operation_id="get-available-analyses",
+    tags=["Data - vEcoli"],
+    summary="Get all available analyses for a given simulation",
+)
+async def get_available_analyses(experiment_tag: str = Query(...)) -> dict[str, list[str]]:
+    try:
+        env = get_settings()
+        service = AnalysisService()
+        outdir = Path(env.simulation_outdir)
+        experiment_id = get_experiment_id_from_tag(experiment_tag)
+        analysis_dir = service.get_analysis_dir(outdir, experiment_id)
+        paths = service.get_analysis_paths(analysis_dir)
+        manifest_template = service.get_manifest_template(paths)
+        manifest = service.get_manifest(analysis_paths=paths, template=manifest_template)
+        return manifest
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/analysis/download",
+    response_model=None,
+    # response_class=FileResponse,
+    operation_id="download-analysis-output",
+    tags=["Data - vEcoli"],
+    summary="Download a file that was generated from a simulation analysis module",
+)
+async def download_analysis_file(
+    background_tasks: BackgroundTasks,
+    experiment_tag: str = Query(...),
+    variant_id: int = Query(default=0),
+    lineage_seed_id: int = Query(default=0),
+    generation_id: int = Query(default=1),
+    agent_id: int = Query(default=0),
+    filename: str = Query(examples=["mass_fraction_summary.html"]),
+) -> Union[FileResponse, HTMLResponse]:
+    try:
+        env = get_settings()
+        experiment_id = get_experiment_id_from_tag(experiment_tag)
+        # filepath = service.get_file_path(experiment_id, filename, remote=True, logger_instance=logger)
+        filepath = (
+            Path(env.simulation_outdir)
+            / experiment_id
+            / "analyses"
+            / f"variant={variant_id}"
+            / f"lineage_seed={lineage_seed_id}"
+            / f"generation={generation_id}"
+            / f"agent_id={agent_id}"
+            / "plots"
+            / filename
+        )
+        mimetype, _ = mimetypes.guess_type(filepath)
+
+        if str(filepath).endswith(".html"):
+            return HTMLResponse(content=filepath.read_text(encoding="utf-8"))
+        return FileResponse(path=filepath, media_type=mimetype or "application/octet-stream", filename=filepath.name)
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/analyses/download",
     response_class=StreamingResponse,
-    operation_id="download-analysis",
+    operation_id="download-analyses",
     tags=["Data - vEcoli"],
     description="Download all available simulation analysis outputs as a .zip file",
 )
-async def download_analysis(experiment_tag: str = Query(...)) -> StreamingResponse:
+async def download_analyses(experiment_tag: str = Query(...)) -> StreamingResponse:
     try:
         # outdir = Path("/Users/alexanderpatrie/sms/vEcoli/out")
         # experiment_id = "sms_multiseed"

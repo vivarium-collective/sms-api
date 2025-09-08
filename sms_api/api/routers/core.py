@@ -29,9 +29,10 @@
 
 import logging
 import mimetypes
+from typing import Union
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 # from sms_api.api.request_examples import examples
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
@@ -409,7 +410,8 @@ async def get_simulation_worker_events(
 
 @config.router.get(
     path="/download/analysis",
-    response_class=FileResponse,
+    response_model=None,
+    # response_class=FileResponse,
     operation_id="download-analysis-file",
     tags=["EcoliSim"],
     summary="Download a file that was generated from a simulation analysis module",
@@ -419,12 +421,15 @@ async def download_analysis_file(
     experiment_id: str = Query(
         examples=["sms_single"], description="Experiment ID for the simulation (from config.json)."
     ),
-    filename: str = Query(examples=["ptools_rna.txt"]),
-) -> FileResponse:
+    filename: str = Query(examples=["mass_fraction_summary.html"]),
+) -> Union[FileResponse, HTMLResponse]:
     try:
         service = AnalysisService()
         filepath = service.get_file_path(experiment_id, filename, remote=True, logger_instance=logger)
         mimetype, _ = mimetypes.guess_type(filepath)
+
+        if str(filepath).endswith(".html"):
+            return HTMLResponse(content=filepath.read_text(encoding="utf-8"))
         return FileResponse(path=filepath, media_type=mimetype or "application/octet-stream", filename=filepath.name)
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")

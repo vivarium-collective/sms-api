@@ -1,5 +1,7 @@
 import logging
+import re
 from pathlib import Path
+from typing import Any
 
 from sms_api.common.gateway.models import Namespace
 from sms_api.common.gateway.utils import get_local_simulation_outdir, get_simulation_outdir
@@ -67,3 +69,30 @@ class AnalysisService:
                 if fp.exists():
                     paths.append(fp)
         return paths
+
+    def get_analysis_dir(self, outdir: Path, experiment_id: str) -> Path:
+        return outdir / experiment_id / "analyses"
+
+    def get_analysis_paths(self, analysis_dir: Path) -> set[Path]:
+        paths = set()
+        for root, _, files in analysis_dir.walk():
+            for fname in files:
+                fp = root / fname
+                if fp.exists():
+                    paths.add(fp)
+        return paths
+
+    def get_manifest_template(self, analysis_paths: set[Path]) -> dict[str, list[Any]]:
+        ids: dict[str, list[Any]] = {}
+        for path in analysis_paths:
+            # output_id = re.sub(r"^.*?analyses?/", "", str(path)).replace('/', '.').split('.plots')[0]
+            output_id = re.sub(r"^.*?analyses?/", "", str(path)).replace("/", ".").split(".plots")[0].replace(".", "/")
+            ids[output_id] = []
+        return ids
+
+    def get_manifest(self, analysis_paths: set[Path], template: dict[str, list[Any]]) -> dict[str, list[str]]:
+        for path in analysis_paths:
+            for key in template:
+                if key in str(path):
+                    template[key].append(path.name)
+        return {k.replace("/", "."): v for k, v in template.items()}
