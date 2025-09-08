@@ -498,7 +498,6 @@ def slurm_script(
     env = settings or get_settings()
     base_path = Path(env.slurm_base_path)
     remote_workspace_dir = base_path / "workspace"
-    # vecoli_dir = remote_vecoli_dir or remote_workspace_dir / "vEcoli"
     vecoli_dir = remote_workspace_dir / "vEcoli"
     slurm_log_file = base_path / f"prod/htclogs/{slurm_job_name}.out"
     experiment_outdir = f"/home/FCAM/svc_vivarium/workspace/outputs/{config_id}"
