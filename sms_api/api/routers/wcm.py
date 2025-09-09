@@ -27,9 +27,12 @@
     hive partitioning: single simulations will always have the same hive partitioning, etc.
 """
 
+import json
 import logging
 import mimetypes
 import os
+import tempfile
+import uuid
 from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
@@ -60,6 +63,7 @@ from sms_api.simulation.models import (
     EcoliWorkflowRequest,
     JobStatus,
     Overrides,
+    SimulationConfig,
     SimulationRun,
     SimulatorVersion,
     Variants,
@@ -134,14 +138,29 @@ async def get_available_config_ids(simulator_hash: str | None = Query(default=No
 )
 async def run_simulation_workflow(
     background_tasks: BackgroundTasks,
-    config_id: str = Query(default="sms_single"),
+    config_id: Optional[str] = None,
     overrides: Optional[Overrides] = None,
     variants: Optional[Variants] = None,
+    config: SimulationConfig | None = None,
     # max_duration: float = Query(default=10800.0),
     # time_step: float = Query(default=1.0),
 ) -> EcoliExperiment:
     simulator: SimulatorVersion = get_simulator()
-    sim_request = EcoliWorkflowRequest(config_id=config_id, overrides=overrides, variants=variants, simulator=simulator)
+    if config is not None:
+        env = get_settings()
+        ssh = get_ssh_service(env)
+        serialized = config.to_json()
+        config_id = serialized.get("experiment_id", f"experiment-{uuid.uuid4()}")
+        with tempfile.TemporaryDirectory() as dirname:
+            local = Path(f"{dirname}/{config_id}.json")
+            with open(local, "w") as fp:
+                json.dump(serialized, fp, indent=3)
+            remote = Path(env.slurm_base_path) / "workspace" / "vEcoli" / "configs" / local.parts[-1]
+            await ssh.scp_upload(local_file=local, remote_path=remote)
+
+    sim_request = EcoliWorkflowRequest(
+        config_id=config_id or "sms_single", overrides=overrides, variants=variants, simulator=simulator
+    )
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
@@ -172,11 +191,13 @@ async def run_simulation_workflow(
     summary="Get the simulation status record by its ID",
 )
 async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationRun:
+    env = get_settings()
     try:
         slurmjob_id = experiment_tag.split("-")[-1]
         # slurmjob_id = get_jobid_by_experiment(experiment_id)
         ssh_service = get_ssh_service()
-        statuses = await ssh_service.run_command(f"sacct -u svc_vivarium | grep {slurmjob_id}")
+        slurm_user = env.slurm_submit_user
+        statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
         status = statuses[1].split("\n")[0].split()[-2]
         return SimulationRun(id=experiment_tag, status=JobStatus[status])
     except Exception as e:
@@ -189,18 +210,18 @@ async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationR
 
 
 @config.router.get(
-    path="/analysis",
+    path="/analysis/outputs",
     response_model=None,
     operation_id="get-available-analyses",
     tags=["Data - vEcoli"],
     summary="Get all available analyses for a given simulation",
 )
-async def get_available_analyses(experiment_tag: str = Query(...)) -> dict[str, list[str]]:
+async def get_available_analyses(experiment_id: str = Query(...)) -> dict[str, list[str]]:
     try:
         env = get_settings()
         service = AnalysisService()
         outdir = Path(env.simulation_outdir)
-        experiment_id = get_experiment_id_from_tag(experiment_tag)
+        # experiment_id = get_experiment_id_from_tag(experiment_tag)
         analysis_dir = service.get_analysis_dir(outdir, experiment_id)
         paths = service.get_analysis_paths(analysis_dir)
         manifest_template = service.get_manifest_template(paths)
@@ -220,8 +241,7 @@ async def get_available_analyses(experiment_tag: str = Query(...)) -> dict[str, 
     summary="Download a file that was generated from a simulation analysis module",
 )
 async def download_analysis_file(
-    background_tasks: BackgroundTasks,
-    experiment_tag: str = Query(...),
+    experiment_id: str = Query(...),
     variant_id: int = Query(default=0),
     lineage_seed_id: int = Query(default=0),
     generation_id: int = Query(default=1),
@@ -230,7 +250,7 @@ async def download_analysis_file(
 ) -> Union[FileResponse, HTMLResponse]:
     try:
         env = get_settings()
-        experiment_id = get_experiment_id_from_tag(experiment_tag)
+        # experiment_id = get_experiment_id_from_tag(experiment_tag)
         # filepath = service.get_file_path(experiment_id, filename, remote=True, logger_instance=logger)
         filepath = (
             Path(env.simulation_outdir)
@@ -260,13 +280,16 @@ async def download_analysis_file(
     tags=["Data - vEcoli"],
     description="Download all available simulation analysis outputs as a .zip file",
 )
-async def download_analyses(experiment_tag: str = Query(...)) -> StreamingResponse:
+async def download_analyses(
+    # experiment: EcoliExperiment,
+    experiment_id: str = Query(...),
+) -> StreamingResponse:
     try:
         # outdir = Path("/Users/alexanderpatrie/sms/vEcoli/out")
         # experiment_id = "sms_multiseed"
         settings = get_settings()
         outdir = Path(settings.slurm_base_path) / "workspace" / "outputs"
-        experiment_id = get_experiment_id_from_tag(experiment_tag)
+        # experiment_id = get_experiment_id_from_tag(experiment_tag)
         analysis_dir = get_analysis_dir(outdir=outdir, experiment_id=experiment_id)
 
         file_paths = []
@@ -296,7 +319,8 @@ async def download_analyses(experiment_tag: str = Query(...)) -> StreamingRespon
 )
 async def get_results(
     background_tasks: BackgroundTasks,
-    experiment_tag: str = Query(..., description="Experiment tag for the simulation."),
+    experiment_id: str = Query(..., description="Experiment id for the simulation."),
+    # experiment: EcoliExperiment,
     variant_id: int = Query(default=0),
     lineage_seed_id: int = Query(default=0),
     generation_id: int = Query(default=1),
@@ -305,7 +329,7 @@ async def get_results(
 ) -> FileResponse:
     try:
         service = ParquetService()
-        experiment_id = get_experiment_id_from_tag(experiment_tag)
+        # experiment_id = get_experiment_id_from_tag(experiment_tag)
         pq_dir = service.get_parquet_dir(
             experiment_id=experiment_id,
             variant=variant_id,

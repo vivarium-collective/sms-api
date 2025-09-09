@@ -157,3 +157,5 @@ sudo kubectl port-forward --address ${EXTERNAL_IP} -n ${DEV_NAMESPACE} deploymen
 sed -i '' "s/jmshost_sim_external=.*/jmshost_sim_external=${EXTERNAL_IP}/" ./config/jimdev/submit.env
 ```
 ````
+
+sms_single-079c43c-ba31b9edaeab-751499
