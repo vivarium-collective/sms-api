@@ -5,13 +5,15 @@ metadata:
 data:
   haproxy.cfg: |
     global
-        maxconn 100
+        maxconn 200
 
     defaults
         mode tcp
-        timeout connect 60s
+        timeout connect 3s
         timeout client  5m
         timeout server  5m
+        retries 3
+        option redispatch
 
     frontend ssh_proxy
         bind *:22
@@ -19,6 +21,8 @@ data:
 
     backend slurm_submit_nodes
         balance roundrobin
+        option tcp-check
+        default-server inter 2s fall 2 rise 2 maxconn 50
         server submit1 mantis-sub-1.cam.uchc.edu:22 check
         server submit2 mantis-sub-2.cam.uchc.edu:22 check
         server submit3 mantis-sub-3.cam.uchc.edu:22 check

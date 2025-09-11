@@ -499,7 +499,8 @@ def slurm_script(
     base_path = Path(env.slurm_base_path)
     remote_workspace_dir = base_path / "workspace"
     vecoli_dir = remote_workspace_dir / "vEcoli"
-    slurm_log_file = base_path / f"prod/htclogs/{slurm_job_name}.out"
+    # slurm_log_file = base_path / f"prod/htclogs/{slurm_job_name}.out"
+    slurm_log_file = base_path / f"prod/htclogs/{experiment_id}.out"
     experiment_outdir = f"/home/FCAM/svc_vivarium/workspace/outputs/{config_id}"
 
     config_dir = vecoli_dir / "configs"

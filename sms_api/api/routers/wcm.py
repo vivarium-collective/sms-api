@@ -41,6 +41,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from pydantic import BaseModel
 
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
@@ -210,6 +211,36 @@ async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationR
 
 
 @config.router.get(
+    path="/simulation/run/log",
+    operation_id="get-vecoli-simulation-log",
+    tags=["Simulations - vEcoli"],
+    summary="Get the simulation log record of a given experiment",
+)
+async def get_simulation_log(experiment: EcoliExperiment) -> str:
+    env = get_settings()
+    try:
+        # slurmjob_id = get_jobid_by_experiment(experiment_id)
+        ssh_service = get_ssh_service()
+        # slurm_user = env.slurm_submit_user
+        returncode, stdout, stderr = await ssh_service.run_command(
+            f"cat {env.slurm_base_path!s}/prod/htclogs/{experiment.experiment_id}.out"
+        )
+        return stdout
+    except Exception as e:
+        logger.exception("""Error getting simulation log.""")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+class AnalysisOutput(BaseModel):
+    id: str
+    files: list[str]
+
+
+class Analyses(BaseModel):
+    value: list[AnalysisOutput]
+
+
+@config.router.get(
     path="/analysis/outputs",
     response_model=None,
     operation_id="get-available-analyses",
@@ -226,6 +257,14 @@ async def get_available_analyses(experiment_id: str = Query(...)) -> dict[str, l
         paths = service.get_analysis_paths(analysis_dir)
         manifest_template = service.get_manifest_template(paths)
         manifest = service.get_manifest(analysis_paths=paths, template=manifest_template)
+
+        # analyses = Analyses(
+        #     value=[
+        #         AnalysisOutput(id=k, files=v)
+        #         for k, v in manifest.items()
+        #     ]
+        # )
+        # return analyses
         return manifest
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
@@ -241,6 +280,47 @@ async def get_available_analyses(experiment_id: str = Query(...)) -> dict[str, l
     summary="Download a file that was generated from a simulation analysis module",
 )
 async def download_analysis_file(
+    experiment_id: str = Query(...),
+    variant_id: int = Query(default=0),
+    lineage_seed_id: int = Query(default=0),
+    generation_id: int = Query(default=1),
+    agent_id: int = Query(default=0),
+    filename: str = Query(examples=["mass_fraction_summary.html"]),
+) -> Union[FileResponse, HTMLResponse]:
+    try:
+        env = get_settings()
+        # experiment_id = get_experiment_id_from_tag(experiment_tag)
+        # filepath = service.get_file_path(experiment_id, filename, remote=True, logger_instance=logger)
+        filepath = (
+            Path(env.simulation_outdir)
+            / experiment_id
+            / "analyses"
+            / f"variant={variant_id}"
+            / f"lineage_seed={lineage_seed_id}"
+            / f"generation={generation_id}"
+            / f"agent_id={agent_id}"
+            / "plots"
+            / filename
+        )
+        mimetype, _ = mimetypes.guess_type(filepath)
+
+        if str(filepath).endswith(".html"):
+            return HTMLResponse(content=filepath.read_text(encoding="utf-8"))
+        return FileResponse(path=filepath, media_type=mimetype or "application/octet-stream", filename=filepath.name)
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/analysis/results",
+    response_model=None,
+    # response_class=FileResponse,
+    operation_id="download-analysis-results",
+    tags=["Data - vEcoli"],
+    summary="Download a file that was generated from a simulation analysis module",
+)
+async def download_analysis(
     experiment_id: str = Query(...),
     variant_id: int = Query(default=0),
     lineage_seed_id: int = Query(default=0),
