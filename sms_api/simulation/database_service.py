@@ -279,6 +279,14 @@ class DatabaseServiceSQL(DatabaseService):
             return orm_experiment.to_dto()
 
     @override
+    async def delete_experiment(self, experiment_id: str) -> EcoliExperimentDTO:
+        pass
+
+    @override
+    async def list_experiments(self) -> list[EcoliExperimentDTO]:
+        pass
+
+    @override
     async def get_simulation_config(self, config_id: str) -> SimulationConfiguration:
         async with self.async_sessionmaker() as session, session.begin():
             orm_sim_config = await self._get_orm_simulation_config(session, config_id=config_id)
