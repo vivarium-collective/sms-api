@@ -10,12 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from sms_api.simulation.models import (
+    ConfigOverrides,
     EcoliExperimentDTO,
     EcoliExperimentRequestDTO,
     HpcRun,
     JobStatus,
     JobType,
-    Overrides,
     SimulationConfiguration,
     SimulatorVersion,
     WorkerEvent,
@@ -221,8 +221,8 @@ class ORMEcoliExperiment(Base):
 
     def to_dto(self) -> EcoliExperimentDTO:
         overrides_data = self.request.get("overrides")
-        overrides = Overrides(**overrides_data) if overrides_data is not None else None
-        request = EcoliExperimentRequestDTO(config_id=self.request["config_id"], overrides=overrides)
+        overrides = ConfigOverrides(**overrides_data) if overrides_data is not None else None  # type: ignore[arg-type]
+        request = EcoliExperimentRequestDTO(config_id=self.request["config_id"], overrides=overrides)  # type: ignore[arg-type]
         return EcoliExperimentDTO(
             experiment_id=self.id,
             request=request,
@@ -234,5 +234,4 @@ class ORMEcoliExperiment(Base):
 
 async def create_db(async_engine: AsyncEngine) -> None:
     async with async_engine.begin() as conn:
-        print("TABLES", Base.metadata.tables)
         await conn.run_sync(Base.metadata.create_all)

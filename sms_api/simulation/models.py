@@ -354,7 +354,7 @@ class VariantConfig(BaseModel):
         data = {}
         for variant in self.variants:
             data[variant.module_name] = {param.name: {"value": param.value} for param in variant.parameters}
-            data[variant.module_name]["op"] = variant.op
+            data[variant.module_name]["op"] = variant.op  # type: ignore[assignment]
         return data
 
 
