@@ -210,7 +210,7 @@ async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationR
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(
+@config.router.post(
     path="/simulation/run/log",
     operation_id="get-vecoli-simulation-log",
     tags=["Simulations - vEcoli"],

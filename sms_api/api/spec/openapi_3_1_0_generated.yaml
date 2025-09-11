@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.15-dev
+  version: 0.2.17-dev
 paths:
   /core/simulator/latest:
     get:
@@ -515,7 +515,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
   /wcm/simulation/run/log:
-    get:
+    post:
       tags:
       - Simulations - vEcoli
       summary: Get the simulation log record of a given experiment
