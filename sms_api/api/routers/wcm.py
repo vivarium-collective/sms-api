@@ -39,13 +39,13 @@ from pathlib import Path
 from typing import Any, Optional, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
-from sms_api.common.gateway.utils import REPO_DIR, get_simulator
+from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.config import get_settings
 
@@ -127,17 +127,17 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
     yield from buffer
 
 
-@config.router.get(path="/simulation/configs", operation_id="get-available-configs", tags=["Simulations - vEcoli"])
-async def get_available_config_ids(simulator_hash: str | None = Query(default=None)) -> list[str]:
-    fname = "available_configs.txt"
-    print(simulator_hash)
-    env = get_settings()
-    path = Path(f"{env.slurm_base_path}/prod") / fname  # currently 78c6310 (8/22/25)
-    if not path.exists():
-        path = Path(f"{REPO_DIR}/assets/simulation") / fname
-    with open(path) as fp:
-        available = [lin.strip().replace(".json", "") for lin in fp.readlines()]
-    return available
+# @config.router.get(path="/simulation/configs", operation_id="get-available-configs", tags=["Simulations - vEcoli"])
+# async def get_available_config_ids(simulator_hash: str | None = Query(default=None)) -> list[str]:
+#     fname = "available_configs.txt"
+#     print(simulator_hash)
+#     env = get_settings()
+#     path = Path(f"{env.slurm_base_path}/prod") / fname  # currently 78c6310 (8/22/25)
+#     if not path.exists():
+#         path = Path(f"{REPO_DIR}/assets/simulation") / fname
+#     with open(path) as fp:
+#         available = [lin.strip().replace(".json", "") for lin in fp.readlines()]
+#     return available
 
 
 @config.router.post(
@@ -161,7 +161,7 @@ async def run_simulation_workflow(
     if config is not None:
         env = get_settings()
         ssh = get_ssh_service(env)
-        serialized = config.to_json()
+        serialized = config.to_dict()
         config_id = serialized.get("experiment_id", f"experiment-{uuid.uuid4()}")
         with tempfile.TemporaryDirectory() as dirname:
             local = Path(f"{dirname}/{config_id}.json")
@@ -470,7 +470,8 @@ async def get_workflow_versions() -> list[EcoliSimulation]:
 @config.router.post(path="/simulation/config", operation_id="upload-simulation-config", tags=["Simulations - vEcoli"])
 async def upload_simulation_config(
     config_id: str | None = Query(default=None), sim_config: SimulationConfiguration = DEFAULT_SIMULATION_CONFIG
-):
+) -> UploadedSimulationConfig:
+    # NOTE: this endpoint should upload it to the logged-in client's dedicated dir
     if not sim_config.experiment_id:
         raise HTTPException(status_code=400, detail="Experiment id is required")
     if sim_config.experiment_id.startswith("<P"):
@@ -480,10 +481,27 @@ async def upload_simulation_config(
     try:
         # store config in db
         db_service = DBService()
-        confid = config_id or str(uuid.uuid4())
-        _ = await db_service.insert_simulation_config(config_id=confid, config=sim_config)
+        user_suffix = str(uuid.uuid4()).split("-")[-1]  # TODO: let this be a reference instead to the user's id
+        if config_id is None:
+            config_id = "simconfig"
+        confid = f"{config_id}-{user_suffix}"
+        sim_config.experiment_id = f"{sim_config.experiment_id}-{user_suffix}"
+        sim_config.emitter_arg["out_dir"] = env.simulation_outdir
+        sim_config.daughter_outdir = env.simulation_outdir
 
-        # here, write to temp local and scp upload unique
+        await db_service.insert_simulation_config(config_id=confid, config=sim_config)
+
+        # upload config to hpc(vEcoli dir)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fname = f"{confid}.json"
+            local = Path(tmpdir).absolute() / fname
+            # write temp local
+            with open(local, "w") as f:
+                json.dump(sim_config.model_dump(), f, indent=3)
+
+            # upload temp local to remote(vEcoli configs dir)
+            remote = Path(env.slurm_base_path) / "workspace" / "vEcoli" / "configs" / fname
+            await ssh.scp_upload(local_file=local, remote_path=remote)
 
         uploaded = UploadedSimulationConfig(config_id=confid)
         return uploaded
@@ -493,7 +511,7 @@ async def upload_simulation_config(
 
 
 @config.router.get(path="/simulation/config", operation_id="get-simulation-config", tags=["Simulations - vEcoli"])
-async def get_simulation_config(config_id: str | None = Query(default=None)):
+async def get_simulation_config(config_id: str) -> SimulationConfiguration:
     try:
         db_service = DBService()
         return await db_service.get_simulation_config(config_id=config_id)
@@ -503,8 +521,63 @@ async def get_simulation_config(config_id: str | None = Query(default=None)):
 
 
 @config.router.delete(path="/simulation/config", operation_id="delete-simulation-config", tags=["Simulations - vEcoli"])
-async def delete_simulation_config(config_id: str) -> None:
-    pass
+async def delete_simulation_config(config_id: str) -> str:
+    try:
+        db_service = DBService()
+        env = get_settings()
+        ssh = get_ssh_service(env)
+        # delete from db
+        await db_service.delete_simulation_config(config_id=config_id)
+
+        # delete from remote fs
+        config_path = f"{env.vecoli_config_dir}/{config_id}.json"
+        await ssh.run_command(f"rm {config_path}")
+
+        return f"Config {config_id} deleted successfully"
+    except Exception as e:
+        logger.exception("Error uploading simulation config")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(path="/simulation/config/all", operation_id="list-simulation-configs", tags=["Simulations - vEcoli"])
+async def list_simulation_configs() -> list[SimulationConfiguration]:
+    try:
+        db_service = DBService()
+        return await db_service.list_simulation_configs()
+    except Exception as e:
+        logger.exception("Error getting configs")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post("/analysis/upload")
+async def upload_analysis_module(
+    file: UploadFile = File(...), submodule_name: str = Query(..., description="Submodule name(single, multiseed, etc)")
+):
+    """NOTE: this endpoint should upload it to the logged-in client's dedicated dir
+
+    :param file: A Python vEcoli-compliant analysis module
+    """
+    try:
+        # db_service = DBService()
+        contents = await file.read()
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tmp_path = Path(tmpdirname) / file.filename
+
+            # Write the file contents to the temp file
+            with open(tmp_path, "wb") as tmpfile:
+                tmpfile.write(contents)
+
+            result = {"tmp_path": str(tmp_path), "size": len(contents)}
+
+            local = tmp_path
+            env = get_settings()
+            remote = Path(env.vecoli_config_dir).parent / "ecoli" / "analysis" / submodule_name / file.filename
+            ssh = get_ssh_service(env)
+            await ssh.scp_upload(local_file=local, remote_path=remote)
+        return result
+    except Exception as e:
+        logger.exception("Error uploading analysis module")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # @config.router.post(

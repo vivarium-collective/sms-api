@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     remote_data_basepath: str = ""
     local_data_basepath: str = ""
     simulation_outdir: str = ""
+    vecoli_config_dir: str = ""
 
 
 @lru_cache

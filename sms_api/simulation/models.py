@@ -11,6 +11,8 @@ from typing import Any
 from pydantic import BaseModel as _BaseModel
 from pydantic import Field
 
+from sms_api.config import get_settings
+
 BASE_SIMULATION_CONFIG_PATH = Path("assets/base_simulation_config.json")
 
 
@@ -283,6 +285,10 @@ class SimulationConfiguration(BaseModel):
             conf = json.load(f)
         # confid = config_id or str(uuid.uuid4())
         # conf["config_id"] = confid
+        env = get_settings()
+        conf["emitter_arg"]["out_dir"] = env.simulation_outdir  # "/home/FCAM/svc_vivarium/workspace/outputs"
+        conf["daughter_outdir"] = env.simulation_outdir
+        conf["parca_options"]["outdir"] = env.simulation_outdir
         return cls(**conf)
 
     @classmethod
@@ -294,7 +300,7 @@ class SimulationConfiguration(BaseModel):
     #     self.id = self.id or str(uuid.uuid4())
     #     return self
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any] | Any:
         data = self.model_dump()
         data.pop("id", None)
         return json.loads(json.dumps(data))

@@ -45,6 +45,14 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def delete_simulation_config(self, config_id: str) -> bool:
+        pass
+
+    @abstractmethod
+    async def list_simulation_configs(self) -> list[SimulationConfiguration]:
+        pass
+
+    @abstractmethod
     async def insert_worker_event(self, worker_event: WorkerEvent, hpcrun_id: int) -> WorkerEvent:
         pass
 
@@ -219,17 +227,36 @@ class DatabaseServiceSQL(DatabaseService):
     @override
     async def insert_simulation_config(
         self, config_id: str, config: SimulationConfiguration
-    ):  # -> SimulationConfiguration:
+    ) -> SimulationConfiguration:
         async with self.async_sessionmaker() as session, session.begin():
             orm_sim_config = ORMSimulationConfig(
                 id=config_id,
                 data=config.model_dump() if isinstance(config, SimulationConfiguration) else config,
             )
-            print(orm_sim_config)
             session.add(orm_sim_config)
             await session.flush()
             return orm_sim_config.to_dto()
-            # return orm_sim_config
+
+    @override
+    async def delete_simulation_config(self, config_id: str) -> bool:
+        async with self.async_sessionmaker() as session, session.begin():
+            simconfig: ORMSimulationConfig | None = await self._get_orm_simulation_config(session, config_id=config_id)
+            if simconfig is None:
+                raise Exception(f"Simulation Config with id: {config_id} not found in the database")
+            await session.delete(simconfig)
+            return True
+
+    @override
+    async def list_simulation_configs(self) -> list[SimulationConfiguration]:
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMSimulationConfig)
+            result: Result[tuple[ORMSimulationConfig]] = await session.execute(stmt)
+            orm_configs = result.scalars().all()
+
+            config_versions: list[SimulationConfiguration] = []
+            for orm_config in orm_configs:
+                config_versions.append(orm_config.to_dto())
+            return config_versions
 
     @override
     async def insert_simulator(self, git_commit_hash: str, git_repo_url: str, git_branch: str) -> SimulatorVersion:

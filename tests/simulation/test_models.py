@@ -4,7 +4,8 @@ import random
 import pytest
 
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.models import EcoliSimulation, EcoliSimulationRequest, ParcaDatasetRequest, SimulationConfig
+from sms_api.simulation.models import EcoliSimulation, EcoliSimulationRequest, ParcaDatasetRequest
+from sms_api.simulation.models import SimulationConfiguration as SimulationConfig
 
 
 @pytest.mark.asyncio
@@ -54,11 +55,11 @@ async def test_save_request_to_mongo(database_service: DatabaseServiceSQL) -> No
 
 
 @pytest.mark.asyncio
-async def test_serialize_sim_config():
+async def test_serialize_sim_config() -> None:
     with open("assets/base_simulation_config.json") as f:
         simulation_config_raw = json.load(f)
-    config = SimulationConfig(**simulation_config_raw, config_id="test")
-    serialized = config.serialize()
+    config = SimulationConfig(**simulation_config_raw)
+    serialized = config.to_json()
     # assert json.loads(serialized) == simulation_config_raw
     assert isinstance(serialized, str)
     assert isinstance(json.loads(serialized), dict)

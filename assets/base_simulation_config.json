@@ -7,7 +7,7 @@
   "sim_data_path": null,
   "emitter": "parquet",
   "emitter_arg": {
-    "out_dir": "workspace/outputs"
+    "out_dir": ""
   },
   "emit_topology": false,
   "emit_processes": false,
@@ -30,11 +30,11 @@
   "n_init_sims": 1,
   "generations": null,
   "single_daughters": true,
-  "daughter_outdir": "workspace/outputs",
+  "daughter_outdir": "",
   "lineage_seed": 0,
   "parca_options": {
     "cpus": 2,
-    "outdir": "workspace/outputs",
+    "outdir": "",
     "operons": true,
     "ribosome_fitting": true,
     "rnapoly_fitting": true,
@@ -50,7 +50,18 @@
     "variable_elongation_translation": false
   },
   "analysis_options": {
-    "cpus": 1
+    "single": {
+      "mass_fraction_summary": {},
+      "ptools_rxns": {
+        "n_tp": 8
+      },
+      "ptools_rna": {
+        "n_tp": 8
+      },
+      "ptools_proteins": {
+        "n_tp": 8
+      }
+    }
   },
   "gcloud": null,
   "agent_id": "0",
