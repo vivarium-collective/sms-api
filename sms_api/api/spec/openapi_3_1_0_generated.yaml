@@ -424,7 +424,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/simulation/run:
+  /wcm/experiment/run:
     post:
       tags:
       - Simulations - vEcoli
@@ -460,7 +460,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/simulation/run/status:
+  /wcm/experiment/status:
     get:
       tags:
       - Simulations - vEcoli
@@ -486,7 +486,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/simulation/run/log:
+  /wcm/experiment/log:
     post:
       tags:
       - Simulations - vEcoli
@@ -513,12 +513,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/analysis/outputs:
+  /wcm/experiment/analysis:
     get:
       tags:
       - Data - vEcoli
       summary: Get all available analyses for a given simulation
-      operationId: get-available-analyses
+      operationId: get-analysis-manifest
       parameters:
       - name: experiment_id
         in: query
@@ -538,73 +538,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/analysis/download:
+  /wcm/experiment/analysis/download:
     get:
       tags:
       - Data - vEcoli
       summary: Download a file that was generated from a simulation analysis module
       operationId: download-analysis-output
-      parameters:
-      - name: experiment_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Experiment Id
-      - name: variant_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Variant Id
-      - name: lineage_seed_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Lineage Seed Id
-      - name: generation_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 1
-          title: Generation Id
-      - name: agent_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Agent Id
-      - name: filename
-        in: query
-        required: true
-        schema:
-          type: string
-          examples:
-          - mass_fraction_summary.html
-          title: Filename
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/analysis/results:
-    get:
-      tags:
-      - Data - vEcoli
-      summary: Download a file that was generated from a simulation analysis module
-      operationId: download-analysis-results
       parameters:
       - name: experiment_id
         in: query
@@ -683,7 +622,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/data:
+  /wcm/experiment/data:
     post:
       tags:
       - Data - vEcoli
@@ -745,7 +684,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/simulation/config:
+  /wcm/experiment/config:
     post:
       tags:
       - Configurations - vEcoli
@@ -1010,7 +949,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/simulation/config/versions:
+  /wcm/experiment/config/versions:
     get:
       tags:
       - Configurations - vEcoli
@@ -1026,12 +965,12 @@ paths:
                   $ref: '#/components/schemas/SimulationConfiguration'
                 type: array
                 title: Response List-Simulation-Configs
-  /wcm/analysis/upload:
+  /wcm/experiment/analysis/upload:
     post:
       tags:
       - myEcoli - vEcoli
       summary: Upload Analysis Module
-      operationId: upload_analysis_module_wcm_analysis_upload_post
+      operationId: upload_analysis_module_wcm_experiment_analysis_upload_post
       parameters:
       - name: submodule_name
         in: query
@@ -1046,7 +985,7 @@ paths:
         content:
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Body_upload_analysis_module_wcm_analysis_upload_post'
+              $ref: '#/components/schemas/Body_upload_analysis_module_wcm_experiment_analysis_upload_post'
       responses:
         '200':
           description: Successful Response
@@ -1118,7 +1057,7 @@ components:
           title: Metadata
       type: object
       title: Body_launch-vecoli-simulation
-    Body_upload_analysis_module_wcm_analysis_upload_post:
+    Body_upload_analysis_module_wcm_experiment_analysis_upload_post:
       properties:
         file:
           type: string
@@ -1127,7 +1066,7 @@ components:
       type: object
       required:
       - file
-      title: Body_upload_analysis_module_wcm_analysis_upload_post
+      title: Body_upload_analysis_module_wcm_experiment_analysis_upload_post
     ConfigOverrides:
       properties:
         experiment_id:
