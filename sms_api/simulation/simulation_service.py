@@ -26,7 +26,13 @@ from sms_api.simulation.hpc_utils import (
     get_slurmjob_name,
     get_vEcoli_repo_dir,
 )
-from sms_api.simulation.models import EcoliSimulation, EcoliWorkflowSimulation, ParcaDataset, SimulatorVersion
+from sms_api.simulation.models import (
+    EcoliExperimentRequestDTO,
+    EcoliSimulation,
+    EcoliWorkflowSimulation,
+    ParcaDataset,
+    SimulatorVersion,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -86,6 +92,15 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def close(self) -> None:
+        pass
+
+    @abstractmethod
+    async def submit_vecoli_simulation_job(
+        self,
+        request: EcoliExperimentRequestDTO,
+        simulator: SimulatorVersion,
+        experiment_id: str,
+    ) -> int:
         pass
 
 
@@ -456,6 +471,24 @@ class SimulationServiceHpc(SimulationService):
         )
 
     @override
+    async def submit_vecoli_simulation_job(
+        self,
+        request: EcoliExperimentRequestDTO,
+        simulator: SimulatorVersion,
+        experiment_id: str,
+    ) -> int:
+        settings = get_settings()
+        ssh = get_ssh_service(settings)
+        return await submit_vecoli_job(
+            config_id=request.config_id,
+            simulator_hash=simulator.git_commit_hash,
+            env=settings,
+            experiment_id=experiment_id,
+            ssh=ssh,
+            logger=logger,
+        )
+
+    @override
     async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
         settings = get_settings()
         ssh_service = SSHService(
@@ -481,7 +514,7 @@ class SimulationServiceHpc(SimulationService):
         pass
 
 
-def slurm_script(
+def simulation_slurm_script(
     config_id: str,
     slurm_job_name: str,
     experiment_id: str,
@@ -490,11 +523,6 @@ def slurm_script(
     settings: Settings | None = None,
     logger: logging.Logger | None = None,
 ) -> str:
-    """
-    :param config_id: config id selected from the dropdown of available
-        simulation config JSON files for running vEcoli workflows.
-
-    """
     env = settings or get_settings()
     base_path = Path(env.slurm_base_path)
     remote_workspace_dir = base_path / "workspace"
@@ -649,7 +677,7 @@ async def submit_vecoli_job(
     slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
     # slurmjob_name = "dev"
 
-    script = slurm_script(
+    script = simulation_slurm_script(
         config_id=config_id, slurm_job_name=slurmjob_name, experiment_id=experiment_id, settings=env, logger=logger
     )
 

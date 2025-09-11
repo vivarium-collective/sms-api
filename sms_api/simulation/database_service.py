@@ -1,6 +1,7 @@
 import datetime
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 
 from sqlalchemy import Result, and_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -9,6 +10,8 @@ from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.simulation.models import (
+    EcoliExperimentDTO,
+    EcoliExperimentRequestDTO,
     EcoliSimulation,
     EcoliSimulationRequest,
     HpcRun,
@@ -22,6 +25,7 @@ from sms_api.simulation.models import (
 from sms_api.simulation.tables_orm import (
     JobStatusDB,
     JobTypeDB,
+    ORMEcoliExperiment,
     ORMHpcRun,
     ORMParcaDataset,
     ORMSimulation,
@@ -34,6 +38,29 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseService(ABC):
+    @abstractmethod
+    async def insert_experiment(
+        self,
+        experiment_id: str,
+        experiment_tag: str,
+        metadata: Mapping[str, str],
+        request: EcoliExperimentRequestDTO,
+        last_updated: str,
+    ) -> EcoliExperimentDTO:
+        pass
+
+    @abstractmethod
+    async def get_experiment(self, experiment_id: str) -> EcoliExperimentDTO:
+        pass
+
+    @abstractmethod
+    async def delete_experiment(self, experiment_id: str) -> bool:
+        pass
+
+    @abstractmethod
+    async def list_experiments(self) -> list[EcoliExperimentDTO]:
+        pass
+
     @abstractmethod
     async def get_simulation_config(self, config_id: str) -> SimulationConfiguration:
         pass
@@ -215,6 +242,41 @@ class DatabaseServiceSQL(DatabaseService):
         result1: Result[tuple[ORMSimulationConfig]] = await session.execute(stmt1)
         orm_sim_config: ORMSimulationConfig | None = result1.scalars().one_or_none()
         return orm_sim_config
+
+    async def _get_orm_experiment(self, session: AsyncSession, experiment_id: str) -> ORMEcoliExperiment | None:
+        stmt1 = select(ORMEcoliExperiment).where(ORMEcoliExperiment.id == experiment_id).limit(1)
+        result1: Result[tuple[ORMEcoliExperiment]] = await session.execute(stmt1)
+        orm_experiment: ORMEcoliExperiment | None = result1.scalars().one_or_none()
+        return orm_experiment
+
+    @override
+    async def insert_experiment(
+        self,
+        experiment_id: str,
+        experiment_tag: str,
+        metadata: Mapping[str, str],
+        request: EcoliExperimentRequestDTO,
+        last_updated: str,
+    ) -> EcoliExperimentDTO:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_experiment = ORMEcoliExperiment(
+                id=experiment_id,
+                tag=experiment_tag,
+                simulation_metadata=metadata,
+                request=request.model_dump(),
+                last_updated=last_updated,
+            )
+            session.add(orm_experiment)
+            await session.flush()
+            return orm_experiment.to_dto()
+
+    @override
+    async def get_experiment(self, experiment_id: str) -> EcoliExperimentDTO:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_experiment = await self._get_orm_experiment(session, experiment_id=experiment_id)
+            if orm_experiment is None:
+                raise RuntimeError(f"Experiment {experiment_id} not found")
+            return orm_experiment.to_dto()
 
     @override
     async def get_simulation_config(self, config_id: str) -> SimulationConfiguration:

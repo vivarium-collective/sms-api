@@ -1,6 +1,8 @@
+import datetime
 import logging
 import random
 import string
+from collections.abc import Mapping
 
 from fastapi import BackgroundTasks, HTTPException
 
@@ -10,6 +12,8 @@ from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import create_experiment_id, get_correlation_id, get_experiment_id
 from sms_api.simulation.models import (
     EcoliExperiment,
+    EcoliExperimentDTO,
+    EcoliExperimentRequestDTO,
     EcoliSimulationRequest,
     EcoliWorkflowRequest,
     EcoliWorkflowSimulation,
@@ -287,4 +291,29 @@ async def run_workflow(
     if jobid is not None:
         simulation.slurmjob_id = jobid
         tag = f"{experiment_id}-{simulation.slurmjob_id}"
-    return EcoliExperiment(experiment_id=experiment_id, simulation=simulation, experiment_tag=tag)
+    return EcoliExperiment(experiment_id=experiment_id, experiment_tag=tag)  # simulation=simulation)
+
+
+async def launch_vecoli_simulation(
+    request: EcoliExperimentRequestDTO,
+    simulator: SimulatorVersion,
+    metadata: Mapping[str, str],
+    simulation_service_slurm: SimulationService,
+    database_service: DatabaseService,
+) -> EcoliExperimentDTO:
+    experiment_id = create_experiment_id(request.config_id, simulator.git_commit_hash)
+    sim_slurmjobid = await simulation_service_slurm.submit_vecoli_simulation_job(
+        request=request, experiment_id=experiment_id, simulator=simulator
+    )
+    tag = None
+    if sim_slurmjobid is not None:
+        tag = f"{experiment_id}-{sim_slurmjobid}"
+
+    experiment = await database_service.insert_experiment(
+        experiment_id=experiment_id,
+        experiment_tag=tag,
+        metadata=metadata,
+        request=request,
+        last_updated=str(datetime.datetime.now()),
+    )
+    return experiment

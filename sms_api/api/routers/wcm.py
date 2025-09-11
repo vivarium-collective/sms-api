@@ -33,23 +33,21 @@ import mimetypes
 import os
 import tempfile
 import uuid
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
-from pydantic import BaseModel
 
+from sms_api.api.request_examples import DEFAULT_SIMULATION_CONFIG
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.config import get_settings
-
-# from sms_api.api.request_examples import examples
 from sms_api.data.analysis_service import AnalysisService
 from sms_api.data.parquet_service import ParquetService
 from sms_api.dependencies import (
@@ -57,20 +55,19 @@ from sms_api.dependencies import (
     get_simulation_service,
 )
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.handlers import run_workflow
+from sms_api.simulation.handlers import launch_vecoli_simulation
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
-    DEFAULT_SIMULATION_CONFIG,
+    ConfigOverrides,
     EcoliExperiment,
+    EcoliExperimentDTO,
+    EcoliExperimentRequestDTO,
     EcoliSimulation,
-    EcoliWorkflowRequest,
     JobStatus,
-    Overrides,
     SimulationConfiguration,
     SimulationRun,
     SimulatorVersion,
     UploadedSimulationConfig,
-    Variants,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,52 +124,68 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
     yield from buffer
 
 
-# @config.router.get(path="/simulation/configs", operation_id="get-available-configs", tags=["Simulations - vEcoli"])
-# async def get_available_config_ids(simulator_hash: str | None = Query(default=None)) -> list[str]:
-#     fname = "available_configs.txt"
-#     print(simulator_hash)
-#     env = get_settings()
-#     path = Path(f"{env.slurm_base_path}/prod") / fname  # currently 78c6310 (8/22/25)
-#     if not path.exists():
-#         path = Path(f"{REPO_DIR}/assets/simulation") / fname
-#     with open(path) as fp:
-#         available = [lin.strip().replace(".json", "") for lin in fp.readlines()]
-#     return available
+# @config.router.post(
+#     path="/simulation/run",
+#     operation_id="run-simulation-workflow",
+#     response_model=EcoliExperiment,
+#     tags=["Simulations - vEcoli"],
+#     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
+#     summary="Dispatches a nextflow-powered vEcoli simulation workflow",
+# )
+# async def run_simulation_workflow(
+#     background_tasks: BackgroundTasks,
+#     config_id: Optional[str] = None,
+#     overrides: Optional[Overrides] = None,
+#     variants: Optional[Variants] = None,
+#     config: SimulationConfiguration | None = None,
+#     # max_duration: float = Query(default=10800.0),
+#     # time_step: float = Query(default=1.0),
+# ) -> EcoliExperiment:
+#     simulator: SimulatorVersion = get_simulator()
+#     sim_request = EcoliWorkflowRequest(
+#         config_id=config_id or "sms_single", overrides=overrides, variants=variants, simulator=simulator
+#     )
+#     sim_service = get_simulation_service()
+#     if sim_service is None:
+#         logger.error("Simulation service is not initialized")
+#         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
+#     db_service = get_database_service()
+#     if db_service is None:
+#         logger.error("Database service is not initialized")
+#         raise HTTPException(status_code=500, detail="Database service is not initialized")
+#
+#     try:
+#         return await run_workflow(
+#             simulation_request=sim_request,
+#             simulation_service_slurm=sim_service,
+#             # background_tasks=background_tasks,
+#             # database_service=db_service,
+#         )
+#     except Exception as e:
+#         logger.exception("Error running vEcoli simulation")
+#         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.post(
-    path="/simulation/run",
-    operation_id="run-simulation-workflow",
-    response_model=EcoliExperiment,
+    path="/experiments/launch",
+    operation_id="launch-vecoli-simulation",
+    response_model=EcoliExperimentDTO,
     tags=["Simulations - vEcoli"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-    summary="Dispatches a nextflow-powered vEcoli simulation workflow",
+    summary="Launches a nextflow-powered vEcoli simulation workflow",
 )
-async def run_simulation_workflow(
-    background_tasks: BackgroundTasks,
-    config_id: Optional[str] = None,
-    overrides: Optional[Overrides] = None,
-    variants: Optional[Variants] = None,
-    config: SimulationConfiguration | None = None,
-    # max_duration: float = Query(default=10800.0),
-    # time_step: float = Query(default=1.0),
-) -> EcoliExperiment:
-    simulator: SimulatorVersion = get_simulator()
-    if config is not None:
-        env = get_settings()
-        ssh = get_ssh_service(env)
-        serialized = config.to_dict()
-        config_id = serialized.get("experiment_id", f"experiment-{uuid.uuid4()}")
-        with tempfile.TemporaryDirectory() as dirname:
-            local = Path(f"{dirname}/{config_id}.json")
-            with open(local, "w") as fp:
-                json.dump(serialized, fp, indent=3)
-            remote = Path(env.slurm_base_path) / "workspace" / "vEcoli" / "configs" / local.parts[-1]
-            await ssh.scp_upload(local_file=local, remote_path=remote)
-
-    sim_request = EcoliWorkflowRequest(
-        config_id=config_id or "sms_single", overrides=overrides, variants=variants, simulator=simulator
-    )
+async def launch_simulation(
+    config_id: str = Query(
+        ..., default="sms", description="Configuration ID of an existing available vecoli simulation configuration JSON"
+    ),
+    overrides: ConfigOverrides | None = None,
+    metadata: Mapping[str, str] | None = None,
+    # TODO: enable overrides here, not variants directly
+    #  (variants should be specified as a top level key-val in overrides,
+    #   mirroring the structure of simulation config JSON directly,
+    #   for now assume knowledge of configs available in db via list endpoint...
+) -> EcoliExperimentDTO:
+    # validate services
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
@@ -182,12 +195,17 @@ async def run_simulation_workflow(
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
 
+    # construct params
+    simulator: SimulatorVersion = get_simulator()
+    request = EcoliExperimentRequestDTO(config_id=config_id, overrides=overrides)
+
     try:
-        return await run_workflow(
-            simulation_request=sim_request,
+        return await launch_vecoli_simulation(
+            request=request,
+            simulator=simulator,
+            metadata=metadata or {},
             simulation_service_slurm=sim_service,
-            # background_tasks=background_tasks,
-            # database_service=db_service,
+            database_service=db_service,
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
@@ -248,15 +266,6 @@ async def get_simulation_log(experiment: EcoliExperiment) -> str:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-class AnalysisOutput(BaseModel):
-    id: str
-    files: list[str]
-
-
-class Analyses(BaseModel):
-    value: list[AnalysisOutput]
-
-
 @config.router.get(
     path="/analysis/outputs",
     response_model=None,
@@ -275,6 +284,11 @@ async def get_available_analyses(experiment_id: str = Query(...)) -> dict[str, l
         manifest_template = service.get_manifest_template(paths)
         manifest = service.get_manifest(analysis_paths=paths, template=manifest_template)
 
+        # class AnalysisOutput(BaseModel):
+        #     id: str
+        #     files: list[str]
+        # class Analyses(BaseModel):
+        #     value: list[AnalysisOutput]
         # analyses = Analyses(
         #     value=[
         #         AnalysisOutput(id=k, files=v)
@@ -551,12 +565,9 @@ async def list_simulation_configs() -> list[SimulationConfiguration]:
 
 @config.router.post("/analysis/upload")
 async def upload_analysis_module(
-    file: UploadFile = File(...), submodule_name: str = Query(..., description="Submodule name(single, multiseed, etc)")
+    file: UploadFile = File(...),  # noqa: B008
+    submodule_name: str = Query(..., description="Submodule name(single, multiseed, etc)"),
 ):
-    """NOTE: this endpoint should upload it to the logged-in client's dedicated dir
-
-    :param file: A Python vEcoli-compliant analysis module
-    """
     try:
         # db_service = DBService()
         contents = await file.read()

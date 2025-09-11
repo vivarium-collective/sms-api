@@ -28,7 +28,7 @@
   "variants": {},
   "skip_baseline": false,
   "n_init_sims": 1,
-  "generations": null,
+  "generations": 1,
   "single_daughters": true,
   "daughter_outdir": "",
   "lineage_seed": 0,

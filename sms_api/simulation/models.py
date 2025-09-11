@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel as _BaseModel
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from sms_api.config import get_settings
 
@@ -178,7 +178,7 @@ class AntibioticSimulation(BaseModel):
 
 class EcoliExperiment(BaseModel):
     experiment_id: str
-    simulation: EcoliSimulation | EcoliWorkflowSimulation | AntibioticSimulation
+    # simulation: EcoliSimulation | EcoliWorkflowSimulation | AntibioticSimulation
     last_updated: str = Field(default_factory=lambda: str(datetime.datetime.now()))
     metadata: Mapping[str, str] = Field(default_factory=dict)
     experiment_tag: str | None = None
@@ -309,17 +309,158 @@ class SimulationConfiguration(BaseModel):
         return json.dumps(self.to_dict())
 
 
+class ParcaOptions(BaseModel):
+    cpus: int = 2
+    outdir: str = ""
+    operons: bool = True
+    ribosome_fitting: bool = True
+    rnapoly_fitting: bool = True
+    remove_rrna_operons: bool = False
+    remove_rrff: bool = False
+    stable_rrna: bool = False
+    new_genes: str = "off"
+    debug_parca: bool = False
+    load_intermediate: str | None = None
+    save_intermediates: bool = False
+    intermediates_directory: str = ""
+    variable_elongation_transcription: bool = True
+    variable_elongation_translation: bool = False
+
+
+AnalysisOptions: type = list[dict[str, dict[str, int | Any]]]
+
+
+class VariantOpType(StrEnum):
+    CARTESIAN = "prod"
+    ZIPPED = "zip"
+
+
+class VariantParameter(BaseModel):
+    # like: "method": {"value": ["multiplicative"]},, where method is name and value is method.value.value()
+    name: str
+    value: list[str | float | int]
+
+
+class Variant(BaseModel):
+    module_name: str
+    parameters: list[VariantParameter]
+    op: VariantOpType = VariantOpType.CARTESIAN
+
+
+class VariantConfig(BaseModel):
+    variants: list[Variant] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        data = {}
+        for variant in self.variants:
+            data[variant.module_name] = {param.name: {"value": param.value} for param in variant.parameters}
+            data[variant.module_name]["op"] = variant.op
+        return data
+
+
+class EmitterArg(BaseModel):
+    out_dir: str
+
+
+class SimulationConfig(BaseModel):
+    experiment_id: str | None = None
+    sim_data_path: str | None = None
+    suffix_time: bool = False
+    parca_options: dict[str, bool | int | str | None | Any] = Field(default_factory=dict)
+    generations: int = 1
+    n_init_sims: int | None = None
+    max_duration: float = 10800.0
+    initial_global_time: float = 0.0
+    time_step: float = 1.0
+    single_daughters: bool = True
+    emitter: str = "parquet"
+    emitter_arg: dict[str, str] = Field(default_factory=dict)
+    variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default_factory=dict)
+    analysis_options: dict[str, Any] = Field(default_factory=dict)
+    gcloud: str | None = None
+    agent_id: str | None = None
+    parallel: bool | None = None
+    divide: bool | None = None
+    d_period: bool | None = None
+    division_threshold: bool | None = None
+    division_variable: list[str] = Field(default_factory=list)
+    chromosome_path: list[str] | None = None
+    spatial_environment: bool | None = None
+    fixed_media: str | None = None
+    condition: str | None = None
+    save: bool | None = None
+    save_times: list[str] = Field(default_factory=list)
+    add_processes: list[str] = Field(default_factory=list)
+    exclude_processes: list[str] = Field(default_factory=list)
+    profile: bool | None = None
+    processes: list[str] = Field(default_factory=list)
+    process_configs: dict[str, Any] = Field(default_factory=dict)
+    topology: dict[str, Any] = field(default_factory=dict)
+    engine_process_reports: list[list[str]] = Field(default_factory=list)
+    emit_paths: list[str] = Field(default_factory=list)
+    progress_bar: bool | None = None
+    emit_topology: bool | None = None
+    emit_processes: bool | None = None
+    emit_config: bool | None = None
+    emit_unique: bool | None = None
+    log_updates: bool | None = None
+    raw_output: bool | None = None
+    description: str | None = None
+    seed: int | None = None
+    mar_regulon: bool | None = None
+    amp_lysis: bool | None = None
+    initial_state_file: str | None = None
+    skip_baseline: bool | None = None
+    daughter_outdir: str | None = None
+    lineage_seed: int | None = None
+    fail_at_max_duration: bool | None = None
+    inherit_from: list[str] = Field(default_factory=list)
+    spatial_environment_config: dict[str, Any] = Field(default_factory=dict)
+    swap_processes: dict[str, Any] = Field(default_factory=dict)
+    flow: dict[str, Any] = Field(default_factory=dict)
+    initial_state_overrides: list[str] = Field(default_factory=list)
+    initial_state: dict[str, Any] = Field(default_factory=dict)
+
+    @classmethod
+    def from_file(cls, fp: Path, config_id: str | None = None) -> "SimulationConfig":
+        filepath = fp
+        with open(filepath) as f:
+            conf = json.load(f)
+        return cls(**conf)
+
+    @classmethod
+    def from_base(cls) -> "SimulationConfig":
+        return cls.from_file(fp=BASE_SIMULATION_CONFIG_PATH)
+
+    @model_validator(mode="after")
+    def set_outdirs(self) -> "SimulationConfig":
+        env = get_settings()
+        self.emitter_arg = {"out_dir": env.simulation_outdir}
+        self.daughter_outdir = env.simulation_outdir
+        self.parca_options = {"cpus": 2}
+        return self
+
+
+class ConfigOverrides(SimulationConfig):
+    pass
+
+
 class UploadedSimulationConfig(BaseModel):
     config_id: str
     # data: SimulationConfiguration
 
 
-class SimulationParameters(FlexData):
-    pass
+class EcoliExperimentRequestDTO(BaseModel):
+    config_id: str
+    overrides: ConfigOverrides | None = None
+    # parca_dataset_id: int | None = None  TODO: we should pin this down and change only administratively
+    # simulator: SimulatorVersion  TODO: we should pin this down and change only administratively
 
 
-class SimulationConfigId(str):
-    pass
-
-
-DEFAULT_SIMULATION_CONFIG = SimulationConfiguration.from_base()
+class EcoliExperimentDTO(BaseModel):
+    experiment_id: str
+    request: EcoliExperimentRequestDTO
+    last_updated: str = Field(default_factory=lambda: str(datetime.datetime.now()))
+    metadata: Mapping[str, str] = Field(default_factory=dict)
+    experiment_tag: str | None = None
+    # simulation: EcoliSimulation | EcoliWorkflowSimulation | AntibioticSimulation

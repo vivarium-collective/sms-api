@@ -13,7 +13,9 @@ Then, add that func to the list within the examples dict comprehension below!
 
 import json
 
-from sms_api.simulation.models import EcoliWorkflowRequest
+from sms_api.simulation.models import EcoliWorkflowRequest, SimulationConfiguration
+
+DEFAULT_SIMULATION_CONFIG = SimulationConfiguration.from_base()
 
 
 def core_simulation_workflow() -> EcoliWorkflowRequest:

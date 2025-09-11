@@ -1,6 +1,7 @@
 import datetime
 import enum
 import logging
+from collections.abc import Mapping
 from typing import Any, Optional
 
 from sqlalchemy import ForeignKey, func
@@ -8,7 +9,17 @@ from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from sms_api.simulation.models import HpcRun, JobStatus, JobType, SimulationConfiguration, SimulatorVersion, WorkerEvent
+from sms_api.simulation.models import (
+    EcoliExperimentDTO,
+    EcoliExperimentRequestDTO,
+    HpcRun,
+    JobStatus,
+    JobType,
+    Overrides,
+    SimulationConfiguration,
+    SimulatorVersion,
+    WorkerEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +206,30 @@ class ORMSimulationConfig(Base):
 
     def to_dto(self) -> SimulationConfiguration:
         return SimulationConfiguration(**self.data)
+
+
+class ORMEcoliExperiment(Base):
+    __tablename__ = "experiment"
+
+    id: Mapped[str] = mapped_column(primary_key=True)
+    tag: Mapped[str] = mapped_column(nullable=False)
+    simulation_metadata: Mapped[Mapping[str, str]] = mapped_column(JSON, nullable=False, default_factory=dict)
+    request: Mapped[dict[str, str | dict[str, Any]]] = mapped_column(
+        JSON, nullable=False
+    )  # this is config_id, and overrides(config)
+    last_updated: Mapped[str] = mapped_column(nullable=False)
+
+    def to_dto(self) -> EcoliExperimentDTO:
+        overrides_data = self.request.get("overrides")
+        overrides = Overrides(**overrides_data) if overrides_data is not None else None
+        request = EcoliExperimentRequestDTO(config_id=self.request["config_id"], overrides=overrides)
+        return EcoliExperimentDTO(
+            experiment_id=self.id,
+            request=request,
+            last_updated=self.last_updated,
+            metadata=self.simulation_metadata,
+            experiment_tag=self.tag,
+        )
 
 
 async def create_db(async_engine: AsyncEngine) -> None:
