@@ -12,10 +12,18 @@ def _():
 @app.function
 def test_variant_dtos():
     from sms_api.simulation.models import Variant, VariantConfig, VariantParameter, VariantOpType
+
     vparam1 = VariantParameter(name="method", value=["multiplicative"])
     vparam2 = VariantParameter(name="noise", value=[0.1])
-    vparam3 = VariantParameter(name="condition", value=["basal", "with_aa", "acetate","succinate", "no_oxygen"])
-    vparam4 = VariantParameter(name="xyz", value=[0.1, 0.10952380952380952, 0.11904761904761905,])
+    vparam3 = VariantParameter(name="condition", value=["basal", "with_aa", "acetate", "succinate", "no_oxygen"])
+    vparam4 = VariantParameter(
+        name="xyz",
+        value=[
+            0.1,
+            0.10952380952380952,
+            0.11904761904761905,
+        ],
+    )
     variant_a = Variant(module_name="perturb_growth_param", parameters=[vparam1, vparam2], op=VariantOpType.CARTESIAN)
     variant_b = Variant(module_name="condition", parameters=[vparam3, vparam4])
     variant_config = VariantConfig(variants=[variant_a, variant_b])
@@ -32,6 +40,7 @@ def _():
 @app.cell
 def _():
     from sms_api.simulation.models import Variant, VariantConfig, VariantParameter, VariantOpType, SimulationConfig
+
     return (SimulationConfig,)
 
 

@@ -213,7 +213,7 @@ class ORMEcoliExperiment(Base):
 
     id: Mapped[str] = mapped_column(primary_key=True)
     tag: Mapped[str] = mapped_column(nullable=False)
-    simulation_metadata: Mapped[Mapping[str, str]] = mapped_column(JSON, nullable=False, default_factory=dict)
+    simulation_metadata: Mapped[Mapping[str, str]] = mapped_column(JSON, nullable=False)
     request: Mapped[dict[str, str | dict[str, Any]]] = mapped_column(
         JSON, nullable=False
     )  # this is config_id, and overrides(config)

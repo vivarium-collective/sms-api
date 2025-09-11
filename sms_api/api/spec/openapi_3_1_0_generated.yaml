@@ -186,7 +186,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EcoliExperiment-Output'
+                $ref: '#/components/schemas/EcoliExperiment'
         '422':
           description: Validation Error
           content:
@@ -206,7 +206,7 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: '#/components/schemas/EcoliSimulation-Output'
+                  $ref: '#/components/schemas/EcoliSimulation'
                 type: array
                 title: Response Get-Simulation-Versions
   /core/simulation/run/status:
@@ -424,64 +424,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/simulation/configs:
-    get:
-      tags:
-      - Simulations - vEcoli
-      summary: Get Available Config Ids
-      operationId: get-available-configs
-      parameters:
-      - name: simulator_hash
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Simulator Hash
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: string
-                title: Response Get-Available-Configs
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/simulation/run:
+  /wcm/experiments/launch:
     post:
       tags:
       - Simulations - vEcoli
-      summary: Dispatches a nextflow-powered vEcoli simulation workflow
-      operationId: run-simulation-workflow
+      summary: Launches a nextflow-powered vEcoli simulation workflow
+      operationId: launch-vecoli-simulation
       parameters:
       - name: config_id
         in: query
         required: false
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
+          type: string
+          description: Configuration ID of an existing available vecoli simulation
+            configuration JSON
+          default: sms
           title: Config Id
+        description: Configuration ID of an existing available vecoli simulation configuration
+          JSON
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Body_run-simulation-workflow'
+              $ref: '#/components/schemas/Body_launch-vecoli-simulation'
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EcoliExperiment-Output'
+                $ref: '#/components/schemas/EcoliExperimentDTO'
         '422':
           description: Validation Error
           content:
@@ -524,7 +496,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EcoliExperiment-Input'
+              $ref: '#/components/schemas/EcoliExperiment'
         required: true
       responses:
         '200':
@@ -785,9 +757,321 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: '#/components/schemas/EcoliSimulation-Output'
+                  $ref: '#/components/schemas/EcoliSimulation'
                 type: array
                 title: Response Get-Workflow-Versions
+  /wcm/simulation/config:
+    post:
+      tags:
+      - Simulations - vEcoli
+      summary: Upload Simulation Config
+      operationId: upload-simulation-config
+      parameters:
+      - name: config_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Config Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulationConfiguration'
+              default:
+                experiment_id: <PLACEHOLDER>
+                suffix_time: true
+                parca_options:
+                  cpus: 2
+                  outdir: /home/FCAM/svc_vivarium/workspace/outputs
+                  operons: true
+                  ribosome_fitting: true
+                  rnapoly_fitting: true
+                  remove_rrna_operons: false
+                  remove_rrff: false
+                  stable_rrna: false
+                  new_genes: 'off'
+                  debug_parca: false
+                  save_intermediates: false
+                  intermediates_directory: ''
+                  variable_elongation_transcription: true
+                  variable_elongation_translation: false
+                generations: 1
+                n_init_sims: 1
+                max_duration: 10800.0
+                initial_global_time: 0.0
+                time_step: 1.0
+                single_daughters: true
+                emitter: parquet
+                emitter_arg:
+                  out_dir: /home/FCAM/svc_vivarium/workspace/outputs
+                variants: {}
+                analysis_options:
+                  single:
+                    mass_fraction_summary: {}
+                    ptools_rxns:
+                      n_tp: 8
+                    ptools_rna:
+                      n_tp: 8
+                    ptools_proteins:
+                      n_tp: 8
+                agent_id: '0'
+                parallel: false
+                divide: true
+                d_period: true
+                division_threshold: true
+                division_variable:
+                - divide
+                chromosome_path:
+                - unique
+                - full_chromosome
+                spatial_environment: false
+                fixed_media: minimal
+                condition: basal
+                save: false
+                save_times: []
+                add_processes: []
+                exclude_processes: []
+                profile: false
+                processes:
+                - post-division-mass-listener
+                - bulk-timeline
+                - media_update
+                - exchange_data
+                - ecoli-tf-unbinding
+                - ecoli-equilibrium
+                - ecoli-two-component-system
+                - ecoli-rna-maturation
+                - ecoli-tf-binding
+                - ecoli-transcript-initiation
+                - ecoli-polypeptide-initiation
+                - ecoli-chromosome-replication
+                - ecoli-protein-degradation
+                - ecoli-rna-degradation
+                - ecoli-complexation
+                - ecoli-transcript-elongation
+                - ecoli-polypeptide-elongation
+                - ecoli-chromosome-structure
+                - ecoli-metabolism
+                - ecoli-mass-listener
+                - RNA_counts_listener
+                - rna_synth_prob_listener
+                - monomer_counts_listener
+                - dna_supercoiling_listener
+                - replication_data_listener
+                - rnap_data_listener
+                - unique_molecule_counts
+                - ribosome_data_listener
+                - global_clock
+                process_configs:
+                  global_clock: {}
+                  replication_data_listener:
+                    time_step: 1
+                topology:
+                  bulk-timeline:
+                    bulk:
+                    - bulk
+                    global:
+                    - timeline
+                    media_id:
+                    - environment
+                    - media_id
+                  global_clock:
+                    global_time:
+                    - global_time
+                    next_update_time:
+                    - next_update_time
+                engine_process_reports:
+                - - listeners
+                emit_paths: []
+                progress_bar: true
+                emit_topology: false
+                emit_processes: false
+                emit_config: false
+                emit_unique: false
+                log_updates: false
+                raw_output: true
+                description: ''
+                seed: 0
+                mar_regulon: false
+                amp_lysis: false
+                initial_state_file: ''
+                skip_baseline: false
+                daughter_outdir: /home/FCAM/svc_vivarium/workspace/outputs
+                lineage_seed: 0
+                fail_at_max_duration: false
+                inherit_from: []
+                spatial_environment_config: {}
+                swap_processes: {}
+                flow:
+                  post-division-mass-listener: []
+                  media_update:
+                  - - post-division-mass-listener
+                  exchange_data:
+                  - - media_update
+                  ecoli-tf-unbinding:
+                  - - media_update
+                  ecoli-equilibrium:
+                  - - ecoli-tf-unbinding
+                  ecoli-two-component-system:
+                  - - ecoli-tf-unbinding
+                  ecoli-rna-maturation:
+                  - - ecoli-tf-unbinding
+                  ecoli-tf-binding:
+                  - - ecoli-equilibrium
+                  ecoli-transcript-initiation:
+                  - - ecoli-tf-binding
+                  ecoli-polypeptide-initiation:
+                  - - ecoli-tf-binding
+                  ecoli-chromosome-replication:
+                  - - ecoli-tf-binding
+                  ecoli-protein-degradation:
+                  - - ecoli-tf-binding
+                  ecoli-rna-degradation:
+                  - - ecoli-tf-binding
+                  ecoli-complexation:
+                  - - ecoli-tf-binding
+                  ecoli-transcript-elongation:
+                  - - ecoli-complexation
+                  ecoli-polypeptide-elongation:
+                  - - ecoli-complexation
+                  ecoli-chromosome-structure:
+                  - - ecoli-polypeptide-elongation
+                  ecoli-metabolism:
+                  - - ecoli-chromosome-structure
+                  ecoli-mass-listener:
+                  - - ecoli-metabolism
+                  RNA_counts_listener:
+                  - - ecoli-metabolism
+                  rna_synth_prob_listener:
+                  - - ecoli-metabolism
+                  monomer_counts_listener:
+                  - - ecoli-metabolism
+                  dna_supercoiling_listener:
+                  - - ecoli-metabolism
+                  replication_data_listener:
+                  - - ecoli-metabolism
+                  rnap_data_listener:
+                  - - ecoli-metabolism
+                  unique_molecule_counts:
+                  - - ecoli-metabolism
+                  ribosome_data_listener:
+                  - - ecoli-metabolism
+                initial_state_overrides: []
+                initial_state: {}
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadedSimulationConfig'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Simulations - vEcoli
+      summary: Get Simulation Config
+      operationId: get-simulation-config
+      parameters:
+      - name: config_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Config Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationConfiguration'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Simulations - vEcoli
+      summary: Delete Simulation Config
+      operationId: delete-simulation-config
+      parameters:
+      - name: config_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Config Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: string
+                title: Response Delete-Simulation-Config
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /wcm/simulation/config/all:
+    get:
+      tags:
+      - Simulations - vEcoli
+      summary: List Simulation Configs
+      operationId: list-simulation-configs
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/SimulationConfiguration'
+                type: array
+                title: Response List-Simulation-Configs
+  /wcm/analysis/upload:
+    post:
+      summary: Upload Analysis Module
+      operationId: upload_analysis_module_wcm_analysis_upload_post
+      parameters:
+      - name: submodule_name
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Submodule name(single, multiseed, etc)
+          title: Submodule Name
+        description: Submodule name(single, multiseed, etc)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_analysis_module_wcm_analysis_upload_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /:
     get:
       tags:
@@ -832,408 +1116,32 @@ paths:
                 title: Response Get Version Version Get
 components:
   schemas:
-    AntibioticSimulation-Input:
-      properties:
-        database_id:
-          type: integer
-          title: Database Id
-        sim_request:
-          $ref: '#/components/schemas/AntibioticSimulationRequest'
-        slurmjob_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Slurmjob Id
-      type: object
-      required:
-      - database_id
-      - sim_request
-      title: AntibioticSimulation
-    AntibioticSimulation-Output:
-      properties:
-        database_id:
-          type: integer
-          title: Database Id
-        sim_request:
-          $ref: '#/components/schemas/AntibioticSimulationRequest'
-        slurmjob_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Slurmjob Id
-      type: object
-      required:
-      - database_id
-      - sim_request
-      title: AntibioticSimulation
-    AntibioticSimulationRequest:
-      properties:
-        simulator:
-          $ref: '#/components/schemas/SimulatorVersion'
-        parca_dataset_id:
-          type: integer
-          title: Parca Dataset Id
-        variant_config:
-          additionalProperties:
-            additionalProperties:
-              anyOf:
-              - type: integer
-              - type: number
-              - type: string
-            type: object
-          type: object
-          title: Variant Config
-          default:
-            named_parameters:
-              param1: 0.5
-              param2: 0.5
-        antibiotics_config:
-          additionalProperties:
-            additionalProperties:
-              anyOf:
-              - type: integer
-              - type: number
-              - type: string
-            type: object
-          type: object
-          title: Antibiotics Config
-      type: object
-      required:
-      - simulator
-      - parca_dataset_id
-      title: AntibioticSimulationRequest
-    Body_run-simulation-workflow:
+    Body_launch-vecoli-simulation:
       properties:
         overrides:
           anyOf:
-          - $ref: '#/components/schemas/Overrides'
+          - $ref: '#/components/schemas/ConfigOverrides'
           - type: 'null'
-        variants:
-          anyOf:
-          - $ref: '#/components/schemas/Variants'
-          - type: 'null'
-        config:
-          anyOf:
-          - $ref: '#/components/schemas/SimulationConfig'
-          - type: 'null'
-      type: object
-      title: Body_run-simulation-workflow
-    EcoliExperiment-Input:
-      properties:
-        experiment_id:
-          type: string
-          title: Experiment Id
-        simulation:
-          anyOf:
-          - $ref: '#/components/schemas/EcoliSimulation-Input'
-          - $ref: '#/components/schemas/EcoliWorkflowSimulation-Input'
-          - $ref: '#/components/schemas/AntibioticSimulation-Input'
-          title: Simulation
-        last_updated:
-          type: string
-          title: Last Updated
         metadata:
-          additionalProperties:
-            type: string
-          type: object
-          title: Metadata
-        experiment_tag:
           anyOf:
-          - type: string
-          - type: 'null'
-          title: Experiment Tag
-      type: object
-      required:
-      - experiment_id
-      - simulation
-      title: EcoliExperiment
-    EcoliExperiment-Output:
-      properties:
-        experiment_id:
-          type: string
-          title: Experiment Id
-        simulation:
-          anyOf:
-          - $ref: '#/components/schemas/EcoliSimulation-Output'
-          - $ref: '#/components/schemas/EcoliWorkflowSimulation-Output'
-          - $ref: '#/components/schemas/AntibioticSimulation-Output'
-          title: Simulation
-        last_updated:
-          type: string
-          title: Last Updated
-        metadata:
-          additionalProperties:
-            type: string
-          type: object
-          title: Metadata
-        experiment_tag:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Experiment Tag
-      type: object
-      required:
-      - experiment_id
-      - simulation
-      title: EcoliExperiment
-    EcoliSimulation-Input:
-      properties:
-        database_id:
-          type: integer
-          title: Database Id
-        sim_request:
-          $ref: '#/components/schemas/EcoliSimulationRequest'
-        slurmjob_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Slurmjob Id
-      type: object
-      required:
-      - database_id
-      - sim_request
-      title: EcoliSimulation
-    EcoliSimulation-Output:
-      properties:
-        database_id:
-          type: integer
-          title: Database Id
-        sim_request:
-          $ref: '#/components/schemas/EcoliSimulationRequest'
-        slurmjob_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Slurmjob Id
-      type: object
-      required:
-      - database_id
-      - sim_request
-      title: EcoliSimulation
-    EcoliSimulationRequest:
-      properties:
-        simulator:
-          $ref: '#/components/schemas/SimulatorVersion'
-        parca_dataset_id:
-          type: integer
-          title: Parca Dataset Id
-        variant_config:
-          additionalProperties:
-            additionalProperties:
-              anyOf:
-              - type: integer
-              - type: number
-              - type: string
+          - additionalProperties:
+              type: string
             type: object
-          type: object
-          title: Variant Config
-          default:
-            named_parameters:
-              param1: 0.5
-              param2: 0.5
+          - type: 'null'
+          title: Metadata
       type: object
-      required:
-      - simulator
-      - parca_dataset_id
-      title: EcoliSimulationRequest
-      description: Fits EcoliSim
-    EcoliWorkflowRequest:
+      title: Body_launch-vecoli-simulation
+    Body_upload_analysis_module_wcm_analysis_upload_post:
       properties:
-        config_id:
+        file:
           type: string
-          title: Config Id
-        simulator:
-          $ref: '#/components/schemas/SimulatorVersion'
-        overrides:
-          anyOf:
-          - $ref: '#/components/schemas/Overrides'
-          - type: 'null'
-        variants:
-          anyOf:
-          - $ref: '#/components/schemas/Variants'
-          - type: 'null'
-        parca_dataset_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Parca Dataset Id
+          format: binary
+          title: File
       type: object
       required:
-      - config_id
-      - simulator
-      title: EcoliWorkflowRequest
-      description: 'Fits Nextflow workflows
-
-
-        :param config_id: (str) filename (without ''.json'') of the given sim config
-
-        :param config_overrides: (Optional[dict[str, Any]]) overrides any key within
-        the file found at {config_id}.json'
-    EcoliWorkflowSimulation-Input:
-      properties:
-        sim_request:
-          $ref: '#/components/schemas/EcoliWorkflowRequest'
-        database_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Database Id
-        slurmjob_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Slurmjob Id
-      type: object
-      required:
-      - sim_request
-      title: EcoliWorkflowSimulation
-    EcoliWorkflowSimulation-Output:
-      properties:
-        sim_request:
-          $ref: '#/components/schemas/EcoliWorkflowRequest'
-        database_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Database Id
-        slurmjob_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Slurmjob Id
-      type: object
-      required:
-      - sim_request
-      title: EcoliWorkflowSimulation
-    HTTPValidationError:
-      properties:
-        detail:
-          items:
-            $ref: '#/components/schemas/ValidationError'
-          type: array
-          title: Detail
-      type: object
-      title: HTTPValidationError
-    HpcRun:
-      properties:
-        database_id:
-          type: integer
-          title: Database Id
-        slurmjobid:
-          type: integer
-          title: Slurmjobid
-        correlation_id:
-          type: string
-          title: Correlation Id
-        job_type:
-          $ref: '#/components/schemas/JobType'
-        ref_id:
-          type: integer
-          title: Ref Id
-        status:
-          anyOf:
-          - $ref: '#/components/schemas/JobStatus'
-          - type: 'null'
-        start_time:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Start Time
-        end_time:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: End Time
-        error_message:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Error Message
-      type: object
-      required:
-      - database_id
-      - slurmjobid
-      - correlation_id
-      - job_type
-      - ref_id
-      title: HpcRun
-    JobStatus:
-      type: string
-      enum:
-      - waiting
-      - queued
-      - running
-      - completed
-      - failed
-      title: JobStatus
-    JobType:
-      type: string
-      enum:
-      - simulation
-      - parca
-      - build_image
-      title: JobType
-    Overrides:
-      properties:
-        config:
-          additionalProperties: true
-          type: object
-          title: Config
-          default: {}
-      type: object
-      title: Overrides
-    ParcaDataset:
-      properties:
-        database_id:
-          type: integer
-          title: Database Id
-        parca_dataset_request:
-          $ref: '#/components/schemas/ParcaDatasetRequest'
-        remote_archive_path:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Remote Archive Path
-      type: object
-      required:
-      - database_id
-      - parca_dataset_request
-      title: ParcaDataset
-    ParcaDatasetRequest:
-      properties:
-        simulator_version:
-          $ref: '#/components/schemas/SimulatorVersion'
-        parca_config:
-          additionalProperties:
-            anyOf:
-            - type: integer
-            - type: number
-            - type: string
-          type: object
-          title: Parca Config
-      type: object
-      required:
-      - simulator_version
-      - parca_config
-      title: ParcaDatasetRequest
-    RegisteredSimulators:
-      properties:
-        versions:
-          items:
-            $ref: '#/components/schemas/SimulatorVersion'
-          type: array
-          title: Versions
-        timestamp:
-          anyOf:
-          - type: string
-            format: date-time
-          - type: 'null'
-          title: Timestamp
-      type: object
-      required:
-      - versions
-      title: RegisteredSimulators
-    SimulationConfig:
+      - file
+      title: Body_upload_analysis_module_wcm_analysis_upload_post
+    ConfigOverrides:
       properties:
         experiment_id:
           anyOf:
@@ -1246,68 +1154,70 @@ components:
           - type: 'null'
           title: Sim Data Path
         suffix_time:
-          anyOf:
-          - type: boolean
-          - type: 'null'
+          type: boolean
           title: Suffix Time
+          default: false
         parca_options:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
+          additionalProperties:
+            anyOf:
+            - type: boolean
+            - type: integer
+            - type: string
+            - {}
+            - type: 'null'
+          type: object
           title: Parca Options
         generations:
-          anyOf:
-          - type: integer
-          - type: 'null'
+          type: integer
           title: Generations
+          default: 1
         n_init_sims:
           anyOf:
           - type: integer
           - type: 'null'
           title: N Init Sims
         max_duration:
-          anyOf:
-          - type: number
-          - type: 'null'
+          type: number
           title: Max Duration
+          default: 10800.0
         initial_global_time:
-          anyOf:
-          - type: number
-          - type: 'null'
+          type: number
           title: Initial Global Time
+          default: 0.0
         time_step:
-          anyOf:
-          - type: number
-          - type: 'null'
+          type: number
           title: Time Step
+          default: 1.0
         single_daughters:
-          anyOf:
-          - type: boolean
-          - type: 'null'
+          type: boolean
           title: Single Daughters
+          default: true
         emitter:
-          anyOf:
-          - type: string
-          - type: 'null'
+          type: string
           title: Emitter
+          default: parquet
         emitter_arg:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
+          additionalProperties:
+            type: string
+          type: object
           title: Emitter Arg
         variants:
-          anyOf:
-          - additionalProperties: true
+          additionalProperties:
+            additionalProperties:
+              additionalProperties:
+                items:
+                  anyOf:
+                  - type: number
+                  - type: string
+                  - type: integer
+                type: array
+              type: object
             type: object
-          - type: 'null'
+          type: object
           title: Variants
         analysis_options:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
+          additionalProperties: true
+          type: object
           title: Analysis Options
         gcloud:
           anyOf:
@@ -1340,11 +1250,9 @@ components:
           - type: 'null'
           title: Division Threshold
         division_variable:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
+          items:
+            type: string
+          type: array
           title: Division Variable
         chromosome_path:
           anyOf:
@@ -1374,25 +1282,19 @@ components:
           - type: 'null'
           title: Save
         save_times:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
+          items:
+            type: string
+          type: array
           title: Save Times
         add_processes:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
+          items:
+            type: string
+          type: array
           title: Add Processes
         exclude_processes:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
+          items:
+            type: string
+          type: array
           title: Exclude Processes
         profile:
           anyOf:
@@ -1400,37 +1302,29 @@ components:
           - type: 'null'
           title: Profile
         processes:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
+          items:
+            type: string
+          type: array
           title: Processes
         process_configs:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
+          additionalProperties: true
+          type: object
           title: Process Configs
         topology:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
+          additionalProperties: true
+          type: object
           title: Topology
         engine_process_reports:
-          anyOf:
-          - items:
+          items:
+            items:
               type: string
             type: array
-          - type: 'null'
+          type: array
           title: Engine Process Reports
         emit_paths:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
+          items:
+            type: string
+          type: array
           title: Emit Paths
         progress_bar:
           anyOf:
@@ -1513,45 +1407,541 @@ components:
           - type: 'null'
           title: Fail At Max Duration
         inherit_from:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
+          items:
+            type: string
+          type: array
           title: Inherit From
         spatial_environment_config:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
+          additionalProperties: true
+          type: object
           title: Spatial Environment Config
         swap_processes:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
+          additionalProperties: true
+          type: object
           title: Swap Processes
         flow:
+          additionalProperties: true
+          type: object
+          title: Flow
+        initial_state_overrides:
+          items:
+            type: string
+          type: array
+          title: Initial State Overrides
+        initial_state:
+          additionalProperties: true
+          type: object
+          title: Initial State
+      type: object
+      title: ConfigOverrides
+    EcoliExperiment:
+      properties:
+        experiment_id:
+          type: string
+          title: Experiment Id
+        last_updated:
+          type: string
+          title: Last Updated
+        metadata:
+          additionalProperties:
+            type: string
+          type: object
+          title: Metadata
+        experiment_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Experiment Tag
+      type: object
+      required:
+      - experiment_id
+      title: EcoliExperiment
+    EcoliExperimentDTO:
+      properties:
+        experiment_id:
+          type: string
+          title: Experiment Id
+        request:
+          $ref: '#/components/schemas/EcoliExperimentRequestDTO'
+        last_updated:
+          type: string
+          title: Last Updated
+        metadata:
+          additionalProperties:
+            type: string
+          type: object
+          title: Metadata
+        experiment_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Experiment Tag
+      type: object
+      required:
+      - experiment_id
+      - request
+      title: EcoliExperimentDTO
+    EcoliExperimentRequestDTO:
+      properties:
+        config_id:
+          type: string
+          title: Config Id
+        overrides:
+          anyOf:
+          - $ref: '#/components/schemas/ConfigOverrides'
+          - type: 'null'
+      type: object
+      required:
+      - config_id
+      title: EcoliExperimentRequestDTO
+    EcoliSimulation:
+      properties:
+        database_id:
+          type: integer
+          title: Database Id
+        sim_request:
+          $ref: '#/components/schemas/EcoliSimulationRequest'
+        slurmjob_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Slurmjob Id
+      type: object
+      required:
+      - database_id
+      - sim_request
+      title: EcoliSimulation
+    EcoliSimulationRequest:
+      properties:
+        simulator:
+          $ref: '#/components/schemas/SimulatorVersion'
+        parca_dataset_id:
+          type: integer
+          title: Parca Dataset Id
+        variant_config:
+          additionalProperties:
+            additionalProperties:
+              anyOf:
+              - type: integer
+              - type: number
+              - type: string
+            type: object
+          type: object
+          title: Variant Config
+          default:
+            named_parameters:
+              param1: 0.5
+              param2: 0.5
+      type: object
+      required:
+      - simulator
+      - parca_dataset_id
+      title: EcoliSimulationRequest
+      description: Fits EcoliSim
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HpcRun:
+      properties:
+        database_id:
+          type: integer
+          title: Database Id
+        slurmjobid:
+          type: integer
+          title: Slurmjobid
+        correlation_id:
+          type: string
+          title: Correlation Id
+        job_type:
+          $ref: '#/components/schemas/JobType'
+        ref_id:
+          type: integer
+          title: Ref Id
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/JobStatus'
+          - type: 'null'
+        start_time:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Start Time
+        end_time:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: End Time
+        error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Message
+      type: object
+      required:
+      - database_id
+      - slurmjobid
+      - correlation_id
+      - job_type
+      - ref_id
+      title: HpcRun
+    JobStatus:
+      type: string
+      enum:
+      - waiting
+      - queued
+      - running
+      - completed
+      - failed
+      title: JobStatus
+    JobType:
+      type: string
+      enum:
+      - simulation
+      - parca
+      - build_image
+      title: JobType
+    ParcaDataset:
+      properties:
+        database_id:
+          type: integer
+          title: Database Id
+        parca_dataset_request:
+          $ref: '#/components/schemas/ParcaDatasetRequest'
+        remote_archive_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Remote Archive Path
+      type: object
+      required:
+      - database_id
+      - parca_dataset_request
+      title: ParcaDataset
+    ParcaDatasetRequest:
+      properties:
+        simulator_version:
+          $ref: '#/components/schemas/SimulatorVersion'
+        parca_config:
+          additionalProperties:
+            anyOf:
+            - type: integer
+            - type: number
+            - type: string
+          type: object
+          title: Parca Config
+      type: object
+      required:
+      - simulator_version
+      - parca_config
+      title: ParcaDatasetRequest
+    RegisteredSimulators:
+      properties:
+        versions:
+          items:
+            $ref: '#/components/schemas/SimulatorVersion'
+          type: array
+          title: Versions
+        timestamp:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Timestamp
+      type: object
+      required:
+      - versions
+      title: RegisteredSimulators
+    SimulationConfiguration:
+      properties:
+        experiment_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Experiment Id
+        sim_data_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sim Data Path
+        suffix_time:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Suffix Time
+        parca_options:
+          additionalProperties: true
+          type: object
+          title: Parca Options
+        generations:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Generations
+        n_init_sims:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: N Init Sims
+        max_duration:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Max Duration
+        initial_global_time:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Initial Global Time
+        time_step:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Time Step
+        single_daughters:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Single Daughters
+        emitter:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Emitter
+        emitter_arg:
+          additionalProperties: true
+          type: object
+          title: Emitter Arg
+        variants:
           anyOf:
           - additionalProperties: true
             type: object
           - type: 'null'
-          title: Flow
-        initial_state_overrides:
+          title: Variants
+        analysis_options:
+          additionalProperties: true
+          type: object
+          title: Analysis Options
+        gcloud:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Gcloud
+        agent_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Agent Id
+        parallel:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Parallel
+        divide:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Divide
+        d_period:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: D Period
+        division_threshold:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Division Threshold
+        division_variable:
+          items:
+            type: string
+          type: array
+          title: Division Variable
+        chromosome_path:
           anyOf:
           - items:
               type: string
             type: array
           - type: 'null'
+          title: Chromosome Path
+        spatial_environment:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Spatial Environment
+        fixed_media:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Fixed Media
+        condition:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Condition
+        save:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Save
+        save_times:
+          items:
+            type: string
+          type: array
+          title: Save Times
+        add_processes:
+          items:
+            type: string
+          type: array
+          title: Add Processes
+        exclude_processes:
+          items:
+            type: string
+          type: array
+          title: Exclude Processes
+        profile:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Profile
+        processes:
+          items:
+            type: string
+          type: array
+          title: Processes
+        process_configs:
+          additionalProperties: true
+          type: object
+          title: Process Configs
+        topology:
+          additionalProperties: true
+          type: object
+          title: Topology
+        engine_process_reports:
+          items:
+            items:
+              type: string
+            type: array
+          type: array
+          title: Engine Process Reports
+        emit_paths:
+          items:
+            type: string
+          type: array
+          title: Emit Paths
+        progress_bar:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Progress Bar
+        emit_topology:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Emit Topology
+        emit_processes:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Emit Processes
+        emit_config:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Emit Config
+        emit_unique:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Emit Unique
+        log_updates:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Log Updates
+        raw_output:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Raw Output
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Seed
+        mar_regulon:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Mar Regulon
+        amp_lysis:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Amp Lysis
+        initial_state_file:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Initial State File
+        skip_baseline:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Skip Baseline
+        daughter_outdir:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Daughter Outdir
+        lineage_seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Lineage Seed
+        fail_at_max_duration:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Fail At Max Duration
+        inherit_from:
+          items:
+            type: string
+          type: array
+          title: Inherit From
+        spatial_environment_config:
+          additionalProperties: true
+          type: object
+          title: Spatial Environment Config
+        swap_processes:
+          additionalProperties: true
+          type: object
+          title: Swap Processes
+        flow:
+          additionalProperties: true
+          type: object
+          title: Flow
+        initial_state_overrides:
+          items:
+            type: string
+          type: array
           title: Initial State Overrides
         initial_state:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
+          additionalProperties: true
+          type: object
           title: Initial State
       type: object
-      title: SimulationConfig
+      title: SimulationConfiguration
     SimulationRun:
       properties:
         id:
@@ -1608,6 +1998,15 @@ components:
       - git_branch
       - database_id
       title: SimulatorVersion
+    UploadedSimulationConfig:
+      properties:
+        config_id:
+          type: string
+          title: Config Id
+      type: object
+      required:
+      - config_id
+      title: UploadedSimulationConfig
     ValidationError:
       properties:
         loc:
@@ -1629,21 +2028,6 @@ components:
       - msg
       - type
       title: ValidationError
-    Variants:
-      properties:
-        config:
-          additionalProperties:
-            additionalProperties:
-              anyOf:
-              - type: integer
-              - type: number
-              - type: string
-            type: object
-          type: object
-          title: Config
-          default: {}
-      type: object
-      title: Variants
     WorkerEvent:
       properties:
         database_id:

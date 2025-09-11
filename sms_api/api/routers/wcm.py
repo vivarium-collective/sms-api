@@ -176,7 +176,7 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
 )
 async def launch_simulation(
     config_id: str = Query(
-        ..., default="sms", description="Configuration ID of an existing available vecoli simulation configuration JSON"
+        default="sms", description="Configuration ID of an existing available vecoli simulation configuration JSON"
     ),
     overrides: ConfigOverrides | None = None,
     metadata: Mapping[str, str] | None = None,
