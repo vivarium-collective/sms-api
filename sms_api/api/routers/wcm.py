@@ -225,7 +225,13 @@ async def get_simulation_log(experiment: EcoliExperiment) -> str:
         returncode, stdout, stderr = await ssh_service.run_command(
             f"cat {env.slurm_base_path!s}/prod/htclogs/{experiment.experiment_id}.out"
         )
-        return stdout
+        # Split at the first occurrence of 'N E X T F L O W'
+        _, _, after = stdout.partition("N E X T F L O W")
+
+        result = "N E X T F L O W" + after
+
+        # Print with original formatting preserved
+        return result
     except Exception as e:
         logger.exception("""Error getting simulation log.""")
         raise HTTPException(status_code=500, detail=str(e)) from e
