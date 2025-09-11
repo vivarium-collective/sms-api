@@ -56,17 +56,20 @@ from sms_api.dependencies import (
     get_database_service,
     get_simulation_service,
 )
+from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.handlers import run_workflow
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
+    DEFAULT_SIMULATION_CONFIG,
     EcoliExperiment,
     EcoliSimulation,
     EcoliWorkflowRequest,
     JobStatus,
     Overrides,
-    SimulationConfig,
+    SimulationConfiguration,
     SimulationRun,
     SimulatorVersion,
+    UploadedSimulationConfig,
     Variants,
 )
 
@@ -76,6 +79,14 @@ LATEST_COMMIT = read_latest_commit()
 ROUTER_TAG = ["Simulations - vEcoli"]
 
 config = RouterConfig(router=APIRouter(), prefix="/wcm", dependencies=[])
+
+
+def DBService() -> DatabaseService | None:
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Simulation database service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
+    return db_service
 
 
 def get_server_url(dev: bool = True) -> ServerMode:
@@ -142,7 +153,7 @@ async def run_simulation_workflow(
     config_id: Optional[str] = None,
     overrides: Optional[Overrides] = None,
     variants: Optional[Variants] = None,
-    config: SimulationConfig | None = None,
+    config: SimulationConfiguration | None = None,
     # max_duration: float = Query(default=10800.0),
     # time_step: float = Query(default=1.0),
 ) -> EcoliExperiment:
@@ -454,6 +465,46 @@ async def get_workflow_versions() -> list[EcoliSimulation]:
     except Exception as e:
         logger.exception("Error getting simulations")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(path="/simulation/config", operation_id="upload-simulation-config", tags=["Simulations - vEcoli"])
+async def upload_simulation_config(
+    config_id: str | None = Query(default=None), sim_config: SimulationConfiguration = DEFAULT_SIMULATION_CONFIG
+):
+    if not sim_config.experiment_id:
+        raise HTTPException(status_code=400, detail="Experiment id is required")
+    if sim_config.experiment_id.startswith("<P"):
+        raise HTTPException(status_code=400, detail="Experiment id is invalid")
+    env = get_settings()
+    ssh = get_ssh_service(env)
+    try:
+        # store config in db
+        db_service = DBService()
+        confid = config_id or str(uuid.uuid4())
+        _ = await db_service.insert_simulation_config(config_id=confid, config=sim_config)
+
+        # here, write to temp local and scp upload unique
+
+        uploaded = UploadedSimulationConfig(config_id=confid)
+        return uploaded
+    except Exception as e:
+        logger.exception("Error uploading simulation config")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(path="/simulation/config", operation_id="get-simulation-config", tags=["Simulations - vEcoli"])
+async def get_simulation_config(config_id: str | None = Query(default=None)):
+    try:
+        db_service = DBService()
+        return await db_service.get_simulation_config(config_id=config_id)
+    except Exception as e:
+        logger.exception("Error uploading simulation config")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.delete(path="/simulation/config", operation_id="delete-simulation-config", tags=["Simulations - vEcoli"])
+async def delete_simulation_config(config_id: str) -> None:
+    pass
 
 
 # @config.router.post(

@@ -1,5 +1,5 @@
 {
-  "experiment_id": "sms-079c43c-1896956c5366",
+  "experiment_id": "sms-079c43c-ad97c5c3249a",
   "simulation": {
     "sim_request": {
       "config_id": "sms",
@@ -8,7 +8,7 @@
         "git_repo_url": "https://github.com/CovertLab/vEcoli",
         "git_branch": "master",
         "database_id": 2,
-        "created_at": "2025-08-26 00:49:30"
+        "created_at": "2025-08-26T00:49:30"
       },
       "overrides": {
         "config": {}
@@ -19,9 +19,9 @@
       "parca_dataset_id": null
     },
     "database_id": null,
-    "slurmjob_id": 760521
+    "slurmjob_id": 763486
   },
-  "last_updated": "2025-09-10 21:42:44.133647",
+  "last_updated": "2025-09-11 02:23:28.521498",
   "metadata": {},
-  "experiment_tag": "sms-079c43c-1896956c5366-760521"
+  "experiment_tag": "sms-079c43c-ad97c5c3249a-763486"
 }

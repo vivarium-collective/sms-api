@@ -1,14 +1,14 @@
 import datetime
 import enum
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import ForeignKey, func
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from sms_api.simulation.models import HpcRun, JobStatus, JobType, SimulatorVersion, WorkerEvent
+from sms_api.simulation.models import HpcRun, JobStatus, JobType, SimulationConfiguration, SimulatorVersion, WorkerEvent
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +174,30 @@ class ORMWorkerEvent(Base):
         )
 
 
+SimulationConfigMappingType = dict[
+    str,
+    str
+    | bool
+    | int
+    | float
+    | None
+    | list[str]
+    | list[list[str]]
+    | dict[str, str | bool | int | float | None | list[str] | list[list[str]]],
+]
+
+
+class ORMSimulationConfig(Base):
+    __tablename__ = "simulation_config"
+
+    id: Mapped[str] = mapped_column(primary_key=True)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+    def to_dto(self) -> SimulationConfiguration:
+        return SimulationConfiguration(**self.data)
+
+
 async def create_db(async_engine: AsyncEngine) -> None:
     async with async_engine.begin() as conn:
+        print("TABLES", Base.metadata.tables)
         await conn.run_sync(Base.metadata.create_all)

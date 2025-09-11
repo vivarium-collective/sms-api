@@ -15,6 +15,7 @@ from sms_api.simulation.models import (
     JobType,
     ParcaDataset,
     ParcaDatasetRequest,
+    SimulationConfiguration,
     SimulatorVersion,
     WorkerEvent,
 )
@@ -24,6 +25,7 @@ from sms_api.simulation.tables_orm import (
     ORMHpcRun,
     ORMParcaDataset,
     ORMSimulation,
+    ORMSimulationConfig,
     ORMSimulator,
     ORMWorkerEvent,
 )
@@ -32,6 +34,16 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseService(ABC):
+    @abstractmethod
+    async def get_simulation_config(self, config_id: str) -> SimulationConfiguration:
+        pass
+
+    @abstractmethod
+    async def insert_simulation_config(
+        self, config_id: str, config: SimulationConfiguration
+    ) -> SimulationConfiguration:
+        pass
+
     @abstractmethod
     async def insert_worker_event(self, worker_event: WorkerEvent, hpcrun_id: int) -> WorkerEvent:
         pass
@@ -189,6 +201,35 @@ class DatabaseServiceSQL(DatabaseService):
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
 
         return orm_hpc_job
+
+    async def _get_orm_simulation_config(self, session: AsyncSession, config_id: str) -> ORMSimulationConfig | None:
+        stmt1 = select(ORMSimulationConfig).where(ORMSimulationConfig.id == config_id).limit(1)
+        result1: Result[tuple[ORMSimulationConfig]] = await session.execute(stmt1)
+        orm_sim_config: ORMSimulationConfig | None = result1.scalars().one_or_none()
+        return orm_sim_config
+
+    @override
+    async def get_simulation_config(self, config_id: str) -> SimulationConfiguration:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_sim_config = await self._get_orm_simulation_config(session, config_id=config_id)
+            if orm_sim_config is None:
+                raise RuntimeError(f"No simulation config with id {config_id} found")
+            return orm_sim_config.to_dto()
+
+    @override
+    async def insert_simulation_config(
+        self, config_id: str, config: SimulationConfiguration
+    ):  # -> SimulationConfiguration:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_sim_config = ORMSimulationConfig(
+                id=config_id,
+                data=config.model_dump() if isinstance(config, SimulationConfiguration) else config,
+            )
+            print(orm_sim_config)
+            session.add(orm_sim_config)
+            await session.flush()
+            return orm_sim_config.to_dto()
+            # return orm_sim_config
 
     @override
     async def insert_simulator(self, git_commit_hash: str, git_repo_url: str, git_branch: str) -> SimulatorVersion:
