@@ -59,10 +59,8 @@ from sms_api.simulation.handlers import launch_vecoli_simulation
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
     ConfigOverrides,
-    EcoliExperiment,
     EcoliExperimentDTO,
     EcoliExperimentRequestDTO,
-    EcoliSimulation,
     JobStatus,
     SimulationConfiguration,
     SimulationRun,
@@ -167,7 +165,7 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
 
 
 @config.router.post(
-    path="/experiments/launch",
+    path="/simulation/run",
     operation_id="launch-vecoli-simulation",
     response_model=EcoliExperimentDTO,
     tags=["Simulations - vEcoli"],
@@ -245,14 +243,14 @@ async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationR
     tags=["Simulations - vEcoli"],
     summary="Get the simulation log record of a given experiment",
 )
-async def get_simulation_log(experiment: EcoliExperiment) -> str:
+async def get_simulation_log(experiment_id: str = Query(...)) -> str:
     env = get_settings()
     try:
         # slurmjob_id = get_jobid_by_experiment(experiment_id)
         ssh_service = get_ssh_service()
         # slurm_user = env.slurm_submit_user
         returncode, stdout, stderr = await ssh_service.run_command(
-            f"cat {env.slurm_base_path!s}/prod/htclogs/{experiment.experiment_id}.out"
+            f"cat {env.slurm_base_path!s}/prod/htclogs/{experiment_id}.out"
         )
         # Split at the first occurrence of 'N E X T F L O W'
         _, _, after = stdout.partition("N E X T F L O W")
@@ -460,28 +458,9 @@ async def get_results(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(
-    path="/simulation/versions",
-    response_model=list[EcoliSimulation],
-    operation_id="get-workflow-versions",
-    tags=["Simulations - vEcoli"],
-    summary="Get list of vEcoli simulations",
+@config.router.post(
+    path="/simulation/config", operation_id="upload-simulation-config", tags=["Configurations - vEcoli"]
 )
-async def get_workflow_versions() -> list[EcoliSimulation]:
-    db_service = get_database_service()
-    if db_service is None:
-        logger.error("Simulation database service is not initialized")
-        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
-
-    try:
-        simulations: list[EcoliSimulation] = await db_service.list_simulations()
-        return simulations
-    except Exception as e:
-        logger.exception("Error getting simulations")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.post(path="/simulation/config", operation_id="upload-simulation-config", tags=["Simulations - vEcoli"])
 async def upload_simulation_config(
     config_id: str | None = Query(default=None), sim_config: SimulationConfiguration = DEFAULT_SIMULATION_CONFIG
 ) -> UploadedSimulationConfig:
@@ -524,7 +503,7 @@ async def upload_simulation_config(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(path="/simulation/config", operation_id="get-simulation-config", tags=["Simulations - vEcoli"])
+@config.router.get(path="/simulation/config", operation_id="get-simulation-config", tags=["Configurations - vEcoli"])
 async def get_simulation_config(config_id: str) -> SimulationConfiguration:
     try:
         db_service = DBService()
@@ -534,7 +513,9 @@ async def get_simulation_config(config_id: str) -> SimulationConfiguration:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.delete(path="/simulation/config", operation_id="delete-simulation-config", tags=["Simulations - vEcoli"])
+@config.router.delete(
+    path="/simulation/config", operation_id="delete-simulation-config", tags=["Configurations - vEcoli"]
+)
 async def delete_simulation_config(config_id: str) -> str:
     try:
         db_service = DBService()
@@ -553,7 +534,9 @@ async def delete_simulation_config(config_id: str) -> str:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(path="/simulation/config/all", operation_id="list-simulation-configs", tags=["Simulations - vEcoli"])
+@config.router.get(
+    path="/simulation/config/versions", operation_id="list-simulation-configs", tags=["Configurations - vEcoli"]
+)
 async def list_simulation_configs() -> list[SimulationConfiguration]:
     try:
         db_service = DBService()
@@ -563,7 +546,7 @@ async def list_simulation_configs() -> list[SimulationConfiguration]:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.post("/analysis/upload")
+@config.router.post("/analysis/upload", tags=["myEcoli - vEcoli"])
 async def upload_analysis_module(
     file: UploadFile = File(...),  # noqa: B008
     submodule_name: str = Query(..., description="Submodule name(single, multiseed, etc)"),
@@ -589,14 +572,3 @@ async def upload_analysis_module(
     except Exception as e:
         logger.exception("Error uploading analysis module")
         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-# @config.router.post(
-#     path="/parameters",
-#     operation_id="get-wcm-parameters",
-#     response_model=SimulationParameters,
-#     tags=["Data - vEcoli"],
-#     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-# )
-# async def get_wcm_parameters(experiment_id: str = Query(...)) -> list[str]:
-#     return [f'WCM Parameters according to {experiment_id}']

@@ -424,7 +424,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/experiments/launch:
+  /wcm/simulation/run:
     post:
       tags:
       - Simulations - vEcoli
@@ -492,12 +492,13 @@ paths:
       - Simulations - vEcoli
       summary: Get the simulation log record of a given experiment
       operationId: get-vecoli-simulation-log
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EcoliExperiment'
+      parameters:
+      - name: experiment_id
+        in: query
         required: true
+        schema:
+          type: string
+          title: Experiment Id
       responses:
         '200':
           description: Successful Response
@@ -744,26 +745,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/simulation/versions:
-    get:
-      tags:
-      - Simulations - vEcoli
-      summary: Get list of vEcoli simulations
-      operationId: get-workflow-versions
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/EcoliSimulation'
-                type: array
-                title: Response Get-Workflow-Versions
   /wcm/simulation/config:
     post:
       tags:
-      - Simulations - vEcoli
+      - Configurations - vEcoli
       summary: Upload Simulation Config
       operationId: upload-simulation-config
       parameters:
@@ -976,7 +961,7 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
     get:
       tags:
-      - Simulations - vEcoli
+      - Configurations - vEcoli
       summary: Get Simulation Config
       operationId: get-simulation-config
       parameters:
@@ -1001,7 +986,7 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
     delete:
       tags:
-      - Simulations - vEcoli
+      - Configurations - vEcoli
       summary: Delete Simulation Config
       operationId: delete-simulation-config
       parameters:
@@ -1025,10 +1010,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/simulation/config/all:
+  /wcm/simulation/config/versions:
     get:
       tags:
-      - Simulations - vEcoli
+      - Configurations - vEcoli
       summary: List Simulation Configs
       operationId: list-simulation-configs
       responses:
@@ -1043,6 +1028,8 @@ paths:
                 title: Response List-Simulation-Configs
   /wcm/analysis/upload:
     post:
+      tags:
+      - myEcoli - vEcoli
       summary: Upload Analysis Module
       operationId: upload_analysis_module_wcm_analysis_upload_post
       parameters:
