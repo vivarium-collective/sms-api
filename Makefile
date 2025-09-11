@@ -28,6 +28,9 @@ clean:
 	@rm -rf .mypy_cache
 	@rm -rf .ruff_cache
 	@find . -name '__pycache__' -exec rm -r {} + -o -name '*.pyc' -delete
+	@uv cache clean
+	@rm -r uv.lock
+	@uv lock --no-cache
 
 .PHONY: test
 test: ## Test the code with pytest
