@@ -279,12 +279,25 @@ class DatabaseServiceSQL(DatabaseService):
             return orm_experiment.to_dto()
 
     @override
-    async def delete_experiment(self, experiment_id: str) -> EcoliExperimentDTO:
-        pass
+    async def delete_experiment(self, experiment_id: str) -> bool:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_exp: ORMEcoliExperiment | None = await self._get_orm_experiment(session, experiment_id=experiment_id)
+            if orm_exp is None:
+                raise Exception(f"Ecoli Experiment with id: {experiment_id} not found in the database")
+            await session.delete(orm_exp)
+            return True
 
     @override
     async def list_experiments(self) -> list[EcoliExperimentDTO]:
-        pass
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMEcoliExperiment)
+            result: Result[tuple[ORMEcoliExperiment]] = await session.execute(stmt)
+            orm_experiments = result.scalars().all()
+
+            experiment_versions: list[EcoliExperimentDTO] = []
+            for experiment in orm_experiments:
+                experiment_versions.append(experiment.to_dto())
+            return experiment_versions
 
     @override
     async def get_simulation_config(self, config_id: str) -> SimulationConfiguration:

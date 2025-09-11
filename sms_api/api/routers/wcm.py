@@ -136,8 +136,8 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
 
 
 @config.router.post(
-    path="/experiment/run",
-    operation_id="launch-vecoli-simulation",
+    path="/experiment",
+    operation_id="launch-experiment",
     response_model=EcoliExperimentDTO,
     tags=["Simulations - vEcoli"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
@@ -178,6 +178,40 @@ async def launch_simulation(
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(path="/experiment", operation_id="get-experiment", tags=["Simulations - vEcoli"])
+async def get_experiment(experiment_id: str) -> EcoliExperimentDTO:
+    try:
+        db_service = DBService()
+        return await db_service.get_experiment(experiment_id=experiment_id)
+    except Exception as e:
+        logger.exception("Error uploading simulation config")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.delete(path="/experiment", operation_id="delete-experiment", tags=["Simulations - vEcoli"])
+async def delete_experiment(experiment_id: str) -> str:
+    try:
+        db_service = DBService()
+        # env = get_settings()
+        # ssh = get_ssh_service(env)
+        # delete from db
+        await db_service.delete_experiment(experiment_id=experiment_id)
+        return f"Experiment {experiment_id} deleted successfully"
+    except Exception as e:
+        logger.exception("Error uploading simulation config")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(path="/experiment/versions", operation_id="list-experiments", tags=["Simulations - vEcoli"])
+async def list_experiments() -> list[EcoliExperimentDTO]:
+    try:
+        db_service = DBService()
+        return await db_service.list_experiments()
+    except Exception as e:
+        logger.exception("Error getting experiments")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

@@ -424,12 +424,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/experiment/run:
+  /wcm/experiment:
     post:
       tags:
       - Simulations - vEcoli
       summary: Launches a nextflow-powered vEcoli simulation workflow
-      operationId: launch-vecoli-simulation
+      operationId: launch-experiment
       parameters:
       - name: config_id
         in: query
@@ -446,7 +446,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Body_launch-vecoli-simulation'
+              $ref: '#/components/schemas/Body_launch-experiment'
       responses:
         '200':
           description: Successful Response
@@ -460,6 +460,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Simulations - vEcoli
+      summary: Get Experiment
+      operationId: get-experiment
+      parameters:
+      - name: experiment_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Experiment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EcoliExperimentDTO'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Simulations - vEcoli
+      summary: Delete Experiment
+      operationId: delete-experiment
+      parameters:
+      - name: experiment_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Experiment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: string
+                title: Response Delete-Experiment
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /wcm/experiment/versions:
+    get:
+      tags:
+      - Simulations - vEcoli
+      summary: List Experiments
+      operationId: list-experiments
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/EcoliExperimentDTO'
+                type: array
+                title: Response List-Experiments
   /wcm/experiment/status:
     get:
       tags:
@@ -1042,7 +1109,7 @@ paths:
                 title: Response Get Version Version Get
 components:
   schemas:
-    Body_launch-vecoli-simulation:
+    Body_launch-experiment:
       properties:
         overrides:
           anyOf:
@@ -1056,7 +1123,7 @@ components:
           - type: 'null'
           title: Metadata
       type: object
-      title: Body_launch-vecoli-simulation
+      title: Body_launch-experiment
     Body_upload_analysis_module_wcm_experiment_analysis_upload_post:
       properties:
         file:
