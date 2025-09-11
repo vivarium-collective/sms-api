@@ -291,7 +291,7 @@ async def run_workflow(
     if jobid is not None:
         simulation.slurmjob_id = jobid
         tag = f"{experiment_id}-{simulation.slurmjob_id}"
-    return EcoliExperiment(experiment_id=experiment_id, experiment_tag=tag)  # simulation=simulation)
+    return EcoliExperiment(experiment_id=experiment_id, experiment_tag=tag, simulation=simulation)
 
 
 async def launch_vecoli_simulation(

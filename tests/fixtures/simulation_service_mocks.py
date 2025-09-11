@@ -4,6 +4,7 @@ from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
+    EcoliExperimentRequestDTO,
     EcoliSimulation,
     EcoliWorkflowSimulation,
     ParcaDataset,
@@ -43,6 +44,15 @@ class ConcreteSimulationService(SimulationService):
         ecoli_simulation: EcoliWorkflowSimulation,
         experiment_id: str,
         # database_service: DatabaseService
+    ) -> int:
+        raise NotImplementedError
+
+    @override
+    async def submit_vecoli_simulation_job(
+        self,
+        request: EcoliExperimentRequestDTO,
+        simulator: SimulatorVersion,
+        experiment_id: str,
     ) -> int:
         raise NotImplementedError
 

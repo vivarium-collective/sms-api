@@ -47,7 +47,7 @@ ROUTER_TAG = ["Simulations - vEcoli"]
 config = RouterConfig(router=APIRouter(), prefix="/wcm", dependencies=[])
 
 
-def DBService() -> DatabaseService | None:
+def DBService() -> DatabaseService:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Simulation database service is not initialized")
@@ -514,12 +514,12 @@ async def list_simulation_configs() -> list[SimulationConfiguration]:
 async def upload_analysis_module(
     file: UploadFile = File(...),  # noqa: B008
     submodule_name: str = Query(..., description="Submodule name(single, multiseed, etc)"),
-):
+) -> dict[str, object]:
     try:
         # db_service = DBService()
         contents = await file.read()
         with tempfile.TemporaryDirectory() as tmpdirname:
-            tmp_path = Path(tmpdirname) / file.filename
+            tmp_path: Path = Path(tmpdirname) / (file.filename or str(file))
 
             # Write the file contents to the temp file
             with open(tmp_path, "wb") as tmpfile:
@@ -529,10 +529,10 @@ async def upload_analysis_module(
 
             local = tmp_path
             env = get_settings()
-            remote = Path(env.vecoli_config_dir).parent / "ecoli" / "analysis" / submodule_name / file.filename
+            remote = Path(env.vecoli_config_dir).parent / "ecoli" / "analysis" / submodule_name / file.filename  # type: ignore[operator]
             ssh = get_ssh_service(env)
             await ssh.scp_upload(local_file=local, remote_path=remote)
-        return result
+            return result
     except Exception as e:
         logger.exception("Error uploading analysis module")
         raise HTTPException(status_code=500, detail=str(e)) from e

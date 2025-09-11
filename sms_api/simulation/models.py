@@ -178,7 +178,7 @@ class AntibioticSimulation(BaseModel):
 
 class EcoliExperiment(BaseModel):
     experiment_id: str
-    # simulation: EcoliSimulation | EcoliWorkflowSimulation | AntibioticSimulation
+    simulation: EcoliSimulation | EcoliWorkflowSimulation | AntibioticSimulation
     last_updated: str = Field(default_factory=lambda: str(datetime.datetime.now()))
     metadata: Mapping[str, str] = Field(default_factory=dict)
     experiment_tag: str | None = None

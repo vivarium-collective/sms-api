@@ -1058,7 +1058,11 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Upload Analysis Module Wcm Experiment Analysis Upload
+                  Post
         '422':
           description: Validation Error
           content:
@@ -1109,6 +1113,59 @@ paths:
                 title: Response Get Version Version Get
 components:
   schemas:
+    AntibioticSimulation:
+      properties:
+        database_id:
+          type: integer
+          title: Database Id
+        sim_request:
+          $ref: '#/components/schemas/AntibioticSimulationRequest'
+        slurmjob_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Slurmjob Id
+      type: object
+      required:
+      - database_id
+      - sim_request
+      title: AntibioticSimulation
+    AntibioticSimulationRequest:
+      properties:
+        simulator:
+          $ref: '#/components/schemas/SimulatorVersion'
+        parca_dataset_id:
+          type: integer
+          title: Parca Dataset Id
+        variant_config:
+          additionalProperties:
+            additionalProperties:
+              anyOf:
+              - type: integer
+              - type: number
+              - type: string
+            type: object
+          type: object
+          title: Variant Config
+          default:
+            named_parameters:
+              param1: 0.5
+              param2: 0.5
+        antibiotics_config:
+          additionalProperties:
+            additionalProperties:
+              anyOf:
+              - type: integer
+              - type: number
+              - type: string
+            type: object
+          type: object
+          title: Antibiotics Config
+      type: object
+      required:
+      - simulator
+      - parca_dataset_id
+      title: AntibioticSimulationRequest
     Body_launch-experiment:
       properties:
         overrides:
@@ -1432,6 +1489,12 @@ components:
         experiment_id:
           type: string
           title: Experiment Id
+        simulation:
+          anyOf:
+          - $ref: '#/components/schemas/EcoliSimulation'
+          - $ref: '#/components/schemas/EcoliWorkflowSimulation'
+          - $ref: '#/components/schemas/AntibioticSimulation'
+          title: Simulation
         last_updated:
           type: string
           title: Last Updated
@@ -1448,6 +1511,7 @@ components:
       type: object
       required:
       - experiment_id
+      - simulation
       title: EcoliExperiment
     EcoliExperimentDTO:
       properties:
@@ -1531,6 +1595,56 @@ components:
       - parca_dataset_id
       title: EcoliSimulationRequest
       description: Fits EcoliSim
+    EcoliWorkflowRequest:
+      properties:
+        config_id:
+          type: string
+          title: Config Id
+        simulator:
+          $ref: '#/components/schemas/SimulatorVersion'
+        overrides:
+          anyOf:
+          - $ref: '#/components/schemas/Overrides'
+          - type: 'null'
+        variants:
+          anyOf:
+          - $ref: '#/components/schemas/Variants'
+          - type: 'null'
+        parca_dataset_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Parca Dataset Id
+      type: object
+      required:
+      - config_id
+      - simulator
+      title: EcoliWorkflowRequest
+      description: 'Fits Nextflow workflows
+
+
+        :param config_id: (str) filename (without ''.json'') of the given sim config
+
+        :param config_overrides: (Optional[dict[str, Any]]) overrides any key within
+        the file found at {config_id}.json'
+    EcoliWorkflowSimulation:
+      properties:
+        sim_request:
+          $ref: '#/components/schemas/EcoliWorkflowRequest'
+        database_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Database Id
+        slurmjob_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Slurmjob Id
+      type: object
+      required:
+      - sim_request
+      title: EcoliWorkflowSimulation
     HTTPValidationError:
       properties:
         detail:
@@ -1599,6 +1713,15 @@ components:
       - parca
       - build_image
       title: JobType
+    Overrides:
+      properties:
+        config:
+          additionalProperties: true
+          type: object
+          title: Config
+          default: {}
+      type: object
+      title: Overrides
     ParcaDataset:
       properties:
         database_id:
@@ -2021,6 +2144,21 @@ components:
       - msg
       - type
       title: ValidationError
+    Variants:
+      properties:
+        config:
+          additionalProperties:
+            additionalProperties:
+              anyOf:
+              - type: integer
+              - type: number
+              - type: string
+            type: object
+          type: object
+          title: Config
+          default: {}
+      type: object
+      title: Variants
     WorkerEvent:
       properties:
         database_id:
