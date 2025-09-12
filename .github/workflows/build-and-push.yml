@@ -7,6 +7,14 @@ on:
         description: "Version to build and push (optional)"
         required: false
         default: ""
+      docker:
+        description: "Set to 'true' to build for Docker (optional)"
+        required: false
+        default: "true"
+      singularity:
+        description: "Set to 'true' to build for Singularity (optional)"
+        required: false
+        default: "false"
 
 jobs:
   build-and-push:
@@ -35,3 +43,28 @@ jobs:
       - name: Run build and push script
         run: |
           ./scripts/build_action.sh "${{ inputs.version }}"
+
+  build-and-push-singularity:
+    if: ${{ inputs.singularity == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Required for pushing to ghcr.io
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - uses: eWaterCycle/setup-apptainer@v2
+        with:
+          apptainer-version: 1.4.2
+
+      - name: Log in to GitHub Container Registry (ghcr.io)
+        run: echo "${{ secrets.GHCR_PAT }}" | singularity remote login --username "${{ github.actor }}" --password-stdin ghcr.io
+
+      - name: Make script executable
+        run: chmod +x ./scripts/build_singularity.sh
+
+      - name: Run Singularity build and push script
+        run: |
+          ./scripts/build_singularity.sh "${{ inputs.version }}"
