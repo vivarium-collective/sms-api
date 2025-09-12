@@ -41,5 +41,5 @@ for service in api; do
   echo "Pushing Singularity image to ghcr.io"
   apptainer push "${sif_name}" "oras://${image_name}"
 
-  echo "Built and pushed service ${service} version ${version} as Docker and Singularity images"
+  echo "Built and pushed service ${service} version ${version} as Singularity images"
 done
