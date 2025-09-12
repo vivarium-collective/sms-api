@@ -59,8 +59,12 @@ jobs:
         with:
           apptainer-version: 1.4.2
 
-      - name: Log in to GitHub Container Registry (ghcr.io)
-        run: echo "${{ secrets.GHCR_PAT }}" | singularity remote login --username "${{ github.actor }}" --password-stdin ghcr.io
+      - name: Set up Docker auth for Apptainer
+        run: |
+          mkdir -p ~/.docker
+          echo '{"auths": {"ghcr.io": {"auth": "'"$(echo -n "${{ github.actor }}:${{ secrets.GHCR_PAT }}" | base64)"'"}}}' > ~/.docker/config.json
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
 
       - name: Make script executable
         run: chmod +x ./scripts/build_singularity.sh
