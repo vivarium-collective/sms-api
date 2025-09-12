@@ -20,7 +20,8 @@ echo "Building and pushing Singularity images for version ${version}"
 for service in api; do
   tag="${version}"
   dockerfile="${ROOT_DIR}/Dockerfile-${service}"
-  image_name="ghcr.io/vivarium-collective/sms-${service}:${tag}"
+  docker_image_name="ghcr.io/vivarium-collective/sms-${service}:${tag}"
+  apptainer_image_name="ghcr.io/vivarium-collective/sms-${service}-sif:${tag}"
   sif_name="sms-${service}-${tag}.sif"
 
   if [[ ! -f "$dockerfile" ]]; then
@@ -28,18 +29,18 @@ for service in api; do
     exit 1
   fi
 
-  echo "Building Docker image $image_name"
+  echo "Building Docker image docker_image_name"
   docker buildx build \
     --platform=linux/amd64 \
     -f "${dockerfile}" \
-    --tag "${image_name}" \
+    --tag "${docker_image_name}" \
     "${ROOT_DIR}"
 
   echo "Building Singularity image $sif_name from Docker image"
-  apptainer build "${sif_name}" "docker-daemon:${image_name}"
+  apptainer build "${sif_name}" "docker-daemon:${docker_image_name}"
 
   echo "Pushing Singularity image to ghcr.io"
-  apptainer push "${sif_name}" "oras://${image_name}"
+  apptainer push "${sif_name}" "oras://${apptainer_image_name}"
 
-  echo "Built and pushed service ${service} version ${version} as Singularity images"
+  echo "Built and pushed service ${service} version ${version} as Singularity image ${apptainer_image_name}"
 done
