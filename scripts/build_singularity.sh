@@ -37,10 +37,16 @@ for service in api; do
     "${ROOT_DIR}"
 
   echo "Building Singularity image $sif_name from Docker image"
-  apptainer build "${sif_name}" "docker-daemon:${docker_image_name}"
+  if ! apptainer build "${sif_name}" "docker-daemon:${docker_image_name}"; then
+    echo "ERROR: Failed to build Singularity image ${sif_name} from docker-daemon:${docker_image_name}"
+    exit 1
+  fi
 
   echo "Pushing Singularity image to ghcr.io"
-  apptainer push "${sif_name}" "oras://${apptainer_image_name}"
+  if ! apptainer push "${sif_name}" "oras://${apptainer_image_name}"; then
+    echo "ERROR: Failed to push Singularity image ${sif_name} to oras://${apptainer_image_name}"
+    exit 1
+  fi
 
   echo "Built and pushed service ${service} version ${version} as Singularity image ${apptainer_image_name}"
 done
