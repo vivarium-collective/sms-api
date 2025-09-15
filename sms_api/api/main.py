@@ -16,6 +16,7 @@
 """
 
 import importlib
+import json
 import logging
 import os
 from collections.abc import AsyncGenerator
@@ -128,10 +129,14 @@ for filename in sorted(os.listdir(ui_dir)):
     # if filename.endswith(".py") and "single_cell" in filename and not filename.startswith("wip"):
     if filename.endswith(".py") and "plots" not in filename and not filename.startswith("wip"):
         app_name = format_marimo_appname(os.path.splitext(filename)[0])
+
         app_path = os.path.join(ui_dir, filename)
         server = server.with_app(path=f"/{app_name}", root=app_path)
         app_names.append(app_name)
         logger.info(f"Using appname: {app_name}")
+
+with open("assets/app_names.json", "w") as f:
+    json.dump(app_names, f, indent=3)
 
 templates = Jinja2Templates(directory=templates_dir)
 
