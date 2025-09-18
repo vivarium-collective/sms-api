@@ -627,3 +627,31 @@ async def get_analysis_archive(bg_tasks: BackgroundTasks) -> FileResponse:
             """
         )
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(path="/analysis", operation_id="show-analysis", tags=["Data - vEcoli"])
+async def get_analysis(experiment_id: str = Query(default="analysis_multigen")) -> list[str]:
+    outdir = Path(ENV.slurm_base_path) / "workspace" / "api_outputs"
+    return get_analysis_html_outputs(outdir_root=outdir, expid=experiment_id)
+
+
+def get_html_output_paths(outdir_root: Path, experiment_id: str) -> list[Path]:
+    outdir = outdir_root / experiment_id
+    filepaths = []
+    for root, _, files in outdir.walk():
+        for f in files:
+            fp = root / f
+            if fp.exists() and fp.is_file():
+                filepaths.append(fp)
+    return list(filter(lambda _file: _file.name.endswith(".html"), filepaths))
+
+
+def read_html_file(file_path: Path) -> str:
+    """Read an HTML file and return its contents as a single string."""
+    with open(str(file_path), encoding="utf-8") as f:
+        return f.read()
+
+
+def get_analysis_html_outputs(outdir_root: Path, expid: str = "analysis_multigen") -> list[str]:
+    filepaths = get_html_output_paths(outdir_root, expid)
+    return [read_html_file(path) for path in filepaths]

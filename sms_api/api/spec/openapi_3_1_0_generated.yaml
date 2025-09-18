@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.18-dev
+  version: 0.2.19-dev
 paths:
   /core/simulator/latest:
     get:
@@ -1133,6 +1133,36 @@ paths:
           content:
             application/json:
               schema: {}
+  /wcm/analysis:
+    post:
+      tags:
+      - Data - vEcoli
+      summary: Get Analysis
+      operationId: show-analysis
+      parameters:
+      - name: experiment_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: analysis_multigen
+          title: Experiment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                title: Response Show-Analysis
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /:
     get:
       tags:

@@ -64,7 +64,7 @@ APP_ROUTERS = ["core", "variants", "wcm"]  # also included: 'antibiotics', 'biom
 ENV = get_settings()
 assets_dir = Path(ENV.assets_dir)
 ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
-UI_NAMES = ["vecoli", "single_cell"]
+UI_NAMES = ["vecoli", "single_cell", "analyze"]
 
 
 # -- app configuration: lifespan and middleware -- #
