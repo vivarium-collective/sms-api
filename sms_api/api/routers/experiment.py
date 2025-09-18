@@ -208,7 +208,7 @@ async def get_simulation_log(experiment_id: str = Query(...)) -> str:
     path="/data",
     response_class=FileResponse,
     operation_id="get-data",
-    tags=["Data - vEcoli"],
+    tags=["Simulations - vEcoli"],
     summary="Get simulation outputs",
 )
 async def get_results(

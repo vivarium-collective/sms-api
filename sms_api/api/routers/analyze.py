@@ -129,7 +129,7 @@ def get_analysis_html_outputs(outdir_root: Path, expid: str = "analysis_multigen
     path="/manifest",
     response_model=None,
     operation_id="get-analysis-manifest",
-    tags=["Data - vEcoli"],
+    tags=["Analysis - vEcoli"],
     summary="Get all available analyses for a given simulation",
 )
 async def get_available_analyses(experiment_id: str = Query(...)) -> dict[str, list[str]]:
@@ -165,7 +165,7 @@ async def get_available_analyses(experiment_id: str = Query(...)) -> dict[str, l
     response_model=None,
     # response_class=FileResponse,
     operation_id="download-analysis-output",
-    tags=["Data - vEcoli"],
+    tags=["Analysis - vEcoli"],
     summary="Download a file that was generated from a simulation analysis module",
 )
 async def download_analysis(
@@ -200,7 +200,7 @@ async def download_analysis(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.post("/upload", tags=["Configurations - vEcoli"])
+@config.router.post("/upload", tags=["Analysis - vEcoli"])
 async def upload_analysis_module(
     file: UploadFile = File(...),  # noqa: B008
     submodule_name: str = Query(..., description="Submodule name(single, multiseed, etc)"),
@@ -230,7 +230,7 @@ async def upload_analysis_module(
 @config.router.post(
     path="/run",
     operation_id="run-analysis",
-    tags=["Data - vEcoli"],
+    tags=["Analysis - vEcoli"],
     summary="Run an analysis",
 )
 async def run_analysis(config: dict[str, Any] | None = None) -> AnalysisJob:
@@ -250,7 +250,7 @@ async def run_analysis(config: dict[str, Any] | None = None) -> AnalysisJob:
 @config.router.post(
     path="/status",
     operation_id="get-analysis-status",
-    tags=["Data - vEcoli"],
+    tags=["Analysis - vEcoli"],
     dependencies=[Depends(get_database_service)],
     summary="Get the analysis status record by its ID",
 )
@@ -274,7 +274,7 @@ async def get_analysis_status(job: AnalysisJob) -> AnalysisJob:
 @config.router.post(
     path="/archive",
     operation_id="get-analysis-archive",
-    tags=["Data - vEcoli"],
+    tags=["Analysis - vEcoli"],
     dependencies=[Depends(get_database_service)],
     summary="Get the analysis archive zip record by its ID",
 )
@@ -304,7 +304,7 @@ async def get_analysis_archive(bg_tasks: BackgroundTasks) -> FileResponse:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.post(path="/get", operation_id="show-analysis", tags=["Data - vEcoli"])
+@config.router.post(path="/get", operation_id="show-analysis", tags=["Analysis - vEcoli"])
 async def get_analysis(experiment_id: str = Query(default="analysis_multigen")) -> list[str]:
     outdir = Path(ENV.slurm_base_path) / "workspace" / "api_outputs"
     return get_analysis_html_outputs(outdir_root=outdir, expid=experiment_id)

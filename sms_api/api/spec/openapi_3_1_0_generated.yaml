@@ -6,7 +6,7 @@ paths:
   /analyze/manifest:
     get:
       tags:
-      - Data - vEcoli
+      - Analysis - vEcoli
       summary: Get all available analyses for a given simulation
       operationId: get-analysis-manifest
       parameters:
@@ -31,7 +31,7 @@ paths:
   /analyze/download:
     get:
       tags:
-      - Data - vEcoli
+      - Analysis - vEcoli
       summary: Download a file that was generated from a simulation analysis module
       operationId: download-analysis-output
       parameters:
@@ -92,7 +92,7 @@ paths:
   /analyze/upload:
     post:
       tags:
-      - Configurations - vEcoli
+      - Analysis - vEcoli
       summary: Upload Analysis Module
       operationId: upload_analysis_module_analyze_upload_post
       parameters:
@@ -128,7 +128,7 @@ paths:
   /analyze/run:
     post:
       tags:
-      - Data - vEcoli
+      - Analysis - vEcoli
       summary: Run an analysis
       operationId: run-analysis
       requestBody:
@@ -156,7 +156,7 @@ paths:
   /analyze/status:
     post:
       tags:
-      - Data - vEcoli
+      - Analysis - vEcoli
       summary: Get the analysis status record by its ID
       operationId: get-analysis-status
       requestBody:
@@ -181,7 +181,7 @@ paths:
   /analyze/archive:
     post:
       tags:
-      - Data - vEcoli
+      - Analysis - vEcoli
       summary: Get the analysis archive zip record by its ID
       operationId: get-analysis-archive
       responses:
@@ -193,7 +193,7 @@ paths:
   /analyze/get:
     post:
       tags:
-      - Data - vEcoli
+      - Analysis - vEcoli
       summary: Get Analysis
       operationId: show-analysis
       parameters:
@@ -719,427 +719,6 @@ paths:
                   $ref: '#/components/schemas/SimulationConfiguration'
                 type: array
                 title: Response List-Simulation-Configs
-  /core/simulator/latest:
-    get:
-      tags:
-      - EcoliSim
-      summary: Get the latest simulator version
-      operationId: get-latest-simulator
-      parameters:
-      - name: git_repo_url
-        in: query
-        required: false
-        schema:
-          type: string
-          default: https://github.com/vivarium-collective/vEcoli
-          title: Git Repo Url
-      - name: git_branch
-        in: query
-        required: false
-        schema:
-          type: string
-          default: messages
-          title: Git Branch
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Simulator'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/simulator/versions:
-    get:
-      tags:
-      - EcoliSim
-      summary: get the list of available simulator versions
-      operationId: get-simulator-versions
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RegisteredSimulators'
-  /core/simulator/status:
-    get:
-      tags:
-      - EcoliSim
-      summary: Get simulator container build status by its ID
-      operationId: get-simulator-status
-      parameters:
-      - name: simulator_id
-        in: query
-        required: true
-        schema:
-          type: integer
-          title: Simulator Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HpcRun'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/simulator/upload:
-    post:
-      tags:
-      - EcoliSim
-      summary: Upload a new simulator (vEcoli) version.
-      operationId: insert-simulator-version
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Simulator'
-        required: true
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SimulatorVersion'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/simulation/parca:
-    post:
-      tags:
-      - EcoliSim
-      summary: Run a parameter calculation
-      operationId: run-parca
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ParcaDatasetRequest'
-        required: true
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ParcaDataset'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/simulation/parca/versions:
-    get:
-      tags:
-      - EcoliSim
-      summary: Get list of parca calculations
-      operationId: get-parca-versions
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/ParcaDataset'
-                type: array
-                title: Response Get-Parca-Versions
-  /core/simulation/parca/status:
-    get:
-      tags:
-      - EcoliSim
-      summary: Get parca calculation status by its ID
-      operationId: get-parca-status
-      parameters:
-      - name: parca_id
-        in: query
-        required: true
-        schema:
-          type: integer
-          title: Parca Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HpcRun'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/simulation/run:
-    post:
-      tags:
-      - EcoliSim
-      summary: Run a vEcoli simulation
-      operationId: run-simulation
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EcoliSimulationRequest'
-        required: true
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EcoliExperiment'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/simulation/run/versions:
-    get:
-      tags:
-      - EcoliSim
-      summary: Get list of vEcoli simulations
-      operationId: get-simulation-versions
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/EcoliSimulation'
-                type: array
-                title: Response Get-Simulation-Versions
-  /core/simulation/run/status:
-    get:
-      tags:
-      - EcoliSim
-      summary: Get the simulation status record by its ID
-      operationId: get-simulation-status
-      parameters:
-      - name: simulation_id
-        in: query
-        required: true
-        schema:
-          type: integer
-          title: Simulation Id
-      - name: num_events
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Num Events
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HpcRun'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/simulation/run/events:
-    get:
-      tags:
-      - EcoliSim
-      summary: Get the worker events for a simulation by its ID
-      operationId: get-simulation-worker-events
-      parameters:
-      - name: simulation_id
-        in: query
-        required: true
-        schema:
-          type: integer
-          title: Simulation Id
-      - name: num_events
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Num Events
-      - name: prev_sequence_number
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Prev Sequence Number
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/WorkerEvent'
-                title: Response Get-Simulation-Worker-Events
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/download/analysis:
-    get:
-      tags:
-      - EcoliSim
-      summary: Download a file that was generated from a simulation analysis module
-      operationId: download-analysis-file
-      parameters:
-      - name: experiment_id
-        in: query
-        required: true
-        schema:
-          type: string
-          description: Experiment ID for the simulation (from config.json).
-          examples:
-          - sms_single
-          title: Experiment Id
-        description: Experiment ID for the simulation (from config.json).
-      - name: filename
-        in: query
-        required: true
-        schema:
-          type: string
-          examples:
-          - mass_fraction_summary.html
-          title: Filename
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/download/chunk:
-    get:
-      tags:
-      - EcoliSim
-      summary: Download a single file that was generated from the parquet emitter
-      operationId: download-chunk
-      parameters:
-      - name: experiment_id
-        in: query
-        required: true
-        schema:
-          type: string
-          description: Experiment ID for the simulation (from config.json).
-          examples:
-          - sms_single
-          title: Experiment Id
-        description: Experiment ID for the simulation (from config.json).
-      - name: chunk_id
-        in: query
-        required: true
-        schema:
-          type: integer
-          examples:
-          - 800
-          title: Chunk Id
-      responses:
-        '200':
-          description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/download/parquet:
-    post:
-      tags:
-      - EcoliSim
-      summary: Download zip file containing pqs that were generated from the parquet
-        emitter
-      operationId: download-parquet
-      parameters:
-      - name: experiment_id
-        in: query
-        required: true
-        schema:
-          type: string
-          description: Experiment ID for the simulation (from config.json).
-          examples:
-          - sms_single
-          title: Experiment Id
-        description: Experiment ID for the simulation (from config.json).
-      - name: filename
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Name you wish to assign to the downloaded zip file
-          title: Filename
-        description: Name you wish to assign to the downloaded zip file
-      responses:
-        '200':
-          description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /core/download/example:
-    get:
-      tags:
-      - EcoliSim
-      summary: Download either parquet or analysis outputs as a zip file generated
-        by the example simulation.
-      operationId: download-example-files
-      parameters:
-      - name: data_type
-        in: query
-        required: false
-        schema:
-          type: string
-          description: Either 'analysis' or 'timeseries'
-          examples:
-          - analysis
-          default: analysis
-          title: Data Type
-        description: Either 'analysis' or 'timeseries'
-      responses:
-        '200':
-          description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /experiment/launch:
     post:
       tags:
@@ -1301,7 +880,7 @@ paths:
   /experiment/data:
     post:
       tags:
-      - Data - vEcoli
+      - Simulations - vEcoli
       summary: Get simulation outputs
       operationId: get-data
       parameters:
@@ -1417,59 +996,6 @@ components:
       required:
       - id
       title: AnalysisJob
-    AntibioticSimulation:
-      properties:
-        database_id:
-          type: integer
-          title: Database Id
-        sim_request:
-          $ref: '#/components/schemas/AntibioticSimulationRequest'
-        slurmjob_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Slurmjob Id
-      type: object
-      required:
-      - database_id
-      - sim_request
-      title: AntibioticSimulation
-    AntibioticSimulationRequest:
-      properties:
-        simulator:
-          $ref: '#/components/schemas/SimulatorVersion'
-        parca_dataset_id:
-          type: integer
-          title: Parca Dataset Id
-        variant_config:
-          additionalProperties:
-            additionalProperties:
-              anyOf:
-              - type: integer
-              - type: number
-              - type: string
-            type: object
-          type: object
-          title: Variant Config
-          default:
-            named_parameters:
-              param1: 0.5
-              param2: 0.5
-        antibiotics_config:
-          additionalProperties:
-            additionalProperties:
-              anyOf:
-              - type: integer
-              - type: number
-              - type: string
-            type: object
-          type: object
-          title: Antibiotics Config
-      type: object
-      required:
-      - simulator
-      - parca_dataset_id
-      title: AntibioticSimulationRequest
     Body_run-experiment:
       properties:
         overrides:
@@ -1788,35 +1314,6 @@ components:
           title: Initial State
       type: object
       title: ConfigOverrides
-    EcoliExperiment:
-      properties:
-        experiment_id:
-          type: string
-          title: Experiment Id
-        simulation:
-          anyOf:
-          - $ref: '#/components/schemas/EcoliSimulation'
-          - $ref: '#/components/schemas/EcoliWorkflowSimulation'
-          - $ref: '#/components/schemas/AntibioticSimulation'
-          title: Simulation
-        last_updated:
-          type: string
-          title: Last Updated
-        metadata:
-          additionalProperties:
-            type: string
-          type: object
-          title: Metadata
-        experiment_tag:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Experiment Tag
-      type: object
-      required:
-      - experiment_id
-      - simulation
-      title: EcoliExperiment
     EcoliExperimentDTO:
       properties:
         experiment_id:
@@ -1855,100 +1352,6 @@ components:
       required:
       - config_id
       title: EcoliExperimentRequestDTO
-    EcoliSimulation:
-      properties:
-        database_id:
-          type: integer
-          title: Database Id
-        sim_request:
-          $ref: '#/components/schemas/EcoliSimulationRequest'
-        slurmjob_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Slurmjob Id
-      type: object
-      required:
-      - database_id
-      - sim_request
-      title: EcoliSimulation
-    EcoliSimulationRequest:
-      properties:
-        simulator:
-          $ref: '#/components/schemas/SimulatorVersion'
-        parca_dataset_id:
-          type: integer
-          title: Parca Dataset Id
-        variant_config:
-          additionalProperties:
-            additionalProperties:
-              anyOf:
-              - type: integer
-              - type: number
-              - type: string
-            type: object
-          type: object
-          title: Variant Config
-          default:
-            named_parameters:
-              param1: 0.5
-              param2: 0.5
-      type: object
-      required:
-      - simulator
-      - parca_dataset_id
-      title: EcoliSimulationRequest
-      description: Fits EcoliSim
-    EcoliWorkflowRequest:
-      properties:
-        config_id:
-          type: string
-          title: Config Id
-        simulator:
-          $ref: '#/components/schemas/SimulatorVersion'
-        overrides:
-          anyOf:
-          - $ref: '#/components/schemas/Overrides'
-          - type: 'null'
-        variants:
-          anyOf:
-          - $ref: '#/components/schemas/Variants'
-          - type: 'null'
-        parca_dataset_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Parca Dataset Id
-      type: object
-      required:
-      - config_id
-      - simulator
-      title: EcoliWorkflowRequest
-      description: 'Fits Nextflow workflows
-
-
-        :param config_id: (str) filename (without ''.json'') of the given sim config
-
-        :param config_overrides: (Optional[dict[str, Any]]) overrides any key within
-        the file found at {config_id}.json'
-    EcoliWorkflowSimulation:
-      properties:
-        sim_request:
-          $ref: '#/components/schemas/EcoliWorkflowRequest'
-        database_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Database Id
-        slurmjob_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Slurmjob Id
-      type: object
-      required:
-      - sim_request
-      title: EcoliWorkflowSimulation
     HTTPValidationError:
       properties:
         detail:
@@ -1958,49 +1361,6 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
-    HpcRun:
-      properties:
-        database_id:
-          type: integer
-          title: Database Id
-        slurmjobid:
-          type: integer
-          title: Slurmjobid
-        correlation_id:
-          type: string
-          title: Correlation Id
-        job_type:
-          $ref: '#/components/schemas/JobType'
-        ref_id:
-          type: integer
-          title: Ref Id
-        status:
-          anyOf:
-          - $ref: '#/components/schemas/JobStatus'
-          - type: 'null'
-        start_time:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Start Time
-        end_time:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: End Time
-        error_message:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Error Message
-      type: object
-      required:
-      - database_id
-      - slurmjobid
-      - correlation_id
-      - job_type
-      - ref_id
-      title: HpcRun
     JobStatus:
       type: string
       enum:
@@ -2010,73 +1370,6 @@ components:
       - completed
       - failed
       title: JobStatus
-    JobType:
-      type: string
-      enum:
-      - simulation
-      - parca
-      - build_image
-      title: JobType
-    Overrides:
-      properties:
-        config:
-          additionalProperties: true
-          type: object
-          title: Config
-          default: {}
-      type: object
-      title: Overrides
-    ParcaDataset:
-      properties:
-        database_id:
-          type: integer
-          title: Database Id
-        parca_dataset_request:
-          $ref: '#/components/schemas/ParcaDatasetRequest'
-        remote_archive_path:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Remote Archive Path
-      type: object
-      required:
-      - database_id
-      - parca_dataset_request
-      title: ParcaDataset
-    ParcaDatasetRequest:
-      properties:
-        simulator_version:
-          $ref: '#/components/schemas/SimulatorVersion'
-        parca_config:
-          additionalProperties:
-            anyOf:
-            - type: integer
-            - type: number
-            - type: string
-          type: object
-          title: Parca Config
-      type: object
-      required:
-      - simulator_version
-      - parca_config
-      title: ParcaDatasetRequest
-    RegisteredSimulators:
-      properties:
-        versions:
-          items:
-            $ref: '#/components/schemas/SimulatorVersion'
-          type: array
-          title: Versions
-        timestamp:
-          anyOf:
-          - type: string
-            format: date-time
-          - type: 'null'
-          title: Timestamp
-      type: object
-      required:
-      - versions
-      title: RegisteredSimulators
     SimulationConfiguration:
       properties:
         experiment_id:
@@ -2374,50 +1667,6 @@ components:
       - id
       - status
       title: SimulationRun
-    Simulator:
-      properties:
-        git_commit_hash:
-          type: string
-          title: Git Commit Hash
-        git_repo_url:
-          type: string
-          title: Git Repo Url
-        git_branch:
-          type: string
-          title: Git Branch
-      type: object
-      required:
-      - git_commit_hash
-      - git_repo_url
-      - git_branch
-      title: Simulator
-    SimulatorVersion:
-      properties:
-        git_commit_hash:
-          type: string
-          title: Git Commit Hash
-        git_repo_url:
-          type: string
-          title: Git Repo Url
-        git_branch:
-          type: string
-          title: Git Branch
-        database_id:
-          type: integer
-          title: Database Id
-        created_at:
-          anyOf:
-          - type: string
-            format: date-time
-          - type: 'null'
-          title: Created At
-      type: object
-      required:
-      - git_commit_hash
-      - git_repo_url
-      - git_branch
-      - database_id
-      title: SimulatorVersion
     UploadedAnalysisConfig:
       properties:
         config_id:
@@ -2457,56 +1706,3 @@ components:
       - msg
       - type
       title: ValidationError
-    Variants:
-      properties:
-        config:
-          additionalProperties:
-            additionalProperties:
-              anyOf:
-              - type: integer
-              - type: number
-              - type: string
-            type: object
-          type: object
-          title: Config
-          default: {}
-      type: object
-      title: Variants
-    WorkerEvent:
-      properties:
-        database_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Database Id
-        created_at:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Created At
-        hpcrun_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Hpcrun Id
-        correlation_id:
-          type: string
-          title: Correlation Id
-        sequence_number:
-          type: integer
-          title: Sequence Number
-        mass:
-          additionalProperties:
-            type: number
-          type: object
-          title: Mass
-        time:
-          type: number
-          title: Time
-      type: object
-      required:
-      - correlation_id
-      - sequence_number
-      - mass
-      - time
-      title: WorkerEvent
