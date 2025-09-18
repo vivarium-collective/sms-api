@@ -4,6 +4,7 @@ import mimetypes
 import os
 import tempfile
 import uuid
+import zipfile
 from collections.abc import Generator, Mapping
 from io import BytesIO
 from pathlib import Path
@@ -571,6 +572,55 @@ async def get_analysis_status(job: AnalysisJob) -> AnalysisJob:
         statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
         status: str = statuses[1].split("\n")[0].split()[-2]
         return AnalysisJob(id=slurmjob_id, status=status)
+    except Exception as e:
+        logger.exception(
+            """Error getting analysis status.
+            """
+        )
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+def unzip_archive(zip_path: Path, dest_dir: Path) -> str:
+    zip_path = Path(zip_path).resolve()
+    dest_dir = Path(dest_dir).resolve()
+
+    if not zip_path.is_file():
+        raise FileNotFoundError(f"{zip_path} does not exist or is not a file")
+
+    if not dest_dir.is_dir():
+        raise NotADirectoryError(f"{dest_dir} does not exist or is not a directory")
+
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        zip_ref.extractall(dest_dir)
+
+    return str(dest_dir)
+
+
+@config.router.post(
+    path="/analysis/archive",
+    operation_id="get-analysis-archive",
+    tags=["Data - vEcoli"],
+    dependencies=[Depends(get_database_service)],
+    summary="Get the analysis archive zip record by its ID",
+)
+async def get_analysis_archive(bg_tasks: BackgroundTasks) -> FileResponse:
+    try:
+        # slurmjob_id = get_jobid_by_experiment(experiment_id)
+        ssh_service = get_ssh_service()
+        tmp = tempfile.TemporaryDirectory()
+        tmpdirname = tmp.name
+        fname = "analysis_multigen.zip"
+        local = Path(tmpdirname) / fname
+        remote = Path(ENV.slurm_base_path) / "workspace" / "api_outputs" / fname
+        await ssh_service.scp_download(local_file=local, remote_path=remote)
+        bg_tasks.add_task(tmp.cleanup)
+
+        # now, do this:
+        # 1. unzip archive found at ``local``
+        # 2. recurse ``local`` and return flattened list of available htmls
+        # 3. handle non-htmls (db?)
+        # 4. return htmls
+        return FileResponse(path=local, media_type="application/octet-stream", filename=local.name)
     except Exception as e:
         logger.exception(
             """Error getting analysis status.

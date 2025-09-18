@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.17-dev
+  version: 0.2.18-dev
 paths:
   /core/simulator/latest:
     get:
@@ -605,6 +605,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Data - vEcoli
+      summary: Run an analysis
+      operationId: run-analysis
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - type: object
+                additionalProperties: true
+              - type: 'null'
+              title: Config
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /wcm/experiment/analysis/download:
     get:
       tags:
@@ -1069,6 +1096,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /wcm/analysis/status:
+    post:
+      tags:
+      - Data - vEcoli
+      summary: Get the analysis status record by its ID
+      operationId: get-analysis-status
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisJob'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /wcm/analysis/archive:
+    post:
+      tags:
+      - Data - vEcoli
+      summary: Get the analysis archive zip record by its ID
+      operationId: get-analysis-archive
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
   /:
     get:
       tags:
@@ -1113,6 +1177,19 @@ paths:
                 title: Response Get Version Version Get
 components:
   schemas:
+    AnalysisJob:
+      properties:
+        id:
+          type: integer
+          title: Id
+        status:
+          type: string
+          title: Status
+          default: WAITING
+      type: object
+      required:
+      - id
+      title: AnalysisJob
     AntibioticSimulation:
       properties:
         database_id:
