@@ -1,8 +1,724 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.19-dev
+  version: 0.2.20-dev
 paths:
+  /analyze/manifest:
+    get:
+      tags:
+      - Data - vEcoli
+      summary: Get all available analyses for a given simulation
+      operationId: get-analysis-manifest
+      parameters:
+      - name: experiment_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Experiment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analyze/download:
+    get:
+      tags:
+      - Data - vEcoli
+      summary: Download a file that was generated from a simulation analysis module
+      operationId: download-analysis-output
+      parameters:
+      - name: experiment_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Experiment Id
+      - name: variant_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Variant Id
+      - name: lineage_seed_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Lineage Seed Id
+      - name: generation_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1
+          title: Generation Id
+      - name: agent_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Agent Id
+      - name: filename
+        in: query
+        required: true
+        schema:
+          type: string
+          examples:
+          - mass_fraction_summary.html
+          title: Filename
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analyze/upload:
+    post:
+      tags:
+      - Configurations - vEcoli
+      summary: Upload Analysis Module
+      operationId: upload_analysis_module_analyze_upload_post
+      parameters:
+      - name: submodule_name
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Submodule name(single, multiseed, etc)
+          title: Submodule Name
+        description: Submodule name(single, multiseed, etc)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_analysis_module_analyze_upload_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Upload Analysis Module Analyze Upload Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analyze/run:
+    post:
+      tags:
+      - Data - vEcoli
+      summary: Run an analysis
+      operationId: run-analysis
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - additionalProperties: true
+                type: object
+              - type: 'null'
+              title: Config
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analyze/status:
+    post:
+      tags:
+      - Data - vEcoli
+      summary: Get the analysis status record by its ID
+      operationId: get-analysis-status
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisJob'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analyze/archive:
+    post:
+      tags:
+      - Data - vEcoli
+      summary: Get the analysis archive zip record by its ID
+      operationId: get-analysis-archive
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /analyze/get:
+    post:
+      tags:
+      - Data - vEcoli
+      summary: Get Analysis
+      operationId: show-analysis
+      parameters:
+      - name: experiment_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: analysis_multigen
+          title: Experiment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                title: Response Show-Analysis
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /configure/upload/simulation:
+    post:
+      tags:
+      - Configurations - vEcoli
+      summary: Upload Simulation Config
+      description: Upload simulation config JSON
+      operationId: upload-simulation-config
+      parameters:
+      - name: config_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Config Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulationConfiguration'
+              default:
+                experiment_id: <PLACEHOLDER>
+                suffix_time: true
+                parca_options:
+                  cpus: 2
+                  outdir: /home/FCAM/svc_vivarium/workspace/outputs
+                  operons: true
+                  ribosome_fitting: true
+                  rnapoly_fitting: true
+                  remove_rrna_operons: false
+                  remove_rrff: false
+                  stable_rrna: false
+                  new_genes: 'off'
+                  debug_parca: false
+                  save_intermediates: false
+                  intermediates_directory: ''
+                  variable_elongation_transcription: true
+                  variable_elongation_translation: false
+                generations: 1
+                n_init_sims: 1
+                max_duration: 10800.0
+                initial_global_time: 0.0
+                time_step: 1.0
+                single_daughters: true
+                emitter: parquet
+                emitter_arg:
+                  out_dir: /home/FCAM/svc_vivarium/workspace/outputs
+                variants: {}
+                analysis_options:
+                  single:
+                    mass_fraction_summary: {}
+                    ptools_rxns:
+                      n_tp: 8
+                    ptools_rna:
+                      n_tp: 8
+                    ptools_proteins:
+                      n_tp: 8
+                agent_id: '0'
+                parallel: false
+                divide: true
+                d_period: true
+                division_threshold: true
+                division_variable:
+                - divide
+                chromosome_path:
+                - unique
+                - full_chromosome
+                spatial_environment: false
+                fixed_media: minimal
+                condition: basal
+                save: false
+                save_times: []
+                add_processes: []
+                exclude_processes: []
+                profile: false
+                processes:
+                - post-division-mass-listener
+                - bulk-timeline
+                - media_update
+                - exchange_data
+                - ecoli-tf-unbinding
+                - ecoli-equilibrium
+                - ecoli-two-component-system
+                - ecoli-rna-maturation
+                - ecoli-tf-binding
+                - ecoli-transcript-initiation
+                - ecoli-polypeptide-initiation
+                - ecoli-chromosome-replication
+                - ecoli-protein-degradation
+                - ecoli-rna-degradation
+                - ecoli-complexation
+                - ecoli-transcript-elongation
+                - ecoli-polypeptide-elongation
+                - ecoli-chromosome-structure
+                - ecoli-metabolism
+                - ecoli-mass-listener
+                - RNA_counts_listener
+                - rna_synth_prob_listener
+                - monomer_counts_listener
+                - dna_supercoiling_listener
+                - replication_data_listener
+                - rnap_data_listener
+                - unique_molecule_counts
+                - ribosome_data_listener
+                - global_clock
+                process_configs:
+                  global_clock: {}
+                  replication_data_listener:
+                    time_step: 1
+                topology:
+                  bulk-timeline:
+                    bulk:
+                    - bulk
+                    global:
+                    - timeline
+                    media_id:
+                    - environment
+                    - media_id
+                  global_clock:
+                    global_time:
+                    - global_time
+                    next_update_time:
+                    - next_update_time
+                engine_process_reports:
+                - - listeners
+                emit_paths: []
+                progress_bar: true
+                emit_topology: false
+                emit_processes: false
+                emit_config: false
+                emit_unique: false
+                log_updates: false
+                raw_output: true
+                description: ''
+                seed: 0
+                mar_regulon: false
+                amp_lysis: false
+                initial_state_file: ''
+                skip_baseline: false
+                daughter_outdir: /home/FCAM/svc_vivarium/workspace/outputs
+                lineage_seed: 0
+                fail_at_max_duration: false
+                inherit_from: []
+                spatial_environment_config: {}
+                swap_processes: {}
+                flow:
+                  post-division-mass-listener: []
+                  media_update:
+                  - - post-division-mass-listener
+                  exchange_data:
+                  - - media_update
+                  ecoli-tf-unbinding:
+                  - - media_update
+                  ecoli-equilibrium:
+                  - - ecoli-tf-unbinding
+                  ecoli-two-component-system:
+                  - - ecoli-tf-unbinding
+                  ecoli-rna-maturation:
+                  - - ecoli-tf-unbinding
+                  ecoli-tf-binding:
+                  - - ecoli-equilibrium
+                  ecoli-transcript-initiation:
+                  - - ecoli-tf-binding
+                  ecoli-polypeptide-initiation:
+                  - - ecoli-tf-binding
+                  ecoli-chromosome-replication:
+                  - - ecoli-tf-binding
+                  ecoli-protein-degradation:
+                  - - ecoli-tf-binding
+                  ecoli-rna-degradation:
+                  - - ecoli-tf-binding
+                  ecoli-complexation:
+                  - - ecoli-tf-binding
+                  ecoli-transcript-elongation:
+                  - - ecoli-complexation
+                  ecoli-polypeptide-elongation:
+                  - - ecoli-complexation
+                  ecoli-chromosome-structure:
+                  - - ecoli-polypeptide-elongation
+                  ecoli-metabolism:
+                  - - ecoli-chromosome-structure
+                  ecoli-mass-listener:
+                  - - ecoli-metabolism
+                  RNA_counts_listener:
+                  - - ecoli-metabolism
+                  rna_synth_prob_listener:
+                  - - ecoli-metabolism
+                  monomer_counts_listener:
+                  - - ecoli-metabolism
+                  dna_supercoiling_listener:
+                  - - ecoli-metabolism
+                  replication_data_listener:
+                  - - ecoli-metabolism
+                  rnap_data_listener:
+                  - - ecoli-metabolism
+                  unique_molecule_counts:
+                  - - ecoli-metabolism
+                  ribosome_data_listener:
+                  - - ecoli-metabolism
+                initial_state_overrides: []
+                initial_state: {}
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadedSimulationConfig'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /configure/upload/analysis:
+    post:
+      tags:
+      - Configurations - vEcoli
+      summary: Upload Analysis Config
+      description: Upload analysis config JSON
+      operationId: upload-analysis-config
+      parameters:
+      - name: config_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Config Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulationConfiguration'
+              default:
+                experiment_id: <PLACEHOLDER>
+                suffix_time: true
+                parca_options:
+                  cpus: 2
+                  outdir: /home/FCAM/svc_vivarium/workspace/outputs
+                  operons: true
+                  ribosome_fitting: true
+                  rnapoly_fitting: true
+                  remove_rrna_operons: false
+                  remove_rrff: false
+                  stable_rrna: false
+                  new_genes: 'off'
+                  debug_parca: false
+                  save_intermediates: false
+                  intermediates_directory: ''
+                  variable_elongation_transcription: true
+                  variable_elongation_translation: false
+                generations: 1
+                n_init_sims: 1
+                max_duration: 10800.0
+                initial_global_time: 0.0
+                time_step: 1.0
+                single_daughters: true
+                emitter: parquet
+                emitter_arg:
+                  out_dir: /home/FCAM/svc_vivarium/workspace/outputs
+                variants: {}
+                analysis_options:
+                  single:
+                    mass_fraction_summary: {}
+                    ptools_rxns:
+                      n_tp: 8
+                    ptools_rna:
+                      n_tp: 8
+                    ptools_proteins:
+                      n_tp: 8
+                agent_id: '0'
+                parallel: false
+                divide: true
+                d_period: true
+                division_threshold: true
+                division_variable:
+                - divide
+                chromosome_path:
+                - unique
+                - full_chromosome
+                spatial_environment: false
+                fixed_media: minimal
+                condition: basal
+                save: false
+                save_times: []
+                add_processes: []
+                exclude_processes: []
+                profile: false
+                processes:
+                - post-division-mass-listener
+                - bulk-timeline
+                - media_update
+                - exchange_data
+                - ecoli-tf-unbinding
+                - ecoli-equilibrium
+                - ecoli-two-component-system
+                - ecoli-rna-maturation
+                - ecoli-tf-binding
+                - ecoli-transcript-initiation
+                - ecoli-polypeptide-initiation
+                - ecoli-chromosome-replication
+                - ecoli-protein-degradation
+                - ecoli-rna-degradation
+                - ecoli-complexation
+                - ecoli-transcript-elongation
+                - ecoli-polypeptide-elongation
+                - ecoli-chromosome-structure
+                - ecoli-metabolism
+                - ecoli-mass-listener
+                - RNA_counts_listener
+                - rna_synth_prob_listener
+                - monomer_counts_listener
+                - dna_supercoiling_listener
+                - replication_data_listener
+                - rnap_data_listener
+                - unique_molecule_counts
+                - ribosome_data_listener
+                - global_clock
+                process_configs:
+                  global_clock: {}
+                  replication_data_listener:
+                    time_step: 1
+                topology:
+                  bulk-timeline:
+                    bulk:
+                    - bulk
+                    global:
+                    - timeline
+                    media_id:
+                    - environment
+                    - media_id
+                  global_clock:
+                    global_time:
+                    - global_time
+                    next_update_time:
+                    - next_update_time
+                engine_process_reports:
+                - - listeners
+                emit_paths: []
+                progress_bar: true
+                emit_topology: false
+                emit_processes: false
+                emit_config: false
+                emit_unique: false
+                log_updates: false
+                raw_output: true
+                description: ''
+                seed: 0
+                mar_regulon: false
+                amp_lysis: false
+                initial_state_file: ''
+                skip_baseline: false
+                daughter_outdir: /home/FCAM/svc_vivarium/workspace/outputs
+                lineage_seed: 0
+                fail_at_max_duration: false
+                inherit_from: []
+                spatial_environment_config: {}
+                swap_processes: {}
+                flow:
+                  post-division-mass-listener: []
+                  media_update:
+                  - - post-division-mass-listener
+                  exchange_data:
+                  - - media_update
+                  ecoli-tf-unbinding:
+                  - - media_update
+                  ecoli-equilibrium:
+                  - - ecoli-tf-unbinding
+                  ecoli-two-component-system:
+                  - - ecoli-tf-unbinding
+                  ecoli-rna-maturation:
+                  - - ecoli-tf-unbinding
+                  ecoli-tf-binding:
+                  - - ecoli-equilibrium
+                  ecoli-transcript-initiation:
+                  - - ecoli-tf-binding
+                  ecoli-polypeptide-initiation:
+                  - - ecoli-tf-binding
+                  ecoli-chromosome-replication:
+                  - - ecoli-tf-binding
+                  ecoli-protein-degradation:
+                  - - ecoli-tf-binding
+                  ecoli-rna-degradation:
+                  - - ecoli-tf-binding
+                  ecoli-complexation:
+                  - - ecoli-tf-binding
+                  ecoli-transcript-elongation:
+                  - - ecoli-complexation
+                  ecoli-polypeptide-elongation:
+                  - - ecoli-complexation
+                  ecoli-chromosome-structure:
+                  - - ecoli-polypeptide-elongation
+                  ecoli-metabolism:
+                  - - ecoli-chromosome-structure
+                  ecoli-mass-listener:
+                  - - ecoli-metabolism
+                  RNA_counts_listener:
+                  - - ecoli-metabolism
+                  rna_synth_prob_listener:
+                  - - ecoli-metabolism
+                  monomer_counts_listener:
+                  - - ecoli-metabolism
+                  dna_supercoiling_listener:
+                  - - ecoli-metabolism
+                  replication_data_listener:
+                  - - ecoli-metabolism
+                  rnap_data_listener:
+                  - - ecoli-metabolism
+                  unique_molecule_counts:
+                  - - ecoli-metabolism
+                  ribosome_data_listener:
+                  - - ecoli-metabolism
+                initial_state_overrides: []
+                initial_state: {}
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadedAnalysisConfig'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /configure/get:
+    get:
+      tags:
+      - Configurations - vEcoli
+      summary: Get Simulation Config
+      operationId: get-simulation-config
+      parameters:
+      - name: config_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Config Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationConfiguration'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /configure/remove:
+    delete:
+      tags:
+      - Configurations - vEcoli
+      summary: Delete Simulation Config
+      operationId: delete-simulation-config
+      parameters:
+      - name: config_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Config Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: string
+                title: Response Delete-Simulation-Config
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /configure/versions:
+    get:
+      tags:
+      - Configurations - vEcoli
+      summary: List Simulation Configs
+      operationId: list-simulation-configs
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/SimulationConfiguration'
+                type: array
+                title: Response List-Simulation-Configs
   /core/simulator/latest:
     get:
       tags:
@@ -424,12 +1140,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/experiment:
+  /experiment/:
     post:
       tags:
       - Simulations - vEcoli
       summary: Launches a nextflow-powered vEcoli simulation workflow
-      operationId: launch-experiment
+      operationId: run-experiment
       parameters:
       - name: config_id
         in: query
@@ -446,7 +1162,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Body_launch-experiment'
+              $ref: '#/components/schemas/Body_run-experiment'
       responses:
         '200':
           description: Successful Response
@@ -511,7 +1227,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/experiment/versions:
+  /experiment/versions:
     get:
       tags:
       - Simulations - vEcoli
@@ -527,7 +1243,7 @@ paths:
                   $ref: '#/components/schemas/EcoliExperimentDTO'
                 type: array
                 title: Response List-Experiments
-  /wcm/experiment/status:
+  /experiment/status:
     get:
       tags:
       - Simulations - vEcoli
@@ -553,7 +1269,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/experiment/log:
+  /experiment/log:
     post:
       tags:
       - Simulations - vEcoli
@@ -580,143 +1296,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/experiment/analysis:
-    get:
-      tags:
-      - Data - vEcoli
-      summary: Get all available analyses for a given simulation
-      operationId: get-analysis-manifest
-      parameters:
-      - name: experiment_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Experiment Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-    post:
-      tags:
-      - Data - vEcoli
-      summary: Run an analysis
-      operationId: run-analysis
-      requestBody:
-        content:
-          application/json:
-            schema:
-              anyOf:
-              - type: object
-                additionalProperties: true
-              - type: 'null'
-              title: Config
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AnalysisJob'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/experiment/analysis/download:
-    get:
-      tags:
-      - Data - vEcoli
-      summary: Download a file that was generated from a simulation analysis module
-      operationId: download-analysis-output
-      parameters:
-      - name: experiment_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Experiment Id
-      - name: variant_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Variant Id
-      - name: lineage_seed_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Lineage Seed Id
-      - name: generation_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 1
-          title: Generation Id
-      - name: agent_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Agent Id
-      - name: filename
-        in: query
-        required: true
-        schema:
-          type: string
-          examples:
-          - mass_fraction_summary.html
-          title: Filename
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/analyses/download:
-    get:
-      tags:
-      - Data - vEcoli
-      summary: Download Analyses
-      description: Download all available simulation analysis outputs as a .zip file
-      operationId: download-analyses
-      parameters:
-      - name: experiment_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Experiment Id
-      responses:
-        '200':
-          description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/experiment/data:
+  /experiment/data:
     post:
       tags:
       - Data - vEcoli
@@ -772,391 +1352,6 @@ paths:
       responses:
         '200':
           description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/experiment/config:
-    post:
-      tags:
-      - Configurations - vEcoli
-      summary: Upload Simulation Config
-      operationId: upload-simulation-config
-      parameters:
-      - name: config_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Config Id
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SimulationConfiguration'
-              default:
-                experiment_id: <PLACEHOLDER>
-                suffix_time: true
-                parca_options:
-                  cpus: 2
-                  outdir: /home/FCAM/svc_vivarium/workspace/outputs
-                  operons: true
-                  ribosome_fitting: true
-                  rnapoly_fitting: true
-                  remove_rrna_operons: false
-                  remove_rrff: false
-                  stable_rrna: false
-                  new_genes: 'off'
-                  debug_parca: false
-                  save_intermediates: false
-                  intermediates_directory: ''
-                  variable_elongation_transcription: true
-                  variable_elongation_translation: false
-                generations: 1
-                n_init_sims: 1
-                max_duration: 10800.0
-                initial_global_time: 0.0
-                time_step: 1.0
-                single_daughters: true
-                emitter: parquet
-                emitter_arg:
-                  out_dir: /home/FCAM/svc_vivarium/workspace/outputs
-                variants: {}
-                analysis_options:
-                  single:
-                    mass_fraction_summary: {}
-                    ptools_rxns:
-                      n_tp: 8
-                    ptools_rna:
-                      n_tp: 8
-                    ptools_proteins:
-                      n_tp: 8
-                agent_id: '0'
-                parallel: false
-                divide: true
-                d_period: true
-                division_threshold: true
-                division_variable:
-                - divide
-                chromosome_path:
-                - unique
-                - full_chromosome
-                spatial_environment: false
-                fixed_media: minimal
-                condition: basal
-                save: false
-                save_times: []
-                add_processes: []
-                exclude_processes: []
-                profile: false
-                processes:
-                - post-division-mass-listener
-                - bulk-timeline
-                - media_update
-                - exchange_data
-                - ecoli-tf-unbinding
-                - ecoli-equilibrium
-                - ecoli-two-component-system
-                - ecoli-rna-maturation
-                - ecoli-tf-binding
-                - ecoli-transcript-initiation
-                - ecoli-polypeptide-initiation
-                - ecoli-chromosome-replication
-                - ecoli-protein-degradation
-                - ecoli-rna-degradation
-                - ecoli-complexation
-                - ecoli-transcript-elongation
-                - ecoli-polypeptide-elongation
-                - ecoli-chromosome-structure
-                - ecoli-metabolism
-                - ecoli-mass-listener
-                - RNA_counts_listener
-                - rna_synth_prob_listener
-                - monomer_counts_listener
-                - dna_supercoiling_listener
-                - replication_data_listener
-                - rnap_data_listener
-                - unique_molecule_counts
-                - ribosome_data_listener
-                - global_clock
-                process_configs:
-                  global_clock: {}
-                  replication_data_listener:
-                    time_step: 1
-                topology:
-                  bulk-timeline:
-                    bulk:
-                    - bulk
-                    global:
-                    - timeline
-                    media_id:
-                    - environment
-                    - media_id
-                  global_clock:
-                    global_time:
-                    - global_time
-                    next_update_time:
-                    - next_update_time
-                engine_process_reports:
-                - - listeners
-                emit_paths: []
-                progress_bar: true
-                emit_topology: false
-                emit_processes: false
-                emit_config: false
-                emit_unique: false
-                log_updates: false
-                raw_output: true
-                description: ''
-                seed: 0
-                mar_regulon: false
-                amp_lysis: false
-                initial_state_file: ''
-                skip_baseline: false
-                daughter_outdir: /home/FCAM/svc_vivarium/workspace/outputs
-                lineage_seed: 0
-                fail_at_max_duration: false
-                inherit_from: []
-                spatial_environment_config: {}
-                swap_processes: {}
-                flow:
-                  post-division-mass-listener: []
-                  media_update:
-                  - - post-division-mass-listener
-                  exchange_data:
-                  - - media_update
-                  ecoli-tf-unbinding:
-                  - - media_update
-                  ecoli-equilibrium:
-                  - - ecoli-tf-unbinding
-                  ecoli-two-component-system:
-                  - - ecoli-tf-unbinding
-                  ecoli-rna-maturation:
-                  - - ecoli-tf-unbinding
-                  ecoli-tf-binding:
-                  - - ecoli-equilibrium
-                  ecoli-transcript-initiation:
-                  - - ecoli-tf-binding
-                  ecoli-polypeptide-initiation:
-                  - - ecoli-tf-binding
-                  ecoli-chromosome-replication:
-                  - - ecoli-tf-binding
-                  ecoli-protein-degradation:
-                  - - ecoli-tf-binding
-                  ecoli-rna-degradation:
-                  - - ecoli-tf-binding
-                  ecoli-complexation:
-                  - - ecoli-tf-binding
-                  ecoli-transcript-elongation:
-                  - - ecoli-complexation
-                  ecoli-polypeptide-elongation:
-                  - - ecoli-complexation
-                  ecoli-chromosome-structure:
-                  - - ecoli-polypeptide-elongation
-                  ecoli-metabolism:
-                  - - ecoli-chromosome-structure
-                  ecoli-mass-listener:
-                  - - ecoli-metabolism
-                  RNA_counts_listener:
-                  - - ecoli-metabolism
-                  rna_synth_prob_listener:
-                  - - ecoli-metabolism
-                  monomer_counts_listener:
-                  - - ecoli-metabolism
-                  dna_supercoiling_listener:
-                  - - ecoli-metabolism
-                  replication_data_listener:
-                  - - ecoli-metabolism
-                  rnap_data_listener:
-                  - - ecoli-metabolism
-                  unique_molecule_counts:
-                  - - ecoli-metabolism
-                  ribosome_data_listener:
-                  - - ecoli-metabolism
-                initial_state_overrides: []
-                initial_state: {}
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UploadedSimulationConfig'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-    get:
-      tags:
-      - Configurations - vEcoli
-      summary: Get Simulation Config
-      operationId: get-simulation-config
-      parameters:
-      - name: config_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Config Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SimulationConfiguration'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-    delete:
-      tags:
-      - Configurations - vEcoli
-      summary: Delete Simulation Config
-      operationId: delete-simulation-config
-      parameters:
-      - name: config_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Config Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: string
-                title: Response Delete-Simulation-Config
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/experiment/config/versions:
-    get:
-      tags:
-      - Configurations - vEcoli
-      summary: List Simulation Configs
-      operationId: list-simulation-configs
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/SimulationConfiguration'
-                type: array
-                title: Response List-Simulation-Configs
-  /wcm/experiment/analysis/upload:
-    post:
-      tags:
-      - myEcoli - vEcoli
-      summary: Upload Analysis Module
-      operationId: upload_analysis_module_wcm_experiment_analysis_upload_post
-      parameters:
-      - name: submodule_name
-        in: query
-        required: true
-        schema:
-          type: string
-          description: Submodule name(single, multiseed, etc)
-          title: Submodule Name
-        description: Submodule name(single, multiseed, etc)
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Body_upload_analysis_module_wcm_experiment_analysis_upload_post'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-                title: Response Upload Analysis Module Wcm Experiment Analysis Upload
-                  Post
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/analysis/status:
-    post:
-      tags:
-      - Data - vEcoli
-      summary: Get the analysis status record by its ID
-      operationId: get-analysis-status
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AnalysisJob'
-        required: true
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AnalysisJob'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /wcm/analysis/archive:
-    post:
-      tags:
-      - Data - vEcoli
-      summary: Get the analysis archive zip record by its ID
-      operationId: get-analysis-archive
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-  /wcm/analysis:
-    post:
-      tags:
-      - Data - vEcoli
-      summary: Get Analysis
-      operationId: show-analysis
-      parameters:
-      - name: experiment_id
-        in: query
-        required: false
-        schema:
-          type: string
-          default: analysis_multigen
-          title: Experiment Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: string
-                title: Response Show-Analysis
         '422':
           description: Validation Error
           content:
@@ -1273,7 +1468,7 @@ components:
       - simulator
       - parca_dataset_id
       title: AntibioticSimulationRequest
-    Body_launch-experiment:
+    Body_run-experiment:
       properties:
         overrides:
           anyOf:
@@ -1287,8 +1482,8 @@ components:
           - type: 'null'
           title: Metadata
       type: object
-      title: Body_launch-experiment
-    Body_upload_analysis_module_wcm_experiment_analysis_upload_post:
+      title: Body_run-experiment
+    Body_upload_analysis_module_analyze_upload_post:
       properties:
         file:
           type: string
@@ -1297,7 +1492,7 @@ components:
       type: object
       required:
       - file
-      title: Body_upload_analysis_module_wcm_experiment_analysis_upload_post
+      title: Body_upload_analysis_module_analyze_upload_post
     ConfigOverrides:
       properties:
         experiment_id:
@@ -2221,6 +2416,15 @@ components:
       - git_branch
       - database_id
       title: SimulatorVersion
+    UploadedAnalysisConfig:
+      properties:
+        config_id:
+          type: string
+          title: Config Id
+      type: object
+      required:
+      - config_id
+      title: UploadedAnalysisConfig
     UploadedSimulationConfig:
       properties:
         config_id:

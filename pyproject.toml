@@ -56,12 +56,12 @@ dev = [
     "types-requests>=2.32.0.20250602,<3",
     "types-pyyaml>=6.0.12.20250516,<7",
     "pytest-asyncio>=1.0.0,<2",
-    "testcontainers[nats]>=4.10.0,<5",
     "types-tqdm>=4.67.0.20250516,<5",
     "openapi-python-client>=0.25.2,<0.26",
     "types-xmltodict>=0.14.0.20241009",
     "debugpy>=1.8.16",
     "ipdb>=0.13.13",
+    "testcontainers[nats]>=4.13.0",
 ]
 docs = [
     "mkdocs>=1.4.2,<2",

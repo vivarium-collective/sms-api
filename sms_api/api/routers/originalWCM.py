@@ -28,7 +28,6 @@ from sms_api.dependencies import (
 )
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.handlers import launch_vecoli_simulation
-from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
     BaseModel,
     ConfigOverrides,
@@ -41,12 +40,14 @@ from sms_api.simulation.models import (
     UploadedSimulationConfig,
 )
 
-logger = logging.getLogger(__name__)
-
-LATEST_COMMIT = read_latest_commit()
 ENV = get_settings()
 
+logger = logging.getLogger(__name__)
+
 config = RouterConfig(router=APIRouter(), prefix="/wcm", dependencies=[])
+
+
+# -- service and data model -- #
 
 
 class AnalysisJob(BaseModel):
@@ -140,6 +141,9 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
 #     except Exception as e:
 #         logger.exception("Error running vEcoli simulation")
 #         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# -- endpoints -- #
 
 
 @config.router.post(
