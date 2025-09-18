@@ -246,3 +246,4 @@ compose:
 .DEFAULT_GOAL := help
 
 # pull in nextflow/java in sms api container
+# cd kustomize && kubectl kustomize overlays/sms-api-rke | kubectl apply -f -

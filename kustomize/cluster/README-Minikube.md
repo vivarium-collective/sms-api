@@ -129,7 +129,7 @@ kubectl kustomize overlays/sms-api-local | kubectl apply -f -
 OR for production:
 
 ```bash
-kubectl kustomize overlays/sms-api-rke | kubectl apply -f -
+cd kustomize && kubectl kustomize overlays/sms-api-rke | kubectl apply -f -
 ```
 
 ### create sealed secrets (see [scripts/README.md](scripts/README.md))

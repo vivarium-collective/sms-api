@@ -5,7 +5,7 @@ namespace: sms-api-rke
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.2.19-dev
+    newTag: 0.2.20-dev
   # - name: ghcr.io/vivarium-collective/sms-api
   #   newTag: 0.2.15-dev
   # - name: ghcr.io/biosimulations/sms-api
