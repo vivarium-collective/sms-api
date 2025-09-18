@@ -9,20 +9,11 @@ app = marimo.App(
 
 
 @app.cell
-def _():
-    # /// script
-    # [tool.marimo.display]
-    # theme = "dark"
-    # ///
-    return
-
-
-@app.cell
 def _(mo):
     mo.md(
         r"""
-    # EcoliSim: Interactive Simulation Interface
-    Welcome to **EcoliSim**, a browser-based interface for running and analyzing whole-cell *E. coli* simulations. This notebook is powered by [Marimo](https://github.com/marimo-team/marimo) and provides lightweight access to *E. coli* models relevant to microbial dynamics, biomanufacturing, and antibiotic response.
+    # SMS Interactive Simulation Interface
+    Welcome to **SMS**, a browser-based interface for running and analyzing whole-cell *E. coli* simulations. This notebook is powered by [Marimo](https://github.com/marimo-team/marimo) and provides lightweight access to *E. coli* models relevant to microbial dynamics, biomanufacturing, and antibiotic response.
 
     Use the controls in each section to simulate growth, visualize outcomes, and explore parameter spaces.
     """
@@ -69,30 +60,25 @@ def _():
 
     logger = logging.getLogger(__file__)
 
+    class ApiResource(StrEnum):
+        SIMULATOR = "simulator"
+        SIMULATION = "simulation"
+
+    class Colors(StrEnum):
+        BLUE = ("#1f77b4",)
+        ORANGE = ("#ff7f0e",)
+        GREEN = ("#2ca02c",)
+        RED = ("#d62728",)
+        PURPLE = ("#9467bd",)
+        BROWN = ("#8c564b",)
+        PINK = ("#e377c2",)
+
     def display_dto(dto: BaseModel | None = None) -> mo.Html | None:
         from pprint import pformat
 
         if not dto:
             return None
         return mo.md(f"```python\n{pformat(dto.dict())}\n```")
-
-    return (
-        Client,
-        Generator,
-        StrEnum,
-        Timeout,
-        contextmanager,
-        get_settings,
-        json,
-        mo,
-    )
-
-
-@app.cell
-def _(Client, Generator, StrEnum, Timeout, contextmanager, get_settings):
-    # -- api client and call setup -- #
-
-    SIMULATION_TEST_ID = 3
 
     def get_base_url() -> str:
         settings = get_settings()
@@ -115,24 +101,11 @@ def _(Client, Generator, StrEnum, Timeout, contextmanager, get_settings):
         with Client(base_url=base_url or get_base_url(), timeout=Timeout(timeout or 22.0)) as client:
             yield client
 
-    class ApiResource(StrEnum):
-        SIMULATOR = "simulator"
-        SIMULATION = "simulation"
-
     def format_endpoint_url(resource: ApiResource, *subpaths):
         base_url = get_base_url()
         return f"{base_url}/{resource}/{'/'.join(list(subpaths))}"
 
-    class Colors(StrEnum):
-        BLUE = ("#1f77b4",)  # blue
-        ORANGE = ("#ff7f0e",)  # orange
-        GREEN = ("#2ca02c",)  # green
-        RED = ("#d62728",)  # red
-        PURPLE = ("#9467bd",)  # purple
-        BROWN = ("#8c564b",)  # brown
-        PINK = ("#e377c2",)  # pink
-
-    return
+    return json, mo
 
 
 @app.cell

@@ -29,6 +29,7 @@ from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.handlers import launch_vecoli_simulation
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
+    BaseModel,
     ConfigOverrides,
     EcoliExperimentDTO,
     EcoliExperimentRequestDTO,
@@ -42,9 +43,14 @@ from sms_api.simulation.models import (
 logger = logging.getLogger(__name__)
 
 LATEST_COMMIT = read_latest_commit()
-ROUTER_TAG = ["Simulations - vEcoli"]
+ENV = get_settings()
 
 config = RouterConfig(router=APIRouter(), prefix="/wcm", dependencies=[])
+
+
+class AnalysisJob(BaseModel):
+    id: int
+    status: str = "WAITING"
 
 
 def DBService() -> DatabaseService:
@@ -195,8 +201,6 @@ async def get_experiment(experiment_id: str) -> EcoliExperimentDTO:
 async def delete_experiment(experiment_id: str) -> str:
     try:
         db_service = DBService()
-        # env = get_settings()
-        # ssh = get_ssh_service(env)
         # delete from db
         await db_service.delete_experiment(experiment_id=experiment_id)
         return f"Experiment {experiment_id} deleted successfully"
@@ -224,14 +228,13 @@ async def list_experiments() -> list[EcoliExperimentDTO]:
     summary="Get the simulation status record by its ID",
 )
 async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationRun:
-    env = get_settings()
     try:
         slurmjob_id = experiment_tag.split("-")[-1]
         # slurmjob_id = get_jobid_by_experiment(experiment_id)
         ssh_service = get_ssh_service()
-        slurm_user = env.slurm_submit_user
+        slurm_user = ENV.slurm_submit_user
         statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
-        status = statuses[1].split("\n")[0].split()[-2]
+        status: str = statuses[1].split("\n")[0].split()[-2]
         return SimulationRun(id=experiment_tag, status=JobStatus[status])
     except Exception as e:
         logger.exception(
@@ -249,13 +252,12 @@ async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationR
     summary="Get the simulation log record of a given experiment",
 )
 async def get_simulation_log(experiment_id: str = Query(...)) -> str:
-    env = get_settings()
     try:
         # slurmjob_id = get_jobid_by_experiment(experiment_id)
         ssh_service = get_ssh_service()
         # slurm_user = env.slurm_submit_user
         returncode, stdout, stderr = await ssh_service.run_command(
-            f"cat {env.slurm_base_path!s}/prod/htclogs/{experiment_id}.out"
+            f"cat {ENV.slurm_base_path!s}/prod/htclogs/{experiment_id}.out"
         )
         # Split at the first occurrence of 'N E X T F L O W'
         _, _, after = stdout.partition("N E X T F L O W")
@@ -278,9 +280,8 @@ async def get_simulation_log(experiment_id: str = Query(...)) -> str:
 )
 async def get_available_analyses(experiment_id: str = Query(...)) -> dict[str, list[str]]:
     try:
-        env = get_settings()
         service = AnalysisService()
-        outdir = Path(env.simulation_outdir)
+        outdir = Path(ENV.simulation_outdir)
         # experiment_id = get_experiment_id_from_tag(experiment_tag)
         analysis_dir = service.get_analysis_dir(outdir, experiment_id)
         paths = service.get_analysis_paths(analysis_dir)
@@ -322,11 +323,10 @@ async def download_analysis(
     filename: str = Query(examples=["mass_fraction_summary.html"]),
 ) -> Union[FileResponse, HTMLResponse]:
     try:
-        env = get_settings()
         # experiment_id = get_experiment_id_from_tag(experiment_tag)
         # filepath = service.get_file_path(experiment_id, filename, remote=True, logger_instance=logger)
         filepath = (
-            Path(env.simulation_outdir)
+            Path(ENV.simulation_outdir)
             / experiment_id
             / "analyses"
             / f"variant={variant_id}"
@@ -433,8 +433,7 @@ async def upload_simulation_config(
         raise HTTPException(status_code=400, detail="Experiment id is required")
     if sim_config.experiment_id.startswith("<P"):
         raise HTTPException(status_code=400, detail="Experiment id is invalid")
-    env = get_settings()
-    ssh = get_ssh_service(env)
+    ssh = get_ssh_service(ENV)
     try:
         # store config in db
         db_service = DBService()
@@ -443,8 +442,8 @@ async def upload_simulation_config(
             config_id = "simconfig"
         confid = f"{config_id}-{user_suffix}"
         sim_config.experiment_id = f"{sim_config.experiment_id}-{user_suffix}"
-        sim_config.emitter_arg["out_dir"] = env.simulation_outdir
-        sim_config.daughter_outdir = env.simulation_outdir
+        sim_config.emitter_arg["out_dir"] = ENV.simulation_outdir
+        sim_config.daughter_outdir = ENV.simulation_outdir
 
         await db_service.insert_simulation_config(config_id=confid, config=sim_config)
 
@@ -457,7 +456,7 @@ async def upload_simulation_config(
                 json.dump(sim_config.model_dump(), f, indent=3)
 
             # upload temp local to remote(vEcoli configs dir)
-            remote = Path(env.slurm_base_path) / "workspace" / "vEcoli" / "configs" / fname
+            remote = Path(ENV.slurm_base_path) / "workspace" / "vEcoli" / "configs" / fname
             await ssh.scp_upload(local_file=local, remote_path=remote)
 
         uploaded = UploadedSimulationConfig(config_id=confid)
@@ -483,13 +482,12 @@ async def get_simulation_config(config_id: str) -> SimulationConfiguration:
 async def delete_simulation_config(config_id: str) -> str:
     try:
         db_service = DBService()
-        env = get_settings()
-        ssh = get_ssh_service(env)
+        ssh = get_ssh_service(ENV)
         # delete from db
         await db_service.delete_simulation_config(config_id=config_id)
 
         # delete from remote fs
-        config_path = f"{env.vecoli_config_dir}/{config_id}.json"
+        config_path = f"{ENV.vecoli_config_dir}/{config_id}.json"
         await ssh.run_command(f"rm {config_path}")
 
         return f"Config {config_id} deleted successfully"
@@ -528,11 +526,54 @@ async def upload_analysis_module(
             result = {"tmp_path": str(tmp_path), "size": len(contents)}
 
             local = tmp_path
-            env = get_settings()
-            remote = Path(env.vecoli_config_dir).parent / "ecoli" / "analysis" / submodule_name / file.filename  # type: ignore[operator]
-            ssh = get_ssh_service(env)
+            remote = Path(ENV.vecoli_config_dir).parent / "ecoli" / "analysis" / submodule_name / file.filename  # type: ignore[operator]
+            ssh = get_ssh_service(ENV)
             await ssh.scp_upload(local_file=local, remote_path=remote)
             return result
     except Exception as e:
         logger.exception("Error uploading analysis module")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/experiment/analysis",
+    operation_id="run-analysis",
+    tags=["Data - vEcoli"],
+    summary="Run an analysis",
+)
+async def run_analysis(config: dict[str, Any] | None = None) -> AnalysisJob:
+    try:
+        service = AnalysisService()
+        config_id = "analysis_multigen"
+        slurm_jobid: int = await service.submit_analysis_job(
+            config_id=config_id, experiment_id=config_id, simulator_hash=get_simulator().git_commit_hash, env=ENV
+        )
+        return AnalysisJob(id=slurm_jobid, status="STARTED")
+
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/analysis/status",
+    operation_id="get-analysis-status",
+    tags=["Data - vEcoli"],
+    dependencies=[Depends(get_database_service)],
+    summary="Get the analysis status record by its ID",
+)
+async def get_analysis_status(job: AnalysisJob) -> AnalysisJob:
+    try:
+        slurmjob_id = job.id
+        # slurmjob_id = get_jobid_by_experiment(experiment_id)
+        ssh_service = get_ssh_service()
+        slurm_user = ENV.slurm_submit_user
+        statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
+        status: str = statuses[1].split("\n")[0].split()[-2]
+        return AnalysisJob(id=slurmjob_id, status=status)
+    except Exception as e:
+        logger.exception(
+            """Error getting analysis status.
+            """
+        )
         raise HTTPException(status_code=500, detail=str(e)) from e

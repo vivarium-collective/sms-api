@@ -16,7 +16,6 @@
 """
 
 import importlib
-import json
 import logging
 import os
 from collections.abc import AsyncGenerator
@@ -61,16 +60,11 @@ APP_ORIGINS = [
     "http://localhost:3001",
     "https://sms.cam.uchc.edu",
 ]
-
-# APP_SERVERS: list[dict[str, str]] = [
-#     {"url": ServerMode.PROD, "description": "Production server"},
-#     {"url": ServerMode.DEV, "description": "Main Development server"},
-#     {"url": ServerMode.PORT_FORWARD_DEV, "description": "Local port-forward"},
-# ]
-APP_SERVERS = None
 APP_ROUTERS = ["core", "variants", "wcm"]  # also included: 'antibiotics', 'biomanufacturing', 'inference'
-assets_dir = Path(get_settings().assets_dir)
+ENV = get_settings()
+assets_dir = Path(ENV.assets_dir)
 ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
+UI_NAMES = ["vecoli", "single_cell"]
 
 
 # -- app configuration: lifespan and middleware -- #
@@ -100,9 +94,13 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     await shutdown_standalone()
 
 
-app = FastAPI(title=APP_TITLE, version=APP_VERSION, servers=APP_SERVERS, lifespan=lifespan)
+app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
 app.add_middleware(
-    CORSMiddleware, allow_origins=APP_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],  # TODO: change origins back to allowed
 )
 for api_name in APP_ROUTERS:
     try:
@@ -112,36 +110,31 @@ for api_name in APP_ROUTERS:
             prefix=api.config.prefix,
             dependencies=api.config.dependencies,
         )
-    except Exception:
+    except ImportError:
         logger.exception(f"Could not register the following api: {api_name}")
 
 
 # -- set ui templates and marimo notebook apps -- #
 
-client_dir = Path(get_settings().app_dir) or Path("app")
+client_dir = Path(ENV.app_dir) or Path("app")
 ui_dir = client_dir / "ui"
 templates_dir = client_dir / "templates"
 
 server = marimo.create_asgi_app()
+app_filenames = [f"{modname}.py" for modname in UI_NAMES]
 app_names: list[str] = []
 
 for filename in sorted(os.listdir(ui_dir)):
-    # if filename.endswith(".py") and "single_cell" in filename and not filename.startswith("wip"):
-    if filename.endswith(".py") and "plots" not in filename and not filename.startswith("wip"):
+    if filename in app_filenames:
         app_name = format_marimo_appname(os.path.splitext(filename)[0])
-
         app_path = os.path.join(ui_dir, filename)
         server = server.with_app(path=f"/{app_name}", root=app_path)
         app_names.append(app_name)
-        logger.info(f"Using appname: {app_name}")
-
-with open("assets/app_names.json", "w") as f:
-    json.dump(app_names, f, indent=3)
 
 templates = Jinja2Templates(directory=templates_dir)
 
 
-# -- app-level endpoints -- #
+# -- main-level endpoints -- #
 
 
 @app.get("/", tags=["SMS API"])

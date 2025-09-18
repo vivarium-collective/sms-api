@@ -7,18 +7,12 @@
     "bordered": true,
     "cells": [
       {
-        "position": null
-      },
-      {
         "position": [
           0,
           0,
           13,
           11
         ]
-      },
-      {
-        "position": null
       },
       {
         "position": null
