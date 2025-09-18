@@ -1140,7 +1140,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /experiment/:
+  /experiment/launch:
     post:
       tags:
       - Simulations - vEcoli
@@ -1176,6 +1176,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /experiment/get:
     get:
       tags:
       - Simulations - vEcoli
@@ -1201,6 +1202,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /experiment/remove:
     delete:
       tags:
       - Simulations - vEcoli

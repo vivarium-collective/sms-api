@@ -75,7 +75,7 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
 
 
 @config.router.post(
-    path="/",
+    path="/launch",
     operation_id="run-experiment",
     response_model=EcoliExperimentDTO,
     tags=["Simulations - vEcoli"],
@@ -120,7 +120,7 @@ async def launch_simulation(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(path="/", operation_id="get-experiment", tags=["Simulations - vEcoli"])
+@config.router.get(path="/get", operation_id="get-experiment", tags=["Simulations - vEcoli"])
 async def get_experiment(experiment_id: str) -> EcoliExperimentDTO:
     try:
         db_service = DBService()
@@ -130,7 +130,7 @@ async def get_experiment(experiment_id: str) -> EcoliExperimentDTO:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.delete(path="/", operation_id="delete-experiment", tags=["Simulations - vEcoli"])
+@config.router.delete(path="/remove", operation_id="delete-experiment", tags=["Simulations - vEcoli"])
 async def delete_experiment(experiment_id: str) -> str:
     try:
         db_service = DBService()
