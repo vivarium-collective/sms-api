@@ -39,6 +39,11 @@ dependencies = [
     "pandas-stubs>=2.3.0.250703",
     "xmltodict>=0.14.2",
     "polars>=1.33.1",
+    "pytest-asyncio>=1.1.0",
+    "aiobotocore>=2.24.2",
+    "types-aiobotocore-sqs>=2.24.2",
+    "boto3>=1.40.18",
+    "botocore>=1.40.18",
 ]
 
 [project.urls]
@@ -62,6 +67,7 @@ dev = [
     "types-xmltodict>=0.14.0.20241009",
     "debugpy>=1.8.16",
     "ipdb>=0.13.13",
+    "types-boto3[sqs]>=1.40.35",
 ]
 docs = [
     "mkdocs>=1.4.2,<2",

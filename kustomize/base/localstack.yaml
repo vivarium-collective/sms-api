@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: localstack
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: localstack } }
+  template:
+    metadata: { labels: { app: localstack } }
+    spec:
+      containers:
+        - name: localstack
+          image: localstack/localstack:latest
+          env:
+            - { name: SERVICES, value: "sqs,sts" }  # add 'sts' if your app calls STS
+            - { name: EDGE_PORT, value: "4566" }
+            - { name: AWS_DEFAULT_REGION, value: "us-east-1" }
+          ports:
+            - containerPort: 4566
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: localstack
+spec:
+  type: ClusterIP
+  selector: { app: localstack }
+  ports:
+    - name: edge
+      port: 4566
+      targetPort: 4566

@@ -15,6 +15,14 @@ from tests.fixtures.api_fixtures import (  # noqa: F401
     simulation_config,
     workspace_image_hash,
 )
+from tests.fixtures.localstack_fixtures import (  # noqa: F401
+    _aio_session,
+    async_sqs_client,
+    async_sqs_queue_url,
+    localstack_info,
+    sqs_client,
+    sqs_queue_url
+)
 from tests.fixtures.logging_fixtures import logger  # noqa: F401
 from tests.fixtures.mongodb_fixtures import (  # noqa: F401
     mongo_test_client,
