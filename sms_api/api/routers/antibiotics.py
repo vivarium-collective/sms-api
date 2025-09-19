@@ -6,4 +6,4 @@ from sms_api.common.gateway.models import RouterConfig
 
 logger = logging.getLogger(__name__)
 
-config = RouterConfig(router=APIRouter(), prefix="/antibiotic", dependencies=[])
+config = RouterConfig(router=APIRouter(), prefix="/antibiotics", dependencies=[])

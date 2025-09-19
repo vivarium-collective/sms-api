@@ -32,7 +32,7 @@ from sms_api.simulation.models import (
 ENV = get_settings()
 
 logger = logging.getLogger(__name__)
-config = RouterConfig(router=APIRouter(), prefix="/experiment", dependencies=[])
+config = RouterConfig(router=APIRouter(), prefix="/experiments", dependencies=[])
 # config = RouterConfig(router=APIRouter(), prefix="/wcm", dependencies=[])
 
 

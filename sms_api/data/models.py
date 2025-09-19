@@ -4,7 +4,7 @@ import pathlib
 from collections.abc import Collection
 from dataclasses import asdict, dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, override
 
 import numpy
 import numpy as np
@@ -174,3 +174,65 @@ class SerializedArray:
     @value.setter
     def value(self, value: np.ndarray) -> None:
         self._value = self.serialize(value)
+
+
+class Configuration(BaseModel):
+    @classmethod
+    def from_file(cls, fp: pathlib.Path, config_id: str | None = None) -> "Configuration":
+        filepath = fp
+        with open(filepath) as f:
+            conf = json.load(f)
+        return cls(**conf)
+
+
+class AnalysisConfigOptions(BaseModel):
+    experiment_id: list[str]
+    variant_data_dir: list[str]
+    validation_data_path: list[str]
+    outdir: str
+    cpus: int
+    single: dict[str, Any] = Field(default_factory=dict)
+    multidaughter: dict[str, Any] = Field(default_factory=dict)
+    multigeneration: dict[str, dict[str, Any]] = {
+        "replication": {},
+        "ribosome_components": {},
+        "ribosome_crowding": {},
+        "ribosome_production": {},
+        "ribosome_usage": {},
+        "rna_decay_03_high": {},
+    }
+    multiseed: dict[str, dict[str, Any]] = {
+        "protein_counts_validation": {},
+        "ribosome_spacing": {},
+        "subgenerational_expression_table": {},
+    }
+    multivariant: dict[str, dict[str, Any]] = {
+        "average_monomer_counts": {},
+        "cell_mass": {},
+        "doubling_time_hist": {"skip_n_gens": 1},
+        "doubling_time_line": {},
+    }
+    multiexperiment: dict[str, Any] = {}
+
+
+class AnalysisConfig(Configuration):
+    analysis_options: AnalysisConfigOptions
+    emitter_arg: dict[str, str] = Field(default={"out_dir": ""})
+
+    def model_post_init(self, *args: Any) -> None:
+        if not self.emitter_arg["out_dir"]:
+            raise ValueError("You must specify an output directory according to vEcoli documentation for analyses...")
+
+    @classmethod
+    @override
+    def from_file(cls, fp: pathlib.Path, config_id: str | None = None) -> "AnalysisConfig":
+        filepath = fp
+        with open(filepath) as f:
+            conf = json.load(f)
+        options = AnalysisConfigOptions(**conf["analysis_options"])
+        return cls(analysis_options=options, emitter_arg=conf["emitter_arg"])
+
+
+class AnalysisJob(BaseModel):
+    id: int
+    status: str = "WAITING"

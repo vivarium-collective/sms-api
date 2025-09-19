@@ -3,44 +3,126 @@ info:
   title: sms-api
   version: 0.2.20-dev
 paths:
-  /analyze/manifest:
-    get:
+  /analyses:
+    post:
       tags:
       - Analysis - vEcoli
-      summary: Get all available analyses for a given simulation
-      operationId: get-analysis-manifest
-      parameters:
-      - name: experiment_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Experiment Id
+      summary: Run an analysis workflow (like multigeneration)
+      operationId: run-analysis
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/AnalysisConfig'
+              - type: 'null'
+              title: Config
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/AnalysisJob'
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /analyze/download:
     get:
       tags:
       - Analysis - vEcoli
-      summary: Download a file that was generated from a simulation analysis module
-      operationId: download-analysis-output
+      summary: Get all available analysis output ids
+      operationId: get-available-analyses
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                title: Response Get-Available-Analyses
+    put:
+      tags:
+      - Analysis - vEcoli
+      summary: Upload custom analysis module
+      operationId: upload_analysis_module_analyses_put
       parameters:
-      - name: experiment_id
+      - name: submodule_name
         in: query
         required: true
         schema:
           type: string
-          title: Experiment Id
+          description: Submodule name(single, multiseed, etc)
+          title: Submodule Name
+        description: Submodule name(single, multiseed, etc)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_analysis_module_analyses_put'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Upload Analysis Module Analyses Put
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analyses/{id}:
+    get:
+      tags:
+      - Analysis - vEcoli
+      summary: Get an array of HTML files as strings and job status6
+      operationId: get_analysis_analyses__id__get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                title: Response Get Analysis Analyses  Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analyses/{id}/download:
+    get:
+      tags:
+      - Analysis - vEcoli
+      summary: Download a single file that was generated from a simulation analysis
+        module
+      operationId: download-analysis-output
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Id
       - name: variant_id
         in: query
         required: false
@@ -89,138 +171,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /analyze/upload:
-    post:
-      tags:
-      - Analysis - vEcoli
-      summary: Upload Analysis Module
-      operationId: upload_analysis_module_analyze_upload_post
-      parameters:
-      - name: submodule_name
-        in: query
-        required: true
-        schema:
-          type: string
-          description: Submodule name(single, multiseed, etc)
-          title: Submodule Name
-        description: Submodule name(single, multiseed, etc)
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Body_upload_analysis_module_analyze_upload_post'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-                title: Response Upload Analysis Module Analyze Upload Post
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /analyze/run:
-    post:
-      tags:
-      - Analysis - vEcoli
-      summary: Run an analysis
-      operationId: run-analysis
-      requestBody:
-        content:
-          application/json:
-            schema:
-              anyOf:
-              - additionalProperties: true
-                type: object
-              - type: 'null'
-              title: Config
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AnalysisJob'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /analyze/status:
-    post:
-      tags:
-      - Analysis - vEcoli
-      summary: Get the analysis status record by its ID
-      operationId: get-analysis-status
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AnalysisJob'
-        required: true
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AnalysisJob'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /analyze/archive:
-    post:
-      tags:
-      - Analysis - vEcoli
-      summary: Get the analysis archive zip record by its ID
-      operationId: get-analysis-archive
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-  /analyze/get:
-    post:
-      tags:
-      - Analysis - vEcoli
-      summary: Get Analysis
-      operationId: show-analysis
-      parameters:
-      - name: experiment_id
-        in: query
-        required: false
-        schema:
-          type: string
-          default: analysis_multigen
-          title: Experiment Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: string
-                title: Response Show-Analysis
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /configure/upload/simulation:
+  /configs/upload/simulation:
     post:
       tags:
       - Configurations - vEcoli
@@ -435,7 +386,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /configure/upload/analysis:
+  /configs/upload/analysis:
     post:
       tags:
       - Configurations - vEcoli
@@ -650,7 +601,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /configure/get:
+  /configs/get:
     get:
       tags:
       - Configurations - vEcoli
@@ -676,7 +627,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /configure/remove:
+  /configs/remove:
     delete:
       tags:
       - Configurations - vEcoli
@@ -703,7 +654,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /configure/versions:
+  /configs/versions:
     get:
       tags:
       - Configurations - vEcoli
@@ -719,7 +670,7 @@ paths:
                   $ref: '#/components/schemas/SimulationConfiguration'
                 type: array
                 title: Response List-Simulation-Configs
-  /experiment/launch:
+  /experiments/launch:
     post:
       tags:
       - Simulations - vEcoli
@@ -755,7 +706,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /experiment/get:
+  /experiments/get:
     get:
       tags:
       - Simulations - vEcoli
@@ -781,7 +732,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /experiment/remove:
+  /experiments/remove:
     delete:
       tags:
       - Simulations - vEcoli
@@ -808,7 +759,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /experiment/versions:
+  /experiments/versions:
     get:
       tags:
       - Simulations - vEcoli
@@ -824,7 +775,7 @@ paths:
                   $ref: '#/components/schemas/EcoliExperimentDTO'
                 type: array
                 title: Response List-Experiments
-  /experiment/status:
+  /experiments/status:
     get:
       tags:
       - Simulations - vEcoli
@@ -850,7 +801,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /experiment/log:
+  /experiments/log:
     post:
       tags:
       - Simulations - vEcoli
@@ -877,7 +828,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /experiment/data:
+  /experiments/data:
     post:
       tags:
       - Simulations - vEcoli
@@ -983,6 +934,100 @@ paths:
                 title: Response Get Version Version Get
 components:
   schemas:
+    AnalysisConfig:
+      properties:
+        analysis_options:
+          $ref: '#/components/schemas/AnalysisConfigOptions'
+        emitter_arg:
+          additionalProperties:
+            type: string
+          type: object
+          title: Emitter Arg
+          default:
+            out_dir: ''
+      type: object
+      required:
+      - analysis_options
+      title: AnalysisConfig
+    AnalysisConfigOptions:
+      properties:
+        experiment_id:
+          items:
+            type: string
+          type: array
+          title: Experiment Id
+        variant_data_dir:
+          items:
+            type: string
+          type: array
+          title: Variant Data Dir
+        validation_data_path:
+          items:
+            type: string
+          type: array
+          title: Validation Data Path
+        outdir:
+          type: string
+          title: Outdir
+        cpus:
+          type: integer
+          title: Cpus
+        single:
+          additionalProperties: true
+          type: object
+          title: Single
+        multidaughter:
+          additionalProperties: true
+          type: object
+          title: Multidaughter
+        multigeneration:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+          type: object
+          title: Multigeneration
+          default:
+            replication: {}
+            ribosome_components: {}
+            ribosome_crowding: {}
+            ribosome_production: {}
+            ribosome_usage: {}
+            rna_decay_03_high: {}
+        multiseed:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+          type: object
+          title: Multiseed
+          default:
+            protein_counts_validation: {}
+            ribosome_spacing: {}
+            subgenerational_expression_table: {}
+        multivariant:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+          type: object
+          title: Multivariant
+          default:
+            average_monomer_counts: {}
+            cell_mass: {}
+            doubling_time_hist:
+              skip_n_gens: 1
+            doubling_time_line: {}
+        multiexperiment:
+          additionalProperties: true
+          type: object
+          title: Multiexperiment
+          default: {}
+      type: object
+      required:
+      - experiment_id
+      - variant_data_dir
+      - validation_data_path
+      - outdir
+      - cpus
+      title: AnalysisConfigOptions
     AnalysisJob:
       properties:
         id:
@@ -1011,7 +1056,7 @@ components:
           title: Metadata
       type: object
       title: Body_run-experiment
-    Body_upload_analysis_module_analyze_upload_post:
+    Body_upload_analysis_module_analyses_put:
       properties:
         file:
           type: string
@@ -1020,7 +1065,7 @@ components:
       type: object
       required:
       - file
-      title: Body_upload_analysis_module_analyze_upload_post
+      title: Body_upload_analysis_module_analyses_put
     ConfigOverrides:
       properties:
         experiment_id:

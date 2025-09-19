@@ -23,7 +23,7 @@ from sms_api.simulation.models import (
 ENV = get_settings()
 
 logger = logging.getLogger(__name__)
-config = RouterConfig(router=APIRouter(), prefix="/configure", dependencies=[])
+config = RouterConfig(router=APIRouter(), prefix="/configs", dependencies=[])
 
 
 def DBService() -> DatabaseService:

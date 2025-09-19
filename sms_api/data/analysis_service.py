@@ -1,9 +1,13 @@
 import logging
 import re
 import tempfile
+import zipfile
+from collections.abc import Generator
+from io import BytesIO
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from sms_api.common.gateway.models import Namespace
 from sms_api.common.gateway.utils import get_local_simulation_outdir, get_simulation_outdir
@@ -118,6 +122,78 @@ class AnalysisService:
             ssh=ssh,
             logger=logger,
         )
+
+
+def get_experiment_id_from_tag(experiment_tag: str) -> str:
+    parts = experiment_tag.split("-")
+    parts.remove(parts[-1])
+    return "-".join(parts)
+
+
+def get_analysis_dir(outdir: Path, experiment_id: str) -> Path:
+    return outdir / experiment_id / "analyses"
+
+
+def get_analysis_paths(analysis_dir: Path) -> set[Path]:
+    paths = set()
+    for root, _, files in analysis_dir.walk():
+        for fname in files:
+            fp = root / fname
+            if fp.exists():
+                paths.add(fp)
+    return paths
+
+
+def generate_zip_buffer(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
+    """
+    Generator function to stream a zip file dynamically.
+    """
+    # Use BytesIO as an in-memory file-like object for chunks
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED) as zip_file:
+        for file_path, arcname in file_paths:
+            # arcname is the filename inside the zip (can handle non-unique names)
+            zip_file.write(file_path, arcname=arcname)
+    buffer.seek(0)
+    yield from buffer
+
+
+def unzip_archive(zip_path: Path, dest_dir: Path) -> str:
+    zip_path = Path(zip_path).resolve()
+    dest_dir = Path(dest_dir).resolve()
+
+    if not zip_path.is_file():
+        raise FileNotFoundError(f"{zip_path} does not exist or is not a file")
+
+    if not dest_dir.is_dir():
+        raise NotADirectoryError(f"{dest_dir} does not exist or is not a directory")
+
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        zip_ref.extractall(dest_dir)
+
+    return str(dest_dir)
+
+
+def get_html_output_paths(outdir_root: Path, experiment_id: str) -> list[Path]:
+    outdir = outdir_root / experiment_id
+    filepaths = []
+    for root, _, files in outdir.walk():
+        for f in files:
+            fp = root / f
+            if fp.exists() and fp.is_file():
+                filepaths.append(fp)
+    return list(filter(lambda _file: _file.name.endswith(".html"), filepaths))
+
+
+def read_html_file(file_path: Path) -> str:
+    """Read an HTML file and return its contents as a single string."""
+    with open(str(file_path), encoding="utf-8") as f:
+        return f.read()
+
+
+def get_analysis_html_outputs(outdir_root: Path, expid: str = "analysis_multigen") -> list[str]:
+    filepaths = get_html_output_paths(outdir_root, expid)
+    return [read_html_file(path) for path in filepaths]
 
 
 def analysis_slurm_script(

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from sms_api.simulation.models import AnalysisConfig
+from sms_api.data.models import AnalysisConfig
 
 
 @pytest.mark.asyncio

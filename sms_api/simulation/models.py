@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, override
+from typing import Any
 
 from pydantic import BaseModel as _BaseModel
 from pydantic import Field, model_validator
@@ -362,15 +362,6 @@ class EmitterArg(BaseModel):
     out_dir: str
 
 
-class Configuration(BaseModel):
-    @classmethod
-    def from_file(cls, fp: Path, config_id: str | None = None) -> "Configuration":
-        filepath = fp
-        with open(filepath) as f:
-            conf = json.load(f)
-        return cls(**conf)
-
-
 class SimulationConfig(BaseModel):
     experiment_id: str | None = None
     sim_data_path: str | None = None
@@ -477,51 +468,3 @@ class EcoliExperimentDTO(BaseModel):
     metadata: Mapping[str, str] = Field(default_factory=dict)
     experiment_tag: str | None = None
     # simulation: EcoliSimulation | EcoliWorkflowSimulation | AntibioticSimulation
-
-
-class AnalysisConfigOptions(BaseModel):
-    experiment_id: list[str]
-    variant_data_dir: list[str]
-    validation_data_path: list[str]
-    outdir: str
-    cpus: int
-    single: dict[str, Any] = Field(default_factory=dict)
-    multidaughter: dict[str, Any] = Field(default_factory=dict)
-    multigeneration: dict[str, dict[str, Any]] = {
-        "replication": {},
-        "ribosome_components": {},
-        "ribosome_crowding": {},
-        "ribosome_production": {},
-        "ribosome_usage": {},
-        "rna_decay_03_high": {},
-    }
-    multiseed: dict[str, dict[str, Any]] = {
-        "protein_counts_validation": {},
-        "ribosome_spacing": {},
-        "subgenerational_expression_table": {},
-    }
-    multivariant: dict[str, dict[str, Any]] = {
-        "average_monomer_counts": {},
-        "cell_mass": {},
-        "doubling_time_hist": {"skip_n_gens": 1},
-        "doubling_time_line": {},
-    }
-    multiexperiment: dict[str, Any] = {}
-
-
-class AnalysisConfig(Configuration):
-    analysis_options: AnalysisConfigOptions
-    emitter_arg: dict[str, str] = Field(default={"out_dir": ""})
-
-    def model_post_init(self, *args: Any) -> None:
-        if not self.emitter_arg["out_dir"]:
-            raise ValueError("You must specify an output directory according to vEcoli documentation for analyses...")
-
-    @classmethod
-    @override
-    def from_file(cls, fp: Path, config_id: str | None = None) -> "AnalysisConfig":
-        filepath = fp
-        with open(filepath) as f:
-            conf = json.load(f)
-        options = AnalysisConfigOptions(**conf["analysis_options"])
-        return cls(analysis_options=options, emitter_arg=conf["emitter_arg"])
