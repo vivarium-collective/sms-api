@@ -100,7 +100,7 @@ build-backend = "hatchling.build"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^smslab/*"]
+exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^libsms/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -219,7 +219,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "smslab/*"]
+exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "libsms/*"]
 
 [tool.ruff.format]
 preview = true
