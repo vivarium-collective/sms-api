@@ -137,6 +137,8 @@ async def dispatch_job(
         slurm_log_file=slurm_log_file,
         slurm_job_name=slurmjob_name,
         env=env,
+        latest_hash=simulator_hash,
+        experiment_id=experiment_id,
     )
     ssh = get_ssh_service(env)
     slurmjob_id = await _submit(
@@ -178,7 +180,7 @@ class AnalysisService:
             namespace=self.settings.deployment if len(self.settings.deployment) else Namespace.PRODUCTION,
         )
         if outdir is None:
-            log = logger_instance or logger_instance
+            log = logger_instance or logging.getLogger(__name__)
             log.debug(f"{outdir} was requested but does not exist. Defaulting to local dir.")
             outdir = get_local_simulation_outdir(experiment_id=experiment_id)
 

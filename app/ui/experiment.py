@@ -105,7 +105,7 @@ def _():
         base_url = get_base_url()
         return f"{base_url}/{resource}/{'/'.join(list(subpaths))}"
 
-    return Path, json, mo, pl
+    return Path, StrEnum, json, mo, pl, time
 
 
 @app.cell
@@ -175,16 +175,13 @@ def _():
         Returns:
             Parsed JSON response.
         """
-        url = f"{url_base}/wcm/experiment?config_id={config_id}"
+        url = f"{url_base}/experiments/launch?config_id={config_id}"
+        # url = f"{url_base}/wcm/experiment?config_id={config_id}"
         headers = {
             "accept": "application/json",
             "Content-Type": "application/json",
         }
-        metadataa = {
-            "additionalProp1": "string",
-            "additionalProp2": "string",
-            "additionalProp3": "string"
-        }
+        metadataa = {"additionalProp1": "string", "additionalProp2": "string", "additionalProp3": "string"}
         payload = {"overrides": {}, "metadata": metadataa}
 
         resp = requests.post(url, headers=headers, json=payload)
@@ -192,7 +189,7 @@ def _():
         return resp.json()
 
     def wcm_status(experiment_tag: str, url_base: str = "http://localhost:8888"):
-        url = f'http://localhost:8888/experiments/status?experiment_tag={experiment_tag}'
+        url = f"http://localhost:8888/experiments/status?experiment_tag={experiment_tag}"
         # url = f"{url_base}/wcm/experiment?config_id={config_id}"
         headers = {
             "accept": "application/json",
@@ -306,13 +303,30 @@ def _(mo):
 def _(mo):
     get_config_id, set_config_id = mo.state(None)
     get_events, set_events = mo.state([])
-    return get_config_id, get_events, set_config_id
+    return (get_events,)
 
 
 @app.cell
-def _(mo, set_config_id):
+def _(StrEnum):
+    class SimulationTypes(StrEnum):
+        MULTIGENERATION = "multigeneration"
+        SINGLE = "single"
+        PERTURBATION = "perturbation"
 
-    drop = mo.ui.dropdown(["multigeneration", "single"], value="single", on_change=lambda _: set_config_id(f"sms_{_}"), label="Experiment Type: ")
+        @classmethod
+        def values(cls):
+            return [SimulationTypes.MULTIGENERATION, SimulationTypes.SINGLE, SimulationTypes.PERTURBATION]
+
+        @classmethod
+        def config_ids(cls):
+            return [f"sms_{val}" for val in SimulationTypes.values()]
+
+    return (SimulationTypes,)
+
+
+@app.cell
+def _(SimulationTypes, mo):
+    drop = mo.ui.dropdown(SimulationTypes.values(), value="single", label="Experiment Configuration Type: ")
     # ecoli_experiment = wcm_experiment(config_id=config_id, overrides=None, metadata={})
     drop
 
@@ -320,10 +334,16 @@ def _(mo, set_config_id):
 
 
 @app.cell
-def _(drop):
-    confid = drop.value
-    confid
+def _(drop, mo):
+    mo.ui.text_area(value=f"Selected Experiment Configuration:\n{drop.value}").callout(kind="info")
     return
+
+
+@app.cell
+def _(drop):
+    confid = "sms_" + drop.value
+    confid
+    return (confid,)
 
 
 @app.cell
@@ -346,8 +366,6 @@ def _(get_events, latest_chart, mo, pl):
         #### Duration
         {mo.ui.slider(start=1, stop=2800, show_value=True, value=2800)}
     """)
-
-
 
     tabs = mo.ui.tabs({
         f"{mo.icon('material-symbols:graph-3')} Explore": mo.ui.data_explorer(pl.DataFrame()),
@@ -384,12 +402,10 @@ def _(mo):
 @app.cell
 def _(mo):
     run_simulation_button = mo.ui.run_button(
-            label=f"{mo.icon('mdi:bacteria-outline')} Start", kind="success", tooltip="Launch Experiment"
-        )
+        label=f"{mo.icon('mdi:bacteria-outline')} Start", kind="success", tooltip="Launch Experiment"
+    )
     stop_simulation_button = mo.ui.run_button(
-        label=f"{mo.icon('pajamas:stop')} Stop",
-        kind="danger",
-        tooltip="Stop Experiment"
+        label=f"{mo.icon('pajamas:stop')} Stop", kind="danger", tooltip="Stop Experiment"
     )
     return run_simulation_button, stop_simulation_button
 
@@ -402,8 +418,8 @@ def _(run_simulation_button):
 
 @app.cell
 def _(mo):
-    get_exp, set_exp = mo.state(None)
-    return get_exp, set_exp
+    get_experiment, set_experiment = mo.state(None)
+    return get_experiment, set_experiment
 
 
 @app.cell
@@ -413,30 +429,137 @@ def _(stop_simulation_button):
 
 
 @app.cell
-def _(drop, get_config_id, run_simulation_button, set_exp, wcm_experiment):
+def _(confid, run_simulation_button, set_experiment, wcm_experiment):
     if run_simulation_button.value:
-        if get_config_id() is not None:
-            experiment = wcm_experiment(config_id=f'sms_{drop.value}')
-            set_exp(experiment)
+        if confid is not None:
+            experiment = wcm_experiment(config_id=confid)
+            set_experiment(experiment)
             print(experiment)
     return
 
 
 @app.cell
-def _(get_exp, wcm_status):
-    status = None 
+def _(mo):
+    getMsg, setMsg = mo.state(f"Run a simulation!\nStatus: Waiting...")
+    getMsgColor, setMsgColor = mo.state("danger")
+    getStatus, setStatus = mo.state(None)
+    getTag, setTag = mo.state(None)
+    getRefreshed, setRefreshed = mo.state(False)
+    return (
+        getMsg,
+        getMsgColor,
+        getRefreshed,
+        getStatus,
+        getTag,
+        setMsg,
+        setMsgColor,
+        setRefreshed,
+        setStatus,
+        setTag,
+    )
 
-    if get_exp() is not None:
-        statusdata = wcm_status(get_exp())
+
+@app.cell
+def _(
+    getStatus,
+    get_experiment,
+    setMsg,
+    setMsgColor,
+    setStatus,
+    setTag,
+    time,
+    wcm_status,
+):
+    exp = get_experiment()
+    if exp is not None:
+        setTag(exp["experiment_tag"])
+        if getStatus() is None:
+            setMsg("Launching experiment...")
+            setMsgColor("warn")
+            time.sleep(7)
+            setMsg("...experiment launched!")
+            setMsgColor("success")
+        statusdata = wcm_status(exp["experiment_tag"])
+        status = statusdata.get("status")
+        expid = statusdata.get("id")
+        setStatus(status)
         msg = f"""\
-        ### Experiment {statusdata['id']}: {statusdata['status']}
+        ### Experiment {expid} status: {status}
         """
+        setMsg(msg)
+        color = "success"
+        setMsgColor(color)
+
     return
 
 
 @app.cell
-def _(get_exp):
-    get_exp()
+def _(getTag, mo, setRefreshed, setStatus, wcm_status):
+    def refresh_status():
+        tag = getTag()
+        status = None
+        if tag is not None:
+            statusdata = wcm_status(tag)
+            status = statusdata.get("status")
+        setRefreshed(True)
+        setStatus(status)
+
+    refresh_button = mo.ui.run_button(label="Refresh Status", kind="neutral")
+    refresh_button
+    return refresh_button, refresh_status
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _(refresh_button, refresh_status):
+    if refresh_button.value:
+        refresh_status()
+    return
+
+
+@app.cell
+def _(getMsg, getMsgColor, getStatus):
+    message = getMsg()
+    messageColor = getMsgColor()
+    simStatus = getStatus()
+    return message, messageColor
+
+
+@app.cell
+def _(message, messageColor, mo):
+    mo.ui.text_area(disabled=True, value=message).callout(messageColor)
+    return
+
+
+@app.cell
+def _(mo):
+    getPopup, setPopup = mo.state(None)
+    return getPopup, setPopup
+
+
+@app.cell
+def _(getRefreshed, getStatus, mo, setPopup, setRefreshed, time):
+    def statusPopup(stat):
+        color = "success" if not "fail" in stat else "danger"
+        return mo.ui.text_area(disabled=True, value=stat).callout(kind=color)
+
+    if getRefreshed():
+        stat = getStatus()
+        popup = statusPopup(stat)
+        setPopup(popup)
+        time.sleep(4)
+        setRefreshed(False)
+        setPopup(None)
+    return
+
+
+@app.cell
+def _(getPopup):
+    getPopup()
     return
 
 

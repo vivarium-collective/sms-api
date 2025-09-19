@@ -11,7 +11,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 
-from sms_api.api.request_examples import examples
 from sms_api.common.gateway.models import RouterConfig
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.config import get_settings
@@ -53,8 +52,8 @@ def DBService() -> DatabaseService:
     summary="Upload custom config JSON to be used for simulation workflows",
 )
 async def upload_simulation_experiment_config(
+    config: SimulationConfiguration,
     config_id: str = Query(description="Name by which you wish to save the config"),
-    config: SimulationConfiguration = examples["core_sim_config"],
 ) -> UploadedSimulationConfig:
     # here, simply write config serialized to tempdir locally then use that to scp upload to configs dir
     async def upload(config_id: str | None, sim_config: SimulationConfiguration) -> UploadedSimulationConfig:
@@ -105,8 +104,8 @@ async def upload_simulation_experiment_config(
     summary="Upload custom config JSON to be used for analysis workflows",
 )
 async def upload_analysis_config(
+    config: AnalysisConfig,
     config_id: str = Query(description="Name by which you wish to save the config"),
-    config: AnalysisConfig = examples["core_analysis_config"],
 ) -> UploadedAnalysisConfig:
     # here, simply write config serialized to tempdir locally then use that to scp upload to configs dir
     async def upload(config_id: str, analysis_config: AnalysisConfig) -> UploadedAnalysisConfig:

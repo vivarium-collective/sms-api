@@ -14,7 +14,6 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
-from sms_api.api.request_examples import DEFAULT_SIMULATION_CONFIG
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.common.gateway.utils import get_simulator
@@ -431,7 +430,7 @@ async def get_results(
     path="/experiment/config", operation_id="upload-experiment-config", tags=["Configurations - vEcoli"]
 )
 async def upload_simulation_config(
-    config_id: str | None = Query(default=None), sim_config: SimulationConfiguration = DEFAULT_SIMULATION_CONFIG
+    sim_config: SimulationConfiguration, config_id: str | None = Query(default=None)
 ) -> UploadedSimulationConfig:
     # NOTE: this endpoint should upload it to the logged-in client's dedicated dir
     if not sim_config.experiment_id:

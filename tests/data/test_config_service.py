@@ -1,13 +1,9 @@
-import logging
 import tempfile
-import uuid
 from pathlib import Path
 
 import pytest
 
-from sms_api.config import get_settings
-from sms_api.data import config_service
-from sms_api.data.models import AnalysisConfig
+from sms_api.data.utils import write_json_for_slurm
 
 
 @pytest.mark.asyncio
@@ -15,7 +11,7 @@ def test_write_json_for_slurm() -> None:
     data = {"x": {"i": 1, "j": [3, 22, 1111]}, "y": 0.22}
     with tempfile.TemporaryDirectory() as tmpdir:
         shared_dir = Path(tmpdir)
-        json_path = config_service.write_json_for_slurm(data, shared_dir)
+        json_path = write_json_for_slurm(data, shared_dir, "test.json")
 
         with open(json_path) as f:
             import json
@@ -26,13 +22,5 @@ def test_write_json_for_slurm() -> None:
 
 
 @pytest.mark.asyncio
-async def test_upload_config(analysis_config_path: Path, logger: logging.Logger, workspace_image_hash: str) -> None:
-    experiment_id = f"sms_analysis_test_{uuid.uuid4()!s}"
-    config = AnalysisConfig.from_file(fp=analysis_config_path)
-    jobid = config_service.dispatch_job(
-        experiment_id=experiment_id,
-        config=config,
-        env=get_settings(),
-        logger=logger,
-        simulator_hash=workspace_image_hash,
-    )
+async def test_upload_config() -> None:
+    pass

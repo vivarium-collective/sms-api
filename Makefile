@@ -258,3 +258,7 @@ client:
 .PHONY: scratch
 scratch:
 	@uv run marimo edit scratchpads/scratch.py
+
+.PHONY: ui
+ui:
+	@uv run --no-cache marimo edit app/ui/$(id).py

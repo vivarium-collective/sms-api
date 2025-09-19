@@ -1,13 +1,11 @@
 import abc
-import json
 import tempfile
 from pathlib import Path
-from textwrap import dedent
 
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import Settings, get_settings
-from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
+from sms_api.simulation.hpc_utils import get_slurm_submit_file
 
 
 class SubmitService(abc.ABC):
@@ -20,7 +18,12 @@ class SubmitService(abc.ABC):
         pass
 
     async def submit_slurm_script(
-        self, script_content: str, slurm_job_name: str, env: Settings | None = None, ssh: SSHService | None = None, logfile: Path | None = None
+        self,
+        script_content: str,
+        slurm_job_name: str,
+        env: Settings | None = None,
+        ssh: SSHService | None = None,
+        logfile: Path | None = None,
     ) -> int:
         settings = env or get_settings()
         ssh_service = ssh or SSHService(

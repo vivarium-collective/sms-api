@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     dev_base_url: str = "http://localhost:8888"
     prod_base_url: str = "https://sms.cam.uchc.edu"
 
+    def dev_engaged(self) -> bool:
+        return bool(int(self.dev_mode))
+
 
 @lru_cache
 def get_settings(env_file: Path | None = None) -> Settings:

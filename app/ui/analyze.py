@@ -73,12 +73,12 @@ app._unparsable_cell(
     r"""
     http://localhost:8888/analyses/{id}
 
-    import httpx 
+    import httpx
 
     with httpx.Client() as client:
-        resp = 
+        resp =
     """,
-    name="_"
+    name="_",
 )
 
 
@@ -86,7 +86,7 @@ app._unparsable_cell(
     r"""
     http://localhost:8888/experiments/launch
     """,
-    name="_"
+    name="_",
 )
 
 

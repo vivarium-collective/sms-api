@@ -14,7 +14,6 @@ import fastapi
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
-from sms_api.api.request_examples import examples
 from sms_api.common.gateway.models import RouterConfig
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import get_ssh_service
@@ -34,7 +33,7 @@ config = RouterConfig(router=APIRouter(), prefix="/analyses", dependencies=[])
     tags=["Analysis - vEcoli"],
     summary="Run an analysis workflow (like multigeneration)",
 )
-async def run_analysis(config: AnalysisConfig = examples["core_analysis_config"]) -> AnalysisJob:
+async def run_analysis(config: AnalysisConfig) -> AnalysisJob:
     try:
         config_id = "analysis_multigen"
         experiment_id = f"sms_{config_id}_{uuid.uuid4()!s}"

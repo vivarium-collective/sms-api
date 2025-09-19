@@ -63,7 +63,7 @@ async def test_serialize_sim_config() -> None:
     with open("assets/base_simulation_config.json") as f:
         simulation_config_raw = json.load(f)
     config = SimulationConfig(**simulation_config_raw)
-    serialized = config.to_json()
+    serialized = config.model_dump_json()
     # assert json.loads(serialized) == simulation_config_raw
     assert isinstance(serialized, str)
     assert isinstance(json.loads(serialized), dict)
