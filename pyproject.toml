@@ -46,7 +46,6 @@ Repository = "https://github.com/vivarium-collective/sms-api"
 Documentation = "https://vivarium-collective.github.io/sms-api/"
 
 [dependency-groups]
-clients = []
 dev = [
     "pytest>=8.3.5,<9",
     "pytest-cov>=4.0.0,<5",

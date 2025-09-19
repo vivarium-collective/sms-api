@@ -2591,7 +2591,6 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-clients = []
 dev = [
     { name = "debugpy", specifier = ">=1.8.16" },
     { name = "deptry", specifier = ">=0.16.2,<0.17" },
