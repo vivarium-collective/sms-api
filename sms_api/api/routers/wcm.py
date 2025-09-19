@@ -428,7 +428,7 @@ async def get_results(
 
 
 @config.router.post(
-    path="/experiment/config", operation_id="upload-simulation-config", tags=["Configurations - vEcoli"]
+    path="/experiment/config", operation_id="upload-experiment-config", tags=["Configurations - vEcoli"]
 )
 async def upload_simulation_config(
     config_id: str | None = Query(default=None), sim_config: SimulationConfiguration = DEFAULT_SIMULATION_CONFIG
@@ -471,7 +471,7 @@ async def upload_simulation_config(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(path="/experiment/config", operation_id="get-simulation-config", tags=["Configurations - vEcoli"])
+@config.router.get(path="/experiment/config", operation_id="get-experiment-config", tags=["Configurations - vEcoli"])
 async def get_simulation_config(config_id: str) -> SimulationConfiguration:
     try:
         db_service = DBService()
@@ -482,7 +482,7 @@ async def get_simulation_config(config_id: str) -> SimulationConfiguration:
 
 
 @config.router.delete(
-    path="/experiment/config", operation_id="delete-simulation-config", tags=["Configurations - vEcoli"]
+    path="/experiment/config", operation_id="delete-experiment-config", tags=["Configurations - vEcoli"]
 )
 async def delete_simulation_config(config_id: str) -> str:
     try:
@@ -659,3 +659,46 @@ def read_html_file(file_path: Path) -> str:
 def get_analysis_html_outputs(outdir_root: Path, expid: str = "analysis_multigen") -> list[str]:
     filepaths = get_html_output_paths(outdir_root, expid)
     return [read_html_file(path) for path in filepaths]
+
+
+@config.router.get(
+    path="/analysis/download",
+    response_model=None,
+    # response_class=FileResponse,
+    operation_id="download-analysis-output-data",
+    tags=["Data - vEcoli"],
+    summary="Download a file that was generated from a simulation analysis module",
+)
+async def download_analysis_file(
+    experiment_id: str = Query(...),
+    variant_id: int = Query(default=0),
+    lineage_seed_id: int = Query(default=0),
+    generation_id: int = Query(default=1),
+    agent_id: int = Query(default=0),
+    filename: str = Query(examples=["mass_fraction_summary.html"]),
+) -> Union[FileResponse, HTMLResponse]:
+    try:
+        env = get_settings()
+        # experiment_id = get_experiment_id_from_tag(experiment_tag)
+        # filepath = service.get_file_path(experiment_id, filename, remote=True, logger_instance=logger)
+
+        outdir = env.local_simulation_outdir if int(env.dev_mode) else env.simulation_outdir
+        filepath = (
+            Path(outdir)
+            / experiment_id
+            / "analyses"
+            / f"variant={variant_id}"
+            / f"lineage_seed={lineage_seed_id}"
+            / f"generation={generation_id}"
+            / f"agent_id={agent_id}"
+            / "plots"
+            / filename
+        )
+        mimetype, _ = mimetypes.guess_type(filepath)
+
+        if str(filepath).endswith(".html"):
+            return HTMLResponse(content=filepath.read_text(encoding="utf-8"))
+        return FileResponse(path=filepath, media_type=mimetype or "application/octet-stream", filename=filepath.name)
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e

@@ -4,8 +4,12 @@ import random
 import pytest
 
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.models import EcoliSimulation, EcoliSimulationRequest, ParcaDatasetRequest
-from sms_api.simulation.models import SimulationConfiguration as SimulationConfig
+from sms_api.simulation.models import (
+    EcoliSimulation,
+    EcoliSimulationRequest,
+    ParcaDatasetRequest,
+    SimulationConfig,
+)
 
 
 @pytest.mark.asyncio

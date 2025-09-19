@@ -1,0 +1,35 @@
+{
+    "emitter_arg": {
+        "out_dir": "/home/FCAM/svc_vivarium/workspace/api_outputs"
+    },
+    "analysis_options": {
+        "experiment_id": ["sms_multigeneration"],
+        "variant_data_dir": ["/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration/variant_sim_data"],
+        "validation_data_path": ["/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration/parca/kb/validationData.cPickle"],
+        "outdir": "/home/FCAM/svc_vivarium/workspace/api_outputs/analysis_multigen",
+        "cpus": 4,
+
+        "single": {},
+        "multidaughter": {},
+        "multigeneration": {
+            "replication": {},
+            "ribosome_components": {},
+            "ribosome_crowding": {},
+            "ribosome_production": {},
+            "ribosome_usage": {},
+            "rna_decay_03_high": {}
+        },
+        "multiseed": {
+            "protein_counts_validation": {},
+            "ribosome_spacing": {},
+            "subgenerational_expression_table": {}
+        },
+        "multivariant": {
+            "average_monomer_counts": {},
+            "cell_mass": {},
+            "doubling_time_hist": {"skip_n_gens": 1},
+            "doubling_time_line": {}
+        },
+        "multiexperiment": {}
+    }
+}

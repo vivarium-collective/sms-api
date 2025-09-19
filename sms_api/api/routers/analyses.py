@@ -1,6 +1,7 @@
 import logging
 import mimetypes
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Union
 
@@ -8,11 +9,12 @@ import fastapi
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
+from sms_api.api.request_examples import examples
 from sms_api.common.gateway.models import RouterConfig
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.config import get_settings
-from sms_api.data.analysis_service import AnalysisService, get_analysis_html_outputs
+from sms_api.data import analysis_service
 from sms_api.data.models import AnalysisConfig, AnalysisJob
 
 ENV = get_settings()
@@ -23,16 +25,20 @@ config = RouterConfig(router=APIRouter(), prefix="/analyses", dependencies=[])
 
 @config.router.post(
     path="",
-    operation_id="run-analysis",
+    operation_id="run-experiment-analysis",
     tags=["Analysis - vEcoli"],
     summary="Run an analysis workflow (like multigeneration)",
 )
-async def run_analysis(config: AnalysisConfig | None = None) -> AnalysisJob:
+async def run_analysis(config: AnalysisConfig = examples["core_analysis_config"]) -> AnalysisJob:
     try:
-        service = AnalysisService()
         config_id = "analysis_multigen"
-        slurm_jobid: int = await service.submit_analysis_job(
-            config_id=config_id, experiment_id=config_id, simulator_hash=get_simulator().git_commit_hash, env=ENV
+        experiment_id = f"sms_{config_id}_{uuid.uuid4()!s}"
+        slurm_jobid: int = await analysis_service.dispatch_job(
+            experiment_id=experiment_id,
+            config=config,
+            simulator_hash=get_simulator().git_commit_hash,
+            env=ENV,
+            logger=logger,
         )
         return AnalysisJob(id=slurm_jobid, status="STARTED")
 
@@ -81,22 +87,21 @@ async def upload_analysis_module(
 @config.router.get(
     path="/{id}", tags=["Analysis - vEcoli"], summary="Get an array of HTML files as strings and job status6"
 )
-async def get_analysis(id: str) -> list[str]:  # noqa: A002
-    id = "analysis_multigen"  # noqa: A001
+async def get_analysis(id: str) -> list[str]:
+    id = "analysis_multigen"
     outdir = Path(ENV.slurm_base_path) / "workspace" / "api_outputs"
-    return get_analysis_html_outputs(outdir_root=outdir, expid=id)
+    return analysis_service.get_analysis_html_outputs(outdir_root=outdir, expid=id)
 
 
 @config.router.get(
     path="/{id}/download",
     response_model=None,
-    # response_class=FileResponse,
-    operation_id="download-analysis-output",
+    operation_id="download-analysis-output-file",
     tags=["Analysis - vEcoli"],
     summary="Download a single file that was generated from a simulation analysis module",
 )
 async def download_analysis(
-    id: str = fastapi.Path(...),  # noqa: A002
+    id: str = fastapi.Path(...),
     variant_id: int = Query(default=0),
     lineage_seed_id: int = Query(default=0),
     generation_id: int = Query(default=1),

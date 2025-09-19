@@ -120,7 +120,7 @@ async def launch_simulation(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(path="/get", operation_id="get-experiment", tags=["Simulations - vEcoli"])
+@config.router.get(path="/get", operation_id="fetch-experiment", tags=["Simulations - vEcoli"])
 async def get_experiment(experiment_id: str) -> EcoliExperimentDTO:
     try:
         db_service = DBService()
@@ -130,7 +130,7 @@ async def get_experiment(experiment_id: str) -> EcoliExperimentDTO:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.delete(path="/remove", operation_id="delete-experiment", tags=["Simulations - vEcoli"])
+@config.router.delete(path="/remove", operation_id="remove-experiment", tags=["Simulations - vEcoli"])
 async def delete_experiment(experiment_id: str) -> str:
     try:
         db_service = DBService()
@@ -142,7 +142,7 @@ async def delete_experiment(experiment_id: str) -> str:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(path="/versions", operation_id="list-experiments", tags=["Simulations - vEcoli"])
+@config.router.get(path="/versions", operation_id="list-all-experiments", tags=["Simulations - vEcoli"])
 async def list_experiments() -> list[EcoliExperimentDTO]:
     try:
         db_service = DBService()
@@ -155,7 +155,7 @@ async def list_experiments() -> list[EcoliExperimentDTO]:
 @config.router.get(
     path="/status",
     response_model=SimulationRun,
-    operation_id="get-vecoli-simulation-status",
+    operation_id="get-simulation-experiment-status",
     tags=["Simulations - vEcoli"],
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
@@ -180,7 +180,7 @@ async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationR
 
 @config.router.post(
     path="/log",
-    operation_id="get-vecoli-simulation-log",
+    operation_id="get-simulation-experiment-log",
     tags=["Simulations - vEcoli"],
     summary="Get the simulation log record of a given experiment",
 )
@@ -207,7 +207,7 @@ async def get_simulation_log(experiment_id: str = Query(...)) -> str:
 @config.router.post(
     path="/data",
     response_class=FileResponse,
-    operation_id="get-data",
+    operation_id="get-output-data",
     tags=["Simulations - vEcoli"],
     summary="Get simulation outputs",
 )

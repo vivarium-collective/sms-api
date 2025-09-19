@@ -12,7 +12,10 @@ Then, add that func to the list within the examples dict comprehension below!
 """
 
 import json
+from pathlib import Path
 
+from sms_api.config import REPO_ROOT
+from sms_api.data.models import AnalysisConfig
 from sms_api.simulation.models import EcoliWorkflowRequest, SimulationConfiguration
 
 DEFAULT_SIMULATION_CONFIG = SimulationConfiguration.from_base()
@@ -44,4 +47,13 @@ def core_simulation_workflow() -> EcoliWorkflowRequest:
     return EcoliWorkflowRequest(**json.loads(payload))
 
 
-examples = {func.__name__: func() for func in [core_simulation_workflow]}
+def core_sim_config() -> SimulationConfiguration:
+    return SimulationConfiguration()
+
+
+def core_analysis_config() -> AnalysisConfig:
+    fp = Path(REPO_ROOT) / "assets" / "sms_multigen_analysis.json"
+    return AnalysisConfig.from_file(fp=fp)
+
+
+examples = {func.__name__: func() for func in [core_simulation_workflow, core_analysis_config, core_sim_config]}

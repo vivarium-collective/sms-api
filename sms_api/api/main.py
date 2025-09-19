@@ -61,10 +61,11 @@ APP_ROUTERS = [
     "antibiotics",
     "biofactory",
     "configs",  # config upload/download/get only
-    # "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
+    "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
     "inference",
     "variants",
     "experiments",  # SLURM submitted, vEcoli/Nextflow-based workflows (main)
+    "wcm",
 ]
 ENV = get_settings()
 assets_dir = Path(ENV.assets_dir)

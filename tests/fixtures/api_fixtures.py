@@ -9,7 +9,7 @@ from httpx import ASGITransport
 
 from sms_api.api.client import Client
 from sms_api.api.main import app
-from sms_api.config import get_settings
+from sms_api.config import REPO_ROOT, get_settings
 
 # from sms_api.data.biocyc_service import BiocycService
 from sms_api.latest_commit import write_latest_commit
@@ -55,3 +55,8 @@ async def in_memory_api_client() -> AsyncGenerator[Client, None]:
 @pytest_asyncio.fixture(scope="session")
 async def workspace_image_hash() -> str:
     return "079c43c"
+
+
+@pytest_asyncio.fixture(scope="session")
+async def analysis_config_path() -> Path:
+    return Path(REPO_ROOT) / "assets" / "sms_multigen_analysis.json"

@@ -218,97 +218,6 @@ class RequestedObservables(BaseModel):
     items: list[str] = Field(default_factory=list)
 
 
-class SimulationConfiguration(BaseModel):
-    experiment_id: str | None = None
-    sim_data_path: str | None = None
-    suffix_time: bool | None = None
-    parca_options: dict[str, Any] = Field(default_factory=dict)
-    generations: int | None = None
-    n_init_sims: int | None = None
-    max_duration: float | None = None
-    initial_global_time: float | None = None
-    time_step: float | None = None
-    single_daughters: bool | None = None
-    emitter: str | None = None
-    emitter_arg: dict[str, Any] = Field(default_factory=dict)
-    variants: dict[str, Any] | None = None
-    analysis_options: dict[str, Any] = Field(default_factory=dict)
-    gcloud: str | None = None
-    agent_id: str | None = None
-    parallel: bool | None = None
-    divide: bool | None = None
-    d_period: bool | None = None
-    division_threshold: bool | None = None
-    division_variable: list[str] = Field(default_factory=list)
-    chromosome_path: list[str] | None = None
-    spatial_environment: bool | None = None
-    fixed_media: str | None = None
-    condition: str | None = None
-    save: bool | None = None
-    save_times: list[str] = Field(default_factory=list)
-    add_processes: list[str] = Field(default_factory=list)
-    exclude_processes: list[str] = Field(default_factory=list)
-    profile: bool | None = None
-    processes: list[str] = Field(default_factory=list)
-    process_configs: dict[str, Any] = Field(default_factory=dict)
-    topology: dict[str, Any] = field(default_factory=dict)
-    engine_process_reports: list[list[str]] = Field(default_factory=list)
-    emit_paths: list[str] = Field(default_factory=list)
-    progress_bar: bool | None = None
-    emit_topology: bool | None = None
-    emit_processes: bool | None = None
-    emit_config: bool | None = None
-    emit_unique: bool | None = None
-    log_updates: bool | None = None
-    raw_output: bool | None = None
-    description: str | None = None
-    seed: int | None = None
-    mar_regulon: bool | None = None
-    amp_lysis: bool | None = None
-    initial_state_file: str | None = None
-    skip_baseline: bool | None = None
-    daughter_outdir: str | None = None
-    lineage_seed: int | None = None
-    fail_at_max_duration: bool | None = None
-    inherit_from: list[str] = Field(default_factory=list)
-    spatial_environment_config: dict[str, Any] = Field(default_factory=dict)
-    swap_processes: dict[str, Any] = Field(default_factory=dict)
-    flow: dict[str, Any] = Field(default_factory=dict)
-    initial_state_overrides: list[str] = Field(default_factory=list)
-    initial_state: dict[str, Any] = Field(default_factory=dict)
-    # config_id: str | None = None
-
-    @classmethod
-    def from_file(cls, fp: Path, config_id: str | None = None) -> "SimulationConfiguration":
-        filepath = fp
-        with open(filepath) as f:
-            conf = json.load(f)
-        # confid = config_id or str(uuid.uuid4())
-        # conf["config_id"] = confid
-        env = get_settings()
-        conf["emitter_arg"]["out_dir"] = env.simulation_outdir  # "/home/FCAM/svc_vivarium/workspace/outputs"
-        conf["daughter_outdir"] = env.simulation_outdir
-        conf["parca_options"]["outdir"] = env.simulation_outdir
-        return cls(**conf)
-
-    @classmethod
-    def from_base(cls, config_id: str | None = None) -> "SimulationConfiguration":
-        return cls.from_file(fp=BASE_SIMULATION_CONFIG_PATH, config_id=config_id)
-
-    # @model_validator(mode="after")
-    # def set_id(self) -> "SimulationConfiguration":
-    #     self.id = self.id or str(uuid.uuid4())
-    #     return self
-
-    def to_dict(self) -> dict[str, Any] | Any:
-        data = self.model_dump()
-        data.pop("id", None)
-        return json.loads(json.dumps(data))
-
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict())
-
-
 class ParcaOptions(BaseModel):
     cpus: int = 2
     outdir: str = ""
@@ -441,8 +350,17 @@ class SimulationConfig(BaseModel):
         return self
 
 
+class SimulationConfiguration(SimulationConfig):
+    pass
+
+
 class ConfigOverrides(SimulationConfig):
     pass
+
+
+class UploadedConfig(BaseModel):
+    id: str
+    data: dict[str, Any] = Field(default_factory=dict)
 
 
 class UploadedSimulationConfig(BaseModel):

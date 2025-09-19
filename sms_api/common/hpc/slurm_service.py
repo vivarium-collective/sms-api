@@ -55,9 +55,14 @@ class SlurmService:
             slurm_jobs.append(SlurmJob.from_sacct_formatted_output(line.strip()))
         return slurm_jobs
 
-    async def submit_job(self, local_sbatch_file: Path, remote_sbatch_file: Path) -> int:
+    async def submit_job(
+        self, local_sbatch_file: Path, remote_sbatch_file: Path, args: tuple[str, ...] | None = None
+    ) -> int:
         await self.ssh_service.scp_upload(local_file=local_sbatch_file, remote_path=remote_sbatch_file)
         command = f"sbatch --parsable {remote_sbatch_file}"
+        if args:
+            for arg in args:
+                command += f" {arg}"
         return_code, stdout, stderr = await self.ssh_service.run_command(command=command)
         if return_code != 0:
             raise Exception(
