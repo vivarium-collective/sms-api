@@ -27,7 +27,7 @@ class AnalysisService:
         self.settings = settings or get_settings()
 
     def get_file_path(
-            self, experiment_id: str, filename: str, remote: bool = True, logger_instance: logging.Logger | None = None
+        self, experiment_id: str, filename: str, remote: bool = True, logger_instance: logging.Logger | None = None
     ) -> Path:
         """Fetches the filepath of a specified simulation analysis output as defined by simulation config.json"""
         if "." not in filename:
@@ -56,7 +56,7 @@ class AnalysisService:
         raise FileNotFoundError(f"Could not find {filename}")
 
     def get_file_paths(
-            self, experiment_id: str, remote: bool = True, logger_instance: logging.Logger | None = None
+        self, experiment_id: str, remote: bool = True, logger_instance: logging.Logger | None = None
     ) -> list[Path]:
         outdir = get_simulation_outdir(
             experiment_id=experiment_id,
@@ -107,11 +107,11 @@ class AnalysisService:
         return {k.replace("/", "."): v for k, v in template.items()}
 
     async def submit_analysis_job(
-            self,
-            config_id: str,
-            simulator_hash: str,
-            env: Settings,
-            experiment_id: str,
+        self,
+        config_id: str,
+        simulator_hash: str,
+        env: Settings,
+        experiment_id: str,
     ) -> int:
         ssh = get_ssh_service(self.settings)
         return await submit_analysis_job(
@@ -197,13 +197,13 @@ def get_analysis_html_outputs(outdir_root: Path, expid: str = "analysis_multigen
 
 
 def analysis_slurm_script(
-        config_id: str,
-        slurm_job_name: str,
-        experiment_id: str,
-        # vecoli_commit_hash: str | None = None,
-        # remote_vecoli_dir: Path | None = None,
-        settings: Settings | None = None,
-        logger: logging.Logger | None = None,
+    config_id: str,
+    slurm_job_name: str,
+    experiment_id: str,
+    # vecoli_commit_hash: str | None = None,
+    # remote_vecoli_dir: Path | None = None,
+    settings: Settings | None = None,
+    logger: logging.Logger | None = None,
 ) -> str:
     env = settings or get_settings()
     base_path = Path(env.slurm_base_path)
@@ -301,7 +301,7 @@ def analysis_slurm_script(
 
 
 async def submit_slurm_script(
-        script_content: str, slurm_job_name: str, env: Settings | None = None, ssh: SSHService | None = None
+    script_content: str, slurm_job_name: str, env: Settings | None = None, ssh: SSHService | None = None
 ) -> int:
     settings = env or get_settings()
     ssh_service = ssh or SSHService(
@@ -330,12 +330,12 @@ def log(msg: str, logger: logging.Logger | None = None) -> None:
 
 
 async def submit_analysis_job(
-        config_id: str,
-        simulator_hash: str,
-        env: Settings,
-        experiment_id: str,
-        ssh: SSHService | None = None,
-        logger: logging.Logger | None = None,
+    config_id: str,
+    simulator_hash: str,
+    env: Settings,
+    experiment_id: str,
+    ssh: SSHService | None = None,
+    logger: logging.Logger | None = None,
 ) -> int:
     # experiment_id = expid or create_experiment_id(config_id=config_id, simulator_hash=simulator_hash)
     experiment_dir = get_experiment_dir(experiment_id=experiment_id, env=env)

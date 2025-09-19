@@ -13,7 +13,7 @@ from pydantic import Field, model_validator
 
 from sms_api.config import get_settings
 
-BASE_SIMULATION_CONFIG_PATH = Path("assets/base_simulation_config.json")
+BASE_SIMULATION_CONFIG_PATH = Path("assets/sms_base_simulation_config.json")
 
 
 @dataclass

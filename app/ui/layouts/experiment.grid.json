@@ -1,0 +1,142 @@
+{
+  "type": "grid",
+  "data": {
+    "columns": 30,
+    "rowHeight": 20,
+    "maxWidth": 1800,
+    "bordered": true,
+    "cells": [
+      {
+        "position": [
+          0,
+          0,
+          13,
+          11
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          20,
+          0,
+          10,
+          3
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          0,
+          19,
+          8,
+          64
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          0,
+          14,
+          5,
+          3
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          8,
+          19,
+          22,
+          43
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          5,
+          13,
+          2,
+          2
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          5,
+          15,
+          2,
+          2
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      }
+    ]
+  }
+}

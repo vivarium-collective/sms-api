@@ -1,3 +1,8 @@
+"""
+/analyses: this router is dedicated to the running and output retrieval of
+    simulation analysis jobs/workflows
+"""
+
 import logging
 import mimetypes
 import tempfile
@@ -90,6 +95,8 @@ async def upload_analysis_module(
 async def get_analysis(id: str) -> list[str]:
     id = "analysis_multigen"
     outdir = Path(ENV.slurm_base_path) / "workspace" / "api_outputs"
+    if int(ENV.dev_mode):
+        outdir = Path("/Users/alexanderpatrie/sms/sms-api/home/FCAM/svc_vivarium/workspace/api_outputs")
     return analysis_service.get_analysis_html_outputs(outdir_root=outdir, expid=id)
 
 

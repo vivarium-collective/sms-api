@@ -1,3 +1,7 @@
+"""
+/experiments: this router is dedicated to the running and introspection of experiments (getting output pq data)
+"""
+
 import logging
 from collections.abc import Generator, Mapping
 from io import BytesIO

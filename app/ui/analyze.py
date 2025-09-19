@@ -69,9 +69,25 @@ def _(btn, get_ui, set_ui, ui):
     return
 
 
-@app.cell
-def _():
-    return
+app._unparsable_cell(
+    r"""
+    http://localhost:8888/analyses/{id}
+
+    import httpx 
+
+    with httpx.Client() as client:
+        resp = 
+    """,
+    name="_"
+)
+
+
+app._unparsable_cell(
+    r"""
+    http://localhost:8888/experiments/launch
+    """,
+    name="_"
+)
 
 
 if __name__ == "__main__":

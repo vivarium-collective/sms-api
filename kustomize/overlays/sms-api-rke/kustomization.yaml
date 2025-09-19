@@ -4,12 +4,12 @@ kind: Kustomization
 namespace: sms-api-rke
 
 images:
-  - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.2.21-dev
   # - name: ghcr.io/vivarium-collective/sms-api
-  #   newTag: 0.2.15-dev
+  #   newTag: 0.2.21-dev
+  - name: ghcr.io/vivarium-collective/sms-api
+    newTag: 0.2.15-dev
   # - name: ghcr.io/biosimulations/sms-api
-  #   newTag: 0.2.11-dev
+  #   newTag: 0.2.17-dev
     # STABLE: newTag: 0.2.10-dev
   - name: docker.io/library/mongo
     newTag: 8.0.4

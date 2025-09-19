@@ -150,7 +150,8 @@ select = [
 ignore = [
     # "DEP001",
 #    # A001 Variable `sum` is shadowing a Python builtin
-#    "A001",
+     "A001",
+     "A002",
 #    # B008 Do not perform function call `Body` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
 #    "B008",
 #    # B026 Star-arg unpacking after a keyword argument is strongly discouraged
@@ -172,7 +173,7 @@ ignore = [
 #    # E731 Do not assign a `lambda` expression, use a `def`
 #    "E731",
 #    # F841 Local variable `keys` is assigned to but never used
-#    "F841",
+     "F841",
 #    # PGH003 Use specific rule codes when ignoring type issues
 #    "PGH003",
 #    # RUF009 Do not perform function call `Field` in dataclass defaults

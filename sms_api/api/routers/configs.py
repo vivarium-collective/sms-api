@@ -1,3 +1,8 @@
+"""
+/configs: this router is dedicated to the upload and introspection of both analysis and simulation
+    configuration JSON files
+"""
+
 import json
 import logging
 import tempfile
@@ -112,11 +117,8 @@ async def upload_analysis_config(
             # db_service = DBService()
             user_suffix = str(uuid.uuid4()).split("-")[-1]  # TODO: let this be a reference instead to the user's id
             if config_id is None:
-                config_id = "simconfig"
+                config_id = "analysis"
             confid = f"{config_id}-{user_suffix}"
-            analysis_config.experiment_id = f"{analysis_config.experiment_id}-{user_suffix}"
-            analysis_config.emitter_arg["out_dir"] = ENV.simulation_outdir
-            analysis_config.daughter_outdir = ENV.simulation_outdir
 
             # await db_service.insert_simulation_config(config_id=confid, config=analysis_config)
             # TODO: adjust the above to an added insert_analysis_config method
