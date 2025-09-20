@@ -6,7 +6,7 @@ import logging
 from collections.abc import Generator, Mapping
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -87,10 +87,8 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
     summary="Launches a nextflow-powered vEcoli simulation workflow",
 )
 async def launch_simulation(
-    config_id: str = Query(
-        default="sms", description="Configuration ID of an existing available vecoli simulation configuration JSON"
-    ),
-    overrides: ConfigOverrides | None = None,
+    config_id: Optional[str],
+    overrides: Optional[ConfigOverrides] = None,
     metadata: Mapping[str, str] | None = None,
     # TODO: enable overrides here, not variants directly
     #  (variants should be specified as a top level key-val in overrides,

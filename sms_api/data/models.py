@@ -3,6 +3,7 @@ import os
 import pathlib
 from collections.abc import Collection
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, override
 
@@ -236,3 +237,14 @@ class AnalysisConfig(Configuration):
 class AnalysisJob(BaseModel):
     id: int
     status: str = "WAITING"
+
+
+class UploadConfirmation(BaseModel):
+    filename: str
+    home: str
+    timestamp: str | None = None
+
+    def model_post_init(self, context, /) -> None:
+        if self.timestamp is not None:
+            raise ValueError("You cannot edit this field!")
+        self.timestamp = str(datetime.now())
