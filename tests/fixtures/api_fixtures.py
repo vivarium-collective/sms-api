@@ -1,4 +1,5 @@
 import os
+import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from httpx import ASGITransport
 from sms_api.api.client import Client
 from sms_api.api.main import app
 from sms_api.config import REPO_ROOT, get_settings
+from sms_api.data.models import AnalysisRequest
 
 # from sms_api.data.biocyc_service import BiocycService
 from sms_api.latest_commit import write_latest_commit
@@ -60,3 +62,33 @@ async def workspace_image_hash() -> str:
 @pytest_asyncio.fixture(scope="session")
 async def analysis_config_path() -> Path:
     return Path(REPO_ROOT) / "assets" / "sms_multigen_analysis.json"
+
+
+def unique_id() -> str:
+    return str(uuid.uuid4())
+
+
+@pytest_asyncio.fixture(scope="session")
+async def analysis_request() -> AnalysisRequest:
+    return AnalysisRequest(**{
+        "experiment_id": "sms_multigeneration",
+        "analysis_name": f"sms_pytest_{unique_id()}",
+        "single": {},
+        "multidaughter": {},
+        "multigeneration": {
+            "replication": {},
+            "ribosome_components": {},
+            "ribosome_crowding": {},
+            "ribosome_production": {},
+            "ribosome_usage": {},
+            "rna_decay_03_high": {},
+        },
+        "multiseed": {"protein_counts_validation": {}, "ribosome_spacing": {}, "subgenerational_expression_table": {}},
+        "multivariant": {
+            "average_monomer_counts": {},
+            "cell_mass": {},
+            "doubling_time_hist": {"skip_n_gens": 1},
+            "doubling_time_line": {},
+        },
+        "multiexperiment": {},
+    })

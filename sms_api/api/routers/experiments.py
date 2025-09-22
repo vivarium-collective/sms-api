@@ -86,9 +86,11 @@ async def read_config_file(config_file: UploadFile) -> SimulationConfiguration:
         attr = getattr(config, attrname)
         if attr is None:
             delattr(config, attrname)
-        if isinstance(attr, list) or isinstance(attr, dict):  # noqa: SIM102
-            if not len(attr):
-                delattr(config, attrname)
+        if isinstance(attr, (list, dict)) and not len(attr):
+            delattr(config, attrname)
+        # if isinstance(attr, list) or isinstance(attr, dict):
+        #     if not len(attr):
+        #         delattr(config, attrname)
     return config
 
 

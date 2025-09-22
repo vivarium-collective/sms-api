@@ -2,8 +2,9 @@ import pytest  # noqa: F401
 import pytest_asyncio  # noqa: F401
 
 from tests.fixtures.api_fixtures import (  # noqa: F401
-    # biocyc_service,
     analysis_config_path,
+    # biocyc_service,
+    analysis_request,
     fastapi_app,
     in_memory_api_client,
     latest_commit_hash,
