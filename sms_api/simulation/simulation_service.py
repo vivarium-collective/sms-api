@@ -589,7 +589,9 @@ def simulation_slurm_script(
             config_id={config_id}
             config_dir={config_dir!s}
             experiment_config=$config_dir/$expid.json
-            [ -f "$config_dir/$config_id.json" ] && jq --arg expid "$expid" '.experiment_id = $expid' "$config_dir/$config_id.json" > "$config_dir/$expid.json"
+            [ -f "$config_dir/$config_id.json" ] \
+            && jq --arg expid "$expid" '.experiment_id = $expid' \
+            "$config_dir/$config_id.json" > "$config_dir/$expid.json"
         fi
 
         ### logging to confirm installations/paths

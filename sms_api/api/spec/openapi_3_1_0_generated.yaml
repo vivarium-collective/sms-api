@@ -20,7 +20,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/ExperimentAnalysisDTO'
         '422':
           description: Validation Error
           content:
@@ -275,6 +276,31 @@ paths:
               schema:
                 type: string
                 title: Response List-Configs
+  /experiments:
+    post:
+      tags:
+      - Simulations - vEcoli
+      summary: Launches a nextflow-powered vEcoli simulation workflow
+      operationId: run-sim-experiment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Body_run-sim-experiment'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EcoliSimulationDTO'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /experiments/launch:
     post:
       tags:
@@ -731,6 +757,18 @@ components:
           title: Config File
       type: object
       title: Body_run-experiment
+    Body_run-sim-experiment:
+      properties:
+        config:
+          $ref: '#/components/schemas/SimulationConfiguration'
+        metadata:
+          anyOf:
+          - $ref: '#/components/schemas/ExperimentMetadata'
+          - type: 'null'
+      type: object
+      required:
+      - config
+      title: Body_run-sim-experiment
     Body_upload_analysis_module_analyses_put:
       properties:
         file:
@@ -767,6 +805,8 @@ components:
             - type: 'null'
           type: object
           title: Parca Options
+          default:
+            cpus: 3
         generations:
           type: integer
           title: Generations
@@ -801,6 +841,8 @@ components:
             type: string
           type: object
           title: Emitter Arg
+          default:
+            out_dir: ''
         variants:
           additionalProperties:
             additionalProperties:
@@ -815,10 +857,12 @@ components:
             type: object
           type: object
           title: Variants
+          default: {}
         analysis_options:
           additionalProperties: true
           type: object
           title: Analysis Options
+          default: {}
         gcloud:
           anyOf:
           - type: string
@@ -854,6 +898,7 @@ components:
             type: string
           type: array
           title: Division Variable
+          default: []
         chromosome_path:
           anyOf:
           - items:
@@ -886,16 +931,19 @@ components:
             type: string
           type: array
           title: Save Times
+          default: []
         add_processes:
           items:
             type: string
           type: array
           title: Add Processes
+          default: []
         exclude_processes:
           items:
             type: string
           type: array
           title: Exclude Processes
+          default: []
         profile:
           anyOf:
           - type: boolean
@@ -906,14 +954,17 @@ components:
             type: string
           type: array
           title: Processes
+          default: []
         process_configs:
           additionalProperties: true
           type: object
           title: Process Configs
+          default: {}
         topology:
           additionalProperties: true
           type: object
           title: Topology
+          default: {}
         engine_process_reports:
           items:
             items:
@@ -921,11 +972,13 @@ components:
             type: array
           type: array
           title: Engine Process Reports
+          default: []
         emit_paths:
           items:
             type: string
           type: array
           title: Emit Paths
+          default: []
         progress_bar:
           anyOf:
           - type: boolean
@@ -1011,27 +1064,33 @@ components:
             type: string
           type: array
           title: Inherit From
+          default: []
         spatial_environment_config:
           additionalProperties: true
           type: object
           title: Spatial Environment Config
+          default: {}
         swap_processes:
           additionalProperties: true
           type: object
           title: Swap Processes
+          default: {}
         flow:
           additionalProperties: true
           type: object
           title: Flow
+          default: {}
         initial_state_overrides:
           items:
             type: string
           type: array
           title: Initial State Overrides
+          default: []
         initial_state:
           additionalProperties: true
           type: object
           title: Initial State
+          default: {}
       type: object
       title: ConfigOverrides
     EcoliExperimentDTO:
@@ -1072,6 +1131,45 @@ components:
       required:
       - config_id
       title: EcoliExperimentRequestDTO
+    EcoliSimulationDTO:
+      properties:
+        config:
+          $ref: '#/components/schemas/SimulationConfiguration'
+        metadata:
+          $ref: '#/components/schemas/ExperimentMetadata'
+        last_updated:
+          type: string
+          title: Last Updated
+      type: object
+      required:
+      - config
+      - metadata
+      title: EcoliSimulationDTO
+    ExperimentAnalysisDTO:
+      properties:
+        database_id:
+          type: integer
+          title: Database Id
+        name:
+          type: string
+          title: Name
+        config:
+          $ref: '#/components/schemas/AnalysisConfig'
+        last_updated:
+          type: string
+          title: Last Updated
+      type: object
+      required:
+      - database_id
+      - name
+      - config
+      - last_updated
+      title: ExperimentAnalysisDTO
+    ExperimentMetadata:
+      additionalProperties:
+        type: string
+      type: object
+      title: ExperimentMetadata
     HTTPValidationError:
       properties:
         detail:
@@ -1116,6 +1214,8 @@ components:
             - type: 'null'
           type: object
           title: Parca Options
+          default:
+            cpus: 3
         generations:
           type: integer
           title: Generations
@@ -1150,6 +1250,8 @@ components:
             type: string
           type: object
           title: Emitter Arg
+          default:
+            out_dir: ''
         variants:
           additionalProperties:
             additionalProperties:
@@ -1164,10 +1266,12 @@ components:
             type: object
           type: object
           title: Variants
+          default: {}
         analysis_options:
           additionalProperties: true
           type: object
           title: Analysis Options
+          default: {}
         gcloud:
           anyOf:
           - type: string
@@ -1203,6 +1307,7 @@ components:
             type: string
           type: array
           title: Division Variable
+          default: []
         chromosome_path:
           anyOf:
           - items:
@@ -1235,16 +1340,19 @@ components:
             type: string
           type: array
           title: Save Times
+          default: []
         add_processes:
           items:
             type: string
           type: array
           title: Add Processes
+          default: []
         exclude_processes:
           items:
             type: string
           type: array
           title: Exclude Processes
+          default: []
         profile:
           anyOf:
           - type: boolean
@@ -1255,14 +1363,17 @@ components:
             type: string
           type: array
           title: Processes
+          default: []
         process_configs:
           additionalProperties: true
           type: object
           title: Process Configs
+          default: {}
         topology:
           additionalProperties: true
           type: object
           title: Topology
+          default: {}
         engine_process_reports:
           items:
             items:
@@ -1270,11 +1381,13 @@ components:
             type: array
           type: array
           title: Engine Process Reports
+          default: []
         emit_paths:
           items:
             type: string
           type: array
           title: Emit Paths
+          default: []
         progress_bar:
           anyOf:
           - type: boolean
@@ -1360,27 +1473,33 @@ components:
             type: string
           type: array
           title: Inherit From
+          default: []
         spatial_environment_config:
           additionalProperties: true
           type: object
           title: Spatial Environment Config
+          default: {}
         swap_processes:
           additionalProperties: true
           type: object
           title: Swap Processes
+          default: {}
         flow:
           additionalProperties: true
           type: object
           title: Flow
+          default: {}
         initial_state_overrides:
           items:
             type: string
           type: array
           title: Initial State Overrides
+          default: []
         initial_state:
           additionalProperties: true
           type: object
           title: Initial State
+          default: {}
       type: object
       title: SimulationConfiguration
     SimulationRun:

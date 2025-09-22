@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel as _BaseModel
-from pydantic import Field, model_validator
+from pydantic import Field, RootModel, model_validator
 
 from sms_api.config import get_settings
 
@@ -275,7 +275,7 @@ class SimulationConfig(BaseModel):
     experiment_id: str | None = None
     sim_data_path: str | None = None
     suffix_time: bool = False
-    parca_options: dict[str, bool | int | str | None | Any] = Field(default_factory=dict)
+    parca_options: dict[str, bool | int | str | None | Any] = Field(default={"cpus": 3})
     generations: int = 1
     n_init_sims: int | None = None
     max_duration: float = 10800.0
@@ -283,30 +283,30 @@ class SimulationConfig(BaseModel):
     time_step: float = 1.0
     single_daughters: bool = True
     emitter: str = "parquet"
-    emitter_arg: dict[str, str] = Field(default_factory=dict)
-    variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default_factory=dict)
-    analysis_options: dict[str, Any] = Field(default_factory=dict)
+    emitter_arg: dict[str, str] = Field(default={"out_dir": ""})
+    variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
+    analysis_options: dict[str, Any] = Field(default={})
     gcloud: str | None = None
     agent_id: str | None = None
     parallel: bool | None = None
     divide: bool | None = None
     d_period: bool | None = None
     division_threshold: bool | None = None
-    division_variable: list[str] = Field(default_factory=list)
+    division_variable: list[str] = Field(default=[])
     chromosome_path: list[str] | None = None
     spatial_environment: bool | None = None
     fixed_media: str | None = None
     condition: str | None = None
     save: bool | None = None
-    save_times: list[str] = Field(default_factory=list)
-    add_processes: list[str] = Field(default_factory=list)
-    exclude_processes: list[str] = Field(default_factory=list)
+    save_times: list[str] = Field(default=[])
+    add_processes: list[str] = Field(default=[])
+    exclude_processes: list[str] = Field(default=[])
     profile: bool | None = None
-    processes: list[str] = Field(default_factory=list)
-    process_configs: dict[str, Any] = Field(default_factory=dict)
-    topology: dict[str, Any] = field(default_factory=dict)
-    engine_process_reports: list[list[str]] = Field(default_factory=list)
-    emit_paths: list[str] = Field(default_factory=list)
+    processes: list[str] = Field(default=[])
+    process_configs: dict[str, Any] = Field(default={})
+    topology: dict[str, Any] = field(default={})
+    engine_process_reports: list[list[str]] = Field(default=[])
+    emit_paths: list[str] = Field(default=[])
     progress_bar: bool | None = None
     emit_topology: bool | None = None
     emit_processes: bool | None = None
@@ -323,12 +323,20 @@ class SimulationConfig(BaseModel):
     daughter_outdir: str | None = None
     lineage_seed: int | None = None
     fail_at_max_duration: bool | None = None
-    inherit_from: list[str] = Field(default_factory=list)
-    spatial_environment_config: dict[str, Any] = Field(default_factory=dict)
-    swap_processes: dict[str, Any] = Field(default_factory=dict)
-    flow: dict[str, Any] = Field(default_factory=dict)
-    initial_state_overrides: list[str] = Field(default_factory=list)
-    initial_state: dict[str, Any] = Field(default_factory=dict)
+    inherit_from: list[str] = Field(default=[])
+    spatial_environment_config: dict[str, Any] = Field(default={})
+    swap_processes: dict[str, Any] = Field(default={})
+    flow: dict[str, Any] = Field(default={})
+    initial_state_overrides: list[str] = Field(default=[])
+    initial_state: dict[str, Any] = Field(default={})
+
+    def model_post_init(self, *args: Any) -> None:
+        for attrname in list(SimulationConfiguration.model_fields.keys()):
+            attr = getattr(self, attrname)
+            if attr is None:
+                delattr(self, attrname)
+            if isinstance(attr, (list, dict)) and not len(attr):
+                delattr(self, attrname)
 
     @classmethod
     def from_file(cls, fp: Path, config_id: str | None = None) -> "SimulationConfig":
@@ -386,3 +394,13 @@ class EcoliExperimentDTO(BaseModel):
     metadata: Mapping[str, str] = Field(default_factory=dict)
     experiment_tag: str | None = None
     # simulation: EcoliSimulation | EcoliWorkflowSimulation | AntibioticSimulation
+
+
+class ExperimentMetadata(RootModel):  # type: ignore[type-arg]
+    root: dict[str, str] = Field(default_factory=dict)
+
+
+class EcoliSimulationDTO(BaseModel):
+    config: SimulationConfiguration
+    metadata: ExperimentMetadata
+    last_updated: str = Field(default_factory=lambda: str(datetime.datetime.now()))

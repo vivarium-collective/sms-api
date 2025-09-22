@@ -14,7 +14,9 @@ from sms_api.simulation.models import (
     EcoliExperimentDTO,
     EcoliExperimentRequestDTO,
     EcoliSimulation,
+    EcoliSimulationDTO,
     EcoliSimulationRequest,
+    ExperimentMetadata,
     HpcRun,
     JobType,
     ParcaDataset,
@@ -28,6 +30,7 @@ from sms_api.simulation.tables_orm import (
     JobTypeDB,
     ORMAnalysis,
     ORMEcoliExperiment,
+    ORMEcoliSimulation,
     ORMHpcRun,
     ORMParcaDataset,
     ORMSimulation,
@@ -40,6 +43,16 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseService(ABC):
+    @abstractmethod
+    async def insert_ecoli_experiment(
+        self, config: SimulationConfiguration, metadata: ExperimentMetadata, last_updated: str
+    ) -> EcoliSimulationDTO:
+        pass
+
+    @abstractmethod
+    async def get_ecoli_experiment(self, database_id: int) -> EcoliSimulationDTO:
+        pass
+
     @abstractmethod
     async def insert_analysis(
         self,
@@ -270,6 +283,32 @@ class DatabaseServiceSQL(DatabaseService):
         orm_experiment: ORMAnalysis | None = result1.scalars().one_or_none()
         return orm_experiment
 
+    async def _get_orm_ecoli_simulation(self, session: AsyncSession, database_id: int) -> ORMEcoliSimulation | None:
+        stmt1 = select(ORMEcoliSimulation).where(ORMEcoliSimulation.id == database_id).limit(1)
+        result1: Result[tuple[ORMEcoliSimulation]] = await session.execute(stmt1)
+        orm_experiment: ORMEcoliSimulation | None = result1.scalars().one_or_none()
+        return orm_experiment
+
+    @override
+    async def insert_ecoli_experiment(
+        self, config: SimulationConfiguration, metadata: ExperimentMetadata, last_updated: str
+    ) -> EcoliSimulationDTO:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_ecoli_experiment = ORMEcoliSimulation(
+                config=config.model_dump(), experiment_metadata=metadata.model_dump(), last_updated=last_updated
+            )
+            session.add(orm_ecoli_experiment)
+            await session.flush()
+            return orm_ecoli_experiment.to_dto()
+
+    @override
+    async def get_ecoli_experiment(self, database_id: int) -> EcoliSimulationDTO:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_ecoli_simulation = await self._get_orm_ecoli_simulation(session, database_id=database_id)
+            if orm_ecoli_simulation is None:
+                raise RuntimeError(f"Experiment {database_id} not found")
+            return orm_ecoli_simulation.to_dto()
+
     @override
     async def insert_analysis(
         self,
@@ -292,7 +331,7 @@ class DatabaseServiceSQL(DatabaseService):
         async with self.async_sessionmaker() as session, session.begin():
             orm_analysis = await self._get_orm_analysis(session, database_id=database_id)
             if orm_analysis is None:
-                raise RuntimeError(f"Experiment {id} not found")
+                raise RuntimeError(f"Experiment {database_id} not found")
             return orm_analysis.to_dto()
 
     @override

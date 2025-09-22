@@ -294,7 +294,7 @@ class UploadConfirmation(BaseModel):
     home: str
     timestamp: str | None = None
 
-    def model_post_init(self, context, /) -> None:
+    def model_post_init(self, context: Any, /) -> None:
         if self.timestamp is not None:
             raise ValueError("You cannot edit this field!")
         self.timestamp = str(datetime.now())

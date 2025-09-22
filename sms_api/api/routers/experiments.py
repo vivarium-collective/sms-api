@@ -2,6 +2,7 @@
 /experiments: this router is dedicated to the running and introspection of experiments (getting output pq data)
 """
 
+import datetime
 import json
 import logging
 from collections.abc import Generator
@@ -28,6 +29,8 @@ from sms_api.simulation.handlers import launch_vecoli_simulation
 from sms_api.simulation.models import (
     EcoliExperimentDTO,
     EcoliExperimentRequestDTO,
+    EcoliSimulationDTO,
+    ExperimentMetadata,
     JobStatus,
     SimulationConfiguration,
     SimulationRun,
@@ -92,6 +95,93 @@ async def read_config_file(config_file: UploadFile) -> SimulationConfiguration:
         #     if not len(attr):
         #         delattr(config, attrname)
     return config
+
+
+"""
+async def run_analysis(request: AnalysisRequest):
+    try:
+        db_service = get_database_service()
+        config = AnalysisConfig.from_request(request)
+        analysis_name = request.analysis_name
+        last_updated = str(datetime.datetime.now())
+        analysis = await db_service.insert_analysis(name=analysis_name, config=config, last_updated=last_updated)
+        slurmjob_id = await dispatch(
+            analysis=analysis, simulator_hash=get_simulator().git_commit_hash, env=ENV, logger=logger
+        )
+        return analysis
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+"""
+
+
+@config.router.post(
+    path="",
+    operation_id="run-sim-experiment",
+    response_model=EcoliSimulationDTO,
+    tags=["Simulations - vEcoli"],
+    dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
+    summary="Launches a nextflow-powered vEcoli simulation workflow",
+)
+async def run_simulation(
+    config: SimulationConfiguration, metadata: ExperimentMetadata | None = None
+) -> EcoliSimulationDTO:
+    # validate services
+    sim_service = get_simulation_service()
+    if sim_service is None:
+        logger.error("Simulation service is not initialized")
+        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Database service is not initialized")
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+
+    # construct params
+    simulator: SimulatorVersion = get_simulator()
+    if config.experiment_id is None:
+        raise HTTPException(status_code=400, detail="Experiment ID is required")
+
+    ecoli_experiment: EcoliSimulationDTO = await db_service.insert_ecoli_experiment(
+        config=config, metadata=metadata, last_updated=str(datetime.datetime.now())
+    )
+
+    # now do the following:
+    # 1. get experiment id from config
+    # 2. Get slurmjobname
+    # async def dispatch(
+    #         analysis: ExperimentAnalysisDTO,
+    #         simulator_hash: str,
+    #         env: Settings,
+    #         logger: logging.Logger
+    # ) -> int:
+    #     experiment_id = analysis.config.analysis_options.experiment_id[0]
+    #     slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
+    #     base_path = Path(env.slurm_base_path)
+    #     slurm_log_file = base_path / f"prod/htclogs/{experiment_id}.out"    #
+    #     slurm_script = script(
+    #         slurm_log_file=slurm_log_file,
+    #         slurm_job_name=slurmjob_name,
+    #         env=env,
+    #         latest_hash=simulator_hash,
+    #         analysis=analysis,
+    #         # experiment_id=experiment_id,
+    #     )   #
+    #     ssh = get_ssh_service(env)
+    #     slurmjob_id = await _submit(
+    #         config=analysis.config,
+    #         experiment_id=experiment_id,
+    #         script_content=slurm_script,
+    #         slurm_job_name=slurmjob_name,
+    #         env=env,
+    #         ssh=ssh,
+    #     )   #
+    #     return slurmjob_id
+
+    try:
+        return ecoli_experiment
+    except Exception as e:
+        logger.exception("Error running vEcoli simulation")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.post(

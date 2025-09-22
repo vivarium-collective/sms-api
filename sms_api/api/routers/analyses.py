@@ -20,7 +20,7 @@ from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.config import get_settings
 from sms_api.data import analysis_service
 from sms_api.data.analysis_service import dispatch
-from sms_api.data.models import AnalysisConfig, AnalysisRequest
+from sms_api.data.models import AnalysisConfig, AnalysisRequest, ExperimentAnalysisDTO
 from sms_api.dependencies import get_database_service
 
 ENV = get_settings()
@@ -31,11 +31,12 @@ config = RouterConfig(router=APIRouter(), prefix="/analyses", dependencies=[])
 
 @config.router.post(
     path="",
+    response_model=ExperimentAnalysisDTO,
     operation_id="run-experiment-analysis",
     tags=["Analysis - vEcoli"],
     summary="Run an analysis workflow (like multigeneration)",
 )
-async def run_analysis(request: AnalysisRequest):
+async def run_analysis(request: AnalysisRequest) -> ExperimentAnalysisDTO:
     try:
         db_service = get_database_service()
         config = AnalysisConfig.from_request(request)
