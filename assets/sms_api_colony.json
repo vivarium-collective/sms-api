@@ -1,7 +1,7 @@
 {
   "inherit_from": [],
   "spatial_environment": true,
-  "sim_data_path": "/home/FCAM/svc_vivarium/workspace/kb/simData.cPickle",
+  "sim_data_path": null,
   "emitter": "parquet",
   "emitter_arg": {
     "out_dir": "/home/FCAM/svc_vivarium/workspace/api_outputs"

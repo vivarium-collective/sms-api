@@ -1,6 +1,7 @@
 import json
 import os
 import pathlib
+import uuid
 from collections.abc import Collection
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -11,6 +12,8 @@ import numpy
 import numpy as np
 import orjson
 from pydantic import BaseModel, Field
+
+from sms_api.config import get_settings
 
 
 class Base(BaseModel):
@@ -186,12 +189,40 @@ class Configuration(BaseModel):
         return cls(**conf)
 
 
+class AnalysisRequest(BaseModel):
+    experiment_id: str
+    analysis_name: str = Field(default_factory=lambda: f"analysis_{str(uuid.uuid4())}")
+    single: dict[str, Any] = {}
+    multidaughter: dict[str, Any] = {}
+    multigeneration: dict[str, dict[str, Any]] = {
+        "replication": {},
+        "ribosome_components": {},
+        "ribosome_crowding": {},
+        "ribosome_production": {},
+        "ribosome_usage": {},
+        "rna_decay_03_high": {},
+    }
+    multiseed: dict[str, dict[str, Any]] = {
+        "protein_counts_validation": {},
+        "ribosome_spacing": {},
+        "subgenerational_expression_table": {},
+    }
+    multivariant: dict[str, dict[str, Any]] = {
+        "average_monomer_counts": {},
+        "cell_mass": {},
+        "doubling_time_hist": {"skip_n_gens": 1},
+        "doubling_time_line": {},
+    }
+    multiexperiment: dict[str, Any] = {}
+
+
 class AnalysisConfigOptions(BaseModel):
+    # TODO: infer variant data dir, validation datapath from experiment id
     experiment_id: list[str]
-    variant_data_dir: list[str]
-    validation_data_path: list[str]
-    outdir: str
-    cpus: int
+    variant_data_dir: list[str] | None = None
+    validation_data_path: list[str] | None = None
+    outdir: str | None = None
+    cpus: int = 3
     single: dict[str, Any] = Field(default_factory=dict)
     multidaughter: dict[str, Any] = Field(default_factory=dict)
     multigeneration: dict[str, dict[str, Any]] = {
@@ -220,9 +251,14 @@ class AnalysisConfig(Configuration):
     analysis_options: AnalysisConfigOptions
     emitter_arg: dict[str, str] = Field(default={"out_dir": ""})
 
-    def model_post_init(self, *args: Any) -> None:
-        if not self.emitter_arg["out_dir"]:
-            raise ValueError("You must specify an output directory according to vEcoli documentation for analyses...")
+    # def model_post_init(self, *args: Any) -> None:
+    #     if not self.emitter_arg["out_dir"]:
+    #         # raise ValueError("You must specify an output directory according to vEcoli documentation for analyses...")
+    #         env = get_settings()
+    #         self.emitter_arg["out_dir"] = env.simulation_outdir
+    #     output_dir = pathlib.Path(f"/home/FCAM/svc_vivarium/workspace/api_outputs/{self.analysis_options.experiment_id}")
+    #     self.analysis_options.variant_data_dir = [str(output_dir / "variant_sim_data")]
+    #     self.analysis_options.validation_data_path = [str(output_dir / "parca/kb/validationData.cPickle")]
 
     @classmethod
     @override
@@ -232,6 +268,31 @@ class AnalysisConfig(Configuration):
             conf = json.load(f)
         options = AnalysisConfigOptions(**conf["analysis_options"])
         return cls(analysis_options=options, emitter_arg=conf["emitter_arg"])
+
+    @classmethod
+    def from_request(cls, request: AnalysisRequest) -> "AnalysisConfig":
+        output_dir = pathlib.Path(f"/home/FCAM/svc_vivarium/workspace/api_outputs/{request.experiment_id}")
+        options = AnalysisConfigOptions(
+            experiment_id=[request.experiment_id],
+            variant_data_dir=[str(output_dir / "variant_sim_data")],
+            validation_data_path=[str(output_dir / "parca/kb/validationData.cPickle")],
+            outdir=str(output_dir.parent / request.analysis_name),
+            single=request.single,
+            multidaughter=request.multidaughter,
+            multigeneration=request.multigeneration,
+            multiexperiment=request.multiexperiment,
+            multivariant=request.multivariant,
+            multiseed=request.multiseed,
+        )
+        emitter_arg = {"out_dir": str(output_dir.parent)}
+        return cls(analysis_options=options, emitter_arg=emitter_arg)
+
+
+class ExperimentAnalysisDTO(BaseModel):
+    database_id: int
+    name: str
+    config: AnalysisConfig
+    last_updated: str
 
 
 class AnalysisJob(BaseModel):
@@ -248,3 +309,6 @@ class UploadConfirmation(BaseModel):
         if self.timestamp is not None:
             raise ValueError("You cannot edit this field!")
         self.timestamp = str(datetime.now())
+
+
+

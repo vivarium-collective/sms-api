@@ -9,6 +9,7 @@ from sqlalchemy.orm import InstrumentedAttribute
 from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.data.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.simulation.models import (
     EcoliExperimentDTO,
     EcoliExperimentRequestDTO,
@@ -31,13 +32,26 @@ from sms_api.simulation.tables_orm import (
     ORMSimulation,
     ORMSimulationConfig,
     ORMSimulator,
-    ORMWorkerEvent,
+    ORMWorkerEvent, ORMAnalysis,
 )
 
 logger = logging.getLogger(__name__)
 
 
 class DatabaseService(ABC):
+    @abstractmethod
+    async def insert_analysis(
+            self,
+            name: str,
+            config: AnalysisConfig,
+            last_updated: str,
+    ) -> ExperimentAnalysisDTO:
+        pass
+
+    @abstractmethod
+    async def get_analysis(self, database_id: int) -> ExperimentAnalysisDTO:
+        pass
+
     @abstractmethod
     async def insert_experiment(
         self,
@@ -248,6 +262,37 @@ class DatabaseServiceSQL(DatabaseService):
         result1: Result[tuple[ORMEcoliExperiment]] = await session.execute(stmt1)
         orm_experiment: ORMEcoliExperiment | None = result1.scalars().one_or_none()
         return orm_experiment
+
+    async def _get_orm_analysis(self, session: AsyncSession, database_id: int) -> ORMAnalysis | None:
+        stmt1 = select(ORMAnalysis).where(ORMAnalysis.id == database_id).limit(1)
+        result1: Result[tuple[ORMAnalysis]] = await session.execute(stmt1)
+        orm_experiment: ORMAnalysis | None = result1.scalars().one_or_none()
+        return orm_experiment
+
+    @override
+    async def insert_analysis(
+        self,
+        name: str,
+        config: AnalysisConfig,
+        last_updated: str,
+    ) -> ExperimentAnalysisDTO:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_analysis = ORMAnalysis(
+                name=name,
+                config=config.model_dump(),
+                last_updated=last_updated,
+            )
+            session.add(orm_analysis)
+            await session.flush()
+            return orm_analysis.to_dto()
+
+    @override
+    async def get_analysis(self, database_id: int) -> ExperimentAnalysisDTO:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_analysis = await self._get_orm_analysis(session, database_id=database_id)
+            if orm_analysis is None:
+                raise RuntimeError(f"Experiment {id} not found")
+            return orm_analysis.to_dto()
 
     @override
     async def insert_experiment(
