@@ -21,6 +21,7 @@ from sms_api.simulation.models import (
     ParcaDataset,
     ParcaDatasetRequest,
     RegisteredSimulators,
+    SimulationConfiguration,
     Simulator,
     SimulatorVersion,
 )
@@ -295,6 +296,35 @@ async def run_workflow(
 
 
 async def launch_vecoli_simulation(
+    request: EcoliExperimentRequestDTO,
+    simulator: SimulatorVersion,
+    metadata: Mapping[str, str],
+    simulation_service_slurm: SimulationService,
+    database_service: DatabaseService,
+    config: SimulationConfiguration | None = None,
+) -> EcoliExperimentDTO:
+    experiment_id = create_experiment_id(request.config_id, simulator.git_commit_hash)
+
+    # upload config if needed
+
+    sim_slurmjobid = await simulation_service_slurm.submit_vecoli_simulation_job(
+        request=request, experiment_id=experiment_id, simulator=simulator, config=config
+    )
+    tag = None
+    if sim_slurmjobid is not None:
+        tag = f"{experiment_id}-{sim_slurmjobid}"
+
+    experiment = await database_service.insert_experiment(
+        experiment_id=experiment_id,
+        experiment_tag=tag,
+        metadata=metadata,
+        request=request,
+        last_updated=str(datetime.datetime.now()),
+    )
+    return experiment
+
+
+async def launch_simulation(
     request: EcoliExperimentRequestDTO,
     simulator: SimulatorVersion,
     metadata: Mapping[str, str],

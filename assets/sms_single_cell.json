@@ -1,5 +1,5 @@
 {
-  "experiment_id": "sms_single",
+  "experiment_id": "sms_api_single",
   "suffix_time": false,
   "parca_options": {
     "cpus": 3

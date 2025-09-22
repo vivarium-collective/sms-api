@@ -4,18 +4,14 @@ import json
 import logging
 import tempfile
 import uuid
-from datetime import datetime
 from pathlib import Path
-from typing import Any, override
+from typing import override
 
-from pydantic import Field
-
-from sms_api.common.ssh.ssh_service import get_ssh_service, SSHService
+from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import Settings
 from sms_api.data.models import AnalysisConfig, UploadConfirmation
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import SimulationConfiguration, UploadedSimulationConfig, BaseModel
-
+from sms_api.simulation.models import SimulationConfiguration
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -32,21 +28,13 @@ class IConfigService(abc.ABC):
         self.logger = logger
 
     @abc.abstractmethod
-    async def upload(
-        self,
-        config_id: str,
-        config: SimulationConfiguration | AnalysisConfig
-    ) -> UploadConfirmation:
+    async def upload(self, config_id: str, config: SimulationConfiguration | AnalysisConfig) -> UploadConfirmation:
         pass
 
 
 class SimulationConfigService(IConfigService):
     @override
-    async def upload(
-        self,
-        config_id: str,
-        sim_config: SimulationConfiguration
-    ) -> UploadConfirmation:
+    async def upload(self, config_id: str, sim_config: SimulationConfiguration) -> UploadConfirmation:
         if not sim_config.experiment_id:
             raise Exception("No experiment ID provided")
         if sim_config.experiment_id.startswith("<P"):
@@ -77,14 +65,22 @@ class SimulationConfigService(IConfigService):
             #     await ssh.scp_upload(local_file=local, remote_path=remote)
             # uploaded = UploadConfirmation(filename=fname, home=self.env.slurm_base_path)
             # return uploaded
-            return await fs_upload(config_id=config_id, config=sim_config, env=self.env, ssh=ssh, remote_config_dir=None)
+            return await fs_upload(
+                config_id=config_id, config=sim_config, env=self.env, ssh=ssh, remote_config_dir=None
+            )
 
         except Exception as e:
             logger.exception("Error uploading simulation config")
             raise Exception(str(e)) from e
 
 
-async def fs_upload(config_id: str, config: SimulationConfiguration | AnalysisConfig, env: Settings, ssh: SSHService, remote_config_dir: Path | None = None) -> UploadConfirmation:
+async def fs_upload(
+    config_id: str,
+    config: SimulationConfiguration | AnalysisConfig,
+    env: Settings,
+    ssh: SSHService,
+    remote_config_dir: Path | None = None,
+) -> UploadConfirmation:
     # upload config to hpc(vEcoli dir)
     with tempfile.TemporaryDirectory() as tmpdir:
         fname = f"{config_id}.json"

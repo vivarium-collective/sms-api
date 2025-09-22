@@ -2,14 +2,15 @@
 /experiments: this router is dedicated to the running and introspection of experiments (getting output pq data)
 """
 
+import json
 import logging
-from collections.abc import Generator, Mapping
+from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Optional
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
@@ -25,10 +26,10 @@ from sms_api.dependencies import (
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.handlers import launch_vecoli_simulation
 from sms_api.simulation.models import (
-    ConfigOverrides,
     EcoliExperimentDTO,
     EcoliExperimentRequestDTO,
     JobStatus,
+    SimulationConfiguration,
     SimulationRun,
     SimulatorVersion,
 )
@@ -78,6 +79,12 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
 # -- endpoints -- #
 
 
+async def read_config_file(config_file: UploadFile) -> SimulationConfiguration:
+    file_contents = await config_file.read()
+    config = SimulationConfiguration(**json.loads(file_contents))
+    return config
+
+
 @config.router.post(
     path="/launch",
     operation_id="run-experiment",
@@ -87,9 +94,10 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
     summary="Launches a nextflow-powered vEcoli simulation workflow",
 )
 async def launch_simulation(
-    config_id: Optional[str],
-    overrides: Optional[ConfigOverrides] = None,
-    metadata: Mapping[str, str] | None = None,
+    config_id: str = Query(default="sms_single"),
+    config_file: Optional[UploadFile] = File(default=None),
+    # overrides: Optional[ConfigOverrides] = None,
+    # metadata: Mapping[str, str] | None = None,
     # TODO: enable overrides here, not variants directly
     #  (variants should be specified as a top level key-val in overrides,
     #   mirroring the structure of simulation config JSON directly,
@@ -107,15 +115,19 @@ async def launch_simulation(
 
     # construct params
     simulator: SimulatorVersion = get_simulator()
+    overrides = None
     request = EcoliExperimentRequestDTO(config_id=config_id, overrides=overrides)
+
+    config = await read_config_file(config_file) if config_file else None
 
     try:
         return await launch_vecoli_simulation(
             request=request,
             simulator=simulator,
-            metadata=metadata or {},
+            metadata={"creator": "<TEST>"},
             simulation_service_slurm=sim_service,
             database_service=db_service,
+            config=config,
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")

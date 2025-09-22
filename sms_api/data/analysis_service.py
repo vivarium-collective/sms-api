@@ -28,11 +28,19 @@ logger.setLevel(logging.INFO)
 #  which itself, calls first _script, then _submit
 
 
-def _script(slurm_log_file: Path, slurm_job_name: str, env: Settings, latest_hash: str, experiment_id: str) -> str:
+def _script(
+    slurm_log_file: Path,
+    slurm_job_name: str,
+    env: Settings,
+    latest_hash: str,
+    experiment_id: str,
+    config: AnalysisConfig | None = None,
+) -> str:
     base_path = Path(env.slurm_base_path)
     remote_workspace_dir = base_path / "workspace"
     vecoli_dir = remote_workspace_dir / "vEcoli"
     config_dir = vecoli_dir / "configs"
+    conf = config.model_dump_json() or "{}"
 
     return dedent(f"""\
         #!/bin/bash
@@ -51,8 +59,6 @@ def _script(slurm_log_file: Path, slurm_job_name: str, env: Settings, latest_has
         local_bin=$HOME/.local/bin
         export JAVA_HOME=$local_bin/java-22
         export PATH=$JAVA_HOME/bin:$local_bin:$PATH
-
-        CONFIG_PATH=$1  # the JSON file path
 
         ### configure working dir and binds
         vecoli_dir={vecoli_dir!s}
