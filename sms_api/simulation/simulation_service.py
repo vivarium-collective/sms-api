@@ -542,7 +542,7 @@ def simulation_slurm_script(
     # latest_hash = vecoli_commit_hash or "079c43c"
     latest_hash = "079c43c"
 
-    conf = config.model_dump_json() or ""
+    conf = config.model_dump_json() if config else ""
     experiment_id = config.experiment_id if config is not None else experiment_id
 
     # --- in python script func: ---
@@ -637,7 +637,7 @@ def simulation_slurm_script(
         # '
 
         ### remove unique sim config on exit, regardless of job outcome
-        [ -f {config_dir!s}/{experiment_id}.json ] && trap 'rm -f {config_dir!s}/{experiment_id}.json' EXIT
+        [ -f {config_dir!s}/{experiment_id}.json ] && trap 'rm -f {config_dir!s}/{experiment_id}.json' && trap 'rm -f /home/FCAM/svc_vivarium/workspace/api_outputs/{experiment_id}' EXIT
 
         ### run bound singularity
         singularity run $binds $image bash -c "

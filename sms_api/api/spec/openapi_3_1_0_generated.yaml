@@ -650,6 +650,7 @@ components:
           anyOf:
           - type: string
             format: binary
+          - type: string
           - type: 'null'
           title: Config File
       type: object

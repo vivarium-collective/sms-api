@@ -7,7 +7,7 @@ import logging
 from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
@@ -102,7 +102,7 @@ async def read_config_file(config_file: UploadFile) -> SimulationConfiguration:
 )
 async def launch_simulation(
     config_id: str | None = Query(default=None),
-    config_file: Optional[UploadFile] = File(default=None),  # noqa: B008
+    config_file: UploadFile | str | None = File(default=None),  # noqa: B008
     # overrides: Optional[ConfigOverrides] = None,
     # metadata: Mapping[str, str] | None = None,
     # TODO: enable overrides here, not variants directly
@@ -131,7 +131,6 @@ async def launch_simulation(
     request = EcoliExperimentRequestDTO(
         config_id=config_id if config is None else config.experiment_id, overrides=overrides
     )
-    logger.info(f"USING CONFIG:\n{config}")
 
     try:
         return await launch_vecoli_simulation(
