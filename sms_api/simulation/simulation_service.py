@@ -637,7 +637,7 @@ def simulation_slurm_script(
         # '
 
         ### remove unique sim config on exit, regardless of job outcome
-        [ -f {config_dir!s}/{experiment_id}.json ] && trap 'rm -f {config_dir!s}/{experiment_id}.json' && trap 'rm -f /home/FCAM/svc_vivarium/workspace/api_outputs/{experiment_id}' EXIT
+        [ -f {config_dir!s}/{experiment_id}.json ] && trap 'rm -f {config_dir!s}/{experiment_id}.json' EXIT
 
         ### run bound singularity
         singularity run $binds $image bash -c "

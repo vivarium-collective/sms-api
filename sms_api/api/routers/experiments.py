@@ -205,14 +205,14 @@ async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationR
 
 
 @config.router.get(
-    path="/simstatus",
+    path="/simlog",
     # response_model=SimulationRun,
     # operation_id="get-simulation-experiment-status",
     tags=["Simulations - vEcoli"],
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
 )
-async def get_simulation_statuss(experiment_id: str = Query(...)):
+async def get_simlog(experiment_id: str = Query(...)):
     try:
         # slurmjob_id = get_jobid_by_experiment(experiment_id)
         ssh_service = get_ssh_service()

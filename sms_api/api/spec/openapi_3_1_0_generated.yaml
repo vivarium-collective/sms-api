@@ -379,12 +379,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /experiments/simstatus:
+  /experiments/simlog:
     get:
       tags:
       - Simulations - vEcoli
       summary: Get the simulation status record by its ID
-      operationId: get_simulation_statuss_experiments_simstatus_get
+      operationId: get_simlog_experiments_simlog_get
       parameters:
       - name: experiment_id
         in: query
