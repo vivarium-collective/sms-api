@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import tempfile
@@ -15,7 +16,6 @@ from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import Settings, get_settings
 from sms_api.data.models import AnalysisConfig, ExperimentAnalysisDTO
-from sms_api.data.utils import write_json_for_slurm
 from sms_api.simulation.hpc_utils import get_experiment_dir, get_slurm_submit_file, get_slurmjob_name
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,8 @@ logger.setLevel(logging.INFO)
 #         singularity run $binds $image bash -c "
 #             export JAVA_HOME=$HOME/.local/bin/java-22
 #             export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-#             uv run --env-file /vEcoli/.env /vEcoli/runscripts/analysis.py --config /vEcoli/configs/{experiment_id}.json
+#             uv run --env-file /vEcoli/.env /vEcoli/runscripts/analysis.py \
+#               --config /vEcoli/configs/{experiment_id}.json
 #         "
 #
 #         ### zip the file
@@ -108,6 +109,7 @@ def _script(
     config_dir = vecoli_dir / "configs"
     conf = analysis.config.model_dump_json() or "{}"
     experiment_id = analysis.config.analysis_options.experiment_id[0]
+    analysis_name = analysis.name
 
     return dedent(f"""\
         #!/bin/bash
@@ -130,10 +132,11 @@ def _script(
         ### configure working dir and binds
         vecoli_dir={vecoli_dir!s}
         latest_hash={latest_hash}
-        
-        uv run python $HOME/workspace/scripts/write_uploaded_config.py --config '{conf}'
+
+        uv run python $HOME/workspace/scripts/write_uploaded_config.py \
+            --config {analysis.config.model_dump()} --name {analysis_name}
         cd $vecoli_dir
-        
+
         ### bind vecoli and outputs dest dir
         binds="-B $HOME/workspace/vEcoli:/vEcoli"
         binds+=" -B $HOME/workspace/api_outputs:/out"
@@ -147,7 +150,8 @@ def _script(
         vecoli_image_root=/vEcoli
 
         # make the output dir if not exists
-        mkdir -p {remote_workspace_dir!s}/api_outputs/{experiment_id}
+        # mkdir -p {remote_workspace_dir!s}/api_outputs/{experiment_id}
+        mkdir -p {remote_workspace_dir!s}/api_outputs/{analysis_name}
 
         ### run bound singularity
         singularity run $binds $image bash -c "
@@ -158,10 +162,73 @@ def _script(
 
         ### zip the file
         cd {remote_workspace_dir!s}
-        uv run python scripts/archive_dir.py api_outputs/{experiment_id}
+        uv run python scripts/archive_dir.py api_outputs/{analysis_name}
 
         # echo "Using config at: $CONFIG_PATH"
         # python my_hpc_script.py --config "$CONFIG_PATH"
+    """)
+
+
+def script(
+    slurm_log_file: Path,
+    slurm_job_name: str,
+    env: Settings,
+    latest_hash: str,
+    analysis: ExperimentAnalysisDTO,
+) -> str:
+    base_path = Path(env.slurm_base_path)
+    remote_workspace_dir = base_path / "workspace"
+    vecoli_dir = remote_workspace_dir / "vEcoli"
+    config_dir = vecoli_dir / "configs"
+    conf = analysis.config.model_dump_json() or "{}"
+    experiment_id = analysis.config.analysis_options.experiment_id[0]
+    analysis_name = analysis.name
+
+    return dedent(f"""\
+        #!/bin/bash
+        #SBATCH --job-name={slurm_job_name}
+        #SBATCH --time=30:00
+        #SBATCH --cpus-per-task 2
+        #SBATCH --mem=8GB
+        #SBATCH --partition={env.slurm_partition}
+        #SBATCH --qos={env.slurm_qos}
+        #SBATCH --output={slurm_log_file!s}
+        #SBATCH --nodelist={env.slurm_node_list}
+
+        set -e
+
+        ### set up java and nextflow
+        local_bin=$HOME/.local/bin
+        export JAVA_HOME=$local_bin/java-22
+        export PATH=$JAVA_HOME/bin:$local_bin:$PATH
+
+        ### configure working dir and binds
+        vecoli_dir={vecoli_dir!s}
+        latest_hash={latest_hash}
+
+        tmp_config=$(mktemp)
+        echo '{json.dumps(analysis.config.model_dump())}' > \"$tmp_config\"
+        uv run --no-cache python $HOME/workspace/scripts/write_config.py \
+          --name {analysis_name} \
+          --config_path "$tmp_config"
+
+        cd $vecoli_dir
+
+        ### binds
+        binds="-B $HOME/workspace/vEcoli:/vEcoli"
+        binds+=" -B $HOME/workspace/api_outputs:/out"
+        binds+=" -B $JAVA_HOME:$JAVA_HOME"
+        binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
+
+        image=$HOME/workspace/images/vecoli-$latest_hash.sif
+        vecoli_image_root=/vEcoli
+
+        mkdir -p {remote_workspace_dir!s}/api_outputs/{analysis_name}
+        singularity run $binds $image bash -c "
+            export JAVA_HOME=$HOME/.local/bin/java-22
+            export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
+            uv run --env-file /vEcoli/.env /vEcoli/runscripts/analysis.py --config \"$tmp_config\"
+        "
     """)
 
 
@@ -192,9 +259,9 @@ async def _submit(
         remote_workspace_dir = base_path / "workspace"
         vecoli_dir = remote_workspace_dir / "vEcoli"
         config_dir = vecoli_dir / "configs"
-        config_path = write_json_for_slurm(
-            data=config.model_dump(), outdir=config_dir, filename=f"{experiment_id}.json"
-        )
+        # config_path = write_json_for_slurm(
+        #     data=config.model_dump(), outdir=config_dir, filename=f"{experiment_id}.json"
+        # )
 
         slurm_jobid = await slurm_service.submit_job(
             local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
@@ -202,27 +269,24 @@ async def _submit(
         return slurm_jobid
 
 
-async def dispatch(
-    analysis: ExperimentAnalysisDTO, simulator_hash: str, env: Settings, logger: logging.Logger
-) -> int:
+async def dispatch(analysis: ExperimentAnalysisDTO, simulator_hash: str, env: Settings, logger: logging.Logger) -> int:
     experiment_id = analysis.config.analysis_options.experiment_id[0]
-    slurmjob_name = get_slurmjob_name(
-        experiment_id=experiment_id,
-        simulator_hash=simulator_hash
-    )
+    slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
     base_path = Path(env.slurm_base_path)
     slurm_log_file = base_path / f"prod/htclogs/{experiment_id}.out"
 
-    slurm_script = _script(
+    slurm_script = script(
         slurm_log_file=slurm_log_file,
         slurm_job_name=slurmjob_name,
         env=env,
         latest_hash=simulator_hash,
-        experiment_id=experiment_id,
+        analysis=analysis,
+        # experiment_id=experiment_id,
     )
+
     ssh = get_ssh_service(env)
     slurmjob_id = await _submit(
-        config=config,
+        config=analysis.config,
         experiment_id=experiment_id,
         script_content=slurm_script,
         slurm_job_name=slurmjob_name,

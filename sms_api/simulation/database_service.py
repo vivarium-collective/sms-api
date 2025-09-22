@@ -26,13 +26,14 @@ from sms_api.simulation.models import (
 from sms_api.simulation.tables_orm import (
     JobStatusDB,
     JobTypeDB,
+    ORMAnalysis,
     ORMEcoliExperiment,
     ORMHpcRun,
     ORMParcaDataset,
     ORMSimulation,
     ORMSimulationConfig,
     ORMSimulator,
-    ORMWorkerEvent, ORMAnalysis,
+    ORMWorkerEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,10 +42,10 @@ logger = logging.getLogger(__name__)
 class DatabaseService(ABC):
     @abstractmethod
     async def insert_analysis(
-            self,
-            name: str,
-            config: AnalysisConfig,
-            last_updated: str,
+        self,
+        name: str,
+        config: AnalysisConfig,
+        last_updated: str,
     ) -> ExperimentAnalysisDTO:
         pass
 

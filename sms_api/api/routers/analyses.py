@@ -2,11 +2,11 @@
 /analyses: this router is dedicated to the running and output retrieval of
     simulation analysis jobs/workflows
 """
+
 import datetime
 import logging
 import mimetypes
 import tempfile
-import uuid
 from pathlib import Path
 from typing import Union
 
@@ -19,7 +19,8 @@ from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.config import get_settings
 from sms_api.data import analysis_service
-from sms_api.data.models import AnalysisConfig, AnalysisJob, AnalysisRequest
+from sms_api.data.analysis_service import dispatch
+from sms_api.data.models import AnalysisConfig, AnalysisRequest
 from sms_api.dependencies import get_database_service
 
 ENV = get_settings()
@@ -41,18 +42,16 @@ async def run_analysis(request: AnalysisRequest):
         analysis_name = request.analysis_name
         last_updated = str(datetime.datetime.now())
         analysis = await db_service.insert_analysis(name=analysis_name, config=config, last_updated=last_updated)
-        # TODO: now pass analysis object to analysis service and use it to create the analysis.config.outdir
-        #   in remote FS, and upload
+        slurmjob_id = await dispatch(
+            analysis=analysis, simulator_hash=get_simulator().git_commit_hash, env=ENV, logger=logger
+        )
+        return analysis
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(
-    path="/fetch/{id}",
-    operation_id="fetch-experiment-analysis",
-    tags=["Analysis - vEcoli"]
-)
+@config.router.get(path="/fetch/{id}", operation_id="fetch-experiment-analysis", tags=["Analysis - vEcoli"])
 async def fetch_analysis(id: int):
     try:
         db_service = get_database_service()
@@ -60,29 +59,6 @@ async def fetch_analysis(id: int):
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
-
-# @config.router.post(
-#     path="",
-#     operation_id="run-experiment-analysis",
-#     tags=["Analysis - vEcoli"],
-#     summary="Run an analysis workflow (like multigeneration)",
-# )
-# async def run_analysis(config: AnalysisConfig) -> AnalysisJob:
-#     try:
-#         config_id = "analysis_multigen"
-#         experiment_id = f"sms_{config_id}_{uuid.uuid4()!s}"
-#         slurm_jobid: int = await analysis_service.dispatch_job(
-#             experiment_id=experiment_id,
-#             config=config,
-#             simulator_hash=get_simulator().git_commit_hash,
-#             env=ENV,
-#             logger=logger,
-#         )
-#         return AnalysisJob(id=slurm_jobid, status="STARTED")
-#
-#     except Exception as e:
-#         logger.exception("Error fetching the simulation analysis file.")
-#         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.get(

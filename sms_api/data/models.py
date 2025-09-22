@@ -13,8 +13,6 @@ import numpy as np
 import orjson
 from pydantic import BaseModel, Field
 
-from sms_api.config import get_settings
-
 
 class Base(BaseModel):
     pass
@@ -191,7 +189,7 @@ class Configuration(BaseModel):
 
 class AnalysisRequest(BaseModel):
     experiment_id: str
-    analysis_name: str = Field(default_factory=lambda: f"analysis_{str(uuid.uuid4())}")
+    analysis_name: str = Field(default_factory=lambda: f"analysis_{uuid.uuid4()!s}")
     single: dict[str, Any] = {}
     multidaughter: dict[str, Any] = {}
     multigeneration: dict[str, dict[str, Any]] = {
@@ -251,15 +249,6 @@ class AnalysisConfig(Configuration):
     analysis_options: AnalysisConfigOptions
     emitter_arg: dict[str, str] = Field(default={"out_dir": ""})
 
-    # def model_post_init(self, *args: Any) -> None:
-    #     if not self.emitter_arg["out_dir"]:
-    #         # raise ValueError("You must specify an output directory according to vEcoli documentation for analyses...")
-    #         env = get_settings()
-    #         self.emitter_arg["out_dir"] = env.simulation_outdir
-    #     output_dir = pathlib.Path(f"/home/FCAM/svc_vivarium/workspace/api_outputs/{self.analysis_options.experiment_id}")
-    #     self.analysis_options.variant_data_dir = [str(output_dir / "variant_sim_data")]
-    #     self.analysis_options.validation_data_path = [str(output_dir / "parca/kb/validationData.cPickle")]
-
     @classmethod
     @override
     def from_file(cls, fp: pathlib.Path, config_id: str | None = None) -> "AnalysisConfig":
@@ -309,6 +298,3 @@ class UploadConfirmation(BaseModel):
         if self.timestamp is not None:
             raise ValueError("You cannot edit this field!")
         self.timestamp = str(datetime.now())
-
-
-

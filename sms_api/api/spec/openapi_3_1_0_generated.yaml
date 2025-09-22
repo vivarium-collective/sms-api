@@ -14,14 +14,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AnalysisConfig'
+              $ref: '#/components/schemas/AnalysisRequest'
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/AnalysisJob'
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -72,6 +71,31 @@ paths:
                 type: object
                 additionalProperties: true
                 title: Response Upload Analysis Module Analyses Put
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analyses/fetch/{id}:
+    get:
+      tags:
+      - Analysis - vEcoli
+      summary: Fetch Analysis
+      operationId: fetch-experiment-analysis
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -560,21 +584,28 @@ components:
           type: array
           title: Experiment Id
         variant_data_dir:
-          items:
-            type: string
-          type: array
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
           title: Variant Data Dir
         validation_data_path:
-          items:
-            type: string
-          type: array
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
           title: Validation Data Path
         outdir:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Outdir
         cpus:
           type: integer
           title: Cpus
+          default: 3
         single:
           additionalProperties: true
           type: object
@@ -626,24 +657,69 @@ components:
       type: object
       required:
       - experiment_id
-      - variant_data_dir
-      - validation_data_path
-      - outdir
-      - cpus
       title: AnalysisConfigOptions
-    AnalysisJob:
+    AnalysisRequest:
       properties:
-        id:
-          type: integer
-          title: Id
-        status:
+        experiment_id:
           type: string
-          title: Status
-          default: WAITING
+          title: Experiment Id
+        analysis_name:
+          type: string
+          title: Analysis Name
+        single:
+          additionalProperties: true
+          type: object
+          title: Single
+          default: {}
+        multidaughter:
+          additionalProperties: true
+          type: object
+          title: Multidaughter
+          default: {}
+        multigeneration:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+          type: object
+          title: Multigeneration
+          default:
+            replication: {}
+            ribosome_components: {}
+            ribosome_crowding: {}
+            ribosome_production: {}
+            ribosome_usage: {}
+            rna_decay_03_high: {}
+        multiseed:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+          type: object
+          title: Multiseed
+          default:
+            protein_counts_validation: {}
+            ribosome_spacing: {}
+            subgenerational_expression_table: {}
+        multivariant:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+          type: object
+          title: Multivariant
+          default:
+            average_monomer_counts: {}
+            cell_mass: {}
+            doubling_time_hist:
+              skip_n_gens: 1
+            doubling_time_line: {}
+        multiexperiment:
+          additionalProperties: true
+          type: object
+          title: Multiexperiment
+          default: {}
       type: object
       required:
-      - id
-      title: AnalysisJob
+      - experiment_id
+      title: AnalysisRequest
     Body_run-experiment:
       properties:
         config_file:
