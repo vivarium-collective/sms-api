@@ -262,16 +262,13 @@ paths:
         in: query
         required: false
         schema:
-          type: string
-          description: Configuration ID of an existing available vecoli simulation
-            configuration JSON
-          default: sms
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Config Id
-        description: Configuration ID of an existing available vecoli simulation configuration
-          JSON
       requestBody:
         content:
-          application/json:
+          multipart/form-data:
             schema:
               $ref: '#/components/schemas/Body_run-experiment'
       responses:
@@ -376,6 +373,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SimulationRun'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /experiments/simstatus:
+    get:
+      tags:
+      - Simulations - vEcoli
+      summary: Get the simulation status record by its ID
+      operationId: get_simulation_statuss_experiments_simstatus_get
+      parameters:
+      - name: experiment_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Experiment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -624,17 +646,12 @@ components:
       title: AnalysisJob
     Body_run-experiment:
       properties:
-        overrides:
+        config_file:
           anyOf:
-          - $ref: '#/components/schemas/ConfigOverrides'
+          - type: string
+            format: binary
           - type: 'null'
-        metadata:
-          anyOf:
-          - additionalProperties:
-              type: string
-            type: object
-          - type: 'null'
-          title: Metadata
+          title: Config File
       type: object
       title: Body_run-experiment
     Body_upload_analysis_module_analyses_put:

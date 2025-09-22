@@ -82,6 +82,13 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
 async def read_config_file(config_file: UploadFile) -> SimulationConfiguration:
     file_contents = await config_file.read()
     config = SimulationConfiguration(**json.loads(file_contents))
+    for attrname in list(SimulationConfiguration.model_fields.keys()):
+        attr = getattr(config, attrname)
+        if attr is None:
+            delattr(config, attrname)
+        if isinstance(attr, list) or isinstance(attr, dict):  # noqa: SIM102
+            if not len(attr):
+                delattr(config, attrname)
     return config
 
 
@@ -94,8 +101,8 @@ async def read_config_file(config_file: UploadFile) -> SimulationConfiguration:
     summary="Launches a nextflow-powered vEcoli simulation workflow",
 )
 async def launch_simulation(
-    config_id: str = Query(default="sms_single"),
-    config_file: Optional[UploadFile] = File(default=None),
+    config_id: str | None = Query(default=None),
+    config_file: Optional[UploadFile] = File(default=None),  # noqa: B008
     # overrides: Optional[ConfigOverrides] = None,
     # metadata: Mapping[str, str] | None = None,
     # TODO: enable overrides here, not variants directly
@@ -116,15 +123,21 @@ async def launch_simulation(
     # construct params
     simulator: SimulatorVersion = get_simulator()
     overrides = None
-    request = EcoliExperimentRequestDTO(config_id=config_id, overrides=overrides)
 
     config = await read_config_file(config_file) if config_file else None
+    if config is None and config_id is None:
+        raise HTTPException(status_code=404, detail="No configuration provided")
+
+    request = EcoliExperimentRequestDTO(
+        config_id=config_id if config is None else config.experiment_id, overrides=overrides
+    )
+    logger.info(f"USING CONFIG:\n{config}")
 
     try:
         return await launch_vecoli_simulation(
             request=request,
             simulator=simulator,
-            metadata={"creator": "<TEST>"},
+            metadata={"creator": "Alexander Patrie", "publication": "myjournal"},
             simulation_service_slurm=sim_service,
             database_service=db_service,
             config=config,
@@ -183,6 +196,32 @@ async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationR
         statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
         status: str = statuses[1].split("\n")[0].split()[-2]
         return SimulationRun(id=experiment_tag, status=JobStatus[status])
+    except Exception as e:
+        logger.exception(
+            """Error getting simulation status.\
+                Are you sure that you've passed the experiment_tag? (not the experiment id)
+            """
+        )
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/simstatus",
+    # response_model=SimulationRun,
+    # operation_id="get-simulation-experiment-status",
+    tags=["Simulations - vEcoli"],
+    dependencies=[Depends(get_database_service)],
+    summary="Get the simulation status record by its ID",
+)
+async def get_simulation_statuss(experiment_id: str = Query(...)):
+    try:
+        # slurmjob_id = get_jobid_by_experiment(experiment_id)
+        ssh_service = get_ssh_service()
+        slurm_user = ENV.slurm_submit_user
+        ret, stdout, stderr = await ssh_service.run_command(
+            f"cd /home/FCAM/svc_vivarium/workspace && make slurmlog id={experiment_id}"
+        )
+        return stdout
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\

@@ -536,13 +536,14 @@ def simulation_slurm_script(
     vecoli_dir = remote_workspace_dir / "vEcoli"
     # slurm_log_file = base_path / f"prod/htclogs/{slurm_job_name}.out"
     slurm_log_file = base_path / f"prod/htclogs/{experiment_id}.out"
-    experiment_outdir = f"/home/FCAM/svc_vivarium/workspace/outputs/{config_id}"
+    experiment_outdir = f"/home/FCAM/svc_vivarium/workspace/api_outputs/{config_id}"
 
     config_dir = vecoli_dir / "configs"
     # latest_hash = vecoli_commit_hash or "079c43c"
     latest_hash = "079c43c"
 
-    conf = config.model_dump_json() or "{}"
+    conf = config.model_dump_json() or ""
+    experiment_id = config.experiment_id if config is not None else experiment_id
 
     # --- in python script func: ---
     # experiment_id = f'sim-{simulator_hash}-{config_id}-{uuid.uuid4()}'
@@ -578,15 +579,18 @@ def simulation_slurm_script(
         # export NEXTFLOW=$local_bin/nextflow
         # export PATH=$JAVA_HOME/bin:$PATH:$(dirname "$NEXTFLOW")
 
-        uv run python $HOME/workspace/scripts/write_uploaded_config.py --config '{conf}'
-
-        ### create request-specific config .json
-        cd $HOME/workspace/vEcoli
-        expid={experiment_id}
-        config_id={config_id}
-        config_dir={config_dir!s}
-        experiment_config=$config_dir/$expid.json
-        [ -f "$config_dir/$config_id.json" ] && jq --arg expid "$expid" '.experiment_id = $expid' "$config_dir/$config_id.json" > "$config_dir/$expid.json"
+        if [ '{conf}' != '' ]; then
+            uv run python $HOME/workspace/scripts/write_uploaded_config.py --config '{conf}'
+            cd $HOME/workspace/vEcoli
+        else
+            ### create request-specific config .json
+            cd $HOME/workspace/vEcoli
+            expid={experiment_id}
+            config_id={config_id}
+            config_dir={config_dir!s}
+            experiment_config=$config_dir/$expid.json
+            [ -f "$config_dir/$config_id.json" ] && jq --arg expid "$expid" '.experiment_id = $expid' "$config_dir/$config_id.json" > "$config_dir/$expid.json"
+        fi
 
         ### logging to confirm installations/paths
         echo "----> START({datetime.datetime.now()}) ---->"
