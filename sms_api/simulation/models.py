@@ -272,7 +272,7 @@ class EmitterArg(BaseModel):
 
 
 class SimulationConfig(BaseModel):
-    experiment_id: str | None = None
+    experiment_id: str
     sim_data_path: str | None = None
     suffix_time: bool = False
     parca_options: dict[str, bool | int | str | None | Any] = Field(default={"cpus": 3})

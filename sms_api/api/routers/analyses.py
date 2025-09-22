@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Union
 
 import fastapi
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
 from sms_api.common.gateway.models import RouterConfig
@@ -35,10 +35,13 @@ config = RouterConfig(router=APIRouter(), prefix="/analyses", dependencies=[])
     operation_id="run-experiment-analysis",
     tags=["Analysis - vEcoli"],
     summary="Run an analysis workflow (like multigeneration)",
+    dependencies=[Depends(get_database_service)],
 )
 async def run_analysis(request: AnalysisRequest) -> ExperimentAnalysisDTO:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
     try:
-        db_service = get_database_service()
         config = AnalysisConfig.from_request(request)
         analysis_name = request.analysis_name
         last_updated = str(datetime.datetime.now())
@@ -52,10 +55,17 @@ async def run_analysis(request: AnalysisRequest) -> ExperimentAnalysisDTO:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(path="/fetch/{id}", operation_id="fetch-experiment-analysis", tags=["Analysis - vEcoli"])
-async def fetch_analysis(id: int):
+@config.router.get(
+    path="/fetch/{id}",
+    operation_id="fetch-experiment-analysis",
+    tags=["Analysis - vEcoli"],
+    dependencies=[Depends(get_database_service)],
+)
+async def fetch_analysis(id: int) -> ExperimentAnalysisDTO:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
     try:
-        db_service = get_database_service()
         return await db_service.get_analysis(database_id=id)
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")

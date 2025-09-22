@@ -142,7 +142,7 @@ async def run_simulation(
         raise HTTPException(status_code=400, detail="Experiment ID is required")
 
     ecoli_experiment: EcoliSimulationDTO = await db_service.insert_ecoli_experiment(
-        config=config, metadata=metadata, last_updated=str(datetime.datetime.now())
+        config=config, metadata=metadata or ExperimentMetadata(), last_updated=str(datetime.datetime.now())
     )
 
     # now do the following:
@@ -304,7 +304,7 @@ async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationR
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
 )
-async def get_simlog(experiment_id: str = Query(...)):
+async def get_simlog(experiment_id: str = Query(...)) -> str:
     try:
         # slurmjob_id = get_jobid_by_experiment(experiment_id)
         ssh_service = get_ssh_service()

@@ -47,8 +47,9 @@ def core_simulation_workflow() -> EcoliWorkflowRequest:
     return EcoliWorkflowRequest(**json.loads(payload))
 
 
-def core_sim_config() -> SimulationConfiguration:
-    return SimulationConfiguration()
+def core_sim_config() -> None:
+    # return SimulationConfiguration()
+    pass
 
 
 def core_analysis_config() -> AnalysisConfig:

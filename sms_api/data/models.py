@@ -221,8 +221,8 @@ class AnalysisConfigOptions(BaseModel):
     validation_data_path: list[str] | None = None
     outdir: str | None = None
     cpus: int = 3
-    single: dict[str, Any] = Field(default_factory=dict)
-    multidaughter: dict[str, Any] = Field(default_factory=dict)
+    single: dict[str, Any] = {}
+    multidaughter: dict[str, Any] = {}
     multigeneration: dict[str, dict[str, Any]] = {
         "replication": {},
         "ribosome_components": {},

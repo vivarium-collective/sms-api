@@ -3,11 +3,9 @@ import abc
 import json
 import logging
 import tempfile
-import uuid
 from pathlib import Path
-from typing import override
 
-from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
+from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import Settings
 from sms_api.data.models import AnalysisConfig, UploadConfirmation
 from sms_api.simulation.database_service import DatabaseService
@@ -30,48 +28,6 @@ class IConfigService(abc.ABC):
     @abc.abstractmethod
     async def upload(self, config_id: str, config: SimulationConfiguration | AnalysisConfig) -> UploadConfirmation:
         pass
-
-
-class SimulationConfigService(IConfigService):
-    @override
-    async def upload(self, config_id: str, sim_config: SimulationConfiguration) -> UploadConfirmation:
-        if not sim_config.experiment_id:
-            raise Exception("No experiment ID provided")
-        if sim_config.experiment_id.startswith("<P"):
-            raise Exception("Experiment id is invalid (still using the placeholder value)")
-
-        ssh = get_ssh_service(self.env)
-
-        try:
-            # store config in db
-            user_suffix = str(uuid.uuid4()).split("-")[-1]  # TODO: let this be a reference instead to the user's id
-            if config_id is None:
-                config_id = "simconfig"
-            confid = f"{config_id}-{user_suffix}"
-            sim_config.experiment_id = f"{sim_config.experiment_id}-{user_suffix}"
-            sim_config.emitter_arg["out_dir"] = self.env.simulation_outdir
-            sim_config.daughter_outdir = self.env.simulation_outdir
-            await self.db_service.insert_simulation_config(config_id=confid, config=sim_config)
-
-            # # upload config to hpc(vEcoli dir)
-            # with tempfile.TemporaryDirectory() as tmpdir:
-            #     fname = f"{confid}.json"
-            #     local = Path(tmpdir).absolute() / fname
-            #     remote = Path(self.env.slurm_base_path) / "workspace" / "vEcoli" / "configs" / fname
-            #     # write temp local
-            #     with open(local, "w") as f:
-            #         json.dump(sim_config.model_dump(), f, indent=3)
-            #     # upload temp local to remote(vEcoli configs dir)
-            #     await ssh.scp_upload(local_file=local, remote_path=remote)
-            # uploaded = UploadConfirmation(filename=fname, home=self.env.slurm_base_path)
-            # return uploaded
-            return await fs_upload(
-                config_id=config_id, config=sim_config, env=self.env, ssh=ssh, remote_config_dir=None
-            )
-
-        except Exception as e:
-            logger.exception("Error uploading simulation config")
-            raise Exception(str(e)) from e
 
 
 async def fs_upload(
