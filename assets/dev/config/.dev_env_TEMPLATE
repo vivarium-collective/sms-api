@@ -65,8 +65,8 @@ LOCAL_NFS_DIR=
 REMOTE_DATA_BASEPATH=
 LOCAL_DATA_BASEPATH=
 
-SIMULATION_OUTDIR=
-LOCAL_SIMULATION_OUTDIR=
+SIMULATION_OUTDIR=  # (remote)
+LOCAL_SIMULATION_OUTDIR= # this should mirror the path structure provided to the HPC $USER, so for example /some/local/location/home/FCAM/svc_vivarium/...etc
 VECOLI_CONFIG_DIR=  # remote, that is
 
 # -- External APIs: biocyc, etc --

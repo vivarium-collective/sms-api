@@ -242,13 +242,20 @@ class ORMAnalysis(Base):
     name: Mapped[str] = mapped_column(nullable=False)  # this should be request.analysis_name
     config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     last_updated: Mapped[str] = mapped_column(nullable=False)
+    job_name: Mapped[str] = mapped_column(nullable=True)
+    job_id: Mapped[int] = mapped_column(nullable=True)
 
     def to_dto(self) -> ExperimentAnalysisDTO:
         options = AnalysisConfigOptions(**self.config["analysis_options"])
         emitter_arg = self.config["emitter_arg"]
         config_dto = AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
         return ExperimentAnalysisDTO(
-            database_id=self.id, name=self.name, config=config_dto, last_updated=self.last_updated
+            database_id=self.id,
+            name=self.name,
+            config=config_dto,
+            last_updated=self.last_updated,
+            job_name=self.job_name,
+            job_id=self.job_id,
         )
 
 

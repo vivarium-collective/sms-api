@@ -73,7 +73,7 @@ class HpcRun(BaseModel):
 
 
 class SimulationRun(BaseModel):
-    id: str
+    id: int
     status: JobStatus
 
 

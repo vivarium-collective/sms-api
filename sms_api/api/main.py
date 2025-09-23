@@ -57,15 +57,15 @@ APP_ORIGINS = [
     "https://sms.cam.uchc.edu",
 ]
 APP_ROUTERS = [
-    "analyses",  # analysis only
+    "ecoli",
     "antibiotics",
     "biofactory",
-    "configs",  # config upload/download/get only
-    # "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
+    # "configs",  # config upload/download/get only
     "inference",
     "variants",
-    "experiments",  # SLURM submitted, vEcoli/Nextflow-based workflows (main)
-    # "wcm",
+    # "experiments",  # SLURM submitted, vEcoli/Nextflow-based workflows (main)
+    # "wcm",  # first iteration of complete nextflow-based requests
+    # "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
 ]
 ENV = get_settings()
 assets_dir = Path(ENV.assets_dir)

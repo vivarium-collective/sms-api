@@ -13,6 +13,11 @@ import numpy as np
 import orjson
 from pydantic import BaseModel, Field
 
+from sms_api.config import get_settings
+
+ENV = get_settings()
+MAX_ANALYSIS_CPUS = 5
+
 
 class Base(BaseModel):
     pass
@@ -277,11 +282,58 @@ class AnalysisConfig(Configuration):
         return cls(analysis_options=options, emitter_arg=emitter_arg)
 
 
+class ExperimentAnalysisRequest(BaseModel):
+    experiment_id: str
+    analysis_name: str = Field(default=f"analysis_{uuid.uuid4()!s}")
+    single: dict[str, Any] = {}
+    multidaughter: dict[str, Any] = {}
+    multigeneration: dict[str, dict[str, Any]] = {
+        "replication": {},
+        "ribosome_components": {},
+        "ribosome_crowding": {},
+        "ribosome_production": {},
+        "ribosome_usage": {},
+        "rna_decay_03_high": {},
+    }
+    multiseed: dict[str, dict[str, Any]] = {
+        "protein_counts_validation": {},
+        "ribosome_spacing": {},
+        "subgenerational_expression_table": {},
+    }
+    multivariant: dict[str, dict[str, Any]] = {
+        "average_monomer_counts": {},
+        "cell_mass": {},
+        "doubling_time_hist": {"skip_n_gens": 1},
+        "doubling_time_line": {},
+    }
+    multiexperiment: dict[str, Any] = {}
+
+    def to_config(self) -> AnalysisConfig:
+        experiment_outdir = f"{ENV.simulation_outdir}/{self.experiment_id}"
+        options = AnalysisConfigOptions(
+            experiment_id=[self.experiment_id],
+            variant_data_dir=[f"{experiment_outdir}/variant_sim_data"],
+            validation_data_path=[f"{experiment_outdir}/parca/kb/validationData.cPickle"],
+            outdir=f"{ENV.simulation_outdir}/{self.analysis_name}",
+            cpus=MAX_ANALYSIS_CPUS,
+            single=self.single,
+            multidaughter=self.multidaughter,
+            multigeneration=self.multigeneration,
+            multiexperiment=self.multiexperiment,
+            multivariant=self.multivariant,
+            multiseed=self.multiseed,
+        )
+        emitter_arg = {"out_dir": ENV.simulation_outdir}
+        return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
+
+
 class ExperimentAnalysisDTO(BaseModel):
     database_id: int
     name: str
     config: AnalysisConfig
     last_updated: str
+    job_name: str | None = None
+    job_id: int | None = None
 
 
 class AnalysisJob(BaseModel):

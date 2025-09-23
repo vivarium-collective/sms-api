@@ -19,7 +19,6 @@ from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.config import get_settings
-from sms_api.data.parquet_service import ParquetService
 from sms_api.dependencies import (
     get_database_service,
     get_simulation_service,

@@ -12,10 +12,11 @@ Then, add that func to the list within the examples dict comprehension below!
 """
 
 import json
+import uuid
 from pathlib import Path
 
 from sms_api.config import REPO_ROOT
-from sms_api.data.models import AnalysisConfig
+from sms_api.data.models import AnalysisConfig, ExperimentAnalysisRequest
 from sms_api.simulation.models import EcoliWorkflowRequest, SimulationConfiguration
 
 DEFAULT_SIMULATION_CONFIG = SimulationConfiguration.from_base()
@@ -57,4 +58,11 @@ def core_analysis_config() -> AnalysisConfig:
     return AnalysisConfig.from_file(fp=fp)
 
 
-examples = {func.__name__: func() for func in [core_simulation_workflow, core_analysis_config, core_sim_config]}
+def core_analysis_request() -> ExperimentAnalysisRequest:
+    return ExperimentAnalysisRequest(experiment_id="sms_multigeneration", analysis_name=f"analysis_{uuid.uuid4()!s}")
+
+
+examples = {
+    func.__name__: func()
+    for func in [core_simulation_workflow, core_analysis_config, core_sim_config, core_analysis_request]
+}

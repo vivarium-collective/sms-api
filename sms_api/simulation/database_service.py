@@ -55,15 +55,16 @@ class DatabaseService(ABC):
 
     @abstractmethod
     async def insert_analysis(
-        self,
-        name: str,
-        config: AnalysisConfig,
-        last_updated: str,
+        self, name: str, config: AnalysisConfig, last_updated: str, job_name: str, job_id: int
     ) -> ExperimentAnalysisDTO:
         pass
 
     @abstractmethod
     async def get_analysis(self, database_id: int) -> ExperimentAnalysisDTO:
+        pass
+
+    @abstractmethod
+    async def list_analyses(self) -> list[ExperimentAnalysisDTO]:
         pass
 
     @abstractmethod
@@ -311,16 +312,12 @@ class DatabaseServiceSQL(DatabaseService):
 
     @override
     async def insert_analysis(
-        self,
-        name: str,
-        config: AnalysisConfig,
-        last_updated: str,
+        self, name: str, config: AnalysisConfig, last_updated: str, job_name: str, job_id: int
     ) -> ExperimentAnalysisDTO:
         async with self.async_sessionmaker() as session, session.begin():
+            config.emitter_arg["out_dir"] = "/home/FCAM/svc_vivarium/workspace/api_outputs"
             orm_analysis = ORMAnalysis(
-                name=name,
-                config=config.model_dump(),
-                last_updated=last_updated,
+                name=name, config=config.model_dump(), last_updated=last_updated, job_name=job_name, job_id=job_id
             )
             session.add(orm_analysis)
             await session.flush()
@@ -333,6 +330,18 @@ class DatabaseServiceSQL(DatabaseService):
             if orm_analysis is None:
                 raise RuntimeError(f"Experiment {database_id} not found")
             return orm_analysis.to_dto()
+
+    @override
+    async def list_analyses(self) -> list[ExperimentAnalysisDTO]:
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMAnalysis)
+            result: Result[tuple[ORMAnalysis]] = await session.execute(stmt)
+            orm_analyses = result.scalars().all()
+
+            versions: list[ExperimentAnalysisDTO] = []
+            for experiment in orm_analyses:
+                versions.append(experiment.to_dto())
+            return versions
 
     @override
     async def insert_experiment(

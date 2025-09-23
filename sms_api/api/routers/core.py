@@ -38,8 +38,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.common.gateway.utils import get_local_simulation_outdir, get_simulation_outdir
-from sms_api.data._analysis_service import AnalysisService
-from sms_api.data.parquet_service import ParquetService
+from sms_api.data.services.parquet import ParquetService
 from sms_api.dependencies import (
     get_database_service,
     get_db_engine,
