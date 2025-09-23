@@ -3,7 +3,7 @@ info:
   title: sms-api
   version: 0.2.20-dev
 paths:
-  /ecoli/v1/analysis:
+  /ecoli/v1/analyses:
     post:
       tags:
       - Analyses
@@ -16,7 +16,7 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: analysis_ae268f15-de6d-49a4-befb-a394de7b4393
+                analysis_name: analysis_772e2723-abf9-4930-9130-fa28a8f67e4c
                 single: {}
                 multidaughter: {}
                 multigeneration:
@@ -86,7 +86,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ecoli/v1/analysis/{id}:
+  /ecoli/v1/analyses/{id}:
     get:
       tags:
       - Analyses
@@ -112,7 +112,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ecoli/v1/analysis/{id}/status:
+  /ecoli/v1/analyses/{id}/status:
     get:
       tags:
       - Analyses
@@ -132,14 +132,15 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/SimulationRun'
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ecoli/v1/analysis/{id}/log:
+  /ecoli/v1/analyses/{id}/log:
     get:
       tags:
       - Analyses
@@ -159,14 +160,16 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: string
+                title: Response Get-Analysis-Log
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ecoli/v1/analysis/{id}/plots:
+  /ecoli/v1/analyses/{id}/plots:
     get:
       tags:
       - Analyses
@@ -198,7 +201,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ecoli/v1/analysis/{id}/download:
+  /ecoli/v1/analyses/{id}/download:
     get:
       tags:
       - Analyses
@@ -260,7 +263,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ecoli/v1/simulation:
+  /ecoli/v1/simulations:
     post:
       tags:
       - Simulations
@@ -285,7 +288,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ecoli/v1/simulation/{id}:
+  /ecoli/v1/simulations/{id}:
     get:
       tags:
       - Simulations
@@ -339,10 +342,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ecoli/v1/simulation/{id}/status:
+  /ecoli/v1/simulations/{id}/status:
     get:
       tags:
-      - Simulations
+      - Simulations - vEcoli
       summary: Get the simulation status record by its ID
       operationId: get-simulation-experiment-status
       parameters:
@@ -365,12 +368,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ecoli/v1/simulation/{id}/logs:
+  /ecoli/v1/simulations/{id}/logs:
     get:
       tags:
       - Simulations
       summary: Get the simulation status record by its ID
-      operationId: get_simlog_ecoli_v1_simulation__id__logs_get
+      operationId: get_simlog_ecoli_v1_simulations__id__logs_get
       parameters:
       - name: id
         in: path
@@ -385,14 +388,14 @@ paths:
             application/json:
               schema:
                 type: string
-                title: Response Get Simlog Ecoli V1 Simulation  Id  Logs Get
+                title: Response Get Simlog Ecoli V1 Simulations  Id  Logs Get
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ecoli/v1/simulation/{id}/log:
+  /ecoli/v1/simulations/{id}/log:
     post:
       tags:
       - Simulations
@@ -419,7 +422,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /ecoli/v1/data:
+  /ecoli/v1/simulations/{id}/metadata:
+    get:
+      tags:
+      - Simulations
+      summary: Get simulation metadata
+      operationId: get-simulation-metadata
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID
+          title: Id
+        description: Database ID
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get-Simulation-Metadata
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /ecoli/v1/simulations/{id}/state:
     post:
       tags:
       - Simulations
@@ -1050,7 +1083,7 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_64d03a8b-ceca-4a4a-8a90-330c9abd839f
+          default: analysis_65841180-626f-4669-a6de-2f71563ec76b
         single:
           additionalProperties: true
           type: object

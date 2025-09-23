@@ -109,7 +109,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     await shutdown_standalone()
 
 
-app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
+app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan, redoc_url="/documentation")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

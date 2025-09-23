@@ -13,7 +13,7 @@ from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
 from textwrap import dedent
-from typing import Union
+from typing import Any, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import fastapi
@@ -42,9 +42,10 @@ from sms_api.simulation.models import (
 )
 
 ENV = get_settings()
+CURRENT_ROUTER_VERSION = "v1"
 
 logger = logging.getLogger(__name__)
-config = RouterConfig(router=APIRouter(prefix="/v1"), prefix="/ecoli", dependencies=[])
+config = RouterConfig(router=APIRouter(prefix=f"/{CURRENT_ROUTER_VERSION}"), prefix="/ecoli", dependencies=[])
 
 
 ###### -- utils -- ######
@@ -68,7 +69,7 @@ def get_experiment_id_from_tag(experiment_tag: str) -> str:
     return "-".join(parts)
 
 
-def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator:
+def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[bytes, None, None]:
     """
     Generator function to stream a zip file dynamically.
     """
@@ -102,14 +103,14 @@ def unique_id(scope: str) -> str:
 
 
 @config.router.post(
-    path="/analysis",
+    path="/analyses",
     response_model=ExperimentAnalysisDTO,
     operation_id="run-experiment-analysis",
     tags=["Analyses"],
     summary="Run an analysis workflow (like multigeneration)",
     dependencies=[Depends(get_database_service)],
 )
-async def run_analysis(request: ExperimentAnalysisRequest = examples["core_analysis_request"]) -> ExperimentAnalysisDTO:
+async def run_analysis(request: ExperimentAnalysisRequest = examples["core_analysis_request"]) -> ExperimentAnalysisDTO:  # type: ignore[assignment]
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
@@ -137,7 +138,7 @@ async def run_analysis(request: ExperimentAnalysisRequest = examples["core_analy
 
 
 @config.router.get(
-    path="/analysis/{id}",
+    path="/analyses/{id}",
     operation_id="fetch-experiment-analysis",
     tags=["Analyses"],
     dependencies=[Depends(get_database_service)],
@@ -155,13 +156,13 @@ async def get_analysis_spec(id: int) -> ExperimentAnalysisDTO:
 
 
 @config.router.get(
-    path="/analysis/{id}/status",
+    path="/analyses/{id}/status",
     tags=["Analyses"],
     operation_id="get-analysis-status",
     dependencies=[Depends(get_database_service)],
     summary="Get the status of an existing experiment analysis run",
 )
-async def get_analysis_status(id: int = fastapi.Path(..., description="Database ID of the analysis")):
+async def get_analysis_status(id: int = fastapi.Path(..., description="Database ID of the analysis")) -> SimulationRun:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
@@ -184,13 +185,13 @@ async def get_analysis_status(id: int = fastapi.Path(..., description="Database 
 
 
 @config.router.get(
-    path="/analysis/{id}/log",
+    path="/analyses/{id}/log",
     tags=["Analyses"],
     operation_id="get-analysis-log",
     dependencies=[Depends(get_database_service)],
     summary="Get the log of an existing experiment analysis run",
 )
-async def get_analysis_log(id: int = fastapi.Path(..., description="Database ID of the analysis")):
+async def get_analysis_log(id: int = fastapi.Path(..., description="Database ID of the analysis")) -> str:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
@@ -211,7 +212,7 @@ async def get_analysis_log(id: int = fastapi.Path(..., description="Database ID 
 
 
 @config.router.get(
-    path="/analysis/{id}/plots",
+    path="/analyses/{id}/plots",
     tags=["Analyses"],
     operation_id="get-analysis-plots",
     dependencies=[Depends(get_database_service)],
@@ -240,7 +241,7 @@ async def get_analysis_plots(id: int = fastapi.Path(..., description="Database I
 
 
 @config.router.put(
-    "/analysis",
+    "/analyses",
     tags=["Analyses"],
     summary="Upload custom python vEcoli analysis module according to the vEcoli analysis API",
     operation_id="upload-analysis-module",
@@ -271,7 +272,7 @@ async def upload_analysis_module(
 
 
 @config.router.get(
-    path="/analysis/{id}/download",
+    path="/analyses/{id}/download",
     response_model=None,
     operation_id="download-analysis-output-file",
     tags=["Analyses"],
@@ -313,7 +314,7 @@ async def download_analysis(
 
 
 @config.router.post(
-    path="/simulation",
+    path="/simulations",
     operation_id="run-sim-experiment",
     response_model=EcoliSimulationDTO,
     tags=["Simulations"],
@@ -380,7 +381,7 @@ async def run_simulation(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(path="/simulation/{id}", operation_id="fetch-simulation", tags=["Simulations"])
+@config.router.get(path="/simulations/{id}", operation_id="fetch-simulation", tags=["Simulations"])
 async def get_experiment(id: str = fastapi.Path(description="Database ID of the simulation")) -> EcoliExperimentDTO:
     try:
         db_service = DBService()
@@ -390,7 +391,7 @@ async def get_experiment(id: str = fastapi.Path(description="Database ID of the 
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.delete(path="/simulation/{id}", operation_id="remove-simulation", tags=["Simulations"])
+@config.router.delete(path="/simulations/{id}", operation_id="remove-simulation", tags=["Simulations"])
 async def delete_experiment(id: str) -> str:
     try:
         db_service = DBService()
@@ -403,19 +404,37 @@ async def delete_experiment(id: str) -> str:
 
 
 @config.router.get(
-    path="/simulation/{id}/status",
+    path="/simulations/{id}/status",
     response_model=SimulationRun,
     operation_id="get-simulation-experiment-status",
-    tags=["Simulations"],
+    tags=["Simulations - vEcoli"],
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
 )
 async def get_simulation_status(id: str = fastapi.Path(...)) -> SimulationRun:
-    pass
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+    try:
+        experiment = await db_service.get_experiment(experiment_id=id)
+        slurmjob_id = int(id)
+        # slurmjob_id = get_jobid_by_experiment(experiment_id)
+        ssh_service = get_ssh_service()
+        slurm_user = ENV.slurm_submit_user
+        statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
+        status: str = statuses[1].split("\n")[0].split()[-2]
+        return SimulationRun(id=int(id), status=JobStatus[status])
+    except Exception as e:
+        logger.exception(
+            """Error getting simulation status.\
+                Are you sure that you've passed the experiment_tag? (not the experiment id)
+            """
+        )
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.get(
-    path="/simulation/{id}/logs",
+    path="/simulations/{id}/logs",
     tags=["Simulations"],
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
@@ -442,7 +461,7 @@ async def get_simlog(id: str = fastapi.Path(...)) -> str:
 
 
 @config.router.post(
-    path="/simulation/{id}/log",
+    path="/simulations/{id}/log",
     operation_id="get-simulation-experiment-log",
     tags=["Simulations"],
     summary="Get the simulation log record of a given experiment",
@@ -465,8 +484,18 @@ async def get_simulation_log(experiment_id: str = Query(...)) -> str:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@config.router.get(
+    path="/simulations/{id}/metadata",
+    operation_id="get-simulation-metadata",
+    tags=["Simulations"],
+    summary="Get simulation metadata",
+)
+async def get_metadata(id: int = fastapi.Path(description="Database ID")) -> dict[str, Any]:
+    return {}
+
+
 @config.router.post(
-    path="/data",
+    path="/simulations/{id}/state",
     response_class=FileResponse,
     operation_id="get-output-data",
     tags=["Simulations"],
