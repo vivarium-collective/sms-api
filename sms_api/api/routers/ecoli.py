@@ -407,7 +407,7 @@ async def delete_experiment(id: str) -> str:
     path="/simulations/{id}/status",
     response_model=SimulationRun,
     operation_id="get-simulation-experiment-status",
-    tags=["Simulations - vEcoli"],
+    tags=["Simulations"],
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
 )

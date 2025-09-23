@@ -16,7 +16,7 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: analysis_772e2723-abf9-4930-9130-fa28a8f67e4c
+                analysis_name: analysis_fa97855b-80e2-44ef-a328-cb2fecd1ca60
                 single: {}
                 multidaughter: {}
                 multigeneration:
@@ -345,7 +345,7 @@ paths:
   /ecoli/v1/simulations/{id}/status:
     get:
       tags:
-      - Simulations - vEcoli
+      - Simulations
       summary: Get the simulation status record by its ID
       operationId: get-simulation-experiment-status
       parameters:
@@ -1083,7 +1083,7 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_65841180-626f-4669-a6de-2f71563ec76b
+          default: analysis_9962f63e-7d08-41da-900d-2b52bd63354c
         single:
           additionalProperties: true
           type: object

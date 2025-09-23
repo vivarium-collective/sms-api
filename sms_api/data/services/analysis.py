@@ -39,9 +39,6 @@ async def dispatch(
         # experiment_id=experiment_id,
     )
 
-    with open("assets/example_analysis_slurm.sh", "w") as outfile:
-        outfile.write(slurm_script)
-
     ssh = get_ssh_service(env)
     slurmjob_id = await _submit_script(
         config=config,
