@@ -16,7 +16,7 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: analysis_3c9efe1f-ac03-4983-b8c4-8df8febd963d
+                analysis_name: analysis_b867befc-e46a-4fc7-b8be-8ca2603c8d17
                 single: {}
                 multidaughter: {}
                 multigeneration:
@@ -279,6 +279,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
   /v1/ecoli/simulations:
+    get:
+      tags:
+      - Simulations
+      summary: List all simulation specs uploaded to the database
+      operationId: list-ecoli-simulations
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/EcoliSimulationDTO'
+                type: array
+                title: Response List-Ecoli-Simulations
     post:
       tags:
       - Simulations
@@ -648,8 +663,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: smsapi-7a3b65fcd680b688_1758680983295-2ebfb1eb8f4156af_1758680983295
-            simulation_name: smsapi-7a3b65fcd680b688_1758680983295
+            experiment_id: smsapi-c6f3543d6c0c15b6_1758684290121-d793fcc2e861731d_1758684290121
+            simulation_name: smsapi-c6f3543d6c0c15b6_1758684290121
             metadata: {}
             run_parca: true
             generations: 1
@@ -760,7 +775,7 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_smsapi-cbdb93bb092a9aff_1758680983188
+          default: analysis_smsapi-707b60b8b52f08e8_1758684290020
         single:
           additionalProperties: true
           type: object
@@ -828,7 +843,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-5abcbfc6a2099940_1758680983200
+          default: sim_smsapi-40c97e3501810f6d_1758684290031
         metadata:
           additionalProperties: true
           type: object

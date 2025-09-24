@@ -8,7 +8,6 @@ import json
 import logging
 import mimetypes
 import tempfile
-import uuid
 from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
@@ -94,12 +93,15 @@ async def read_config_file(config_file: UploadFile) -> SimulationConfiguration:
     return config
 
 
-def unique_id(scope: str) -> str:
-    return f"{scope}-{uuid.uuid4().hex}"
-
-
 def timestamp() -> str:
     return str(datetime.datetime.now())
+
+
+async def get_slurm_log(db_service: DatabaseService, ssh_service: SSHService, db_id: int) -> str:
+    experiment = await db_service.get_ecoli_simulation(database_id=db_id)
+    remote_log_path = f"{ENV.slurm_log_base_path!s}/{experiment.job_name}"
+    returncode, stdout, stderr = await ssh_service.run_command(f"cat {remote_log_path}.out")
+    return stdout
 
 
 ###### -- analyses -- ######
@@ -458,13 +460,6 @@ async def get_simlog(id: int = fastapi.Path(...)) -> str:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-async def get_slurm_log(db_service: DatabaseService, ssh_service: SSHService, db_id: int) -> str:
-    experiment = await db_service.get_ecoli_simulation(database_id=db_id)
-    remote_log_path = f"{ENV.slurm_log_base_path!s}/{experiment.job_name}"
-    returncode, stdout, stderr = await ssh_service.run_command(f"cat {remote_log_path}.out")
-    return stdout
-
-
 @config.router.post(
     path="/simulations/{id}/log",
     operation_id="get-ecoli-simulation-log",
@@ -542,4 +537,23 @@ async def get_results(
         return FileResponse(path=filepath, media_type="application/octet-stream", filename=filepath.name)
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/simulations",
+    operation_id="list-ecoli-simulations",
+    tags=["Simulations"],
+    summary="List all simulation specs uploaded to the database",
+    dependencies=[Depends(get_database_service)],
+)
+async def list_simulations() -> list[EcoliSimulationDTO]:
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Database service is not initialized")
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    try:
+        return await db_service.list_ecoli_simulations()
+    except Exception as e:
+        logger.exception("Error fetching the uploaded analyses")
         raise HTTPException(status_code=500, detail=str(e)) from e
