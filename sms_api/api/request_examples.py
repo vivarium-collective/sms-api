@@ -60,7 +60,29 @@ def core_analysis_config() -> AnalysisConfig:
 
 
 def core_analysis_request() -> ExperimentAnalysisRequest:
-    return ExperimentAnalysisRequest(experiment_id="sms_multigeneration", analysis_name=f"analysis_{uuid.uuid4()!s}")
+    return ExperimentAnalysisRequest(
+        experiment_id="sms_multigeneration",
+        analysis_name=f"analysis_{uuid.uuid4()!s}",
+        multigeneration={
+            "replication": {},
+            "ribosome_components": {},
+            "ribosome_crowding": {},
+            "ribosome_production": {},
+            "ribosome_usage": {},
+            "rna_decay_03_high": {},
+            "ptools_rxns": {"n_tp": 8},
+            "ptools_rna": {"n_tp": 8},
+            "ptools_proteins": {"n_tp": 8},
+        },
+        multiseed={
+            "protein_counts_validation": {},
+            "ribosome_spacing": {},
+            "subgenerational_expression_table": {},
+            "ptools_rxns": {"n_tp": 8},
+            "ptools_rna": {"n_tp": 8},
+            "ptools_proteins": {"n_tp": 8},
+        },
+    )
 
 
 def core_experiment_request() -> ExperimentRequest:

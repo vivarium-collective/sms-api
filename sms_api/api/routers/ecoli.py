@@ -244,6 +244,38 @@ async def get_analysis_plots(id: int = fastapi.Path(..., description="Database I
     return analysis.get_analysis_html_outputs(outdir_root=outdir, expid=output_id)
 
 
+@config.router.get(
+    path="/analyses/{id}/ptools",
+    tags=["Analyses"],
+    operation_id="get-analysis-tsv",
+    dependencies=[Depends(get_database_service)],
+    summary="Get an array tsv files formatted for ptools.",
+)
+async def get_ptools_tsv(id: int = fastapi.Path(..., description="Database ID of the analysis")) -> list[str]:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+
+    try:
+        analysis_data = await db_service.get_analysis(database_id=id)
+        output_id = analysis_data.name
+        outdir = Path(ENV.simulation_outdir)
+        if int(ENV.dev_mode):
+            ssh = get_ssh_service(ENV)
+            remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
+            ret, stdin, stdout = await ssh.run_command(
+                dedent(f"""
+                cd /home/FCAM/svc_vivarium/workspace \
+                    && {remote_uv_executable} run scripts/ptools_outputs.py --output_id {output_id}
+            """)
+            )
+            return [stdin]
+        return analysis.get_analysis_tsv_outputs(outdir_root=outdir, expid=output_id)
+    except Exception as e:
+        logger.exception("Error uploading analysis module")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @config.router.put(
     "/analyses",
     tags=["Analyses"],
