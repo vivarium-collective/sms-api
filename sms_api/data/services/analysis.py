@@ -24,8 +24,8 @@ MAX_ANALYSIS_CPUS = 5
 async def dispatch(
     config: AnalysisConfig, analysis_name: str, simulator_hash: str, env: Settings, logger: logging.Logger
 ) -> tuple[str, int]:
-    experiment_id = config.analysis_options.experiment_id[0]
-    slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
+    # experiment_id = config.analysis_options.experiment_id[0]
+    slurmjob_name = get_slurmjob_name(experiment_id=analysis_name, simulator_hash=simulator_hash)
     base_path = Path(env.slurm_base_path)
     slurm_log_file = base_path / f"prod/htclogs/{slurmjob_name}.out"
 
@@ -42,7 +42,7 @@ async def dispatch(
     ssh = get_ssh_service(env)
     slurmjob_id = await _submit_script(
         config=config,
-        experiment_id=experiment_id,
+        experiment_id=config.analysis_options.experiment_id[0],
         script_content=slurm_script,
         slurm_job_name=slurmjob_name,
         env=env,

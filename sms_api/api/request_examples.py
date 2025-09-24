@@ -65,7 +65,7 @@ def core_analysis_request() -> ExperimentAnalysisRequest:
 
 def core_experiment_request() -> ExperimentRequest:
     expid = unique_id()
-    return ExperimentRequest(experiment_id=expid)
+    return ExperimentRequest(experiment_id=expid, simulation_name=expid)
 
 
 examples = {

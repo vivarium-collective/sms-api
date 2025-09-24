@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel as _BaseModel
-from pydantic import Field, RootModel, model_validator
+from pydantic import Field, RootModel
 
 from sms_api.common.utils import unique_id
 from sms_api.config import get_settings
@@ -277,7 +277,7 @@ class SimulationConfig(BaseModel):
     experiment_id: str
     sim_data_path: str | None = None
     suffix_time: bool = False
-    parca_options: dict[str, bool | int | str | None | Any] = Field(default={"cpus": 3})
+    parca_options: dict[str, bool | int | str | None | Any] = {"cpus": 3}
     generations: int = 1
     n_init_sims: int | None = None
     max_duration: float = 10800.0
@@ -285,7 +285,7 @@ class SimulationConfig(BaseModel):
     time_step: float = 1.0
     single_daughters: bool = True
     emitter: str = "parquet"
-    emitter_arg: dict[str, str] = Field(default={"out_dir": ENV.simulation_outdir})
+    emitter_arg: dict[str, str] = {"out_dir": ENV.simulation_outdir}
     variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
     analysis_options: dict[str, Any] = Field(default={})
     gcloud: str | None = None
@@ -333,9 +333,11 @@ class SimulationConfig(BaseModel):
     initial_state: dict[str, Any] = Field(default={})
 
     def model_post_init(self, *args: Any) -> None:
+        if self.sim_data_path is None:
+            self.sim_data_path = f"{ENV.slurm_base_path}/workspace/kb/simData.cPickle"
         for attrname in list(SimulationConfig.model_fields.keys()):
             attr = getattr(self, attrname)
-            if attr is None:
+            if attr is None or attr == ["string"]:
                 delattr(self, attrname)
             if isinstance(attr, (list, dict)) and not len(attr):
                 delattr(self, attrname)
@@ -351,13 +353,13 @@ class SimulationConfig(BaseModel):
     def from_base(cls) -> "SimulationConfig":
         return cls.from_file(fp=BASE_SIMULATION_CONFIG_PATH)
 
-    @model_validator(mode="after")
-    def set_outdirs(self) -> "SimulationConfig":
-        env = get_settings()
-        self.emitter_arg = {"out_dir": env.simulation_outdir}
-        self.daughter_outdir = env.simulation_outdir
-        self.parca_options = {"cpus": 2}
-        return self
+    # @model_validator(mode="after")
+    # def set_outdirs(self) -> "SimulationConfig":
+    #     env = get_settings()
+    #     self.emitter_arg = {"out_dir": env.simulation_outdir}
+    #     self.daughter_outdir = env.simulation_outdir
+    #     self.parca_options = {"cpus": 2}
+    #     return self
 
 
 class SimulationConfiguration(SimulationConfig):
@@ -406,7 +408,7 @@ class ExperimentRequest(BaseModel):
     """Used by the simulation endpoint."""
 
     experiment_id: str
-    simulation_name: str = Field(default=f"simulation_{unique_id()!s}")
+    simulation_name: str = f"sim_{unique_id()!s}"
     metadata: dict[str, Any] = {}
     run_parca: bool = True
     generations: int = 1
@@ -462,10 +464,18 @@ class ExperimentRequest(BaseModel):
     def to_config(self) -> SimulationConfig:
         attributes = self.model_json_schema()["properties"]
         excluded = ["simdata_id", "metadata"]
-        config_kwargs = {attribute: getattr(self, attribute) for attribute in attributes if attribute not in excluded}
+        config_kwargs = {}
+        for attribute in attributes:
+            if attribute not in excluded:
+                attr_val = getattr(self, attribute)
+                if attr_val != "string":
+                    config_kwargs[attribute] = attr_val
+
+        # config_kwargs = {attribute: getattr(self, attribute) for attribute in attributes if attribute not in excluded}
+
         if not self.run_parca:
             # case: use the cached simdata
-            config_kwargs["sim_data_path"] = str(Path(ENV.simulation_outdir).parent / "kb/simData.cPickle")
+            config_kwargs["sim_data_path"] = str(Path(ENV.slurm_base_path) / "workspace/kb/simData.cPickle")
         return SimulationConfig(**config_kwargs)
 
 

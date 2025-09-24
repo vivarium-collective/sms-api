@@ -523,9 +523,6 @@ class SimulationServiceHpc(SimulationService):
 
                 tmp_config=$(mktemp)
                 echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
-                uv run --no-cache python $HOME/workspace/scripts/write_config.py \
-                  --name {simulation_name} \
-                  --config_path "$tmp_config"
 
                 cd $vecoli_dir
 

@@ -125,3 +125,7 @@ def get_simulator() -> SimulatorVersion:
         database_id=2,
         created_at=datetime.datetime.fromisoformat("2025-08-26T00:49:30"),
     )
+
+
+def slurmjob_name_prefix() -> str:
+    return f"sms-{get_simulator().git_commit_hash}"

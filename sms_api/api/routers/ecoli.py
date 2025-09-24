@@ -24,7 +24,7 @@ from sms_api.api.request_examples import examples
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import ServerMode
 from sms_api.common.gateway.utils import get_simulator, router_config
-from sms_api.common.ssh.ssh_service import get_ssh_service
+from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import get_settings
 from sms_api.data.models import ExperimentAnalysisDTO, ExperimentAnalysisRequest
 from sms_api.data.services import analysis
@@ -36,7 +36,6 @@ from sms_api.simulation.models import (
     ExperimentMetadata,
     ExperimentRequest,
     JobStatus,
-    SimulationConfig,
     SimulationConfiguration,
     SimulationRun,
     SimulatorVersion,
@@ -344,7 +343,8 @@ async def list_analyses() -> list[ExperimentAnalysisDTO]:
     summary="Launches a nextflow-powered vEcoli simulation workflow",
 )
 async def run_simulation(
-    request: ExperimentRequest, config: SimulationConfig, metadata: ExperimentMetadata | None = None
+    request: ExperimentRequest = examples["core_experiment_request"],  # type: ignore[assignment]
+    metadata: ExperimentMetadata | None = None,
 ) -> EcoliSimulationDTO:
     # validate services
     sim_service = get_simulation_service()
@@ -447,10 +447,8 @@ async def get_simlog(id: int = fastapi.Path(...)) -> str:
         experiment = await db_service.get_ecoli_simulation(database_id=id)
         ssh_service = get_ssh_service()
         slurm_user = ENV.slurm_submit_user
-        ret, stdout, stderr = await ssh_service.run_command(
-            f"cd /home/FCAM/svc_vivarium/workspace && make slurmlog id={experiment.config.experiment_id}"
-        )
-        return stdout
+
+        return await get_slurm_log(db_service, ssh_service, id)
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
@@ -460,16 +458,30 @@ async def get_simlog(id: int = fastapi.Path(...)) -> str:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+async def get_slurm_log(db_service: DatabaseService, ssh_service: SSHService, db_id: int) -> str:
+    experiment = await db_service.get_ecoli_simulation(database_id=db_id)
+    remote_log_path = f"{ENV.slurm_log_base_path!s}/{experiment.job_name}"
+    returncode, stdout, stderr = await ssh_service.run_command(f"cat {remote_log_path}.out")
+    return stdout
+
+
 @config.router.post(
     path="/simulations/{id}/log",
     operation_id="get-ecoli-simulation-log",
     tags=["Simulations"],
     summary="Get the simulation log record of a given experiment",
 )
-async def get_simulation_log(id: str = fastapi.Path(...)) -> str:
+async def get_simulation_log(id: int = fastapi.Path(...)) -> str:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+    ssh_service = get_ssh_service()
     try:
-        ssh_service = get_ssh_service()
-        returncode, stdout, stderr = await ssh_service.run_command(f"cat {ENV.slurm_base_path!s}/prod/htclogs/{id}.out")
+        experiment = await db_service.get_ecoli_simulation(database_id=id)
+        remote_log_path = f"{ENV.slurm_log_base_path!s}/{experiment.job_name}"
+        # returncode, stdout, stderr = await ssh_service.run_command(f"cat {remote_log_path}.out")
+        stdout = await get_slurm_log(db_service, ssh_service, id)
+
         # Split at the first occurrence of 'N E X T F L O W'
         _, _, after = stdout.partition("N E X T F L O W")
 
