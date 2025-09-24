@@ -70,7 +70,7 @@ def unique_id() -> str:
 
 @pytest_asyncio.fixture(scope="session")
 async def analysis_request() -> AnalysisRequest:
-    return AnalysisRequest(**{
+    return AnalysisRequest(**{  # type: ignore[arg-type]
         "experiment_id": "sms_multigeneration",
         "analysis_name": f"sms_pytest_{unique_id()}",
         "single": {},
