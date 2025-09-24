@@ -16,7 +16,7 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: analysis_fc6d8516-e2b2-406e-bde5-b4cfc947861a
+                analysis_name: analysis_3f1ab5da-29b0-4b2a-b572-77d97de0a72b
                 single: {}
                 multidaughter: {}
                 multigeneration:
@@ -416,9 +416,7 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema:
-                type: string
-                title: Response Get-Ecoli-Simulation-Log
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -663,8 +661,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: smsapi-fc4002ac725d389d_1758694060865-3622fba1d498e82b_1758694060865
-            simulation_name: smsapi-fc4002ac725d389d_1758694060865
+            experiment_id: smsapi-ef23a2eb2886abbf_1758738584660-1f20ae083ac3f9d7_1758738584660
+            simulation_name: smsapi-ef23a2eb2886abbf_1758738584660
             metadata: {}
             run_parca: true
             generations: 1
@@ -775,7 +773,7 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_smsapi-5de765a9da25a142_1758694060759
+          default: analysis_smsapi-0890128c75d1341c_1758738584551
         single:
           additionalProperties: true
           type: object
@@ -843,7 +841,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-a876d0e03ea051c8_1758694060771
+          default: sim_smsapi-e6427910ecf3123c_1758738584563
         metadata:
           additionalProperties: true
           type: object

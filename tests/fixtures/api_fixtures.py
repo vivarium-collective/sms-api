@@ -1,7 +1,8 @@
+import datetime
 import os
-import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from random import randint
 
 import httpx
 import pytest_asyncio
@@ -11,12 +12,19 @@ from httpx import ASGITransport
 from sms_api.api.client import Client
 from sms_api.api.main import app
 from sms_api.api.request_examples import examples
+from sms_api.common.utils import unique_id
 from sms_api.config import REPO_ROOT, get_settings
 from sms_api.data.models import AnalysisRequest
 
 # from sms_api.data.biocyc_service import BiocycService
 from sms_api.latest_commit import write_latest_commit
-from sms_api.simulation.models import ExperimentRequest
+from sms_api.simulation.hpc_utils import get_slurmjob_name
+from sms_api.simulation.models import (
+    EcoliSimulationDTO,
+    ExperimentMetadata,
+    ExperimentRequest,
+    SimulationConfig,
+)
 
 # @pytest_asyncio.fixture(scope="function")
 # async def biocyc_service() -> BiocycService:
@@ -66,10 +74,6 @@ async def analysis_config_path() -> Path:
     return Path(REPO_ROOT) / "assets" / "sms_multigen_analysis.json"
 
 
-def unique_id() -> str:
-    return str(uuid.uuid4())
-
-
 @pytest_asyncio.fixture(scope="session")
 async def analysis_request() -> AnalysisRequest:
     return AnalysisRequest(**{  # type: ignore[arg-type]
@@ -99,6 +103,50 @@ async def analysis_request() -> AnalysisRequest:
 @pytest_asyncio.fixture(scope="session")
 async def experiment_request() -> ExperimentRequest:
     return examples["core_experiment_request"]  # type: ignore[return-value]
+
+
+@pytest_asyncio.fixture(scope="session")
+async def simulation_config() -> SimulationConfig:
+    return SimulationConfig(
+        experiment_id="pytest_fixture_config",
+        sim_data_path="/pytest/kb/simData.cPickle",
+        suffix_time=False,
+        parca_options={"cpus": 3},
+        generations=randint(1, 1000),  # noqa: S311
+        max_duration=10800,
+        initial_global_time=0,
+        time_step=1,
+        single_daughters=True,
+        emitter="parquet",
+        emitter_arg={"outdir": "/pytest/api_outputs"},
+    )
+
+
+@pytest_asyncio.fixture(scope="session")
+async def ecoli_simulation() -> EcoliSimulationDTO:
+    pytest_fixture = "pytest_fixture"
+    db_id = -1
+    return EcoliSimulationDTO(
+        database_id=-1,
+        name=pytest_fixture,
+        config=SimulationConfig(
+            experiment_id=pytest_fixture,
+            sim_data_path="/pytest/kb/simData.cPickle",
+            suffix_time=False,
+            parca_options={"cpus": 3},
+            generations=randint(1, 1000),  # noqa: S311
+            max_duration=10800,
+            initial_global_time=0,
+            time_step=1,
+            single_daughters=True,
+            emitter="parquet",
+            emitter_arg={"outdir": "/pytest/api_outputs"},
+        ),
+        metadata=ExperimentMetadata(root={"requester": f"{pytest_fixture}:{db_id}", "context": "pytest"}),
+        last_updated=str(datetime.datetime.now()),
+        job_name=get_slurmjob_name(experiment_id=pytest_fixture),
+        job_id=randint(10000, 1000000),  # noqa: S311
+    )
 
 
 @pytest_asyncio.fixture(scope="session")

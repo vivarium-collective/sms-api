@@ -466,7 +466,7 @@ async def get_simlog(id: int = fastapi.Path(...)) -> str:
     tags=["Simulations"],
     summary="Get the simulation log record of a given experiment",
 )
-async def get_simulation_log(id: int = fastapi.Path(...)) -> str:
+async def get_simulation_log(id: int = fastapi.Path(...)) -> fastapi.Response:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
@@ -483,7 +483,8 @@ async def get_simulation_log(id: int = fastapi.Path(...)) -> str:
         result = "N E X T F L O W" + after
 
         # Print with original formatting preserved
-        return result
+        # return result
+        return fastapi.Response(content=result, media_type="text/plain")
     except Exception as e:
         logger.exception("""Error getting simulation log.""")
         raise HTTPException(status_code=500, detail=str(e)) from e
