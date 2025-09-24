@@ -1,9 +1,7 @@
 import logging
 
-from fastapi import APIRouter
-
-from sms_api.common.gateway.models import RouterConfig
+from sms_api.common.gateway.utils import router_config
 
 logger = logging.getLogger(__name__)
 
-config = RouterConfig(router=APIRouter(), prefix="/variants", dependencies=[])
+config = router_config(prefix="variants")

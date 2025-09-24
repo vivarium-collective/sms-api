@@ -1,7 +1,6 @@
 import datetime
 import enum
 import logging
-from collections.abc import Mapping
 from typing import Any, Optional
 
 from sqlalchemy import ForeignKey, func
@@ -11,14 +10,12 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from sms_api.data.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisDTO
 from sms_api.simulation.models import (
-    ConfigOverrides,
-    EcoliExperimentDTO,
-    EcoliExperimentRequestDTO,
     EcoliSimulationDTO,
     ExperimentMetadata,
     HpcRun,
     JobStatus,
     JobType,
+    SimulationConfig,
     SimulationConfiguration,
     SimulatorVersion,
     WorkerEvent,
@@ -211,31 +208,9 @@ class ORMSimulationConfig(Base):
         return SimulationConfiguration(**self.data)
 
 
-class ORMEcoliExperiment(Base):
-    __tablename__ = "experiment"
-
-    id: Mapped[str] = mapped_column(primary_key=True)
-    tag: Mapped[str] = mapped_column(nullable=False)
-    simulation_metadata: Mapped[Mapping[str, str]] = mapped_column(JSON, nullable=False)
-    request: Mapped[dict[str, str | dict[str, Any]]] = mapped_column(
-        JSON, nullable=False
-    )  # this is config_id, and overrides(config)
-    last_updated: Mapped[str] = mapped_column(nullable=False)
-
-    def to_dto(self) -> EcoliExperimentDTO:
-        overrides_data = self.request.get("overrides")
-        overrides = ConfigOverrides(**overrides_data) if overrides_data is not None else None  # type: ignore[arg-type]
-        request = EcoliExperimentRequestDTO(config_id=self.request["config_id"], overrides=overrides)  # type: ignore[arg-type]
-        return EcoliExperimentDTO(
-            experiment_id=self.id,
-            request=request,
-            last_updated=self.last_updated,
-            metadata=self.simulation_metadata,
-            experiment_tag=self.tag,
-        )
-
-
 class ORMAnalysis(Base):
+    """Used by the /ecoli router"""
+
     __tablename__ = "analysis"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -259,21 +234,30 @@ class ORMAnalysis(Base):
         )
 
 
-class ORMEcoliSimulation(Base):
-    __tablename__ = "ecoli_simulation"
+class ORMExperiment(Base):
+    """Used by the /ecoli router"""
+
+    __tablename__ = "ecoli_experiment"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(nullable=False)
     config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    experiment_metadata: Mapped[Mapping[str, Any]] = mapped_column(JSON, nullable=False)
     last_updated: Mapped[str] = mapped_column(nullable=False)
+    job_name: Mapped[str] = mapped_column(nullable=True)
+    job_id: Mapped[int] = mapped_column(nullable=True)
+    experiment_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=True)
 
     def to_dto(self) -> EcoliSimulationDTO:
-        config = SimulationConfiguration(**self.config)
-        metadata = ExperimentMetadata(**self.experiment_metadata)
+        config_dto = SimulationConfig(**self.config)
+        metadata = ExperimentMetadata(root=self.experiment_metadata)
         return EcoliSimulationDTO(
-            config=config,
-            metadata=metadata,
+            database_id=self.id,
+            name=self.name,
+            config=config_dto,
             last_updated=self.last_updated,
+            job_name=self.job_name,
+            job_id=self.job_id,
+            metadata=metadata,
         )
 
 

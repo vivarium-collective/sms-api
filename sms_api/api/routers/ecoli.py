@@ -13,17 +13,17 @@ from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Union
+from typing import Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import fastapi
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
 from sms_api.api.request_examples import examples
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
-from sms_api.common.gateway.models import RouterConfig, ServerMode
-from sms_api.common.gateway.utils import get_simulator
+from sms_api.common.gateway.models import ServerMode
+from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.config import get_settings
 from sms_api.data.models import ExperimentAnalysisDTO, ExperimentAnalysisRequest
@@ -32,20 +32,20 @@ from sms_api.data.services.parquet import ParquetService
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
-    EcoliExperimentDTO,
     EcoliSimulationDTO,
     ExperimentMetadata,
+    ExperimentRequest,
     JobStatus,
+    SimulationConfig,
     SimulationConfiguration,
     SimulationRun,
     SimulatorVersion,
 )
 
 ENV = get_settings()
-CURRENT_ROUTER_VERSION = "v1"
 
 logger = logging.getLogger(__name__)
-config = RouterConfig(router=APIRouter(prefix=f"/{CURRENT_ROUTER_VERSION}"), prefix="/ecoli", dependencies=[])
+config = router_config(prefix="ecoli")
 
 
 ###### -- utils -- ######
@@ -99,6 +99,10 @@ def unique_id(scope: str) -> str:
     return f"{scope}-{uuid.uuid4().hex}"
 
 
+def timestamp() -> str:
+    return str(datetime.datetime.now())
+
+
 ###### -- analyses -- ######
 
 
@@ -116,7 +120,6 @@ async def run_analysis(request: ExperimentAnalysisRequest = examples["core_analy
         raise HTTPException(status_code=404, detail="Database not found")
     try:
         config = request.to_config()
-        last_updated = str(datetime.datetime.now())
         slurmjob_name, slurmjob_id = await analysis.dispatch(
             config=config,
             analysis_name=request.analysis_name,
@@ -127,7 +130,7 @@ async def run_analysis(request: ExperimentAnalysisRequest = examples["core_analy
         analysis_record = await db_service.insert_analysis(
             name=request.analysis_name,
             config=config,
-            last_updated=last_updated,
+            last_updated=timestamp(),
             job_name=slurmjob_name,
             job_id=slurmjob_id,
         )
@@ -310,19 +313,38 @@ async def download_analysis(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@config.router.get(
+    path="/analyses",
+    operation_id="list-analyses",
+    tags=["Analyses"],
+    summary="List all analysis specs uploaded to the database",
+    dependencies=[Depends(get_database_service)],
+)
+async def list_analyses() -> list[ExperimentAnalysisDTO]:
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Database service is not initialized")
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    try:
+        return await db_service.list_analyses()
+    except Exception as e:
+        logger.exception("Error fetching the uploaded analyses")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 ###### -- simulations -- ######
 
 
 @config.router.post(
     path="/simulations",
-    operation_id="run-sim-experiment",
+    operation_id="run-ecoli-simulation",
     response_model=EcoliSimulationDTO,
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
     summary="Launches a nextflow-powered vEcoli simulation workflow",
 )
 async def run_simulation(
-    config: SimulationConfiguration, metadata: ExperimentMetadata | None = None
+    request: ExperimentRequest, config: SimulationConfig, metadata: ExperimentMetadata | None = None
 ) -> EcoliSimulationDTO:
     # validate services
     sim_service = get_simulation_service()
@@ -334,70 +356,47 @@ async def run_simulation(
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
 
-    # construct params
-    simulator: SimulatorVersion = get_simulator()
+    config = request.to_config()
     if config.experiment_id is None:
         raise HTTPException(status_code=400, detail="Experiment ID is required")
 
-    ecoli_experiment: EcoliSimulationDTO = await db_service.insert_ecoli_experiment(
-        config=config, metadata=metadata or ExperimentMetadata(), last_updated=str(datetime.datetime.now())
-    )
-    # now do the following:
-    # 1. get experiment id from config
-    # 2. Get slurmjobname
-    # async def dispatch(
-    #         analysis: ExperimentAnalysisDTO,
-    #         simulator_hash: str,
-    #         env: Settings,
-    #         logger: logging.Logger
-    # ) -> int:
-    #     experiment_id = analysis.config.analysis_options.experiment_id[0]
-    #     slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
-    #     base_path = Path(env.slurm_base_path)
-    #     slurm_log_file = base_path / f"prod/htclogs/{experiment_id}.out"    #
-    #     slurm_script = script(
-    #         slurm_log_file=slurm_log_file,
-    #         slurm_job_name=slurmjob_name,
-    #         env=env,
-    #         latest_hash=simulator_hash,
-    #         analysis=analysis,
-    #         # experiment_id=experiment_id,
-    #     )   #
-    #     ssh = get_ssh_service(env)
-    #     slurmjob_id = await _submit(
-    #         config=analysis.config,
-    #         experiment_id=experiment_id,
-    #         script_content=slurm_script,
-    #         slurm_job_name=slurmjob_name,
-    #         env=env,
-    #         ssh=ssh,
-    #     )   #
-    #     return slurmjob_id
-
     try:
-        return ecoli_experiment
+        simulator: SimulatorVersion = get_simulator()
+        last_update = timestamp()
+        slurmjob_name, slurmjob_id = await sim_service.submit_experiment_job(
+            config=config,
+            simulation_name=request.simulation_name,
+            simulator_hash=simulator.git_commit_hash,
+            env=ENV,
+            logger=logger,
+        )
+        simulation_record = await db_service.insert_ecoli_simulation(
+            name=request.simulation_name,
+            config=config,
+            last_updated=timestamp(),
+            job_name=slurmjob_name,
+            job_id=slurmjob_id,
+            metadata=request.metadata,
+        )
+        return simulation_record
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(path="/simulations/{id}", operation_id="fetch-simulation", tags=["Simulations"])
-async def get_experiment(id: str = fastapi.Path(description="Database ID of the simulation")) -> EcoliExperimentDTO:
+@config.router.get(
+    path="/simulations/{id}",
+    operation_id="get-ecoli-simulation",
+    tags=["Simulations"],
+    dependencies=[Depends(get_database_service)],
+)
+async def get_simulation(id: int = fastapi.Path(description="Database ID of the simulation")) -> EcoliSimulationDTO:
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Database service is not initialized")
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        db_service = DBService()
-        return await db_service.get_experiment(experiment_id=id)
-    except Exception as e:
-        logger.exception("Error uploading simulation config")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.delete(path="/simulations/{id}", operation_id="remove-simulation", tags=["Simulations"])
-async def delete_experiment(id: str) -> str:
-    try:
-        db_service = DBService()
-        # delete from db
-        await db_service.delete_experiment(experiment_id=id)
-        return f"Experiment {id} deleted successfully"
+        return await db_service.get_ecoli_simulation(database_id=id)
     except Exception as e:
         logger.exception("Error uploading simulation config")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -406,18 +405,18 @@ async def delete_experiment(id: str) -> str:
 @config.router.get(
     path="/simulations/{id}/status",
     response_model=SimulationRun,
-    operation_id="get-simulation-experiment-status",
+    operation_id="get-ecoli-simulation-status",
     tags=["Simulations"],
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
 )
-async def get_simulation_status(id: str = fastapi.Path(...)) -> SimulationRun:
+async def get_simulation_status(id: int = fastapi.Path(...)) -> SimulationRun:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
-        experiment = await db_service.get_experiment(experiment_id=id)
-        slurmjob_id = int(id)
+        sim_record = await db_service.get_ecoli_simulation(database_id=id)
+        slurmjob_id = sim_record.job_id
         # slurmjob_id = get_jobid_by_experiment(experiment_id)
         ssh_service = get_ssh_service()
         slurm_user = ENV.slurm_submit_user
@@ -434,21 +433,22 @@ async def get_simulation_status(id: str = fastapi.Path(...)) -> SimulationRun:
 
 
 @config.router.get(
-    path="/simulations/{id}/logs",
+    path="/simulations/{id}/log/detailed",
     tags=["Simulations"],
+    operation_id="get-ecoli-simulation-log-detail",
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
 )
-async def get_simlog(id: str = fastapi.Path(...)) -> str:
+async def get_simlog(id: int = fastapi.Path(...)) -> str:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
-        experiment = await db_service.get_experiment(experiment_id=id)
+        experiment = await db_service.get_ecoli_simulation(database_id=id)
         ssh_service = get_ssh_service()
         slurm_user = ENV.slurm_submit_user
         ret, stdout, stderr = await ssh_service.run_command(
-            f"cd /home/FCAM/svc_vivarium/workspace && make slurmlog id={experiment.experiment_id}"
+            f"cd /home/FCAM/svc_vivarium/workspace && make slurmlog id={experiment.config.experiment_id}"
         )
         return stdout
     except Exception as e:
@@ -462,16 +462,14 @@ async def get_simlog(id: str = fastapi.Path(...)) -> str:
 
 @config.router.post(
     path="/simulations/{id}/log",
-    operation_id="get-simulation-experiment-log",
+    operation_id="get-ecoli-simulation-log",
     tags=["Simulations"],
     summary="Get the simulation log record of a given experiment",
 )
-async def get_simulation_log(experiment_id: str = Query(...)) -> str:
+async def get_simulation_log(id: str = fastapi.Path(...)) -> str:
     try:
         ssh_service = get_ssh_service()
-        returncode, stdout, stderr = await ssh_service.run_command(
-            f"cat {ENV.slurm_base_path!s}/prod/htclogs/{experiment_id}.out"
-        )
+        returncode, stdout, stderr = await ssh_service.run_command(f"cat {ENV.slurm_base_path!s}/prod/htclogs/{id}.out")
         # Split at the first occurrence of 'N E X T F L O W'
         _, _, after = stdout.partition("N E X T F L O W")
 
@@ -486,24 +484,24 @@ async def get_simulation_log(experiment_id: str = Query(...)) -> str:
 
 @config.router.get(
     path="/simulations/{id}/metadata",
-    operation_id="get-simulation-metadata",
+    operation_id="get-ecoli-simulation-metadata",
     tags=["Simulations"],
     summary="Get simulation metadata",
 )
-async def get_metadata(id: int = fastapi.Path(description="Database ID")) -> dict[str, Any]:
-    return {}
+async def get_metadata(id: int = fastapi.Path(description="Database ID")) -> ExperimentMetadata:
+    return ExperimentMetadata(root={})
 
 
 @config.router.post(
     path="/simulations/{id}/state",
     response_class=FileResponse,
-    operation_id="get-output-data",
+    operation_id="get-ecoli-simulation-outdata",
     tags=["Simulations"],
     summary="Get simulation outputs",
 )
 async def get_results(
     background_tasks: BackgroundTasks,
-    experiment_id: str = Query(..., description="Experiment id for the simulation."),
+    id: int = fastapi.Path(..., description="Experiment id for the simulation."),
     # experiment: EcoliExperiment,
     variant_id: int = Query(default=0),
     lineage_seed_id: int = Query(default=0),
@@ -511,18 +509,22 @@ async def get_results(
     agent_id: int = Query(default=0),
     filename: str | None = Query(default=None, description="Name you wish to assign to the downloaded zip file"),
 ) -> FileResponse:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
     try:
+        experiment = await db_service.get_ecoli_simulation(database_id=id)
         service = ParquetService()
         # experiment_id = get_experiment_id_from_tag(experiment_tag)
         pq_dir = service.get_parquet_dir(
-            experiment_id=experiment_id,
+            experiment_id=experiment.config.experiment_id,
             variant=variant_id,
             lineage_seed=lineage_seed_id,
             generation=generation_id,
             agent_id=agent_id,
         )
         buffer = get_zip_buffer(pq_dir)
-        fname = filename or experiment_id
+        fname = filename or experiment.config.experiment_id
         filepath = write_zip_buffer(buffer, fname, background_tasks)
 
         return FileResponse(path=filepath, media_type="application/octet-stream", filename=filepath.name)

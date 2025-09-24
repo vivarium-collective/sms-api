@@ -11,9 +11,11 @@ from typing import Any
 from pydantic import BaseModel as _BaseModel
 from pydantic import Field, RootModel, model_validator
 
+from sms_api.common.utils import unique_id
 from sms_api.config import get_settings
 
 BASE_SIMULATION_CONFIG_PATH = Path("assets/sms_base_simulation_config.json")
+ENV = get_settings()
 
 
 @dataclass
@@ -283,7 +285,7 @@ class SimulationConfig(BaseModel):
     time_step: float = 1.0
     single_daughters: bool = True
     emitter: str = "parquet"
-    emitter_arg: dict[str, str] = Field(default={"out_dir": ""})
+    emitter_arg: dict[str, str] = Field(default={"out_dir": ENV.simulation_outdir})
     variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
     analysis_options: dict[str, Any] = Field(default={})
     gcloud: str | None = None
@@ -331,7 +333,7 @@ class SimulationConfig(BaseModel):
     initial_state: dict[str, Any] = Field(default={})
 
     def model_post_init(self, *args: Any) -> None:
-        for attrname in list(SimulationConfiguration.model_fields.keys()):
+        for attrname in list(SimulationConfig.model_fields.keys()):
             attr = getattr(self, attrname)
             if attr is None:
                 delattr(self, attrname)
@@ -380,6 +382,10 @@ class UploadedAnalysisConfig(BaseModel):
     config_id: str
 
 
+class ExperimentMetadata(RootModel):  # type: ignore[type-arg]
+    root: dict[str, str] = Field(default_factory=dict)
+
+
 class EcoliExperimentRequestDTO(BaseModel):
     config_id: str
     overrides: ConfigOverrides | None = None
@@ -396,11 +402,80 @@ class EcoliExperimentDTO(BaseModel):
     # simulation: EcoliSimulation | EcoliWorkflowSimulation | AntibioticSimulation
 
 
-class ExperimentMetadata(RootModel):  # type: ignore[type-arg]
-    root: dict[str, str] = Field(default_factory=dict)
+class ExperimentRequest(BaseModel):
+    """Used by the simulation endpoint."""
+
+    experiment_id: str
+    simulation_name: str = Field(default=f"simulation_{unique_id()!s}")
+    metadata: dict[str, Any] = {}
+    run_parca: bool = True
+    generations: int = 1
+    n_init_sims: int | None = None
+    max_duration: float = 10800.0
+    initial_global_time: float = 0.0
+    time_step: float = 1.0
+    single_daughters: bool = True
+    variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
+    analysis_options: dict[str, Any] = Field(default={})
+    gcloud: str | None = None
+    agent_id: str | None = None
+    parallel: bool | None = None
+    divide: bool | None = None
+    d_period: bool | None = None
+    division_threshold: bool | None = None
+    division_variable: list[str] = Field(default=[])
+    chromosome_path: list[str] | None = None
+    spatial_environment: bool | None = None
+    fixed_media: str | None = None
+    condition: str | None = None
+    add_processes: list[str] = Field(default=[])
+    exclude_processes: list[str] = Field(default=[])
+    profile: bool | None = None
+    processes: list[str] = Field(default=[])
+    process_configs: dict[str, Any] = Field(default={})
+    topology: dict[str, Any] = field(default={})
+    engine_process_reports: list[list[str]] = Field(default=[])
+    emit_paths: list[str] = Field(default=[])
+    emit_topology: bool | None = None
+    emit_processes: bool | None = None
+    emit_config: bool | None = None
+    emit_unique: bool | None = None
+    log_updates: bool | None = None
+    description: str | None = None
+    seed: int | None = None
+    mar_regulon: bool | None = None
+    amp_lysis: bool | None = None
+    initial_state_file: str | None = None
+    skip_baseline: bool | None = None
+    lineage_seed: int | None = None
+    fail_at_max_duration: bool | None = None
+    inherit_from: list[str] = Field(default=[])
+    spatial_environment_config: dict[str, Any] = Field(default={})
+    swap_processes: dict[str, Any] = Field(default={})
+    flow: dict[str, Any] = Field(default={})
+    initial_state_overrides: list[str] = Field(default=[])
+    initial_state: dict[str, Any] = Field(default={})
+
+    def model_post_init(self, context: Any, /) -> None:
+        self.experiment_id = unique_id(self.experiment_id)
+
+    def to_config(self) -> SimulationConfig:
+        attributes = self.model_json_schema()["properties"]
+        excluded = ["simdata_id", "metadata"]
+        config_kwargs = {attribute: getattr(self, attribute) for attribute in attributes if attribute not in excluded}
+        if not self.run_parca:
+            # case: use the cached simdata
+            config_kwargs["sim_data_path"] = str(Path(ENV.simulation_outdir).parent / "kb/simData.cPickle")
+        return SimulationConfig(**config_kwargs)
 
 
 class EcoliSimulationDTO(BaseModel):
-    config: SimulationConfiguration
+    """Used by the simulation endpoint"""
+
+    database_id: int
+    name: str
+    config: SimulationConfig
     metadata: ExperimentMetadata
     last_updated: str = Field(default_factory=lambda: str(datetime.datetime.now()))
+    job_name: str | None = None
+    job_id: int | None = None

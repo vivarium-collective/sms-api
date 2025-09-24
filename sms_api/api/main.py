@@ -60,10 +60,8 @@ APP_ROUTERS = [
     "ecoli",
     "antibiotics",
     "biofactory",
-    # "configs",  # config upload/download/get only
     "inference",
     "variants",
-    # "experiments",  # SLURM submitted, vEcoli/Nextflow-based workflows (main)
     # "wcm",  # first iteration of complete nextflow-based requests
     # "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
 ]

@@ -4,12 +4,21 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-from sms_api.common.gateway.models import Namespace
+from fastapi import APIRouter
+
+from sms_api.common.gateway.models import Namespace, RouterConfig
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import HpcRun, JobType, SimulatorVersion
 
 REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
 PINNED_OUTDIR = REPO_DIR / "out" / "sms_single"
+CURRENT_API_VERSION = "v1"
+
+
+def router_config(prefix: str, api_version: str | None = None) -> RouterConfig:
+    return RouterConfig(
+        router=APIRouter(prefix=f"/{prefix}"), prefix=f"/{api_version or CURRENT_API_VERSION}", dependencies=[]
+    )
 
 
 def get_pinned_outdir() -> Path:

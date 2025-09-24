@@ -15,9 +15,10 @@ import json
 import uuid
 from pathlib import Path
 
+from sms_api.common.utils import unique_id
 from sms_api.config import REPO_ROOT
 from sms_api.data.models import AnalysisConfig, ExperimentAnalysisRequest
-from sms_api.simulation.models import EcoliWorkflowRequest, SimulationConfiguration
+from sms_api.simulation.models import EcoliWorkflowRequest, ExperimentRequest, SimulationConfiguration
 
 DEFAULT_SIMULATION_CONFIG = SimulationConfiguration.from_base()
 
@@ -62,7 +63,18 @@ def core_analysis_request() -> ExperimentAnalysisRequest:
     return ExperimentAnalysisRequest(experiment_id="sms_multigeneration", analysis_name=f"analysis_{uuid.uuid4()!s}")
 
 
+def core_experiment_request() -> ExperimentRequest:
+    expid = unique_id()
+    return ExperimentRequest(experiment_id=expid)
+
+
 examples = {
     func.__name__: func()
-    for func in [core_simulation_workflow, core_analysis_config, core_sim_config, core_analysis_request]
+    for func in [
+        core_simulation_workflow,
+        core_analysis_config,
+        core_sim_config,
+        core_analysis_request,
+        core_experiment_request,
+    ]
 }

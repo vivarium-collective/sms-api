@@ -13,6 +13,7 @@ import numpy as np
 import orjson
 from pydantic import BaseModel, Field
 
+from sms_api.common.utils import unique_id
 from sms_api.config import get_settings
 
 ENV = get_settings()
@@ -284,7 +285,7 @@ class AnalysisConfig(Configuration):
 
 class ExperimentAnalysisRequest(BaseModel):
     experiment_id: str
-    analysis_name: str = Field(default=f"analysis_{uuid.uuid4()!s}")
+    analysis_name: str = Field(default=f"analysis_{unique_id()!s}")
     single: dict[str, Any] = {}
     multidaughter: dict[str, Any] = {}
     multigeneration: dict[str, dict[str, Any]] = {
