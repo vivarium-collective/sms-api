@@ -5,7 +5,7 @@ import os
 import tempfile
 import uuid
 import zipfile
-from collections.abc import Generator, Mapping
+from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Union
@@ -16,26 +16,16 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.models import RouterConfig, ServerMode
-from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.config import get_settings
-from sms_api.data.analysis_service import AnalysisService
-from sms_api.data.parquet_service import ParquetService
+from sms_api.data.parquet_service import ParquetService  # type: ignore[import-untyped]
 from sms_api.dependencies import (
     get_database_service,
-    get_simulation_service,
 )
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.handlers import launch_vecoli_simulation
 from sms_api.simulation.models import (
     BaseModel,
-    ConfigOverrides,
-    EcoliExperimentDTO,
-    EcoliExperimentRequestDTO,
-    JobStatus,
     SimulationConfiguration,
-    SimulationRun,
-    SimulatorVersion,
     UploadedSimulationConfig,
 )
 
@@ -100,153 +90,7 @@ def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
     yield from buffer
 
 
-# @config.router.post(
-#     path="/simulation/run",
-#     operation_id="run-simulation-workflow",
-#     response_model=EcoliExperiment,
-#     tags=["Simulations - vEcoli"],
-#     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-#     summary="Dispatches a nextflow-powered vEcoli simulation workflow",
-# )
-# async def run_simulation_workflow(
-#     background_tasks: BackgroundTasks,
-#     config_id: Optional[str] = None,
-#     overrides: Optional[Overrides] = None,
-#     variants: Optional[Variants] = None,
-#     config: SimulationConfiguration | None = None,
-#     # max_duration: float = Query(default=10800.0),
-#     # time_step: float = Query(default=1.0),
-# ) -> EcoliExperiment:
-#     simulator: SimulatorVersion = get_simulator()
-#     sim_request = EcoliWorkflowRequest(
-#         config_id=config_id or "sms_single", overrides=overrides, variants=variants, simulator=simulator
-#     )
-#     sim_service = get_simulation_service()
-#     if sim_service is None:
-#         logger.error("Simulation service is not initialized")
-#         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
-#     db_service = get_database_service()
-#     if db_service is None:
-#         logger.error("Database service is not initialized")
-#         raise HTTPException(status_code=500, detail="Database service is not initialized")
-#
-#     try:
-#         return await run_workflow(
-#             simulation_request=sim_request,
-#             simulation_service_slurm=sim_service,
-#             # background_tasks=background_tasks,
-#             # database_service=db_service,
-#         )
-#     except Exception as e:
-#         logger.exception("Error running vEcoli simulation")
-#         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
 # -- endpoints -- #
-
-
-@config.router.post(
-    path="/experiment",
-    operation_id="launch-experiment",
-    response_model=EcoliExperimentDTO,
-    tags=["Simulations - vEcoli"],
-    dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-    summary="Launches a nextflow-powered vEcoli simulation workflow",
-)
-async def launch_simulation(
-    config_id: str = Query(
-        default="sms", description="Configuration ID of an existing available vecoli simulation configuration JSON"
-    ),
-    overrides: ConfigOverrides | None = None,
-    metadata: Mapping[str, str] | None = None,
-    # TODO: enable overrides here, not variants directly
-    #  (variants should be specified as a top level key-val in overrides,
-    #   mirroring the structure of simulation config JSON directly,
-    #   for now assume knowledge of configs available in db via list endpoint...
-) -> EcoliExperimentDTO:
-    # validate services
-    sim_service = get_simulation_service()
-    if sim_service is None:
-        logger.error("Simulation service is not initialized")
-        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
-    db_service = get_database_service()
-    if db_service is None:
-        logger.error("Database service is not initialized")
-        raise HTTPException(status_code=500, detail="Database service is not initialized")
-
-    # construct params
-    simulator: SimulatorVersion = get_simulator()
-    request = EcoliExperimentRequestDTO(config_id=config_id, overrides=overrides)
-
-    try:
-        return await launch_vecoli_simulation(
-            request=request,
-            simulator=simulator,
-            metadata=metadata or {},
-            simulation_service_slurm=sim_service,
-            database_service=db_service,
-        )
-    except Exception as e:
-        logger.exception("Error running vEcoli simulation")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(path="/experiment", operation_id="get-experiment", tags=["Simulations - vEcoli"])
-async def get_experiment(experiment_id: str) -> EcoliExperimentDTO:
-    try:
-        db_service = DBService()
-        return await db_service.get_experiment(experiment_id=experiment_id)
-    except Exception as e:
-        logger.exception("Error uploading simulation config")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.delete(path="/experiment", operation_id="delete-experiment", tags=["Simulations - vEcoli"])
-async def delete_experiment(experiment_id: str) -> str:
-    try:
-        db_service = DBService()
-        # delete from db
-        await db_service.delete_experiment(experiment_id=experiment_id)
-        return f"Experiment {experiment_id} deleted successfully"
-    except Exception as e:
-        logger.exception("Error uploading simulation config")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(path="/experiment/versions", operation_id="list-experiments", tags=["Simulations - vEcoli"])
-async def list_experiments() -> list[EcoliExperimentDTO]:
-    try:
-        db_service = DBService()
-        return await db_service.list_experiments()
-    except Exception as e:
-        logger.exception("Error getting experiments")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/experiment/status",
-    response_model=SimulationRun,
-    operation_id="get-vecoli-simulation-status",
-    tags=["Simulations - vEcoli"],
-    dependencies=[Depends(get_database_service)],
-    summary="Get the simulation status record by its ID",
-)
-async def get_simulation_status(experiment_tag: str = Query(...)) -> SimulationRun:
-    try:
-        slurmjob_id = experiment_tag.split("-")[-1]
-        # slurmjob_id = get_jobid_by_experiment(experiment_id)
-        ssh_service = get_ssh_service()
-        slurm_user = ENV.slurm_submit_user
-        statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
-        status: str = statuses[1].split("\n")[0].split()[-2]
-        return SimulationRun(id=experiment_tag, status=JobStatus[status])
-    except Exception as e:
-        logger.exception(
-            """Error getting simulation status.\
-                Are you sure that you've passed the experiment_tag? (not the experiment id)
-            """
-        )
-        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.post(
@@ -272,41 +116,6 @@ async def get_simulation_log(experiment_id: str = Query(...)) -> str:
         return result
     except Exception as e:
         logger.exception("""Error getting simulation log.""")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/experiment/analysis",
-    response_model=None,
-    operation_id="get-analysis-manifest",
-    tags=["Data - vEcoli"],
-    summary="Get all available analyses for a given simulation",
-)
-async def get_available_analyses(experiment_id: str = Query(...)) -> dict[str, list[str]]:
-    try:
-        service = AnalysisService()
-        outdir = Path(ENV.simulation_outdir)
-        # experiment_id = get_experiment_id_from_tag(experiment_tag)
-        analysis_dir = service.get_analysis_dir(outdir, experiment_id)
-        paths = service.get_analysis_paths(analysis_dir)
-        manifest_template = service.get_manifest_template(paths)
-        manifest = service.get_manifest(analysis_paths=paths, template=manifest_template)
-
-        # class AnalysisOutput(BaseModel):
-        #     id: str
-        #     files: list[str]
-        # class Analyses(BaseModel):
-        #     value: list[AnalysisOutput]
-        # analyses = Analyses(
-        #     value=[
-        #         AnalysisOutput(id=k, files=v)
-        #         for k, v in manifest.items()
-        #     ]
-        # )
-        # return analyses
-        return manifest
-    except Exception as e:
-        logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -536,26 +345,6 @@ async def upload_analysis_module(
             return result
     except Exception as e:
         logger.exception("Error uploading analysis module")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.post(
-    path="/experiment/analysis",
-    operation_id="run-analysis",
-    tags=["Data - vEcoli"],
-    summary="Run an analysis",
-)
-async def run_analysis(config: dict[str, Any] | None = None) -> AnalysisJob:
-    try:
-        service = AnalysisService()
-        config_id = "analysis_multigen"
-        slurm_jobid: int = await service.submit_analysis_job(
-            config_id=config_id, experiment_id=config_id, simulator_hash=get_simulator().git_commit_hash, env=ENV
-        )
-        return AnalysisJob(id=slurm_jobid, status="STARTED")
-
-    except Exception as e:
-        logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
