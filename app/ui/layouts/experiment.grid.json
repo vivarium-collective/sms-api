@@ -1,63 +1,12 @@
 {
   "type": "grid",
   "data": {
-    "columns": 30,
+    "columns": 24,
     "rowHeight": 20,
-    "maxWidth": 1800,
+    "maxWidth": 1400,
     "bordered": true,
     "cells": [
       {
-        "position": [
-          0,
-          0,
-          13,
-          11
-        ]
-      },
-      {
-        "position": null
-      },
-      {
-        "position": [
-          20,
-          0,
-          10,
-          3
-        ]
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
-        "position": [
-          0,
-          30,
-          7,
-          72
-        ]
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
         "position": null
       },
       {
@@ -81,80 +30,10 @@
       {
         "position": [
           0,
-          13,
-          6,
-          3
-        ]
-      },
-      {
-        "position": [
-          0,
-          16,
-          6,
-          13
-        ]
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
-        "position": [
-          8,
-          30,
-          22,
-          43
-        ]
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
-        "position": [
-          8,
-          14,
-          2,
-          2
-        ]
-      },
-      {
-        "position": null
-      },
-      {
-        "position": [
-          10,
-          14,
-          2,
-          2
-        ]
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
-        "position": [
-          14,
-          14,
           3,
-          2
+          6,
+          142
         ]
-      },
-      {
-        "position": null
       },
       {
         "position": null
@@ -164,20 +43,43 @@
       },
       {
         "position": [
-          8,
+          7,
+          3,
           16,
-          9,
-          12
+          15
         ]
       },
       {
-        "position": null
+        "position": [
+          1,
+          0,
+          2,
+          2
+        ]
       },
       {
-        "position": null
+        "position": [
+          0,
+          0,
+          1,
+          2
+        ]
       },
       {
-        "position": null
+        "position": [
+          7,
+          20,
+          8,
+          19
+        ]
+      },
+      {
+        "position": [
+          7,
+          39,
+          15,
+          36
+        ]
       },
       {
         "position": null
