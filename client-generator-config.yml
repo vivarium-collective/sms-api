@@ -1,0 +1,6 @@
+project_name_override: libsms
+package_name_override: libsms
+meta: uv
+file_encoding: utf-8
+overwrite: true
+fail_on_warning: false
