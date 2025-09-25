@@ -43,6 +43,7 @@ async def test_get_analysis(
         assert fetch_response.json() == analysis_response
 
 
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_get_outputs(base_router: str, database_service: DatabaseService) -> None:
     exp_name = unique_id(scope="pytest_analysis")
