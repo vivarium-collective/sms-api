@@ -9,10 +9,6 @@
 - api to download the data
 - marimo instead of Jupyter notebooks....(auth). ... also on gov cloud.
 - endpoint to send sql like queries to parquet files back to client
-
-# TODO: mount nfs driver for local dev
-# TODO: add more routers, ie; antibiotics, etc
-
 """
 
 import importlib
@@ -60,16 +56,25 @@ APP_ORIGINS = [
     "http://localhost:3001",
     "https://sms.cam.uchc.edu",
 ]
-
-# APP_SERVERS: list[dict[str, str]] = [
-#     {"url": ServerMode.PROD, "description": "Production server"},
-#     {"url": ServerMode.DEV, "description": "Main Development server"},
-#     {"url": ServerMode.PORT_FORWARD_DEV, "description": "Local port-forward"},
-# ]
-APP_SERVERS = None
-APP_ROUTERS = ["core", "variants", "wcm"]  # also included: 'antibiotics', 'biomanufacturing', 'inference'
-assets_dir = Path(get_settings().assets_dir)
+APP_ROUTERS = [
+    "ecoli",
+    "antibiotics",
+    "biofactory",
+    "inference",
+    "variants",
+    # "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
+]
+ENV = get_settings()
+assets_dir = Path(ENV.assets_dir)
 ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
+UI_NAMES = [
+    "analyze",
+    "antibiotic",
+    "biofactory",
+    "experiment",
+    # "inference",
+    # "single_cell",
+]
 
 
 # -- app configuration: lifespan and middleware -- #
@@ -99,9 +104,13 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     await shutdown_standalone()
 
 
-app = FastAPI(title=APP_TITLE, version=APP_VERSION, servers=APP_SERVERS, lifespan=lifespan)
+app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan, redoc_url="/documentation")
 app.add_middleware(
-    CORSMiddleware, allow_origins=APP_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],  # TODO: change origins back to allowed
 )
 for api_name in APP_ROUTERS:
     try:
@@ -111,37 +120,48 @@ for api_name in APP_ROUTERS:
             prefix=api.config.prefix,
             dependencies=api.config.dependencies,
         )
-    except Exception:
+    except ImportError:
         logger.exception(f"Could not register the following api: {api_name}")
 
 
 # -- set ui templates and marimo notebook apps -- #
 
-client_dir = Path(get_settings().app_dir) or Path("app")
+client_dir = Path(ENV.app_dir) or Path("app")
 ui_dir = client_dir / "ui"
 templates_dir = client_dir / "templates"
-
 server = marimo.create_asgi_app()
-app_names: list[str] = []
 
+app_filenames = [f"{modname}.py" for modname in UI_NAMES]
 for filename in sorted(os.listdir(ui_dir)):
-    if filename.endswith(".py") and "single_cell" in filename and not filename.startswith("wip"):
-        # if filename.endswith(".py") and "plots" not in filename and not filename.startswith("wip"):
-        app_name = format_marimo_appname(os.path.splitext(filename)[0])
+    if filename in app_filenames:
+        if "analyze" in filename:
+            app_name = "Analyze"
+            desc = "Run Simulation Analyses"
+        elif "experiment" in filename:
+            app_name = "Experiment"
+            desc = "Run a Simulation Experiment"
+        else:
+            app_name = format_marimo_appname(os.path.splitext(filename)[0])
+            desc = "Click Me!"
         app_path = os.path.join(ui_dir, filename)
         server = server.with_app(path=f"/{app_name}", root=app_path)
-        app_names.append(app_name)
 
 templates = Jinja2Templates(directory=templates_dir)
 
 
-# -- app-level endpoints -- #
+# -- main-level endpoints -- #
 
 
 @app.get("/", tags=["SMS API"])
 async def home(request: Request) -> templating._TemplateResponse:
+    app_info = [
+        ("Analyze", "Run Simulation Analyses"),
+        ("Antibiotic", "Explore new possibilities"),
+        ("Biofactory", "Create new strains"),
+        ("Experiment", "Design and run simulation experiments"),
+    ]
     return templates.TemplateResponse(
-        request, "home.html", {"request": request, "app_names": app_names, "marimo_path_prefix": "/ws"}
+        request, "home.html", {"request": request, "app_names": app_info, "marimo_path_prefix": "/ws"}
     )
 
 
