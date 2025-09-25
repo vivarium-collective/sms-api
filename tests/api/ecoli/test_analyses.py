@@ -12,6 +12,7 @@ from sms_api.data.models import AnalysisConfig, AnalysisConfigOptions, Experimen
 from sms_api.simulation.database_service import DatabaseService
 
 
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_run_analysis(
     base_router: str, analysis_request: ExperimentAnalysisRequest, database_service: DatabaseService
@@ -24,6 +25,7 @@ async def test_run_analysis(
         assert isinstance(data["config"]["analysis_options"]["experiment_id"], list)
 
 
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_get_analysis(
     base_router: str, analysis_request: ExperimentAnalysisRequest, database_service: DatabaseService
