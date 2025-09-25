@@ -6,6 +6,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from sms_api.api.main import app
+from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_slurmjob_name
 from sms_api.simulation.models import EcoliSimulationDTO, ExperimentRequest, SimulationConfig
@@ -13,7 +14,9 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 
 @pytest.mark.asyncio
-async def test_list_simulations(experiment_request: ExperimentRequest, database_service: DatabaseService) -> None:
+async def test_list_simulations(
+    experiment_request: ExperimentRequest, database_service: DatabaseService, ssh_service: SSHService
+) -> None:
     n = 3
     inserted_sims = []
     for i in range(n):
@@ -55,6 +58,7 @@ async def test_run_simulation(
     ecoli_simulation: EcoliSimulationDTO,
     database_service: DatabaseService,
     simulation_service_slurm: SimulationServiceHpc,
+    ssh_service: SSHService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -104,6 +108,7 @@ async def test_get_simulation_status(
     experiment_request: ExperimentRequest,
     database_service: DatabaseService,
     simulation_service_slurm: SimulationServiceHpc,
+    ssh_service: SSHService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -125,6 +130,7 @@ async def test_get_simulation_log(
     experiment_request: ExperimentRequest,
     database_service: DatabaseService,
     simulation_service_slurm: SimulationServiceHpc,
+    ssh_service: SSHService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -156,6 +162,7 @@ async def test_run_fetch_simulation(
     experiment_request: ExperimentRequest,
     database_service: DatabaseService,
     simulation_service_slurm: SimulationServiceHpc,
+    ssh_service: SSHService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -175,6 +182,7 @@ async def test_fetch_simulation(
     experiment_request: ExperimentRequest,
     database_service: DatabaseService,
     simulation_service_slurm: SimulationServiceHpc,
+    ssh_service: SSHService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
