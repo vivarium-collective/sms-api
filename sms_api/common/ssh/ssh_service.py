@@ -24,7 +24,11 @@ class SSHService:
 
     async def run_command(self, command: str) -> tuple[int, str, str]:
         async with asyncssh.connect(
-            host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=self.known_hosts
+            host=self.hostname,
+            username=self.username,
+            client_keys=[self.key_path],
+            known_hosts=self.known_hosts,
+            keepalive_interval=30,
         ) as conn:
             try:
                 logger.info(f"Running ssh command: {command}")

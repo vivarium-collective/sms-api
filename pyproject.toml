@@ -149,7 +149,8 @@ select = [
 ignore = [
     # "DEP001",
 #    # A001 Variable `sum` is shadowing a Python builtin
-#    "A001",
+     "A001",
+     "A002",
 #    # B008 Do not perform function call `Body` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
 #    "B008",
 #    # B026 Star-arg unpacking after a keyword argument is strongly discouraged

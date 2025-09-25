@@ -1,6 +1,7 @@
 import datetime
 import logging
 from abc import ABC, abstractmethod
+from typing import Any
 
 from sqlalchemy import Result, and_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -8,19 +9,24 @@ from sqlalchemy.orm import InstrumentedAttribute
 from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.data.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.simulation.models import (
     EcoliSimulation,
+    EcoliSimulationDTO,
     EcoliSimulationRequest,
     HpcRun,
     JobType,
     ParcaDataset,
     ParcaDatasetRequest,
+    SimulationConfig,
     SimulatorVersion,
     WorkerEvent,
 )
 from sms_api.simulation.tables_orm import (
     JobStatusDB,
     JobTypeDB,
+    ORMAnalysis,
+    ORMExperiment,
     ORMHpcRun,
     ORMParcaDataset,
     ORMSimulation,
@@ -32,6 +38,48 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseService(ABC):
+    @abstractmethod
+    async def insert_ecoli_simulation(
+        self,
+        name: str,
+        config: SimulationConfig,
+        last_updated: str,
+        job_name: str,
+        job_id: int,
+        metadata: dict[str, Any],
+    ) -> EcoliSimulationDTO:
+        """Used by the /ecoli router"""
+        pass
+
+    @abstractmethod
+    async def get_ecoli_simulation(self, database_id: int) -> EcoliSimulationDTO:
+        """Used by the /ecoli router"""
+        pass
+
+    @abstractmethod
+    async def list_ecoli_simulations(self) -> list[EcoliSimulationDTO]:
+        """Used by the /ecoli router"""
+        pass
+
+    @abstractmethod
+    async def insert_analysis(
+        self, name: str, config: AnalysisConfig, last_updated: str, job_name: str, job_id: int
+    ) -> ExperimentAnalysisDTO:
+        """Used by the /ecoli router"""
+        pass
+
+    @abstractmethod
+    async def get_analysis(self, database_id: int) -> ExperimentAnalysisDTO:
+        """Used by the /ecoli router"""
+        pass
+
+    @abstractmethod
+    async def list_analyses(self) -> list[ExperimentAnalysisDTO]:
+        """Used by the /ecoli router"""
+        pass
+
+    ####################################
+
     @abstractmethod
     async def insert_worker_event(self, worker_event: WorkerEvent, hpcrun_id: int) -> WorkerEvent:
         pass
@@ -189,6 +237,105 @@ class DatabaseServiceSQL(DatabaseService):
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
 
         return orm_hpc_job
+
+    async def _get_orm_analysis(self, session: AsyncSession, database_id: int) -> ORMAnalysis | None:
+        """Used by the /ecoli router"""
+        stmt1 = select(ORMAnalysis).where(ORMAnalysis.id == database_id).limit(1)
+        result1: Result[tuple[ORMAnalysis]] = await session.execute(stmt1)
+        orm_experiment: ORMAnalysis | None = result1.scalars().one_or_none()
+        return orm_experiment
+
+    async def _get_orm_ecoli_experiment(self, session: AsyncSession, database_id: int) -> ORMExperiment | None:
+        """Used by the /ecoli router"""
+        stmt1 = select(ORMExperiment).where(ORMExperiment.id == database_id).limit(1)
+        result1: Result[tuple[ORMExperiment]] = await session.execute(stmt1)
+        orm_experiment: ORMExperiment | None = result1.scalars().one_or_none()
+        return orm_experiment
+
+    @override
+    async def insert_ecoli_simulation(
+        self,
+        name: str,
+        config: SimulationConfig,
+        last_updated: str,
+        job_name: str,
+        job_id: int,
+        metadata: dict[str, Any],
+    ) -> EcoliSimulationDTO:
+        """Used by the /ecoli router"""
+        async with self.async_sessionmaker() as session, session.begin():
+            config.emitter_arg["out_dir"] = "/home/FCAM/svc_vivarium/workspace/api_outputs"
+            orm_experiment = ORMExperiment(
+                name=name,
+                config=config.model_dump(),
+                last_updated=last_updated,
+                job_name=job_name,
+                job_id=job_id,
+                experiment_metadata=metadata,
+            )
+            session.add(orm_experiment)
+            await session.flush()
+            return orm_experiment.to_dto()
+
+    @override
+    async def get_ecoli_simulation(self, database_id: int) -> EcoliSimulationDTO:
+        """Used by the /ecoli router"""
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_experiment = await self._get_orm_ecoli_experiment(session, database_id=database_id)
+            if orm_experiment is None:
+                raise RuntimeError(f"Experiment {database_id} not found")
+            return orm_experiment.to_dto()
+
+    @override
+    async def list_ecoli_simulations(self) -> list[EcoliSimulationDTO]:
+        """Used by the /ecoli router"""
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMExperiment)
+            result: Result[tuple[ORMExperiment]] = await session.execute(stmt)
+            orm_analyses = result.scalars().all()
+
+            versions: list[EcoliSimulationDTO] = []
+            for experiment in orm_analyses:
+                versions.append(experiment.to_dto())
+            return versions
+
+    @override
+    async def insert_analysis(
+        self, name: str, config: AnalysisConfig, last_updated: str, job_name: str, job_id: int
+    ) -> ExperimentAnalysisDTO:
+        """Used by the /ecoli router"""
+        async with self.async_sessionmaker() as session, session.begin():
+            config.emitter_arg["out_dir"] = "/home/FCAM/svc_vivarium/workspace/api_outputs"
+            orm_analysis = ORMAnalysis(
+                name=name, config=config.model_dump(), last_updated=last_updated, job_name=job_name, job_id=job_id
+            )
+            session.add(orm_analysis)
+            await session.flush()
+            return orm_analysis.to_dto()
+
+    @override
+    async def get_analysis(self, database_id: int) -> ExperimentAnalysisDTO:
+        """Used by the /ecoli router"""
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_analysis = await self._get_orm_analysis(session, database_id=database_id)
+            if orm_analysis is None:
+                raise RuntimeError(f"Experiment {database_id} not found")
+            return orm_analysis.to_dto()
+
+    @override
+    async def list_analyses(self) -> list[ExperimentAnalysisDTO]:
+        """Used by the /ecoli router"""
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMAnalysis)
+            result: Result[tuple[ORMAnalysis]] = await session.execute(stmt)
+            orm_analyses = result.scalars().all()
+
+            versions: list[ExperimentAnalysisDTO] = []
+            for experiment in orm_analyses:
+                versions.append(experiment.to_dto())
+            return versions
+
+    ##################################
 
     @override
     async def insert_simulator(self, git_commit_hash: str, git_repo_url: str, git_branch: str) -> SimulatorVersion:

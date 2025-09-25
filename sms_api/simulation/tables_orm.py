@@ -1,14 +1,24 @@
 import datetime
 import enum
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import ForeignKey, func
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from sms_api.simulation.models import HpcRun, JobStatus, JobType, SimulatorVersion, WorkerEvent
+from sms_api.data.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisDTO
+from sms_api.simulation.models import (
+    EcoliSimulationDTO,
+    ExperimentMetadata,
+    HpcRun,
+    JobStatus,
+    JobType,
+    SimulationConfig,
+    SimulatorVersion,
+    WorkerEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +181,59 @@ class ORMWorkerEvent(Base):
             mass=mass_data,
             time=event_time,
             hpcrun_id=hpcrun_id,
+        )
+
+
+class ORMAnalysis(Base):
+    """Used by the /ecoli router"""
+
+    __tablename__ = "analysis"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(nullable=False)  # this should be request.analysis_name
+    config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    last_updated: Mapped[str] = mapped_column(nullable=False)
+    job_name: Mapped[str] = mapped_column(nullable=True)
+    job_id: Mapped[int] = mapped_column(nullable=True)
+
+    def to_dto(self) -> ExperimentAnalysisDTO:
+        options = AnalysisConfigOptions(**self.config["analysis_options"])
+        emitter_arg = self.config["emitter_arg"]
+        config_dto = AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
+        return ExperimentAnalysisDTO(
+            database_id=self.id,
+            name=self.name,
+            config=config_dto,
+            last_updated=self.last_updated,
+            job_name=self.job_name,
+            job_id=self.job_id,
+        )
+
+
+class ORMExperiment(Base):
+    """Used by the /ecoli router"""
+
+    __tablename__ = "ecoli_experiment"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(nullable=False)
+    config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    last_updated: Mapped[str] = mapped_column(nullable=False)
+    job_name: Mapped[str] = mapped_column(nullable=True)
+    job_id: Mapped[int] = mapped_column(nullable=True)
+    experiment_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=True)
+
+    def to_dto(self) -> EcoliSimulationDTO:
+        config_dto = SimulationConfig(**self.config)
+        metadata = ExperimentMetadata(root=self.experiment_metadata)
+        return EcoliSimulationDTO(
+            database_id=self.id,
+            name=self.name,
+            config=config_dto,
+            last_updated=self.last_updated,
+            job_name=self.job_name,
+            job_id=self.job_id,
+            metadata=metadata,
         )
 
 

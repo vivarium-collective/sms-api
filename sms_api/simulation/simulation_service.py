@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import random
 import string
@@ -26,10 +27,18 @@ from sms_api.simulation.hpc_utils import (
     get_slurmjob_name,
     get_vEcoli_repo_dir,
 )
-from sms_api.simulation.models import EcoliSimulation, EcoliWorkflowSimulation, ParcaDataset, SimulatorVersion
+from sms_api.simulation.models import (
+    EcoliSimulation,
+    ParcaDataset,
+    SimulationConfig,
+    SimulationConfiguration,
+    SimulatorVersion,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+MAX_SIMULATION_CPUS = 5
 
 
 class SimulationService(ABC):
@@ -57,15 +66,6 @@ class SimulationService(ABC):
         pass
 
     @abstractmethod
-    async def submit_vecoli_job(
-        self,
-        ecoli_simulation: EcoliWorkflowSimulation,
-        experiment_id: str,
-        # database_service: DatabaseService
-    ) -> int:
-        pass
-
-    @abstractmethod
     async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
         pass
 
@@ -86,6 +86,12 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def close(self) -> None:
+        pass
+
+    @abstractmethod
+    async def submit_experiment_job(
+        self, config: SimulationConfig, simulation_name: str, simulator_hash: str, env: Settings, logger: logging.Logger
+    ) -> tuple[str, int]:
         pass
 
 
@@ -427,33 +433,129 @@ class SimulationServiceHpc(SimulationService):
             return slurm_jobid
 
     @override
-    async def submit_vecoli_job(
-        self,
-        ecoli_simulation: EcoliWorkflowSimulation,
-        experiment_id: str,
-        # database_service: DatabaseService
-    ) -> int:
-        """Dispatches a nextflow-powered vEcoli simulation workflow
-        as in (/vEcoli/runscripts/workflow.py --config <CONFIG_JSON_PATH>)
-        """
-        if not isinstance(ecoli_simulation, EcoliWorkflowSimulation):
-            raise TypeError("You must pass a simulation workflow request simulation (EcoliWorkflowSimulation)")
+    async def submit_experiment_job(
+        self, config: SimulationConfig, simulation_name: str, simulator_hash: str, env: Settings, logger: logging.Logger
+    ) -> tuple[str, int]:
+        """Used by the /ecoli router"""
 
-        settings = get_settings()
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        return await submit_vecoli_job(
-            config_id=ecoli_simulation.sim_request.config_id,
-            simulator_hash=ecoli_simulation.sim_request.simulator.git_commit_hash,
-            env=settings,
-            experiment_id=experiment_id,
-            ssh=ssh_service,
-            logger=logger,
-        )
+        async def _dispatch(
+            config: SimulationConfig, simulation_name: str, simulator_hash: str, env: Settings, logger: logging.Logger
+        ) -> tuple[str, int]:
+            experiment_id = config.experiment_id
+            slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
+            base_path = Path(env.slurm_base_path)
+            slurm_log_file = base_path / f"prod/htclogs/{slurmjob_name}.out"
+
+            slurm_script = _slurm_script(
+                slurm_log_file=slurm_log_file,
+                slurm_job_name=slurmjob_name,
+                env=env,
+                latest_hash=simulator_hash,
+                config=config,
+                simulation_name=simulation_name,
+            )
+
+            ssh = get_ssh_service(env)
+            slurmjob_id = await _submit_script(
+                config=config,
+                script_content=slurm_script,
+                slurm_job_name=slurmjob_name,
+                env=env,
+                ssh=ssh,
+            )
+
+            return slurmjob_name, slurmjob_id
+
+        def _slurm_script(
+            slurm_log_file: Path,
+            slurm_job_name: str,
+            env: Settings,
+            latest_hash: str,
+            config: SimulationConfig,
+            simulation_name: str,
+        ) -> str:
+            base_path = Path(env.slurm_base_path)
+            remote_workspace_dir = base_path / "workspace"
+            vecoli_dir = remote_workspace_dir / "vEcoli"
+            # config_dir = vecoli_dir / "configs"
+            # conf = config.model_dump_json() or "{}"
+
+            return dedent(f"""\
+                #!/bin/bash
+                #SBATCH --job-name={slurm_job_name}
+                #SBATCH --time=30:00
+                #SBATCH --cpus-per-task {MAX_SIMULATION_CPUS}
+                #SBATCH --mem=8GB
+                #SBATCH --partition={env.slurm_partition}
+                #SBATCH --qos={env.slurm_qos}
+                #SBATCH --output={slurm_log_file!s}
+                #SBATCH --nodelist={env.slurm_node_list}
+
+                set -e
+
+                ### set up java and nextflow
+                local_bin=$HOME/.local/bin
+                export JAVA_HOME=$local_bin/java-22
+                export PATH=$JAVA_HOME/bin:$local_bin:$PATH
+
+                ### configure working dir and binds
+                vecoli_dir={vecoli_dir!s}
+                latest_hash={latest_hash}
+
+                tmp_config=$(mktemp)
+                echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
+
+                cd $vecoli_dir
+
+                ### binds
+                binds="-B $HOME/workspace/vEcoli:/vEcoli"
+                binds+=" -B $HOME/workspace/api_outputs:/out"
+                binds+=" -B $JAVA_HOME:$JAVA_HOME"
+                binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
+
+                image=$HOME/workspace/images/vecoli-$latest_hash.sif
+                vecoli_image_root=/vEcoli
+
+                singularity run $binds $image bash -c "
+                    export JAVA_HOME=$HOME/.local/bin/java-22
+                    export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
+                    uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config \"$tmp_config\"
+                "
+            """)
+
+        async def _submit_script(
+            config: SimulationConfig,
+            script_content: str,
+            slurm_job_name: str,
+            env: Settings,
+            ssh: SSHService | None = None,
+        ) -> int:
+            settings = env or get_settings()
+            ssh_service = ssh or SSHService(
+                hostname=settings.slurm_submit_host,
+                username=settings.slurm_submit_user,
+                key_path=Path(settings.slurm_submit_key_path),
+                known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
+            )
+            slurm_service = SlurmService(ssh_service=ssh_service)
+
+            slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
+                with open(local_submit_file, "w") as f:
+                    f.write(script_content)
+
+                # base_path = Path(env.slurm_base_path)
+                # remote_workspace_dir = base_path / "workspace"
+                # vecoli_dir = remote_workspace_dir / "vEcoli"
+                # config_dir = vecoli_dir / "configs"
+
+                slurm_jobid = await slurm_service.submit_job(
+                    local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+                )
+                return slurm_jobid
+
+        return await _dispatch(config, simulation_name, simulator_hash, env, logger)
 
     @override
     async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
@@ -481,50 +583,32 @@ class SimulationServiceHpc(SimulationService):
         pass
 
 
-def slurm_script(
+def simulation_slurm_script(
     config_id: str,
     slurm_job_name: str,
     experiment_id: str,
-    # vecoli_commit_hash: str | None = None,
-    # remote_vecoli_dir: Path | None = None,
     settings: Settings | None = None,
     logger: logging.Logger | None = None,
+    config: SimulationConfiguration | None = None,
 ) -> str:
-    """
-    :param config_id: config id selected from the dropdown of available
-        simulation config JSON files for running vEcoli workflows.
-
-    """
     env = settings or get_settings()
     base_path = Path(env.slurm_base_path)
     remote_workspace_dir = base_path / "workspace"
     vecoli_dir = remote_workspace_dir / "vEcoli"
-    slurm_log_file = base_path / f"prod/htclogs/{slurm_job_name}.out"
-    experiment_outdir = f"/home/FCAM/svc_vivarium/workspace/outputs/{config_id}"
+    slurm_log_file = base_path / f"prod/htclogs/{experiment_id}.out"
+    experiment_outdir = f"/home/FCAM/svc_vivarium/workspace/api_outputs/{config_id}"
 
     config_dir = vecoli_dir / "configs"
-    # latest_hash = vecoli_commit_hash or "079c43c"
     latest_hash = "079c43c"
 
-    # --- in python script func: ---
-    # experiment_id = f'sim-{simulator_hash}-{config_id}-{uuid.uuid4()}'
-
-    # --- in slurm script: ---
-    # config_dir=$HOME/workspace/vEcoli/configs
-    # expid={experiment_id}
-    # jq --arg expid "$expid" '.experiment_id = $expid' "$config_dir/${config_id}.json" > "$config_dir/${expid}.json"
-    # ...BINDS, ETC...
-    # singularity run $binds $image bash -c '
-    #     export JAVA_HOME=$HOME/.local/bin/java-22
-    #     export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-    #     uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/$expid.json
-    # '
+    conf = config.model_dump_json() if config else ""
+    experiment_id = config.experiment_id if config is not None else experiment_id
 
     return dedent(f"""\
         #!/bin/bash
         #SBATCH --job-name={slurm_job_name}
         #SBATCH --time=30:00
-        #SBATCH --cpus-per-task 2
+        #SBATCH --cpus-per-task 8
         #SBATCH --mem=8GB
         #SBATCH --partition={env.slurm_partition}
         #SBATCH --qos={env.slurm_qos}
@@ -540,13 +624,20 @@ def slurm_script(
         # export NEXTFLOW=$local_bin/nextflow
         # export PATH=$JAVA_HOME/bin:$PATH:$(dirname "$NEXTFLOW")
 
-        ### create request-specific config .json
-        cd $HOME/workspace/vEcoli
-        expid={experiment_id}
-        config_id={config_id}
-        config_dir={config_dir!s}
-        experiment_config=$config_dir/$expid.json
-        jq --arg expid "$expid" '.experiment_id = $expid' "$config_dir/$config_id.json" > "$config_dir/$expid.json"
+        if [ '{conf}' != '' ]; then
+            uv run python $HOME/workspace/scripts/write_uploaded_config.py --config '{conf}'
+            cd $HOME/workspace/vEcoli
+        else
+            ### create request-specific config .json
+            cd $HOME/workspace/vEcoli
+            expid={experiment_id}
+            config_id={config_id}
+            config_dir={config_dir!s}
+            experiment_config=$config_dir/$expid.json
+            [ -f "$config_dir/$config_id.json" ] \
+            && jq --arg expid "$expid" '.experiment_id = $expid' \
+            "$config_dir/$config_id.json" > "$config_dir/$expid.json"
+        fi
 
         ### logging to confirm installations/paths
         echo "----> START({datetime.datetime.now()}) ---->"
@@ -593,7 +684,7 @@ def slurm_script(
         # '
 
         ### remove unique sim config on exit, regardless of job outcome
-        trap 'rm -f {config_dir!s}/{experiment_id}.json' EXIT
+        [ -f {config_dir!s}/{experiment_id}.json ] && trap 'rm -f {config_dir!s}/{experiment_id}.json' EXIT
 
         ### run bound singularity
         singularity run $binds $image bash -c "
@@ -640,6 +731,7 @@ async def submit_vecoli_job(
     experiment_id: str,
     ssh: SSHService | None = None,
     logger: logging.Logger | None = None,
+    config: SimulationConfiguration | None = None,
 ) -> int:
     # experiment_id = expid or create_experiment_id(config_id=config_id, simulator_hash=simulator_hash)
     experiment_dir = get_experiment_dir(experiment_id=experiment_id, env=env)
@@ -648,8 +740,13 @@ async def submit_vecoli_job(
     slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
     # slurmjob_name = "dev"
 
-    script = slurm_script(
-        config_id=config_id, slurm_job_name=slurmjob_name, experiment_id=experiment_id, settings=env, logger=logger
+    script = simulation_slurm_script(
+        config_id=config_id,
+        slurm_job_name=slurmjob_name,
+        experiment_id=experiment_id,
+        settings=env,
+        logger=logger,
+        config=config,
     )
 
     msg = dedent(f"""\

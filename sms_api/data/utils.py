@@ -1,5 +1,7 @@
+import json
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 
@@ -32,7 +34,7 @@ def get_variant_data_dirpath(
     remote: bool = True,
 ) -> Path:
     settings: Settings = get_settings()
-    base_datapath = Path(settings.remote_data_basepath if remote else settings.local_data_basepath)
+    base_datapath = Path(settings.simulation_outdir)
     return (
         base_datapath
         / experiment_id
@@ -43,3 +45,12 @@ def get_variant_data_dirpath(
         / f"generation={generation}"
         / f"agent_id={agent_id}"
     )
+
+
+def write_json_for_slurm(data: dict[str, Any], outdir: Path, filename: str) -> Path:
+    """Write dict to a JSON file accessible by SLURM jobs."""
+    outdir.mkdir(parents=True, exist_ok=True)
+    filepath = outdir / filename
+    with filepath.open("w") as f:
+        json.dump(data, f, indent=2)
+    return filepath

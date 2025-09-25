@@ -20,7 +20,8 @@ T = TypeVar("T", bound="EcoliSimulationRequest")
 
 @_attrs_define
 class EcoliSimulationRequest:
-    """
+    """Fits EcoliSim
+
     Attributes:
         simulator (SimulatorVersion):
         parca_dataset_id (int):

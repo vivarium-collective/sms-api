@@ -1,9 +1,7 @@
 import json
 import os
 import pathlib
-from collections.abc import Collection
 from dataclasses import asdict, dataclass
-from enum import StrEnum
 from typing import Any
 
 import numpy
@@ -11,12 +9,136 @@ import numpy as np
 import orjson
 from pydantic import BaseModel, Field
 
+from sms_api.common.utils import unique_id
+from sms_api.config import get_settings
 
-class Base(BaseModel):
-    pass
+ENV = get_settings()
+MAX_ANALYSIS_CPUS = 3
 
 
-class BiocycComponentData(Base):
+### -- analyses -- ###
+
+
+class AnalysisConfigOptions(BaseModel):
+    # TODO: infer variant data dir, validation datapath from experiment id
+    experiment_id: list[str]
+    variant_data_dir: list[str] | None = None
+    validation_data_path: list[str] | None = None
+    outdir: str | None = None
+    cpus: int = 3
+    single: dict[str, Any] = {}
+    multidaughter: dict[str, Any] = {}
+    multigeneration: dict[str, dict[str, Any]] = {
+        "replication": {},
+        "ribosome_components": {},
+        "ribosome_crowding": {},
+        "ribosome_production": {},
+        "ribosome_usage": {},
+        "rna_decay_03_high": {},
+    }
+    multiseed: dict[str, dict[str, Any]] = {
+        "protein_counts_validation": {},
+        "ribosome_spacing": {},
+        "subgenerational_expression_table": {},
+    }
+    multivariant: dict[str, dict[str, Any]] = {
+        "average_monomer_counts": {},
+        "cell_mass": {},
+        "doubling_time_hist": {"skip_n_gens": 1},
+        "doubling_time_line": {},
+    }
+    multiexperiment: dict[str, Any] = {}
+
+
+class AnalysisConfig(BaseModel):
+    analysis_options: AnalysisConfigOptions
+    emitter_arg: dict[str, str] = Field(default={"out_dir": ""})
+
+    @classmethod
+    def from_file(cls, fp: pathlib.Path, config_id: str | None = None) -> "AnalysisConfig":
+        filepath = fp
+        with open(filepath) as f:
+            conf = json.load(f)
+        options = AnalysisConfigOptions(**conf["analysis_options"])
+        return cls(analysis_options=options, emitter_arg=conf["emitter_arg"])
+
+    @classmethod
+    def from_request(cls, request: "ExperimentAnalysisRequest") -> "AnalysisConfig":
+        output_dir = pathlib.Path(f"/home/FCAM/svc_vivarium/workspace/api_outputs/{request.experiment_id}")
+        options = AnalysisConfigOptions(
+            experiment_id=[request.experiment_id],
+            variant_data_dir=[str(output_dir / "variant_sim_data")],
+            validation_data_path=[str(output_dir / "parca/kb/validationData.cPickle")],
+            outdir=str(output_dir.parent / request.analysis_name),
+            single=request.single,
+            multidaughter=request.multidaughter,
+            multigeneration=request.multigeneration,
+            multiexperiment=request.multiexperiment,
+            multivariant=request.multivariant,
+            multiseed=request.multiseed,
+        )
+        emitter_arg = {"out_dir": str(output_dir.parent)}
+        return cls(analysis_options=options, emitter_arg=emitter_arg)
+
+
+class ExperimentAnalysisRequest(BaseModel):
+    experiment_id: str
+    analysis_name: str = Field(default=f"analysis_{unique_id()!s}")
+    single: dict[str, Any] = {}
+    multidaughter: dict[str, Any] = {}
+    multigeneration: dict[str, dict[str, Any]] = {
+        "replication": {},
+        "ribosome_components": {},
+        "ribosome_crowding": {},
+        "ribosome_production": {},
+        "ribosome_usage": {},
+        "rna_decay_03_high": {},
+    }
+    multiseed: dict[str, dict[str, Any]] = {
+        "protein_counts_validation": {},
+        "ribosome_spacing": {},
+        "subgenerational_expression_table": {},
+    }
+    multivariant: dict[str, dict[str, Any]] = {
+        "average_monomer_counts": {},
+        "cell_mass": {},
+        "doubling_time_hist": {"skip_n_gens": 1},
+        "doubling_time_line": {},
+    }
+    multiexperiment: dict[str, Any] = {}
+
+    def to_config(self) -> AnalysisConfig:
+        experiment_outdir = f"{ENV.simulation_outdir}/{self.experiment_id}"
+        options = AnalysisConfigOptions(
+            experiment_id=[self.experiment_id],
+            variant_data_dir=[f"{experiment_outdir}/variant_sim_data"],
+            validation_data_path=[f"{experiment_outdir}/parca/kb/validationData.cPickle"],
+            outdir=f"{ENV.simulation_outdir}/{self.analysis_name}",
+            cpus=MAX_ANALYSIS_CPUS,
+            single=self.single,
+            multidaughter=self.multidaughter,
+            multigeneration=self.multigeneration,
+            multiexperiment=self.multiexperiment,
+            multivariant=self.multivariant,
+            multiseed=self.multiseed,
+        )
+        emitter_arg = {"out_dir": ENV.simulation_outdir}
+        return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
+
+
+class ExperimentAnalysisDTO(BaseModel):
+    database_id: int
+    name: str
+    config: AnalysisConfig
+    last_updated: str
+    job_name: str | None = None
+    job_id: int | None = None
+
+
+### -- biocyc -- ###
+
+
+class BiocycComponentData(BaseModel):
     id: str
     orgid: str
     frameid: str
@@ -37,7 +159,7 @@ class BiocycReaction(BiocycComponentData):
     left: list[dict[str, Any]]
 
 
-class BiocycComponent(Base):
+class BiocycComponent(BaseModel):
     id: str  # loadedjson['obj_id']
     pgdb: dict[str, Any]  # ['data']['ptools-xml']['metadata']['PGDB']
     data: BiocycCompound | BiocycReaction  # ['data']['ptools-xml']['Compound'] FOR EXAMPLE
@@ -117,40 +239,6 @@ class BiocycCredentials(Credentials):
         dotenv.load_dotenv(env_fp)
         print("loading", env_fp)
         return cls(username=os.getenv("BIOCYC_EMAIL"), password=os.getenv("BIOCYC_PASSWORD"), config=config)
-
-
-@dataclass
-class _BiocycData:
-    obj_id: str
-    org_id: str
-    data: dict[str, Any]
-    request: dict[str, Collection[str]]
-    dest_dirpath: pathlib.Path | None = None
-
-    @property
-    def filepath(self) -> pathlib.Path:
-        dest_fp = self.dest_dirpath or pathlib.Path("assets/biocyc")
-        return dest_fp / f"{self.obj_id}.json"
-
-    def to_dict(self) -> dict[str, str | dict[str, Any] | dict[str, str] | pathlib.Path | None]:
-        return asdict(self)
-
-    def export(self, fp: pathlib.Path | None = None) -> None:
-        try:
-            exp = self.to_dict()
-            fp = fp or self.filepath
-            with open(fp, "w") as f:
-                json.dump(exp, f, indent=4)
-            print(f"Successfully wrote: {fp}")
-        except OSError:
-            print(f"Could not write for {self.obj_id}")
-
-
-class OutputDomain(StrEnum):
-    ANALYSIS = "analysis"
-    PARQUET = "history"
-    STATE = "daughter_states"
-    PARAMETERS = "parca"
 
 
 class SerializedArray:

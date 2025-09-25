@@ -6,9 +6,9 @@ import pytest
 
 import sms_api
 from sms_api.api.client import Client
-from sms_api.api.client.api.simulators.get_simulator_status import asyncio as get_simulator_status_async
-from sms_api.api.client.api.simulators.get_simulator_versions import asyncio as get_simulator_versions_async
-from sms_api.api.client.api.simulators.insert_simulator_version import asyncio as insert_simulator_version_async
+from sms_api.api.client.api.ecoli_sim.get_simulator_status import asyncio as get_simulator_status_async
+from sms_api.api.client.api.ecoli_sim.get_simulator_versions import asyncio as get_simulator_versions_async
+from sms_api.api.client.api.ecoli_sim.insert_simulator_version import asyncio as insert_simulator_version_async
 from sms_api.api.client.models import HpcRun, HTTPValidationError, RegisteredSimulators
 from sms_api.api.client.models.simulator import Simulator as SimulatorDto
 from sms_api.api.client.models.simulator_version import SimulatorVersion as SimulatorVersionDto
