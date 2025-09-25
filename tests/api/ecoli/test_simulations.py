@@ -1,0 +1,187 @@
+import asyncio
+import datetime
+from random import randint
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from sms_api.api.main import app
+from sms_api.simulation.database_service import DatabaseService
+from sms_api.simulation.hpc_utils import get_slurmjob_name
+from sms_api.simulation.models import EcoliSimulationDTO, ExperimentRequest, SimulationConfig
+from sms_api.simulation.simulation_service import SimulationServiceHpc
+
+
+@pytest.mark.asyncio
+async def test_list_simulations(experiment_request: ExperimentRequest, database_service: DatabaseService) -> None:
+    n = 3
+    inserted_sims = []
+    for i in range(n):
+        name_i = f"pytest_fixture_config_{i}"
+        config_i = SimulationConfig(
+            experiment_id=name_i,
+            sim_data_path="/pytest/kb/simData.cPickle",
+            suffix_time=False,
+            parca_options={"cpus": 3},
+            generations=randint(1, 1000),  # noqa: S311
+            max_duration=10800,
+            initial_global_time=0,
+            time_step=1,
+            single_daughters=True,
+            emitter="parquet",
+            emitter_arg={"outdir": "/pytest/api_outputs"},
+        )
+        last_updated_i = str(datetime.datetime.now())
+        job_name_i = get_slurmjob_name(experiment_id=name_i)
+        job_id_i = randint(10000, 1000000)  # noqa: S311
+        sim_i = await database_service.insert_ecoli_simulation(
+            name=name_i,
+            config=config_i,
+            last_updated=last_updated_i,
+            job_name=job_name_i,
+            job_id=job_id_i,
+            metadata={"requester": f"{name_i}:{i}", "context": "pytest"},
+        )
+        inserted_sims.append(sim_i.model_dump())
+    all_sims = await database_service.list_simulations()
+    assert len(inserted_sims) == n
+
+
+@pytest.mark.asyncio
+async def test_run_simulation(
+    base_router: str,
+    experiment_request: ExperimentRequest,
+    ecoli_simulation: EcoliSimulationDTO,
+    database_service: DatabaseService,
+    simulation_service_slurm: SimulationServiceHpc,
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(f"{base_router}/simulations", json=experiment_request.model_dump())
+        response.raise_for_status()
+        sim_response = response.json()
+        for key in sim_response:
+            assert key in list(ecoli_simulation.model_fields)
+
+
+@pytest.mark.asyncio
+async def test_get_simulation(database_service: DatabaseService) -> None:
+    i = -1
+    name_i = "pytest_fixture_config"
+    config_i = SimulationConfig(
+        experiment_id=name_i,
+        sim_data_path="/pytest/kb/simData.cPickle",
+        suffix_time=False,
+        parca_options={"cpus": 3},
+        generations=randint(1, 1000),  # noqa: S311
+        max_duration=10800,
+        initial_global_time=0,
+        time_step=1,
+        single_daughters=True,
+        emitter="parquet",
+        emitter_arg={"outdir": "/pytest/api_outputs"},
+    )
+    last_updated_i = str(datetime.datetime.now())
+    job_name_i = get_slurmjob_name(experiment_id=name_i)
+    job_id_i = randint(10000, 1000000)  # noqa: S311
+    sim_i = await database_service.insert_ecoli_simulation(
+        name=name_i,
+        config=config_i,
+        last_updated=last_updated_i,
+        job_name=job_name_i,
+        job_id=job_id_i,
+        metadata={"requester": f"{name_i}:{i}", "context": "pytest"},
+    )
+
+    fetched_i = await database_service.get_ecoli_simulation(database_id=sim_i.database_id)
+    assert fetched_i.model_dump() == sim_i.model_dump()
+
+
+@pytest.mark.asyncio
+async def test_get_simulation_status(
+    base_router: str,
+    experiment_request: ExperimentRequest,
+    database_service: DatabaseService,
+    simulation_service_slurm: SimulationServiceHpc,
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        sim_response = await client.post(f"{base_router}/simulations", json=experiment_request.model_dump())
+        sim_response.raise_for_status()
+        sim_response = sim_response.json()
+
+        await asyncio.sleep(3)
+
+        status_response = await client.get(f"{base_router}/simulations/{sim_response['database_id']}/status")
+        status_response.raise_for_status()
+        status_response = status_response.json()
+        assert list(status_response.keys()) == ["id", "status"]
+
+
+@pytest.mark.asyncio
+async def test_get_simulation_log(
+    base_router: str,
+    experiment_request: ExperimentRequest,
+    database_service: DatabaseService,
+    simulation_service_slurm: SimulationServiceHpc,
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        sim_response = await client.post(f"{base_router}/simulations", json=experiment_request.model_dump())
+        sim_response.raise_for_status()
+        sim_response = sim_response.json()
+
+        await asyncio.sleep(3)
+
+        status_response = await client.post(f"{base_router}/simulations/{sim_response['database_id']}/log")
+        status_response.raise_for_status()
+
+        assert isinstance(status_response.text, str)
+
+
+@pytest.mark.asyncio
+async def test_get_metadata() -> None:
+    pass
+
+
+@pytest.mark.asyncio
+async def test_get_state_data() -> None:
+    pass
+
+
+@pytest.mark.asyncio
+async def test_run_fetch_simulation(
+    base_router: str,
+    experiment_request: ExperimentRequest,
+    database_service: DatabaseService,
+    simulation_service_slurm: SimulationServiceHpc,
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(f"{base_router}/simulations", json=experiment_request.model_dump())
+        response.raise_for_status()
+        sim_response = response.json()
+        db_id = sim_response["database_id"]
+
+        fetch_response = await client.get(f"{base_router}/simulations/{db_id}")
+        fetch_response.raise_for_status()
+        assert fetch_response.json() == sim_response
+
+
+@pytest.mark.asyncio
+async def test_fetch_simulation(
+    base_router: str,
+    experiment_request: ExperimentRequest,
+    database_service: DatabaseService,
+    simulation_service_slurm: SimulationServiceHpc,
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(f"{base_router}/simulations", json=experiment_request.model_dump())
+        response.raise_for_status()
+        sim_response = response.json()
+        db_id = sim_response["database_id"]
+
+        fetch_response = await client.get(f"{base_router}/simulations/{db_id}")
+        fetch_response.raise_for_status()
+        assert fetch_response.json() == sim_response
