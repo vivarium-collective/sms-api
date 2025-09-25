@@ -477,8 +477,8 @@ class SimulationServiceHpc(SimulationService):
             base_path = Path(env.slurm_base_path)
             remote_workspace_dir = base_path / "workspace"
             vecoli_dir = remote_workspace_dir / "vEcoli"
-            config_dir = vecoli_dir / "configs"
-            conf = config.model_dump_json() or "{}"
+            # config_dir = vecoli_dir / "configs"
+            # conf = config.model_dump_json() or "{}"
 
             return dedent(f"""\
                 #!/bin/bash
@@ -545,10 +545,10 @@ class SimulationServiceHpc(SimulationService):
                 with open(local_submit_file, "w") as f:
                     f.write(script_content)
 
-                base_path = Path(env.slurm_base_path)
-                remote_workspace_dir = base_path / "workspace"
-                vecoli_dir = remote_workspace_dir / "vEcoli"
-                config_dir = vecoli_dir / "configs"
+                # base_path = Path(env.slurm_base_path)
+                # remote_workspace_dir = base_path / "workspace"
+                # vecoli_dir = remote_workspace_dir / "vEcoli"
+                # config_dir = vecoli_dir / "configs"
 
                 slurm_jobid = await slurm_service.submit_job(
                     local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file

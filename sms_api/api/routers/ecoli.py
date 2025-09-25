@@ -149,7 +149,6 @@ async def get_analysis_log(id: int = fastapi.Path(..., description="Database ID 
         analysis_record = await db_service.get_analysis(database_id=id)
         slurm_logfile = Path(ENV.slurm_log_base_path) / f"{analysis_record.job_name}.out"
         ssh_service = get_ssh_service()
-        slurm_user = ENV.slurm_submit_user
         ret, stdout, stdin = await ssh_service.run_command(f"cat {slurm_logfile!s}")
         return stdout
     except Exception as e:
@@ -342,7 +341,6 @@ async def run_simulation(
 
     try:
         simulator: SimulatorVersion = get_simulator()
-        last_update = timestamp()
         slurmjob_name, slurmjob_id = await sim_service.submit_experiment_job(
             config=config,
             simulation_name=request.simulation_name,
@@ -424,10 +422,7 @@ async def get_simlog(id: int = fastapi.Path(...)) -> str:
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
-        experiment = await db_service.get_ecoli_simulation(database_id=id)
         ssh_service = get_ssh_service()
-        slurm_user = ENV.slurm_submit_user
-
         return await get_slurm_log(db_service, ssh_service, id)
     except Exception as e:
         logger.exception(
@@ -450,18 +445,9 @@ async def get_simulation_log(id: int = fastapi.Path(...)) -> fastapi.Response:
         raise HTTPException(status_code=404, detail="Database not found")
     ssh_service = get_ssh_service()
     try:
-        experiment = await db_service.get_ecoli_simulation(database_id=id)
-        remote_log_path = f"{ENV.slurm_log_base_path!s}/{experiment.job_name}"
-        # returncode, stdout, stderr = await ssh_service.run_command(f"cat {remote_log_path}.out")
         stdout = await get_slurm_log(db_service, ssh_service, id)
-
-        # Split at the first occurrence of 'N E X T F L O W'
         _, _, after = stdout.partition("N E X T F L O W")
-
         result = "N E X T F L O W" + after
-
-        # Print with original formatting preserved
-        # return result
         return fastapi.Response(content=result, media_type="text/plain")
     except Exception as e:
         logger.exception("""Error getting simulation log.""")

@@ -13,10 +13,7 @@ Then, add that func to the list within the examples dict comprehension below!
 
 from sms_api.common.utils import unique_id
 from sms_api.data.models import ExperimentAnalysisRequest
-from sms_api.simulation.models import ExperimentRequest, SimulationConfiguration
-
-DEFAULT_SIMULATION_CONFIG = SimulationConfiguration.from_base()
-
+from sms_api.simulation.models import ExperimentRequest
 
 base_analysis = ExperimentAnalysisRequest(
     experiment_id="sms_multigeneration",

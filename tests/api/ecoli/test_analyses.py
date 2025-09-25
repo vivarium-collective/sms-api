@@ -1,5 +1,4 @@
 import datetime
-from pathlib import Path
 from textwrap import dedent
 
 import pytest
@@ -43,7 +42,6 @@ async def test_get_analysis(
 
 @pytest.mark.asyncio
 async def test_get_outputs(base_router: str, database_service: DatabaseService) -> None:
-    request = ExperimentAnalysisRequest(analysis_name=unique_id(scope="pytest"), experiment_id="sms_multigeneration")
     exp_name = unique_id(scope="pytest_analysis")
     analysis = await database_service.insert_analysis(
         name=exp_name,
@@ -57,7 +55,6 @@ async def test_get_outputs(base_router: str, database_service: DatabaseService) 
     ssh = get_ssh_service(env)
     analysis_data = await database_service.get_analysis(database_id=analysis.database_id)
     output_id = analysis_data.name
-    outdir = Path(env.simulation_outdir)
     remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
     ret, stdin, stdout = await ssh.run_command(
         dedent(f"""
