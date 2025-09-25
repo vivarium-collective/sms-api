@@ -7,7 +7,8 @@ from httpx import ASGITransport, AsyncClient
 
 from sms_api.api.main import app
 from sms_api.common.ssh.ssh_service import SSHService
-from sms_api.simulation.database_service import DatabaseService
+from sms_api.config import get_settings
+from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_slurmjob_name
 from sms_api.simulation.models import EcoliSimulationDTO, ExperimentRequest, SimulationConfig
 from sms_api.simulation.simulation_service import SimulationServiceHpc
@@ -15,7 +16,7 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 @pytest.mark.asyncio
 async def test_list_simulations(
-    experiment_request: ExperimentRequest, database_service: DatabaseService, ssh_service: SSHService
+    experiment_request: ExperimentRequest, database_service: DatabaseServiceSQL, ssh_service: SSHService
 ) -> None:
     n = 3
     inserted_sims = []
@@ -51,12 +52,13 @@ async def test_list_simulations(
     assert len(inserted_sims) == len(all_sims)
 
 
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_run_simulation(
     base_router: str,
     experiment_request: ExperimentRequest,
     ecoli_simulation: EcoliSimulationDTO,
-    database_service: DatabaseService,
+    database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
     ssh_service: SSHService,
 ) -> None:
@@ -70,7 +72,7 @@ async def test_run_simulation(
 
 
 @pytest.mark.asyncio
-async def test_get_simulation(database_service: DatabaseService) -> None:
+async def test_get_simulation(database_service: DatabaseServiceSQL) -> None:
     i = -1
     name_i = "pytest_fixture_config"
     config_i = SimulationConfig(
@@ -102,11 +104,12 @@ async def test_get_simulation(database_service: DatabaseService) -> None:
     assert fetched_i.model_dump() == sim_i.model_dump()
 
 
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_get_simulation_status(
     base_router: str,
     experiment_request: ExperimentRequest,
-    database_service: DatabaseService,
+    database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
     ssh_service: SSHService,
 ) -> None:
@@ -124,11 +127,12 @@ async def test_get_simulation_status(
         assert list(status_response.keys()) == ["id", "status"]
 
 
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_get_simulation_log(
     base_router: str,
     experiment_request: ExperimentRequest,
-    database_service: DatabaseService,
+    database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
     ssh_service: SSHService,
 ) -> None:
@@ -156,11 +160,12 @@ async def test_get_state_data() -> None:
     pass
 
 
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_run_fetch_simulation(
     base_router: str,
     experiment_request: ExperimentRequest,
-    database_service: DatabaseService,
+    database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
     ssh_service: SSHService,
 ) -> None:
@@ -176,11 +181,12 @@ async def test_run_fetch_simulation(
         assert fetch_response.json() == sim_response
 
 
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_fetch_simulation(
     base_router: str,
     experiment_request: ExperimentRequest,
-    database_service: DatabaseService,
+    database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
     ssh_service: SSHService,
 ) -> None:
