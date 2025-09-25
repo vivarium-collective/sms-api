@@ -81,6 +81,14 @@ class Settings(BaseSettings):
 
     remote_data_basepath: str = ""
     local_data_basepath: str = ""
+    simulation_outdir: str = ""
+    local_simulation_outdir: str = ""
+    vecoli_config_dir: str = ""
+    dev_base_url: str = "http://localhost:8888"
+    prod_base_url: str = "https://sms.cam.uchc.edu"
+
+    def dev_engaged(self) -> bool:
+        return bool(int(self.dev_mode))
 
 
 @lru_cache
