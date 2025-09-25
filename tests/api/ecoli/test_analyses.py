@@ -30,12 +30,13 @@ async def test_get_analysis(
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.post(f"{base_router}/analyses", json=analysis_request.model_dump())
+        analyses_url = f"{base_router}/analyses"
+        response = await client.post(analyses_url, json=analysis_request.model_dump())
         response.raise_for_status()
         analysis_response = response.json()
         db_id = analysis_response["database_id"]
 
-        fetch_response = await client.get(f"/analyses/fetch/{db_id}")
+        fetch_response = await client.get(f"{analyses_url}/{db_id}")
         fetch_response.raise_for_status()
         assert fetch_response.json() == analysis_response
 

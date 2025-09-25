@@ -43,7 +43,7 @@ async def test_list_simulations(experiment_request: ExperimentRequest, database_
             metadata={"requester": f"{name_i}:{i}", "context": "pytest"},
         )
         inserted_sims.append(sim_i.model_dump())
-    all_sims = await database_service.list_simulations()
+    all_sims = await database_service.list_ecoli_simulations()
     assert len(inserted_sims) == n
     assert len(inserted_sims) == len(all_sims)
 

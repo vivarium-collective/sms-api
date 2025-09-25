@@ -19,8 +19,25 @@ def test_load_simulation_config() -> None:
     config = SimulationConfig.from_file(fp=Path("assets/sms_base_simulation_config.json"))
     expected_dump = {
         "experiment_id": "<PLACEHOLDER>",
+        "sim_data_path": "/home/FCAM/svc_vivarium/workspace/kb/simData.cPickle",
         "suffix_time": True,
-        "parca_options": {"cpus": 2},
+        "parca_options": {
+            "cpus": 2,
+            "outdir": "",
+            "operons": True,
+            "ribosome_fitting": True,
+            "rnapoly_fitting": True,
+            "remove_rrna_operons": False,
+            "remove_rrff": False,
+            "stable_rrna": False,
+            "new_genes": "off",
+            "debug_parca": False,
+            "load_intermediate": None,
+            "save_intermediates": False,
+            "intermediates_directory": "",
+            "variable_elongation_transcription": True,
+            "variable_elongation_translation": False,
+        },
         "generations": 1,
         "n_init_sims": 1,
         "max_duration": 10800.0,
@@ -28,7 +45,7 @@ def test_load_simulation_config() -> None:
         "time_step": 1.0,
         "single_daughters": True,
         "emitter": "parquet",
-        "emitter_arg": {"out_dir": "/home/FCAM/svc_vivarium/workspace/api_outputs"},
+        "emitter_arg": {"out_dir": ""},
         "analysis_options": {
             "single": {
                 "mass_fraction_summary": {},
@@ -99,7 +116,7 @@ def test_load_simulation_config() -> None:
         "amp_lysis": False,
         "initial_state_file": "",
         "skip_baseline": False,
-        "daughter_outdir": "/home/FCAM/svc_vivarium/workspace/api_outputs",
+        "daughter_outdir": "",
         "lineage_seed": 0,
         "fail_at_max_duration": False,
         "flow": {

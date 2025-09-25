@@ -11,8 +11,7 @@ from httpx import ASGITransport
 
 from sms_api.api.client import Client
 from sms_api.api.main import app
-from sms_api.api.request_examples import base_simulation
-from sms_api.common.utils import unique_id
+from sms_api.api.request_examples import base_analysis, base_simulation
 from sms_api.config import REPO_ROOT, get_settings
 from sms_api.data.models import ExperimentAnalysisRequest
 
@@ -76,28 +75,7 @@ async def analysis_config_path() -> Path:
 
 @pytest_asyncio.fixture(scope="session")
 async def analysis_request() -> ExperimentAnalysisRequest:
-    return ExperimentAnalysisRequest(**{  # type: ignore[arg-type]
-        "experiment_id": "sms_multigeneration",
-        "analysis_name": f"sms_pytest_{unique_id()}",
-        "single": {},
-        "multidaughter": {},
-        "multigeneration": {
-            "replication": {},
-            "ribosome_components": {},
-            "ribosome_crowding": {},
-            "ribosome_production": {},
-            "ribosome_usage": {},
-            "rna_decay_03_high": {},
-        },
-        "multiseed": {"protein_counts_validation": {}, "ribosome_spacing": {}, "subgenerational_expression_table": {}},
-        "multivariant": {
-            "average_monomer_counts": {},
-            "cell_mass": {},
-            "doubling_time_hist": {"skip_n_gens": 1},
-            "doubling_time_line": {},
-        },
-        "multiexperiment": {},
-    })
+    return base_analysis
 
 
 @pytest_asyncio.fixture(scope="session")

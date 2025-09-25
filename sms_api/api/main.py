@@ -62,7 +62,7 @@ APP_ROUTERS = [
     "biofactory",
     "inference",
     "variants",
-    # "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
+    "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
 ]
 ENV = get_settings()
 assets_dir = Path(ENV.assets_dir)

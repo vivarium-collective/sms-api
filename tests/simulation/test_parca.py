@@ -67,7 +67,7 @@ async def test_parca(
         slurm_job_parca = await simulation_service_slurm.get_slurm_job_status(slurmjobid=job_id)
         if slurm_job_parca is not None and slurm_job_parca.is_done():
             break
-        await asyncio.sleep(5)
+        await asyncio.sleep(7)
 
     assert slurm_job_parca is not None
     assert slurm_job_parca.is_done()
