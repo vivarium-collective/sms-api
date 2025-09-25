@@ -155,9 +155,3 @@ def get_experiment_dir(experiment_id: str, env: Settings) -> Path:
 
 def create_experiment_id(config_id: str, simulator_hash: str) -> str:
     return f"{config_id}-{simulator_hash}-{str(uuid.uuid4()).split('-')[-1]}"
-
-
-def get_experiment_id_from_tag(experiment_tag: str) -> str:
-    parts = experiment_tag.split("-")
-    parts.remove(parts[-1])
-    return "-".join(parts)

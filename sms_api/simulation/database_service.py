@@ -19,7 +19,6 @@ from sms_api.simulation.models import (
     ParcaDataset,
     ParcaDatasetRequest,
     SimulationConfig,
-    SimulationConfiguration,
     SimulatorVersion,
     WorkerEvent,
 )
@@ -31,7 +30,6 @@ from sms_api.simulation.tables_orm import (
     ORMHpcRun,
     ORMParcaDataset,
     ORMSimulation,
-    ORMSimulationConfig,
     ORMSimulator,
     ORMWorkerEvent,
 )
@@ -50,51 +48,37 @@ class DatabaseService(ABC):
         job_id: int,
         metadata: dict[str, Any],
     ) -> EcoliSimulationDTO:
+        """Used by the /ecoli router"""
         pass
 
     @abstractmethod
     async def get_ecoli_simulation(self, database_id: int) -> EcoliSimulationDTO:
+        """Used by the /ecoli router"""
         pass
 
     @abstractmethod
     async def list_ecoli_simulations(self) -> list[EcoliSimulationDTO]:
+        """Used by the /ecoli router"""
         pass
 
     @abstractmethod
     async def insert_analysis(
         self, name: str, config: AnalysisConfig, last_updated: str, job_name: str, job_id: int
     ) -> ExperimentAnalysisDTO:
+        """Used by the /ecoli router"""
         pass
 
     @abstractmethod
     async def get_analysis(self, database_id: int) -> ExperimentAnalysisDTO:
+        """Used by the /ecoli router"""
         pass
 
     @abstractmethod
     async def list_analyses(self) -> list[ExperimentAnalysisDTO]:
+        """Used by the /ecoli router"""
         pass
 
     ####################################
-
-    @abstractmethod
-    async def get_simulation_config(self, config_id: str) -> SimulationConfiguration:
-        pass
-
-    @abstractmethod
-    async def insert_simulation_config(
-        self, config_id: str, config: SimulationConfiguration
-    ) -> SimulationConfiguration:
-        pass
-
-    @abstractmethod
-    async def delete_simulation_config(self, config_id: str) -> bool:
-        pass
-
-    @abstractmethod
-    async def list_simulation_configs(self) -> list[SimulationConfiguration]:
-        pass
-
-    ################################
 
     @abstractmethod
     async def insert_worker_event(self, worker_event: WorkerEvent, hpcrun_id: int) -> WorkerEvent:
@@ -254,12 +238,6 @@ class DatabaseServiceSQL(DatabaseService):
 
         return orm_hpc_job
 
-    async def _get_orm_simulation_config(self, session: AsyncSession, config_id: str) -> ORMSimulationConfig | None:
-        stmt1 = select(ORMSimulationConfig).where(ORMSimulationConfig.id == config_id).limit(1)
-        result1: Result[tuple[ORMSimulationConfig]] = await session.execute(stmt1)
-        orm_sim_config: ORMSimulationConfig | None = result1.scalars().one_or_none()
-        return orm_sim_config
-
     async def _get_orm_analysis(self, session: AsyncSession, database_id: int) -> ORMAnalysis | None:
         """Used by the /ecoli router"""
         stmt1 = select(ORMAnalysis).where(ORMAnalysis.id == database_id).limit(1)
@@ -358,48 +336,6 @@ class DatabaseServiceSQL(DatabaseService):
             return versions
 
     ##################################
-
-    @override
-    async def get_simulation_config(self, config_id: str) -> SimulationConfiguration:
-        async with self.async_sessionmaker() as session, session.begin():
-            orm_sim_config = await self._get_orm_simulation_config(session, config_id=config_id)
-            if orm_sim_config is None:
-                raise RuntimeError(f"No simulation config with id {config_id} found")
-            return orm_sim_config.to_dto()
-
-    @override
-    async def insert_simulation_config(
-        self, config_id: str, config: SimulationConfiguration
-    ) -> SimulationConfiguration:
-        async with self.async_sessionmaker() as session, session.begin():
-            orm_sim_config = ORMSimulationConfig(
-                id=config_id,
-                data=config.model_dump() if isinstance(config, SimulationConfiguration) else config,
-            )
-            session.add(orm_sim_config)
-            await session.flush()
-            return orm_sim_config.to_dto()
-
-    @override
-    async def delete_simulation_config(self, config_id: str) -> bool:
-        async with self.async_sessionmaker() as session, session.begin():
-            simconfig: ORMSimulationConfig | None = await self._get_orm_simulation_config(session, config_id=config_id)
-            if simconfig is None:
-                raise Exception(f"Simulation Config with id: {config_id} not found in the database")
-            await session.delete(simconfig)
-            return True
-
-    @override
-    async def list_simulation_configs(self) -> list[SimulationConfiguration]:
-        async with self.async_sessionmaker() as session:
-            stmt = select(ORMSimulationConfig)
-            result: Result[tuple[ORMSimulationConfig]] = await session.execute(stmt)
-            orm_configs = result.scalars().all()
-
-            config_versions: list[SimulationConfiguration] = []
-            for orm_config in orm_configs:
-                config_versions.append(orm_config.to_dto())
-            return config_versions
 
     @override
     async def insert_simulator(self, git_commit_hash: str, git_repo_url: str, git_branch: str) -> SimulatorVersion:

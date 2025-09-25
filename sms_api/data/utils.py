@@ -34,7 +34,7 @@ def get_variant_data_dirpath(
     remote: bool = True,
 ) -> Path:
     settings: Settings = get_settings()
-    base_datapath = Path(settings.remote_data_basepath if remote else settings.local_data_basepath)
+    base_datapath = Path(settings.simulation_outdir)
     return (
         base_datapath
         / experiment_id

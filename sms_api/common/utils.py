@@ -1,3 +1,4 @@
+import datetime
 import secrets
 import time
 
@@ -22,3 +23,7 @@ def unique_id(data_id: str | None = None, scope: str | None = None) -> str:
     unique = f"{data_id}-" if data_id is not None else f"{scope or 'smsapi'}-"
     unique += f"{tag}_{timestamp}"
     return unique
+
+
+def timestamp() -> str:
+    return str(datetime.datetime.now())

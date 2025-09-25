@@ -62,7 +62,6 @@ APP_ROUTERS = [
     "biofactory",
     "inference",
     "variants",
-    # "wcm",  # first iteration of complete nextflow-based requests
     # "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
 ]
 ENV = get_settings()
@@ -72,9 +71,7 @@ UI_NAMES = [
     "analyze",
     "antibiotic",
     "biofactory",
-    "configure",
     "experiment",
-    # "wcm",
     # "inference",
     # "single_cell",
 ]
@@ -161,8 +158,7 @@ async def home(request: Request) -> templating._TemplateResponse:
         ("Analyze", "Run Simulation Analyses"),
         ("Antibiotic", "Explore new possibilities"),
         ("Biofactory", "Create new strains"),
-        ("Configure", "Customize and configure experiments"),
-        ("Experiment", "Run a Simulation Experiment"),
+        ("Experiment", "Design and run simulation experiments"),
     ]
     return templates.TemplateResponse(
         request, "home.html", {"request": request, "app_names": app_info, "marimo_path_prefix": "/ws"}

@@ -16,7 +16,6 @@ from sms_api.simulation.models import (
     JobStatus,
     JobType,
     SimulationConfig,
-    SimulationConfiguration,
     SimulatorVersion,
     WorkerEvent,
 )
@@ -183,29 +182,6 @@ class ORMWorkerEvent(Base):
             time=event_time,
             hpcrun_id=hpcrun_id,
         )
-
-
-SimulationConfigMappingType = dict[
-    str,
-    str
-    | bool
-    | int
-    | float
-    | None
-    | list[str]
-    | list[list[str]]
-    | dict[str, str | bool | int | float | None | list[str] | list[list[str]]],
-]
-
-
-class ORMSimulationConfig(Base):
-    __tablename__ = "simulation_config"
-
-    id: Mapped[str] = mapped_column(primary_key=True)
-    data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-
-    def to_dto(self) -> SimulationConfiguration:
-        return SimulationConfiguration(**self.data)
 
 
 class ORMAnalysis(Base):

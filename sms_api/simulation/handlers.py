@@ -4,12 +4,11 @@ import string
 
 from fastapi import BackgroundTasks, HTTPException
 
-from sms_api.common.gateway.models import RouterConfig
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.hpc_utils import get_correlation_id, get_experiment_id
+from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import (
-    EcoliExperiment,
+    EcoliSimulation,
     EcoliSimulationRequest,
     JobType,
     ParcaDataset,
@@ -190,10 +189,9 @@ async def run_simulation(
     parca_dataset_id: int,
     database_service: DatabaseService,
     simulation_service_slurm: SimulationService,
-    router_config: RouterConfig,
     variant_config: dict[str, dict[str, int | float | str]] | None = None,
-    background_tasks: BackgroundTasks | None = None,
-) -> EcoliExperiment:
+) -> EcoliSimulation:
+    # insert simulation
     simulation_request = EcoliSimulationRequest(
         simulator=simulator,
         parca_dataset_id=parca_dataset_id,
@@ -201,25 +199,17 @@ async def run_simulation(
     )
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
-    async def dispatch_job() -> None:
-        random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311 doesn't need to be secure
-        correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string_7_hex)
-        sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
-            ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
-        )
-        _hpcrun = await database_service.insert_hpcrun(
-            slurmjobid=sim_slurmjobid,
-            job_type=JobType.SIMULATION,
-            ref_id=simulation.database_id,
-            correlation_id=correlation_id,
-        )
-
-    if background_tasks:
-        background_tasks.add_task(dispatch_job)
-    else:
-        await dispatch_job()
-    experiment_id = get_experiment_id(
-        router_config=router_config, simulation=simulation, sim_request=simulation_request
+    # dispatch and insert hpc job
+    random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311 doesn't need to be secure
+    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string_7_hex)
+    sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
+        ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
+    )
+    _ = await database_service.insert_hpcrun(
+        slurmjobid=sim_slurmjobid,
+        job_type=JobType.SIMULATION,
+        ref_id=simulation.database_id,
+        correlation_id=correlation_id,
     )
 
-    return EcoliExperiment(experiment_id=experiment_id, simulation=simulation)
+    return simulation

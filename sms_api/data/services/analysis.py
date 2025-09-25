@@ -72,7 +72,7 @@ def _slurm_script(
         #SBATCH --job-name={slurm_job_name}
         #SBATCH --time=30:00
         #SBATCH --cpus-per-task {MAX_ANALYSIS_CPUS}
-        #SBATCH --mem=8GB
+        #SBATCH --mem=10GB
         #SBATCH --partition={env.slurm_partition}
         #SBATCH --qos={env.slurm_qos}
         #SBATCH --output={slurm_log_file!s}

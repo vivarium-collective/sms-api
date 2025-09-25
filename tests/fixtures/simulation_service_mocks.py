@@ -6,13 +6,10 @@ from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import Settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
-    EcoliExperimentRequestDTO,
     EcoliSimulation,
-    EcoliWorkflowSimulation,
     ParcaDataset,
     ParcaDatasetRequest,
     SimulationConfig,
-    SimulationConfiguration,
     SimulatorVersion,
 )
 from sms_api.simulation.simulation_service import SimulationService
@@ -45,25 +42,6 @@ class ConcreteSimulationService(SimulationService):
     @override
     async def submit_ecoli_simulation_job(
         self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
-    ) -> int:
-        raise NotImplementedError
-
-    @override
-    async def submit_vecoli_job(
-        self,
-        ecoli_simulation: EcoliWorkflowSimulation,
-        experiment_id: str,
-        # database_service: DatabaseService
-    ) -> int:
-        raise NotImplementedError
-
-    @override
-    async def submit_vecoli_simulation_job(
-        self,
-        request: EcoliExperimentRequestDTO,
-        simulator: SimulatorVersion,
-        experiment_id: str,
-        config: SimulationConfiguration | None = None,
     ) -> int:
         raise NotImplementedError
 

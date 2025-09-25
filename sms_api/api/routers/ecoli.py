@@ -3,27 +3,22 @@
     simulation analysis jobs/workflows
 """
 
-import datetime
-import json
 import logging
 import mimetypes
 import tempfile
-from collections.abc import Generator
-from io import BytesIO
 from pathlib import Path
 from textwrap import dedent
 from typing import Union
-from zipfile import ZIP_DEFLATED, ZipFile
 
 import fastapi
 from fastapi import BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
-from sms_api.api.request_examples import examples
+from sms_api.api import request_examples
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
-from sms_api.common.gateway.models import ServerMode
 from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
+from sms_api.common.utils import timestamp
 from sms_api.config import get_settings
 from sms_api.data.models import ExperimentAnalysisDTO, ExperimentAnalysisRequest
 from sms_api.data.services import analysis
@@ -35,7 +30,6 @@ from sms_api.simulation.models import (
     ExperimentMetadata,
     ExperimentRequest,
     JobStatus,
-    SimulationConfiguration,
     SimulationRun,
     SimulatorVersion,
 )
@@ -47,54 +41,6 @@ config = router_config(prefix="ecoli")
 
 
 ###### -- utils -- ######
-
-
-def DBService() -> DatabaseService:
-    db_service = get_database_service()
-    if db_service is None:
-        logger.error("Simulation database service is not initialized")
-        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
-    return db_service
-
-
-def get_server_url(dev: bool = True) -> ServerMode:
-    return ServerMode.DEV if dev else ServerMode.PROD
-
-
-def get_experiment_id_from_tag(experiment_tag: str) -> str:
-    parts = experiment_tag.split("-")
-    parts.remove(parts[-1])
-    return "-".join(parts)
-
-
-def generate_zip(file_paths: list[tuple[Path, str]]) -> Generator[bytes, None, None]:
-    """
-    Generator function to stream a zip file dynamically.
-    """
-    # Use BytesIO as an in-memory file-like object for chunks
-    buffer = BytesIO()
-    with ZipFile(buffer, "w", ZIP_DEFLATED) as zip_file:
-        for file_path, arcname in file_paths:
-            # arcname is the filename inside the zip (can handle non-unique names)
-            zip_file.write(file_path, arcname=arcname)
-    buffer.seek(0)
-    yield from buffer
-
-
-async def read_config_file(config_file: UploadFile) -> SimulationConfiguration:
-    file_contents = await config_file.read()
-    config = SimulationConfiguration(**json.loads(file_contents))
-    for attrname in list(SimulationConfiguration.model_fields.keys()):
-        attr = getattr(config, attrname)
-        if attr is None:
-            delattr(config, attrname)
-        if isinstance(attr, (list, dict)) and not len(attr):
-            delattr(config, attrname)
-    return config
-
-
-def timestamp() -> str:
-    return str(datetime.datetime.now())
 
 
 async def get_slurm_log(db_service: DatabaseService, ssh_service: SSHService, db_id: int) -> str:
@@ -115,7 +61,7 @@ async def get_slurm_log(db_service: DatabaseService, ssh_service: SSHService, db
     summary="Run an analysis workflow (like multigeneration)",
     dependencies=[Depends(get_database_service)],
 )
-async def run_analysis(request: ExperimentAnalysisRequest = examples["core_analysis_request"]) -> ExperimentAnalysisDTO:  # type: ignore[assignment]
+async def run_analysis(request: ExperimentAnalysisRequest = request_examples.ptools_analysis) -> ExperimentAnalysisDTO:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
@@ -377,7 +323,7 @@ async def list_analyses() -> list[ExperimentAnalysisDTO]:
     summary="Launches a nextflow-powered vEcoli simulation workflow",
 )
 async def run_simulation(
-    request: ExperimentRequest = examples["core_experiment_request"],  # type: ignore[assignment]
+    request: ExperimentRequest = request_examples.base_simulation,
     metadata: ExperimentMetadata | None = None,
 ) -> EcoliSimulationDTO:
     # validate services

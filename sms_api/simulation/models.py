@@ -353,14 +353,6 @@ class SimulationConfig(BaseModel):
     def from_base(cls) -> "SimulationConfig":
         return cls.from_file(fp=BASE_SIMULATION_CONFIG_PATH)
 
-    # @model_validator(mode="after")
-    # def set_outdirs(self) -> "SimulationConfig":
-    #     env = get_settings()
-    #     self.emitter_arg = {"out_dir": env.simulation_outdir}
-    #     self.daughter_outdir = env.simulation_outdir
-    #     self.parca_options = {"cpus": 2}
-    #     return self
-
 
 class SimulationConfiguration(SimulationConfig):
     pass
@@ -388,24 +380,8 @@ class ExperimentMetadata(RootModel):  # type: ignore[type-arg]
     root: dict[str, str] = Field(default_factory=dict)
 
 
-class EcoliExperimentRequestDTO(BaseModel):
-    config_id: str
-    overrides: ConfigOverrides | None = None
-    # parca_dataset_id: int | None = None  TODO: we should pin this down and change only administratively
-    # simulator: SimulatorVersion  TODO: we should pin this down and change only administratively
-
-
-class EcoliExperimentDTO(BaseModel):
-    experiment_id: str
-    request: EcoliExperimentRequestDTO
-    last_updated: str = Field(default_factory=lambda: str(datetime.datetime.now()))
-    metadata: Mapping[str, str] = Field(default_factory=dict)
-    experiment_tag: str | None = None
-    # simulation: EcoliSimulation | EcoliWorkflowSimulation | AntibioticSimulation
-
-
 class ExperimentRequest(BaseModel):
-    """Used by the simulation endpoint."""
+    """Used by the /simulation endpoint."""
 
     experiment_id: str
     simulation_name: str = f"sim_{unique_id()!s}"
@@ -480,7 +456,7 @@ class ExperimentRequest(BaseModel):
 
 
 class EcoliSimulationDTO(BaseModel):
-    """Used by the simulation endpoint"""
+    """Used by the /simulation endpoint"""
 
     database_id: int
     name: str

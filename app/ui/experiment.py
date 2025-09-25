@@ -18,7 +18,10 @@ def _(mo):
     getSim, setSim = mo.state(None)
     getLog, setLog = mo.state(None)
     getSimId, setSimId = mo.state(None)
-    getStatus, setStatus = mo.state(None)
+    getStatus, setStatus = mo.state({"id": None, "status": "waiting"})
+
+    getAnalysis, setAnalysis = mo.state(None)
+    getAnalysisStatus, setAnalysisStatus = mo.state(None)
     return (
         getLog,
         getSim,
@@ -146,7 +149,7 @@ def _(getLog, getStatus, mo):
     status_panel = mo.ui.text_area(value=statuss["status"] or "", label="Simulation Status", disabled=True).callout(
         kind="success" if logg is not None else "info"
     )
-    return log_panel, logg, status_panel
+    return log_panel, logg, status_panel, statuss
 
 
 @app.cell
@@ -183,6 +186,60 @@ def _(mo):
 
 
 @app.cell
+def _(mo):
+    def render_analysis_config():
+        analysis_scopes = ["single", "multigeneration", "multiseed"]
+        ptools_modnames = [f"ptools_{val}" for val in ["rxns", "rna", "proteins"]]
+
+        analysis_conf = {
+            "experiment_id": mo.ui.text(value="sms_multigeneration"),
+            "analysis_name": mo.ui.text(value="ptools_test_2"),
+        }
+        for scope in analysis_scopes:
+            analysis_conf[scope] = mo.ui.dictionary(
+                {
+                    modname: mo.ui.dictionary({"n_tp": mo.ui.number(value=8)}, label=f"{modname} parameters")
+                    for modname in ptools_modnames
+                },
+                label=f"{scope} anaylsis config",
+            )
+        return mo.ui.dictionary(analysis_conf, label="Analysis Configuration")
+
+    analysis_config = render_analysis_config()
+    analysis_config
+    return (analysis_config,)
+
+
+@app.cell
+def _(mo):
+    interaction_mode_dd = mo.ui.dropdown(
+        label="Interaction Mode: ", options=["Simulation", "Analysis"], value="Analysis"
+    )
+    interaction_mode_dd
+    return (interaction_mode_dd,)
+
+
+@app.cell
+def _(interaction_mode_dd):
+    interaction_mode_dd.value
+    return
+
+
+@app.cell
+def _(analysis_config, interaction_mode_dd, mo, simconfig):
+    def onchange():
+        raise ValueError("Cannot change")
+
+    mo.ui.tabs(
+        {"Simulation": simconfig, "Analysis": analysis_config},
+        label="Choose Simulation Type",
+        value=interaction_mode_dd.value,
+        on_change=lambda _: onchange(),
+    )
+    return
+
+
+@app.cell
 def _(simconfig):
     def collect_config():
         vals = {}
@@ -202,8 +259,8 @@ def _(simconfig):
 @app.cell
 def _(getSim):
     expp = getSim()
-    print(expp)
-    return
+    print(expp) if expp is not None else print()
+    return (expp,)
 
 
 @app.cell
@@ -231,8 +288,39 @@ def _(log_panel):
 
 
 @app.cell
+def _(expp, logg, mo, statuss):
+    md = None
+    if logg is not None:
+        md = mo.md(f"""
+            **Name**: ```{expp.get("name")}```
+
+            **Simulation ID**: ```{statuss.get("id")}```
+
+            **Status**: ```{statuss.get("status")}```
+
+            **Log**:
+
+            {logg}
+        """)
+    md
+    return
+
+
+@app.cell
+def _(logg):
+    logg
+    return
+
+
+@app.cell
 def _(logg, mo):
-    mo.md(logg)
+    mo.ui.text_area(value=logg or "", label="Simulation Log", disabled=True).batch()
+    return
+
+
+@app.cell
+def _(logg):
+    print(logg) if logg is not None else print()
     return
 
 

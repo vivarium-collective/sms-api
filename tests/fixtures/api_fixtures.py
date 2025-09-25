@@ -11,10 +11,10 @@ from httpx import ASGITransport
 
 from sms_api.api.client import Client
 from sms_api.api.main import app
-from sms_api.api.request_examples import examples
+from sms_api.api.request_examples import base_simulation
 from sms_api.common.utils import unique_id
 from sms_api.config import REPO_ROOT, get_settings
-from sms_api.data.models import AnalysisRequest
+from sms_api.data.models import ExperimentAnalysisRequest
 
 # from sms_api.data.biocyc_service import BiocycService
 from sms_api.latest_commit import write_latest_commit
@@ -75,8 +75,8 @@ async def analysis_config_path() -> Path:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def analysis_request() -> AnalysisRequest:
-    return AnalysisRequest(**{  # type: ignore[arg-type]
+async def analysis_request() -> ExperimentAnalysisRequest:
+    return ExperimentAnalysisRequest(**{  # type: ignore[arg-type]
         "experiment_id": "sms_multigeneration",
         "analysis_name": f"sms_pytest_{unique_id()}",
         "single": {},
@@ -102,7 +102,7 @@ async def analysis_request() -> AnalysisRequest:
 
 @pytest_asyncio.fixture(scope="session")
 async def experiment_request() -> ExperimentRequest:
-    return examples["core_experiment_request"]  # type: ignore[return-value]
+    return base_simulation
 
 
 @pytest_asyncio.fixture(scope="session")
