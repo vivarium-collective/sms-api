@@ -1,6 +1,6 @@
 [project]
 name = "sms_api"
-version = "0.2.12-dev"
+version = "0.2.21-dev"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
 requires-python = ">=3.12,<4.0"
@@ -38,6 +38,7 @@ dependencies = [
     "orjson>=3.11.1",
     "pandas-stubs>=2.3.0.250703",
     "xmltodict>=0.14.2",
+    "polars>=1.33.1",
 ]
 
 [project.urls]
@@ -55,12 +56,12 @@ dev = [
     "types-requests>=2.32.0.20250602,<3",
     "types-pyyaml>=6.0.12.20250516,<7",
     "pytest-asyncio>=1.0.0,<2",
-    "testcontainers[nats]>=4.10.0,<5",
     "types-tqdm>=4.67.0.20250516,<5",
     "openapi-python-client>=0.25.2,<0.26",
     "types-xmltodict>=0.14.0.20241009",
     "debugpy>=1.8.16",
     "ipdb>=0.13.13",
+    "testcontainers[nats]>=4.13.0",
 ]
 docs = [
     "mkdocs>=1.4.2,<2",
@@ -98,7 +99,7 @@ build-backend = "hatchling.build"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*"]
+exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^libsms/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -149,7 +150,8 @@ select = [
 ignore = [
     # "DEP001",
 #    # A001 Variable `sum` is shadowing a Python builtin
-#    "A001",
+     "A001",
+     "A002",
 #    # B008 Do not perform function call `Body` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
 #    "B008",
 #    # B026 Star-arg unpacking after a keyword argument is strongly discouraged
@@ -171,7 +173,7 @@ ignore = [
 #    # E731 Do not assign a `lambda` expression, use a `def`
 #    "E731",
 #    # F841 Local variable `keys` is assigned to but never used
-#    "F841",
+     "F841",
 #    # PGH003 Use specific rule codes when ignoring type issues
 #    "PGH003",
 #    # RUF009 Do not perform function call `Field` in dataclass defaults
@@ -217,7 +219,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*"]
+exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "libsms/*"]
 
 [tool.ruff.format]
 preview = true

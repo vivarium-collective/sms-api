@@ -22,7 +22,7 @@
       <div
         class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
       >
-        {% for app_name in app_names %}
+          {% for app_name, description in app_names %}
         <a
           href="{{ marimo_path_prefix }}/{{ app_name }}"
           class="block"
@@ -37,7 +37,7 @@
               {{ app_name }}
             </h3>
             <p class="text-gray-600 dark:text-gray-400 mt-2">
-              Click to open application
+              {{ description }}
             </p>
           </div>
         </a>

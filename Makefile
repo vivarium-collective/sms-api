@@ -28,6 +28,9 @@ clean:
 	@rm -rf .mypy_cache
 	@rm -rf .ruff_cache
 	@find . -name '__pycache__' -exec rm -r {} + -o -name '*.pyc' -delete
+	@uv cache clean
+	@rm -r uv.lock
+	@uv lock --no-cache
 
 .PHONY: test
 test: ## Test the code with pytest
@@ -87,7 +90,7 @@ check-minikube:
 
 .PHONY: spec
 spec:
-	@uv run python ./sms_api/api/openapi_spec.py
+	@uv run --no-cache ./sms_api/api/openapi_spec.py
 
 .PHONY: new
 new:
@@ -243,3 +246,16 @@ compose:
 .DEFAULT_GOAL := help
 
 # pull in nextflow/java in sms api container
+# cd kustomize && kubectl kustomize overlays/sms-api-rke | kubectl apply -f -
+
+.PHONY: api_client
+api_client:
+	@make spec; uv run --no-cache --refresh openapi-python-client generate \
+		--path ./sms_api/api/spec/openapi_3_1_0_generated.yaml \
+		--config ./client-generator-config.yml \
+		--overwrite \
+		--output-path $(dest)
+
+.PHONY: ui
+ui:
+	@uv run --no-cache marimo edit app/ui/$(id).py

@@ -1,19 +1,27 @@
+import logging
 from typing import override
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.ssh.ssh_service import SSHService
+from sms_api.config import Settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
     EcoliSimulation,
-    EcoliWorkflowSimulation,
     ParcaDataset,
     ParcaDatasetRequest,
+    SimulationConfig,
     SimulatorVersion,
 )
 from sms_api.simulation.simulation_service import SimulationService
 
 
 class ConcreteSimulationService(SimulationService):
+    @override
+    async def submit_experiment_job(
+        self, config: SimulationConfig, simulation_name: str, simulator_hash: str, env: Settings, logger: logging.Logger
+    ) -> tuple[str, int]:
+        raise NotImplementedError()
+
     @override
     async def get_latest_commit_hash(
         self,
@@ -34,15 +42,6 @@ class ConcreteSimulationService(SimulationService):
     @override
     async def submit_ecoli_simulation_job(
         self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
-    ) -> int:
-        raise NotImplementedError
-
-    @override
-    async def submit_vecoli_job(
-        self,
-        ecoli_simulation: EcoliWorkflowSimulation,
-        experiment_id: str,
-        # database_service: DatabaseService
     ) -> int:
         raise NotImplementedError
 
