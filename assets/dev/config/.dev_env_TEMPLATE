@@ -17,6 +17,12 @@ MONGODB_COLLECTION_OMEX=BiosimOmex
 MONGODB_COLLECTION_SIMS=BiosimSims
 MONGODB_COLLECTION_COMPARE=BiosimCompare
 
+# NATS settings
+NATS_URL=
+NATS_EMITTER_URL=
+HPC_SIM_CONFIG_FILE=
+NATS_WORKER_EVENT_SUBJECT=
+
 # SQLite settings
 SQLITE_URI=sqlite+aiosqlite:///./sms.db
 
@@ -37,5 +43,32 @@ HPC_SIM_BASE_PATH=
 HPC_SIM_CONFIG_FILE=
 
 
+# -- Data (outputs) retrieval --
+HPC_USER=
+HPC_GROUP=
+DEPLOYMENT=
+
+# -- Application/UI-level --
+APP_DIR=
+ASSETS_DIR=
+NFS_PATH=
+DEV_BASE_URL=http://localhost:8888
+PROD_BASE_URL=
+MARIMO_API_SERVER=http://localhost:8888
+NFS_MOUNT_URL=
+NFS_SERVER=
+DEV_MODE=1
+POLARS_VERBOSE=1
+
+# -- important FS remote paths --
+LOCAL_NFS_DIR=
+REMOTE_DATA_BASEPATH=
+LOCAL_DATA_BASEPATH=
+
+SIMULATION_OUTDIR=  # (remote)
+LOCAL_SIMULATION_OUTDIR= # this should mirror the path structure provided to the HPC $USER, so for example /some/local/location/home/FCAM/svc_vivarium/...etc
+VECOLI_CONFIG_DIR=  # remote, that is
+
+# -- External APIs: biocyc, etc --
 BIOCYC_EMAIL="myemail@website.org"
 BIOCYC_PASSWORD="my-super-secret-password!"
