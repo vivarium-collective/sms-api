@@ -248,16 +248,13 @@ compose:
 # pull in nextflow/java in sms api container
 # cd kustomize && kubectl kustomize overlays/sms-api-rke | kubectl apply -f -
 
-.PHONY: client
-client:
-	@make spec && uv run --no-cache --refresh openapi-python-client generate \
+.PHONY: api_client
+api_client:
+	@make spec; uv run --no-cache --refresh openapi-python-client generate \
 		--path ./sms_api/api/spec/openapi_3_1_0_generated.yaml \
 		--config ./client-generator-config.yml \
-		--overwrite
-
-.PHONY: scratch
-scratch:
-	@uv run marimo edit scratchpads/scratch.py
+		--overwrite \
+		--output-path $(dest)
 
 .PHONY: ui
 ui:
