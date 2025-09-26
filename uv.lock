@@ -2504,7 +2504,7 @@ wheels = [
 
 [[package]]
 name = "sms-api"
-version = "0.2.24.dev0"
+version = "0.2.25.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },

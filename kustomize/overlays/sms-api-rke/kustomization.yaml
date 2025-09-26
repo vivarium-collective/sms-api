@@ -9,7 +9,7 @@ namespace: sms-api-rke
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.2.24-dev
+    newTag: 0.2.25-dev  # 0.2.24-dev
   - name: docker.io/library/mongo
     newTag: 8.0.4
 

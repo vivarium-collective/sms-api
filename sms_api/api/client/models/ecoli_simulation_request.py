@@ -11,8 +11,8 @@ from typing import cast
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..models.ecoli_simulation_request_variant_config import EcoliSimulationRequestVariantConfig
     from ..models.simulator_version import SimulatorVersion
+    from ..models.ecoli_simulation_request_variant_config import EcoliSimulationRequestVariantConfig
 
 
 T = TypeVar("T", bound="EcoliSimulationRequest")
@@ -34,8 +34,8 @@ class EcoliSimulationRequest:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.ecoli_simulation_request_variant_config import EcoliSimulationRequestVariantConfig
         from ..models.simulator_version import SimulatorVersion
+        from ..models.ecoli_simulation_request_variant_config import EcoliSimulationRequestVariantConfig
 
         simulator = self.simulator.to_dict()
 
@@ -58,8 +58,8 @@ class EcoliSimulationRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.ecoli_simulation_request_variant_config import EcoliSimulationRequestVariantConfig
         from ..models.simulator_version import SimulatorVersion
+        from ..models.ecoli_simulation_request_variant_config import EcoliSimulationRequestVariantConfig
 
         d = dict(src_dict)
         simulator = SimulatorVersion.from_dict(d.pop("simulator"))

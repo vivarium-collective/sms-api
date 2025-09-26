@@ -24,6 +24,7 @@
   <div id="output"></div>
 
 <script>
+    const baseUrl = "https://sms.cam.uchc.edu";
 function parseBoundary(contentType) {
   const m = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType || '');
   return m ? (m[1] || m[2]).trim() : null;
@@ -138,7 +139,7 @@ async function streamAndParse(endpoint) {
 
 document.getElementById('startBtn').addEventListener('click', () => {
   const id = document.getElementById('analysisId').value.trim();
-  const endpoint = `http://localhost:8888/v1/ecoli/analyses/${encodeURIComponent(id)}/ptools/formatted`; // adjust base path if needed
+  const endpoint = `${baseUrl}/v1/ecoli/analyses/${encodeURIComponent(id)}/ptools/formatted`; // adjust base path if needed
   streamAndParse(endpoint);
 });
 </script>
