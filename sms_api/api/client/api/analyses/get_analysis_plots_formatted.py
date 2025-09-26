@@ -8,7 +8,6 @@ from ...types import Response, UNSET
 from ... import errors
 
 from ...models.http_validation_error import HTTPValidationError
-from ...models.output_file import OutputFile
 from typing import cast
 
 
@@ -17,7 +16,7 @@ def _get_kwargs(
 ) -> dict[str, Any]:
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/v1/ecoli/analyses/{id}/plots".format(
+        "url": "/v1/ecoli/analyses/{id}/plots/formatted".format(
             id=id,
         ),
     }
@@ -27,15 +26,9 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[HTTPValidationError, list["OutputFile"]]]:
+) -> Optional[Union[Any, HTTPValidationError]]:
     if response.status_code == 200:
-        response_200 = []
-        _response_200 = response.json()
-        for response_200_item_data in _response_200:
-            response_200_item = OutputFile.from_dict(response_200_item_data)
-
-            response_200.append(response_200_item)
-
+        response_200 = response.json()
         return response_200
     if response.status_code == 422:
         response_422 = HTTPValidationError.from_dict(response.json())
@@ -49,7 +42,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[HTTPValidationError, list["OutputFile"]]]:
+) -> Response[Union[Any, HTTPValidationError]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -62,8 +55,8 @@ def sync_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[HTTPValidationError, list["OutputFile"]]]:
-    """Get an array of HTML files representing all plot outputs of a given analysis.
+) -> Response[Union[Any, HTTPValidationError]]:
+    """Get a stream of multiple html file contents representing plots.
 
     Args:
         id (int): Database ID of the analysis
@@ -73,7 +66,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, list['OutputFile']]]
+        Response[Union[Any, HTTPValidationError]]
     """
 
     kwargs = _get_kwargs(
@@ -91,8 +84,8 @@ def sync(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[HTTPValidationError, list["OutputFile"]]]:
-    """Get an array of HTML files representing all plot outputs of a given analysis.
+) -> Optional[Union[Any, HTTPValidationError]]:
+    """Get a stream of multiple html file contents representing plots.
 
     Args:
         id (int): Database ID of the analysis
@@ -102,7 +95,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, list['OutputFile']]
+        Union[Any, HTTPValidationError]
     """
 
     return sync_detailed(
@@ -115,8 +108,8 @@ async def asyncio_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[HTTPValidationError, list["OutputFile"]]]:
-    """Get an array of HTML files representing all plot outputs of a given analysis.
+) -> Response[Union[Any, HTTPValidationError]]:
+    """Get a stream of multiple html file contents representing plots.
 
     Args:
         id (int): Database ID of the analysis
@@ -126,7 +119,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, list['OutputFile']]]
+        Response[Union[Any, HTTPValidationError]]
     """
 
     kwargs = _get_kwargs(
@@ -142,8 +135,8 @@ async def asyncio(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[HTTPValidationError, list["OutputFile"]]]:
-    """Get an array of HTML files representing all plot outputs of a given analysis.
+) -> Optional[Union[Any, HTTPValidationError]]:
+    """Get a stream of multiple html file contents representing plots.
 
     Args:
         id (int): Database ID of the analysis
@@ -153,7 +146,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, list['OutputFile']]
+        Union[Any, HTTPValidationError]
     """
 
     return (

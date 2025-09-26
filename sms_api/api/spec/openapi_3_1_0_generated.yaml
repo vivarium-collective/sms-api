@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.20-dev
+  version: 0.2.25-dev
 paths:
   /v1/ecoli/analyses:
     post:
@@ -16,7 +16,7 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: ptools_analysis-77e9fedb26bd3bb2_1758906442941
+                analysis_name: ptools_analysis-29b95d8d7cd98f99_1758921792227
                 single:
                   ptools_rxns:
                     n_tp: 8
@@ -210,14 +210,37 @@ paths:
           content:
             application/json:
               schema:
-                anyOf:
-                - type: array
-                  items:
-                    $ref: '#/components/schemas/OutputFile'
-                - type: array
-                  items:
-                    type: string
+                type: array
+                items:
+                  $ref: '#/components/schemas/OutputFile'
                 title: Response Get-Analysis-Plots
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses/{id}/plots/formatted:
+    get:
+      tags:
+      - Analyses
+      summary: Get a stream of multiple html file contents representing plots.
+      operationId: get-analysis-plots-formatted
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the analysis
+          title: Id
+        description: Database ID of the analysis
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -260,7 +283,7 @@ paths:
       tags:
       - Analyses
       summary: Get a stream of multiple tsv file contents formatted for ptools.
-      operationId: get-analysis-tsv
+      operationId: get-analysis-tsv-formatted
       parameters:
       - name: id
         in: path
@@ -1039,8 +1062,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-344362e258bbd348_1758906442941-353798b398f195ef_1758906442941
-            simulation_name: sms_single-344362e258bbd348_1758906442941
+            experiment_id: sms_single-c35e921972a7cf8c_1758921792227-b36a8b860b3953d8_1758921792228
+            simulation_name: sms_single-c35e921972a7cf8c_1758921792227
             metadata: {}
             run_parca: true
             generations: 1
@@ -1195,7 +1218,7 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_smsapi-96196d02c5dc4f92_1758906442855
+          default: analysis_smsapi-937dc1f1e0b2cd43_1758921792139
         single:
           additionalProperties: true
           type: object
@@ -1263,7 +1286,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-63c15023a3b7a1c7_1758906442879
+          default: sim_smsapi-0f71400611378c1b_1758921792163
         metadata:
           additionalProperties: true
           type: object

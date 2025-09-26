@@ -1,0 +1,30 @@
+{
+  "experiment_id": "sms_multigeneration",
+  "analysis_name": "ptools_analysis_multigeneration",
+  "single": {},
+  "multidaughter": {},
+  "multigeneration": {
+    "ptools_rxns": {
+      "n_tp": 8
+    },
+    "ptools_rna": {
+      "n_tp": 8
+    },
+    "ptools_proteins": {
+      "n_tp": 8
+    }
+  },
+  "multiseed": {
+    "ptools_rxns": {
+      "n_tp": 8
+    },
+    "ptools_rna": {
+      "n_tp": 8
+    },
+    "ptools_proteins": {
+      "n_tp": 8
+    }
+  },
+  "multivariant": {},
+  "multiexperiment": {}
+}
