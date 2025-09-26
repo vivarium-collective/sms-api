@@ -10,7 +10,6 @@ import zipfile
 from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
-from textwrap import dedent
 from typing import Union
 
 import fastapi
@@ -23,14 +22,15 @@ from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.common.utils import timestamp
 from sms_api.config import get_settings
-from sms_api.data.models import ExperimentAnalysisDTO, ExperimentAnalysisRequest
+from sms_api.data.models import ExperimentAnalysisDTO, ExperimentAnalysisRequest, OutputFile
 from sms_api.data.services import analysis
 from sms_api.data.services.analysis import (
-    FileServiceHtml,
-    FileServiceTsv,
-    OutputFile,
+    format_html_string,
     format_tsv_string,
+    get_html_outputs_local,
+    get_html_outputs_remote,
     get_tsv_outputs_local,
+    get_tsv_outputs_remote,
 )
 from sms_api.data.services.parquet import ParquetService
 from sms_api.dependencies import get_database_service, get_simulation_service
@@ -179,27 +179,63 @@ async def get_analysis_log(id: int = fastapi.Path(..., description="Database ID 
 )
 async def get_analysis_plots(
     id: int = fastapi.Path(..., description="Database ID of the analysis"),
-) -> list[OutputFile] | list[str]:
+) -> list[OutputFile]:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
 
-    analysis_data = await db_service.get_analysis(database_id=id)
-    output_id = analysis_data.name
-    # outdir = Path(ENV.simulation_outdir)
-    if int(ENV.dev_mode):
-        ssh = get_ssh_service(ENV)
-        # f"cd /home/FCAM/svc_vivarium/workspace && /home/FCAM/svc_vivarium/.local/bin/uv run scripts/html_outputs.py --output_id {output_id}"  # noqa: E501
-        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-        ret, stdin, stdout = await ssh.run_command(
-            dedent(f"""
-            cd /home/FCAM/svc_vivarium/workspace \
-                && {remote_uv_executable} run scripts/html_outputs.py --output_id {output_id}
-        """)
-        )
-        return [stdin]
-    # return analysis.get_analysis_html_outputs(outdir_root=outdir, expid=output_id)
-    return FileServiceHtml().get_outputs(output_id=output_id)
+    try:
+        analysis_data = await db_service.get_analysis(database_id=id)
+        output_id = analysis_data.name
+        if int(ENV.dev_mode):
+            return await get_html_outputs_local(output_id=output_id, ssh_service=get_ssh_service(ENV))
+        else:
+            return get_html_outputs_remote(output_id=output_id)
+    except Exception as e:
+        logger.exception("Error getting analysis data")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/analyses/{id}/plots/formatted",
+    tags=["Analyses"],
+    operation_id="get-analysis-plots-formatted",
+    dependencies=[Depends(get_database_service)],
+    summary="Get a stream of multiple html file contents representing plots.",
+)
+async def get_analysis_plots_formatted(
+    id: int = fastapi.Path(..., description="Database ID of the analysis"),
+) -> fastapi.responses.StreamingResponse:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+
+    try:
+        data = None
+        analysis_data = await db_service.get_analysis(database_id=id)
+        output_id = analysis_data.name
+        if int(ENV.dev_mode):
+            data = await get_html_outputs_local(output_id=output_id, ssh_service=get_ssh_service())
+        else:
+            # data = FileServiceTsv().get_outputs(output_id=output_id)
+            data = get_html_outputs_remote(output_id=output_id)
+
+        boundary = "myboundary"
+
+        def generate() -> Generator[str, None, None]:
+            for idx, item in enumerate(data, 1):
+                filename = f"{item.name if hasattr(item, 'name') else f'item{idx}'}.tsv"
+                yield f"--{boundary}\r\n"
+                yield "Content-Type: text/plain\r\n"
+                yield f'Content-Disposition: attachment; filename="{filename}"\r\n\r\n'
+                yield format_html_string(item) + "\r\n"
+
+            yield f"--{boundary}--\r\n"
+
+        return fastapi.responses.StreamingResponse(generate(), media_type=f"multipart/mixed; boundary={boundary}")
+    except Exception as e:
+        logger.exception("Error uploading analysis module")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.get(
@@ -217,20 +253,19 @@ async def get_ptools_tsv(id: int = fastapi.Path(..., description="Database ID of
     try:
         analysis_data = await db_service.get_analysis(database_id=id)
         output_id = analysis_data.name
-        # outdir = Path(ENV.simulation_outdir)
         if int(ENV.dev_mode):
-            return await get_tsv_outputs_local(output_id=output_id, ssh_service=get_ssh_service())
+            return await get_tsv_outputs_local(output_id=output_id, ssh_service=get_ssh_service(ENV))
         else:
-            return FileServiceTsv().get_outputs(output_id=output_id)
+            return get_tsv_outputs_remote(output_id=output_id)
     except Exception as e:
-        logger.exception("Error uploading analysis module")
+        logger.exception("Error getting analysis data")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.get(
     path="/analyses/{id}/ptools/formatted",
     tags=["Analyses"],
-    operation_id="get-analysis-tsv",
+    operation_id="get-analysis-tsv-formatted",
     dependencies=[Depends(get_database_service)],
     summary="Get a stream of multiple tsv file contents formatted for ptools.",
 )
@@ -248,7 +283,8 @@ async def get_ptools_tsv_formatted(
         if int(ENV.dev_mode):
             data = await get_tsv_outputs_local(output_id=output_id, ssh_service=get_ssh_service())
         else:
-            data = FileServiceTsv().get_outputs(output_id=output_id)
+            # data = FileServiceTsv().get_outputs(output_id=output_id)
+            data = get_tsv_outputs_remote(output_id=output_id)
 
         boundary = "myboundary"
 
@@ -264,7 +300,7 @@ async def get_ptools_tsv_formatted(
 
         return fastapi.responses.StreamingResponse(generate(), media_type=f"multipart/mixed; boundary={boundary}")
     except Exception as e:
-        logger.exception("Error uploading analysis module")
+        logger.exception("Error getting analysis data")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -289,7 +325,8 @@ async def download_ptools_zip(
         if int(ENV.dev_mode):
             data = await get_tsv_outputs_local(output_id=output_id, ssh_service=get_ssh_service())
         else:
-            data = FileServiceTsv().get_outputs(output_id=output_id)
+            # data = FileServiceTsv().get_outputs(output_id=output_id)
+            data = get_tsv_outputs_remote(output_id=output_id)
 
         def write_file(outdir: Path, output_file: OutputFile) -> Path:
             lines = "".join(output_file.content).split("\n")

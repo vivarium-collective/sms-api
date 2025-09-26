@@ -19,6 +19,11 @@ MAX_ANALYSIS_CPUS = 3
 ### -- analyses -- ###
 
 
+class OutputFile(BaseModel):
+    name: str
+    content: str
+
+
 class AnalysisConfigOptions(BaseModel):
     # TODO: infer variant data dir, validation datapath from experiment id
     experiment_id: list[str]

@@ -4,7 +4,8 @@ import pytest
 
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
-from sms_api.data.services.analysis import OutputFile, get_tsv_outputs_local
+from sms_api.data.models import OutputFile
+from sms_api.data.services.analysis import get_tsv_outputs_local
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
