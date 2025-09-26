@@ -1,4 +1,5 @@
 import abc
+import io
 import json
 import logging
 import tempfile
@@ -9,6 +10,8 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Any, override
 from zipfile import ZIP_DEFLATED, ZipFile
+
+import polars
 
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
@@ -266,8 +269,6 @@ class FileServiceHtml(FileService):
 
 
 async def get_tsv_outputs_local(output_id: str, ssh_service: SSHService) -> list[OutputFile]:
-    # output_id = 'ptools_multigen_analysis_alex'
-    # outdir = Path("/home/FCAM/svc_vivarium/workspace/api_outputs")
     remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
     ret, stdin, stdout = await ssh_service.run_command(
         dedent(f"""
@@ -279,6 +280,25 @@ async def get_tsv_outputs_local(output_id: str, ssh_service: SSHService) -> list
     deserialized = json.loads(stdin.replace("'", '"'))
     outputs = []
     for spec in deserialized:
-        for name, content in spec.items():
-            outputs.append(OutputFile(name=name, content=content))
+        output = OutputFile(name=spec["name"], content=spec["content"])
+        outputs.append(output)
     return outputs
+
+
+def format_tsv_string(output: OutputFile) -> str:
+    raw_string = output.content
+    return raw_string.encode("utf-8").decode("unicode_escape")
+
+
+def tsv_string_to_polars_df(output: OutputFile) -> polars.DataFrame:
+    formatted = format_tsv_string(output)
+    return polars.read_csv(io.StringIO(formatted), separator="\t")
+
+
+def write_tsvs(data: list[OutputFile]) -> None:
+    lines = [(output.name, "".join(output.content).split("\n")) for output in data]
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for filename, filedata in lines:
+            with open(Path(tmpdir) / filename, "w") as f:
+                for item in filedata:
+                    f.write(f"{item}\n")

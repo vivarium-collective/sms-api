@@ -6,6 +6,9 @@
 import logging
 import mimetypes
 import tempfile
+import zipfile
+from collections.abc import Generator
+from io import BytesIO
 from pathlib import Path
 from textwrap import dedent
 from typing import Union
@@ -22,7 +25,13 @@ from sms_api.common.utils import timestamp
 from sms_api.config import get_settings
 from sms_api.data.models import ExperimentAnalysisDTO, ExperimentAnalysisRequest
 from sms_api.data.services import analysis
-from sms_api.data.services.analysis import FileServiceHtml, FileServiceTsv, OutputFile, get_tsv_outputs_local
+from sms_api.data.services.analysis import (
+    FileServiceHtml,
+    FileServiceTsv,
+    OutputFile,
+    format_tsv_string,
+    get_tsv_outputs_local,
+)
 from sms_api.data.services.parquet import ParquetService
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.database_service import DatabaseService
@@ -198,7 +207,7 @@ async def get_analysis_plots(
     tags=["Analyses"],
     operation_id="get-analysis-tsv",
     dependencies=[Depends(get_database_service)],
-    summary="Get an array tsv files formatted for ptools.",
+    summary="Get an array of tsv files formatted for ptools.",
 )
 async def get_ptools_tsv(id: int = fastapi.Path(..., description="Database ID of the analysis")) -> list[OutputFile]:
     db_service = get_database_service()
@@ -211,7 +220,104 @@ async def get_ptools_tsv(id: int = fastapi.Path(..., description="Database ID of
         # outdir = Path(ENV.simulation_outdir)
         if int(ENV.dev_mode):
             return await get_tsv_outputs_local(output_id=output_id, ssh_service=get_ssh_service())
-        return FileServiceTsv().get_outputs(output_id=output_id)
+        else:
+            return FileServiceTsv().get_outputs(output_id=output_id)
+    except Exception as e:
+        logger.exception("Error uploading analysis module")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/analyses/{id}/ptools/formatted",
+    tags=["Analyses"],
+    operation_id="get-analysis-tsv",
+    dependencies=[Depends(get_database_service)],
+    summary="Get a stream of multiple tsv file contents formatted for ptools.",
+)
+async def get_ptools_tsv_formatted(
+    id: int = fastapi.Path(..., description="Database ID of the analysis"),
+) -> fastapi.responses.StreamingResponse:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+
+    try:
+        data = None
+        analysis_data = await db_service.get_analysis(database_id=id)
+        output_id = analysis_data.name
+        if int(ENV.dev_mode):
+            data = await get_tsv_outputs_local(output_id=output_id, ssh_service=get_ssh_service())
+        else:
+            data = FileServiceTsv().get_outputs(output_id=output_id)
+
+        boundary = "myboundary"
+
+        def generate() -> Generator[str, None, None]:
+            for idx, item in enumerate(data, 1):
+                filename = f"{item.name if hasattr(item, 'name') else f'item{idx}'}.tsv"
+                yield f"--{boundary}\r\n"
+                yield "Content-Type: text/plain\r\n"
+                yield f'Content-Disposition: attachment; filename="{filename}"\r\n\r\n'
+                yield format_tsv_string(item) + "\r\n"
+
+            yield f"--{boundary}--\r\n"
+
+        return fastapi.responses.StreamingResponse(generate(), media_type=f"multipart/mixed; boundary={boundary}")
+    except Exception as e:
+        logger.exception("Error uploading analysis module")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/analyses/{id}/ptools/download",
+    tags=["Analyses"],
+    operation_id="download-tsv-zip",
+    dependencies=[Depends(get_database_service)],
+    summary="Download zip file of TSV outputs formatted for ptools.",
+)
+async def download_ptools_zip(
+    id: int = fastapi.Path(..., description="Database ID of the analysis"),
+) -> fastapi.responses.StreamingResponse:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+
+    try:
+        data = None
+        analysis_data = await db_service.get_analysis(database_id=id)
+        output_id = analysis_data.name
+        if int(ENV.dev_mode):
+            data = await get_tsv_outputs_local(output_id=output_id, ssh_service=get_ssh_service())
+        else:
+            data = FileServiceTsv().get_outputs(output_id=output_id)
+
+        def write_file(outdir: Path, output_file: OutputFile) -> Path:
+            lines = "".join(output_file.content).split("\n")
+            outfile = outdir / output_file.name
+            with open(outfile, "w") as f:
+                for item in lines:
+                    f.write(f"{item}\n")
+            return outfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dirpath = Path(tmpdir)
+            files = []
+            for output in data:
+                f = write_file(dirpath, output)
+                if f.exists():
+                    files.append(f)
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for file_path in files:
+                    # Add file to ZIP; arcname makes sure only the file name is used
+                    zip_file.write(file_path, arcname=file_path.name)
+            zip_buffer.seek(0)
+
+            return fastapi.responses.StreamingResponse(
+                zip_buffer,
+                media_type="application/zip",
+                headers={"Content-Disposition": f'attachment; filename="{output_id}.zip"'},
+            )
     except Exception as e:
         logger.exception("Error uploading analysis module")
         raise HTTPException(status_code=500, detail=str(e)) from e

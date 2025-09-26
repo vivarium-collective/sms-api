@@ -16,7 +16,7 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: ptools_analysis-f244d98e1fafb16f_1758834636240
+                analysis_name: ptools_analysis-77e9fedb26bd3bb2_1758906442941
                 single:
                   ptools_rxns:
                     n_tp: 8
@@ -210,9 +210,13 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                anyOf:
+                - type: array
+                  items:
+                    $ref: '#/components/schemas/OutputFile'
+                - type: array
+                  items:
+                    type: string
                 title: Response Get-Analysis-Plots
         '422':
           description: Validation Error
@@ -224,7 +228,7 @@ paths:
     get:
       tags:
       - Analyses
-      summary: Get an array tsv files formatted for ptools.
+      summary: Get an array of tsv files formatted for ptools.
       operationId: get-analysis-tsv
       parameters:
       - name: id
@@ -243,8 +247,62 @@ paths:
               schema:
                 type: array
                 items:
-                  type: string
+                  $ref: '#/components/schemas/OutputFile'
                 title: Response Get-Analysis-Tsv
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses/{id}/ptools/formatted:
+    get:
+      tags:
+      - Analyses
+      summary: Get a stream of multiple tsv file contents formatted for ptools.
+      operationId: get-analysis-tsv
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the analysis
+          title: Id
+        description: Database ID of the analysis
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses/{id}/ptools/download:
+    get:
+      tags:
+      - Analyses
+      summary: Download zip file of TSV outputs formatted for ptools.
+      operationId: download-tsv-zip
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the analysis
+          title: Id
+        description: Database ID of the analysis
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -981,8 +1039,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-c6930bc3c659aef2_1758834636240-d8cdb806f7ad275e_1758834636240
-            simulation_name: sms_single-c6930bc3c659aef2_1758834636240
+            experiment_id: sms_single-344362e258bbd348_1758906442941-353798b398f195ef_1758906442941
+            simulation_name: sms_single-344362e258bbd348_1758906442941
             metadata: {}
             run_parca: true
             generations: 1
@@ -1137,7 +1195,7 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_smsapi-75f3365df39383d1_1758834636157
+          default: analysis_smsapi-96196d02c5dc4f92_1758906442855
         single:
           additionalProperties: true
           type: object
@@ -1205,7 +1263,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-aa6c65991c507fbe_1758834636180
+          default: sim_smsapi-63c15023a3b7a1c7_1758906442879
         metadata:
           additionalProperties: true
           type: object
@@ -1535,6 +1593,19 @@ components:
       - parca
       - build_image
       title: JobType
+    OutputFile:
+      properties:
+        name:
+          type: string
+          title: Name
+        content:
+          type: string
+          title: Content
+      type: object
+      required:
+      - name
+      - content
+      title: OutputFile
     ParcaDataset:
       properties:
         database_id:
