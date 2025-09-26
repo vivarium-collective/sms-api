@@ -22,6 +22,7 @@ from sms_api.common.utils import timestamp
 from sms_api.config import get_settings
 from sms_api.data.models import ExperimentAnalysisDTO, ExperimentAnalysisRequest
 from sms_api.data.services import analysis
+from sms_api.data.services.analysis import FileServiceHtml, FileServiceTsv, OutputFile, get_tsv_outputs_local
 from sms_api.data.services.parquet import ParquetService
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.database_service import DatabaseService
@@ -167,14 +168,16 @@ async def get_analysis_log(id: int = fastapi.Path(..., description="Database ID 
     dependencies=[Depends(get_database_service)],
     summary="Get an array of HTML files representing all plot outputs of a given analysis.",
 )
-async def get_analysis_plots(id: int = fastapi.Path(..., description="Database ID of the analysis")) -> list[str]:
+async def get_analysis_plots(
+    id: int = fastapi.Path(..., description="Database ID of the analysis"),
+) -> list[OutputFile] | list[str]:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
 
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
-    outdir = Path(ENV.simulation_outdir)
+    # outdir = Path(ENV.simulation_outdir)
     if int(ENV.dev_mode):
         ssh = get_ssh_service(ENV)
         # f"cd /home/FCAM/svc_vivarium/workspace && /home/FCAM/svc_vivarium/.local/bin/uv run scripts/html_outputs.py --output_id {output_id}"  # noqa: E501
@@ -186,7 +189,8 @@ async def get_analysis_plots(id: int = fastapi.Path(..., description="Database I
         """)
         )
         return [stdin]
-    return analysis.get_analysis_html_outputs(outdir_root=outdir, expid=output_id)
+    # return analysis.get_analysis_html_outputs(outdir_root=outdir, expid=output_id)
+    return FileServiceHtml().get_outputs(output_id=output_id)
 
 
 @config.router.get(
@@ -196,7 +200,7 @@ async def get_analysis_plots(id: int = fastapi.Path(..., description="Database I
     dependencies=[Depends(get_database_service)],
     summary="Get an array tsv files formatted for ptools.",
 )
-async def get_ptools_tsv(id: int = fastapi.Path(..., description="Database ID of the analysis")) -> list[str]:
+async def get_ptools_tsv(id: int = fastapi.Path(..., description="Database ID of the analysis")) -> list[OutputFile]:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
@@ -204,18 +208,10 @@ async def get_ptools_tsv(id: int = fastapi.Path(..., description="Database ID of
     try:
         analysis_data = await db_service.get_analysis(database_id=id)
         output_id = analysis_data.name
-        outdir = Path(ENV.simulation_outdir)
+        # outdir = Path(ENV.simulation_outdir)
         if int(ENV.dev_mode):
-            ssh = get_ssh_service(ENV)
-            remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-            ret, stdin, stdout = await ssh.run_command(
-                dedent(f"""
-                cd /home/FCAM/svc_vivarium/workspace \
-                    && {remote_uv_executable} run scripts/ptools_outputs.py --output_id {output_id}
-            """)
-            )
-            return [stdin]
-        return analysis.get_analysis_tsv_outputs(outdir_root=outdir, expid=output_id)
+            return await get_tsv_outputs_local(output_id=output_id, ssh_service=get_ssh_service())
+        return FileServiceTsv().get_outputs(output_id=output_id)
     except Exception as e:
         logger.exception("Error uploading analysis module")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -235,8 +231,6 @@ async def upload_analysis_module(
         contents = await file.read()
         with tempfile.TemporaryDirectory() as tmpdirname:
             tmp_path: Path = Path(tmpdirname) / (file.filename or str(file))
-
-            # Write the file contents to the temp file
             with open(tmp_path, "wb") as tmpfile:
                 tmpfile.write(contents)
 
@@ -268,8 +262,6 @@ async def download_analysis(
     filename: str = Query(examples=["mass_fraction_summary.html"]),
 ) -> Union[FileResponse, HTMLResponse]:
     try:
-        # experiment_id = get_experiment_id_from_tag(experiment_tag)
-        # filepath = service.get_file_path(experiment_id, filename, remote=True, logger_instance=logger)
         filepath = (
             Path(ENV.simulation_outdir)
             / id
