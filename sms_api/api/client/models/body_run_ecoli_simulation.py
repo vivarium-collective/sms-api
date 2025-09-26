@@ -12,8 +12,8 @@ from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..models.experiment_metadata import ExperimentMetadata
     from ..models.experiment_request import ExperimentRequest
+    from ..models.experiment_metadata import ExperimentMetadata
 
 
 T = TypeVar("T", bound="BodyRunEcoliSimulation")
@@ -32,8 +32,8 @@ class BodyRunEcoliSimulation:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.experiment_metadata import ExperimentMetadata
         from ..models.experiment_request import ExperimentRequest
+        from ..models.experiment_metadata import ExperimentMetadata
 
         request: Union[Unset, dict[str, Any]] = UNSET
         if not isinstance(self.request, Unset):
@@ -59,8 +59,8 @@ class BodyRunEcoliSimulation:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.experiment_metadata import ExperimentMetadata
         from ..models.experiment_request import ExperimentRequest
+        from ..models.experiment_metadata import ExperimentMetadata
 
         d = dict(src_dict)
         _request = d.pop("request", UNSET)

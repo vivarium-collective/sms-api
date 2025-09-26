@@ -16,7 +16,7 @@ def _get_kwargs(
 ) -> dict[str, Any]:
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/v1/ecoli/analyses/{id}/ptools".format(
+        "url": "/v1/ecoli/analyses/{id}/ptools/formatted".format(
             id=id,
         ),
     }
@@ -26,10 +26,9 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[HTTPValidationError, list[str]]]:
+) -> Optional[Union[Any, HTTPValidationError]]:
     if response.status_code == 200:
-        response_200 = cast(list[str], response.json())
-
+        response_200 = response.json()
         return response_200
     if response.status_code == 422:
         response_422 = HTTPValidationError.from_dict(response.json())
@@ -43,7 +42,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[HTTPValidationError, list[str]]]:
+) -> Response[Union[Any, HTTPValidationError]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -56,8 +55,8 @@ def sync_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[HTTPValidationError, list[str]]]:
-    """Get an array tsv files formatted for ptools.
+) -> Response[Union[Any, HTTPValidationError]]:
+    """Get a stream of multiple tsv file contents formatted for ptools.
 
     Args:
         id (int): Database ID of the analysis
@@ -67,7 +66,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, list[str]]]
+        Response[Union[Any, HTTPValidationError]]
     """
 
     kwargs = _get_kwargs(
@@ -85,8 +84,8 @@ def sync(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[HTTPValidationError, list[str]]]:
-    """Get an array tsv files formatted for ptools.
+) -> Optional[Union[Any, HTTPValidationError]]:
+    """Get a stream of multiple tsv file contents formatted for ptools.
 
     Args:
         id (int): Database ID of the analysis
@@ -96,7 +95,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, list[str]]
+        Union[Any, HTTPValidationError]
     """
 
     return sync_detailed(
@@ -109,8 +108,8 @@ async def asyncio_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[HTTPValidationError, list[str]]]:
-    """Get an array tsv files formatted for ptools.
+) -> Response[Union[Any, HTTPValidationError]]:
+    """Get a stream of multiple tsv file contents formatted for ptools.
 
     Args:
         id (int): Database ID of the analysis
@@ -120,7 +119,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, list[str]]]
+        Response[Union[Any, HTTPValidationError]]
     """
 
     kwargs = _get_kwargs(
@@ -136,8 +135,8 @@ async def asyncio(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[HTTPValidationError, list[str]]]:
-    """Get an array tsv files formatted for ptools.
+) -> Optional[Union[Any, HTTPValidationError]]:
+    """Get a stream of multiple tsv file contents formatted for ptools.
 
     Args:
         id (int): Database ID of the analysis
@@ -147,7 +146,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, list[str]]
+        Union[Any, HTTPValidationError]
     """
 
     return (

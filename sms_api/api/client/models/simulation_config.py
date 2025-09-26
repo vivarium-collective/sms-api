@@ -12,16 +12,16 @@ from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..models.simulation_config_emitter_arg import SimulationConfigEmitterArg
-    from ..models.simulation_config_swap_processes import SimulationConfigSwapProcesses
-    from ..models.simulation_config_analysis_options import SimulationConfigAnalysisOptions
-    from ..models.simulation_config_parca_options import SimulationConfigParcaOptions
-    from ..models.simulation_config_variants import SimulationConfigVariants
-    from ..models.simulation_config_topology import SimulationConfigTopology
     from ..models.simulation_config_flow import SimulationConfigFlow
-    from ..models.simulation_config_spatial_environment_config import SimulationConfigSpatialEnvironmentConfig
-    from ..models.simulation_config_initial_state import SimulationConfigInitialState
+    from ..models.simulation_config_analysis_options import SimulationConfigAnalysisOptions
+    from ..models.simulation_config_topology import SimulationConfigTopology
+    from ..models.simulation_config_variants import SimulationConfigVariants
     from ..models.simulation_config_process_configs import SimulationConfigProcessConfigs
+    from ..models.simulation_config_parca_options import SimulationConfigParcaOptions
+    from ..models.simulation_config_emitter_arg import SimulationConfigEmitterArg
+    from ..models.simulation_config_spatial_environment_config import SimulationConfigSpatialEnvironmentConfig
+    from ..models.simulation_config_swap_processes import SimulationConfigSwapProcesses
+    from ..models.simulation_config_initial_state import SimulationConfigInitialState
 
 
 T = TypeVar("T", bound="SimulationConfig")
@@ -150,16 +150,16 @@ class SimulationConfig:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.simulation_config_emitter_arg import SimulationConfigEmitterArg
-        from ..models.simulation_config_swap_processes import SimulationConfigSwapProcesses
-        from ..models.simulation_config_analysis_options import SimulationConfigAnalysisOptions
-        from ..models.simulation_config_parca_options import SimulationConfigParcaOptions
-        from ..models.simulation_config_variants import SimulationConfigVariants
-        from ..models.simulation_config_topology import SimulationConfigTopology
         from ..models.simulation_config_flow import SimulationConfigFlow
-        from ..models.simulation_config_spatial_environment_config import SimulationConfigSpatialEnvironmentConfig
-        from ..models.simulation_config_initial_state import SimulationConfigInitialState
+        from ..models.simulation_config_analysis_options import SimulationConfigAnalysisOptions
+        from ..models.simulation_config_topology import SimulationConfigTopology
+        from ..models.simulation_config_variants import SimulationConfigVariants
         from ..models.simulation_config_process_configs import SimulationConfigProcessConfigs
+        from ..models.simulation_config_parca_options import SimulationConfigParcaOptions
+        from ..models.simulation_config_emitter_arg import SimulationConfigEmitterArg
+        from ..models.simulation_config_spatial_environment_config import SimulationConfigSpatialEnvironmentConfig
+        from ..models.simulation_config_swap_processes import SimulationConfigSwapProcesses
+        from ..models.simulation_config_initial_state import SimulationConfigInitialState
 
         experiment_id = self.experiment_id
 
@@ -562,16 +562,16 @@ class SimulationConfig:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.simulation_config_emitter_arg import SimulationConfigEmitterArg
-        from ..models.simulation_config_swap_processes import SimulationConfigSwapProcesses
-        from ..models.simulation_config_analysis_options import SimulationConfigAnalysisOptions
-        from ..models.simulation_config_parca_options import SimulationConfigParcaOptions
-        from ..models.simulation_config_variants import SimulationConfigVariants
-        from ..models.simulation_config_topology import SimulationConfigTopology
         from ..models.simulation_config_flow import SimulationConfigFlow
-        from ..models.simulation_config_spatial_environment_config import SimulationConfigSpatialEnvironmentConfig
-        from ..models.simulation_config_initial_state import SimulationConfigInitialState
+        from ..models.simulation_config_analysis_options import SimulationConfigAnalysisOptions
+        from ..models.simulation_config_topology import SimulationConfigTopology
+        from ..models.simulation_config_variants import SimulationConfigVariants
         from ..models.simulation_config_process_configs import SimulationConfigProcessConfigs
+        from ..models.simulation_config_parca_options import SimulationConfigParcaOptions
+        from ..models.simulation_config_emitter_arg import SimulationConfigEmitterArg
+        from ..models.simulation_config_spatial_environment_config import SimulationConfigSpatialEnvironmentConfig
+        from ..models.simulation_config_swap_processes import SimulationConfigSwapProcesses
+        from ..models.simulation_config_initial_state import SimulationConfigInitialState
 
         d = dict(src_dict)
         experiment_id = d.pop("experiment_id")
