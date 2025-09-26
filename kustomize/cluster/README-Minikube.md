@@ -129,7 +129,7 @@ kubectl kustomize overlays/sms-api-local | kubectl apply -f -
 OR for production:
 
 ```bash
-kubectl kustomize overlays/sms-api-rke | kubectl apply -f -
+cd kustomize && kubectl kustomize overlays/sms-api-rke | kubectl apply -f - && cd ..
 ```
 
 ### create sealed secrets (see [scripts/README.md](scripts/README.md))
@@ -157,3 +157,5 @@ sudo kubectl port-forward --address ${EXTERNAL_IP} -n ${DEV_NAMESPACE} deploymen
 sed -i '' "s/jmshost_sim_external=.*/jmshost_sim_external=${EXTERNAL_IP}/" ./config/jimdev/submit.env
 ```
 ````
+
+sms_single-079c43c-ba31b9edaeab-751499

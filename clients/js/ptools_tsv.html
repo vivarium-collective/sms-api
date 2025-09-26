@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ptools TSV Stream Viewer</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; }
+    button { padding: 4px 8px; margin-left:6px; }
+    .part { margin: 12px 0; border: 1px solid #ddd; border-radius: 6px; background:#fafafa; padding:8px; }
+    .header { font-weight: 600; color:#333; margin-bottom:6px; display:flex; align-items:center; justify-content:space-between; }
+    pre { white-space: pre-wrap; margin:0; font-family: monospace; }
+    .error { color: #b91c1c; }
+  </style>
+</head>
+<body>
+  <h1>Ptools TSV Stream Viewer</h1>
+  <div>
+    <label>Analysis ID: <input id="analysisId" value="1" /></label>
+    <button id="startBtn">Load TSV parts</button>
+    <span id="status"></span>
+  </div>
+
+  <div id="output"></div>
+
+<script>
+function parseBoundary(contentType) {
+  const m = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType || '');
+  return m ? (m[1] || m[2]).trim() : null;
+}
+
+async function streamAndParse(endpoint) {
+  const statusEl = document.getElementById('status');
+  const output = document.getElementById('output');
+  output.innerHTML = '';
+  statusEl.textContent = 'Fetching…';
+
+  let res;
+  try {
+    res = await fetch(endpoint);
+  } catch (err) {
+    statusEl.textContent = 'Fetch failed';
+    const e = document.createElement('div');
+    e.className = 'error';
+    e.textContent = err.message;
+    output.appendChild(e);
+    return;
+  }
+
+  if (!res.ok) {
+    statusEl.textContent = `HTTP ${res.status}`;
+    const errText = await res.text().catch(()=>'(no body)');
+    const e = document.createElement('div');
+    e.className = 'error';
+    e.textContent = errText;
+    output.appendChild(e);
+    return;
+  }
+
+  const boundary = parseBoundary(res.headers.get('content-type'));
+  if (!boundary) {
+    // fallback to plain text
+    const txt = await res.text();
+    const wrap = document.createElement('div'); wrap.className='part';
+    const h = document.createElement('div'); h.className='header'; h.textContent='Single text';
+    const p = document.createElement('pre'); p.textContent=txt;
+    wrap.appendChild(h); wrap.appendChild(p);
+    output.appendChild(wrap);
+    statusEl.textContent = 'Done';
+    return;
+  }
+
+  statusEl.textContent = `Streaming multipart (boundary=${boundary})`;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let partIndex = 0;
+
+  function handlePart(rawPart) {
+    rawPart = rawPart.trim();
+    if (!rawPart || rawPart === '--') return;
+    let sep = rawPart.indexOf('\r\n\r\n');
+    if (sep === -1) sep = rawPart.indexOf('\n\n');
+
+    let headers='', body=rawPart;
+    if (sep !== -1) {
+      headers = rawPart.slice(0,sep).trim();
+      body = rawPart.slice(sep + (rawPart.includes('\r\n\r\n')?4:2));
+    }
+
+    partIndex++;
+    const wrap = document.createElement('div'); wrap.className='part';
+
+    // header row with filename + button
+    const h = document.createElement('div'); h.className='header';
+    const cdMatch = headers.match(/Content-Disposition:[^\r\n]*filename="?([^"\r\n;]+)"?/i);
+    let filename = `part${partIndex}.txt`;
+    // if (cdMatch) filename = cdMatch[1];
+      if (cdMatch) {
+        const baseName = cdMatch[1].replace(/\.tsv$/i, '');
+        filename = baseName + '.txt';
+    }
+    const title = document.createElement('span');
+    title.textContent = `Part ${partIndex} — ${filename}`;
+    const downloadBtn = document.createElement('button');
+    downloadBtn.textContent = 'Download TSV';
+    downloadBtn.addEventListener('click', () => {
+      const blob = new Blob([body], {type:'text/plain'});  // tab-separated-values
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+    h.appendChild(title);
+    h.appendChild(downloadBtn);
+
+    const pre = document.createElement('pre'); pre.textContent=body.trim();
+    wrap.appendChild(h);
+    wrap.appendChild(pre);
+    output.appendChild(wrap);
+  }
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value,{stream:true});
+    const parts = buffer.split(`--${boundary}`);
+    buffer = parts.pop(); // keep last incomplete
+    for (const part of parts) handlePart(part);
+  }
+  if (buffer && buffer.trim()) handlePart(buffer);
+  statusEl.textContent = 'Stream complete';
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  const id = document.getElementById('analysisId').value.trim();
+  const endpoint = `http://localhost:8888/v1/ecoli/analyses/${encodeURIComponent(id)}/ptools/formatted`; // adjust base path if needed
+  streamAndParse(endpoint);
+});
+</script>
+</body>
+</html>

@@ -62,6 +62,7 @@ from .hpc_run import HpcRun
 from .http_validation_error import HTTPValidationError
 from .job_status import JobStatus
 from .job_type import JobType
+from .output_file import OutputFile
 from .parca_dataset import ParcaDataset
 from .parca_dataset_request import ParcaDatasetRequest
 from .parca_dataset_request_parca_config import ParcaDatasetRequestParcaConfig
@@ -138,6 +139,7 @@ __all__ = (
     "HTTPValidationError",
     "JobStatus",
     "JobType",
+    "OutputFile",
     "ParcaDataset",
     "ParcaDatasetRequest",
     "ParcaDatasetRequestParcaConfig",

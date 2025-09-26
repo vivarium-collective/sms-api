@@ -1,3 +1,5 @@
+import abc
+import io
 import json
 import logging
 import tempfile
@@ -6,14 +8,17 @@ from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
 from textwrap import dedent
-from typing import Any
+from typing import Any, override
 from zipfile import ZIP_DEFLATED, ZipFile
+
+import polars
 
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import Settings, get_settings
 from sms_api.data.models import AnalysisConfig
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
+from sms_api.simulation.models import BaseModel
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -204,43 +209,96 @@ def unzip_archive(zip_path: Path, dest_dir: Path) -> str:
     return str(dest_dir)
 
 
-def get_html_output_paths(outdir_root: Path, experiment_id: str) -> list[Path]:
-    outdir = outdir_root / experiment_id
-    filepaths = []
-    for root, _, files in outdir.walk():
-        for f in files:
-            fp = root / f
-            if fp.exists() and fp.is_file():
-                filepaths.append(fp)
-    return list(filter(lambda _file: _file.name.endswith(".html"), filepaths))
+class OutputFile(BaseModel):
+    name: str
+    content: str
 
 
-def get_tsv_output_paths(outdir_root: Path, experiment_id: str) -> list[Path]:
-    outdir = outdir_root / experiment_id
-    filepaths = []
-    for root, _, files in outdir.walk():
-        for f in files:
-            fp = root / f
-            if fp.exists() and fp.is_file():
-                filepaths.append(fp)
-    return list(filter(lambda _file: _file.name.endswith(".tsv"), filepaths))
+class FileService(abc.ABC):
+    @abc.abstractmethod
+    def _get_output_paths(self, outdir_root: Path, experiment_id: str) -> list[Path]:
+        pass
+
+    @abc.abstractmethod
+    def _read_file(self, file_path: Path) -> str:
+        pass
+
+    def get_outputs(self, output_id: str = "analysis_multigen") -> list[OutputFile]:
+        outdir_root = Path("/home/FCAM/svc_vivarium/workspace/api_outputs")
+        filepaths = self._get_output_paths(outdir_root, output_id)
+        # return [read_tsv_file(path) for path in filepaths]
+        # return {path.name: self._read_file(path) for path in filepaths}
+        return [OutputFile(name=path.name, content=self._read_file(path)) for path in filepaths]
 
 
-def read_html_file(file_path: Path) -> str:
-    """Read an HTML file and return its contents as a single string."""
-    with open(str(file_path), encoding="utf-8") as f:
-        return f.read()
+class FileServiceTsv(FileService):
+    @override
+    def _get_output_paths(self, outdir_root: Path, experiment_id: str) -> list[Path]:
+        outdir = outdir_root / experiment_id
+        filepaths = []
+        for root, _, files in outdir.walk():
+            for f in files:
+                fp = root / f
+                if fp.exists() and fp.is_file():
+                    filepaths.append(fp)
+        return list(filter(lambda _file: _file.name.endswith(".txt"), filepaths))
+
+    @override
+    def _read_file(self, file_path: Path) -> str:
+        with open(str(file_path), encoding="utf-8") as f:
+            return f.read()
 
 
-def read_tsv_file(file_path: Path) -> str:
-    return read_html_file(file_path)
+class FileServiceHtml(FileService):
+    @override
+    def _get_output_paths(self, outdir_root: Path, experiment_id: str) -> list[Path]:
+        outdir = outdir_root / experiment_id
+        filepaths = []
+        for root, _, files in outdir.walk():
+            for f in files:
+                fp = root / f
+                if fp.exists() and fp.is_file():
+                    filepaths.append(fp)
+        return list(filter(lambda _file: _file.name.endswith(".html"), filepaths))
+
+    @override
+    def _read_file(self, file_path: Path) -> str:
+        """Read an HTML file and return its contents as a single string."""
+        with open(str(file_path), encoding="utf-8") as f:
+            return f.read()
 
 
-def get_analysis_html_outputs(outdir_root: Path, expid: str = "analysis_multigen") -> list[str]:
-    filepaths = get_html_output_paths(outdir_root, expid)
-    return [read_html_file(path) for path in filepaths]
+async def get_tsv_outputs_local(output_id: str, ssh_service: SSHService) -> list[OutputFile]:
+    remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
+    ret, stdin, stdout = await ssh_service.run_command(
+        dedent(f"""
+                cd /home/FCAM/svc_vivarium/workspace \
+                    && {remote_uv_executable} run scripts/ptools_outputs.py --output_id {output_id}
+            """)
+    )
+
+    deserialized = json.loads(stdin.replace("'", '"'))
+    outputs = []
+    for spec in deserialized:
+        output = OutputFile(name=spec["name"], content=spec["content"])
+        outputs.append(output)
+    return outputs
 
 
-def get_analysis_tsv_outputs(outdir_root: Path, expid: str = "analysis_multigen") -> list[str]:
-    filepaths = get_tsv_output_paths(outdir_root, expid)
-    return [read_tsv_file(path) for path in filepaths]
+def format_tsv_string(output: OutputFile) -> str:
+    raw_string = output.content
+    return raw_string.encode("utf-8").decode("unicode_escape")
+
+
+def tsv_string_to_polars_df(output: OutputFile) -> polars.DataFrame:
+    formatted = format_tsv_string(output)
+    return polars.read_csv(io.StringIO(formatted), separator="\t")
+
+
+def write_tsvs(data: list[OutputFile]) -> None:
+    lines = [(output.name, "".join(output.content).split("\n")) for output in data]
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for filename, filedata in lines:
+            with open(Path(tmpdir) / filename, "w") as f:
+                for item in filedata:
+                    f.write(f"{item}\n")
