@@ -1,9 +1,13 @@
 import asyncio
 import io
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import httpx
+import ijson  # type: ignore[import-untyped]
 import polars
+from httpx import ASGITransport
+from polars._typing import PolarsType
 
 from sms_api.api.client import Client
 from sms_api.api.client.api.analyses.fetch_experiment_analysis import (
@@ -130,7 +134,13 @@ class ClientWrapper:
             raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
 
     async def get_simulation_data(
-        self, experiment_id: str, lineage: int = 6, generation: int = 1, obs: list[str] | None = None
+        self,
+        experiment_id: str,
+        lineage: int = 6,
+        generation: int = 1,
+        obs: list[str] | None = None,
+        variant: int = 0,
+        agent_id: int = 0,
     ) -> polars.DataFrame:
         api_client = self._get_api_client()
         response = await get_simulation_data_async(
@@ -139,12 +149,62 @@ class ClientWrapper:
             experiment_id=experiment_id,
             lineage_seed=lineage,
             generation=generation,
+            variant=variant,
+            agent_id=agent_id,
         )
         if response.status_code == 200:
             # return response.parsed
             return polars.from_dicts(response.parsed).sort("time")  # type: ignore[arg-type]
         else:
             raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
+
+
+async def fetch_simulation_data(
+    base_url: str,
+    base_router: str,
+    params: dict[str, str | int | float],
+    observable_list: list[str],
+    transport: ASGITransport | None = None,
+) -> PolarsType:
+    class AsyncGeneratorWrapper:
+        def __init__(self, agen: AsyncIterator[bytes]) -> None:
+            self.agen = agen
+            self.buffer = b""
+
+        async def read(self, n: int = -1) -> bytes:
+            while n < 0 or len(self.buffer) < n:
+                try:
+                    chunk = await self.agen.__anext__()
+                    self.buffer += chunk
+                except StopAsyncIteration:
+                    break
+            if n < 0:
+                result, self.buffer = self.buffer, b""
+            else:
+                result, self.buffer = self.buffer[:n], self.buffer[n:]
+            return result
+
+    async with httpx.AsyncClient(timeout=60, base_url=base_url, transport=transport) as client:
+        url = f"{base_router}/simulations/data"
+        async with client.stream("POST", url, json=observable_list, params=params) as response:
+            if response.status_code != 200:
+                raise RuntimeError(f"Server error: {response.status_code}")
+
+            wrapped = AsyncGeneratorWrapper(response.aiter_bytes())
+            batch = []
+            batch_size = 50_000
+            df_list = []
+
+            async for item in ijson.items_async(wrapped, "item"):
+                batch.append(item)
+                if len(batch) >= batch_size:
+                    df_list.append(polars.DataFrame(batch))
+                    batch.clear()
+
+            if batch:
+                df_list.append(polars.DataFrame(batch))
+
+            return polars.concat(df_list).sort("time")  # type: ignore[return-value]
 
 
 def format_tsv_string(output: OutputFile) -> str:

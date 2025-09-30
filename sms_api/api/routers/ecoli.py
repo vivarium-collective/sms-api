@@ -672,13 +672,16 @@ async def list_simulations() -> list[EcoliSimulationDTO]:
     operation_id="get-ecoli-simulation-data",
     tags=["Simulations"],
     dependencies=[Depends(get_database_service)],
+    summary="Get/Stream simulation data",
 )
 async def get_simulation_data(
     bg_tasks: BackgroundTasks,
-    observables: list[str] = ["bulk"],  # noqa: B006
     experiment_id: str = Query(default="sms_multigeneration"),
     lineage_seed: int = Query(default=6),
     generation: int = Query(default=1),
+    variant: int = Query(default=0),
+    agent_id: int = Query(default=0),
+    observables: list[str] = request_examples.base_observables,
 ) -> fastapi.responses.StreamingResponse:
     db_service = get_database_service()
     if db_service is None:
@@ -686,22 +689,30 @@ async def get_simulation_data(
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
         ssh = get_ssh_service(ENV)
+
+        # first, slice parquet and write temp pq to remote disk
         remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
         ret, stdout, stderr = await ssh.run_command(
             dedent(f"""\
                 cd /home/FCAM/svc_vivarium/workspace \
                 && {remote_uv_executable} run scripts/get_parquet_data.py \
-                    --experiment_id {experiment_id} --lineage_seed {lineage_seed} \
-                    --generation {generation} --observables {observables[0]}
+                    --experiment_id {experiment_id} \
+                    --lineage_seed {lineage_seed} \
+                    --generation {generation} \
+                    --variant {variant} \
+                    --agent_id {agent_id} \
+                    --observables {" ".join(observables)!s}
             """)
         )
-        pq_filename = f"{experiment_id}.parquet"
 
+        # then, download the temp pq
+        pq_filename = f"{experiment_id}.parquet"
         tmpdir = tempfile.TemporaryDirectory()
         local = Path(tmpdir.name, pq_filename)
         bg_tasks.add_task(tmpdir.cleanup)
-        remote = Path(ENV.simulation_outdir).parent / pq_filename
+        remote = Path(ENV.simulation_outdir).parent / "data" / pq_filename
         await ssh.scp_download(local_file=local, remote_path=remote)
+        bg_tasks.add_task(ssh.run_command, f"rm {remote!s}")
 
         def generate(data: list[dict[str, Any]]) -> Generator[bytes, Any, None]:
             yield b"["
@@ -714,24 +725,86 @@ async def get_simulation_data(
                 yield orjson.dumps(item)
             yield b"]"
 
-        # -- bson-like response -- #
-        # return fastapi.Response(
-        #     content=msgpack.packb(pl.read_parquet(local).to_dicts()),
-        #     media_type="application/msgpack"
-        # )
-
-        # -- file blob response -- #
-        # tmpdir = tempfile.TemporaryDirectory()
-        # local = Path(tmpdir.name, pq_filename)
-        # bg_tasks.add_task(tmpdir.cleanup)
-        # remote = Path(ENV.simulation_outdir).parent / pq_filename
-        # await ssh.scp_download(local_file=local, remote_path=remote)
-        # return FileResponse(path=local, media_type="application/octet-stream", filename=local.name)
-
         return fastapi.responses.StreamingResponse(
             generate(pl.read_parquet(local).to_dicts()), media_type="application/json"
         )
 
+        # def generate(path: Path):
+        #     # Collect with streaming engine
+        #     df = pl.scan_parquet(path).collect(streaming=True)
+        #     yield b"["
+        #     first = True
+        #     for batch in df.iter_slices(n_rows=10_000):  # chunked iteration
+        #         for row in batch.iter_rows(named=True):
+        #             if not first:
+        #                 yield b","
+        #             else:
+        #                 first = False
+        #             yield orjson.dumps(row)
+        #     yield b"]"
+        # return fastapi.responses.StreamingResponse(
+        #     generate(local), media_type="application/json"
+        # )
+
+    except Exception as e:
+        logger.exception("Error uploading simulation config")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/simulations/data/download",
+    operation_id="download-ecoli-simulation-data",
+    tags=["Simulations"],
+    dependencies=[Depends(get_database_service)],
+    summary="Download selected simulation data as a parquet file",
+)
+async def download_simulation_data(
+    bg_tasks: BackgroundTasks,
+    experiment_id: str = Query(default="sms_multigeneration"),
+    lineage_seed: int = Query(default=6),
+    generation: int = Query(default=1),
+    variant: int = Query(default=0),
+    agent_id: int = Query(default=0),
+    observables: list[str] = request_examples.base_observables,
+) -> FileResponse:
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Database service is not initialized")
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    try:
+        ssh = get_ssh_service(ENV)
+
+        # first, slice parquet and write temp pq to remote disk
+        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
+        ret, stdout, stderr = await ssh.run_command(
+            dedent(f"""\
+                cd /home/FCAM/svc_vivarium/workspace \
+                && {remote_uv_executable} run scripts/get_parquet_data.py \
+                    --experiment_id {experiment_id} \
+                    --lineage_seed {lineage_seed} \
+                    --generation {generation} \
+                    --variant {variant} \
+                    --agent_id {agent_id} \
+                    --observables {" ".join(observables)!s}
+            """)
+        )
+
+        # then, download the temp pq
+        pq_filename = f"{experiment_id}.parquet"
+        tmpdir = tempfile.TemporaryDirectory()
+        local = Path(tmpdir.name, pq_filename)
+        bg_tasks.add_task(tmpdir.cleanup)
+        remote = Path(ENV.simulation_outdir).parent / "data" / pq_filename
+        await ssh.scp_download(local_file=local, remote_path=remote)
+        bg_tasks.add_task(ssh.run_command, f"rm {remote!s}")
+
+        # -- file blob response -- #
+        tmpdir = tempfile.TemporaryDirectory()
+        local = Path(tmpdir.name, pq_filename)
+        bg_tasks.add_task(tmpdir.cleanup)
+        remote = Path(ENV.simulation_outdir).parent / pq_filename
+        await ssh.scp_download(local_file=local, remote_path=remote)
+        return FileResponse(path=local, media_type="application/octet-stream", filename=local.name)
     except Exception as e:
         logger.exception("Error uploading simulation config")
         raise HTTPException(status_code=500, detail=str(e)) from e

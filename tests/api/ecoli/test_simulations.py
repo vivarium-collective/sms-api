@@ -5,6 +5,7 @@ from random import randint
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.client_wrapper import fetch_simulation_data
 from sms_api.api.main import app
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
@@ -202,11 +203,110 @@ async def test_fetch_simulation(
         assert fetch_response.json() == sim_response
 
 
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_get_simulation_data() -> None:
-    from app.client_wrapper import ClientWrapper
+async def test_fetch_simulation_data(
+    base_router: str, database_service: DatabaseServiceSQL, ssh_service: SSHService
+) -> None:
+    transport = ASGITransport(app=app)
+    df = await fetch_simulation_data(
+        base_url="http://testserver",
+        base_router=base_router,
+        params={"experiment_id": "sms_multigeneration", "lineage_seed": 6, "generation": 1},
+        observable_list=["bulk", "listeners__rnap_data__termination_loss"],
+        transport=transport,
+    )
+    print(df)
+    print(df.shape)
+    assert sorted(df.columns) == sorted(["bulk", "time", "listeners__rnap_data__termination_loss"])
 
-    client = ClientWrapper(base_url="http://localhost:8888")
-    resp = await client.get_simulation_data(experiment_id="sms_multigeneration", lineage=6, generation=1, obs=["bulk"])
-    assert resp.columns == ["bulk", "time"]
-    print(resp)
+
+# async def fetch_simulation_data(base_url: str, base_router: str, params: dict, observable_list: list[str]):
+#     class AsyncGeneratorWrapper:
+#         """Wrap an async generator to provide an async read() for ijson."""
+#
+#         def __init__(self, agen):
+#             self.agen = agen
+#             self.buffer = b""
+#
+#         async def read(self, n=-1):
+#             while n < 0 or len(self.buffer) < n:
+#                 try:
+#                     chunk = await self.agen.__anext__()
+#                     self.buffer += chunk
+#                 except StopAsyncIteration:
+#                     break
+#             if n < 0:
+#                 result, self.buffer = self.buffer, b""
+#             else:
+#                 result, self.buffer = self.buffer[:n], self.buffer[n:]
+#             return result
+#
+#     transport = ASGITransport(app=app)
+#     async with httpx.AsyncClient(transport=transport, timeout=60, base_url=base_url) as client:
+#         url = f"{base_router}/simulations/data"
+#         async with client.stream("POST", url, json=observable_list, params=params) as response:
+#             if response.status_code != 200:
+#                 raise RuntimeError(f"Server error: {response.status_code}")
+#
+#             wrapped = AsyncGeneratorWrapper(response.aiter_bytes())
+#
+#             # Use ijson async parser to yield dicts one at a time
+#             batch = []
+#             batch_size = 50_000  # adjust depending on memory
+#             df_list = []
+#
+#             async for item in ijson.items_async(wrapped, "item"):
+#                 batch.append(item)
+#                 if len(batch) >= batch_size:
+#                     df_list.append(pl.DataFrame(batch))
+#                     batch.clear()
+#
+#             # add remaining items
+#             if batch:
+#                 df_list.append(pl.DataFrame(batch))
+#
+#             # vertically stack all batches
+#             return pl.concat(df_list)
+
+
+# async def fetch_stream(base_router: str, base_url: str):
+#     class AsyncReader:
+#         """Wrap httpx async byte iterator so ijson can consume it."""
+#
+#         def __init__(self, aiter_bytes):
+#             self._aiter = aiter_bytes
+#             self._buffer = b""
+#
+#         async def read(self, n=-1):
+#             while n < 0 or len(self._buffer) < n:
+#                 try:
+#                     chunk = await self._aiter.__anext__()
+#                     self._buffer += chunk
+#                 except StopAsyncIteration:
+#                     break
+#             if n < 0:
+#                 result, self._buffer = self._buffer, b""
+#             else:
+#                 result, self._buffer = self._buffer[:n], self._buffer[n:]
+#             return result
+#
+#     transport = ASGITransport(app=app)
+#     async with httpx.AsyncClient(transport=transport, timeout=None, base_url=base_url) as client:
+#         url = f"{base_router}/simulations/data"
+#         async with client.stream("POST", url) as response:
+#             response.raise_for_status()
+#             reader = AsyncReader(response.aiter_bytes())
+#
+#             async for item in ijson.items_async(reader, "item"):
+#                 yield item  # each item is one dict
+#
+#
+# @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+# @pytest.mark.asyncio
+# async def test_get_simulation_data(base_router: str, database_service: DatabaseServiceSQL, ssh_service: SSHService):
+#     base_url = "http://testserver"
+#     async for obj in fetch_stream(base_router=base_router, base_url=base_url):
+#         print(obj)
+#         # break early for demo
+#         # break

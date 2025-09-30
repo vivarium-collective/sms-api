@@ -16,7 +16,7 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: ptools_analysis-e5398b51023623db_1759190732267
+                analysis_name: ptools_analysis-6ca8b2fd9c37e74d_1759239346714
                 single:
                   ptools_rxns:
                     n_tp: 8
@@ -633,7 +633,7 @@ paths:
     post:
       tags:
       - Simulations
-      summary: Get Simulation Data
+      summary: Get/Stream simulation data
       operationId: get-ecoli-simulation-data
       parameters:
       - name: experiment_id
@@ -657,6 +657,84 @@ paths:
           type: integer
           default: 1
           title: Generation
+      - name: variant
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Variant
+      - name: agent_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Agent Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+              default:
+              - bulk
+              title: Observables
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/simulations/data/download:
+    post:
+      tags:
+      - Simulations
+      summary: Download selected simulation data as a parquet file
+      operationId: download-ecoli-simulation-data
+      parameters:
+      - name: experiment_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: sms_multigeneration
+          title: Experiment Id
+      - name: lineage_seed
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 6
+          title: Lineage Seed
+      - name: generation
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1
+          title: Generation
+      - name: variant
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Variant
+      - name: agent_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Agent Id
       requestBody:
         content:
           application/json:
@@ -1112,8 +1190,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-b334113b9c20f5e7_1759190732267-19eecdaf845d1623_1759190732267
-            simulation_name: sms_single-b334113b9c20f5e7_1759190732267
+            experiment_id: sms_single-67ed9261d9628a87_1759239346714-ab8aac31292a7538_1759239346714
+            simulation_name: sms_single-67ed9261d9628a87_1759239346714
             metadata: {}
             run_parca: true
             generations: 1
@@ -1268,7 +1346,7 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_smsapi-d0110ee01a41da7b_1759190732105
+          default: analysis_smsapi-103ea058fd342807_1759239346589
         single:
           additionalProperties: true
           type: object
@@ -1336,7 +1414,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-ed2f0dfe9473b661_1759190732130
+          default: sim_smsapi-e0197b80deadab35_1759239346615
         metadata:
           additionalProperties: true
           type: object
