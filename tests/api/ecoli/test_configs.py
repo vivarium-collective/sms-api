@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from sms_api.config import get_settings
 from sms_api.data.models import AnalysisConfig
 from sms_api.simulation.models import SimulationConfig
 
@@ -14,6 +15,7 @@ async def test_analysis_config() -> None:
     assert len(conf.emitter_arg["out_dir"])
 
 
+@pytest.mark.skipif(len(get_settings().slurm_base_path) == 0, reason="slurm base path not supplied")
 @pytest.mark.asyncio
 def test_load_simulation_config() -> None:
     config = SimulationConfig.from_file(fp=Path("assets/sms_base_simulation_config.json"))
