@@ -3,6 +3,11 @@
     simulation analysis jobs/workflows
 """
 
+# TODO: do we require simulation/analysis configs that are supersets of the original configs:
+#   IE: where do we provide this special config: in vEcoli or API?
+# TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
+# TODO: labkey preprocessing
+
 import logging
 import mimetypes
 import tempfile
@@ -10,9 +15,12 @@ import zipfile
 from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
-from typing import Union
+from textwrap import dedent
+from typing import Any, Union
 
 import fastapi
+import orjson
+import polars as pl
 from fastapi import BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
@@ -656,4 +664,74 @@ async def list_simulations() -> list[EcoliSimulationDTO]:
         return await db_service.list_ecoli_simulations()
     except Exception as e:
         logger.exception("Error fetching the uploaded analyses")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/simulations/data",
+    operation_id="get-ecoli-simulation-data",
+    tags=["Simulations"],
+    dependencies=[Depends(get_database_service)],
+)
+async def get_simulation_data(
+    bg_tasks: BackgroundTasks,
+    observables: list[str] = ["bulk"],  # noqa: B006
+    experiment_id: str = Query(default="sms_multigeneration"),
+    lineage_seed: int = Query(default=6),
+    generation: int = Query(default=1),
+) -> fastapi.responses.StreamingResponse:
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Database service is not initialized")
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    try:
+        ssh = get_ssh_service(ENV)
+        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
+        ret, stdout, stderr = await ssh.run_command(
+            dedent(f"""\
+                cd /home/FCAM/svc_vivarium/workspace \
+                && {remote_uv_executable} run scripts/get_parquet_data.py \
+                    --experiment_id {experiment_id} --lineage_seed {lineage_seed} \
+                    --generation {generation} --observables {observables[0]}
+            """)
+        )
+        pq_filename = f"{experiment_id}.parquet"
+
+        tmpdir = tempfile.TemporaryDirectory()
+        local = Path(tmpdir.name, pq_filename)
+        bg_tasks.add_task(tmpdir.cleanup)
+        remote = Path(ENV.simulation_outdir).parent / pq_filename
+        await ssh.scp_download(local_file=local, remote_path=remote)
+
+        def generate(data: list[dict[str, Any]]) -> Generator[bytes, Any, None]:
+            yield b"["
+            first = True
+            for item in data:
+                if not first:
+                    yield b","
+                else:
+                    first = False
+                yield orjson.dumps(item)
+            yield b"]"
+
+        # -- bson-like response -- #
+        # return fastapi.Response(
+        #     content=msgpack.packb(pl.read_parquet(local).to_dicts()),
+        #     media_type="application/msgpack"
+        # )
+
+        # -- file blob response -- #
+        # tmpdir = tempfile.TemporaryDirectory()
+        # local = Path(tmpdir.name, pq_filename)
+        # bg_tasks.add_task(tmpdir.cleanup)
+        # remote = Path(ENV.simulation_outdir).parent / pq_filename
+        # await ssh.scp_download(local_file=local, remote_path=remote)
+        # return FileResponse(path=local, media_type="application/octet-stream", filename=local.name)
+
+        return fastapi.responses.StreamingResponse(
+            generate(pl.read_parquet(local).to_dicts()), media_type="application/json"
+        )
+
+    except Exception as e:
+        logger.exception("Error uploading simulation config")
         raise HTTPException(status_code=500, detail=str(e)) from e
