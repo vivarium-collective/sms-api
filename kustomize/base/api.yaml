@@ -22,7 +22,7 @@ spec:
         fsGroup: 10000
       containers:
         - name: api
-          image: ghcr.io/vivarium-collective/sms-api:0.2.25-dev  # 0.2.24-dev
+          image: ghcr.io/vivarium-collective/sms-api:0.2.26-dev  # 0.2.25-dev
           # STABLE SRI WORKING VERSION: image: ghcr.io/biosimulations/sms-api:0.2.15-dev
           imagePullPolicy: Always
           ports:
