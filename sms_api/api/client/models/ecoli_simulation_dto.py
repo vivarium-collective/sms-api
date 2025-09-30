@@ -12,8 +12,8 @@ from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..models.simulation_config import SimulationConfig
     from ..models.experiment_metadata import ExperimentMetadata
+    from ..models.simulation_config import SimulationConfig
 
 
 T = TypeVar("T", bound="EcoliSimulationDTO")
@@ -43,8 +43,8 @@ class EcoliSimulationDTO:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.simulation_config import SimulationConfig
         from ..models.experiment_metadata import ExperimentMetadata
+        from ..models.simulation_config import SimulationConfig
 
         database_id = self.database_id
 
@@ -87,8 +87,8 @@ class EcoliSimulationDTO:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.simulation_config import SimulationConfig
         from ..models.experiment_metadata import ExperimentMetadata
+        from ..models.simulation_config import SimulationConfig
 
         d = dict(src_dict)
         database_id = d.pop("database_id")

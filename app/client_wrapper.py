@@ -1,9 +1,13 @@
 import asyncio
 import io
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import httpx
+import ijson  # type: ignore[import-untyped]
 import polars
+from httpx import ASGITransport
+from polars._typing import PolarsType
 
 from sms_api.api.client import Client
 from sms_api.api.client.api.analyses.fetch_experiment_analysis import (
@@ -12,6 +16,11 @@ from sms_api.api.client.api.analyses.fetch_experiment_analysis import (
 from sms_api.api.client.api.analyses.get_analysis_status import asyncio_detailed as get_analysis_status_async
 from sms_api.api.client.api.analyses.get_analysis_tsv import asyncio_detailed as get_analysis_tsv_async
 from sms_api.api.client.api.analyses.run_experiment_analysis import asyncio_detailed as run_analysis_async
+from sms_api.api.client.api.simulations.get_ecoli_simulation import asyncio_detailed as get_simulation_async
+from sms_api.api.client.api.simulations.get_ecoli_simulation_data import asyncio_detailed as get_simulation_data_async
+from sms_api.api.client.api.simulations.get_ecoli_simulation_status import (
+    asyncio_detailed as get_simulation_status_async,
+)
 from sms_api.api.client.api.simulations.run_ecoli_simulation import asyncio_detailed as run_simulation_async
 from sms_api.api.client.models import (
     BodyRunEcoliSimulation,
@@ -51,6 +60,26 @@ class ClientWrapper:
             client=api_client, body=BodyRunEcoliSimulation(request=request)
         )
         if response.status_code == 200 and isinstance(response.parsed, EcoliSimulationDTO):
+            return response.parsed
+        else:
+            raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
+
+    async def get_simulation(self, database_id: int) -> EcoliSimulationDTO:
+        api_client = self._get_api_client()
+        response: Response[EcoliSimulationDTO | HTTPValidationError] = await get_simulation_async(
+            client=api_client, id=database_id
+        )
+        if response.status_code == 200 and isinstance(response.parsed, EcoliSimulationDTO):
+            return response.parsed
+        else:
+            raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
+
+    async def get_simulation_status(self, simulation: EcoliSimulationDTO) -> SimulationRun:
+        api_client = self._get_api_client()
+        response: Response[SimulationRun | HTTPValidationError] = await get_simulation_status_async(
+            client=api_client, id=simulation.database_id
+        )
+        if response.status_code == 200 and isinstance(response.parsed, SimulationRun):
             return response.parsed
         else:
             raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
@@ -103,6 +132,79 @@ class ClientWrapper:
 
         else:
             raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
+
+    async def get_simulation_data(
+        self,
+        experiment_id: str,
+        lineage: int = 6,
+        generation: int = 1,
+        obs: list[str] | None = None,
+        variant: int = 0,
+        agent_id: int = 0,
+    ) -> polars.DataFrame:
+        api_client = self._get_api_client()
+        response = await get_simulation_data_async(
+            client=api_client,
+            body=obs or ["bulk"],
+            experiment_id=experiment_id,
+            lineage_seed=lineage,
+            generation=generation,
+            variant=variant,
+            agent_id=agent_id,
+        )
+        if response.status_code == 200:
+            # return response.parsed
+            return polars.from_dicts(response.parsed).sort("time")  # type: ignore[arg-type]
+        else:
+            raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
+
+
+async def fetch_simulation_data(
+    base_url: str,
+    base_router: str,
+    params: dict[str, str | int | float],
+    observable_list: list[str],
+    transport: ASGITransport | None = None,
+) -> PolarsType:
+    class AsyncGeneratorWrapper:
+        def __init__(self, agen: AsyncIterator[bytes]) -> None:
+            self.agen = agen
+            self.buffer = b""
+
+        async def read(self, n: int = -1) -> bytes:
+            while n < 0 or len(self.buffer) < n:
+                try:
+                    chunk = await self.agen.__anext__()
+                    self.buffer += chunk
+                except StopAsyncIteration:
+                    break
+            if n < 0:
+                result, self.buffer = self.buffer, b""
+            else:
+                result, self.buffer = self.buffer[:n], self.buffer[n:]
+            return result
+
+    async with httpx.AsyncClient(timeout=60, base_url=base_url, transport=transport) as client:
+        url = f"{base_router}/simulations/data"
+        async with client.stream("POST", url, json=observable_list, params=params) as response:
+            if response.status_code != 200:
+                raise RuntimeError(f"Server error: {response.status_code}")
+
+            wrapped = AsyncGeneratorWrapper(response.aiter_bytes())
+            batch = []
+            batch_size = 50_000
+            df_list = []
+
+            async for item in ijson.items_async(wrapped, "item"):
+                batch.append(item)
+                if len(batch) >= batch_size:
+                    df_list.append(polars.DataFrame(batch))
+                    batch.clear()
+
+            if batch:
+                df_list.append(polars.DataFrame(batch))
+
+            return polars.concat(df_list).sort("time")  # type: ignore[return-value]
 
 
 def format_tsv_string(output: OutputFile) -> str:

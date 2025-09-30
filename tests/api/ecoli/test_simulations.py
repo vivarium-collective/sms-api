@@ -5,6 +5,7 @@ from random import randint
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.client_wrapper import fetch_simulation_data
 from sms_api.api.main import app
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
@@ -200,3 +201,21 @@ async def test_fetch_simulation(
         fetch_response = await client.get(f"{base_router}/simulations/{db_id}")
         fetch_response.raise_for_status()
         assert fetch_response.json() == sim_response
+
+
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.asyncio
+async def test_fetch_simulation_data(
+    base_router: str, database_service: DatabaseServiceSQL, ssh_service: SSHService
+) -> None:
+    transport = ASGITransport(app=app)
+    df = await fetch_simulation_data(
+        base_url="http://testserver",
+        base_router=base_router,
+        params={"experiment_id": "sms_multigeneration", "lineage_seed": 6, "generation": 1},
+        observable_list=["bulk", "listeners__rnap_data__termination_loss"],
+        transport=transport,
+    )
+    print(df)
+    print(df.shape)
+    assert sorted(df.columns) == sorted(["bulk", "time", "listeners__rnap_data__termination_loss"])

@@ -70,3 +70,5 @@ ptools_analysis = ExperimentAnalysisRequest(
 
 
 base_simulation = (lambda expid: ExperimentRequest(experiment_id=expid, simulation_name=expid))(unique_id("sms_single"))
+
+base_observables = ["bulk"]

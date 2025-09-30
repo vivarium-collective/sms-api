@@ -48,7 +48,7 @@ async def test_get_analysis(
 async def test_get_outputs(base_router: str, database_service: DatabaseService) -> None:
     exp_name = unique_id(scope="pytest_analysis")
     analysis = await database_service.insert_analysis(
-        name=exp_name,
+        name="analysis_multigen",
         last_updated=str(datetime.datetime.now()),
         job_name=exp_name,
         job_id=1234,

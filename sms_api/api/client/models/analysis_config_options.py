@@ -13,11 +13,11 @@ from typing import Union
 
 if TYPE_CHECKING:
     from ..models.analysis_config_options_multiseed import AnalysisConfigOptionsMultiseed
+    from ..models.analysis_config_options_multiexperiment import AnalysisConfigOptionsMultiexperiment
+    from ..models.analysis_config_options_single import AnalysisConfigOptionsSingle
+    from ..models.analysis_config_options_multivariant import AnalysisConfigOptionsMultivariant
     from ..models.analysis_config_options_multigeneration import AnalysisConfigOptionsMultigeneration
     from ..models.analysis_config_options_multidaughter import AnalysisConfigOptionsMultidaughter
-    from ..models.analysis_config_options_multivariant import AnalysisConfigOptionsMultivariant
-    from ..models.analysis_config_options_single import AnalysisConfigOptionsSingle
-    from ..models.analysis_config_options_multiexperiment import AnalysisConfigOptionsMultiexperiment
 
 
 T = TypeVar("T", bound="AnalysisConfigOptions")
@@ -55,11 +55,11 @@ class AnalysisConfigOptions:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.analysis_config_options_multiseed import AnalysisConfigOptionsMultiseed
+        from ..models.analysis_config_options_multiexperiment import AnalysisConfigOptionsMultiexperiment
+        from ..models.analysis_config_options_single import AnalysisConfigOptionsSingle
+        from ..models.analysis_config_options_multivariant import AnalysisConfigOptionsMultivariant
         from ..models.analysis_config_options_multigeneration import AnalysisConfigOptionsMultigeneration
         from ..models.analysis_config_options_multidaughter import AnalysisConfigOptionsMultidaughter
-        from ..models.analysis_config_options_multivariant import AnalysisConfigOptionsMultivariant
-        from ..models.analysis_config_options_single import AnalysisConfigOptionsSingle
-        from ..models.analysis_config_options_multiexperiment import AnalysisConfigOptionsMultiexperiment
 
         experiment_id = self.experiment_id
 
@@ -144,11 +144,11 @@ class AnalysisConfigOptions:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.analysis_config_options_multiseed import AnalysisConfigOptionsMultiseed
+        from ..models.analysis_config_options_multiexperiment import AnalysisConfigOptionsMultiexperiment
+        from ..models.analysis_config_options_single import AnalysisConfigOptionsSingle
+        from ..models.analysis_config_options_multivariant import AnalysisConfigOptionsMultivariant
         from ..models.analysis_config_options_multigeneration import AnalysisConfigOptionsMultigeneration
         from ..models.analysis_config_options_multidaughter import AnalysisConfigOptionsMultidaughter
-        from ..models.analysis_config_options_multivariant import AnalysisConfigOptionsMultivariant
-        from ..models.analysis_config_options_single import AnalysisConfigOptionsSingle
-        from ..models.analysis_config_options_multiexperiment import AnalysisConfigOptionsMultiexperiment
 
         d = dict(src_dict)
         experiment_id = cast(list[str], d.pop("experiment_id"))

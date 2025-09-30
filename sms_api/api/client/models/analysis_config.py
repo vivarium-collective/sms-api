@@ -11,8 +11,8 @@ from typing import cast
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..models.analysis_config_options import AnalysisConfigOptions
     from ..models.analysis_config_emitter_arg import AnalysisConfigEmitterArg
+    from ..models.analysis_config_options import AnalysisConfigOptions
 
 
 T = TypeVar("T", bound="AnalysisConfig")
@@ -31,8 +31,8 @@ class AnalysisConfig:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.analysis_config_options import AnalysisConfigOptions
         from ..models.analysis_config_emitter_arg import AnalysisConfigEmitterArg
+        from ..models.analysis_config_options import AnalysisConfigOptions
 
         analysis_options = self.analysis_options.to_dict()
 
@@ -52,8 +52,8 @@ class AnalysisConfig:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.analysis_config_options import AnalysisConfigOptions
         from ..models.analysis_config_emitter_arg import AnalysisConfigEmitterArg
+        from ..models.analysis_config_options import AnalysisConfigOptions
 
         d = dict(src_dict)
         analysis_options = AnalysisConfigOptions.from_dict(d.pop("analysis_options"))
