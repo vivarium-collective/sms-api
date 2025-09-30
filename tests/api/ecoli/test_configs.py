@@ -19,7 +19,7 @@ def test_load_simulation_config() -> None:
     config = SimulationConfig.from_file(fp=Path("assets/sms_base_simulation_config.json"))
     expected_dump = {
         "experiment_id": "<PLACEHOLDER>",
-        "sim_data_path": "/workspace/kb/simData.cPickle",
+        "sim_data_path": "/home/FCAM/svc_vivarium/workspace/kb/simData.cPickle",
         "suffix_time": True,
         "parca_options": {
             "cpus": 2,
