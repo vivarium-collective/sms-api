@@ -12,11 +12,11 @@ from typing import Union
 
 if TYPE_CHECKING:
     from ..models.experiment_analysis_request_multigeneration import ExperimentAnalysisRequestMultigeneration
-    from ..models.experiment_analysis_request_multidaughter import ExperimentAnalysisRequestMultidaughter
-    from ..models.experiment_analysis_request_multiexperiment import ExperimentAnalysisRequestMultiexperiment
+    from ..models.experiment_analysis_request_multiseed import ExperimentAnalysisRequestMultiseed
     from ..models.experiment_analysis_request_single import ExperimentAnalysisRequestSingle
     from ..models.experiment_analysis_request_multivariant import ExperimentAnalysisRequestMultivariant
-    from ..models.experiment_analysis_request_multiseed import ExperimentAnalysisRequestMultiseed
+    from ..models.experiment_analysis_request_multiexperiment import ExperimentAnalysisRequestMultiexperiment
+    from ..models.experiment_analysis_request_multidaughter import ExperimentAnalysisRequestMultidaughter
 
 
 T = TypeVar("T", bound="ExperimentAnalysisRequest")
@@ -27,7 +27,7 @@ class ExperimentAnalysisRequest:
     """
     Attributes:
         experiment_id (str):
-        analysis_name (Union[Unset, str]):  Default: 'analysis_smsapi-ad47f8ebade013b7_1759190675283'.
+        analysis_name (Union[Unset, str]):  Default: 'analysis_smsapi-103ea058fd342807_1759239346589'.
         single (Union[Unset, ExperimentAnalysisRequestSingle]):
         multidaughter (Union[Unset, ExperimentAnalysisRequestMultidaughter]):
         multigeneration (Union[Unset, ExperimentAnalysisRequestMultigeneration]):
@@ -37,7 +37,7 @@ class ExperimentAnalysisRequest:
     """
 
     experiment_id: str
-    analysis_name: Union[Unset, str] = "analysis_smsapi-ad47f8ebade013b7_1759190675283"
+    analysis_name: Union[Unset, str] = "analysis_smsapi-103ea058fd342807_1759239346589"
     single: Union[Unset, "ExperimentAnalysisRequestSingle"] = UNSET
     multidaughter: Union[Unset, "ExperimentAnalysisRequestMultidaughter"] = UNSET
     multigeneration: Union[Unset, "ExperimentAnalysisRequestMultigeneration"] = UNSET
@@ -48,11 +48,11 @@ class ExperimentAnalysisRequest:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.experiment_analysis_request_multigeneration import ExperimentAnalysisRequestMultigeneration
-        from ..models.experiment_analysis_request_multidaughter import ExperimentAnalysisRequestMultidaughter
-        from ..models.experiment_analysis_request_multiexperiment import ExperimentAnalysisRequestMultiexperiment
+        from ..models.experiment_analysis_request_multiseed import ExperimentAnalysisRequestMultiseed
         from ..models.experiment_analysis_request_single import ExperimentAnalysisRequestSingle
         from ..models.experiment_analysis_request_multivariant import ExperimentAnalysisRequestMultivariant
-        from ..models.experiment_analysis_request_multiseed import ExperimentAnalysisRequestMultiseed
+        from ..models.experiment_analysis_request_multiexperiment import ExperimentAnalysisRequestMultiexperiment
+        from ..models.experiment_analysis_request_multidaughter import ExperimentAnalysisRequestMultidaughter
 
         experiment_id = self.experiment_id
 
@@ -107,11 +107,11 @@ class ExperimentAnalysisRequest:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.experiment_analysis_request_multigeneration import ExperimentAnalysisRequestMultigeneration
-        from ..models.experiment_analysis_request_multidaughter import ExperimentAnalysisRequestMultidaughter
-        from ..models.experiment_analysis_request_multiexperiment import ExperimentAnalysisRequestMultiexperiment
+        from ..models.experiment_analysis_request_multiseed import ExperimentAnalysisRequestMultiseed
         from ..models.experiment_analysis_request_single import ExperimentAnalysisRequestSingle
         from ..models.experiment_analysis_request_multivariant import ExperimentAnalysisRequestMultivariant
-        from ..models.experiment_analysis_request_multiseed import ExperimentAnalysisRequestMultiseed
+        from ..models.experiment_analysis_request_multiexperiment import ExperimentAnalysisRequestMultiexperiment
+        from ..models.experiment_analysis_request_multidaughter import ExperimentAnalysisRequestMultidaughter
 
         d = dict(src_dict)
         experiment_id = d.pop("experiment_id")

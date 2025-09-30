@@ -12,15 +12,15 @@ from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
+    from ..models.experiment_request_analysis_options import ExperimentRequestAnalysisOptions
+    from ..models.experiment_request_topology import ExperimentRequestTopology
+    from ..models.experiment_request_spatial_environment_config import ExperimentRequestSpatialEnvironmentConfig
+    from ..models.experiment_request_flow import ExperimentRequestFlow
+    from ..models.experiment_request_process_configs import ExperimentRequestProcessConfigs
+    from ..models.experiment_request_metadata import ExperimentRequestMetadata
+    from ..models.experiment_request_swap_processes import ExperimentRequestSwapProcesses
     from ..models.experiment_request_variants import ExperimentRequestVariants
     from ..models.experiment_request_initial_state import ExperimentRequestInitialState
-    from ..models.experiment_request_process_configs import ExperimentRequestProcessConfigs
-    from ..models.experiment_request_topology import ExperimentRequestTopology
-    from ..models.experiment_request_flow import ExperimentRequestFlow
-    from ..models.experiment_request_analysis_options import ExperimentRequestAnalysisOptions
-    from ..models.experiment_request_swap_processes import ExperimentRequestSwapProcesses
-    from ..models.experiment_request_metadata import ExperimentRequestMetadata
-    from ..models.experiment_request_spatial_environment_config import ExperimentRequestSpatialEnvironmentConfig
 
 
 T = TypeVar("T", bound="ExperimentRequest")
@@ -32,7 +32,7 @@ class ExperimentRequest:
 
     Attributes:
         experiment_id (str):
-        simulation_name (Union[Unset, str]):  Default: 'sim_smsapi-fee4e43162d08aa8_1759190675310'.
+        simulation_name (Union[Unset, str]):  Default: 'sim_smsapi-e0197b80deadab35_1759239346615'.
         metadata (Union[Unset, ExperimentRequestMetadata]):
         run_parca (Union[Unset, bool]):  Default: True.
         generations (Union[Unset, int]):  Default: 1.
@@ -84,7 +84,7 @@ class ExperimentRequest:
     """
 
     experiment_id: str
-    simulation_name: Union[Unset, str] = "sim_smsapi-fee4e43162d08aa8_1759190675310"
+    simulation_name: Union[Unset, str] = "sim_smsapi-e0197b80deadab35_1759239346615"
     metadata: Union[Unset, "ExperimentRequestMetadata"] = UNSET
     run_parca: Union[Unset, bool] = True
     generations: Union[Unset, int] = 1
@@ -136,15 +136,15 @@ class ExperimentRequest:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.experiment_request_analysis_options import ExperimentRequestAnalysisOptions
+        from ..models.experiment_request_topology import ExperimentRequestTopology
+        from ..models.experiment_request_spatial_environment_config import ExperimentRequestSpatialEnvironmentConfig
+        from ..models.experiment_request_flow import ExperimentRequestFlow
+        from ..models.experiment_request_process_configs import ExperimentRequestProcessConfigs
+        from ..models.experiment_request_metadata import ExperimentRequestMetadata
+        from ..models.experiment_request_swap_processes import ExperimentRequestSwapProcesses
         from ..models.experiment_request_variants import ExperimentRequestVariants
         from ..models.experiment_request_initial_state import ExperimentRequestInitialState
-        from ..models.experiment_request_process_configs import ExperimentRequestProcessConfigs
-        from ..models.experiment_request_topology import ExperimentRequestTopology
-        from ..models.experiment_request_flow import ExperimentRequestFlow
-        from ..models.experiment_request_analysis_options import ExperimentRequestAnalysisOptions
-        from ..models.experiment_request_swap_processes import ExperimentRequestSwapProcesses
-        from ..models.experiment_request_metadata import ExperimentRequestMetadata
-        from ..models.experiment_request_spatial_environment_config import ExperimentRequestSpatialEnvironmentConfig
 
         experiment_id = self.experiment_id
 
@@ -495,15 +495,15 @@ class ExperimentRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.experiment_request_analysis_options import ExperimentRequestAnalysisOptions
+        from ..models.experiment_request_topology import ExperimentRequestTopology
+        from ..models.experiment_request_spatial_environment_config import ExperimentRequestSpatialEnvironmentConfig
+        from ..models.experiment_request_flow import ExperimentRequestFlow
+        from ..models.experiment_request_process_configs import ExperimentRequestProcessConfigs
+        from ..models.experiment_request_metadata import ExperimentRequestMetadata
+        from ..models.experiment_request_swap_processes import ExperimentRequestSwapProcesses
         from ..models.experiment_request_variants import ExperimentRequestVariants
         from ..models.experiment_request_initial_state import ExperimentRequestInitialState
-        from ..models.experiment_request_process_configs import ExperimentRequestProcessConfigs
-        from ..models.experiment_request_topology import ExperimentRequestTopology
-        from ..models.experiment_request_flow import ExperimentRequestFlow
-        from ..models.experiment_request_analysis_options import ExperimentRequestAnalysisOptions
-        from ..models.experiment_request_swap_processes import ExperimentRequestSwapProcesses
-        from ..models.experiment_request_metadata import ExperimentRequestMetadata
-        from ..models.experiment_request_spatial_environment_config import ExperimentRequestSpatialEnvironmentConfig
 
         d = dict(src_dict)
         experiment_id = d.pop("experiment_id")

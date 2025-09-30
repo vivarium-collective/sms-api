@@ -40,7 +40,7 @@ def _get_kwargs(
 
     _kwargs: dict[str, Any] = {
         "method": "post",
-        "url": "/v1/ecoli/simulations/data",
+        "url": "/v1/ecoli/simulations/data/download",
         "params": params,
     }
 
@@ -89,7 +89,7 @@ def sync_detailed(
     variant: Union[Unset, int] = 0,
     agent_id: Union[Unset, int] = 0,
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """Get/Stream simulation data
+    """Download selected simulation data as a parquet file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'sms_multigeneration'.
@@ -133,7 +133,7 @@ def sync(
     variant: Union[Unset, int] = 0,
     agent_id: Union[Unset, int] = 0,
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """Get/Stream simulation data
+    """Download selected simulation data as a parquet file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'sms_multigeneration'.
@@ -172,7 +172,7 @@ async def asyncio_detailed(
     variant: Union[Unset, int] = 0,
     agent_id: Union[Unset, int] = 0,
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """Get/Stream simulation data
+    """Download selected simulation data as a parquet file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'sms_multigeneration'.
@@ -214,7 +214,7 @@ async def asyncio(
     variant: Union[Unset, int] = 0,
     agent_id: Union[Unset, int] = 0,
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """Get/Stream simulation data
+    """Download selected simulation data as a parquet file
 
     Args:
         experiment_id (Union[Unset, str]):  Default: 'sms_multigeneration'.
