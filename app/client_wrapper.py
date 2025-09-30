@@ -12,6 +12,11 @@ from sms_api.api.client.api.analyses.fetch_experiment_analysis import (
 from sms_api.api.client.api.analyses.get_analysis_status import asyncio_detailed as get_analysis_status_async
 from sms_api.api.client.api.analyses.get_analysis_tsv import asyncio_detailed as get_analysis_tsv_async
 from sms_api.api.client.api.analyses.run_experiment_analysis import asyncio_detailed as run_analysis_async
+from sms_api.api.client.api.simulations.get_ecoli_simulation import asyncio_detailed as get_simulation_async
+from sms_api.api.client.api.simulations.get_ecoli_simulation_data import asyncio_detailed as get_simulation_data_async
+from sms_api.api.client.api.simulations.get_ecoli_simulation_status import (
+    asyncio_detailed as get_simulation_status_async,
+)
 from sms_api.api.client.api.simulations.run_ecoli_simulation import asyncio_detailed as run_simulation_async
 from sms_api.api.client.models import (
     BodyRunEcoliSimulation,
@@ -51,6 +56,26 @@ class ClientWrapper:
             client=api_client, body=BodyRunEcoliSimulation(request=request)
         )
         if response.status_code == 200 and isinstance(response.parsed, EcoliSimulationDTO):
+            return response.parsed
+        else:
+            raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
+
+    async def get_simulation(self, database_id: int) -> EcoliSimulationDTO:
+        api_client = self._get_api_client()
+        response: Response[EcoliSimulationDTO | HTTPValidationError] = await get_simulation_async(
+            client=api_client, id=database_id
+        )
+        if response.status_code == 200 and isinstance(response.parsed, EcoliSimulationDTO):
+            return response.parsed
+        else:
+            raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
+
+    async def get_simulation_status(self, simulation: EcoliSimulationDTO) -> SimulationRun:
+        api_client = self._get_api_client()
+        response: Response[SimulationRun | HTTPValidationError] = await get_simulation_status_async(
+            client=api_client, id=simulation.database_id
+        )
+        if response.status_code == 200 and isinstance(response.parsed, SimulationRun):
             return response.parsed
         else:
             raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
@@ -101,6 +126,23 @@ class ClientWrapper:
 
             return outputs
 
+        else:
+            raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
+
+    async def get_simulation_data(
+        self, experiment_id: str, lineage: int = 6, generation: int = 1, obs: list[str] | None = None
+    ) -> polars.DataFrame:
+        api_client = self._get_api_client()
+        response = await get_simulation_data_async(
+            client=api_client,
+            body=obs or ["bulk"],
+            experiment_id=experiment_id,
+            lineage_seed=lineage,
+            generation=generation,
+        )
+        if response.status_code == 200:
+            # return response.parsed
+            return polars.from_dicts(response.parsed).sort("time")  # type: ignore[arg-type]
         else:
             raise TypeError(f"Unexpected response status: {response.status_code}, content: {type(response.content)}")
 

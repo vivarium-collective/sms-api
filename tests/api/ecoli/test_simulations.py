@@ -200,3 +200,13 @@ async def test_fetch_simulation(
         fetch_response = await client.get(f"{base_router}/simulations/{db_id}")
         fetch_response.raise_for_status()
         assert fetch_response.json() == sim_response
+
+
+@pytest.mark.asyncio
+async def test_get_simulation_data() -> None:
+    from app.client_wrapper import ClientWrapper
+
+    client = ClientWrapper(base_url="http://localhost:8888")
+    resp = await client.get_simulation_data(experiment_id="sms_multigeneration", lineage=6, generation=1, obs=["bulk"])
+    assert resp.columns == ["bulk", "time"]
+    print(resp)
