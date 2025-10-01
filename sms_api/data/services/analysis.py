@@ -15,7 +15,7 @@ import polars
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import Settings, get_settings
-from sms_api.data.models import AnalysisConfig, OutputFile
+from sms_api.data.models import AnalysisConfig, OutputFile, TsvOutputFile
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
 
 logger = logging.getLogger(__name__)
@@ -223,6 +223,60 @@ async def get_tsv_outputs_local(output_id: str, ssh_service: SSHService) -> list
         output = OutputFile(name=spec["name"], content=spec["content"])
         outputs.append(output)
     return outputs
+
+
+def get_tsv_output_paths_remote(experiment_id: str) -> list[Path]:
+    outdir_root = Path("/home/FCAM/svc_vivarium/workspace/api_outputs")
+    outdir = outdir_root / experiment_id
+    filepaths = []
+    for root, _, files in outdir.walk():
+        for f in files:
+            fp = root / f
+            if fp.exists() and fp.is_file():
+                filepaths.append(fp)
+    return list(filter(lambda _file: _file.name.endswith(".txt"), filepaths))
+
+
+def get_tsv_manifest_remote(output_id: str) -> list[TsvOutputFile]:
+    import re
+
+    # outdir_root = Path("/home/FCAM/svc_vivarium/workspace/api_outputs")
+    paths = [str(fp) for fp in get_tsv_output_paths_remote(output_id)]
+    outputs = []
+    for p in paths:
+        match = re.search(r"experiment_id=[^/]+/(.*)", p)
+        if match:
+            result = match.group(1)
+            filename = Path(result).name
+            metadata_components = result.replace(f"/{filename}", "").split("/")
+            md = {}
+            for comp in metadata_components:
+                scope, scope_id = comp.split("=")
+                md[scope] = int(scope_id)
+            md["filename"] = filename  # type: ignore[assignment]
+            outputs.append(md)
+            # outputs.append({"metadata": metadata_components, "filename": filename})
+    return [TsvOutputFile(**item) for item in outputs]  # type: ignore[arg-type]
+
+
+async def get_tsv_manifest_local(output_id: str, ssh_service: SSHService) -> list[TsvOutputFile]:
+    """Run in DEV"""
+    remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
+    ret, stdin, stdout = await ssh_service.run_command(
+        dedent(f"""
+                cd /home/FCAM/svc_vivarium/workspace \
+                    && {remote_uv_executable} run scripts/ptools_outputs.py --output_id {output_id} --manifest
+            """)
+    )
+
+    deserialized = json.loads(stdin.replace("'", '"'))
+    return [TsvOutputFile(**item) for item in deserialized]
+
+
+def read_tsv_file(file_path: Path) -> str:
+    """Read an HTML file and return its contents as a single string."""
+    with open(str(file_path), encoding="utf-8") as f:
+        return f.read()
 
 
 def get_tsv_outputs_remote(output_id: str = "analysis_multigen") -> list[OutputFile]:

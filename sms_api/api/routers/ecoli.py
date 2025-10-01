@@ -16,13 +16,13 @@ from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Union
+from typing import Any
 
 import fastapi
 import orjson
 import polars as pl
 from fastapi import BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse
 
 from sms_api.api import request_examples
 from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
@@ -30,15 +30,24 @@ from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.common.utils import timestamp
 from sms_api.config import get_settings
-from sms_api.data.models import ExperimentAnalysisDTO, ExperimentAnalysisRequest, OutputFile
+from sms_api.data.models import (
+    ExperimentAnalysisDTO,
+    ExperimentAnalysisRequest,
+    OutputFile,
+    TsvOutputFile,
+    TsvOutputFileRequest,
+)
 from sms_api.data.services import analysis
 from sms_api.data.services.analysis import (
     format_html_string,
     format_tsv_string,
     get_html_outputs_local,
     get_html_outputs_remote,
+    get_tsv_manifest_local,
+    get_tsv_manifest_remote,
     get_tsv_outputs_local,
     get_tsv_outputs_remote,
+    read_tsv_file,
 )
 from sms_api.data.services.parquet import ParquetService
 from sms_api.dependencies import get_database_service, get_simulation_service
@@ -118,6 +127,94 @@ async def get_analysis_spec(id: int) -> ExperimentAnalysisDTO:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
         return await db_service.get_analysis(database_id=id)
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/analyses/{id}/manifest",
+    tags=["Analyses"],
+    operation_id="get-analysis-manifest",
+    dependencies=[Depends(get_database_service)],
+    summary="Get an array of tsv files formatted for ptools.",
+)
+async def get_ptools_manifest(
+    id: int = fastapi.Path(..., description="Database ID of the analysis"),
+) -> list[TsvOutputFile]:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+
+    try:
+        analysis_data = await db_service.get_analysis(database_id=id)
+        output_id = analysis_data.name
+        if int(ENV.dev_mode):
+            return await get_tsv_manifest_local(output_id=output_id, ssh_service=get_ssh_service(ENV))
+        else:
+            return get_tsv_manifest_remote(output_id)
+    except Exception as e:
+        logger.exception("Error getting analysis data")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/analyses/{id}/tsv",
+    response_model=None,
+    operation_id="fetch-analysis-output-file",
+    tags=["Analyses"],
+    dependencies=[Depends(get_database_service)],
+    summary="Download a single file that was generated from a simulation analysis module",
+)
+async def fetch_analysis_output_file(request: TsvOutputFileRequest, id: int = fastapi.Path(...)) -> TsvOutputFile:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+    try:
+        variant_id = request.variant
+        lineage_seed_id = request.lineage_seed
+        generation_id = request.generation
+        agent_id = request.agent_id
+        filename = request.filename
+        analysis_data = await db_service.get_analysis(database_id=id)
+        output_id = analysis_data.name
+        fp = (
+            Path(ENV.simulation_outdir)
+            / output_id
+            / f"experiment_id={analysis_data.config.analysis_options.experiment_id[0]}"
+        )
+        if variant_id is not None:
+            fp = fp / f"variant={variant_id}"
+        if lineage_seed_id is not None:
+            fp = fp / f"lineage_seed={lineage_seed_id}"
+        if generation_id is not None:
+            fp = fp / f"generation={generation_id}"
+        if agent_id is not None:
+            fp = fp / f"agent_id={agent_id}"
+
+        filepath = fp / filename
+        mimetype, _ = mimetypes.guess_type(filepath)
+
+        if int(ENV.dev_mode):
+            ssh = get_ssh_service(ENV)
+            _, stdout, stderr = await ssh.run_command(f"cat {filepath!s}")
+            return TsvOutputFile(
+                filename=filename,
+                variant=variant_id,
+                lineage_seed=lineage_seed_id,
+                generation=generation_id,
+                agent_id=agent_id,
+                content=stdout,
+            )
+
+        return TsvOutputFile(
+            filename=filename,
+            variant=variant_id,
+            lineage_seed=lineage_seed_id,
+            generation=generation_id,
+            agent_id=agent_id,
+            content=read_tsv_file(filepath),
+        )
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -394,43 +491,6 @@ async def upload_analysis_module(
             return result
     except Exception as e:
         logger.exception("Error uploading analysis module")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/analyses/{id}/download",
-    response_model=None,
-    operation_id="download-analysis-output-file",
-    tags=["Analyses"],
-    summary="Download a single file that was generated from a simulation analysis module",
-)
-async def download_analysis(
-    id: str = fastapi.Path(...),
-    variant_id: int = Query(default=0),
-    lineage_seed_id: int = Query(default=0),
-    generation_id: int = Query(default=1),
-    agent_id: int = Query(default=0),
-    filename: str = Query(examples=["mass_fraction_summary.html"]),
-) -> Union[FileResponse, HTMLResponse]:
-    try:
-        filepath = (
-            Path(ENV.simulation_outdir)
-            / id
-            / "analyses"
-            / f"variant={variant_id}"
-            / f"lineage_seed={lineage_seed_id}"
-            / f"generation={generation_id}"
-            / f"agent_id={agent_id}"
-            / "plots"
-            / filename
-        )
-        mimetype, _ = mimetypes.guess_type(filepath)
-
-        if str(filepath).endswith(".html"):
-            return HTMLResponse(content=filepath.read_text(encoding="utf-8"))
-        return FileResponse(path=filepath, media_type=mimetype or "application/octet-stream", filename=filepath.name)
-    except Exception as e:
-        logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
