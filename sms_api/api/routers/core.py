@@ -319,9 +319,8 @@ async def get_simulation_status(
 ) -> HpcRun:
     db_service = get_database_service()
     if db_service is None:
-        logger.error("SSH service is not initialized")
-        raise HTTPException(status_code=500, detail="SSH service is not initialized")
-    # experiment_dir = Path("/home/FCAM/svc_vivarium/test/sims/experiment_96bb7a2_id_1_20250620-181422")
+        logger.error("database service is not initialized")
+        raise HTTPException(status_code=500, detail="database service is not initialized")
     try:
         simulation_hpcrun: HpcRun | None = await db_service.get_hpcrun_by_ref(
             ref_id=simulation_id, job_type=JobType.SIMULATION
@@ -354,9 +353,8 @@ async def get_simulation_worker_events(
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
     db_service = get_database_service()
     if db_service is None:
-        logger.error("SSH service is not initialized")
-        raise HTTPException(status_code=500, detail="SSH service is not initialized")
-    # experiment_dir = Path("/home/FCAM/svc_vivarium/test/sims/experiment_96bb7a2_id_1_20250620-181422")
+        logger.error("database service is not initialized")
+        raise HTTPException(status_code=500, detail="database service is not initialized")
     try:
         simulation_hpcrun: HpcRun | None = await db_service.get_hpcrun_by_ref(
             ref_id=simulation_id, job_type=JobType.SIMULATION
