@@ -1,8 +1,8 @@
 import pytest
 from fastapi import BackgroundTasks
 
+from sms_api.simulation.core_handlers import upload_simulator
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.handlers import upload_simulator
 from sms_api.simulation.models import JobStatus, JobType
 from tests.fixtures.simulation_service_mocks import SimulationServiceMockCloneAndBuild
 
