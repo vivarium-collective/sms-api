@@ -137,7 +137,7 @@ async def get_analysis_spec(id: int) -> ExperimentAnalysisDTO:
     tags=["Analyses"],
     operation_id="get-analysis-manifest",
     dependencies=[Depends(get_database_service)],
-    summary="Get an array of tsv files formatted for ptools.",
+    summary="Get the available outputs of a given analysis",
 )
 async def get_ptools_manifest(
     id: int = fastapi.Path(..., description="Database ID of the analysis"),
@@ -161,12 +161,12 @@ async def get_ptools_manifest(
 @config.router.post(
     path="/analyses/{id}/tsv",
     response_model=None,
-    operation_id="fetch-analysis-output-file",
+    operation_id="get-analysis-output-file",
     tags=["Analyses"],
     dependencies=[Depends(get_database_service)],
-    summary="Download a single file that was generated from a simulation analysis module",
+    summary="Get the contents single file that was generated from a simulation analysis module",
 )
-async def fetch_analysis_output_file(request: TsvOutputFileRequest, id: int = fastapi.Path(...)) -> TsvOutputFile:
+async def get_analysis_output_file(request: TsvOutputFileRequest, id: int = fastapi.Path(...)) -> TsvOutputFile:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")

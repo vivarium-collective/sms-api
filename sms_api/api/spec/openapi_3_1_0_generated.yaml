@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.25-dev
+  version: 0.2.27-dev
 paths:
   /v1/ecoli/analyses:
     post:
@@ -16,7 +16,7 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: ptools_analysis-4b994b53c65d9d46_1759239662721
+                analysis_name: ptools_analysis-cbdcd0107a667594_1759427964721
                 single:
                   ptools_rxns:
                     n_tp: 8
@@ -125,6 +125,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExperimentAnalysisDTO'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses/{id}/manifest:
+    get:
+      tags:
+      - Analyses
+      summary: Get the available outputs of a given analysis
+      operationId: get-analysis-manifest
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the analysis
+          title: Id
+        description: Database ID of the analysis
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TsvOutputFile'
+                title: Response Get-Analysis-Manifest
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses/{id}/tsv:
+    post:
+      tags:
+      - Analyses
+      summary: Get the contents single file that was generated from a simulation analysis
+        module
+      operationId: get-analysis-output-file
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TsvOutputFileRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -320,68 +383,6 @@ paths:
           description: Database ID of the analysis
           title: Id
         description: Database ID of the analysis
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}/download:
-    get:
-      tags:
-      - Analyses
-      summary: Download a single file that was generated from a simulation analysis
-        module
-      operationId: download-analysis-output-file
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Id
-      - name: variant_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Variant Id
-      - name: lineage_seed_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Lineage Seed Id
-      - name: generation_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 1
-          title: Generation Id
-      - name: agent_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Agent Id
-      - name: filename
-        in: query
-        required: true
-        schema:
-          type: string
-          examples:
-          - mass_fraction_summary.html
-          title: Filename
       responses:
         '200':
           description: Successful Response
@@ -1190,11 +1191,13 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-993281095ae57c82_1759239662721-14853890ebc152f5_1759239662721
-            simulation_name: sms_single-993281095ae57c82_1759239662721
+            experiment_id: sms_single-24510de063eaa4ad_1759427964721-d649106bef375ccc_1759427964721
+            simulation_name: sms_single-24510de063eaa4ad_1759427964721
             metadata: {}
             run_parca: true
             generations: 1
+            n_init_sims: 1
+            lineage_seed: 1
             max_duration: 10800.0
             initial_global_time: 0.0
             time_step: 1.0
@@ -1346,7 +1349,7 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_smsapi-8894600434994392_1759239662566
+          default: analysis_smsapi-97e91095b1f9442c_1759427964559
         single:
           additionalProperties: true
           type: object
@@ -1414,7 +1417,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-0b6375caf639c141_1759239662592
+          default: sim_smsapi-bd09782a2af33004_1759427964587
         metadata:
           additionalProperties: true
           type: object
@@ -1429,10 +1432,13 @@ components:
           title: Generations
           default: 1
         n_init_sims:
-          anyOf:
-          - type: integer
-          - type: 'null'
+          type: integer
           title: N Init Sims
+          default: 1
+        lineage_seed:
+          type: integer
+          title: Lineage Seed
+          default: 1
         max_duration:
           type: number
           title: Max Duration
@@ -1629,11 +1635,6 @@ components:
           - type: boolean
           - type: 'null'
           title: Skip Baseline
-        lineage_seed:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Lineage Seed
         fail_at_max_duration:
           anyOf:
           - type: boolean
@@ -2178,6 +2179,74 @@ components:
       - git_branch
       - database_id
       title: SimulatorVersion
+    TsvOutputFile:
+      properties:
+        filename:
+          type: string
+          title: Filename
+        variant:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Variant
+        lineage_seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Lineage Seed
+        generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Generation
+        agent_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Agent Id
+        content:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content
+        analysis_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Analysis Type
+      type: object
+      required:
+      - filename
+      title: TsvOutputFile
+    TsvOutputFileRequest:
+      properties:
+        filename:
+          type: string
+          title: Filename
+        variant:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Variant
+        lineage_seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Lineage Seed
+        generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Generation
+        agent_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Agent Id
+      type: object
+      required:
+      - filename
+      title: TsvOutputFileRequest
     ValidationError:
       properties:
         loc:
