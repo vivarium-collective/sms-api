@@ -16,7 +16,7 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: ptools_analysis-cbdcd0107a667594_1759427964721
+                analysis_name: ptools_analysis-1c4c42299b1c7538_1759846355307
                 single:
                   ptools_rxns:
                     n_tp: 8
@@ -540,174 +540,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/{id}/metadata:
-    get:
-      tags:
-      - Simulations
-      summary: Get simulation metadata
-      operationId: get-ecoli-simulation-metadata
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          description: Database ID
-          title: Id
-        description: Database ID
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExperimentMetadata'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/{id}/state:
-    post:
-      tags:
-      - Simulations
-      summary: Get simulation outputs
-      operationId: get-ecoli-simulation-outdata
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          description: Experiment id for the simulation.
-          title: Id
-        description: Experiment id for the simulation.
-      - name: variant_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Variant Id
-      - name: lineage_seed_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Lineage Seed Id
-      - name: generation_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 1
-          title: Generation Id
-      - name: agent_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Agent Id
-      - name: filename
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Name you wish to assign to the downloaded zip file
-          title: Filename
-        description: Name you wish to assign to the downloaded zip file
-      responses:
-        '200':
-          description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/data:
+  /v1/ecoli/simulations/{id}/data:
     post:
       tags:
       - Simulations
       summary: Get/Stream simulation data
       operationId: get-ecoli-simulation-data
       parameters:
-      - name: experiment_id
-        in: query
-        required: false
-        schema:
-          type: string
-          default: sms_multigeneration
-          title: Experiment Id
-      - name: lineage_seed
-        in: query
-        required: false
+      - name: id
+        in: path
+        required: true
         schema:
           type: integer
-          default: 6
-          title: Lineage Seed
-      - name: generation
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 1
-          title: Generation
-      - name: variant
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Variant
-      - name: agent_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Agent Id
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                type: string
-              default:
-              - bulk
-              title: Observables
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/data/download:
-    post:
-      tags:
-      - Simulations
-      summary: Download selected simulation data as a parquet file
-      operationId: download-ecoli-simulation-data
-      parameters:
-      - name: experiment_id
-        in: query
-        required: false
-        schema:
-          type: string
-          default: sms_multigeneration
-          title: Experiment Id
+          description: Database ID of the simulation.
+          title: Id
+        description: Database ID of the simulation.
       - name: lineage_seed
         in: query
         required: false
@@ -1191,8 +1038,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-24510de063eaa4ad_1759427964721-d649106bef375ccc_1759427964721
-            simulation_name: sms_single-24510de063eaa4ad_1759427964721
+            experiment_id: sms_single-40d87f52f80c4466_1759846355307-1f3d58fe1938a9c7_1759846355307
+            simulation_name: sms_single-40d87f52f80c4466_1759846355307
             metadata: {}
             run_parca: true
             generations: 1
@@ -1349,7 +1196,7 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_smsapi-97e91095b1f9442c_1759427964559
+          default: analysis_smsapi-4adc5cd4c1fa61c8_1759846355218
         single:
           additionalProperties: true
           type: object
@@ -1417,7 +1264,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-bd09782a2af33004_1759427964587
+          default: sim_smsapi-43ad81672cbff1bd_1759846355242
         metadata:
           additionalProperties: true
           type: object
