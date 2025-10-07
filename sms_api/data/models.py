@@ -2,6 +2,7 @@ import json
 import os
 import pathlib
 from dataclasses import asdict, dataclass
+from enum import StrEnum
 from typing import Any
 
 import numpy
@@ -167,6 +168,19 @@ class ExperimentAnalysisDTO(BaseModel):
     last_updated: str
     job_name: str | None = None
     job_id: int | None = None
+
+
+class JobStatus(StrEnum):
+    WAITING = "waiting"
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class AnalysisRun(BaseModel):
+    id: int
+    status: JobStatus
 
 
 ### -- biocyc -- ###
