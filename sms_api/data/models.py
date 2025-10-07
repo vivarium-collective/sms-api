@@ -2,6 +2,7 @@ import json
 import os
 import pathlib
 from dataclasses import asdict, dataclass
+from enum import StrEnum
 from typing import Any
 
 import numpy
@@ -17,6 +18,35 @@ MAX_ANALYSIS_CPUS = 3
 
 
 ### -- analyses -- ###
+
+
+class TsvOutputFileRequest(BaseModel):
+    # analysis_id: int
+    filename: str
+    variant: int | None = None
+    lineage_seed: int | None = None
+    generation: int | None = None
+    agent_id: str | None = None
+
+
+class TsvOutputFile(BaseModel):
+    filename: str
+    variant: int | None = None
+    lineage_seed: int | None = None
+    generation: int | None = None
+    agent_id: str | None = None
+    content: str | None = None
+    analysis_type: str | None = None
+
+    def model_post_init(self, *args: Any) -> None:
+        for attrname in list(TsvOutputFile.model_fields.keys()):
+            if "analysis_type" not in attrname:
+                attr = getattr(self, attrname)
+                if attr is None or attr == ["string"]:
+                    delattr(self, attrname)
+                if isinstance(attr, (list, dict)) and not len(attr):
+                    delattr(self, attrname)
+        self.analysis_type = self.filename.split("_")[-1].replace(".txt", "")
 
 
 class OutputFile(BaseModel):
@@ -138,6 +168,19 @@ class ExperimentAnalysisDTO(BaseModel):
     last_updated: str
     job_name: str | None = None
     job_id: int | None = None
+
+
+class JobStatus(StrEnum):
+    WAITING = "waiting"
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class AnalysisRun(BaseModel):
+    id: int
+    status: JobStatus
 
 
 ### -- biocyc -- ###

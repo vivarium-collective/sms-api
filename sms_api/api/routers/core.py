@@ -22,7 +22,7 @@ from sms_api.dependencies import (
     get_db_engine,
     get_simulation_service,
 )
-from sms_api.simulation import handlers
+from sms_api.simulation import core_handlers
 from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
     EcoliSimulation,
@@ -139,7 +139,7 @@ async def insert_simulator_version(
     simulator: Simulator,
 ) -> SimulatorVersion:
     # verify simulator request
-    handlers.verify_simulator_payload(simulator)
+    core_handlers.verify_simulator_payload(simulator)
 
     # check parameterized service availabilities
     db_service = get_database_service()
@@ -154,7 +154,7 @@ async def insert_simulator_version(
     existing_version = await db_service.get_simulator_by_commit(simulator.git_commit_hash)
     if existing_version is None:
         try:
-            return await handlers.upload_simulator(
+            return await core_handlers.upload_simulator(
                 commit_hash=simulator.git_commit_hash,
                 git_repo_url=simulator.git_repo_url,
                 git_branch=simulator.git_branch,
@@ -190,7 +190,7 @@ async def run_parameter_calculator(
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
 
     try:
-        return await handlers.run_parca(
+        return await core_handlers.run_parca(
             simulator=parca_request.simulator_version,
             simulation_service_slurm=sim_service,
             database_service=db_service,
@@ -221,7 +221,7 @@ async def get_parcas() -> list[ParcaDataset]:
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
 
     try:
-        return await handlers.get_parca_datasets(
+        return await core_handlers.get_parca_datasets(
             simulation_service_slurm=sim_service,
             database_service=db_service,
         )
@@ -273,7 +273,7 @@ async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation
         raise HTTPException(status_code=500, detail="Database service is not initialized")
 
     try:
-        return await handlers.run_simulation(
+        return await core_handlers.run_simulation(
             simulator=sim_request.simulator,
             parca_dataset_id=sim_request.parca_dataset_id,
             database_service=db_service,

@@ -9,63 +9,38 @@
 # TODO: labkey preprocessing
 
 import logging
-import mimetypes
-import tempfile
-import zipfile
-from collections.abc import Generator
-from io import BytesIO
-from pathlib import Path
-from textwrap import dedent
-from typing import Any, Union
 
 import fastapi
-import orjson
-import polars as pl
 from fastapi import BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
 
 from sms_api.api import request_examples
-from sms_api.common.gateway.io import get_zip_buffer, write_zip_buffer
 from sms_api.common.gateway.utils import get_simulator, router_config
-from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
+from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.common.utils import timestamp
 from sms_api.config import get_settings
-from sms_api.data.models import ExperimentAnalysisDTO, ExperimentAnalysisRequest, OutputFile
-from sms_api.data.services import analysis
-from sms_api.data.services.analysis import (
-    format_html_string,
-    format_tsv_string,
-    get_html_outputs_local,
-    get_html_outputs_remote,
-    get_tsv_outputs_local,
-    get_tsv_outputs_remote,
+from sms_api.data import analysis_service
+from sms_api.data import ecoli_handlers as data_handlers
+from sms_api.data.models import (
+    AnalysisRun,
+    ExperimentAnalysisDTO,
+    ExperimentAnalysisRequest,
+    OutputFile,
+    TsvOutputFile,
+    TsvOutputFileRequest,
 )
-from sms_api.data.services.parquet import ParquetService
 from sms_api.dependencies import get_database_service, get_simulation_service
-from sms_api.simulation.database_service import DatabaseService
+from sms_api.simulation import ecoli_handlers as simulation_handlers
 from sms_api.simulation.models import (
     EcoliSimulationDTO,
     ExperimentMetadata,
     ExperimentRequest,
-    JobStatus,
     SimulationRun,
-    SimulatorVersion,
 )
 
 ENV = get_settings()
 
 logger = logging.getLogger(__name__)
 config = router_config(prefix="ecoli")
-
-
-###### -- utils -- ######
-
-
-async def get_slurm_log(db_service: DatabaseService, ssh_service: SSHService, db_id: int) -> str:
-    experiment = await db_service.get_ecoli_simulation(database_id=db_id)
-    remote_log_path = f"{ENV.slurm_log_base_path!s}/{experiment.job_name}"
-    returncode, stdout, stderr = await ssh_service.run_command(f"cat {remote_log_path}.out")
-    return stdout
 
 
 ###### -- analyses -- ######
@@ -84,22 +59,15 @@ async def run_analysis(request: ExperimentAnalysisRequest = request_examples.pto
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
-        config = request.to_config()
-        slurmjob_name, slurmjob_id = await analysis.dispatch(
-            config=config,
-            analysis_name=request.analysis_name,
-            simulator_hash=get_simulator().git_commit_hash,
+        return await data_handlers.run_analysis(
+            request=request,
+            simulator=get_simulator(),
+            analysis_service=analysis_service,
             env=ENV,
+            db_service=db_service,
+            timestamp=timestamp(),
             logger=logger,
         )
-        analysis_record = await db_service.insert_analysis(
-            name=request.analysis_name,
-            config=config,
-            last_updated=timestamp(),
-            job_name=slurmjob_name,
-            job_id=slurmjob_id,
-        )
-        return analysis_record
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -117,7 +85,53 @@ async def get_analysis_spec(id: int) -> ExperimentAnalysisDTO:
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
-        return await db_service.get_analysis(database_id=id)
+        return await data_handlers.get_analysis(db_service=db_service, id=id)
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/analyses/{id}/manifest",
+    tags=["Analyses"],
+    operation_id="get-analysis-manifest",
+    dependencies=[Depends(get_database_service)],
+    summary="Get the available outputs of a given analysis",
+)
+async def get_ptools_manifest(
+    id: int = fastapi.Path(..., description="Database ID of the analysis"),
+) -> list[TsvOutputFile]:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+    ssh_service = get_ssh_service(ENV)
+
+    try:
+        return await data_handlers.get_ptools_manifest(
+            db_service=db_service, env=ENV, ssh_service=ssh_service, id=id, analysis_service=analysis_service
+        )
+    except Exception as e:
+        logger.exception("Error getting analysis data")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/analyses/{id}/tsv",
+    response_model=None,
+    operation_id="get-analysis-output-file",
+    tags=["Analyses"],
+    dependencies=[Depends(get_database_service)],
+    summary="Get the contents single file that was generated from a simulation analysis module",
+)
+async def get_analysis_output_file(request: TsvOutputFileRequest, id: int = fastapi.Path(...)) -> TsvOutputFile:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+    ssh_service = get_ssh_service(ENV)
+    try:
+        return await data_handlers.get_tsv_output(
+            request=request, db_service=db_service, id=id, env=ENV, ssh=ssh_service, analysis_service=analysis_service
+        )
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -130,19 +144,13 @@ async def get_analysis_spec(id: int) -> ExperimentAnalysisDTO:
     dependencies=[Depends(get_database_service)],
     summary="Get the status of an existing experiment analysis run",
 )
-async def get_analysis_status(id: int = fastapi.Path(..., description="Database ID of the analysis")) -> SimulationRun:
+async def get_analysis_status(id: int = fastapi.Path(..., description="Database ID of the analysis")) -> AnalysisRun:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
+    ssh_service = get_ssh_service(ENV)
     try:
-        analysis_record = await db_service.get_analysis(database_id=id)
-        slurmjob_id = analysis_record.job_id
-        # slurmjob_id = get_jobid_by_experiment(experiment_id)
-        ssh_service = get_ssh_service()
-        slurm_user = ENV.slurm_submit_user
-        statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
-        status: str = statuses[1].split("\n")[0].split()[-2]
-        return SimulationRun(id=id, status=JobStatus[status])
+        return await data_handlers.get_analysis_status(db_service=db_service, ssh_service=ssh_service, id=id, env=ENV)
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
@@ -163,12 +171,9 @@ async def get_analysis_log(id: int = fastapi.Path(..., description="Database ID 
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
+    ssh_service = get_ssh_service()
     try:
-        analysis_record = await db_service.get_analysis(database_id=id)
-        slurm_logfile = Path(ENV.slurm_log_base_path) / f"{analysis_record.job_name}.out"
-        ssh_service = get_ssh_service()
-        ret, stdout, stdin = await ssh_service.run_command(f"cat {slurm_logfile!s}")
-        return stdout
+        return await data_handlers.get_analysis_log(db_service=db_service, id=id, env=ENV, ssh_service=ssh_service)
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
@@ -191,180 +196,13 @@ async def get_analysis_plots(
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-
+    ssh_service = get_ssh_service(ENV)
     try:
-        analysis_data = await db_service.get_analysis(database_id=id)
-        output_id = analysis_data.name
-        if int(ENV.dev_mode):
-            return await get_html_outputs_local(output_id=output_id, ssh_service=get_ssh_service(ENV))
-        else:
-            return get_html_outputs_remote(output_id=output_id)
+        return await data_handlers.get_analysis_plots(
+            db_service=db_service, id=id, env=ENV, analysis_service=analysis_service, ssh_service=ssh_service
+        )
     except Exception as e:
         logger.exception("Error getting analysis data")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/analyses/{id}/plots/formatted",
-    tags=["Analyses"],
-    operation_id="get-analysis-plots-formatted",
-    dependencies=[Depends(get_database_service)],
-    summary="Get a stream of multiple html file contents representing plots.",
-)
-async def get_analysis_plots_formatted(
-    id: int = fastapi.Path(..., description="Database ID of the analysis"),
-) -> fastapi.responses.StreamingResponse:
-    db_service = get_database_service()
-    if db_service is None:
-        raise HTTPException(status_code=404, detail="Database not found")
-
-    try:
-        data = None
-        analysis_data = await db_service.get_analysis(database_id=id)
-        output_id = analysis_data.name
-        if int(ENV.dev_mode):
-            data = await get_html_outputs_local(output_id=output_id, ssh_service=get_ssh_service())
-        else:
-            # data = FileServiceTsv().get_outputs(output_id=output_id)
-            data = get_html_outputs_remote(output_id=output_id)
-
-        boundary = "myboundary"
-
-        def generate() -> Generator[str, None, None]:
-            for idx, item in enumerate(data, 1):
-                filename = f"{item.name if hasattr(item, 'name') else f'item{idx}'}.tsv"
-                yield f"--{boundary}\r\n"
-                yield "Content-Type: text/plain\r\n"
-                yield f'Content-Disposition: attachment; filename="{filename}"\r\n\r\n'
-                yield format_html_string(item) + "\r\n"
-
-            yield f"--{boundary}--\r\n"
-
-        return fastapi.responses.StreamingResponse(generate(), media_type=f"multipart/mixed; boundary={boundary}")
-    except Exception as e:
-        logger.exception("Error uploading analysis module")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/analyses/{id}/ptools",
-    tags=["Analyses"],
-    operation_id="get-analysis-tsv",
-    dependencies=[Depends(get_database_service)],
-    summary="Get an array of tsv files formatted for ptools.",
-)
-async def get_ptools_tsv(id: int = fastapi.Path(..., description="Database ID of the analysis")) -> list[OutputFile]:
-    db_service = get_database_service()
-    if db_service is None:
-        raise HTTPException(status_code=404, detail="Database not found")
-
-    try:
-        analysis_data = await db_service.get_analysis(database_id=id)
-        output_id = analysis_data.name
-        if int(ENV.dev_mode):
-            return await get_tsv_outputs_local(output_id=output_id, ssh_service=get_ssh_service(ENV))
-        else:
-            return get_tsv_outputs_remote(output_id=output_id)
-    except Exception as e:
-        logger.exception("Error getting analysis data")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/analyses/{id}/ptools/formatted",
-    tags=["Analyses"],
-    operation_id="get-analysis-tsv-formatted",
-    dependencies=[Depends(get_database_service)],
-    summary="Get a stream of multiple tsv file contents formatted for ptools.",
-)
-async def get_ptools_tsv_formatted(
-    id: int = fastapi.Path(..., description="Database ID of the analysis"),
-) -> fastapi.responses.StreamingResponse:
-    db_service = get_database_service()
-    if db_service is None:
-        raise HTTPException(status_code=404, detail="Database not found")
-
-    try:
-        data = None
-        analysis_data = await db_service.get_analysis(database_id=id)
-        output_id = analysis_data.name
-        if int(ENV.dev_mode):
-            data = await get_tsv_outputs_local(output_id=output_id, ssh_service=get_ssh_service())
-        else:
-            # data = FileServiceTsv().get_outputs(output_id=output_id)
-            data = get_tsv_outputs_remote(output_id=output_id)
-
-        boundary = "myboundary"
-
-        def generate() -> Generator[str, None, None]:
-            for idx, item in enumerate(data, 1):
-                filename = f"{item.name if hasattr(item, 'name') else f'item{idx}'}.tsv"
-                yield f"--{boundary}\r\n"
-                yield "Content-Type: text/plain\r\n"
-                yield f'Content-Disposition: attachment; filename="{filename}"\r\n\r\n'
-                yield format_tsv_string(item) + "\r\n"
-
-            yield f"--{boundary}--\r\n"
-
-        return fastapi.responses.StreamingResponse(generate(), media_type=f"multipart/mixed; boundary={boundary}")
-    except Exception as e:
-        logger.exception("Error getting analysis data")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/analyses/{id}/ptools/download",
-    tags=["Analyses"],
-    operation_id="download-tsv-zip",
-    dependencies=[Depends(get_database_service)],
-    summary="Download zip file of TSV outputs formatted for ptools.",
-)
-async def download_ptools_zip(
-    id: int = fastapi.Path(..., description="Database ID of the analysis"),
-) -> fastapi.responses.StreamingResponse:
-    db_service = get_database_service()
-    if db_service is None:
-        raise HTTPException(status_code=404, detail="Database not found")
-
-    try:
-        data = None
-        analysis_data = await db_service.get_analysis(database_id=id)
-        output_id = analysis_data.name
-        if int(ENV.dev_mode):
-            data = await get_tsv_outputs_local(output_id=output_id, ssh_service=get_ssh_service())
-        else:
-            # data = FileServiceTsv().get_outputs(output_id=output_id)
-            data = get_tsv_outputs_remote(output_id=output_id)
-
-        def write_file(outdir: Path, output_file: OutputFile) -> Path:
-            lines = "".join(output_file.content).split("\n")
-            outfile = outdir / output_file.name
-            with open(outfile, "w") as f:
-                for item in lines:
-                    f.write(f"{item}\n")
-            return outfile
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            dirpath = Path(tmpdir)
-            files = []
-            for output in data:
-                f = write_file(dirpath, output)
-                if f.exists():
-                    files.append(f)
-            zip_buffer = BytesIO()
-            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                for file_path in files:
-                    # Add file to ZIP; arcname makes sure only the file name is used
-                    zip_file.write(file_path, arcname=file_path.name)
-            zip_buffer.seek(0)
-
-            return fastapi.responses.StreamingResponse(
-                zip_buffer,
-                media_type="application/zip",
-                headers={"Content-Disposition": f'attachment; filename="{output_id}.zip"'},
-            )
-    except Exception as e:
-        logger.exception("Error uploading analysis module")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -378,59 +216,13 @@ async def upload_analysis_module(
     file: UploadFile = File(...),  # noqa: B008
     submodule_name: str = Query(..., description="Submodule name(single, multiseed, etc)"),
 ) -> dict[str, object]:
+    ssh_service = get_ssh_service(ENV)
     try:
-        contents = await file.read()
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            tmp_path: Path = Path(tmpdirname) / (file.filename or str(file))
-            with open(tmp_path, "wb") as tmpfile:
-                tmpfile.write(contents)
-
-            result = {"tmp_path": str(tmp_path), "size": len(contents)}
-
-            local = tmp_path
-            remote = Path(ENV.vecoli_config_dir).parent / "ecoli" / "analysis" / submodule_name / file.filename  # type: ignore[operator]
-            ssh = get_ssh_service(ENV)
-            await ssh.scp_upload(local_file=local, remote_path=remote)
-            return result
+        return await data_handlers.upload_analysis_module(
+            file=file, ssh=ssh_service, submodule_name=submodule_name, env=ENV
+        )
     except Exception as e:
         logger.exception("Error uploading analysis module")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/analyses/{id}/download",
-    response_model=None,
-    operation_id="download-analysis-output-file",
-    tags=["Analyses"],
-    summary="Download a single file that was generated from a simulation analysis module",
-)
-async def download_analysis(
-    id: str = fastapi.Path(...),
-    variant_id: int = Query(default=0),
-    lineage_seed_id: int = Query(default=0),
-    generation_id: int = Query(default=1),
-    agent_id: int = Query(default=0),
-    filename: str = Query(examples=["mass_fraction_summary.html"]),
-) -> Union[FileResponse, HTMLResponse]:
-    try:
-        filepath = (
-            Path(ENV.simulation_outdir)
-            / id
-            / "analyses"
-            / f"variant={variant_id}"
-            / f"lineage_seed={lineage_seed_id}"
-            / f"generation={generation_id}"
-            / f"agent_id={agent_id}"
-            / "plots"
-            / filename
-        )
-        mimetype, _ = mimetypes.guess_type(filepath)
-
-        if str(filepath).endswith(".html"):
-            return HTMLResponse(content=filepath.read_text(encoding="utf-8"))
-        return FileResponse(path=filepath, media_type=mimetype or "application/octet-stream", filename=filepath.name)
-    except Exception as e:
-        logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -447,7 +239,8 @@ async def list_analyses() -> list[ExperimentAnalysisDTO]:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        return await db_service.list_analyses()
+        # return await db_service.list_analyses()
+        return await data_handlers.list_analyses(db_service=db_service)
     except Exception as e:
         logger.exception("Error fetching the uploaded analyses")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -483,23 +276,15 @@ async def run_simulation(
         raise HTTPException(status_code=400, detail="Experiment ID is required")
 
     try:
-        simulator: SimulatorVersion = get_simulator()
-        slurmjob_name, slurmjob_id = await sim_service.submit_experiment_job(
+        return await simulation_handlers.run_simulation(
+            sim_service=sim_service,
             config=config,
-            simulation_name=request.simulation_name,
-            simulator_hash=simulator.git_commit_hash,
+            request=request,
             env=ENV,
             logger=logger,
+            db_service=db_service,
+            timestamp=timestamp(),
         )
-        simulation_record = await db_service.insert_ecoli_simulation(
-            name=request.simulation_name,
-            config=config,
-            last_updated=timestamp(),
-            job_name=slurmjob_name,
-            job_id=slurmjob_id,
-            metadata=request.metadata,
-        )
-        return simulation_record
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -517,7 +302,8 @@ async def get_simulation(id: int = fastapi.Path(description="Database ID of the 
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        return await db_service.get_ecoli_simulation(database_id=id)
+        # return await db_service.get_ecoli_simulation(database_id=id)
+        return await simulation_handlers.get_simulation(db_service=db_service, id=id)
     except Exception as e:
         logger.exception("Error uploading simulation config")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -536,14 +322,9 @@ async def get_simulation_status(id: int = fastapi.Path(...)) -> SimulationRun:
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
-        sim_record = await db_service.get_ecoli_simulation(database_id=id)
-        slurmjob_id = sim_record.job_id
-        # slurmjob_id = get_jobid_by_experiment(experiment_id)
-        ssh_service = get_ssh_service()
-        slurm_user = ENV.slurm_submit_user
-        statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
-        status: str = statuses[1].split("\n")[0].split()[-2]
-        return SimulationRun(id=int(id), status=JobStatus[status])
+        return await simulation_handlers.get_simulation_status(
+            db_service=db_service, id=id, env=ENV, ssh_service=get_ssh_service(ENV)
+        )
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
@@ -564,9 +345,11 @@ async def get_simlog(id: int = fastapi.Path(...)) -> str:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
+    ssh_service = get_ssh_service()
     try:
-        ssh_service = get_ssh_service()
-        return await get_slurm_log(db_service, ssh_service, id)
+        return await simulation_handlers.get_simulation_log_detailed(
+            db_service=db_service, ssh_service=ssh_service, id=id, env=ENV
+        )
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
@@ -588,63 +371,11 @@ async def get_simulation_log(id: int = fastapi.Path(...)) -> fastapi.Response:
         raise HTTPException(status_code=404, detail="Database not found")
     ssh_service = get_ssh_service()
     try:
-        stdout = await get_slurm_log(db_service, ssh_service, id)
-        _, _, after = stdout.partition("N E X T F L O W")
-        result = "N E X T F L O W" + after
-        return fastapi.Response(content=result, media_type="text/plain")
+        return await simulation_handlers.get_simulation_log(
+            db_service=db_service, ssh_service=ssh_service, id=id, env=ENV
+        )
     except Exception as e:
         logger.exception("""Error getting simulation log.""")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/simulations/{id}/metadata",
-    operation_id="get-ecoli-simulation-metadata",
-    tags=["Simulations"],
-    summary="Get simulation metadata",
-)
-async def get_metadata(id: int = fastapi.Path(description="Database ID")) -> ExperimentMetadata:
-    return ExperimentMetadata(root={})
-
-
-@config.router.post(
-    path="/simulations/{id}/state",
-    response_class=FileResponse,
-    operation_id="get-ecoli-simulation-outdata",
-    tags=["Simulations"],
-    summary="Get simulation outputs",
-)
-async def get_results(
-    background_tasks: BackgroundTasks,
-    id: int = fastapi.Path(..., description="Experiment id for the simulation."),
-    # experiment: EcoliExperiment,
-    variant_id: int = Query(default=0),
-    lineage_seed_id: int = Query(default=0),
-    generation_id: int = Query(default=1),
-    agent_id: int = Query(default=0),
-    filename: str | None = Query(default=None, description="Name you wish to assign to the downloaded zip file"),
-) -> FileResponse:
-    db_service = get_database_service()
-    if db_service is None:
-        raise HTTPException(status_code=404, detail="Database not found")
-    try:
-        experiment = await db_service.get_ecoli_simulation(database_id=id)
-        service = ParquetService()
-        # experiment_id = get_experiment_id_from_tag(experiment_tag)
-        pq_dir = service.get_parquet_dir(
-            experiment_id=experiment.config.experiment_id,
-            variant=variant_id,
-            lineage_seed=lineage_seed_id,
-            generation=generation_id,
-            agent_id=agent_id,
-        )
-        buffer = get_zip_buffer(pq_dir)
-        fname = filename or experiment.config.experiment_id
-        filepath = write_zip_buffer(buffer, fname, background_tasks)
-
-        return FileResponse(path=filepath, media_type="application/octet-stream", filename=filepath.name)
-    except Exception as e:
-        logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -661,14 +392,15 @@ async def list_simulations() -> list[EcoliSimulationDTO]:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        return await db_service.list_ecoli_simulations()
+        # return await db_service.list_ecoli_simulations()
+        return await simulation_handlers.list_simulations(db_service=db_service)
     except Exception as e:
         logger.exception("Error fetching the uploaded analyses")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.post(
-    path="/simulations/data",
+    path="/simulations/{id}/data",
     operation_id="get-ecoli-simulation-data",
     tags=["Simulations"],
     dependencies=[Depends(get_database_service)],
@@ -676,7 +408,8 @@ async def list_simulations() -> list[EcoliSimulationDTO]:
 )
 async def get_simulation_data(
     bg_tasks: BackgroundTasks,
-    experiment_id: str = Query(default="sms_multigeneration"),
+    id: int = fastapi.Path(description="Database ID of the simulation."),
+    # experiment_id: str = Query(default="sms_multigeneration"),
     lineage_seed: int = Query(default=6),
     generation: int = Query(default=1),
     variant: int = Query(default=0),
@@ -688,123 +421,18 @@ async def get_simulation_data(
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        ssh = get_ssh_service(ENV)
-
-        # first, slice parquet and write temp pq to remote disk
-        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-        ret, stdout, stderr = await ssh.run_command(
-            dedent(f"""\
-                cd /home/FCAM/svc_vivarium/workspace \
-                && {remote_uv_executable} run scripts/get_parquet_data.py \
-                    --experiment_id {experiment_id} \
-                    --lineage_seed {lineage_seed} \
-                    --generation {generation} \
-                    --variant {variant} \
-                    --agent_id {agent_id} \
-                    --observables {" ".join(observables)!s}
-            """)
+        return await simulation_handlers.get_simulation_data(
+            ssh=get_ssh_service(ENV),
+            db_service=db_service,
+            id=id,
+            lineage_seed=lineage_seed,
+            generation=generation,
+            variant=variant,
+            agent_id=agent_id,
+            observables=observables,
+            env=ENV,
+            bg_tasks=bg_tasks,
         )
-
-        # then, download the temp pq
-        pq_filename = f"{experiment_id}.parquet"
-        tmpdir = tempfile.TemporaryDirectory()
-        local = Path(tmpdir.name, pq_filename)
-        bg_tasks.add_task(tmpdir.cleanup)
-        remote = Path(ENV.simulation_outdir).parent / "data" / pq_filename
-        await ssh.scp_download(local_file=local, remote_path=remote)
-        bg_tasks.add_task(ssh.run_command, f"rm {remote!s}")
-
-        def generate(data: list[dict[str, Any]]) -> Generator[bytes, Any, None]:
-            yield b"["
-            first = True
-            for item in data:
-                if not first:
-                    yield b","
-                else:
-                    first = False
-                yield orjson.dumps(item)
-            yield b"]"
-
-        return fastapi.responses.StreamingResponse(
-            generate(pl.read_parquet(local).to_dicts()), media_type="application/json"
-        )
-
-        # def generate(path: Path):
-        #     # Collect with streaming engine
-        #     df = pl.scan_parquet(path).collect(streaming=True)
-        #     yield b"["
-        #     first = True
-        #     for batch in df.iter_slices(n_rows=10_000):  # chunked iteration
-        #         for row in batch.iter_rows(named=True):
-        #             if not first:
-        #                 yield b","
-        #             else:
-        #                 first = False
-        #             yield orjson.dumps(row)
-        #     yield b"]"
-        # return fastapi.responses.StreamingResponse(
-        #     generate(local), media_type="application/json"
-        # )
-
-    except Exception as e:
-        logger.exception("Error uploading simulation config")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.post(
-    path="/simulations/data/download",
-    operation_id="download-ecoli-simulation-data",
-    tags=["Simulations"],
-    dependencies=[Depends(get_database_service)],
-    summary="Download selected simulation data as a parquet file",
-)
-async def download_simulation_data(
-    bg_tasks: BackgroundTasks,
-    experiment_id: str = Query(default="sms_multigeneration"),
-    lineage_seed: int = Query(default=6),
-    generation: int = Query(default=1),
-    variant: int = Query(default=0),
-    agent_id: int = Query(default=0),
-    observables: list[str] = request_examples.base_observables,
-) -> FileResponse:
-    db_service = get_database_service()
-    if db_service is None:
-        logger.error("Database service is not initialized")
-        raise HTTPException(status_code=500, detail="Database service is not initialized")
-    try:
-        ssh = get_ssh_service(ENV)
-
-        # first, slice parquet and write temp pq to remote disk
-        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-        ret, stdout, stderr = await ssh.run_command(
-            dedent(f"""\
-                cd /home/FCAM/svc_vivarium/workspace \
-                && {remote_uv_executable} run scripts/get_parquet_data.py \
-                    --experiment_id {experiment_id} \
-                    --lineage_seed {lineage_seed} \
-                    --generation {generation} \
-                    --variant {variant} \
-                    --agent_id {agent_id} \
-                    --observables {" ".join(observables)!s}
-            """)
-        )
-
-        # then, download the temp pq
-        pq_filename = f"{experiment_id}.parquet"
-        tmpdir = tempfile.TemporaryDirectory()
-        local = Path(tmpdir.name, pq_filename)
-        bg_tasks.add_task(tmpdir.cleanup)
-        remote = Path(ENV.simulation_outdir).parent / "data" / pq_filename
-        await ssh.scp_download(local_file=local, remote_path=remote)
-        bg_tasks.add_task(ssh.run_command, f"rm {remote!s}")
-
-        # -- file blob response -- #
-        tmpdir = tempfile.TemporaryDirectory()
-        local = Path(tmpdir.name, pq_filename)
-        bg_tasks.add_task(tmpdir.cleanup)
-        remote = Path(ENV.simulation_outdir).parent / pq_filename
-        await ssh.scp_download(local_file=local, remote_path=remote)
-        return FileResponse(path=local, media_type="application/octet-stream", filename=local.name)
     except Exception as e:
         logger.exception("Error uploading simulation config")
         raise HTTPException(status_code=500, detail=str(e)) from e

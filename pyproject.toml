@@ -1,6 +1,6 @@
 [project]
 name = "sms_api"
-version = "0.2.26-dev"
+version = "0.2.28-dev"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
 requires-python = ">=3.12,<4.0"
@@ -107,7 +107,7 @@ testpaths = ["tests"]
 addopts = "--cov-report=html"
 
 [tool.deptry]
-exclude = [".venv/*", "home/*", "simulation_configs/*"]
+exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py"]
 ignore = ["DEP002", "DEP003", "DEP004"]
 
 [tool.ruff]

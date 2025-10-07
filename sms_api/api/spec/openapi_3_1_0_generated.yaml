@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.25-dev
+  version: 0.2.27-dev
 paths:
   /v1/ecoli/analyses:
     post:
@@ -16,7 +16,7 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: ptools_analysis-4b994b53c65d9d46_1759239662721
+                analysis_name: ptools_analysis-2d3f2a176fc95480_1759849177028
                 single:
                   ptools_rxns:
                     n_tp: 8
@@ -131,6 +131,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses/{id}/manifest:
+    get:
+      tags:
+      - Analyses
+      summary: Get the available outputs of a given analysis
+      operationId: get-analysis-manifest
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the analysis
+          title: Id
+        description: Database ID of the analysis
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TsvOutputFile'
+                title: Response Get-Analysis-Manifest
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses/{id}/tsv:
+    post:
+      tags:
+      - Analyses
+      summary: Get the contents single file that was generated from a simulation analysis
+        module
+      operationId: get-analysis-output-file
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TsvOutputFileRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/ecoli/analyses/{id}/status:
     get:
       tags:
@@ -152,7 +215,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SimulationRun'
+                $ref: '#/components/schemas/AnalysisRun'
         '422':
           description: Validation Error
           content:
@@ -214,180 +277,6 @@ paths:
                 items:
                   $ref: '#/components/schemas/OutputFile'
                 title: Response Get-Analysis-Plots
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}/plots/formatted:
-    get:
-      tags:
-      - Analyses
-      summary: Get a stream of multiple html file contents representing plots.
-      operationId: get-analysis-plots-formatted
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          description: Database ID of the analysis
-          title: Id
-        description: Database ID of the analysis
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}/ptools:
-    get:
-      tags:
-      - Analyses
-      summary: Get an array of tsv files formatted for ptools.
-      operationId: get-analysis-tsv
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          description: Database ID of the analysis
-          title: Id
-        description: Database ID of the analysis
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/OutputFile'
-                title: Response Get-Analysis-Tsv
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}/ptools/formatted:
-    get:
-      tags:
-      - Analyses
-      summary: Get a stream of multiple tsv file contents formatted for ptools.
-      operationId: get-analysis-tsv-formatted
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          description: Database ID of the analysis
-          title: Id
-        description: Database ID of the analysis
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}/ptools/download:
-    get:
-      tags:
-      - Analyses
-      summary: Download zip file of TSV outputs formatted for ptools.
-      operationId: download-tsv-zip
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          description: Database ID of the analysis
-          title: Id
-        description: Database ID of the analysis
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}/download:
-    get:
-      tags:
-      - Analyses
-      summary: Download a single file that was generated from a simulation analysis
-        module
-      operationId: download-analysis-output-file
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Id
-      - name: variant_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Variant Id
-      - name: lineage_seed_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Lineage Seed Id
-      - name: generation_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 1
-          title: Generation Id
-      - name: agent_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Agent Id
-      - name: filename
-        in: query
-        required: true
-        schema:
-          type: string
-          examples:
-          - mass_fraction_summary.html
-          title: Filename
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
         '422':
           description: Validation Error
           content:
@@ -539,174 +428,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/{id}/metadata:
-    get:
-      tags:
-      - Simulations
-      summary: Get simulation metadata
-      operationId: get-ecoli-simulation-metadata
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          description: Database ID
-          title: Id
-        description: Database ID
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExperimentMetadata'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/{id}/state:
-    post:
-      tags:
-      - Simulations
-      summary: Get simulation outputs
-      operationId: get-ecoli-simulation-outdata
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          description: Experiment id for the simulation.
-          title: Id
-        description: Experiment id for the simulation.
-      - name: variant_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Variant Id
-      - name: lineage_seed_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Lineage Seed Id
-      - name: generation_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 1
-          title: Generation Id
-      - name: agent_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Agent Id
-      - name: filename
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Name you wish to assign to the downloaded zip file
-          title: Filename
-        description: Name you wish to assign to the downloaded zip file
-      responses:
-        '200':
-          description: Successful Response
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/data:
+  /v1/ecoli/simulations/{id}/data:
     post:
       tags:
       - Simulations
       summary: Get/Stream simulation data
       operationId: get-ecoli-simulation-data
       parameters:
-      - name: experiment_id
-        in: query
-        required: false
-        schema:
-          type: string
-          default: sms_multigeneration
-          title: Experiment Id
-      - name: lineage_seed
-        in: query
-        required: false
+      - name: id
+        in: path
+        required: true
         schema:
           type: integer
-          default: 6
-          title: Lineage Seed
-      - name: generation
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 1
-          title: Generation
-      - name: variant
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Variant
-      - name: agent_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Agent Id
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                type: string
-              default:
-              - bulk
-              title: Observables
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/data/download:
-    post:
-      tags:
-      - Simulations
-      summary: Download selected simulation data as a parquet file
-      operationId: download-ecoli-simulation-data
-      parameters:
-      - name: experiment_id
-        in: query
-        required: false
-        schema:
-          type: string
-          default: sms_multigeneration
-          title: Experiment Id
+          description: Database ID of the simulation.
+          title: Id
+        description: Database ID of the simulation.
       - name: lineage_seed
         in: query
         required: false
@@ -1185,16 +921,30 @@ components:
       required:
       - experiment_id
       title: AnalysisConfigOptions
+    AnalysisRun:
+      properties:
+        id:
+          type: integer
+          title: Id
+        status:
+          $ref: '#/components/schemas/JobStatus'
+      type: object
+      required:
+      - id
+      - status
+      title: AnalysisRun
     Body_run-ecoli-simulation:
       properties:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-993281095ae57c82_1759239662721-14853890ebc152f5_1759239662721
-            simulation_name: sms_single-993281095ae57c82_1759239662721
+            experiment_id: sms_single-37d1ac2894103e09_1759849177028-3de9185a50264c72_1759849177028
+            simulation_name: sms_single-37d1ac2894103e09_1759849177028
             metadata: {}
             run_parca: true
             generations: 1
+            n_init_sims: 1
+            lineage_seed: 1
             max_duration: 10800.0
             initial_global_time: 0.0
             time_step: 1.0
@@ -1346,7 +1096,7 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_smsapi-8894600434994392_1759239662566
+          default: analysis_smsapi-89c86e39536a42b5_1759849176939
         single:
           additionalProperties: true
           type: object
@@ -1414,7 +1164,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-0b6375caf639c141_1759239662592
+          default: sim_smsapi-c4b2f2feea6f35cd_1759849176964
         metadata:
           additionalProperties: true
           type: object
@@ -1429,10 +1179,13 @@ components:
           title: Generations
           default: 1
         n_init_sims:
-          anyOf:
-          - type: integer
-          - type: 'null'
+          type: integer
           title: N Init Sims
+          default: 1
+        lineage_seed:
+          type: integer
+          title: Lineage Seed
+          default: 1
         max_duration:
           type: number
           title: Max Duration
@@ -1629,11 +1382,6 @@ components:
           - type: boolean
           - type: 'null'
           title: Skip Baseline
-        lineage_seed:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Lineage Seed
         fail_at_max_duration:
           anyOf:
           - type: boolean
@@ -2178,6 +1926,74 @@ components:
       - git_branch
       - database_id
       title: SimulatorVersion
+    TsvOutputFile:
+      properties:
+        filename:
+          type: string
+          title: Filename
+        variant:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Variant
+        lineage_seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Lineage Seed
+        generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Generation
+        agent_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Agent Id
+        content:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content
+        analysis_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Analysis Type
+      type: object
+      required:
+      - filename
+      title: TsvOutputFile
+    TsvOutputFileRequest:
+      properties:
+        filename:
+          type: string
+          title: Filename
+        variant:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Variant
+        lineage_seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Lineage Seed
+        generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Generation
+        agent_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Agent Id
+      type: object
+      required:
+      - filename
+      title: TsvOutputFileRequest
     ValidationError:
       properties:
         loc:
