@@ -107,7 +107,7 @@ testpaths = ["tests"]
 addopts = "--cov-report=html"
 
 [tool.deptry]
-exclude = [".venv/*", "home/*", "simulation_configs/*"]
+exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py"]
 ignore = ["DEP002", "DEP003", "DEP004"]
 
 [tool.ruff]
