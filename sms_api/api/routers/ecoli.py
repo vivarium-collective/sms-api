@@ -173,10 +173,6 @@ async def get_analysis_log(id: int = fastapi.Path(..., description="Database ID 
         raise HTTPException(status_code=404, detail="Database not found")
     ssh_service = get_ssh_service()
     try:
-        # analysis_record = await db_service.get_analysis(database_id=id)
-        # slurm_logfile = Path(ENV.slurm_log_base_path) / f"{analysis_record.job_name}.out"
-        # ret, stdout, stdin = await ssh_service.run_command(f"cat {slurm_logfile!s}")
-        # return stdout
         return await data_handlers.get_analysis_log(db_service=db_service, id=id, env=ENV, ssh_service=ssh_service)
     except Exception as e:
         logger.exception(

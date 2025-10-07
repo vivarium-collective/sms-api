@@ -1,6 +1,6 @@
 [project]
 name = "sms_api"
-version = "0.2.27-dev"
+version = "0.2.28-dev"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
 requires-python = ">=3.12,<4.0"
