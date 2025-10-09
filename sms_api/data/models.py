@@ -3,12 +3,12 @@ import os
 import pathlib
 from dataclasses import asdict, dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 import numpy
 import numpy as np
 import orjson
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from sms_api.common.utils import unique_id
 from sms_api.config import get_settings
@@ -29,24 +29,20 @@ class TsvOutputFileRequest(BaseModel):
     agent_id: str | None = None
 
 
-class TsvOutputFile(BaseModel):
+class OutputFileMetadata(BaseModel):
     filename: str
     variant: int | None = None
     lineage_seed: int | None = None
     generation: int | None = None
     agent_id: str | None = None
     content: str | None = None
-    analysis_type: str | None = None
 
     def model_post_init(self, *args: Any) -> None:
-        for attrname in list(TsvOutputFile.model_fields.keys()):
-            if "analysis_type" not in attrname:
-                attr = getattr(self, attrname)
-                if attr is None or attr == ["string"]:
-                    delattr(self, attrname)
-                if isinstance(attr, (list, dict)) and not len(attr):
-                    delattr(self, attrname)
-        self.analysis_type = self.filename.split("_")[-1].replace(".txt", "")
+        trim_attributes(self, OutputFileMetadata)
+
+
+class TsvOutputFile(OutputFileMetadata):
+    pass
 
 
 class OutputFile(BaseModel):
@@ -54,8 +50,81 @@ class OutputFile(BaseModel):
     content: str
 
 
+class AnalysisModuleConfig(BaseModel):
+    name: str
+    files: list[OutputFileMetadata] | None = None
+    model_config = ConfigDict(extra="allow")
+
+    def model_post_init(self, *args: Any) -> None:
+        trim_attributes(self, OutputFileMetadata)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {self.name: {}}
+
+
+class PtoolsAnalysisConfig(BaseModel):
+    """
+    :param name: (str) Analysis module name (One of ["ptools_rxns", "ptools_rna", "ptools_proteins"])
+    :param n_tp: (int) Number of timepoints/columns to use in the tsv
+    :param files: (list[OutputFileMetadata]) Specification of files requested to be returned
+        with the completion of the analysis.
+    """
+
+    name: Literal["ptools_rxns", "ptools_rna", "ptools_proteins"]
+    n_tp: int = 8
+    files: list[OutputFileMetadata] | None = None
+
+    def to_dict(self) -> dict[Literal["ptools_rxns", "ptools_rna", "ptools_proteins"], dict[str, int]]:
+        return {self.name: {"n_tp": self.n_tp}}
+
+
 class AnalysisConfigOptions(BaseModel):
-    # TODO: infer variant data dir, validation datapath from experiment id
+    """Schema for analysis module configs:
+
+    "single": {},
+    "multidaughter": {},
+    "multigeneration": {
+      "replication": {},
+      "ribosome_components": {},
+      "ribosome_crowding": {},
+      "ribosome_production": {},
+      "ribosome_usage": {},
+      "rna_decay_03_high": {},
+      "ptools_rxns": {
+        "n_tp": 8
+      },
+      "ptools_rna": {
+        "n_tp": 8
+      },
+      "ptools_proteins": {
+        "n_tp": 8
+      }
+    },
+    "multiseed": {
+      "protein_counts_validation": {},
+      "ribosome_spacing": {},
+      "subgenerational_expression_table":
+      "ptools_rxns": {
+        "n_tp": 8
+      },
+      "ptools_rna": {
+        "n_tp": 8
+      },
+      "ptools_proteins": {
+        "n_tp": 8
+      }
+    },
+    "multivariant": {
+      "average_monomer_counts": {},
+      "cell_mass": {},
+      "doubling_time_hist": {
+        "skip_n_gens": 1
+      },
+      "doubling_time_line": {}
+    },
+    "multiexperiment": {}
+    """
+
     experiment_id: list[str]
     variant_data_dir: list[str] | None = None
     validation_data_path: list[str] | None = None
@@ -63,25 +132,9 @@ class AnalysisConfigOptions(BaseModel):
     cpus: int = 3
     single: dict[str, Any] = {}
     multidaughter: dict[str, Any] = {}
-    multigeneration: dict[str, dict[str, Any]] = {
-        "replication": {},
-        "ribosome_components": {},
-        "ribosome_crowding": {},
-        "ribosome_production": {},
-        "ribosome_usage": {},
-        "rna_decay_03_high": {},
-    }
-    multiseed: dict[str, dict[str, Any]] = {
-        "protein_counts_validation": {},
-        "ribosome_spacing": {},
-        "subgenerational_expression_table": {},
-    }
-    multivariant: dict[str, dict[str, Any]] = {
-        "average_monomer_counts": {},
-        "cell_mass": {},
-        "doubling_time_hist": {"skip_n_gens": 1},
-        "doubling_time_line": {},
-    }
+    multigeneration: dict[str, dict[str, Any]] = {}
+    multiseed: dict[str, dict[str, Any]] = {}
+    multivariant: dict[str, dict[str, Any]] = {}
     multiexperiment: dict[str, Any] = {}
 
 
@@ -100,17 +153,18 @@ class AnalysisConfig(BaseModel):
     @classmethod
     def from_request(cls, request: "ExperimentAnalysisRequest") -> "AnalysisConfig":
         output_dir = pathlib.Path(f"/home/FCAM/svc_vivarium/workspace/api_outputs/{request.experiment_id}")
+
         options = AnalysisConfigOptions(
             experiment_id=[request.experiment_id],
             variant_data_dir=[str(output_dir / "variant_sim_data")],
             validation_data_path=[str(output_dir / "parca/kb/validationData.cPickle")],
             outdir=str(output_dir.parent / request.analysis_name),
-            single=request.single,
-            multidaughter=request.multidaughter,
-            multigeneration=request.multigeneration,
-            multiexperiment=request.multiexperiment,
-            multivariant=request.multivariant,
-            multiseed=request.multiseed,
+            single=dict_options(request.single),
+            multidaughter=dict_options(request.multidaughter),
+            multigeneration=dict_options(request.multigeneration),
+            multiexperiment=dict_options(request.multiexperiment),
+            multivariant=dict_options(request.multivariant),
+            multiseed=dict_options(request.multiseed),
         )
         emitter_arg = {"out_dir": str(output_dir.parent)}
         return cls(analysis_options=options, emitter_arg=emitter_arg)
@@ -119,28 +173,12 @@ class AnalysisConfig(BaseModel):
 class ExperimentAnalysisRequest(BaseModel):
     experiment_id: str
     analysis_name: str = Field(default=f"analysis_{unique_id()!s}")
-    single: dict[str, Any] = {}
-    multidaughter: dict[str, Any] = {}
-    multigeneration: dict[str, dict[str, Any]] = {
-        "replication": {},
-        "ribosome_components": {},
-        "ribosome_crowding": {},
-        "ribosome_production": {},
-        "ribosome_usage": {},
-        "rna_decay_03_high": {},
-    }
-    multiseed: dict[str, dict[str, Any]] = {
-        "protein_counts_validation": {},
-        "ribosome_spacing": {},
-        "subgenerational_expression_table": {},
-    }
-    multivariant: dict[str, dict[str, Any]] = {
-        "average_monomer_counts": {},
-        "cell_mass": {},
-        "doubling_time_hist": {"skip_n_gens": 1},
-        "doubling_time_line": {},
-    }
-    multiexperiment: dict[str, Any] = {}
+    single: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    multidaughter: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    multigeneration: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    multiseed: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    multivariant: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    multiexperiment: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
 
     def to_config(self) -> AnalysisConfig:
         experiment_outdir = f"{ENV.simulation_outdir}/{self.experiment_id}"
@@ -150,18 +188,84 @@ class ExperimentAnalysisRequest(BaseModel):
             validation_data_path=[f"{experiment_outdir}/parca/kb/validationData.cPickle"],
             outdir=f"{ENV.simulation_outdir}/{self.analysis_name}",
             cpus=MAX_ANALYSIS_CPUS,
-            single=self.single,
-            multidaughter=self.multidaughter,
-            multigeneration=self.multigeneration,
-            multiexperiment=self.multiexperiment,
-            multivariant=self.multivariant,
-            multiseed=self.multiseed,
+            single=dict_options(self.single),
+            multidaughter=dict_options(self.multidaughter),
+            multigeneration=dict_options(self.multigeneration),
+            multiexperiment=dict_options(self.multiexperiment),
+            multivariant=dict_options(self.multivariant),
+            multiseed=dict_options(self.multiseed),
         )
         emitter_arg = {"out_dir": ENV.simulation_outdir}
         return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
 
 
 class ExperimentAnalysisDTO(BaseModel):
+    """Example schema:
+    {
+        "database_id": 1,
+        "name": "ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634",
+        "config": {
+          "analysis_options": {
+            "experiment_id": [
+              "sms_multigeneration_0-67ed3dbe116f78d9_1759364318634"
+            ],
+            "variant_data_dir": [
+              "/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/variant_sim_data"
+            ],
+            "validation_data_path": [
+              "/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/parca/kb/validationData.cPickle"
+            ],
+            "outdir":
+                "/home/FCAM/svc_vivarium/workspace/api_outputs/ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634",
+            "cpus": 3,
+            "single": {},
+            "multidaughter": {},
+            "multigeneration": {
+              "ptools_rxns": {
+                "n_tp": 8,
+                "files": [
+                  {
+                     "filename": "ptools_rxns_multigen.txt",
+                     "variant": 0,
+                     "lineage_seed": 0
+                  }
+                ]
+              },
+              "ptools_rna": {
+                "n_tp": 8,
+                "files": [
+                  {
+                     "filename": "ptools_rna_multigen.txt",
+                     "variant": 0,
+                     "lineage_seed": 0
+                  }
+                ]
+              },
+              "ptools_proteins": {
+                "n_tp": 8,
+                "files": [
+                  {
+                     "filename": "ptools_proteins_multigen.txt",
+                     "variant": 0,
+                     "lineage_seed": 0
+                  }
+                ]
+              }
+            },
+            "multiseed": {},
+            "multivariant": {},
+            "multiexperiment": {}
+          },
+          "emitter_arg": {
+            "out_dir": "/home/FCAM/svc_vivarium/workspace/api_outputs"
+          }
+        },
+        "last_updated": "2025-10-02 00:50:39.764349",
+        "job_name": "sms-079c43c-ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634-e5qu7p",
+        "job_id": 812320
+      }
+    """
+
     database_id: int
     name: str
     config: AnalysisConfig
@@ -310,3 +414,21 @@ class SerializedArray:
     @value.setter
     def value(self, value: np.ndarray) -> None:
         self._value = self.serialize(value)
+
+
+def trim_attributes(instance: BaseModel, cls: type[BaseModel]) -> None:
+    for attrname in list(cls.model_fields.keys()):
+        if "analysis_type" not in attrname:
+            attr = getattr(instance, attrname)
+            if attr is None or attr == ["string"]:
+                delattr(instance, attrname)
+            if isinstance(attr, (list, dict)) and not len(attr):
+                delattr(instance, attrname)
+
+
+def dict_options(items: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None) -> dict[str, Any]:
+    options: dict[str, Any] = {}
+    if items is not None:
+        for item in items:
+            options.update(item.to_dict())  # type: ignore[arg-type]
+    return options

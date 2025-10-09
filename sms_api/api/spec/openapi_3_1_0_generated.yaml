@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.27-dev
+  version: 0.2.28-dev
 paths:
   /v1/ecoli/analyses:
     post:
@@ -16,7 +16,7 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: ptools_analysis-2d3f2a176fc95480_1759849177028
+                analysis_name: ptools_analysis-cd178bb5dbf64db0_1759932809360
                 single:
                   ptools_rxns:
                     n_tp: 8
@@ -938,8 +938,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-37d1ac2894103e09_1759849177028-3de9185a50264c72_1759849177028
-            simulation_name: sms_single-37d1ac2894103e09_1759849177028
+            experiment_id: sms_single-4b34619a14d420ee_1759932809360-87fd71c0be5c3c54_1759932809360
+            simulation_name: sms_single-4b34619a14d420ee_1759932809360
             metadata: {}
             run_parca: true
             generations: 1
@@ -1088,6 +1088,30 @@ components:
       - config
       - last_updated
       title: ExperimentAnalysisDTO
+      description: "{\n    \"database_id\": 1,\n    \"name\": \"ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634\"\
+        ,\n    \"config\": {\n      \"analysis_options\": {\n        \"experiment_id\"\
+        : [\n          \"sms_multigeneration_0-67ed3dbe116f78d9_1759364318634\"\n\
+        \        ],\n        \"variant_data_dir\": [\n          \"/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/variant_sim_data\"\
+        \n        ],\n        \"validation_data_path\": [\n          \"/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/parca/kb/validationData.cPickle\"\
+        \n        ],\n        \"outdir\": \"/home/FCAM/svc_vivarium/workspace/api_outputs/ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634\"\
+        ,\n        \"cpus\": 3,\n        \"single\": {},\n        \"multidaughter\"\
+        : {},\n        \"multigeneration\": {\n          \"ptools_rxns\": {\n    \
+        \        \"n_tp\": 8,\n            \"files\": [\n              {\n       \
+        \          \"filename\": \"ptools_rxns_multigen.txt\",\n                 \"\
+        variant\": 0,\n                 \"lineage_seed\": 0\n              }\n   \
+        \         ]\n          },\n          \"ptools_rna\": {\n            \"n_tp\"\
+        : 8,\n            \"files\": [\n              {\n                 \"filename\"\
+        : \"ptools_rna_multigen.txt\",\n                 \"variant\": 0,\n       \
+        \          \"lineage_seed\": 0\n              }\n            ]\n         \
+        \ },\n          \"ptools_proteins\": {\n            \"n_tp\": 8,\n       \
+        \     \"files\": [\n              {\n                 \"filename\": \"ptools_proteins_multigen.txt\"\
+        ,\n                 \"variant\": 0,\n                 \"lineage_seed\": 0\n\
+        \              }\n            ]\n          }\n        },\n        \"multiseed\"\
+        : {},\n        \"multivariant\": {},\n        \"multiexperiment\": {}\n  \
+        \    },\n      \"emitter_arg\": {\n        \"out_dir\": \"/home/FCAM/svc_vivarium/workspace/api_outputs\"\
+        \n      }\n    },\n    \"last_updated\": \"2025-10-02 00:50:39.764349\",\n\
+        \    \"job_name\": \"sms-079c43c-ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634-e5qu7p\"\
+        ,\n    \"job_id\": 812320\n  }"
     ExperimentAnalysisRequest:
       properties:
         experiment_id:
@@ -1096,7 +1120,7 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_smsapi-89c86e39536a42b5_1759849176939
+          default: analysis_smsapi-b3163e3522bd97ae_1759932809277
         single:
           additionalProperties: true
           type: object
@@ -1164,7 +1188,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-c4b2f2feea6f35cd_1759849176964
+          default: sim_smsapi-6768b4688033f011_1759932809300
         metadata:
           additionalProperties: true
           type: object
@@ -1956,11 +1980,6 @@ components:
           - type: string
           - type: 'null'
           title: Content
-        analysis_type:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Analysis Type
       type: object
       required:
       - filename

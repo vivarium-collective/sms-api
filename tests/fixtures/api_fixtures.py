@@ -11,7 +11,7 @@ from httpx import ASGITransport
 
 from sms_api.api.client import Client
 from sms_api.api.main import app
-from sms_api.api.request_examples import base_analysis, base_simulation
+from sms_api.api.request_examples import base_simulation, ptools_analysis
 from sms_api.config import REPO_ROOT, get_settings
 from sms_api.data.models import ExperimentAnalysisRequest
 
@@ -75,7 +75,7 @@ async def analysis_config_path() -> Path:
 
 @pytest_asyncio.fixture(scope="session")
 async def analysis_request() -> ExperimentAnalysisRequest:
-    return base_analysis
+    return ptools_analysis
 
 
 @pytest_asyncio.fixture(scope="session")

@@ -387,9 +387,9 @@ class ExperimentRequest(BaseModel):
     simulation_name: str = f"sim_{unique_id()!s}"
     metadata: dict[str, Any] = {}
     run_parca: bool = True
-    generations: int = 1
+    generations: int = 2
     n_init_sims: int = 1
-    lineage_seed: int = 1
+    lineage_seed: int = 3
     max_duration: float = 10800.0
     initial_global_time: float = 0.0
     time_step: float = 1.0
