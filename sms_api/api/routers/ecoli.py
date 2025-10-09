@@ -11,7 +11,7 @@
 import logging
 
 import fastapi
-from fastapi import BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, Depends, HTTPException, Query
 
 from sms_api.api import request_examples
 from sms_api.common.gateway.utils import get_simulator, router_config
@@ -203,26 +203,6 @@ async def get_analysis_plots(
         )
     except Exception as e:
         logger.exception("Error getting analysis data")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.put(
-    "/analyses",
-    tags=["Analyses"],
-    summary="Upload custom python vEcoli analysis module according to the vEcoli analysis API",
-    operation_id="upload-analysis-module",
-)
-async def upload_analysis_module(
-    file: UploadFile = File(...),  # noqa: B008
-    submodule_name: str = Query(..., description="Submodule name(single, multiseed, etc)"),
-) -> dict[str, object]:
-    ssh_service = get_ssh_service(ENV)
-    try:
-        return await data_handlers.upload_analysis_module(
-            file=file, ssh=ssh_service, submodule_name=submodule_name, env=ENV
-        )
-    except Exception as e:
-        logger.exception("Error uploading analysis module")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
