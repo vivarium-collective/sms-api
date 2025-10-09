@@ -4,92 +4,6 @@ info:
   version: 0.2.28-dev
 paths:
   /v1/ecoli/analyses:
-    post:
-      tags:
-      - Analyses
-      summary: Run an analysis workflow (like multigeneration)
-      operationId: run-experiment-analysis
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ExperimentAnalysisRequest'
-              default:
-                experiment_id: sms_multigeneration
-                analysis_name: ptools_analysis-cd178bb5dbf64db0_1759932809360
-                single:
-                  ptools_rxns:
-                    n_tp: 8
-                  ptools_rna:
-                    n_tp: 8
-                  ptools_proteins:
-                    n_tp: 8
-                multidaughter: {}
-                multigeneration:
-                  ptools_rxns:
-                    n_tp: 8
-                  ptools_rna:
-                    n_tp: 8
-                  ptools_proteins:
-                    n_tp: 8
-                multiseed:
-                  ptools_rxns:
-                    n_tp: 8
-                  ptools_rna:
-                    n_tp: 8
-                  ptools_proteins:
-                    n_tp: 8
-                multivariant: {}
-                multiexperiment: {}
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExperimentAnalysisDTO'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-    put:
-      tags:
-      - Analyses
-      summary: Upload custom python vEcoli analysis module according to the vEcoli
-        analysis API
-      operationId: upload-analysis-module
-      parameters:
-      - name: submodule_name
-        in: query
-        required: true
-        schema:
-          type: string
-          description: Submodule name(single, multiseed, etc)
-          title: Submodule Name
-        description: Submodule name(single, multiseed, etc)
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Body_upload-analysis-module'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-                title: Response Upload-Analysis-Module
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
     get:
       tags:
       - Analyses
@@ -101,10 +15,48 @@ paths:
           content:
             application/json:
               schema:
-                type: array
                 items:
                   $ref: '#/components/schemas/ExperimentAnalysisDTO'
+                type: array
                 title: Response List-Analyses
+    post:
+      tags:
+      - Analyses
+      summary: Run an analysis workflow (like multigeneration)
+      operationId: run-experiment-analysis
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentAnalysisRequest'
+              default:
+                experiment_id: sms_multigeneration_0
+                analysis_name: ptools_analysis-6645a7913c1c4456_1760036728973
+                multiseed:
+                - name: ptools_rxns
+                  n_tp: 8
+                  files:
+                  - filename: ptools_rxns_multiseed.txt
+                    variant: 0
+                    generation: 1
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  anyOf:
+                  - $ref: '#/components/schemas/OutputFileMetadata'
+                  - $ref: '#/components/schemas/TsvOutputFile'
+                type: array
+                title: Response Run-Experiment-Analysis
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/ecoli/analyses/{id}:
     get:
       tags:
@@ -883,35 +835,21 @@ components:
             type: object
           type: object
           title: Multigeneration
-          default:
-            replication: {}
-            ribosome_components: {}
-            ribosome_crowding: {}
-            ribosome_production: {}
-            ribosome_usage: {}
-            rna_decay_03_high: {}
+          default: {}
         multiseed:
           additionalProperties:
             additionalProperties: true
             type: object
           type: object
           title: Multiseed
-          default:
-            protein_counts_validation: {}
-            ribosome_spacing: {}
-            subgenerational_expression_table: {}
+          default: {}
         multivariant:
           additionalProperties:
             additionalProperties: true
             type: object
           type: object
           title: Multivariant
-          default:
-            average_monomer_counts: {}
-            cell_mass: {}
-            doubling_time_hist:
-              skip_n_gens: 1
-            doubling_time_line: {}
+          default: {}
         multiexperiment:
           additionalProperties: true
           type: object
@@ -921,6 +859,35 @@ components:
       required:
       - experiment_id
       title: AnalysisConfigOptions
+      description: "Schema for analysis module configs:\n\n\"single\": {},\n\"multidaughter\"\
+        : {},\n\"multigeneration\": {\n  \"replication\": {},\n  \"ribosome_components\"\
+        : {},\n  \"ribosome_crowding\": {},\n  \"ribosome_production\": {},\n  \"\
+        ribosome_usage\": {},\n  \"rna_decay_03_high\": {},\n  \"ptools_rxns\": {\n\
+        \    \"n_tp\": 8\n  },\n  \"ptools_rna\": {\n    \"n_tp\": 8\n  },\n  \"ptools_proteins\"\
+        : {\n    \"n_tp\": 8\n  }\n},\n\"multiseed\": {\n  \"protein_counts_validation\"\
+        : {},\n  \"ribosome_spacing\": {},\n  \"subgenerational_expression_table\"\
+        :\n  \"ptools_rxns\": {\n    \"n_tp\": 8\n  },\n  \"ptools_rna\": {\n    \"\
+        n_tp\": 8\n  },\n  \"ptools_proteins\": {\n    \"n_tp\": 8\n  }\n},\n\"multivariant\"\
+        : {\n  \"average_monomer_counts\": {},\n  \"cell_mass\": {},\n  \"doubling_time_hist\"\
+        : {\n    \"skip_n_gens\": 1\n  },\n  \"doubling_time_line\": {}\n},\n\"multiexperiment\"\
+        : {}"
+    AnalysisModuleConfig:
+      properties:
+        name:
+          type: string
+          title: Name
+        files:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/OutputFileMetadata'
+            type: array
+          - type: 'null'
+          title: Files
+      additionalProperties: true
+      type: object
+      required:
+      - name
+      title: AnalysisModuleConfig
     AnalysisRun:
       properties:
         id:
@@ -938,13 +905,13 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-4b34619a14d420ee_1759932809360-87fd71c0be5c3c54_1759932809360
-            simulation_name: sms_single-4b34619a14d420ee_1759932809360
+            experiment_id: sms_single-82b0fc5342d341e8_1760036728973-6be94dbee6661f96_1760036728973
+            simulation_name: sms_single-82b0fc5342d341e8_1760036728973
             metadata: {}
             run_parca: true
-            generations: 1
+            generations: 2
             n_init_sims: 1
-            lineage_seed: 1
+            lineage_seed: 3
             max_duration: 10800.0
             initial_global_time: 0.0
             time_step: 1.0
@@ -971,16 +938,6 @@ components:
           - type: 'null'
       type: object
       title: Body_run-ecoli-simulation
-    Body_upload-analysis-module:
-      properties:
-        file:
-          type: string
-          format: binary
-          title: File
-      type: object
-      required:
-      - file
-      title: Body_upload-analysis-module
     EcoliSimulation:
       properties:
         database_id:
@@ -1088,12 +1045,13 @@ components:
       - config
       - last_updated
       title: ExperimentAnalysisDTO
-      description: "{\n    \"database_id\": 1,\n    \"name\": \"ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634\"\
-        ,\n    \"config\": {\n      \"analysis_options\": {\n        \"experiment_id\"\
+      description: "Example schema:\n{\n    \"database_id\": 1,\n    \"name\": \"\
+        ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634\",\n\
+        \    \"config\": {\n      \"analysis_options\": {\n        \"experiment_id\"\
         : [\n          \"sms_multigeneration_0-67ed3dbe116f78d9_1759364318634\"\n\
         \        ],\n        \"variant_data_dir\": [\n          \"/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/variant_sim_data\"\
         \n        ],\n        \"validation_data_path\": [\n          \"/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/parca/kb/validationData.cPickle\"\
-        \n        ],\n        \"outdir\": \"/home/FCAM/svc_vivarium/workspace/api_outputs/ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634\"\
+        \n        ],\n        \"outdir\":\n            \"/home/FCAM/svc_vivarium/workspace/api_outputs/ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634\"\
         ,\n        \"cpus\": 3,\n        \"single\": {},\n        \"multidaughter\"\
         : {},\n        \"multigeneration\": {\n          \"ptools_rxns\": {\n    \
         \        \"n_tp\": 8,\n            \"files\": [\n              {\n       \
@@ -1120,57 +1078,61 @@ components:
         analysis_name:
           type: string
           title: Analysis Name
-          default: analysis_smsapi-b3163e3522bd97ae_1759932809277
+          default: analysis_smsapi-0b511676e31f848e_1760036728897
         single:
-          additionalProperties: true
-          type: object
+          anyOf:
+          - items:
+              anyOf:
+              - $ref: '#/components/schemas/AnalysisModuleConfig'
+              - $ref: '#/components/schemas/PtoolsAnalysisConfig'
+            type: array
+          - type: 'null'
           title: Single
-          default: {}
         multidaughter:
-          additionalProperties: true
-          type: object
+          anyOf:
+          - items:
+              anyOf:
+              - $ref: '#/components/schemas/AnalysisModuleConfig'
+              - $ref: '#/components/schemas/PtoolsAnalysisConfig'
+            type: array
+          - type: 'null'
           title: Multidaughter
-          default: {}
         multigeneration:
-          additionalProperties:
-            additionalProperties: true
-            type: object
-          type: object
+          anyOf:
+          - items:
+              anyOf:
+              - $ref: '#/components/schemas/AnalysisModuleConfig'
+              - $ref: '#/components/schemas/PtoolsAnalysisConfig'
+            type: array
+          - type: 'null'
           title: Multigeneration
-          default:
-            replication: {}
-            ribosome_components: {}
-            ribosome_crowding: {}
-            ribosome_production: {}
-            ribosome_usage: {}
-            rna_decay_03_high: {}
         multiseed:
-          additionalProperties:
-            additionalProperties: true
-            type: object
-          type: object
+          anyOf:
+          - items:
+              anyOf:
+              - $ref: '#/components/schemas/AnalysisModuleConfig'
+              - $ref: '#/components/schemas/PtoolsAnalysisConfig'
+            type: array
+          - type: 'null'
           title: Multiseed
-          default:
-            protein_counts_validation: {}
-            ribosome_spacing: {}
-            subgenerational_expression_table: {}
         multivariant:
-          additionalProperties:
-            additionalProperties: true
-            type: object
-          type: object
+          anyOf:
+          - items:
+              anyOf:
+              - $ref: '#/components/schemas/AnalysisModuleConfig'
+              - $ref: '#/components/schemas/PtoolsAnalysisConfig'
+            type: array
+          - type: 'null'
           title: Multivariant
-          default:
-            average_monomer_counts: {}
-            cell_mass: {}
-            doubling_time_hist:
-              skip_n_gens: 1
-            doubling_time_line: {}
         multiexperiment:
-          additionalProperties: true
-          type: object
+          anyOf:
+          - items:
+              anyOf:
+              - $ref: '#/components/schemas/AnalysisModuleConfig'
+              - $ref: '#/components/schemas/PtoolsAnalysisConfig'
+            type: array
+          - type: 'null'
           title: Multiexperiment
-          default: {}
       type: object
       required:
       - experiment_id
@@ -1188,7 +1150,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-6768b4688033f011_1759932809300
+          default: sim_smsapi-5012a5e10bf7885f_1760036728909
         metadata:
           additionalProperties: true
           type: object
@@ -1201,7 +1163,7 @@ components:
         generations:
           type: integer
           title: Generations
-          default: 1
+          default: 2
         n_init_sims:
           type: integer
           title: N Init Sims
@@ -1209,7 +1171,7 @@ components:
         lineage_seed:
           type: integer
           title: Lineage Seed
-          default: 1
+          default: 3
         max_duration:
           type: number
           title: Max Duration
@@ -1529,6 +1491,40 @@ components:
       - name
       - content
       title: OutputFile
+    OutputFileMetadata:
+      properties:
+        filename:
+          type: string
+          title: Filename
+        variant:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Variant
+        lineage_seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Lineage Seed
+        generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Generation
+        agent_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Agent Id
+        content:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content
+      type: object
+      required:
+      - filename
+      title: OutputFileMetadata
     ParcaDataset:
       properties:
         database_id:
@@ -1563,6 +1559,34 @@ components:
       - simulator_version
       - parca_config
       title: ParcaDatasetRequest
+    PtoolsAnalysisConfig:
+      properties:
+        name:
+          type: string
+          enum:
+          - ptools_rxns
+          - ptools_rna
+          - ptools_proteins
+          title: Name
+        n_tp:
+          type: integer
+          title: N Tp
+          default: 8
+        files:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/OutputFileMetadata'
+            type: array
+          - type: 'null'
+          title: Files
+      type: object
+      required:
+      - name
+      title: PtoolsAnalysisConfig
+      description: ":param name: (str) Analysis module name (One of [\"ptools_rxns\"\
+        , \"ptools_rna\", \"ptools_proteins\"])\n:param n_tp: (int) Number of timepoints/columns\
+        \ to use in the tsv\n:param files: (list[OutputFileMetadata]) Specification\
+        \ of files requested to be returned\n    with the completion of the analysis."
     RegisteredSimulators:
       properties:
         versions:

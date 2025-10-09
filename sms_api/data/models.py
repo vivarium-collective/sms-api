@@ -55,9 +55,6 @@ class AnalysisModuleConfig(BaseModel):
     files: list[OutputFileMetadata] | None = None
     model_config = ConfigDict(extra="allow")
 
-    def model_post_init(self, *args: Any) -> None:
-        trim_attributes(self, OutputFileMetadata)
-
     def to_dict(self) -> dict[str, Any]:
         return {self.name: {}}
 
@@ -419,7 +416,7 @@ class SerializedArray:
 def trim_attributes(instance: BaseModel, cls: type[BaseModel]) -> None:
     for attrname in list(cls.model_fields.keys()):
         if "analysis_type" not in attrname:
-            attr = getattr(instance, attrname)
+            attr = getattr(instance, attrname, None)
             if attr is None or attr == ["string"]:
                 delattr(instance, attrname)
             if isinstance(attr, (list, dict)) and not len(attr):

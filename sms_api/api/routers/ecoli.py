@@ -25,6 +25,7 @@ from sms_api.data.models import (
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
     OutputFile,
+    OutputFileMetadata,
     TsvOutputFile,
     TsvOutputFileRequest,
 )
@@ -48,13 +49,15 @@ config = router_config(prefix="ecoli")
 
 @config.router.post(
     path="/analyses",
-    response_model=ExperimentAnalysisDTO,
+    # response_model=ExperimentAnalysisDTO,
     operation_id="run-experiment-analysis",
     tags=["Analyses"],
     summary="Run an analysis workflow (like multigeneration)",
     dependencies=[Depends(get_database_service)],
 )
-async def run_analysis(request: ExperimentAnalysisRequest = request_examples.ptools_analysis) -> ExperimentAnalysisDTO:
+async def run_analysis(
+    request: ExperimentAnalysisRequest = request_examples.ptools_analysis,
+) -> list[OutputFileMetadata | TsvOutputFile]:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
@@ -67,6 +70,7 @@ async def run_analysis(request: ExperimentAnalysisRequest = request_examples.pto
             db_service=db_service,
             timestamp=timestamp(),
             logger=logger,
+            ssh_service=get_ssh_service(ENV),
         )
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
