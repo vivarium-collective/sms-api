@@ -22,8 +22,8 @@ paths:
     post:
       tags:
       - Analyses
-      summary: Run an analysis workflow (like multigeneration)
-      operationId: run-experiment-analysis
+      summary: Run an analysis
+      operationId: run-analysis
       requestBody:
         content:
           application/json:
@@ -52,7 +52,7 @@ paths:
                   - $ref: '#/components/schemas/OutputFileMetadata'
                   - $ref: '#/components/schemas/TsvOutputFile'
                 type: array
-                title: Response Run-Experiment-Analysis
+                title: Response Run-Analysis
         '422':
           description: Validation Error
           content:
@@ -63,8 +63,8 @@ paths:
     get:
       tags:
       - Analyses
-      summary: Retrieve an existing experiment analysis spec detail from the database
-      operationId: fetch-experiment-analysis
+      summary: Retrieve an experiment analysis spec from the database
+      operationId: get-analysis
       parameters:
       - name: id
         in: path
@@ -79,69 +79,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExperimentAnalysisDTO'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}/manifest:
-    get:
-      tags:
-      - Analyses
-      summary: Get the available outputs of a given analysis
-      operationId: get-analysis-manifest
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          description: Database ID of the analysis
-          title: Id
-        description: Database ID of the analysis
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/TsvOutputFile'
-                title: Response Get-Analysis-Manifest
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}/tsv:
-    post:
-      tags:
-      - Analyses
-      summary: Get the contents single file that was generated from a simulation analysis
-        module
-      operationId: get-analysis-output-file
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          title: Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TsvOutputFileRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
         '422':
           description: Validation Error
           content:
@@ -324,33 +261,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SimulationRun'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/{id}/log/detailed:
-    get:
-      tags:
-      - Simulations
-      summary: Get the simulation status record by its ID
-      operationId: get-ecoli-simulation-log-detail
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          title: Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: string
-                title: Response Get-Ecoli-Simulation-Log-Detail
         '422':
           description: Validation Error
           content:
@@ -907,8 +817,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-ed6f1bd782002d74_1760046528564-855b6e65ef66cda8_1760046528564
-            simulation_name: sms_single-ed6f1bd782002d74_1760046528564
+            experiment_id: sms_single-e15b917511a05255_1760048478138-3eccc713c47d868e_1760048478138
+            simulation_name: sms_single-e15b917511a05255_1760048478138
             metadata: {}
             run_parca: true
             generations: 2
@@ -1148,7 +1058,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-ea1f0ff4b4a514e3_1760046528499
+          default: sim_smsapi-db06b17cb44d48c0_1760048478076
         metadata:
           additionalProperties: true
           type: object
@@ -2023,34 +1933,6 @@ components:
       required:
       - filename
       title: TsvOutputFile
-    TsvOutputFileRequest:
-      properties:
-        filename:
-          type: string
-          title: Filename
-        variant:
-          type: integer
-          title: Variant
-          default: 0
-        lineage_seed:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Lineage Seed
-        generation:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Generation
-        agent_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Agent Id
-      type: object
-      required:
-      - filename
-      title: TsvOutputFileRequest
     ValidationError:
       properties:
         loc:

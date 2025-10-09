@@ -27,7 +27,6 @@ from sms_api.data.models import (
     OutputFile,
     OutputFileMetadata,
     TsvOutputFile,
-    TsvOutputFileRequest,
 )
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation import ecoli_handlers as simulation_handlers
@@ -50,10 +49,13 @@ config = router_config(prefix="ecoli")
 @config.router.post(
     path="/analyses",
     # response_model=ExperimentAnalysisDTO,
-    operation_id="run-experiment-analysis",
+    operation_id="run-analysis",
     tags=["Analyses"],
-    summary="Run an analysis workflow (like multigeneration)",
-    dependencies=[Depends(get_database_service)],
+    summary="Run an analysis",
+    dependencies=[
+        Depends(get_database_service),
+        # Depends(get_ssh_svc)
+    ],
 )
 async def run_analysis(
     request: ExperimentAnalysisRequest = request_examples.ptools_analysis,
@@ -79,10 +81,10 @@ async def run_analysis(
 
 @config.router.get(
     path="/analyses/{id}",
-    operation_id="fetch-experiment-analysis",
+    operation_id="get-analysis",
     tags=["Analyses"],
     dependencies=[Depends(get_database_service)],
-    summary="Retrieve an existing experiment analysis spec detail from the database",
+    summary="Retrieve an experiment analysis spec from the database",
 )
 async def get_analysis_spec(id: int) -> ExperimentAnalysisDTO:
     db_service = get_database_service()
@@ -95,50 +97,50 @@ async def get_analysis_spec(id: int) -> ExperimentAnalysisDTO:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(
-    path="/analyses/{id}/manifest",
-    tags=["Analyses"],
-    operation_id="get-analysis-manifest",
-    dependencies=[Depends(get_database_service)],
-    summary="Get the available outputs of a given analysis",
-)
-async def get_ptools_manifest(
-    id: int = fastapi.Path(..., description="Database ID of the analysis"),
-) -> list[TsvOutputFile]:
-    db_service = get_database_service()
-    if db_service is None:
-        raise HTTPException(status_code=404, detail="Database not found")
-    ssh_service = get_ssh_service(ENV)
+# @config.router.get(
+#     path="/analyses/{id}/manifest",
+#     tags=["Analyses"],
+#     operation_id="get-analysis-manifest",
+#     dependencies=[Depends(get_database_service)],
+#     summary="Get the available outputs of a given analysis",
+# )
+# async def get_ptools_manifest(
+#     id: int = fastapi.Path(..., description="Database ID of the analysis"),
+# ) -> list[TsvOutputFile]:
+#     db_service = get_database_service()
+#     if db_service is None:
+#         raise HTTPException(status_code=404, detail="Database not found")
+#     ssh_service = get_ssh_service(ENV)
+#
+#     try:
+#         return await data_handlers.get_ptools_manifest(
+#             db_service=db_service, env=ENV, ssh_service=ssh_service, id=id, analysis_service=analysis_service
+#         )
+#     except Exception as e:
+#         logger.exception("Error getting analysis data")
+#         raise HTTPException(status_code=500, detail=str(e)) from e
 
-    try:
-        return await data_handlers.get_ptools_manifest(
-            db_service=db_service, env=ENV, ssh_service=ssh_service, id=id, analysis_service=analysis_service
-        )
-    except Exception as e:
-        logger.exception("Error getting analysis data")
-        raise HTTPException(status_code=500, detail=str(e)) from e
 
-
-@config.router.post(
-    path="/analyses/{id}/tsv",
-    response_model=None,
-    operation_id="get-analysis-output-file",
-    tags=["Analyses"],
-    dependencies=[Depends(get_database_service)],
-    summary="Get the contents single file that was generated from a simulation analysis module",
-)
-async def get_analysis_output_file(request: TsvOutputFileRequest, id: int = fastapi.Path(...)) -> TsvOutputFile:
-    db_service = get_database_service()
-    if db_service is None:
-        raise HTTPException(status_code=404, detail="Database not found")
-    ssh_service = get_ssh_service(ENV)
-    try:
-        return await data_handlers.get_tsv_output(
-            request=request, db_service=db_service, id=id, env=ENV, ssh=ssh_service, analysis_service=analysis_service
-        )
-    except Exception as e:
-        logger.exception("Error fetching the simulation analysis file.")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+# @config.router.post(
+#     path="/analyses/{id}/tsv",
+#     response_model=None,
+#     operation_id="get-analysis-output-file",
+#     tags=["Analyses"],
+#     dependencies=[Depends(get_database_service)],
+#     summary="Get the contents single file that was generated from a simulation analysis module",
+# )
+# async def get_analysis_output_file(request: TsvOutputFileRequest, id: int = fastapi.Path(...)) -> TsvOutputFile:
+#     db_service = get_database_service()
+#     if db_service is None:
+#         raise HTTPException(status_code=404, detail="Database not found")
+#     ssh_service = get_ssh_service(ENV)
+#     try:
+#         return await data_handlers.get_tsv_output(
+#             request=request, db_service=db_service, id=id, env=ENV, ssh=ssh_service, analysis_service=analysis_service
+#         )
+#     except Exception as e:
+#         logger.exception("Error fetching the simulation analysis file.")
+#         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.get(
@@ -318,29 +320,29 @@ async def get_simulation_status(id: int = fastapi.Path(...)) -> SimulationRun:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@config.router.get(
-    path="/simulations/{id}/log/detailed",
-    tags=["Simulations"],
-    operation_id="get-ecoli-simulation-log-detail",
-    dependencies=[Depends(get_database_service)],
-    summary="Get the simulation status record by its ID",
-)
-async def get_simlog(id: int = fastapi.Path(...)) -> str:
-    db_service = get_database_service()
-    if db_service is None:
-        raise HTTPException(status_code=404, detail="Database not found")
-    ssh_service = get_ssh_service()
-    try:
-        return await simulation_handlers.get_simulation_log_detailed(
-            db_service=db_service, ssh_service=ssh_service, id=id, env=ENV
-        )
-    except Exception as e:
-        logger.exception(
-            """Error getting simulation status.\
-                Are you sure that you've passed the experiment_tag? (not the experiment id)
-            """
-        )
-        raise HTTPException(status_code=500, detail=str(e)) from e
+# @config.router.get(
+#     path="/simulations/{id}/log/detailed",
+#     tags=["Simulations"],
+#     operation_id="get-ecoli-simulation-log-detail",
+#     dependencies=[Depends(get_database_service)],
+#     summary="Get the simulation status record by its ID",
+# )
+# async def get_simlog(id: int = fastapi.Path(...)) -> str:
+#     db_service = get_database_service()
+#     if db_service is None:
+#         raise HTTPException(status_code=404, detail="Database not found")
+#     ssh_service = get_ssh_service()
+#     try:
+#         return await simulation_handlers.get_simulation_log_detailed(
+#             db_service=db_service, ssh_service=ssh_service, id=id, env=ENV
+#         )
+#     except Exception as e:
+#         logger.exception(
+#             """Error getting simulation status.\
+#                 Are you sure that you've passed the experiment_tag? (not the experiment id)
+#             """
+#         )
+#         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.post(
