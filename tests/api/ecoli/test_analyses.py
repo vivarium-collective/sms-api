@@ -15,14 +15,17 @@ from sms_api.simulation.database_service import DatabaseService
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_run_analysis(
-    base_router: str, analysis_request: ExperimentAnalysisRequest, database_service: DatabaseService
+    base_router: str,
+    analysis_request: ExperimentAnalysisRequest,
+    database_service: DatabaseService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.post(f"{base_router}/analyses", json=analysis_request.model_dump())
         response.raise_for_status()
         data = response.json()
-        assert isinstance(data["config"]["analysis_options"]["experiment_id"], list)
+        assert isinstance(data, list)
+        assert len(data) == 3
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")

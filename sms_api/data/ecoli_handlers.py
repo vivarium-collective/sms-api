@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import mimetypes
 import tempfile
@@ -7,6 +8,7 @@ from types import ModuleType
 from fastapi import UploadFile
 
 from sms_api.common.ssh.ssh_service import SSHService
+from sms_api.common.utils import unique_id
 from sms_api.config import Settings
 from sms_api.data.models import (
     AnalysisRun,
@@ -14,6 +16,7 @@ from sms_api.data.models import (
     ExperimentAnalysisRequest,
     JobStatus,
     OutputFile,
+    OutputFileMetadata,
     TsvOutputFile,
     TsvOutputFileRequest,
 )
@@ -29,23 +32,73 @@ async def run_analysis(
     logger: logging.Logger,
     db_service: DatabaseService,
     timestamp: str,
-) -> ExperimentAnalysisDTO:
-    config = request.to_config()
+    ssh_service: SSHService,
+) -> list[OutputFileMetadata | TsvOutputFile]:
+    # dispatch and process analysis run
+    analysis_name = unique_id(scope="sms_analysis")
+    config = request.to_config(analysis_name=analysis_name)
     slurmjob_name, slurmjob_id = await analysis_service.dispatch(
         config=config,
-        analysis_name=request.analysis_name,
+        analysis_name=analysis_name,
         simulator_hash=simulator.git_commit_hash,
         env=env,
         logger=logger,
     )
     analysis_record = await db_service.insert_analysis(
-        name=request.analysis_name,
+        name=analysis_name,
         config=config,
         last_updated=timestamp,
         job_name=slurmjob_name,
         job_id=slurmjob_id,
     )
-    return analysis_record
+
+    # wait for a little bit
+    await asyncio.sleep(5)
+
+    # check status
+    run = await get_analysis_status(
+        db_service=db_service, ssh_service=ssh_service, id=analysis_record.database_id, env=env
+    )
+    while run.status.lower() not in ["completed", "failed"]:
+        logger.info(f"Run not complete: {run.status.lower()}")
+        await asyncio.sleep(3)
+        run = await get_analysis_status(
+            db_service=db_service, ssh_service=ssh_service, id=analysis_record.database_id, env=env
+        )
+    if run.status.lower() == "failed":
+        raise Exception(f"Run has failed:\n{run}")
+
+    # fetch requested outputs
+    requested_outputs = []
+    analysis_types = ["single", "multiseed", "multigeneration", "multivariant", "multiexperiment"]
+    for analysis_type in analysis_types:
+        analyses = getattr(request, analysis_type, None)
+        if analyses is not None:
+            for analysis in analyses:
+                analysis_name = analysis.name
+                if "multigeneration" in analysis_name:
+                    analysis_name = analysis_name.replace("multigeneration", "multigen")
+                fname = f"{analysis_name}_{analysis_type}"
+                fname += ".txt" if "ptools" in analysis_name else ".html"
+                metadata_kwargs: dict[str, str | int] = {}
+                for param in ["variant", "lineage_seed", "agent_id", "generation"]:
+                    kwarg_val = getattr(analysis, param, None)
+                    if kwarg_val is not None:
+                        metadata_kwargs[param] = kwarg_val
+                metadata_kwargs["filename"] = fname
+                files = [OutputFileMetadata(**metadata_kwargs)]  # type: ignore[arg-type]
+                for file_spec in files:
+                    output = await get_tsv_output(
+                        request=TsvOutputFileRequest(**file_spec.model_dump()),
+                        db_service=db_service,
+                        id=analysis_record.database_id,
+                        env=env,
+                        ssh=ssh_service,
+                        analysis_service=analysis_service,
+                    )
+                    requested_outputs.append(output)
+
+    return requested_outputs  # type: ignore[return-value]
 
 
 async def get_analysis(db_service: DatabaseService, id: int) -> ExperimentAnalysisDTO:

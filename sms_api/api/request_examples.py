@@ -12,60 +12,19 @@ Then, add that func to the list within the examples dict comprehension below!
 """
 
 from sms_api.common.utils import unique_id
-from sms_api.data.models import ExperimentAnalysisRequest
+from sms_api.data.models import ExperimentAnalysisRequest, PtoolsAnalysisConfig
 from sms_api.simulation.models import ExperimentRequest
 
-base_analysis = ExperimentAnalysisRequest(
-    experiment_id="sms_multigeneration",
-    analysis_name=unique_id(scope="ptools_analysis"),
-    single={
-        "mass_fraction_summary": {},
-        "ptools_rxns": {"n_tp": 8},
-        "ptools_rna": {"n_tp": 8},
-        "ptools_proteins": {"n_tp": 8},
-    },
-    multigeneration={
-        "replication": {},
-        "ribosome_components": {},
-        "ribosome_crowding": {},
-        "ribosome_production": {},
-        "ribosome_usage": {},
-        "rna_decay_03_high": {},
-        "ptools_rxns": {"n_tp": 8},
-        "ptools_rna": {"n_tp": 8},
-        "ptools_proteins": {"n_tp": 8},
-    },
-    multiseed={
-        "protein_counts_validation": {},
-        "ribosome_spacing": {},
-        "subgenerational_expression_table": {},
-        "ptools_rxns": {"n_tp": 8},
-        "ptools_rna": {"n_tp": 8},
-        "ptools_proteins": {"n_tp": 8},
-    },
-    multivariant={
-        "average_monomer_counts": {},
-        "cell_mass": {},
-        "doubling_time_hist": {"skip_n_gens": 1},
-        "doubling_time_line": {},
-    },
-)
-
 ptools_analysis = ExperimentAnalysisRequest(
-    experiment_id="sms_multigeneration",
-    analysis_name=unique_id(scope="ptools_analysis"),
-    single={"ptools_rxns": {"n_tp": 8}, "ptools_rna": {"n_tp": 8}, "ptools_proteins": {"n_tp": 8}},
-    multigeneration={
-        "ptools_rxns": {"n_tp": 8},
-        "ptools_rna": {"n_tp": 8},
-        "ptools_proteins": {"n_tp": 8},
-    },
-    multiseed={
-        "ptools_rxns": {"n_tp": 8},
-        "ptools_rna": {"n_tp": 8},
-        "ptools_proteins": {"n_tp": 8},
-    },
-    multivariant={},
+    experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
+    multiseed=[
+        PtoolsAnalysisConfig(
+            name="ptools_rxns",
+            n_tp=8,
+        ),
+        PtoolsAnalysisConfig(name="ptools_proteins", n_tp=8),
+        PtoolsAnalysisConfig(name="ptools_rna", n_tp=8),
+    ],
 )
 
 

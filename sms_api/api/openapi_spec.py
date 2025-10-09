@@ -32,7 +32,7 @@ def main() -> None:
     with open(spec_fp, "w") as f:
         f.write(openapi_spec_yaml)
 
-    print("New OpenAPI spec for compose_api generated!")
+    print("New OpenAPI spec for sms_api.api generated!")
 
 
 if __name__ == "__main__":
