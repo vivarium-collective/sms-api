@@ -12,18 +12,18 @@ Then, add that func to the list within the examples dict comprehension below!
 """
 
 from sms_api.common.utils import unique_id
-from sms_api.data.models import ExperimentAnalysisRequest, OutputFileMetadata, PtoolsAnalysisConfig
+from sms_api.data.models import ExperimentAnalysisRequest, PtoolsAnalysisConfig
 from sms_api.simulation.models import ExperimentRequest
 
 ptools_analysis = ExperimentAnalysisRequest(
-    experiment_id="sms_multigeneration_0",
-    analysis_name=unique_id(scope="ptools_analysis"),
+    experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
     multiseed=[
         PtoolsAnalysisConfig(
             name="ptools_rxns",
             n_tp=8,
-            files=[OutputFileMetadata(filename="ptools_rxns_multiseed.txt", variant=0, generation=1)],
-        )
+        ),
+        PtoolsAnalysisConfig(name="ptools_proteins", n_tp=8),
+        PtoolsAnalysisConfig(name="ptools_rna", n_tp=8),
     ],
 )
 

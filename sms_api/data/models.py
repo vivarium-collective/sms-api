@@ -10,7 +10,6 @@ import numpy as np
 import orjson
 from pydantic import BaseModel, ConfigDict, Field
 
-from sms_api.common.utils import unique_id
 from sms_api.config import get_settings
 
 ENV = get_settings()
@@ -23,7 +22,7 @@ MAX_ANALYSIS_CPUS = 3
 class TsvOutputFileRequest(BaseModel):
     # analysis_id: int
     filename: str
-    variant: int | None = None
+    variant: int = 0
     lineage_seed: int | None = None
     generation: int | None = None
     agent_id: str | None = None
@@ -31,7 +30,7 @@ class TsvOutputFileRequest(BaseModel):
 
 class OutputFileMetadata(BaseModel):
     filename: str
-    variant: int | None = None
+    variant: int = 0
     lineage_seed: int | None = None
     generation: int | None = None
     agent_id: str | None = None
@@ -69,7 +68,16 @@ class PtoolsAnalysisConfig(BaseModel):
 
     name: Literal["ptools_rxns", "ptools_rna", "ptools_proteins"]
     n_tp: int = 8
+    variant: int = 0
+    generation: int | None = None
+    lineage_seed: int | None = None
+    agent_id: int | None = None
     files: list[OutputFileMetadata] | None = None
+
+    def model_post_init(self, context: Any, /) -> None:
+        for attrname in list(PtoolsAnalysisConfig.model_fields.keys()):
+            if getattr(self, attrname, None) is None:
+                delattr(self, attrname)
 
     def to_dict(self) -> dict[Literal["ptools_rxns", "ptools_rna", "ptools_proteins"], dict[str, int]]:
         return {self.name: {"n_tp": self.n_tp}}
@@ -148,14 +156,14 @@ class AnalysisConfig(BaseModel):
         return cls(analysis_options=options, emitter_arg=conf["emitter_arg"])
 
     @classmethod
-    def from_request(cls, request: "ExperimentAnalysisRequest") -> "AnalysisConfig":
+    def from_request(cls, request: "ExperimentAnalysisRequest", analysis_name: str) -> "AnalysisConfig":
         output_dir = pathlib.Path(f"/home/FCAM/svc_vivarium/workspace/api_outputs/{request.experiment_id}")
 
         options = AnalysisConfigOptions(
             experiment_id=[request.experiment_id],
             variant_data_dir=[str(output_dir / "variant_sim_data")],
             validation_data_path=[str(output_dir / "parca/kb/validationData.cPickle")],
-            outdir=str(output_dir.parent / request.analysis_name),
+            outdir=str(output_dir.parent / analysis_name),
             single=dict_options(request.single),
             multidaughter=dict_options(request.multidaughter),
             multigeneration=dict_options(request.multigeneration),
@@ -169,7 +177,7 @@ class AnalysisConfig(BaseModel):
 
 class ExperimentAnalysisRequest(BaseModel):
     experiment_id: str
-    analysis_name: str = Field(default=f"analysis_{unique_id()!s}")
+    # analysis_name: str = Field(default=f"analysis_{unique_id()!s}")
     single: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multidaughter: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multigeneration: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
@@ -177,13 +185,13 @@ class ExperimentAnalysisRequest(BaseModel):
     multivariant: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multiexperiment: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
 
-    def to_config(self) -> AnalysisConfig:
+    def to_config(self, analysis_name: str) -> AnalysisConfig:
         experiment_outdir = f"{ENV.simulation_outdir}/{self.experiment_id}"
         options = AnalysisConfigOptions(
             experiment_id=[self.experiment_id],
             variant_data_dir=[f"{experiment_outdir}/variant_sim_data"],
             validation_data_path=[f"{experiment_outdir}/parca/kb/validationData.cPickle"],
-            outdir=f"{ENV.simulation_outdir}/{self.analysis_name}",
+            outdir=f"{ENV.simulation_outdir}/{analysis_name}",
             cpus=MAX_ANALYSIS_CPUS,
             single=dict_options(self.single),
             multidaughter=dict_options(self.multidaughter),

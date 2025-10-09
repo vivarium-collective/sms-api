@@ -30,15 +30,17 @@ paths:
             schema:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
-                experiment_id: sms_multigeneration_0
-                analysis_name: ptools_analysis-fda7f8566f2d2834_1760039215342
+                experiment_id: sms_multiseed_0-2794dfa74b9cf37c_1759844363435
                 multiseed:
                 - name: ptools_rxns
                   n_tp: 8
-                  files:
-                  - filename: ptools_rxns_multiseed.txt
-                    variant: 0
-                    generation: 1
+                  variant: 0
+                - name: ptools_proteins
+                  n_tp: 8
+                  variant: 0
+                - name: ptools_rna
+                  n_tp: 8
+                  variant: 0
       responses:
         '200':
           description: Successful Response
@@ -905,8 +907,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-e8a2a2ca48090e00_1760039215342-8ed3e604b7f6f8db_1760039215342
-            simulation_name: sms_single-e8a2a2ca48090e00_1760039215342
+            experiment_id: sms_single-ed6f1bd782002d74_1760046528564-855b6e65ef66cda8_1760046528564
+            simulation_name: sms_single-ed6f1bd782002d74_1760046528564
             metadata: {}
             run_parca: true
             generations: 2
@@ -1075,10 +1077,6 @@ components:
         experiment_id:
           type: string
           title: Experiment Id
-        analysis_name:
-          type: string
-          title: Analysis Name
-          default: analysis_smsapi-2275ac529ce60d50_1760039215265
         single:
           anyOf:
           - items:
@@ -1150,7 +1148,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-4ecf3e30ca31cfbc_1760039215278
+          default: sim_smsapi-ea1f0ff4b4a514e3_1760046528499
         metadata:
           additionalProperties: true
           type: object
@@ -1497,10 +1495,9 @@ components:
           type: string
           title: Filename
         variant:
-          anyOf:
-          - type: integer
-          - type: 'null'
+          type: integer
           title: Variant
+          default: 0
         lineage_seed:
           anyOf:
           - type: integer
@@ -1572,6 +1569,25 @@ components:
           type: integer
           title: N Tp
           default: 8
+        variant:
+          type: integer
+          title: Variant
+          default: 0
+        generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Generation
+        lineage_seed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Lineage Seed
+        agent_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Agent Id
         files:
           anyOf:
           - items:
@@ -1980,10 +1996,9 @@ components:
           type: string
           title: Filename
         variant:
-          anyOf:
-          - type: integer
-          - type: 'null'
+          type: integer
           title: Variant
+          default: 0
         lineage_seed:
           anyOf:
           - type: integer
@@ -2014,10 +2029,9 @@ components:
           type: string
           title: Filename
         variant:
-          anyOf:
-          - type: integer
-          - type: 'null'
+          type: integer
           title: Variant
+          default: 0
         lineage_seed:
           anyOf:
           - type: integer

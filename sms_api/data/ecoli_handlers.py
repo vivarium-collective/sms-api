@@ -8,6 +8,7 @@ from types import ModuleType
 from fastapi import UploadFile
 
 from sms_api.common.ssh.ssh_service import SSHService
+from sms_api.common.utils import unique_id
 from sms_api.config import Settings
 from sms_api.data.models import (
     AnalysisRun,
@@ -33,36 +34,18 @@ async def run_analysis(
     timestamp: str,
     ssh_service: SSHService,
 ) -> list[OutputFileMetadata | TsvOutputFile]:
-    """
-    Request schema example:
-        {
-          "experiment_id": "sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
-          "analysis_name": "ptools_analysis_multiseed_4-sms_multiseed_0-a0b2167887d5def0_1760035355480",
-          "multiseed": [
-            {
-              "name": "ptools_rxns",
-              "n_tp": 8,
-              "files": [
-                {
-                  "filename": "ptools_rxns_multiseed.txt",
-                  "variant": 0
-                }
-              ]
-            }
-          ]
-        }
-    """
     # dispatch and process analysis run
-    config = request.to_config()
+    analysis_name = unique_id(scope="sms_analysis")
+    config = request.to_config(analysis_name=analysis_name)
     slurmjob_name, slurmjob_id = await analysis_service.dispatch(
         config=config,
-        analysis_name=request.analysis_name,
+        analysis_name=analysis_name,
         simulator_hash=simulator.git_commit_hash,
         env=env,
         logger=logger,
     )
     analysis_record = await db_service.insert_analysis(
-        name=request.analysis_name,
+        name=analysis_name,
         config=config,
         last_updated=timestamp,
         job_name=slurmjob_name,
@@ -70,9 +53,7 @@ async def run_analysis(
     )
 
     # wait for a little bit
-    logger.info("Analysis inserted and dispatched.\nNow sleeping...")
     await asyncio.sleep(5)
-    logger.info("...sleeping complete. Now polling...")
 
     # check status
     run = await get_analysis_status(
@@ -94,7 +75,19 @@ async def run_analysis(
         analyses = getattr(request, analysis_type, None)
         if analyses is not None:
             for analysis in analyses:
-                for file_spec in analysis.files:
+                analysis_name = analysis.name
+                if "multigeneration" in analysis_name:
+                    analysis_name = analysis_name.replace("multigeneration", "multigen")
+                fname = f"{analysis_name}_{analysis_type}"
+                fname += ".txt" if "ptools" in analysis_name else ".html"
+                metadata_kwargs: dict[str, str | int] = {}
+                for param in ["variant", "lineage_seed", "agent_id", "generation"]:
+                    kwarg_val = getattr(analysis, param, None)
+                    if kwarg_val is not None:
+                        metadata_kwargs[param] = kwarg_val
+                metadata_kwargs["filename"] = fname
+                files = [OutputFileMetadata(**metadata_kwargs)]  # type: ignore[arg-type]
+                for file_spec in files:
                     output = await get_tsv_output(
                         request=TsvOutputFileRequest(**file_spec.model_dump()),
                         db_service=db_service,
