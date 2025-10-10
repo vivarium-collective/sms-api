@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService
-from sms_api.config import get_settings
+from sms_api.config import Settings, get_settings
+from sms_api.data.analysis_service import AnalysisService, AnalysisServiceHpc
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.job_scheduler import JobScheduler
@@ -92,6 +93,10 @@ def get_async_engine(url: str, enable_ssl: bool = True, **engine_params: Any) ->
     if not enable_ssl:
         engine_params["connect_args"] = {"ssl": "disable"}
     return create_async_engine(url, **engine_params)
+
+
+def get_analysis_service(env: Settings) -> AnalysisService:
+    return AnalysisServiceHpc(env)
 
 
 async def init_standalone(enable_ssl: bool = True) -> None:

@@ -13,9 +13,9 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import polars
 
-from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
-from sms_api.config import Settings, get_settings
+from sms_api.common.hpc.slurm_service import SlurmServiceManaged
+from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
+from sms_api.config import Settings
 from sms_api.data.models import AnalysisConfig, OutputFile, TsvOutputFile
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
 
@@ -36,6 +36,7 @@ class AnalysisService(abc.ABC):
         analysis_name: str,
         simulator_hash: str,
         logger: logging.Logger,
+        ssh: SSHServiceManaged,
     ) -> tuple[str, int]:
         pass
 
@@ -47,8 +48,8 @@ class AnalysisServiceHpc(AnalysisService):
         analysis_name: str,
         simulator_hash: str,
         logger: logging.Logger,
+        ssh: SSHServiceManaged,
     ) -> tuple[str, int]:
-        # experiment_id = config.analysis_options.experiment_id[0]
         slurmjob_name = get_slurmjob_name(experiment_id=analysis_name, simulator_hash=simulator_hash)
         base_path = Path(self.env.slurm_base_path)
         slurm_log_file = base_path / f"prod/htclogs/{slurmjob_name}.out"
@@ -59,10 +60,8 @@ class AnalysisServiceHpc(AnalysisService):
             latest_hash=simulator_hash,
             config=config,
             analysis_name=analysis_name,
-            # experiment_id=experiment_id,
         )
 
-        ssh = get_ssh_service(self.env)
         slurmjob_id = await self._submit_script(
             config=config,
             experiment_id=config.analysis_options.experiment_id[0],
@@ -84,9 +83,6 @@ class AnalysisServiceHpc(AnalysisService):
         base_path = Path(self.env.slurm_base_path)
         remote_workspace_dir = base_path / "workspace"
         vecoli_dir = remote_workspace_dir / "vEcoli"
-        # config_dir = vecoli_dir / "configs"
-        # conf = config.model_dump_json() or "{}"
-        # experiment_id = config.analysis_options.experiment_id[0]
 
         return dedent(f"""\
             #!/bin/bash
@@ -143,16 +139,10 @@ class AnalysisServiceHpc(AnalysisService):
         experiment_id: str,
         script_content: str,
         slurm_job_name: str,
-        ssh: SSHService | None = None,
+        ssh: SSHServiceManaged,
     ) -> int:
-        settings = self.env
-        ssh_service = ssh or SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        slurm_service = SlurmService(ssh_service=ssh_service)
+        ssh_service = ssh
+        slurm_service = SlurmServiceManaged(ssh_service=ssh_service)
 
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -160,152 +150,10 @@ class AnalysisServiceHpc(AnalysisService):
             with open(local_submit_file, "w") as f:
                 f.write(script_content)
 
-            # base_path = Path(env.slurm_base_path)
-            # remote_workspace_dir = base_path / "workspace"
-            # vecoli_dir = remote_workspace_dir / "vEcoli"
-            # config_dir = vecoli_dir / "configs"
-
             slurm_jobid = await slurm_service.submit_job(
                 local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid
-
-
-# -- original module service -- #
-
-
-async def dispatch(
-    config: AnalysisConfig,
-    analysis_name: str,
-    simulator_hash: str,
-    env: Settings,
-    logger: logging.Logger,
-) -> tuple[str, int]:
-    # experiment_id = config.analysis_options.experiment_id[0]
-    slurmjob_name = get_slurmjob_name(experiment_id=analysis_name, simulator_hash=simulator_hash)
-    base_path = Path(env.slurm_base_path)
-    slurm_log_file = base_path / f"prod/htclogs/{slurmjob_name}.out"
-
-    slurm_script = _slurm_script(
-        slurm_log_file=slurm_log_file,
-        slurm_job_name=slurmjob_name,
-        env=env,
-        latest_hash=simulator_hash,
-        config=config,
-        analysis_name=analysis_name,
-        # experiment_id=experiment_id,
-    )
-
-    ssh = get_ssh_service(env)
-    slurmjob_id = await _submit_script(
-        config=config,
-        experiment_id=config.analysis_options.experiment_id[0],
-        script_content=slurm_script,
-        slurm_job_name=slurmjob_name,
-        env=env,
-        ssh=ssh,
-    )
-
-    return slurmjob_name, slurmjob_id
-
-
-def _slurm_script(
-    slurm_log_file: Path,
-    slurm_job_name: str,
-    env: Settings,
-    latest_hash: str,
-    config: AnalysisConfig,
-    analysis_name: str,
-) -> str:
-    base_path = Path(env.slurm_base_path)
-    remote_workspace_dir = base_path / "workspace"
-    vecoli_dir = remote_workspace_dir / "vEcoli"
-    # config_dir = vecoli_dir / "configs"
-    # conf = config.model_dump_json() or "{}"
-    # experiment_id = config.analysis_options.experiment_id[0]
-
-    return dedent(f"""\
-        #!/bin/bash
-        #SBATCH --job-name={slurm_job_name}
-        #SBATCH --time=30:00
-        #SBATCH --cpus-per-task {MAX_ANALYSIS_CPUS}
-        #SBATCH --mem=10GB
-        #SBATCH --partition={env.slurm_partition}
-        #SBATCH --qos={env.slurm_qos}
-        #SBATCH --output={slurm_log_file!s}
-        #SBATCH --nodelist={env.slurm_node_list}
-
-        set -e
-
-        ### set up java and nextflow
-        local_bin=$HOME/.local/bin
-        export JAVA_HOME=$local_bin/java-22
-        export PATH=$JAVA_HOME/bin:$local_bin:$PATH
-
-        ### configure working dir and binds
-        vecoli_dir={vecoli_dir!s}
-        latest_hash={latest_hash}
-
-        tmp_config=$(mktemp)
-        echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
-        uv run --no-cache python $HOME/workspace/scripts/write_config.py \
-          --name {analysis_name} \
-          --config_path "$tmp_config"
-
-        cd $vecoli_dir
-
-        ### binds
-        binds="-B $HOME/workspace/vEcoli:/vEcoli"
-        binds+=" -B $HOME/workspace/api_outputs:/out"
-        binds+=" -B $JAVA_HOME:$JAVA_HOME"
-        binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
-
-        image=$HOME/workspace/images/vecoli-$latest_hash.sif
-        vecoli_image_root=/vEcoli
-
-        mkdir -p {remote_workspace_dir!s}/api_outputs/{analysis_name}
-        singularity run $binds $image bash -c "
-            export JAVA_HOME=$HOME/.local/bin/java-22
-            export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-            uv run --env-file /vEcoli/.env /vEcoli/runscripts/analysis.py --config \"$tmp_config\"
-        "
-        cd {remote_workspace_dir!s}
-        uv run python scripts/archive_dir.py {remote_workspace_dir!s}/api_outputs/{analysis_name}
-    """)
-
-
-async def _submit_script(
-    config: AnalysisConfig,
-    experiment_id: str,
-    script_content: str,
-    slurm_job_name: str,
-    env: Settings,
-    ssh: SSHService | None = None,
-) -> int:
-    settings = env or get_settings()
-    ssh_service = ssh or SSHService(
-        hostname=settings.slurm_submit_host,
-        username=settings.slurm_submit_user,
-        key_path=Path(settings.slurm_submit_key_path),
-        known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-    )
-    slurm_service = SlurmService(ssh_service=ssh_service)
-
-    slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
-        with open(local_submit_file, "w") as f:
-            f.write(script_content)
-
-        # base_path = Path(env.slurm_base_path)
-        # remote_workspace_dir = base_path / "workspace"
-        # vecoli_dir = remote_workspace_dir / "vEcoli"
-        # config_dir = vecoli_dir / "configs"
-
-        slurm_jobid = await slurm_service.submit_job(
-            local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
-        )
-        return slurm_jobid
 
 
 # -- utils -- #
@@ -464,7 +312,7 @@ def get_tsv_outputs_remote(output_id: str = "analysis_multigen") -> list[OutputF
     return sorted_files
 
 
-async def get_html_outputs_local(output_id: str, ssh_service: SSHService) -> list[OutputFile]:
+async def get_html_outputs_local(output_id: str, ssh_service: SSHServiceManaged) -> list[OutputFile]:
     """Run in DEV"""
     remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
     ret, stdin, stdout = await ssh_service.run_command(
