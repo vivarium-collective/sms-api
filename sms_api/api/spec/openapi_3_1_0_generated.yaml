@@ -817,8 +817,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-e15b917511a05255_1760048478138-3eccc713c47d868e_1760048478138
-            simulation_name: sms_single-e15b917511a05255_1760048478138
+            experiment_id: sms_single-c768cca739f4ca29_1760103922306-e40d70c3a96a0cef_1760103922306
+            simulation_name: sms_single-c768cca739f4ca29_1760103922306
             metadata: {}
             run_parca: true
             generations: 2
@@ -1058,7 +1058,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-db06b17cb44d48c0_1760048478076
+          default: sim_smsapi-212cf930976c0c12_1760103922214
         metadata:
           additionalProperties: true
           type: object
