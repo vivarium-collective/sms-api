@@ -15,7 +15,7 @@ from fastapi import BackgroundTasks, Depends, HTTPException, Query
 
 from sms_api.api import request_examples
 from sms_api.common.gateway.utils import get_simulator, router_config
-from sms_api.common.ssh.ssh_service import get_ssh_service
+from sms_api.common.ssh.ssh_service import get_ssh_service, get_ssh_service_managed
 from sms_api.common.utils import timestamp
 from sms_api.config import get_settings
 from sms_api.data import analysis_service
@@ -28,7 +28,7 @@ from sms_api.data.models import (
     OutputFileMetadata,
     TsvOutputFile,
 )
-from sms_api.dependencies import get_database_service, get_simulation_service
+from sms_api.dependencies import get_analysis_service, get_database_service, get_simulation_service
 from sms_api.simulation import ecoli_handlers as simulation_handlers
 from sms_api.simulation.models import (
     EcoliSimulationDTO,
@@ -63,6 +63,12 @@ async def run_analysis(
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
+
+    analysis_service = get_analysis_service(ENV)
+
+    ssh_service = get_ssh_service_managed(ENV)
+    await ssh_service.connect()
+
     try:
         return await data_handlers.run_analysis(
             request=request,
@@ -72,11 +78,13 @@ async def run_analysis(
             db_service=db_service,
             timestamp=timestamp(),
             logger=logger,
-            ssh_service=get_ssh_service(ENV),
+            ssh_service=ssh_service,
         )
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await ssh_service.disconnect()
 
 
 @config.router.get(
@@ -154,7 +162,8 @@ async def get_analysis_status(id: int = fastapi.Path(..., description="Database 
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-    ssh_service = get_ssh_service(ENV)
+    ssh_service = get_ssh_service_managed(ENV)
+    await ssh_service.connect()
     try:
         return await data_handlers.get_analysis_status(db_service=db_service, ssh_service=ssh_service, id=id, env=ENV)
     except Exception as e:
@@ -164,6 +173,8 @@ async def get_analysis_status(id: int = fastapi.Path(..., description="Database 
             """
         )
         raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await ssh_service.disconnect()
 
 
 @config.router.get(
@@ -202,14 +213,19 @@ async def get_analysis_plots(
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-    ssh_service = get_ssh_service(ENV)
+
+    ssh_service = get_ssh_service_managed(ENV)
+    await ssh_service.connect()
+
     try:
-        return await data_handlers.get_analysis_plots(
+        return await data_handlers.get_analysis_plots(db_service=db_service, id=id, env=ENV, ssh_service=ssh_service)
             db_service=db_service, id=id, env=ENV, analysis_service=analysis_service, ssh_service=ssh_service
         )
     except Exception as e:
         logger.exception("Error getting analysis data")
         raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await ssh_service.disconnect()
 
 
 @config.router.get(

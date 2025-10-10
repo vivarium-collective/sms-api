@@ -1,15 +1,18 @@
 import asyncio
 import logging
 import mimetypes
-import tempfile
 from pathlib import Path
 from types import ModuleType
 
-from fastapi import UploadFile
-
-from sms_api.common.ssh.ssh_service import SSHService
+from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
 from sms_api.common.utils import unique_id
 from sms_api.config import Settings
+from sms_api.data.analysis_service import (
+    AnalysisService,
+    get_html_outputs_local,
+    get_html_outputs_remote,
+    read_tsv_file,
+)
 from sms_api.data.models import (
     AnalysisRun,
     ExperimentAnalysisDTO,
@@ -27,12 +30,12 @@ from sms_api.simulation.models import SimulatorVersion
 async def run_analysis(
     request: ExperimentAnalysisRequest,
     simulator: SimulatorVersion,
-    analysis_service: ModuleType,
+    analysis_service: AnalysisService,
     env: Settings,
     logger: logging.Logger,
     db_service: DatabaseService,
     timestamp: str,
-    ssh_service: SSHService,
+    ssh_service: SSHServiceManaged,
 ) -> list[OutputFileMetadata | TsvOutputFile]:
     # dispatch and process analysis run
     analysis_name = unique_id(scope="sms_analysis")
@@ -41,8 +44,8 @@ async def run_analysis(
         config=config,
         analysis_name=analysis_name,
         simulator_hash=simulator.git_commit_hash,
-        env=env,
         logger=logger,
+        ssh=ssh_service,
     )
     analysis_record = await db_service.insert_analysis(
         name=analysis_name,
@@ -52,21 +55,19 @@ async def run_analysis(
         job_id=slurmjob_id,
     )
 
-    # wait for a little bit
-    await asyncio.sleep(5)
+    # status check
+    await asyncio.sleep(3)
 
-    # check status
     run = await get_analysis_status(
         db_service=db_service, ssh_service=ssh_service, id=analysis_record.database_id, env=env
     )
     while run.status.lower() not in ["completed", "failed"]:
-        logger.info(f"Run not complete: {run.status.lower()}")
         await asyncio.sleep(3)
         run = await get_analysis_status(
             db_service=db_service, ssh_service=ssh_service, id=analysis_record.database_id, env=env
         )
     if run.status.lower() == "failed":
-        raise Exception(f"Run has failed:\n{run}")
+        raise Exception(f"Analysis Run has failed:\n{run}")
 
     # fetch requested outputs
     requested_outputs = []
@@ -94,7 +95,6 @@ async def run_analysis(
                         id=analysis_record.database_id,
                         env=env,
                         ssh=ssh_service,
-                        analysis_service=analysis_service,
                     )
                     requested_outputs.append(output)
 
@@ -125,8 +125,7 @@ async def get_tsv_output(
     db_service: DatabaseService,
     id: int,
     env: Settings,
-    ssh: SSHService,
-    analysis_service: ModuleType,
+    ssh: SSHServiceManaged,
 ) -> TsvOutputFile:
     variant_id = request.variant
     lineage_seed_id = request.lineage_seed
@@ -169,12 +168,12 @@ async def get_tsv_output(
         lineage_seed=lineage_seed_id,
         generation=generation_id,
         agent_id=agent_id,
-        content=analysis_service.read_tsv_file(filepath),
+        content=read_tsv_file(filepath),
     )
 
 
 async def get_analysis_status(
-    db_service: DatabaseService, ssh_service: SSHService, id: int, env: Settings
+    db_service: DatabaseService, ssh_service: SSHServiceManaged, id: int, env: Settings
 ) -> AnalysisRun:
     analysis_record = await db_service.get_analysis(database_id=id)
     slurmjob_id = analysis_record.job_id
@@ -194,29 +193,11 @@ async def get_analysis_log(db_service: DatabaseService, id: int, env: Settings, 
 
 
 async def get_analysis_plots(
-    db_service: DatabaseService, id: int, env: Settings, analysis_service: ModuleType, ssh_service: SSHService
+    db_service: DatabaseService, id: int, env: Settings, ssh_service: SSHServiceManaged
 ) -> list[OutputFile]:
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
     if int(env.dev_mode):
-        return await analysis_service.get_html_outputs_local(output_id=output_id, ssh_service=ssh_service)  # type: ignore[no-any-return]
+        return await get_html_outputs_local(output_id=output_id, ssh_service=ssh_service)
     else:
-        return analysis_service.get_html_outputs_remote(output_id=output_id)  # type: ignore[no-any-return]
-
-
-async def upload_analysis_module(
-    file: UploadFile, ssh: SSHService, submodule_name: str, env: Settings
-) -> dict[str, object]:
-    contents = await file.read()
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        tmp_path: Path = Path(tmpdirname) / (file.filename or str(file))
-        with open(tmp_path, "wb") as tmpfile:
-            tmpfile.write(contents)
-
-        result = {"tmp_path": str(tmp_path), "size": len(contents)}
-
-        local = tmp_path
-        remote = Path(env.vecoli_config_dir).parent / "ecoli" / "analysis" / submodule_name / file.filename  # type: ignore[operator]
-        # ssh = get_ssh_service(ENV)
-        await ssh.scp_upload(local_file=local, remote_path=remote)
-        return result
+        return get_html_outputs_remote(output_id=output_id)
