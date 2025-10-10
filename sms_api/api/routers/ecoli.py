@@ -18,7 +18,6 @@ from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.common.ssh.ssh_service import get_ssh_service, get_ssh_service_managed
 from sms_api.common.utils import timestamp
 from sms_api.config import get_settings
-from sms_api.data import analysis_service
 from sms_api.data import ecoli_handlers as data_handlers
 from sms_api.data.models import (
     AnalysisRun,
@@ -105,52 +104,6 @@ async def get_analysis_spec(id: int) -> ExperimentAnalysisDTO:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-# @config.router.get(
-#     path="/analyses/{id}/manifest",
-#     tags=["Analyses"],
-#     operation_id="get-analysis-manifest",
-#     dependencies=[Depends(get_database_service)],
-#     summary="Get the available outputs of a given analysis",
-# )
-# async def get_ptools_manifest(
-#     id: int = fastapi.Path(..., description="Database ID of the analysis"),
-# ) -> list[TsvOutputFile]:
-#     db_service = get_database_service()
-#     if db_service is None:
-#         raise HTTPException(status_code=404, detail="Database not found")
-#     ssh_service = get_ssh_service(ENV)
-#
-#     try:
-#         return await data_handlers.get_ptools_manifest(
-#             db_service=db_service, env=ENV, ssh_service=ssh_service, id=id, analysis_service=analysis_service
-#         )
-#     except Exception as e:
-#         logger.exception("Error getting analysis data")
-#         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-# @config.router.post(
-#     path="/analyses/{id}/tsv",
-#     response_model=None,
-#     operation_id="get-analysis-output-file",
-#     tags=["Analyses"],
-#     dependencies=[Depends(get_database_service)],
-#     summary="Get the contents single file that was generated from a simulation analysis module",
-# )
-# async def get_analysis_output_file(request: TsvOutputFileRequest, id: int = fastapi.Path(...)) -> TsvOutputFile:
-#     db_service = get_database_service()
-#     if db_service is None:
-#         raise HTTPException(status_code=404, detail="Database not found")
-#     ssh_service = get_ssh_service(ENV)
-#     try:
-#         return await data_handlers.get_tsv_output(
-#             request=request, db_service=db_service, id=id, env=ENV, ssh=ssh_service, analysis_service=analysis_service
-#         )
-#     except Exception as e:
-#         logger.exception("Error fetching the simulation analysis file.")
-#         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
 @config.router.get(
     path="/analyses/{id}/status",
     tags=["Analyses"],
@@ -219,8 +172,6 @@ async def get_analysis_plots(
 
     try:
         return await data_handlers.get_analysis_plots(db_service=db_service, id=id, env=ENV, ssh_service=ssh_service)
-            db_service=db_service, id=id, env=ENV, analysis_service=analysis_service, ssh_service=ssh_service
-        )
     except Exception as e:
         logger.exception("Error getting analysis data")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -334,31 +285,6 @@ async def get_simulation_status(id: int = fastapi.Path(...)) -> SimulationRun:
             """
         )
         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-# @config.router.get(
-#     path="/simulations/{id}/log/detailed",
-#     tags=["Simulations"],
-#     operation_id="get-ecoli-simulation-log-detail",
-#     dependencies=[Depends(get_database_service)],
-#     summary="Get the simulation status record by its ID",
-# )
-# async def get_simlog(id: int = fastapi.Path(...)) -> str:
-#     db_service = get_database_service()
-#     if db_service is None:
-#         raise HTTPException(status_code=404, detail="Database not found")
-#     ssh_service = get_ssh_service()
-#     try:
-#         return await simulation_handlers.get_simulation_log_detailed(
-#             db_service=db_service, ssh_service=ssh_service, id=id, env=ENV
-#         )
-#     except Exception as e:
-#         logger.exception(
-#             """Error getting simulation status.\
-#                 Are you sure that you've passed the experiment_tag? (not the experiment id)
-#             """
-#         )
-#         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.post(
