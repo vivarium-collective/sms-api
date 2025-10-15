@@ -4,7 +4,7 @@ import unittest
 
 import swiglpk as glp
 
-from wholecell.utils._netflow.nf_glpk import (
+from sms_api.notebook.wholecell.utils._netflow.nf_glpk import (
     MessageLevel,
     NetworkFlowGLPK,
     SimplexMethod,

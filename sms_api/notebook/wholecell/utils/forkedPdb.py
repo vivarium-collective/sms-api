@@ -5,7 +5,7 @@ from IPython.core.debugger import Pdb
 class ForkedPdb(Pdb):
     """Usage:
     ==========
-    from wholecell.utils import ForkedPdb
+    from sms_api.notebook.wholecell.utils import ForkedPdb
     ForkedPdb().set_trace()
     ==========
     Don't forget to actually instantiate an

@@ -26,7 +26,7 @@ import warnings
 import numpy as np
 
 import wholecell.utils.filepath as fp
-from wholecell.utils import parallelization
+from sms_api.notebook.wholecell.utils import parallelization
 
 # Silence Sphinx autodoc warning
 unittest.TestCase.__module__ = "unittest"

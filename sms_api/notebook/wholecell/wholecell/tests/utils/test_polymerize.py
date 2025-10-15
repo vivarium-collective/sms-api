@@ -5,7 +5,7 @@ Test polymerize.py
         pytest wholecell/tests/utils/test_polymerize.py
 """
 
-from wholecell.utils.polymerize import (
+from sms_api.notebook.wholecell.utils.polymerize import (
     buildSequences,
     polymerize,
     computeMassIncrease,

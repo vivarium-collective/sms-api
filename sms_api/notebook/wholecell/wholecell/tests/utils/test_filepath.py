@@ -9,7 +9,7 @@ import unittest
 
 import pytest
 
-from wholecell.utils import filepath
+from sms_api.notebook.wholecell.utils import filepath
 
 # Silence Sphinx autodoc warning
 unittest.TestCase.__module__ = "unittest"

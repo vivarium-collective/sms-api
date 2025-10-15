@@ -34,7 +34,7 @@ Example:
 
 """
 
-from wholecell.utils import units
+from sms_api.notebook.wholecell.utils import units
 
 INF = float("inf")
 NEG_INF = float("-inf")

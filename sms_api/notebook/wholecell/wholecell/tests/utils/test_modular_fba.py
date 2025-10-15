@@ -2,7 +2,7 @@
 
 import unittest
 
-from wholecell.utils.modular_fba import FluxBalanceAnalysis
+from sms_api.notebook.wholecell.utils.modular_fba import FluxBalanceAnalysis
 
 # Silence Sphinx autodoc warning
 unittest.TestCase.__module__ = "unittest"

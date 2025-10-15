@@ -28,7 +28,7 @@ import gc
 import sys
 import unittest
 
-from wholecell.utils import memory_debug
+from sms_api.notebook.wholecell.utils import memory_debug
 
 PEP442 = sys.version_info[:2] >= (3, 4)
 

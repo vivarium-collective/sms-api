@@ -17,7 +17,7 @@ def line_profile(func):
     used in front of any function in the model with the lines below.
 
     Usage:
-            from wholecell.utils.profiler import line_profile
+            from sms_api.notebook.wholecell.utils.profiler import line_profile
             @line_profile
             def function_to_profile():
                     ...

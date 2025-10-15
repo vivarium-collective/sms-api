@@ -2,8 +2,8 @@
 Test unit_struct_array.py
 """
 
-from wholecell.utils.unit_struct_array import UnitStructArray
-from wholecell.utils.units import g, mol
+from sms_api.notebook.wholecell.utils.unit_struct_array import UnitStructArray
+from sms_api.notebook.wholecell.utils.units import g, mol
 import numpy as np
 
 import unittest

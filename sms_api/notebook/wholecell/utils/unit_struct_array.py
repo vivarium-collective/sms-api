@@ -14,7 +14,7 @@ import numpy.typing as npt
 import unum
 from typing import Optional
 
-from wholecell.utils import units as units_pkg
+from sms_api.notebook.wholecell.utils import units as units_pkg
 
 
 class UnitStructArray(object):

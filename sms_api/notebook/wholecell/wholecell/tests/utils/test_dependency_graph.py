@@ -5,7 +5,7 @@
 
 import unittest
 
-from wholecell.utils.dependency_graph import (
+from sms_api.notebook.wholecell.utils.dependency_graph import (
     DependencyGraph,
     InvalidDependencyGraphError,
 )

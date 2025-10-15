@@ -7,10 +7,10 @@ import pickle
 import os
 from typing import Any, Optional, TYPE_CHECKING
 from vivarium.library.units import units as vivunits
-from wholecell.utils import units
-from wholecell.utils.unit_struct_array import UnitStructArray
-from wholecell.utils.fitting import normalize
-from wholecell.utils.filepath import ROOT_PATH
+from sms_api.notebook.wholecell.utils import units
+from sms_api.notebook.wholecell.utils.unit_struct_array import UnitStructArray
+from sms_api.notebook.wholecell.utils.fitting import normalize
+from sms_api.notebook.wholecell.utils.filepath import ROOT_PATH
 
 from sms_api.notebook.initial_conditions import MICROMOLAR_UNITS
 from sms_api.notebook.parameters import param_store

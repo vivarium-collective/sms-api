@@ -24,8 +24,8 @@ from time import monotonic as monotonic_seconds
 
 import numpy as np
 
-from wholecell.utils.polymerize import polymerize
-from wholecell.utils.profiler import line_profile
+from sms_api.notebook.wholecell.utils.polymerize import polymerize
+from sms_api.notebook.wholecell.utils.profiler import line_profile
 
 PAD_VALUE = polymerize.PAD_VALUE
 

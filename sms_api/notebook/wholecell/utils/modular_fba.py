@@ -24,7 +24,7 @@ QUADRATIC = {
 }
 
 if TYPE_CHECKING:
-    from wholecell.utils._netflow._base import NetworkFlowProblemBase
+    from sms_api.notebook.wholecell.utils._netflow._base import NetworkFlowProblemBase
 
 SOLVERS: dict[str, "Type[NetworkFlowProblemBase]"] = {}
 try:

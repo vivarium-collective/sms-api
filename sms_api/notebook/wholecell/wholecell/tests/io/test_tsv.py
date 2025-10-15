@@ -4,7 +4,7 @@ from io import BytesIO
 from itertools import zip_longest
 import unittest
 
-from wholecell.io import tsv
+from sms_api.notebook.wholecell.io import tsv
 
 # Silence Sphinx autodoc warning
 unittest.TestCase.__module__ = "unittest"

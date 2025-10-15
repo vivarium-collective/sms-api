@@ -3,7 +3,7 @@ Test polymerize_new.py
 """
 
 try:
-    from wholecell.utils.mc_complexation import (
+    from sms_api.notebook.wholecell.utils.mc_complexation import (
         mccBuildMatrices,
         mccFormComplexesWithPrebuiltMatrices,
     )

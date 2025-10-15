@@ -22,9 +22,9 @@ from scipy.integrate import solve_ivp
 from unum import Unum
 
 # wcEcoli imports
-from wholecell.utils.polymerize import buildSequences, polymerize, computeMassIncrease
-from wholecell.utils.random import stochasticRound
-from wholecell.utils import units
+from sms_api.notebook.wholecell.utils.polymerize import buildSequences, polymerize, computeMassIncrease
+from sms_api.notebook.wholecell.utils.random import stochasticRound
+from sms_api.notebook.wholecell.utils import units
 
 # vivarium imports
 from vivarium.core.composition import simulate_process
@@ -2492,19 +2492,19 @@ from ecoli.processes.polypeptide_elongation import (
     REMOVED_FROM_CHARGING,
     MICROMOLAR_UNITS,
 )
-from wholecell.utils import units
-from wholecell.utils.fitting import (
+from sms_api.notebook.wholecell.utils import units
+from sms_api.notebook.wholecell.utils.fitting import (
     countsFromMassAndExpression,
     masses_and_counts_for_homeostatic_target,
     normalize,
 )
 
 try:
-    from wholecell.utils.mc_complexation import mccFormComplexesWithPrebuiltMatrices
+    from sms_api.notebook.wholecell.utils.mc_complexation import mccFormComplexesWithPrebuiltMatrices
 except ImportError as exc:
     raise RuntimeError("Failed to import Cython module. Try running 'make clean compile'.") from exc
-from wholecell.utils.polymerize import computeMassIncrease
-from wholecell.utils.random import stochasticRound
+from sms_api.notebook.wholecell.utils.polymerize import computeMassIncrease
+from sms_api.notebook.wholecell.utils.random import stochasticRound
 
 RAND_MAX = 2**31
 

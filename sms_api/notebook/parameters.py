@@ -8,7 +8,7 @@ from scipy import constants
 from vivarium.library.topology import get_in, assoc_path
 from vivarium.library.units import units
 
-from wholecell.utils.filepath import ROOT_PATH
+from sms_api.notebook.wholecell.utils.filepath import ROOT_PATH
 
 
 def geom_sampler(rng, p):

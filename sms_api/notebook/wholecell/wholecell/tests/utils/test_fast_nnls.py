@@ -5,7 +5,7 @@ Test the fast nonnegative least squares (NNLS) utils function
         pytest wholecell/tests/utils/test_fast_nnls.py
 """
 
-from wholecell.utils.fast_nonnegative_least_squares import fast_nnls
+from sms_api.notebook.wholecell.utils.fast_nonnegative_least_squares import fast_nnls
 
 import numpy as np
 import numpy.testing as npt

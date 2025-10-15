@@ -9,7 +9,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from scipy import stats
 import numpy as np
 
-from wholecell.utils import filepath
+from sms_api.notebook.wholecell.utils import filepath
 
 DEFAULT_MATPLOTLIB_COLORS = [
     "#1f77b4",

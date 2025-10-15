@@ -8,7 +8,7 @@ import numpy as np
 import scipy.constants
 from unum import Unum
 
-from wholecell.utils import units
+from sms_api.notebook.wholecell.utils import units
 
 
 K_B = scipy.constants.Boltzmann * units.J / units.K  # Boltzmann constant, unit: J/K

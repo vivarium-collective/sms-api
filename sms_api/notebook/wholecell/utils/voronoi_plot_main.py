@@ -47,7 +47,7 @@ If you want to implement the functions that are created here and make a new
 voronoi plot with your own data, please read the following instructions:
 (1)Place this in the heading, or other ways that can import every function in
 this file.
-from wholecell.utils.voronoiPlotMain import VoronoiMaster
+from sms_api.notebook.wholecell.utils.voronoiPlotMain import VoronoiMaster
 
 (2)Copy the following code and modify it appropriately:
 vm = VoronoiMaster()

@@ -9,7 +9,7 @@ import unittest
 
 import pytest
 
-from wholecell.utils import parallelization
+from sms_api.notebook.wholecell.utils import parallelization
 
 # Silence Sphinx autodoc warning
 unittest.TestCase.__module__ = "unittest"

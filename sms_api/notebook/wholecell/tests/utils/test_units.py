@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from wholecell.utils import units
+from sms_api.notebook.wholecell.utils import units
 
 # Silence Sphinx autodoc warning
 unittest.TestCase.__module__ = "unittest"
