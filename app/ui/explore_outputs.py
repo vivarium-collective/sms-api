@@ -196,7 +196,8 @@ def _(mo):
 def _(bulk_names_unique, mo, os, wd_root):
     sp_select = mo.ui.multiselect(options=bulk_names_unique, value=["--TRANS-ACENAPHTHENE-12-DIOL"])
     exp_select = mo.ui.dropdown(
-        options=os.listdir(os.path.join(wd_root, "api_outputs")), value="sms_multiseed_0-2794dfa74b9cf37c_1759844363435"
+        options=os.listdir(os.path.join(wd_root.parent, "api_outputs")),
+        value="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
     )
     # exp_select = mo.ui.dropdown(options=os.listdir(os.path.join(wd_root, "out")), value="sms_multiseed")
     y_scale = mo.ui.dropdown(options=["linear", "log", "symlog"], value="linear")
@@ -264,14 +265,14 @@ def _(analysis_select, get_db_filter, partitions_dict):
 
 
 @app.cell
-def _(dataset_sql, db_filter, exp_select, os, wd_root):
+def _(dataset_sql, db_filter, exp_select, os, wd_roo):
     pq_columns = [
         "bulk",
         "listeners__fba_results__base_reaction_fluxes",
         "listeners__rna_counts__full_mRNA_cistron_counts",
     ]
 
-    history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "api_outputs"), experiment_ids=[exp_select.value])
+    history_sql_base, _, _ = dataset_sql(os.path.join(wd_roo.parent, "api_outputs"), experiment_ids=[exp_select.value])
     # history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "out"), experiment_ids=[exp_select.value])
     history_sql_filtered = (
         f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
@@ -509,7 +510,7 @@ def _(exp_select, os, wd_root):
     def get_variants(
         exp_id,
         # outdir=os.path.join(wd_root, "out")
-        outdir=os.path.join(wd_root, "api_outputs"),
+        outdir=os.path.join(wd_root.parent, "api_outputs"),
     ):
         try:
             vars_ls = os.listdir(
@@ -533,7 +534,7 @@ def _(exp_select, os, wd_root):
     def get_seeds(
         exp_id,
         var_id,
-        outdir=os.path.join(wd_root, "api_outputs"),
+        outdir=os.path.join(wd_root.parent, "api_outputs"),
         # outdir=os.path.join(wd_root, "out")
     ):
         try:
@@ -559,7 +560,7 @@ def _(exp_select, os, wd_root):
         var_id,
         seed_id,
         # outdir=os.path.join(wd_root, "out")
-        outdir=os.path.join(wd_root, "api_outputs"),
+        outdir=os.path.join(wd_root.parent, "api_outputs"),
     ):
         try:
             gens_ls = os.listdir(
@@ -587,7 +588,7 @@ def _(exp_select, os, wd_root):
         seed_id,
         gen_id,
         # outdir=os.path.join(wd_root, "out")
-        outdir=os.path.join(wd_root, "api_outputs"),
+        outdir=os.path.join(wd_root.parent, "api_outputs"),
     ):
         try:
             agents_ls = os.listdir(
