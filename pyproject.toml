@@ -73,6 +73,7 @@ docs = [
     "sphinx-rtd-theme>=3.0.2,<4",
 ]
 notebook = [
+    "numba>=0.62.1",
     "unum>=4.2.1",
     "vivarium-core>=1.6.5",
 ]

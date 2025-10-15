@@ -21,7 +21,7 @@ import numpy.typing as npt
 from scipy.integrate import solve_ivp
 from unum import Unum
 
-# wcEcoli imports
+# wcEcoli imports TODO: somehow resolve this: is it okay to use PyPI?
 from sms_api.notebook.wholecell.utils.polymerize import buildSequences, polymerize, computeMassIncrease
 from sms_api.notebook.wholecell.utils.random import stochasticRound
 from sms_api.notebook.wholecell.utils import units
@@ -2481,16 +2481,11 @@ from numpy.lib import recfunctions as rfn
 from typing import Any
 from unum import Unum
 
-from ecoli.library.schema import (
+from sms_api.notebook.schema import (
     attrs,
     bulk_name_to_idx,
     counts,
     MetadataArray,
-)
-from ecoli.processes.polypeptide_elongation import (
-    calculate_trna_charging,
-    REMOVED_FROM_CHARGING,
-    MICROMOLAR_UNITS,
 )
 from sms_api.notebook.wholecell.utils import units
 from sms_api.notebook.wholecell.utils.fitting import (
