@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.16.5"
+__generated_with = "0.17.0"
 app = marimo.App(
     width="medium",
     layout_file="layouts/explore_outputs.grid.json",
@@ -32,133 +32,68 @@ def _(mo):
 @app.cell
 def _():
     from sms_api.notebook.parquet import dataset_sql
+    from sms_api.config import get_settings
+    from sms_api.common.ssh.ssh_service import get_ssh_service
 
-    return (dataset_sql,)
-
-
-@app.cell
-def _(Path, sys):
-    # wd_root = Path(os.getcwd().split("/notebooks")[0]).parent / "vEcoli"
-    wd_root = Path("/home/FCAM/svc_vivarium/workspace/vEcoli")
-
-    sys.path.append(wd_root)
-
-    # from ecoli.library.sim_data import LoadSimData
-    # from ecoli.library.parquet_emitter import dataset_sql
-
-    # sim_data_path = os.path.join(wd_root, "reconstruction", "sim_data", "kb", "simData.cPickle")
-    sim_data_path = wd_root / "kb" / "simData.cPickle"
-    # sim_data_path = os.path.join(wd_root, "reconstruction", "sim_data", "kb", "simData.cPickle")
-    # sim_data = LoadSimData(sim_data_path).sim_data
-    return (wd_root,)
+    env = get_settings()
+    DEV_MODE = bool(int(env.dev_mode))
+    DEV_MODE
+    return DEV_MODE, dataset_sql, get_ssh_service
 
 
 @app.cell
-def _(mo):
-    get_labels, set_labels = mo.state(([], [], [], [], []))
-    return get_labels, set_labels
+async def _(DEV_MODE, Path, get_ssh_service, hydrate_list, os, sys):
+    # manages the given vEcoli installation: TODO: improve this!
+    local_vecoli_dir = Path(os.getcwd().split("/notebooks")[0]).parent / "vEcoli"
+    remote_vecoli_dir = Path("/home/FCAM/svc_vivarium/workspace/vEcoli")
+    vecoli_dir = local_vecoli_dir if DEV_MODE else remote_vecoli_dir
+    sys.path.append(vecoli_dir)
+    sim_data_path = (local_vecoli_dir if DEV_MODE else remote_vecoli_dir.parent) / "kb" / "simData.cPickle"
+
+    output_dir = os.path.join(remote_vecoli_dir.parent, "api_outputs")
+
+    # list REMOTE outdir
+    async def list_output_dir() -> list[str]:
+        ssh = get_ssh_service()
+        command = (
+            "cd ~/workspace && "
+            "/home/FCAM/svc_vivarium/.local/bin/uv run python -c "
+            "'import os; print(os.listdir(\"api_outputs\"))'"
+        )
+        ret, out, err = await ssh.run_command(command)
+        return hydrate_list(out)
+
+    available_experiments = await list_output_dir()
+    return available_experiments, output_dir
 
 
 @app.cell
-def _(mo, set_labels):
+async def _():
     from sms_api.common.ssh.ssh_service import get_ssh_service_managed
     from textwrap import dedent
-    from sms_api.config import get_settings
-
-    async def get_bulk_ids() -> list[str]:
-        ssh_service = get_ssh_service_managed()
-        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-        await ssh_service.connect()
-        try:
-            ret, stdout, stderror = await ssh_service.run_command(
-                dedent(f"""
-                        cd /home/FCAM/svc_vivarium/workspace \
-                            && {remote_uv_executable} run scripts/get_bulk_ids.py
-                    """)
-            )
-            print(stdout)
-            return [v.strip() for v in stdout.replace("[", "").replace("]", "").replace("'", "").split(",")]
-        finally:
-            await ssh_service.disconnect()
-
-    async def get_rxn_ids() -> list[str]:
-        ssh_service = get_ssh_service_managed()
-        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-        await ssh_service.connect()
-        try:
-            ret, stdout, stderror = await ssh_service.run_command(
-                dedent(f"""
-                        cd /home/FCAM/svc_vivarium/workspace \
-                            && {remote_uv_executable} run scripts/get_rxn_ids.py
-                    """)
-            )
-            print(stdout)
-            return [v.strip() for v in stdout.replace("[", "").replace("]", "").replace("'", "").split(",")]
-        finally:
-            await ssh_service.disconnect()
-
-    async def get_common_names(bulk_names: list[str]) -> list[str]:
-        ssh_service = get_ssh_service_managed()
-        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-        await ssh_service.connect()
-        try:
-            ret, stdout, stderror = await ssh_service.run_command(
-                dedent(f"""
-                        cd /home/FCAM/svc_vivarium/workspace \
-                            && {remote_uv_executable} run scripts/get_common_names.py --bulk_names {bulk_names}
-                    """)
-            )
-            print(stdout)
-            return [v.strip() for v in stdout.replace("[", "").replace("]", "").replace("'", "").split(",")]
-        finally:
-            await ssh_service.disconnect()
-
-    async def get_mrna_cistron_names() -> list[str]:
-        ssh_service = get_ssh_service_managed()
-        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-        await ssh_service.connect()
-        try:
-            ret, stdout, stderror = await ssh_service.run_command(
-                dedent(f"""
-                        cd /home/FCAM/svc_vivarium/workspace \
-                            && {remote_uv_executable} run scripts/get_mrna_cistron_names.py
-                    """)
-            )
-            print(stdout)
-            return [v.strip() for v in stdout.replace("[", "").replace("]", "").replace("'", "").split(",")]
-        finally:
-            await ssh_service.disconnect()
-
-    @mo.cache
-    async def __get_ids():
-        ssh_service = get_ssh_service_managed()
-        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-        await ssh_service.connect()
-        try:
-            ret, stdout, stderror = await ssh_service.run_command(
-                dedent(f"""
-                        cd /home/FCAM/svc_vivarium/workspace \
-                            && {remote_uv_executable} run scripts/get_ids.py
-                    """)
-            )
-            print(stdout)
-            # return [v.strip() for v in stdout.replace("[", "").replace("]", "").replace("'", "").split(',')]
-            return stdout
-        finally:
-            await ssh_service.disconnect()
 
     def hydrate_list(data: str) -> list:
         return [v.strip() for v in data.replace("[", "").replace("]", "").replace("'", "").split(",")]
 
-    async def get_ids(ssh_service) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
-        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-        ret, stdout, stderror = await ssh_service.run_command(
-            dedent(f"""
-                    cd /home/FCAM/svc_vivarium/workspace \
-                        && {remote_uv_executable} run scripts/get_ids.py
-                """)
-        )
-        bulk_common_names, bulk_names_unique, bulk_ids_biocyc, rxn_ids, mrna_cistron_names = (await __get_ids()).split(
+    async def get_selector_labels() -> tuple[list[str], list[str], list[str], list[str], list[str]]:
+        async def _get_ids():
+            ssh_service = get_ssh_service_managed()
+            remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
+            await ssh_service.connect()
+            try:
+                ret, stdout, stderror = await ssh_service.run_command(
+                    dedent(f"""
+                            cd /home/FCAM/svc_vivarium/workspace \
+                                && {remote_uv_executable} run scripts/get_ids.py
+                        """)
+                )
+                print(stdout)
+                # return [v.strip() for v in stdout.replace("[", "").replace("]", "").replace("'", "").split(',')]
+                return stdout
+            finally:
+                await ssh_service.disconnect()
+
+        bulk_common_names, bulk_names_unique, bulk_ids_biocyc, rxn_ids, mrna_cistron_names = (await _get_ids()).split(
             "<-->"
         )
         bulk_common_names = hydrate_list(bulk_common_names)
@@ -168,32 +103,14 @@ def _(mo, set_labels):
         mrna_cistron_names = hydrate_list(mrna_cistron_names)
         return bulk_common_names, bulk_names_unique, bulk_ids_biocyc, rxn_ids, mrna_cistron_names
 
-    @mo.cache
-    async def get_selector_labels():
-        env = get_settings()
-        ssh_service = get_ssh_service_managed(env)
-        await ssh_service.connect()
-        labels = None
-        if ssh_service.conn:
-            labels = await get_ids(ssh_service)
-            set_labels(labels)
-
-    return (get_selector_labels,)
-
-
-@app.cell
-async def _(get_selector_labels):
-    await get_selector_labels()
-    return
-
-
-@app.cell
-def _(get_labels):
-    bulk_common_names, bulk_names_unique, bulk_ids_biocyc, rxn_ids, mrna_cistron_names = get_labels()
+    bulk_common_names, bulk_names_unique, bulk_ids_biocyc, rxn_ids, mrna_cistron_names = await get_selector_labels()
     return (
         bulk_common_names,
         bulk_ids_biocyc,
         bulk_names_unique,
+        dedent,
+        get_ssh_service_managed,
+        hydrate_list,
         mrna_cistron_names,
         rxn_ids,
     )
@@ -211,11 +128,13 @@ def _(mo):
 
 
 @app.cell
-def _(bulk_names_unique, mo, os, wd_root):
-    sp_select = mo.ui.multiselect(options=bulk_names_unique, value=["--TRANS-ACENAPHTHENE-12-DIOL"])
+def _(available_experiments, bulk_names_unique, mo):
+    sp_select = mo.ui.multiselect(options=bulk_names_unique)
     exp_select = mo.ui.dropdown(
-        options=os.listdir(os.path.join(wd_root.parent, "api_outputs")),
+        options=available_experiments,
         value="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
+        # options=os.listdir(output_dir),
+        # value="sms_multiseed_0-2794dfa74b9cf37c_1759844363435" if not DEV_MODE else "sms_multiseed",
     )
     # exp_select = mo.ui.dropdown(options=os.listdir(os.path.join(wd_root, "out")), value="sms_multiseed")
     y_scale = mo.ui.dropdown(options=["linear", "log", "symlog"], value="linear")
@@ -239,37 +158,53 @@ def _(analysis_select, mo, partition_groups, partitions_display):
 
 
 @app.cell
-def _(exp_select, get_variants, mo):
-    variant_select = mo.ui.dropdown(options=get_variants(exp_id=exp_select.value))
+async def _(exp_select, get_variants, mo, output_dir):
+    variant_select = mo.ui.dropdown(options=(await get_variants(outdir=output_dir, exp_id=exp_select.value)))
     return (variant_select,)
 
 
 @app.cell
-def _(exp_select, get_seeds, mo, variant_select):
-    seed_select = mo.ui.dropdown(options=get_seeds(exp_id=exp_select.value, var_id=variant_select.value))
+async def _(exp_select, get_seeds, mo, output_dir, variant_select):
+    seed_select = mo.ui.dropdown(
+        options=(await get_seeds(outdir=output_dir, exp_id=exp_select.value, var_id=variant_select.value))
+    )
     return (seed_select,)
 
 
 @app.cell
-def _(exp_select, get_gens, mo, seed_select, variant_select):
+async def _(exp_select, get_gens, mo, output_dir, seed_select, variant_select):
     gen_select = mo.ui.dropdown(
-        options=get_gens(
-            exp_id=exp_select.value,
-            var_id=variant_select.value,
-            seed_id=seed_select.value,
+        options=(
+            await get_gens(
+                outdir=output_dir,
+                exp_id=exp_select.value,
+                var_id=variant_select.value,
+                seed_id=seed_select.value,
+            )
         )
     )
     return (gen_select,)
 
 
 @app.cell
-def _(exp_select, gen_select, get_agents, mo, seed_select, variant_select):
+async def _(
+    exp_select,
+    gen_select,
+    get_agents,
+    mo,
+    output_dir,
+    seed_select,
+    variant_select,
+):
     agent_select = mo.ui.dropdown(
-        options=get_agents(
-            exp_id=exp_select.value,
-            var_id=variant_select.value,
-            seed_id=seed_select.value,
-            gen_id=gen_select.value,
+        options=(
+            await get_agents(
+                outdir=output_dir,
+                exp_id=exp_select.value,
+                var_id=variant_select.value,
+                seed_id=seed_select.value,
+                gen_id=gen_select.value,
+            )
         )
     )
     return (agent_select,)
@@ -283,14 +218,14 @@ def _(analysis_select, get_db_filter, partitions_dict):
 
 
 @app.cell
-def _(dataset_sql, db_filter, exp_select, os, wd_root):
+def _(dataset_sql, db_filter, exp_select, output_dir):
     pq_columns = [
         "bulk",
         "listeners__fba_results__base_reaction_fluxes",
         "listeners__rna_counts__full_mRNA_cistron_counts",
     ]
 
-    history_sql_base, _, _ = dataset_sql(os.path.join(wd_root.parent, "api_outputs"), experiment_ids=[exp_select.value])
+    history_sql_base, _, _ = dataset_sql(output_dir, experiment_ids=[exp_select.value])
     # history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "out"), experiment_ids=[exp_select.value])
     history_sql_filtered = (
         f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
@@ -524,111 +459,152 @@ def _(alt, rxns_dfds_long, y_scale_rxns):
 
 
 @app.cell
-def _(exp_select, os, wd_root):
-    def get_variants(
-        exp_id,
-        # outdir=os.path.join(wd_root, "out")
-        outdir=os.path.join(wd_root.parent, "api_outputs"),
-    ):
+def _(dedent, get_ssh_service_managed, hydrate_list):
+    async def fetch_selectors(exp_id: str, outdir: str, **kwargs):
+        ssh_service = get_ssh_service_managed()
+        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
+        await ssh_service.connect()
+        script_kwargs = f" --outdir {outdir} --exp_id {exp_id}"
+        for k, v in kwargs.items():
+            script_kwargs += f" --{k} {v}"
         try:
-            vars_ls = os.listdir(
-                os.path.join(
-                    outdir,
-                    exp_select.value,
-                    "history",
-                    f"experiment_id={exp_select.value}",
-                )
+            ret, stdout, stderror = await ssh_service.run_command(
+                dedent(f"""
+                        cd /home/FCAM/svc_vivarium/workspace \
+                            && {remote_uv_executable} run scripts/partitioning_utils.py{script_kwargs}
+                    """)
             )
+            # return [v.strip() for v in stdout.replace("[", "").replace("]", "").replace("'", "").split(',')]
+            return hydrate_list(stdout)
+        finally:
+            await ssh_service.disconnect()
 
-            variant_folders = [folder for folder in vars_ls if not folder.startswith(".")]
+    return (fetch_selectors,)
 
-            variants = [var.split("variant=")[1] for var in variant_folders]
 
-        except (FileNotFoundError, TypeError):
-            variants = ["N/A"]
+@app.cell
+def _(fetch_selectors):
+    async def get_variants(exp_id, outdir):
+        return await fetch_selectors(exp_id, outdir)
 
-        return variants
+    async def get_seeds(exp_id, outdir, var_id):
+        return await fetch_selectors(exp_id, outdir, var_id=var_id)
 
-    def get_seeds(
-        exp_id,
-        var_id,
-        outdir=os.path.join(wd_root.parent, "api_outputs"),
-        # outdir=os.path.join(wd_root, "out")
-    ):
-        try:
-            seeds_ls = os.listdir(
-                os.path.join(
-                    outdir,
-                    exp_select.value,
-                    "history",
-                    f"experiment_id={exp_select.value}",
-                    f"variant={var_id}",
-                )
-            )
-            seed_folders = [folder for folder in seeds_ls if not folder.startswith(".")]
+    async def get_gens(exp_id, outdir, var_id, seed_id):
+        return await fetch_selectors(exp_id, outdir, var_id=var_id, seed_id=seed_id)
 
-            seeds = [seed.split("lineage_seed=")[1] for seed in seed_folders]
-        except (FileNotFoundError, TypeError):
-            seeds = ["N/A"]
-
-        return seeds
-
-    def get_gens(
-        exp_id,
-        var_id,
-        seed_id,
-        # outdir=os.path.join(wd_root, "out")
-        outdir=os.path.join(wd_root.parent, "api_outputs"),
-    ):
-        try:
-            gens_ls = os.listdir(
-                os.path.join(
-                    outdir,
-                    exp_select.value,
-                    "history",
-                    f"experiment_id={exp_select.value}",
-                    f"variant={var_id}",
-                    f"lineage_seed={seed_id}",
-                )
-            )
-
-            gen_folders = [folder for folder in gens_ls if not folder.startswith(".")]
-
-            gens = [gen.split("generation=")[1] for gen in gen_folders]
-        except (FileNotFoundError, TypeError):
-            gens = ["N/A"]
-
-        return gens
-
-    def get_agents(
-        exp_id,
-        var_id,
-        seed_id,
-        gen_id,
-        # outdir=os.path.join(wd_root, "out")
-        outdir=os.path.join(wd_root.parent, "api_outputs"),
-    ):
-        try:
-            agents_ls = os.listdir(
-                os.path.join(
-                    outdir,
-                    exp_select.value,
-                    "history",
-                    f"experiment_id={exp_select.value}",
-                    f"variant={var_id}",
-                    f"lineage_seed={seed_id}",
-                    f"generation={gen_id}",
-                )
-            )
-
-            agent_folders = [folder for folder in agents_ls if not folder.startswith(".")]
-            agents = [agent.split("agent_id=")[1] for agent in agent_folders]
-        except (FileNotFoundError, TypeError):
-            agents = ["N/A"]
-
-        return agents
+    async def get_agents(exp_id, outdir, var_id, seed_id, gen_id):
+        return await fetch_selectors(exp_id, outdir, var_id=var_id, seed_id=seed_id, gen_id=gen_id)
 
     return get_agents, get_gens, get_seeds, get_variants
+
+
+@app.cell
+def _():
+    # def get_variants(
+    #     exp_id,
+    #     # outdir=os.path.join(wd_root, "out")
+    #     # outdir=os.path.join(wd_root.parent, "api_outputs"),
+    #
+    # ):
+    #     try:
+    #         vars_ls = os.listdir(
+    #             os.path.join(
+    #                 outdir,
+    #                 exp_select.value,
+    #                 "history",
+    #                 f"experiment_id={exp_select.value}",
+    #             )
+    #         )
+    #
+    #         variant_folders = [folder for folder in vars_ls if not folder.startswith(".")]
+    #
+    #         variants = [var.split("variant=")[1] for var in variant_folders]
+    #
+    #     except (FileNotFoundError, TypeError):
+    #         variants = ["N/A"]
+    #
+    #     return variants
+    #
+    # def get_seeds(
+    #     exp_id,
+    #     var_id,
+    #     outdir=os.path.join(wd_root.parent, "api_outputs"),
+    #     # outdir=os.path.join(wd_root, "out")
+    # ):
+    #     try:
+    #         seeds_ls = os.listdir(
+    #             os.path.join(
+    #                 outdir,
+    #                 exp_select.value,
+    #                 "history",
+    #                 f"experiment_id={exp_select.value}",
+    #                 f"variant={var_id}",
+    #             )
+    #         )
+    #         seed_folders = [folder for folder in seeds_ls if not folder.startswith(".")]
+    #
+    #         seeds = [seed.split("lineage_seed=")[1] for seed in seed_folders]
+    #     except (FileNotFoundError, TypeError):
+    #         seeds = ["N/A"]
+    #
+    #     return seeds
+    #
+    # def get_gens(
+    #     exp_id,
+    #     var_id,
+    #     seed_id,
+    #     # outdir=os.path.join(wd_root, "out")
+    #     outdir=os.path.join(wd_root.parent, "api_outputs"),
+    # ):
+    #     try:
+    #         gens_ls = os.listdir(
+    #             os.path.join(
+    #                 outdir,
+    #                 exp_select.value,
+    #                 "history",
+    #                 f"experiment_id={exp_select.value}",
+    #                 f"variant={var_id}",
+    #                 f"lineage_seed={seed_id}",
+    #             )
+    #         )
+    #
+    #         gen_folders = [folder for folder in gens_ls if not folder.startswith(".")]
+    #
+    #         gens = [gen.split("generation=")[1] for gen in gen_folders]
+    #     except (FileNotFoundError, TypeError):
+    #         gens = ["N/A"]
+    #
+    #     return gens
+    #
+    # def get_agents(
+    #     exp_id,
+    #     var_id,
+    #     seed_id,
+    #     gen_id,
+    #     # outdir=os.path.join(wd_root, "out")
+    #     outdir=os.path.join(wd_root.parent, "api_outputs"),
+    # ):
+    #     try:
+    #         agents_ls = os.listdir(
+    #             os.path.join(
+    #                 outdir,
+    #                 exp_select.value,
+    #                 "history",
+    #                 f"experiment_id={exp_select.value}",
+    #                 f"variant={var_id}",
+    #                 f"lineage_seed={seed_id}",
+    #                 f"generation={gen_id}",
+    #             )
+    #         )
+    #
+    #         agent_folders = [folder for folder in agents_ls if not folder.startswith(".")]
+    #         agents = [agent.split("agent_id=")[1] for agent in agent_folders]
+    #     except (FileNotFoundError, TypeError):
+    #         agents = ["N/A"]
+    #
+    #     return agents
+    return
 
 
 @app.cell
