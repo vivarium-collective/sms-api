@@ -55,8 +55,15 @@ def _(Path, sys):
 
 @app.cell
 def _(mo):
+    get_labels, set_labels = mo.state(([], [], [], [], []))
+    return get_labels, set_labels
+
+
+@app.cell
+def _(mo, set_labels):
     from sms_api.common.ssh.ssh_service import get_ssh_service_managed
     from textwrap import dedent
+    from sms_api.config import get_settings
 
     async def get_bulk_ids() -> list[str]:
         ssh_service = get_ssh_service_managed()
@@ -123,7 +130,7 @@ def _(mo):
             await ssh_service.disconnect()
 
     @mo.cache
-    async def get_ids():
+    async def __get_ids():
         ssh_service = get_ssh_service_managed()
         remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
         await ssh_service.connect()
@@ -140,38 +147,49 @@ def _(mo):
         finally:
             await ssh_service.disconnect()
 
-    return (get_ids,)
-
-
-@app.cell
-async def _(get_ids):
     def hydrate_list(data: str) -> list:
         return [v.strip() for v in data.replace("[", "").replace("]", "").replace("'", "").split(",")]
 
-    bulk_common_names, bulk_names_unique, bulk_ids_biocyc, rxn_ids, mrna_cistron_names = (await get_ids()).split("<-->")
-    bulk_common_names = hydrate_list(bulk_common_names)
-    bulk_names_unique = [v.replace("np.str_(", "").replace(")", "") for v in hydrate_list(bulk_names_unique)]
-    bulk_ids_biocyc = hydrate_list(bulk_ids_biocyc)
-    rxn_ids = hydrate_list(rxn_ids)
-    mrna_cistron_names = hydrate_list(mrna_cistron_names)
+    async def get_ids(ssh_service) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
+        remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
+        ret, stdout, stderror = await ssh_service.run_command(
+            dedent(f"""
+                    cd /home/FCAM/svc_vivarium/workspace \
+                        && {remote_uv_executable} run scripts/get_ids.py
+                """)
+        )
+        bulk_common_names, bulk_names_unique, bulk_ids_biocyc, rxn_ids, mrna_cistron_names = (await __get_ids()).split(
+            "<-->"
+        )
+        bulk_common_names = hydrate_list(bulk_common_names)
+        bulk_names_unique = [v.replace("np.str_(", "").replace(")", "") for v in hydrate_list(bulk_names_unique)]
+        bulk_ids_biocyc = hydrate_list(bulk_ids_biocyc)
+        rxn_ids = hydrate_list(rxn_ids)
+        mrna_cistron_names = hydrate_list(mrna_cistron_names)
+        return bulk_common_names, bulk_names_unique, bulk_ids_biocyc, rxn_ids, mrna_cistron_names
 
-    # bulk_ids = await get_bulk_ids()
-    # bulk_ids_biocyc = [bulk_id[:-3] for bulk_id in bulk_ids]
-    # bulk_names_unique = list(np.unique(bulk_ids_biocyc))
-    # bulk_common_names = await get_common_names(bulk_names_unique)
-    # rxn_ids = await get_rxn_ids()
-    # cistron_data = sim_data.process.transcription.cistron_data
-    # mrna_cistron_ids = cistron_data["id"][cistron_data["is_mRNA"]].tolist()
-    # mrna_cistron_names = [sim_data.common_names.get_common_name(cistron_id) for cistron_id in mrna_cistron_ids]
-    # mrna_cistron_names = await get_mrna_cistron_names()
-    # bulk_ids = get_bulk_ids(sim_data_path)
-    # bulk_ids_biocyc = [bulk_id[:-3] for bulk_id in bulk_ids]
-    # bulk_names_unique = list(np.unique(bulk_ids_biocyc))
-    # bulk_common_names = get_common_names(bulk_names_unique, sim_data)
-    # rxn_ids = get_rxn_ids(sim_data_path)
-    # cistron_data = sim_data.process.transcription.cistron_data
-    # mrna_cistron_ids = cistron_data["id"][cistron_data["is_mRNA"]].tolist()
-    # mrna_cistron_names = [sim_data.common_names.get_common_name(cistron_id) for cistron_id in mrna_cistron_ids]
+    @mo.cache
+    async def get_selector_labels():
+        env = get_settings()
+        ssh_service = get_ssh_service_managed(env)
+        await ssh_service.connect()
+        labels = None
+        if ssh_service.conn:
+            labels = await get_ids(ssh_service)
+            set_labels(labels)
+
+    return (get_selector_labels,)
+
+
+@app.cell
+async def _(get_selector_labels):
+    await get_selector_labels()
+    return
+
+
+@app.cell
+def _(get_labels):
+    bulk_common_names, bulk_names_unique, bulk_ids_biocyc, rxn_ids, mrna_cistron_names = get_labels()
     return (
         bulk_common_names,
         bulk_ids_biocyc,
@@ -222,7 +240,7 @@ def _(analysis_select, mo, partition_groups, partitions_display):
 
 @app.cell
 def _(exp_select, get_variants, mo):
-    variant_select = mo.ui.dropdown(options=get_variants(exp_id=exp_select.value), value=0)
+    variant_select = mo.ui.dropdown(options=get_variants(exp_id=exp_select.value))
     return (variant_select,)
 
 
@@ -265,14 +283,14 @@ def _(analysis_select, get_db_filter, partitions_dict):
 
 
 @app.cell
-def _(dataset_sql, db_filter, exp_select, os, wd_roo):
+def _(dataset_sql, db_filter, exp_select, os, wd_root):
     pq_columns = [
         "bulk",
         "listeners__fba_results__base_reaction_fluxes",
         "listeners__rna_counts__full_mRNA_cistron_counts",
     ]
 
-    history_sql_base, _, _ = dataset_sql(os.path.join(wd_roo.parent, "api_outputs"), experiment_ids=[exp_select.value])
+    history_sql_base, _, _ = dataset_sql(os.path.join(wd_root.parent, "api_outputs"), experiment_ids=[exp_select.value])
     # history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "out"), experiment_ids=[exp_select.value])
     history_sql_filtered = (
         f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
