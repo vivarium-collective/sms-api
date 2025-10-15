@@ -72,11 +72,15 @@ docs = [
     "sphinx-autodoc-typehints>=3.2.0,<4",
     "sphinx-rtd-theme>=3.0.2,<4",
 ]
+notebook = [
+    "vivarium-core>=1.6.5",
+]
 
 [tool.uv]
 default-groups = [
     "dev",
     "docs",
+    "notebook"
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -100,14 +104,14 @@ build-backend = "hatchling.build"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*"]
+exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/notebook/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov-report=html"
 
 [tool.deptry]
-exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py", "scratchpads/*"]
+exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py", "scratchpads/*", "sms_api/notebook/*"]
 ignore = ["DEP002", "DEP003", "DEP004"]
 
 [tool.ruff]
@@ -220,7 +224,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*"]
+exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "sms_api/notebook/*"]
 
 [tool.ruff.format]
 preview = true
