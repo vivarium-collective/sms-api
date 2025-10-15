@@ -11,7 +11,7 @@ import os
 import subprocess
 from typing import Any, Optional, Generator
 
-import wholecell
+import sms_api.notebook.wholecell as wholecell
 
 
 TIMEOUT = 60  # seconds
