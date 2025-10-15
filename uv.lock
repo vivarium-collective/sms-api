@@ -2889,6 +2889,7 @@ docs = [
     { name = "sphinx-rtd-theme" },
 ]
 notebook = [
+    { name = "unum" },
     { name = "vivarium-core" },
 ]
 
@@ -2956,7 +2957,10 @@ docs = [
     { name = "sphinx-autodoc-typehints", specifier = ">=3.2.0,<4" },
     { name = "sphinx-rtd-theme", specifier = ">=3.0.2,<4" },
 ]
-notebook = [{ name = "vivarium-core", specifier = ">=1.6.5" }]
+notebook = [
+    { name = "unum", specifier = ">=4.2.1" },
+    { name = "vivarium-core", specifier = ">=1.6.5" },
+]
 
 [[package]]
 name = "sniffio"
@@ -3332,6 +3336,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/95/32/1a225d6164441be76
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5c/23/c7abc0ca0a1526a0774eca151daeb8de62ec457e77262b66b359c3c7679e/tzdata-2025.2-py2.py3-none-any.whl", hash = "sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8", size = 347839 },
 ]
+
+[[package]]
+name = "unum"
+version = "4.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ff/a7/0d0685be80d222f1dcd32d687960e9dba1a2b7f77ea2d6dfc79290de4892/Unum-4.2.1.tar.gz", hash = "sha256:96591615235eb1ef08434c8221fb042c6999a519b0a7d4f57d49cd2d39ef21e5", size = 25656 }
 
 [[package]]
 name = "urllib3"
