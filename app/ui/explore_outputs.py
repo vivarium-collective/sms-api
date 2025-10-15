@@ -30,18 +30,28 @@ def _(mo):
 
 
 @app.cell
-def _(Path, os, sys):
-    wd_root = Path(os.getcwd().split("/notebooks")[0]).parent / "vEcoli"
+def _():
+    from sms_api.notebook.sim_data import LoadSimData
+    from sms_api.notebook.parquet import dataset_sql
+
+    return LoadSimData, dataset_sql
+
+
+@app.cell
+def _(LoadSimData, Path, sys):
+    # wd_root = Path(os.getcwd().split("/notebooks")[0]).parent / "vEcoli"
+    wd_root = Path("/home/FCAM/svc_vivarium/workspace/vEcoli")
 
     sys.path.append(wd_root)
 
-    from ecoli.library.sim_data import LoadSimData
-    from ecoli.library.parquet_emitter import dataset_sql
+    # from ecoli.library.sim_data import LoadSimData
+    # from ecoli.library.parquet_emitter import dataset_sql
 
-    sim_data_path = os.path.join(wd_root, "reconstruction", "sim_data", "kb", "simData.cPickle")
-
+    # sim_data_path = os.path.join(wd_root, "reconstruction", "sim_data", "kb", "simData.cPickle")
+    sim_data_path = wd_root / "kb" / "simData.cPickle"
+    # sim_data_path = os.path.join(wd_root, "reconstruction", "sim_data", "kb", "simData.cPickle")
     sim_data = LoadSimData(sim_data_path).sim_data
-    return LoadSimData, dataset_sql, sim_data, sim_data_path, wd_root
+    return sim_data, sim_data_path, wd_root
 
 
 @app.cell
@@ -92,7 +102,8 @@ def _(mo):
 @app.cell
 def _(bulk_names_unique, mo, os, wd_root):
     sp_select = mo.ui.multiselect(options=bulk_names_unique, value=["--TRANS-ACENAPHTHENE-12-DIOL"])
-    exp_select = mo.ui.dropdown(options=os.listdir(os.path.join(wd_root, "out")), value="sms_multiseed")
+    exp_select = mo.ui.dropdown(options=os.listdir(os.path.join(wd_root, "api_outputs")), value="sms_multiseed")
+    # exp_select = mo.ui.dropdown(options=os.listdir(os.path.join(wd_root, "out")), value="sms_multiseed")
     y_scale = mo.ui.dropdown(options=["linear", "log", "symlog"], value="linear")
     return exp_select, sp_select, y_scale
 
@@ -165,7 +176,8 @@ def _(dataset_sql, db_filter, exp_select, os, wd_root):
         "listeners__rna_counts__full_mRNA_cistron_counts",
     ]
 
-    history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "out"), experiment_ids=[exp_select.value])
+    history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "api_outputs"), experiment_ids=[exp_select.value])
+    # history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "out"), experiment_ids=[exp_select.value])
     history_sql_filtered = (
         f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
     )
@@ -399,7 +411,11 @@ def _(alt, rxns_dfds_long, y_scale_rxns):
 
 @app.cell
 def _(exp_select, os, wd_root):
-    def get_variants(exp_id, outdir=os.path.join(wd_root, "out")):
+    def get_variants(
+        exp_id,
+        # outdir=os.path.join(wd_root, "out")
+        outdir=os.path.join(wd_root, "api_outputs"),
+    ):
         try:
             vars_ls = os.listdir(
                 os.path.join(
@@ -419,7 +435,12 @@ def _(exp_select, os, wd_root):
 
         return variants
 
-    def get_seeds(exp_id, var_id, outdir=os.path.join(wd_root, "out")):
+    def get_seeds(
+        exp_id,
+        var_id,
+        outdir=os.path.join(wd_root, "api_outputs"),
+        # outdir=os.path.join(wd_root, "out")
+    ):
         try:
             seeds_ls = os.listdir(
                 os.path.join(
@@ -438,7 +459,13 @@ def _(exp_select, os, wd_root):
 
         return seeds
 
-    def get_gens(exp_id, var_id, seed_id, outdir=os.path.join(wd_root, "out")):
+    def get_gens(
+        exp_id,
+        var_id,
+        seed_id,
+        # outdir=os.path.join(wd_root, "out")
+        outdir=os.path.join(wd_root, "api_outputs"),
+    ):
         try:
             gens_ls = os.listdir(
                 os.path.join(
@@ -459,7 +486,14 @@ def _(exp_select, os, wd_root):
 
         return gens
 
-    def get_agents(exp_id, var_id, seed_id, gen_id, outdir=os.path.join(wd_root, "out")):
+    def get_agents(
+        exp_id,
+        var_id,
+        seed_id,
+        gen_id,
+        # outdir=os.path.join(wd_root, "out")
+        outdir=os.path.join(wd_root, "api_outputs"),
+    ):
         try:
             agents_ls = os.listdir(
                 os.path.join(
