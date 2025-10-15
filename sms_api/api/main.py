@@ -56,7 +56,9 @@ APP_ORIGINS = [
     "http://localhost:3001",
     "https://sms.cam.uchc.edu",
 ]
-APP_ROUTERS = [
+
+# api routers
+API_ROUTERS = [
     "ecoli",
     "antibiotics",
     "biofactory",
@@ -67,14 +69,9 @@ APP_ROUTERS = [
 ENV = get_settings()
 assets_dir = Path(ENV.assets_dir)
 ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
-UI_NAMES = [
-    "analyze",
-    "antibiotic",
-    "biofactory",
-    "experiment",
-    # "inference",
-    # "single_cell",
-]
+
+# marimo ui app labels
+UI_NAMES = ["analyze", "antibiotic", "biofactory", "experiment", "explore_outputs"]
 
 
 # -- app configuration: lifespan and middleware -- #
@@ -112,7 +109,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],  # TODO: change origins back to allowed
 )
-for api_name in APP_ROUTERS:
+for api_name in API_ROUTERS:
     try:
         api = importlib.import_module(f"sms_api.api.routers.{api_name}")
         app.include_router(
@@ -159,6 +156,7 @@ async def home(request: Request) -> templating._TemplateResponse:
         ("Antibiotic", "Explore new possibilities"),
         ("Biofactory", "Create new strains"),
         ("Experiment", "Design and run simulation experiments"),
+        ("Explore Outputs", "Explore Simulation Outputs"),
     ]
     return templates.TemplateResponse(
         request, "home.html", {"request": request, "app_names": app_info, "marimo_path_prefix": "/ws"}
