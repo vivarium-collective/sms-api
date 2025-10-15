@@ -25,15 +25,64 @@ if os.getenv(ENV_SECRET_ENV_FILE) is not None and os.path.exists(str(os.getenv(E
 
 
 class Settings(BaseSettings):
+    # slurm params
+    slurm_submit_host: str = ""
+    slurm_submit_user: str = ""  # "svc_vivarium"
+    slurm_submit_key_path: str = ""
+    slurm_submit_known_hosts: str | None = None
+    slurm_partition: str = ""
+    slurm_node_list: str = ""  # comma-separated list of nodes, e.g., "node1,node2"
+    slurm_qos: str = ""
+    slurm_log_base_path: str = ""
+    slurm_base_path: str = ""
+
+    # runtime/deployment args
+    dev_mode: str = "0"
+    app_dir: str = f"{REPO_ROOT}/app"
+    assets_dir: str = f"{REPO_ROOT}/assets"
+    marimo_api_server: str = ""
+    hpc_user: str = ""
+    hpc_group: str = ""
+    deployment: str = "prod"
+    dev_base_url: str = "http://localhost:8888"
+    prod_base_url: str = "https://sms.cam.uchc.edu"
+
+    # hpc paths
+    hpc_image_base_path: str = ""
+    hpc_parca_base_path: str = ""
+    hpc_repo_base_path: str = ""
+    hpc_sim_base_path: str = ""
+    hpc_sim_config_file: str = "publish.json"
+
+    # storage: internal
+    remote_workspace_dir: str = (
+        ""  # point to dir containing both vEcoli AND sim/analysis output directory called api_outputs
+    )
+    remote_workspace_interpreter: str = ""  # really, $REMOTE_WORKSPACE_DIR/.venv/bin/python
+    remote_data_basepath: str = ""
+    local_data_basepath: str = ""
+    simulation_outdir: str = ""
+    local_simulation_outdir: str = ""
+    vecoli_config_dir: str = ""
+
+    # external services
+    biocyc_email: str = ""
+    biocyc_password: str = ""
+
+    nats_url: str = ""
+    nats_worker_event_subject: str = "worker.events"
+    nats_emitter_url: str = ""
+    nats_emitter_magic_word: str = "emitter-magic-word"
+
+    temporal_service_url: str = "localhost:7233"
+
+    storage_local_cache_dir: str = "./local_cache"
+
     storage_bucket: str = "files.biosimulations.dev"
     storage_endpoint_url: str = "https://storage.googleapis.com"
     storage_region: str = "us-east4"
     storage_tensorstore_driver: TS_DRIVER = "zarr3"
     storage_tensorstore_kvstore_driver: KV_DRIVER = "gcs"
-
-    temporal_service_url: str = "localhost:7233"
-
-    storage_local_cache_dir: str = "./local_cache"
 
     storage_gcs_credentials_file: str = ""
 
@@ -44,48 +93,6 @@ class Settings(BaseSettings):
     mongodb_collection_compare: str = "BiosimCompare"
 
     sqlite_dbfile: str = "./sms.db"  # SQLite database URL for local development
-
-    slurm_submit_host: str = ""
-    slurm_submit_user: str = ""  # "svc_vivarium"
-    slurm_submit_key_path: str = ""  # "/Users/jimschaff/.ssh/id_rsa"
-    slurm_submit_known_hosts: str | None = None
-    slurm_partition: str = ""
-    slurm_node_list: str = ""  # comma-separated list of nodes, e.g., "node1,node2"
-    slurm_qos: str = ""
-    slurm_log_base_path: str = ""
-    slurm_base_path: str = ""
-
-    hpc_image_base_path: str = ""
-    hpc_parca_base_path: str = ""
-    hpc_repo_base_path: str = ""
-    hpc_sim_base_path: str = ""
-    hpc_sim_config_file: str = "publish.json"
-
-    nats_url: str = ""
-    nats_worker_event_subject: str = "worker.events"
-
-    nats_emitter_url: str = ""
-    nats_emitter_magic_word: str = "emitter-magic-word"
-
-    dev_mode: str = "0"
-    app_dir: str = f"{REPO_ROOT}/app"
-    assets_dir: str = f"{REPO_ROOT}/assets"
-    marimo_api_server: str = ""
-    hpc_user: str = ""
-    hpc_group: str = ""
-    deployment: str = "prod"
-
-    # external services
-    biocyc_email: str = ""
-    biocyc_password: str = ""
-
-    remote_data_basepath: str = ""
-    local_data_basepath: str = ""
-    simulation_outdir: str = ""
-    local_simulation_outdir: str = ""
-    vecoli_config_dir: str = ""
-    dev_base_url: str = "http://localhost:8888"
-    prod_base_url: str = "https://sms.cam.uchc.edu"
 
     def dev_engaged(self) -> bool:
         return bool(int(self.dev_mode))

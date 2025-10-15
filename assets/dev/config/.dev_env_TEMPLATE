@@ -1,4 +1,4 @@
-# Storage settings
+# -- Storage settings --
 STORAGE_BUCKET=files.biosimulations.dev
 STORAGE_ENDPOINT_URL=https://storage.googleapis.com
 STORAGE_REGION=us-east4
@@ -7,26 +7,26 @@ STORAGE_TENSORSTORE_KVSTORE_DRIVER=gcs
 STORAGE_LOCAL_CACHE_DIR=./local_cache
 STORAGE_GCS_CREDENTIALS_FILE=
 
-# Temporal service
+# -- Temporal service --
 TEMPORAL_SERVICE_URL=localhost:7233
 
-# MongoDB settings
+# -- MongoDB settings --
 MONGODB_URI=mongodb://localhost:27017
 MONGODB_DATABASE=biosimulations
 MONGODB_COLLECTION_OMEX=BiosimOmex
 MONGODB_COLLECTION_SIMS=BiosimSims
 MONGODB_COLLECTION_COMPARE=BiosimCompare
 
-# NATS settings
+# -- NATS settings --
 NATS_URL=
 NATS_EMITTER_URL=
 HPC_SIM_CONFIG_FILE=
 NATS_WORKER_EVENT_SUBJECT=
 
-# SQLite settings
+# -- SQLite settings --
 SQLITE_URI=sqlite+aiosqlite:///./sms.db
 
-# SLURM (optional, for local dev leave blank or set as needed)
+# -- SLURM (optional, for local dev leave blank or set as needed) --
 SLURM_SUBMIT_HOST=
 SLURM_SUBMIT_USER=
 SLURM_SUBMIT_KEY_PATH=
@@ -65,9 +65,16 @@ LOCAL_NFS_DIR=
 REMOTE_DATA_BASEPATH=
 LOCAL_DATA_BASEPATH=
 
-SIMULATION_OUTDIR=  # (remote)
-LOCAL_SIMULATION_OUTDIR= # this should mirror the path structure provided to the HPC $USER, so for example /some/local/location/home/FCAM/svc_vivarium/...etc
+# -- required FS paths(remote) --
+REMOTE_WORKSPACE_DIR=
+REMOTE_WORKSPACE_INTERPRETER=
+REMOTE_DATA_BASEPATH=
+SIMULATION_OUTDIR=  # this should mirror the path structure provided to the HPC $USER, so for example /some/local/location/home/FCAM/svc_vivarium/...etc
 VECOLI_CONFIG_DIR=  # remote, that is
+
+# -- required FS paths(local/host/api container) --
+LOCAL_DATA_BASEPATH=
+LOCAL_SIMULATION_OUTDIR=
 
 # -- External APIs: biocyc, etc --
 BIOCYC_EMAIL="myemail@website.org"
