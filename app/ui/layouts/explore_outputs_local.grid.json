@@ -30,6 +30,9 @@
         "position": null
       },
       {
+        "position": null
+      },
+      {
         "position": [
           0,
           3,
@@ -88,7 +91,7 @@
         "position": [
           0,
           8,
-          4,
+          6,
           3
         ]
       },

@@ -3,7 +3,7 @@ import marimo
 __generated_with = "0.16.5"
 app = marimo.App(
     width="medium",
-    layout_file="layouts/explore_outputs.grid.json",
+    layout_file="layouts/explore_outputs_local.grid.json",
 )
 
 
@@ -31,15 +31,16 @@ def _(mo):
 
 @app.cell
 def _():
+    # from sms_api.notebook.sim_data import LoadSimData
     from sms_api.notebook.parquet import dataset_sql
 
     return (dataset_sql,)
 
 
 @app.cell
-def _(Path, sys):
-    # wd_root = Path(os.getcwd().split("/notebooks")[0]).parent / "vEcoli"
-    wd_root = Path("/home/FCAM/svc_vivarium/workspace/vEcoli")
+def _(Path, os, sys):
+    wd_root = Path(os.getcwd().split("/notebooks")[0]).parent / "vEcoli"
+    # wd_root = Path("/home/FCAM/svc_vivarium/workspace/vEcoli")
 
     sys.path.append(wd_root)
 
@@ -51,6 +52,20 @@ def _(Path, sys):
     # sim_data_path = os.path.join(wd_root, "reconstruction", "sim_data", "kb", "simData.cPickle")
     # sim_data = LoadSimData(sim_data_path).sim_data
     return (wd_root,)
+
+
+@app.cell
+def _():
+    # def get_bulk_ids(sim_data_path):
+    #     sim_data = LoadSimData(sim_data_path).sim_data
+    #     bulk_ids = sim_data.internal_state.bulk_molecules.bulk_data["id"].tolist()
+    #     return bulk_ids
+    #
+    # def get_rxn_ids(sim_data_path):
+    #     sim_data = LoadSimData(sim_data_path).sim_data
+    #     rxn_ids = sim_data.process.metabolism.base_reaction_ids
+    #     return rxn_ids
+    return
 
 
 @app.cell
@@ -164,14 +179,6 @@ async def _(get_ids):
     # mrna_cistron_ids = cistron_data["id"][cistron_data["is_mRNA"]].tolist()
     # mrna_cistron_names = [sim_data.common_names.get_common_name(cistron_id) for cistron_id in mrna_cistron_ids]
     # mrna_cistron_names = await get_mrna_cistron_names()
-    # bulk_ids = get_bulk_ids(sim_data_path)
-    # bulk_ids_biocyc = [bulk_id[:-3] for bulk_id in bulk_ids]
-    # bulk_names_unique = list(np.unique(bulk_ids_biocyc))
-    # bulk_common_names = get_common_names(bulk_names_unique, sim_data)
-    # rxn_ids = get_rxn_ids(sim_data_path)
-    # cistron_data = sim_data.process.transcription.cistron_data
-    # mrna_cistron_ids = cistron_data["id"][cistron_data["is_mRNA"]].tolist()
-    # mrna_cistron_names = [sim_data.common_names.get_common_name(cistron_id) for cistron_id in mrna_cistron_ids]
     return (
         bulk_common_names,
         bulk_ids_biocyc,
@@ -195,10 +202,8 @@ def _(mo):
 @app.cell
 def _(bulk_names_unique, mo, os, wd_root):
     sp_select = mo.ui.multiselect(options=bulk_names_unique, value=["--TRANS-ACENAPHTHENE-12-DIOL"])
-    exp_select = mo.ui.dropdown(
-        options=os.listdir(os.path.join(wd_root, "api_outputs")), value="sms_multiseed_0-2794dfa74b9cf37c_1759844363435"
-    )
-    # exp_select = mo.ui.dropdown(options=os.listdir(os.path.join(wd_root, "out")), value="sms_multiseed")
+    # exp_select = mo.ui.dropdown(options=os.listdir(os.path.join(wd_root, "api_outputs")), value="sms_multiseed")
+    exp_select = mo.ui.dropdown(options=os.listdir(os.path.join(wd_root, "out")), value="sms_multiseed")
     y_scale = mo.ui.dropdown(options=["linear", "log", "symlog"], value="linear")
     return exp_select, sp_select, y_scale
 
@@ -271,8 +276,8 @@ def _(dataset_sql, db_filter, exp_select, os, wd_root):
         "listeners__rna_counts__full_mRNA_cistron_counts",
     ]
 
-    history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "api_outputs"), experiment_ids=[exp_select.value])
-    # history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "out"), experiment_ids=[exp_select.value])
+    # history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "api_outputs"), experiment_ids=[exp_select.value])
+    history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "out"), experiment_ids=[exp_select.value])
     history_sql_filtered = (
         f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
     )
@@ -508,8 +513,8 @@ def _(alt, rxns_dfds_long, y_scale_rxns):
 def _(exp_select, os, wd_root):
     def get_variants(
         exp_id,
-        # outdir=os.path.join(wd_root, "out")
-        outdir=os.path.join(wd_root, "api_outputs"),
+        outdir=os.path.join(wd_root, "out"),
+        # outdir=os.path.join(wd_root, "api_outputs"),
     ):
         try:
             vars_ls = os.listdir(
@@ -533,8 +538,8 @@ def _(exp_select, os, wd_root):
     def get_seeds(
         exp_id,
         var_id,
-        outdir=os.path.join(wd_root, "api_outputs"),
-        # outdir=os.path.join(wd_root, "out")
+        # outdir=os.path.join(wd_root, "api_outputs"),
+        outdir=os.path.join(wd_root, "out"),
     ):
         try:
             seeds_ls = os.listdir(
@@ -558,8 +563,8 @@ def _(exp_select, os, wd_root):
         exp_id,
         var_id,
         seed_id,
-        # outdir=os.path.join(wd_root, "out")
-        outdir=os.path.join(wd_root, "api_outputs"),
+        outdir=os.path.join(wd_root, "out"),
+        # outdir=os.path.join(wd_root, "api_outputs"),
     ):
         try:
             gens_ls = os.listdir(
@@ -586,8 +591,8 @@ def _(exp_select, os, wd_root):
         var_id,
         seed_id,
         gen_id,
-        # outdir=os.path.join(wd_root, "out")
-        outdir=os.path.join(wd_root, "api_outputs"),
+        outdir=os.path.join(wd_root, "out"),
+        # outdir=os.path.join(wd_root, "api_outputs"),
     ):
         try:
             agents_ls = os.listdir(
