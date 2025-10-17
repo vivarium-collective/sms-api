@@ -31,13 +31,16 @@ COPY --chown=appuser:appgroup uv.lock /app/uv.lock
 COPY --chown=appuser:appgroup pyproject.toml /app/pyproject.toml
 
 # Install dependencies
-RUN uv sync --frozen --no-install-project --group notebook
+RUN uv sync --frozen --no-install-project
 
 # Copy the rest of the application code
 COPY --chown=appuser:appgroup . /app
 
 # Sync the project
 RUN uv sync --frozen
+
+# Install ecoli deps
+RUN uv pip install vecoli
 
 # Declare the volume for local cache storage
 VOLUME ["/app/scratch"]
