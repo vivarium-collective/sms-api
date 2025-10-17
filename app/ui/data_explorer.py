@@ -1,6 +1,12 @@
+# /// script
+# [tool.marimo.display]
+# theme = "dark"
+# cell_output = "below"
+# ///
+
 import marimo
 
-__generated_with = "0.14.7"
+__generated_with = "0.17.0"
 app = marimo.App(width="medium")
 
 
@@ -13,27 +19,28 @@ def _():
     import duckdb
     import sys
     import altair as alt
+    import itertools
+    from pathlib import Path
 
-    return alt, duckdb, mo, np, os, pd, sys
+    alt.data_transformers.enable("vegafusion")
+    return Path, alt, duckdb, itertools, mo, np, os, pd, sys
 
 
 @app.cell
-def _(os, sys):
-    remote_interpreter = "/home/FCAM/svc_vivarium/workspace/.venv/bin/python"
-    sys.path.append(remote_interpreter)
-
+def _(Path, sys):
     # wd_root = os.getcwd().split("/notebooks")[0]
-    wd_root = "/home/FCAM/svc_vivarium/workspace/vEcoli"
-
+    remote_vecoli_dir = Path("/home/FCAM/svc_vivarium/workspace/vEcoli")
+    wd_root = str(remote_vecoli_dir)
+    output_dir = str(remote_vecoli_dir.parent / "api_outputs")
     sys.path.append(wd_root)
 
     from ecoli.library.sim_data import LoadSimData
     from ecoli.library.parquet_emitter import dataset_sql
 
-    sim_data_path = os.path.join(wd_root, "reconstruction", "sim_data", "kb", "simData.cPickle")
+    sim_data_path = str(remote_vecoli_dir.parent / "kb" / "simData.cPickle")
 
     sim_data = LoadSimData(sim_data_path).sim_data
-    return LoadSimData, dataset_sql, sim_data, sim_data_path, wd_root
+    return LoadSimData, dataset_sql, output_dir, sim_data, sim_data_path
 
 
 @app.cell
@@ -52,13 +59,22 @@ def _(LoadSimData):
 
 
 @app.cell
-def _(get_bulk_ids, get_rxn_ids, sim_data, sim_data_path):
+def _(get_bulk_ids, get_rxn_ids, np, sim_data, sim_data_path):
     bulk_ids = get_bulk_ids(sim_data_path)
+    bulk_ids_biocyc = [bulk_id[:-3] for bulk_id in bulk_ids]
+    bulk_names_unique = list(np.unique(bulk_ids_biocyc))
+    bulk_common_names = get_common_names(bulk_names_unique, sim_data)
     rxn_ids = get_rxn_ids(sim_data_path)
     cistron_data = sim_data.process.transcription.cistron_data
     mrna_cistron_ids = cistron_data["id"][cistron_data["is_mRNA"]].tolist()
     mrna_cistron_names = [sim_data.common_names.get_common_name(cistron_id) for cistron_id in mrna_cistron_ids]
-    return bulk_ids, mrna_cistron_names, rxn_ids
+    return (
+        bulk_common_names,
+        bulk_ids_biocyc,
+        bulk_names_unique,
+        mrna_cistron_names,
+        rxn_ids,
+    )
 
 
 @app.cell
@@ -72,11 +88,10 @@ def _(mo):
 
 
 @app.cell
-def _(bulk_ids, mo, os, wd_root):
-    sp_select = mo.ui.multiselect(options=bulk_ids)
-    exp_select = mo.ui.dropdown(options=os.listdir(os.path.join(wd_root, "out")))
+def _(bulk_names_unique, mo, os, output_dir):
+    sp_select = mo.ui.multiselect(options=bulk_names_unique)
+    exp_select = mo.ui.dropdown(options=os.listdir(output_dir))
     y_scale = mo.ui.dropdown(options=["linear", "log", "symlog"], value="linear")
-
     return exp_select, sp_select, y_scale
 
 
@@ -135,22 +150,20 @@ def _(exp_select, gen_select, get_agents, mo, seed_select, variant_select):
 
 @app.cell
 def _(analysis_select, get_db_filter, partitions_dict):
-    # dbf_dict = partitions_dict(exp_select.value,variant_select.value,seed_select.value,gen_select.value,agent_select.value)
     dbf_dict = partitions_dict(analysis_select.value)
     db_filter = get_db_filter(dbf_dict)
-
     return (db_filter,)
 
 
 @app.cell
-def _(dataset_sql, db_filter, exp_select, os, wd_root):
+def _(dataset_sql, db_filter, exp_select, output_dir):
     pq_columns = [
         "bulk",
         "listeners__fba_results__base_reaction_fluxes",
         "listeners__rna_counts__full_mRNA_cistron_counts",
     ]
 
-    history_sql_base, _, _ = dataset_sql(os.path.join(wd_root, "out"), experiment_ids=[exp_select.value])
+    history_sql_base, _, _ = dataset_sql(output_dir, experiment_ids=[exp_select.value])
     history_sql_filtered = (
         f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
     )
@@ -158,42 +171,105 @@ def _(dataset_sql, db_filter, exp_select, os, wd_root):
 
 
 @app.cell
-def _(bulk_ids, history_sql_filtered, load_outputs, np, sp_select):
+def _(bulk_sp_plot, get_bulk_sp_traj, history_sql_filtered, load_outputs, np):
     output_loaded = load_outputs(history_sql_filtered)
 
     bulk_mtx = np.stack(output_loaded["bulk"].values)
 
-    sp_idxs = [bulk_ids.index(bulk_id) for bulk_id in sp_select.value]
+    # sp_idxs = [bulk_ids.index(bulk_id) for bulk_id in sp_select.value]
 
-    sp_trajs = [bulk_mtx[:, sp_idx] for sp_idx in sp_idxs]
+    # sp_trajs = [bulk_mtx[:, sp_idx] for sp_idx in sp_idxs]
 
+    sp_trajs = [get_bulk_sp_traj(bulk_id, bulk_mtx) for bulk_id in bulk_sp_plot.value]
     return output_loaded, sp_trajs
 
 
 @app.cell
-def _(output_loaded, pd, sp_select, sp_trajs):
-    plot_dict = {key: val for (key, val) in zip(sp_select.value, sp_trajs)}
+def _(
+    bulk_common_names,
+    bulk_ids_biocyc,
+    bulk_names_unique,
+    molecule_id_type,
+    np,
+):
+    def get_bulk_sp_traj(sp_input, bulk_mtx):
+        if molecule_id_type.value == "common name":
+            sp_name = bulk_names_unique[bulk_common_names.index(sp_input)]
+
+        elif molecule_id_type.value == "bulk id":
+            sp_name = sp_input
+
+        sp_idxs = [index for index, item in enumerate(bulk_ids_biocyc) if item == sp_name]
+
+        bulk_sp_traj = np.sum(bulk_mtx[:, sp_idxs], 1)
+
+        return bulk_sp_traj
+
+    return (get_bulk_sp_traj,)
+
+
+@app.cell
+def _(bulk_sp_plot, output_loaded, pd, sp_trajs):
+    plot_dict = {key: val for (key, val) in zip(bulk_sp_plot.value, sp_trajs)}
 
     plot_dict["time"] = output_loaded["time"]
 
     plot_df = pd.DataFrame(plot_dict)
-
     return (plot_df,)
 
 
 @app.cell
-def _(plot_df):
+def _(downsample, plot_df):
     df_long = plot_df.melt(
         id_vars=["time"],  # Columns to keep as identifier variables
         var_name="bulk_molecules",  # Name for the new column containing original column headers
         value_name="counts",  # Name for the new column containing original column values
     )
-    return (df_long,)
+
+    dfds_long = downsample(df_long)
+    return (dfds_long,)
 
 
 @app.cell
 def _(mo):
     mo.md("""bulk molecule counts""")
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _(mo):
+    molecule_id_type = mo.ui.radio(options=["common name", "bulk id"], value="common name")
+    return (molecule_id_type,)
+
+
+@app.cell
+def _(bulk_common_names, bulk_names_unique, mo, molecule_id_type):
+    if molecule_id_type.value == "common name":
+        molecule_id_options = bulk_common_names
+    elif molecule_id_type.value == "bulk id":
+        molecule_id_options = bulk_names_unique
+
+    bulk_sp_plot = mo.ui.multiselect(options=molecule_id_options)
+    return (bulk_sp_plot,)
+
+
+@app.cell
+def _(bulk_sp_plot, mo, molecule_id_type):
+    bulk_select = ["molecule id type:", molecule_id_type]
+
+    if molecule_id_type.value == "common name":
+        bulk_select.append("name:")
+        bulk_select.append(bulk_sp_plot)
+    elif molecule_id_type.value == "bulk id":
+        bulk_select.append("id:")
+        bulk_select.append(bulk_sp_plot)
+
+    mo.hstack(bulk_select, justify="center")
     return
 
 
@@ -204,8 +280,8 @@ def _(mo, sp_select, y_scale):
 
 
 @app.cell
-def _(alt, df_long, y_scale):
-    alt.Chart(df_long).mark_line().encode(
+def _(alt, dfds_long, y_scale):
+    alt.Chart(dfds_long).mark_line().encode(
         x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4)),
         y=alt.Y("counts:Q", scale=alt.Scale(type=y_scale.value)),
         color="bulk_molecules:N",
@@ -228,7 +304,7 @@ def _(mo, mrna_cistron_names):
 
 
 @app.cell
-def _(mrna_cistron_names, mrna_select, np, output_loaded, pd):
+def _(downsample, mrna_cistron_names, mrna_select, np, output_loaded, pd):
     mrna_mtx = np.stack(output_loaded["listeners__rna_counts__full_mRNA_cistron_counts"])
 
     mrna_idxs = [mrna_cistron_names.index(gene_id) for gene_id in mrna_select.value]
@@ -246,12 +322,14 @@ def _(mrna_cistron_names, mrna_select, np, output_loaded, pd):
         var_name="gene names",  # Name for the new column containing original column headers
         value_name="counts",  # Name for the new column containing original column values
     )
-    return (mrna_df_long,)
+
+    mrna_dfds_long = downsample(mrna_df_long)
+    return (mrna_dfds_long,)
 
 
 @app.cell
-def _(alt, mrna_df_long, y_scale_mrna):
-    alt.Chart(mrna_df_long).mark_line().encode(
+def _(alt, mrna_dfds_long, y_scale_mrna):
+    alt.Chart(mrna_dfds_long).mark_line().encode(
         x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4)),
         y=alt.Y("counts:Q", scale=alt.Scale(type=y_scale_mrna.value)),
         color="gene names:N",
@@ -274,7 +352,7 @@ def _(mo, rxn_ids):
 
 
 @app.cell
-def _(np, output_loaded, pd, rxn_ids, select_rxns):
+def _(downsample, np, output_loaded, pd, rxn_ids, select_rxns):
     rxns_mtx = np.stack(output_loaded["listeners__fba_results__base_reaction_fluxes"].values)
 
     rxns_idxs = [rxn_ids.index(rxn) for rxn in select_rxns.value]
@@ -293,12 +371,13 @@ def _(np, output_loaded, pd, rxn_ids, select_rxns):
         value_name="flux",  # Name for the new column containing original column values
     )
 
-    return (rxns_df_long,)
+    rxns_dfds_long = downsample(rxns_df_long)
+    return (rxns_dfds_long,)
 
 
 @app.cell
-def _(alt, rxns_df_long, y_scale_rxns):
-    alt.Chart(rxns_df_long).mark_line().encode(
+def _(alt, rxns_dfds_long, y_scale_rxns):
+    alt.Chart(rxns_dfds_long).mark_line().encode(
         x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4)),
         y=alt.Y("flux:Q", scale=alt.Scale(type=y_scale_rxns.value)),
         color="reaction_id:N",
@@ -307,8 +386,8 @@ def _(alt, rxns_df_long, y_scale_rxns):
 
 
 @app.cell
-def _(exp_select, os, wd_root):
-    def get_variants(exp_id, outdir=os.path.join(wd_root, "out")):
+def _(exp_select, os, output_dir):
+    def get_variants(exp_id, outdir=output_dir):
         try:
             vars_ls = os.listdir(
                 os.path.join(
@@ -328,7 +407,7 @@ def _(exp_select, os, wd_root):
 
         return variants
 
-    def get_seeds(exp_id, var_id, outdir=os.path.join(wd_root, "out")):
+    def get_seeds(exp_id, var_id, outdir=output_dir):
         try:
             seeds_ls = os.listdir(
                 os.path.join(
@@ -347,7 +426,7 @@ def _(exp_select, os, wd_root):
 
         return seeds
 
-    def get_gens(exp_id, var_id, seed_id, outdir=os.path.join(wd_root, "out")):
+    def get_gens(exp_id, var_id, seed_id, outdir=output_dir):
         try:
             gens_ls = os.listdir(
                 os.path.join(
@@ -368,7 +447,7 @@ def _(exp_select, os, wd_root):
 
         return gens
 
-    def get_agents(exp_id, var_id, seed_id, gen_id, outdir=os.path.join(wd_root, "out")):
+    def get_agents(exp_id, var_id, seed_id, gen_id, outdir=output_dir):
         try:
             agents_ls = os.listdir(
                 os.path.join(
@@ -394,9 +473,6 @@ def _(exp_select, os, wd_root):
 
 @app.cell
 def _(partition_groups, read_partitions):
-    # def partitions_dict(exp_id,var_id,seed_id,gen_id,agent_id):
-    #     return {"experiment_id":f"'{exp_id}'", "variant":var_id, "lineage_seed":seed_id, "generation":gen_id, "agent_id":agent_id}
-
     def partitions_dict(analysis_type):
         partitions_req = partition_groups[analysis_type]
         partitions_all = read_partitions()
@@ -458,14 +534,42 @@ def _(agent_select, exp_select, gen_select, seed_select, variant_select):
 
 
 @app.cell
-def _(duckdb):
+def _(duckdb, itertools, np):
     def load_outputs(sql):
         outputs_df = duckdb.sql(sql).df()
         outputs_df = outputs_df.groupby("time", as_index=False).sum()
 
         return outputs_df
 
-    return (load_outputs,)
+    def downsample(df_long):
+        tp_all = np.unique(df_long["time"]).astype(int)
+        ds_ratio = int(np.ceil(np.shape(df_long)[0] / 20000))
+        tp_ds = list(itertools.islice(tp_all, 0, max(tp_all), ds_ratio))
+        df_ds = df_long[np.isin(df_long["time"], tp_ds)]
+
+        return df_ds
+
+    return downsample, load_outputs
+
+
+@app.function
+def get_common_names(bulk_names, sim_data):
+    bulk_common_names = [sim_data.common_names.get_common_name(name) for name in bulk_names]
+
+    duplicates = []
+
+    for item in bulk_common_names:
+        if bulk_common_names.count(item) > 1 and item not in duplicates:
+            duplicates.append(item)
+
+    for dup in duplicates:
+        sp_idxs = [index for index, item in enumerate(bulk_common_names) if item == dup]
+
+        for sp_idx in sp_idxs:
+            bulk_rename = str(bulk_common_names[sp_idx]) + f"[{bulk_names[sp_idx]}]"
+            bulk_common_names[sp_idx] = bulk_rename
+
+    return bulk_common_names
 
 
 if __name__ == "__main__":

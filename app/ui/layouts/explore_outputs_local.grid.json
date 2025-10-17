@@ -1,0 +1,202 @@
+{
+  "type": "grid",
+  "data": {
+    "columns": 24,
+    "rowHeight": 20,
+    "maxWidth": 1400,
+    "bordered": true,
+    "cells": [
+      {
+        "position": null
+      },
+      {
+        "position": [
+          0,
+          0,
+          6,
+          3
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          0,
+          3,
+          5,
+          4
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          5,
+          3,
+          13,
+          4
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          0,
+          8,
+          6,
+          3
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          0,
+          11,
+          10,
+          5
+        ]
+      },
+      {
+        "position": [
+          0,
+          16,
+          10,
+          4
+        ]
+      },
+      {
+        "position": [
+          0,
+          20,
+          20,
+          19
+        ]
+      },
+      {
+        "position": [
+          0,
+          41,
+          4,
+          3
+        ]
+      },
+      {
+        "position": [
+          0,
+          44,
+          8,
+          3
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          0,
+          47,
+          20,
+          17
+        ]
+      },
+      {
+        "position": [
+          0,
+          65,
+          6,
+          2
+        ]
+      },
+      {
+        "position": [
+          0,
+          67,
+          9,
+          3
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
+          0,
+          70,
+          20,
+          19
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      }
+    ]
+  }
+}

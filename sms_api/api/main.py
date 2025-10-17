@@ -56,7 +56,9 @@ APP_ORIGINS = [
     "http://localhost:3001",
     "https://sms.cam.uchc.edu",
 ]
-APP_ROUTERS = [
+
+# api routers
+API_ROUTERS = [
     "ecoli",
     "antibiotics",
     "biofactory",
@@ -67,14 +69,9 @@ APP_ROUTERS = [
 ENV = get_settings()
 assets_dir = Path(ENV.assets_dir)
 ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
-UI_NAMES = [
-    "analyze",
-    "antibiotic",
-    "biofactory",
-    "experiment",
-    # "inference",
-    # "single_cell",
-]
+
+# marimo ui app labels
+UI_NAMES = ["analyze", "antibiotic", "biofactory", "experiment", "data_explorer"]
 
 
 # -- app configuration: lifespan and middleware -- #
@@ -112,7 +109,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],  # TODO: change origins back to allowed
 )
-for api_name in APP_ROUTERS:
+for api_name in API_ROUTERS:
     try:
         api = importlib.import_module(f"sms_api.api.routers.{api_name}")
         app.include_router(
@@ -133,13 +130,16 @@ server = marimo.create_asgi_app()
 
 app_filenames = [f"{modname}.py" for modname in UI_NAMES]
 for filename in sorted(os.listdir(ui_dir)):
-    if filename in app_filenames:
+    if filename in app_filenames and "explore_outputs" not in filename:
         if "analyze" in filename:
             app_name = "Analyze"
             desc = "Run Simulation Analyses"
         elif "experiment" in filename:
             app_name = "Experiment"
             desc = "Run a Simulation Experiment"
+        elif "data_explorer" in filename:
+            app_name = "Data Explorer"
+            desc = "Explore Simulation Data"
         else:
             app_name = format_marimo_appname(os.path.splitext(filename)[0])
             desc = "Click Me!"
@@ -159,6 +159,7 @@ async def home(request: Request) -> templating._TemplateResponse:
         ("Antibiotic", "Explore new possibilities"),
         ("Biofactory", "Create new strains"),
         ("Experiment", "Design and run simulation experiments"),
+        ("Data Explorer", "Explore simulation outputs"),
     ]
     return templates.TemplateResponse(
         request, "home.html", {"request": request, "app_names": app_info, "marimo_path_prefix": "/ws"}

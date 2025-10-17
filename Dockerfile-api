@@ -7,6 +7,8 @@ ARG APP_GID=10000
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     openssh-client \
+    build-essential \
+    python3-dev \
     sqlite3 && \
     rm -rf /var/lib/apt/lists/*
 
@@ -36,6 +38,9 @@ COPY --chown=appuser:appgroup . /app
 
 # Sync the project
 RUN uv sync --frozen
+
+# Install ecoli deps
+RUN uv pip install vecoli
 
 # Declare the volume for local cache storage
 VOLUME ["/app/scratch"]
