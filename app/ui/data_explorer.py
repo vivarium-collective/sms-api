@@ -1,3 +1,9 @@
+# /// script
+# [tool.marimo.display]
+# theme = "dark"
+# cell_output = "below"
+# ///
+
 import marimo
 
 __generated_with = "0.17.0"
