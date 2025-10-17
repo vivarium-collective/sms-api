@@ -16,6 +16,7 @@ def _():
     import itertools
     from pathlib import Path
 
+    alt.data_transformers.enable("vegafusion")
     return Path, alt, duckdb, itertools, mo, np, os, pd, sys
 
 
