@@ -1,9 +1,10 @@
 [project]
 name = "sms_api"
-version = "0.2.32-dev"
+version = "0.2.33-dev"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
-requires-python = ">=3.12,<4.0"
+# requires-python = ">=3.12,<4.0"
+requires-python = "==3.12.9"
 readme = "README.md"
 dependencies = [
     "dotenv>=0.9.9,<0.10",
@@ -40,6 +41,7 @@ dependencies = [
     "marimo>=0.16.5",
     "sqlglot>=27.27.0",
     "ruff>=0.12.12",
+    "vecoli==0.0.2",
 ]
 
 [project.urls]
@@ -47,6 +49,9 @@ Repository = "https://github.com/vivarium-collective/sms-api"
 Documentation = "https://vivarium-collective.github.io/sms-api/"
 
 [dependency-groups]
+bindings = [
+    "maturin>=1.9.6",
+]
 dev = [
     "pytest>=8.3.5,<9",
     "pytest-cov>=4.0.0,<5",
@@ -73,18 +78,18 @@ docs = [
     "sphinx-autodoc-typehints>=3.2.0,<4",
     "sphinx-rtd-theme>=3.0.2,<4",
 ]
-notebook = [
-    "fsspec>=2025.9.0",
-    "numba>=0.62.1",
-    "unum>=4.2.1",
-    "vivarium-core>=1.6.5",
-]
+# notebook = [
+#     "fsspec>=2025.9.0",
+#     "numba>=0.62.1",
+#     "unum>=4.2.1",
+#     "vivarium-core>=1.6.5",
+# ]
 
 [tool.uv]
 default-groups = [
     "dev",
     "docs",
-    "notebook"
+    # "notebook"
 ]
 
 [tool.hatch.build.targets.sdist]

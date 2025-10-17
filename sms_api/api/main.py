@@ -71,7 +71,7 @@ assets_dir = Path(ENV.assets_dir)
 ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
 
 # marimo ui app labels
-UI_NAMES = ["analyze", "antibiotic", "biofactory", "experiment", "explore_outputs"]
+UI_NAMES = ["analyze", "antibiotic", "biofactory", "experiment", "explore_outputs", "explore_simulation_data"]
 
 
 # -- app configuration: lifespan and middleware -- #
@@ -157,6 +157,7 @@ async def home(request: Request) -> templating._TemplateResponse:
         ("Biofactory", "Create new strains"),
         ("Experiment", "Design and run simulation experiments"),
         ("Explore Outputs", "Explore Simulation Outputs"),
+        ("Explore Simulation Data", "Explore Data"),
     ]
     return templates.TemplateResponse(
         request, "home.html", {"request": request, "app_names": app_info, "marimo_path_prefix": "/ws"}
