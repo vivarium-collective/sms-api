@@ -41,7 +41,6 @@ dependencies = [
     "marimo>=0.16.5",
     "sqlglot>=27.27.0",
     "ruff>=0.12.12",
-    "vecoli==0.0.2",
 ]
 
 [project.urls]
@@ -49,9 +48,6 @@ Repository = "https://github.com/vivarium-collective/sms-api"
 Documentation = "https://vivarium-collective.github.io/sms-api/"
 
 [dependency-groups]
-bindings = [
-    "maturin>=1.9.6",
-]
 dev = [
     "pytest>=8.3.5,<9",
     "pytest-cov>=4.0.0,<5",
@@ -77,6 +73,9 @@ docs = [
     "sphinx>=8.2.3,<9",
     "sphinx-autodoc-typehints>=3.2.0,<4",
     "sphinx-rtd-theme>=3.0.2,<4",
+]
+notebook = [
+    "vecoli==0.0.2",
 ]
 # notebook = [
 #     "fsspec>=2025.9.0",
