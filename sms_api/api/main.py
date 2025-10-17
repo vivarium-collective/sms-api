@@ -137,6 +137,9 @@ for filename in sorted(os.listdir(ui_dir)):
         elif "experiment" in filename:
             app_name = "Experiment"
             desc = "Run a Simulation Experiment"
+        elif "data_explorer" in filename:
+            app_name = "Data Explorer"
+            desc = "Explore Simulation Data"
         else:
             app_name = format_marimo_appname(os.path.splitext(filename)[0])
             desc = "Click Me!"
