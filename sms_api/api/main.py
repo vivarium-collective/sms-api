@@ -71,7 +71,7 @@ assets_dir = Path(ENV.assets_dir)
 ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
 
 # marimo ui app labels
-UI_NAMES = ["analyze", "antibiotic", "biofactory", "experiment", "explore_outputs", "explore_simulation_data"]
+UI_NAMES = ["analyze", "antibiotic", "biofactory", "experiment", "data_explorer"]
 
 
 # -- app configuration: lifespan and middleware -- #
@@ -130,7 +130,7 @@ server = marimo.create_asgi_app()
 
 app_filenames = [f"{modname}.py" for modname in UI_NAMES]
 for filename in sorted(os.listdir(ui_dir)):
-    if filename in app_filenames:
+    if filename in app_filenames and "explore_outputs" not in filename:
         if "analyze" in filename:
             app_name = "Analyze"
             desc = "Run Simulation Analyses"
@@ -156,8 +156,7 @@ async def home(request: Request) -> templating._TemplateResponse:
         ("Antibiotic", "Explore new possibilities"),
         ("Biofactory", "Create new strains"),
         ("Experiment", "Design and run simulation experiments"),
-        ("Explore Outputs", "Explore Simulation Outputs"),
-        ("Explore Simulation Data", "Explore Data"),
+        ("Data Explorer", "Explore simulation outputs"),
     ]
     return templates.TemplateResponse(
         request, "home.html", {"request": request, "app_names": app_info, "marimo_path_prefix": "/ws"}
