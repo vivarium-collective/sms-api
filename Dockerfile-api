@@ -7,6 +7,8 @@ ARG APP_GID=10000
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     openssh-client \
+    build-essential \
+    python3-dev \
     sqlite3 && \
     rm -rf /var/lib/apt/lists/*
 
@@ -29,13 +31,13 @@ COPY --chown=appuser:appgroup uv.lock /app/uv.lock
 COPY --chown=appuser:appgroup pyproject.toml /app/pyproject.toml
 
 # Install dependencies
-RUN uv sync --frozen --no-install-project --no-group notebook
+RUN uv sync --frozen --no-install-project --group notebook
 
 # Copy the rest of the application code
 COPY --chown=appuser:appgroup . /app
 
 # Sync the project
-RUN uv sync --frozen --group notebook
+RUN uv sync --frozen
 
 # Declare the volume for local cache storage
 VOLUME ["/app/scratch"]
