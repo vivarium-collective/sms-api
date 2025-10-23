@@ -40,6 +40,8 @@ dependencies = [
     "xmltodict>=0.14.2",
     "polars>=1.33.1",
     "ijson>=3.4.0",
+    "gcloud-aio-storage>=9.6.0",
+    "aiofiles>=24.1.0",
 ]
 
 [project.urls]
@@ -63,6 +65,7 @@ dev = [
     "types-xmltodict>=0.14.0.20241009",
     "debugpy>=1.8.16",
     "ipdb>=0.13.13",
+    "types-aiofiles>=25.1.0.20251011",
 ]
 docs = [
     "mkdocs>=1.4.2,<2",

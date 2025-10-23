@@ -15,6 +15,13 @@ from tests.fixtures.api_fixtures import (  # noqa: F401
     simulation_config,
     workspace_image_hash,
 )
+from tests.fixtures.gcs_fixtures import (  # noqa: F401
+    file_service_gcs,
+    file_service_gcs_test_base_path,
+    file_service_local,
+    gcs_token,
+    temp_test_data_dir,
+)
 from tests.fixtures.logging_fixtures import logger  # noqa: F401
 from tests.fixtures.mongodb_fixtures import (  # noqa: F401
     mongo_test_client,
