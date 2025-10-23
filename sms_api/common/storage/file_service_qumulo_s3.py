@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -46,6 +47,11 @@ class FileServiceQumuloS3(FileService):
         self.endpoint_url = settings.storage_qumulo_endpoint_url
         self.verify_ssl = settings.storage_qumulo_verify_ssl
 
+        # Disable AWS checksums that Qumulo doesn't support
+        # Set environment variables that control AWS SDK checksum behavior
+        os.environ['AWS_REQUEST_CHECKSUM_CALCULATION'] = 'when_required'
+        os.environ['AWS_RESPONSE_CHECKSUM_VALIDATION'] = 'when_required'
+
         # Create session with Qumulo credentials
         self.session = aioboto3.Session(
             aws_access_key_id=settings.storage_qumulo_access_key_id,
@@ -53,9 +59,13 @@ class FileServiceQumuloS3(FileService):
         )
 
         # Configure for Qumulo S3 compatibility
-        # Force path-style addressing and configure SSL verification
+        # Force path-style addressing and disable payload signing
+        # Qumulo doesn't support the newer AWS checksums (CRC64NVME, etc.)
         self.config = Config(
-            s3={'addressing_style': 'path'},
+            s3={
+                'addressing_style': 'path',
+                'payload_signing_enabled': False,
+            },
             signature_version='s3v4',
         )
 

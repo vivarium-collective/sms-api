@@ -40,11 +40,10 @@ STORAGE_QUMULO_VERIFY_SSL=false
    - The connection is encrypted (HTTPS) but certificate verification is disabled
    - In production, you may want to configure proper SSL certificates
 
-4. **Access Permissions**: Current access key has **READ-ONLY** permissions
-   - ✅ List buckets and objects
-   - ✅ Download files
-   - ❌ Upload files (returns AuthorizationHeaderMalformed error)
-   - For write access, contact your Qumulo administrator to get write permissions or a different access key
+4. **Checksum Compatibility**: Qumulo doesn't support AWS's newer checksums
+   - The FileService automatically disables CRC64NVME and other newer checksums
+   - Sets `AWS_REQUEST_CHECKSUM_CALCULATION=when_required` environment variable
+   - This is required for write operations to succeed
 
 ## Testing Qumulo Connection
 
@@ -77,22 +76,29 @@ export QUMULO_SECRET="<<secret-key>>"
 AWS_ACCESS_KEY_ID=$QUMULO_ACCESS_KEY \
 AWS_SECRET_ACCESS_KEY=$QUMULO_SECRET \
 aws s3 ls s3://sms-vivarium/ \
-  --endpoint-url http://cfs15.cam.uchc.edu:9000 \
+  --endpoint-url https://cfs15.cam.uchc.edu:9000 \
   --no-verify-ssl
 
-# Upload a test file
+# Upload a test file (requires checksum settings for Qumulo compatibility)
 echo "Test content" > /tmp/test.txt
+AWS_REQUEST_CHECKSUM_CALCULATION=when_required \
+AWS_RESPONSE_CHECKSUM_VALIDATION=when_required \
+AWS_S3_ADDRESSING_STYLE=path \
+AWS_DEFAULT_REGION=us-east-1 \
 AWS_ACCESS_KEY_ID=$QUMULO_ACCESS_KEY \
 AWS_SECRET_ACCESS_KEY=$QUMULO_SECRET \
-aws s3 cp /tmp/test.txt s3://sms-vivarium/test/aws_test.txt \
-  --endpoint-url http://cfs15.cam.uchc.edu:9000 \
+aws s3api put-object \
+  --bucket sms-vivarium \
+  --key test/aws_test.txt \
+  --body /tmp/test.txt \
+  --endpoint-url https://cfs15.cam.uchc.edu:9000 \
   --no-verify-ssl
 
 # Download the file
 AWS_ACCESS_KEY_ID=$QUMULO_ACCESS_KEY \
 AWS_SECRET_ACCESS_KEY=$QUMULO_SECRET \
 aws s3 cp s3://sms-vivarium/test/aws_test.txt /tmp/downloaded.txt \
-  --endpoint-url http://cfs15.cam.uchc.edu:9000 \
+  --endpoint-url https://cfs15.cam.uchc.edu:9000 \
   --no-verify-ssl
 
 # Verify content
