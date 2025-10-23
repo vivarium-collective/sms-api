@@ -1,8 +1,10 @@
 import json
 import random
+from pathlib import Path
 
 import pytest
 
+from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
     EcoliSimulation,
@@ -60,7 +62,8 @@ async def test_save_request_to_mongo(database_service: DatabaseServiceSQL) -> No
 
 @pytest.mark.asyncio
 async def test_serialize_sim_config() -> None:
-    with open("assets/sms_base_simulation_config.json") as f:
+    assets_dir = Path(get_settings().assets_dir)
+    with open(assets_dir / "sms_base_simulation_config.json") as f:
         simulation_config_raw = json.load(f)
     config = SimulationConfig(**simulation_config_raw)
     serialized = config.model_dump_json()

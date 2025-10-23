@@ -14,7 +14,6 @@ from pydantic import Field, RootModel
 from sms_api.common.utils import unique_id
 from sms_api.config import get_settings
 
-BASE_SIMULATION_CONFIG_PATH = Path("assets/sms_base_simulation_config.json")
 ENV = get_settings()
 
 
@@ -351,7 +350,7 @@ class SimulationConfig(BaseModel):
 
     @classmethod
     def from_base(cls) -> "SimulationConfig":
-        return cls.from_file(fp=BASE_SIMULATION_CONFIG_PATH)
+        return cls.from_file(fp=Path(ENV.assets_dir) / "sms_base_simulation_config.json")
 
 
 class SimulationConfiguration(SimulationConfig):
