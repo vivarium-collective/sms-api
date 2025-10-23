@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings
 
 KV_DRIVER = Literal["file", "s3", "gcs"]
 TS_DRIVER = Literal["zarr", "n5", "zarr3"]
+STORAGE_BACKEND = Literal["gcs", "s3", "qumulo"]
 
 # -- load dev env -- #
 REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -25,6 +26,7 @@ if os.getenv(ENV_SECRET_ENV_FILE) is not None and os.path.exists(str(os.getenv(E
 
 
 class Settings(BaseSettings):
+    storage_backend: STORAGE_BACKEND = "gcs"
     storage_bucket: str = "files.biosimulations.dev"
     storage_endpoint_url: str = "https://storage.googleapis.com"
     storage_region: str = "us-east4"
@@ -36,6 +38,19 @@ class Settings(BaseSettings):
     storage_local_cache_dir: str = "./local_cache"
 
     storage_gcs_credentials_file: str = ""
+
+    # AWS S3 configuration
+    storage_s3_bucket: str = ""
+    storage_s3_region: str = "us-east-1"
+    storage_s3_access_key_id: str = ""
+    storage_s3_secret_access_key: str = ""
+
+    # Qumulo S3-compatible storage configuration
+    storage_qumulo_endpoint_url: str = ""
+    storage_qumulo_bucket: str = ""
+    storage_qumulo_access_key_id: str = ""
+    storage_qumulo_secret_access_key: str = ""
+    storage_qumulo_verify_ssl: bool = True
 
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_database: str = "biosimulations"

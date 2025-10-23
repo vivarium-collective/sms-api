@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService
-from sms_api.common.storage import FileService, FileServiceGCS
+from sms_api.common.storage import FileService, FileServiceGCS, FileServiceQumuloS3, FileServiceS3
 from sms_api.config import Settings, get_settings
 from sms_api.data.analysis_service import AnalysisService, AnalysisServiceHpc
 from sms_api.log_config import setup_logging
@@ -118,7 +118,13 @@ def get_analysis_service(env: Settings) -> AnalysisService:
 async def init_standalone(enable_ssl: bool = True) -> None:
     _settings = get_settings()
 
-    set_file_service(FileServiceGCS())
+    # Initialize file service based on configured backend
+    if _settings.storage_backend == "s3":
+        set_file_service(FileServiceS3())
+    elif _settings.storage_backend == "qumulo":
+        set_file_service(FileServiceQumuloS3())
+    else:  # default to gcs
+        set_file_service(FileServiceGCS())
 
     # set services that don't require params (currently using hpc)
     set_simulation_service(SimulationServiceHpc())

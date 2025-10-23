@@ -15,10 +15,14 @@ from tests.fixtures.api_fixtures import (  # noqa: F401
     simulation_config,
     workspace_image_hash,
 )
-from tests.fixtures.gcs_fixtures import (  # noqa: F401
+from tests.fixtures.file_service_fixtures import (  # noqa: F401
     file_service_gcs,
     file_service_gcs_test_base_path,
     file_service_local,
+    file_service_qumulo,
+    file_service_qumulo_test_base_path,
+    file_service_s3,
+    file_service_s3_test_base_path,
     gcs_token,
     temp_test_data_dir,
 )
