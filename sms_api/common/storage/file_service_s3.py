@@ -96,8 +96,8 @@ class FileServiceS3(FileService):
                 full_s3_path = f"s3://{bucket}/{key}"
                 logger.info(f"Successfully downloaded {full_s3_path} to {file_path}")
                 return full_s3_path, str(file_path)
-            except ClientError as e:
-                logger.error(f"Failed to download {bucket}/{key}: {e}")
+            except ClientError:
+                logger.exception(f"Failed to download {bucket}/{key}")
                 raise
 
     @override
@@ -112,8 +112,8 @@ class FileServiceS3(FileService):
                 full_s3_path = f"s3://{bucket}/{key}"
                 logger.info(f"Successfully uploaded {file_path} to {full_s3_path}")
                 return full_s3_path
-            except ClientError as e:
-                logger.error(f"Failed to upload {file_path} to {bucket}/{key}: {e}")
+            except ClientError:
+                logger.exception(f"Failed to upload {file_path} to {bucket}/{key}")
                 raise
 
     @override
@@ -129,8 +129,8 @@ class FileServiceS3(FileService):
                 full_s3_path = f"s3://{bucket}/{key}"
                 logger.info(f"Successfully uploaded {len(file_contents)} bytes to {full_s3_path}")
                 return full_s3_path
-            except ClientError as e:
-                logger.error(f"Failed to upload bytes to {bucket}/{key}: {e}")
+            except ClientError:
+                logger.exception(f"Failed to upload bytes to {bucket}/{key}")
                 raise
 
     @override
@@ -145,8 +145,8 @@ class FileServiceS3(FileService):
                 last_modified = response["LastModified"]
                 logger.info(f"Last modified date of {bucket}/{key}: {last_modified}")
                 return last_modified
-            except ClientError as e:
-                logger.error(f"Failed to get modified date for {bucket}/{key}: {e}")
+            except ClientError:
+                logger.exception(f"Failed to get modified date for {bucket}/{key}")
                 raise
 
     @override
@@ -184,8 +184,8 @@ class FileServiceS3(FileService):
 
                 logger.info(f"Found {len(listing)} objects in {bucket}/{prefix}")
                 return listing
-            except ClientError as e:
-                logger.error(f"Failed to list objects in {bucket}/{prefix}: {e}")
+            except ClientError:
+                logger.exception(f"Failed to list objects in {bucket}/{prefix}")
                 raise
 
     @override

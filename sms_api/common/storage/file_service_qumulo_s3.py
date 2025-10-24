@@ -49,8 +49,8 @@ class FileServiceQumuloS3(FileService):
 
         # Disable AWS checksums that Qumulo doesn't support
         # Set environment variables that control AWS SDK checksum behavior
-        os.environ['AWS_REQUEST_CHECKSUM_CALCULATION'] = 'when_required'
-        os.environ['AWS_RESPONSE_CHECKSUM_VALIDATION'] = 'when_required'
+        os.environ["AWS_REQUEST_CHECKSUM_CALCULATION"] = "when_required"
+        os.environ["AWS_RESPONSE_CHECKSUM_VALIDATION"] = "when_required"
 
         # Create session with Qumulo credentials
         self.session = aioboto3.Session(
@@ -63,10 +63,10 @@ class FileServiceQumuloS3(FileService):
         # Qumulo doesn't support the newer AWS checksums (CRC64NVME, etc.)
         self.config = Config(
             s3={
-                'addressing_style': 'path',
-                'payload_signing_enabled': False,
+                "addressing_style": "path",
+                "payload_signing_enabled": False,
             },
-            signature_version='s3v4',
+            signature_version="s3v4",
         )
 
         # For SSL verification, we need to pass it separately to the client
@@ -138,7 +138,7 @@ class FileServiceQumuloS3(FileService):
 
         # If path contains bucket separator
         if "/" in clean_path:
-            parts = clean_path.split("/", 1)
+            _parts = clean_path.split("/", 1)
             # Check if first part looks like a bucket name
             # For Qumulo, typically use the configured bucket
             return settings.storage_qumulo_bucket, clean_path
@@ -165,8 +165,8 @@ class FileServiceQumuloS3(FileService):
                 full_path = f"qumulo://{bucket}/{key}"
                 logger.info(f"Successfully downloaded {full_path} to {file_path}")
                 return full_path, str(file_path)
-            except ClientError as e:
-                logger.error(f"Failed to download {bucket}/{key}: {e}")
+            except ClientError:
+                logger.exception(f"Failed to download {bucket}/{key}")
                 raise
 
     @override
@@ -183,8 +183,8 @@ class FileServiceQumuloS3(FileService):
                 full_path = f"qumulo://{bucket}/{key}"
                 logger.info(f"Successfully uploaded {file_path} to {full_path}")
                 return full_path
-            except ClientError as e:
-                logger.error(f"Failed to upload {file_path} to {bucket}/{key}: {e}")
+            except ClientError:
+                logger.exception(f"Failed to upload {file_path} to {bucket}/{key}")
                 raise
 
     @override
@@ -201,8 +201,8 @@ class FileServiceQumuloS3(FileService):
                 full_path = f"qumulo://{bucket}/{key}"
                 logger.info(f"Successfully uploaded {len(file_contents)} bytes to {full_path}")
                 return full_path
-            except ClientError as e:
-                logger.error(f"Failed to upload bytes to {bucket}/{key}: {e}")
+            except ClientError:
+                logger.exception(f"Failed to upload bytes to {bucket}/{key}")
                 raise
 
     @override
@@ -217,8 +217,8 @@ class FileServiceQumuloS3(FileService):
                 last_modified: datetime = response["LastModified"]
                 logger.info(f"Last modified date of {bucket}/{key}: {last_modified}")
                 return last_modified
-            except ClientError as e:
-                logger.error(f"Failed to get modified date for {bucket}/{key}: {e}")
+            except ClientError:
+                logger.exception(f"Failed to get modified date for {bucket}/{key}")
                 raise
 
     @override
@@ -257,8 +257,8 @@ class FileServiceQumuloS3(FileService):
 
                 logger.info(f"Found {len(listing)} objects in {bucket}/{prefix}")
                 return listing
-            except ClientError as e:
-                logger.error(f"Failed to list objects in {bucket}/{prefix}: {e}")
+            except ClientError:
+                logger.exception(f"Failed to list objects in {bucket}/{prefix}")
                 raise
 
     @override

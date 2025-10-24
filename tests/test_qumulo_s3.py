@@ -81,8 +81,7 @@ async def test_qumulo_download_to_file(file_service_qumulo: FileServiceQumuloS3,
     # Download to a specific location
     download_path = tmp_path / "downloaded.txt"
     returned_qumulo_path, returned_local_path = await file_service_qumulo.download_file(
-        "test/qumulo/download_test.txt",
-        download_path
+        "test/qumulo/download_test.txt", download_path
     )
 
     print(f"Downloaded from: {returned_qumulo_path}")
@@ -101,8 +100,8 @@ async def test_qumulo_path_formats(file_service_qumulo: FileServiceQumuloS3) -> 
 
     # Test different path formats
     paths_to_test = [
-        "test/qumulo/path1.txt",           # Relative path
-        "/test/qumulo/path2.txt",          # Absolute-style path
+        "test/qumulo/path1.txt",  # Relative path
+        "/test/qumulo/path2.txt",  # Absolute-style path
         "qumulo://test/qumulo/path3.txt",  # Protocol prefix
     ]
 
