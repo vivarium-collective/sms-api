@@ -9,8 +9,12 @@ from pathlib import Path
 import pytest
 
 from sms_api.common.storage import FileServiceQumuloS3
+from sms_api.config import get_settings
 
 
+@pytest.mark.skipif(
+    len(get_settings().storage_qumulo_access_key_id) == 0, reason="gcs_credentials.json file not supplied"
+)
 @pytest.mark.asyncio
 async def test_qumulo_file_service(file_service_qumulo: FileServiceQumuloS3, tmp_path: Path) -> None:
     """
@@ -69,6 +73,9 @@ async def test_qumulo_file_service(file_service_qumulo: FileServiceQumuloS3, tmp
     print("\n✅ All Qumulo S3 tests passed!")
 
 
+@pytest.mark.skipif(
+    len(get_settings().storage_qumulo_access_key_id) == 0, reason="gcs_credentials.json file not supplied"
+)
 @pytest.mark.asyncio
 async def test_qumulo_download_to_file(file_service_qumulo: FileServiceQumuloS3, tmp_path: Path) -> None:
     """Test downloading a file from Qumulo to local filesystem."""
@@ -93,6 +100,9 @@ async def test_qumulo_download_to_file(file_service_qumulo: FileServiceQumuloS3,
     print("✅ Download test passed!")
 
 
+@pytest.mark.skipif(
+    len(get_settings().storage_qumulo_access_key_id) == 0, reason="gcs_credentials.json file not supplied"
+)
 @pytest.mark.asyncio
 async def test_qumulo_path_formats(file_service_qumulo: FileServiceQumuloS3) -> None:
     """Test that Qumulo handles various path formats correctly."""
