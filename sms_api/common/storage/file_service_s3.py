@@ -27,6 +27,7 @@ class FileServiceS3(FileService):
     - storage_s3_region: AWS region (e.g., 'us-east-1')
     - storage_s3_access_key_id: AWS access key (optional, can use IAM roles)
     - storage_s3_secret_access_key: AWS secret key (optional, can use IAM roles)
+    - storage_s3_session_token: AWS session token (optional can use IAM rols)
     """
 
     session: aioboto3.Session
@@ -34,10 +35,15 @@ class FileServiceS3(FileService):
     def __init__(self) -> None:
         settings = get_settings()
         # Create session with explicit credentials if provided, otherwise use default credential chain
-        if settings.storage_s3_access_key_id and settings.storage_s3_secret_access_key:
+        if (
+            settings.storage_s3_access_key_id
+            and settings.storage_s3_secret_access_key
+            and settings.storage_s3_session_token
+        ):
             self.session = aioboto3.Session(
                 aws_access_key_id=settings.storage_s3_access_key_id,
                 aws_secret_access_key=settings.storage_s3_secret_access_key,
+                aws_session_token=settings.storage_s3_session_token,
                 region_name=settings.storage_s3_region,
             )
         else:
@@ -49,29 +55,26 @@ class FileServiceS3(FileService):
         Parse S3 path into bucket and key.
 
         Supports formats:
-        - s3://bucket/key/path
-        - bucket/key/path
+        - s3://bucket/key/path  (explicit bucket in URL)
+        - key/path              (uses default bucket from settings)
 
         Returns:
             tuple: (bucket_name, key_path)
         """
         settings = get_settings()
-        path = s3_path.replace("s3://", "")
 
-        # If path doesn't contain a bucket, use default from settings
-        if "/" not in path:
-            return settings.storage_s3_bucket, path
+        # If path has s3:// prefix, extract bucket from URL
+        if s3_path.startswith("s3://"):
+            path = s3_path.replace("s3://", "")
+            parts = path.split("/", 1)
+            if len(parts) == 2:
+                return parts[0], parts[1]
+            else:
+                # Just bucket name, no key
+                return parts[0], ""
 
-        parts = path.split("/", 1)
-        if len(parts) == 1:
-            return settings.storage_s3_bucket, parts[0]
-
-        # Check if first part looks like a bucket name (no extension)
-        # If it does, use it; otherwise use default bucket
-        if "." not in parts[0] or parts[0].startswith("s3"):
-            return parts[0], parts[1] if len(parts) > 1 else ""
-        else:
-            return settings.storage_s3_bucket, path
+        # Otherwise, treat entire path as the key and use default bucket
+        return settings.storage_s3_bucket, s3_path
 
     @override
     async def download_file(self, gcs_path: str, file_path: Optional[Path] = None) -> tuple[str, str]:
@@ -121,7 +124,8 @@ class FileServiceS3(FileService):
 
         async with self.session.client("s3") as s3_client:
             try:
-                await s3_client.put_object(Bucket=bucket, Key=key, Body=file_contents)
+                # Explicitly use AES256 (SSE-S3) to avoid KMS permission issues
+                await s3_client.put_object(Bucket=bucket, Key=key, Body=file_contents, ServerSideEncryption="AES256")
                 full_s3_path = f"s3://{bucket}/{key}"
                 logger.info(f"Successfully uploaded {len(file_contents)} bytes to {full_s3_path}")
                 return full_s3_path
@@ -201,7 +205,21 @@ class FileServiceS3(FileService):
                 if e.response["Error"]["Code"] == "NoSuchKey":
                     logger.warning(f"Object not found: {bucket}/{key}")
                     return None
-                logger.error(f"Failed to get contents of {bucket}/{key}: {e}")
+                logger.exception(f"Failed to get contents of {bucket}/{key}")
+                raise
+
+    @override
+    async def delete_file(self, gcs_path: str) -> None:
+        """Delete a file from S3."""
+        logger.info(f"Deleting S3 object: {gcs_path}")
+        bucket, key = self._parse_s3_path(gcs_path)
+
+        async with self.session.client("s3") as s3_client:
+            try:
+                await s3_client.delete_object(Bucket=bucket, Key=key)
+                logger.info(f"Successfully deleted {bucket}/{key}")
+            except ClientError:
+                logger.exception(f"Failed to delete {bucket}/{key}")
                 raise
 
     @override

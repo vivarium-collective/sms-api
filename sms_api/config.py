@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     storage_s3_region: str = "us-east-1"
     storage_s3_access_key_id: str = ""
     storage_s3_secret_access_key: str = ""
+    storage_s3_session_token: str = ""
 
     # Qumulo S3-compatible storage configuration
     storage_qumulo_endpoint_url: str = ""

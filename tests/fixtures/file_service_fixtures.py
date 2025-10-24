@@ -117,10 +117,10 @@ async def file_service_s3() -> AsyncGenerator[FileServiceS3, None]:
 
     Environment:
         Requires one of:
-        - STORAGE_S3_ACCESS_KEY_ID and STORAGE_S3_SECRET_ACCESS_KEY
+        - STORAGE_S3_ACCESS_KEY_ID and STORAGE_S3_SECRET_ACCESS_KEY and STORAGE_S3_SESSION_TOKEN
         - AWS IAM role credentials
         - ~/.aws/credentials file
-        - AWS environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+        - AWS environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)
 
         Also requires:
         - STORAGE_S3_BUCKET (bucket name)

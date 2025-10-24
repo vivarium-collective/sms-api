@@ -39,5 +39,10 @@ class FileService(ABC):
         pass
 
     @abstractmethod
+    async def delete_file(self, gcs_path: str) -> None:
+        """Delete a file from storage. Raises exception if file doesn't exist or delete fails."""
+        pass
+
+    @abstractmethod
     async def close(self) -> None:
         pass

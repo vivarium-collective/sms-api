@@ -100,3 +100,12 @@ class FileServiceLocal(FileService):
         if not gcs_file_path.exists():
             return None
         return gcs_file_path.read_bytes()
+
+    @override
+    async def delete_file(self, gcs_path: str) -> None:
+        # delete the file from mock gcs
+        gcs_file_path = self.BASE_DIR / gcs_path
+        if gcs_file_path.exists():
+            gcs_file_path.unlink()
+        else:
+            raise FileNotFoundError(f"File {gcs_path} does not exist in local file service.")

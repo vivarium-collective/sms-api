@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from sms_api.common.storage import FileServiceGCS, FileServiceQumuloS3, FileServiceS3
+from sms_api.config import get_settings
 from tests.fixtures.file_service_local import FileServiceLocal
 
 
@@ -71,7 +72,7 @@ async def test_local_file_service_listing(file_service_local: FileServiceLocal) 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    True,  # Set to False when you have GCS credentials configured
+    len(get_settings().storage_gcs_credentials_file) == 0,
     reason="Requires GCS credentials - only run when explicitly enabled",
 )
 async def test_gcs_file_service(file_service_gcs: FileServiceGCS, tmp_path: Path) -> None:
@@ -97,7 +98,7 @@ async def test_gcs_file_service(file_service_gcs: FileServiceGCS, tmp_path: Path
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    False,  # Set to False when you have S3 credentials configured
+    len(get_settings().storage_s3_access_key_id) == 0,
     reason="Requires AWS S3 credentials - only run when explicitly enabled",
 )
 async def test_s3_file_service(file_service_s3: FileServiceS3, tmp_path: Path) -> None:
@@ -126,7 +127,7 @@ async def test_s3_file_service(file_service_s3: FileServiceS3, tmp_path: Path) -
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    False,  # Set to False when you have Qumulo credentials configured
+    len(get_settings().storage_qumulo_access_key_id) == 0,
     reason="Requires Qumulo S3 credentials - only run when explicitly enabled",
 )
 async def test_qumulo_file_service(file_service_qumulo: FileServiceQumuloS3, tmp_path: Path) -> None:

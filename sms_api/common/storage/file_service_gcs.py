@@ -64,5 +64,11 @@ class FileServiceGCS(FileService):
         return await get_gcs_file_contents(gcs_path=gcs_path, token=self.token)
 
     @override
+    async def delete_file(self, gcs_path: str) -> None:
+        logger.info(f"Deleting GCS object: {gcs_path}")
+        # TODO: Implement GCS delete functionality
+        raise NotImplementedError("GCS delete not yet implemented")
+
+    @override
     async def close(self) -> None:
         await close_token(self.token)

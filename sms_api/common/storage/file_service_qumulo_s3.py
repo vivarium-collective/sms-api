@@ -88,6 +88,29 @@ class FileServiceQumuloS3(FileService):
             kwargs["verify"] = False
         return kwargs
 
+    async def _delete_if_exists(self, s3_client: Any, bucket: str, key: str) -> None:
+        """
+        Delete an object if it exists, to work around Qumulo's no-overwrite policy.
+
+        Args:
+            s3_client: The S3 client to use
+            bucket: The bucket name
+            key: The object key
+        """
+        try:
+            # Check if object exists
+            await s3_client.head_object(Bucket=bucket, Key=key)
+            # If we get here, object exists - delete it
+            logger.info(f"Deleting existing object {bucket}/{key} before upload")
+            await s3_client.delete_object(Bucket=bucket, Key=key)
+        except ClientError as e:
+            # NoSuchKey or 404 means it doesn't exist - that's fine
+            if e.response.get("Error", {}).get("Code") in ["NoSuchKey", "404"]:
+                logger.debug(f"Object {bucket}/{key} does not exist, proceeding with upload")
+            else:
+                # Some other error - log it but continue with upload attempt
+                logger.warning(f"Error checking existence of {bucket}/{key}: {e}")
+
     def _parse_qumulo_path(self, path: str) -> tuple[str, str]:
         """
         Parse path into bucket and key for Qumulo.
@@ -154,6 +177,8 @@ class FileServiceQumuloS3(FileService):
 
         async with self.session.client(**self._get_client_kwargs()) as s3_client:
             try:
+                # Delete existing file to work around Qumulo's no-overwrite policy
+                await self._delete_if_exists(s3_client, bucket, key)
                 await s3_client.upload_file(str(file_path), bucket, key)
                 full_path = f"qumulo://{bucket}/{key}"
                 logger.info(f"Successfully uploaded {file_path} to {full_path}")
@@ -170,6 +195,8 @@ class FileServiceQumuloS3(FileService):
 
         async with self.session.client(**self._get_client_kwargs()) as s3_client:
             try:
+                # Delete existing file to work around Qumulo's no-overwrite policy
+                await self._delete_if_exists(s3_client, bucket, key)
                 await s3_client.put_object(Bucket=bucket, Key=key, Body=file_contents)
                 full_path = f"qumulo://{bucket}/{key}"
                 logger.info(f"Successfully uploaded {len(file_contents)} bytes to {full_path}")
@@ -251,7 +278,21 @@ class FileServiceQumuloS3(FileService):
                 if e.response["Error"]["Code"] == "NoSuchKey":
                     logger.warning(f"Object not found: {bucket}/{key}")
                     return None
-                logger.error(f"Failed to get contents of {bucket}/{key}: {e}")
+                logger.exception(f"Failed to get contents of {bucket}/{key}")
+                raise
+
+    @override
+    async def delete_file(self, gcs_path: str) -> None:
+        """Delete a file from Qumulo S3."""
+        logger.info(f"Deleting Qumulo object: {gcs_path}")
+        bucket, key = self._parse_qumulo_path(gcs_path)
+
+        async with self.session.client(**self._get_client_kwargs()) as s3_client:
+            try:
+                await s3_client.delete_object(Bucket=bucket, Key=key)
+                logger.info(f"Successfully deleted {bucket}/{key}")
+            except ClientError:
+                logger.exception(f"Failed to delete {bucket}/{key}")
                 raise
 
     @override

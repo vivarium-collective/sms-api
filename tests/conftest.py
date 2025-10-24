@@ -51,6 +51,7 @@ from tests.fixtures.slurm_fixtures import (  # noqa: F401
     slurm_template_hello_1s,
     slurm_template_hello_10s,
     slurm_template_hello_TEMPLATE,
+    slurm_template_with_storage,
     ssh_service,
 )
 from tests.fixtures.sqlite_fixtures import async_db_engine, database_service  # noqa: F401
