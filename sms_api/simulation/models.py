@@ -55,6 +55,7 @@ class JobType(enum.Enum):
 
 class JobStatus(StrEnum):
     WAITING = "waiting"
+    PENDING = "pending"
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
