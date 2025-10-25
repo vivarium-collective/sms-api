@@ -1,14 +1,30 @@
 # Storage settings
-STORAGE_BUCKET=files.biosimulations.dev
-STORAGE_ENDPOINT_URL=https://storage.googleapis.com
-STORAGE_REGION=us-east4
-STORAGE_TENSORSTORE_DRIVER=zarr3
-STORAGE_TENSORSTORE_KVSTORE_DRIVER=gcs
-STORAGE_LOCAL_CACHE_DIR=./local_cache
+STORAGE_BACKEND=s3
+
+# GCS settings
+STORAGE_GCS_BUCKET=files.biosimulations.dev
+STORAGE_GCS_ENDPOINT_URL=https://storage.googleapis.com
+STORAGE_GCS_REGION=us-east4
 STORAGE_GCS_CREDENTIALS_FILE=
 
-# Temporal service
-TEMPORAL_SERVICE_URL=localhost:7233
+# Local storage settings
+STORAGE_LOCAL_CACHE_DIR=./local_cache
+
+# AWS S3 settings (for testing)
+STORAGE_S3_BUCKET=
+STORAGE_S3_REGION=us-east-1
+
+# Leave these blank to use AWS SSO credentials (recommended during dev)
+STORAGE_S3_ACCESS_KEY_ID=
+STORAGE_S3_SECRET_ACCESS_KEY=
+STORAGE_S3_SESSION_TOKEN=
+
+# Qumulo S3-compatible storage settings
+STORAGE_QUMULO_ENDPOINT_URL=https://cfs15.cam.uchc.edu:9000
+STORAGE_QUMULO_BUCKET=sms-vivarium
+STORAGE_QUMULO_ACCESS_KEY_ID=
+STORAGE_QUMULO_SECRET_ACCESS_KEY=
+STORAGE_QUMULO_VERIFY_SSL=false
 
 # MongoDB settings
 MONGODB_URI=mongodb://localhost:27017
@@ -17,58 +33,55 @@ MONGODB_COLLECTION_OMEX=BiosimOmex
 MONGODB_COLLECTION_SIMS=BiosimSims
 MONGODB_COLLECTION_COMPARE=BiosimCompare
 
-# NATS settings
-NATS_URL=
-NATS_EMITTER_URL=
-HPC_SIM_CONFIG_FILE=
-NATS_WORKER_EVENT_SUBJECT=
-
 # SQLite settings
-SQLITE_URI=sqlite+aiosqlite:///./sms.db
+#SQLITE_DBFILE=
 
 # SLURM (optional, for local dev leave blank or set as needed)
 SLURM_SUBMIT_HOST=
 SLURM_SUBMIT_USER=
 SLURM_SUBMIT_KEY_PATH=
+SLURM_SUBMIT_KNOWN_HOSTS=
 SLURM_PARTITION=
 SLURM_NODE_LIST=
 SLURM_QOS=
 SLURM_LOG_BASE_PATH=
-SLURM_SUBMIT_KNOWN_HOSTS=
+SLURM_BASE_PATH=
 
 HPC_IMAGE_BASE_PATH=
 HPC_PARCA_BASE_PATH=
 HPC_REPO_BASE_PATH=
 HPC_SIM_BASE_PATH=
-HPC_SIM_CONFIG_FILE=
+#HPC_SIM_CONFIG_FILE=publish-uchc-hpc.json
+HPC_SIM_CONFIG_FILE=publish-local.json
 
+# NATS settings
+#NATS_URL=
+NATS_WORKER_EVENT_SUBJECT=test.ecoli-publish
+
+#NATS_EMITTER_URL=
+#NATS_EMITTER_MAGIC_WORD=
+
+DEV_MODE=1
+#APP_DIR=
+#ASSETS_DIR=
+MARIMO_API_SERVER=http://localhost:8888
 
 # -- Data (outputs) retrieval --
 HPC_USER=
 HPC_GROUP=
-DEPLOYMENT=
-
-# -- Application/UI-level --
-APP_DIR=
-ASSETS_DIR=
-NFS_PATH=
-DEV_BASE_URL=http://localhost:8888
-PROD_BASE_URL=
-MARIMO_API_SERVER=http://localhost:8888
-NFS_MOUNT_URL=
-NFS_SERVER=
-DEV_MODE=1
-POLARS_VERBOSE=1
-
-# -- important FS remote paths --
-LOCAL_NFS_DIR=
-REMOTE_DATA_BASEPATH=
-LOCAL_DATA_BASEPATH=
-
-SIMULATION_OUTDIR=  # (remote)
-LOCAL_SIMULATION_OUTDIR= # this should mirror the path structure provided to the HPC $USER, so for example /some/local/location/home/FCAM/svc_vivarium/...etc
-VECOLI_CONFIG_DIR=  # remote, that is
+DEPLOYMENT=dev
 
 # -- External APIs: biocyc, etc --
 BIOCYC_EMAIL="myemail@website.org"
 BIOCYC_PASSWORD="my-super-secret-password!"
+
+# -- important FS remote paths --
+REMOTE_DATA_BASEPATH=
+LOCAL_DATA_BASEPATH=
+SIMULATION_OUTDIR=  # (remote)
+LOCAL_SIMULATION_OUTDIR= # this should mirror the path structure provided to the HPC $USER, so for example /some/local/location/home/FCAM/svc_vivarium/...etc
+VECOLI_CONFIG_DIR=  # remote, that is
+
+# -- Application/UI-level --
+DEV_BASE_URL=http://localhost:8888
+PROD_BASE_URL=

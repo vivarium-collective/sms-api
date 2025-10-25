@@ -9,7 +9,8 @@ from sms_api.simulation.models import SimulationConfig
 
 @pytest.mark.asyncio
 async def test_analysis_config() -> None:
-    conf_path = Path("assets/sms_multigen_analysis.json")
+    assets_dir = Path(get_settings().assets_dir)
+    conf_path = assets_dir / "sms_multigen_analysis.json"
     conf = AnalysisConfig.from_file(fp=conf_path)
     assert conf.analysis_options.experiment_id is not None
     assert len(conf.emitter_arg["out_dir"])
@@ -18,7 +19,8 @@ async def test_analysis_config() -> None:
 @pytest.mark.skipif(len(get_settings().slurm_base_path) == 0, reason="slurm base path not supplied")
 @pytest.mark.asyncio
 def test_load_simulation_config() -> None:
-    config = SimulationConfig.from_file(fp=Path("assets/sms_base_simulation_config.json"))
+    assets_dir = Path(get_settings().assets_dir)
+    config = SimulationConfig.from_file(fp=assets_dir / "sms_base_simulation_config.json")
     expected_dump = {
         "experiment_id": "<PLACEHOLDER>",
         "sim_data_path": "/home/FCAM/svc_vivarium/workspace/kb/simData.cPickle",

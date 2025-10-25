@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 class JobStatusDB(enum.Enum):
     WAITING = "waiting"
+    PENDING = "pending"
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
