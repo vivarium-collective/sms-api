@@ -26,18 +26,16 @@ if os.getenv(ENV_SECRET_ENV_FILE) is not None and os.path.exists(str(os.getenv(E
 
 
 class Settings(BaseSettings):
-    storage_backend: STORAGE_BACKEND = "gcs"
-    storage_bucket: str = "files.biosimulations.dev"
-    storage_endpoint_url: str = "https://storage.googleapis.com"
-    storage_region: str = "us-east4"
-    storage_tensorstore_driver: TS_DRIVER = "zarr3"
-    storage_tensorstore_kvstore_driver: KV_DRIVER = "gcs"
+    storage_backend: STORAGE_BACKEND = "s3"
 
-    temporal_service_url: str = "localhost:7233"
-
-    storage_local_cache_dir: str = "./local_cache"
-
+    # GCS configuration
+    storage_gcs_bucket: str = "files.biosimulations.dev"
+    storage_gcs_endpoint_url: str = "https://storage.googleapis.com"
+    storage_gcs_region: str = "us-east4"
     storage_gcs_credentials_file: str = ""
+
+    # Local storage configuration
+    storage_local_cache_dir: str = "./local_cache"
 
     # AWS S3 configuration
     storage_s3_bucket: str = ""
@@ -87,6 +85,8 @@ class Settings(BaseSettings):
     app_dir: str = f"{REPO_ROOT}/app"
     assets_dir: str = f"{REPO_ROOT}/assets"
     marimo_api_server: str = ""
+
+    # data (outputs) retrieval
     hpc_user: str = ""
     hpc_group: str = ""
     deployment: str = "prod"
@@ -100,6 +100,7 @@ class Settings(BaseSettings):
     simulation_outdir: str = ""
     local_simulation_outdir: str = ""
     vecoli_config_dir: str = ""
+
     dev_base_url: str = "http://localhost:8888"
     prod_base_url: str = "https://sms.cam.uchc.edu"
 

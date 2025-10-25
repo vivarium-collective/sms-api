@@ -51,7 +51,7 @@ async def download_gcs_file(gcs_path: str, file_path: Path, token: Token) -> str
     logger.info(f"Downloading {file_path} to {gcs_path}")
     async with Storage(token=token) as client:
         await client.download_to_filename(
-            bucket=get_settings().storage_bucket, object_name=gcs_path, filename=str(file_path)
+            bucket=get_settings().storage_gcs_bucket, object_name=gcs_path, filename=str(file_path)
         )
         return gcs_path
 
@@ -60,7 +60,7 @@ async def upload_file_to_gcs(file_path: Path, gcs_path: str, token: Token) -> st
     logger.info(f"Uploading {file_path} to {gcs_path}")
     async with Storage(token=token) as client:
         result: dict[str, Any] = await client.upload_from_filename(
-            bucket=get_settings().storage_bucket, object_name=gcs_path, filename=str(file_path)
+            bucket=get_settings().storage_gcs_bucket, object_name=gcs_path, filename=str(file_path)
         )
         logger.info(f"Upload result: {result}")
         return gcs_path
@@ -69,7 +69,7 @@ async def upload_file_to_gcs(file_path: Path, gcs_path: str, token: Token) -> st
 async def upload_bytes_to_gcs(file_contents: bytes, gcs_path: str, token: Token) -> str:
     logger.info(f"Uploading {len(file_contents)} bytes to {gcs_path}")
     async with Storage(token=token) as client:
-        await client.upload(bucket=get_settings().storage_bucket, file_data=file_contents, object_name=gcs_path)
+        await client.upload(bucket=get_settings().storage_gcs_bucket, file_data=file_contents, object_name=gcs_path)
         return gcs_path
 
 
@@ -77,7 +77,7 @@ async def get_gcs_modified_date(gcs_path: str, token: Token) -> datetime:
     logger.info(f"Getting modified date for {gcs_path}")
     async with Storage(token=token) as client:
         metadata: dict[str, Any] = await client.download_metadata(
-            bucket=get_settings().storage_bucket, object_name=gcs_path
+            bucket=get_settings().storage_gcs_bucket, object_name=gcs_path
         )
         return datetime.fromisoformat(metadata["updated"])
 
@@ -85,7 +85,7 @@ async def get_gcs_modified_date(gcs_path: str, token: Token) -> datetime:
 async def get_listing_of_gcs(token: Token) -> list[ListingItem]:
     logger.info("Retrieving file list from root of bucket")
     async with Storage(token=token) as client:
-        metadata: dict[str, Any] = await client.list_objects(bucket=get_settings().storage_bucket)
+        metadata: dict[str, Any] = await client.list_objects(bucket=get_settings().storage_gcs_bucket)
         files: list[ListingItem] = [
             ListingItem(
                 Key=item["id"],
@@ -103,7 +103,7 @@ async def get_listing_of_gcs_path(gcs_path: str, token: Token) -> list[ListingIt
     async with _StorageWithListPrefix(token=token) as _my_client:
         my_client = cast(_StorageWithListPrefix, _my_client)
         metadata: dict[str, Any] = await my_client.list_objects_with_prefix(
-            bucket=get_settings().storage_bucket, prefix=gcs_path
+            bucket=get_settings().storage_gcs_bucket, prefix=gcs_path
         )
         files: list[ListingItem] = [
             ListingItem(
@@ -121,7 +121,7 @@ async def get_gcs_file_contents(gcs_path: str, token: Token) -> bytes | None:
     logger.info(f"Getting file contents for {gcs_path}")
     try:
         async with Storage(token=token) as client:
-            return await client.download(bucket=get_settings().storage_bucket, object_name=gcs_path)
+            return await client.download(bucket=get_settings().storage_gcs_bucket, object_name=gcs_path)
     except FileNotFoundError as e:
         logger.exception(f"File not found: {e.filename}")
         return None
