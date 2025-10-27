@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import mimetypes
 from pathlib import Path
 from types import ModuleType
 
@@ -10,8 +9,6 @@ from sms_api.config import Settings
 from sms_api.data.analysis_service import (
     AnalysisService,
     get_html_outputs_local,
-    get_html_outputs_remote,
-    read_tsv_file,
 )
 from sms_api.data.models import (
     AnalysisRun,
@@ -114,10 +111,7 @@ async def get_ptools_manifest(
 ) -> list[TsvOutputFile]:
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
-    if int(env.dev_mode):
-        return await analysis_service.get_tsv_manifest_local(output_id=output_id, ssh_service=ssh_service)  # type: ignore[no-any-return]
-    else:
-        return analysis_service.get_tsv_manifest_remote(output_id)  # type: ignore[no-any-return]
+    return await analysis_service.get_tsv_manifest_local(output_id=output_id, ssh_service=ssh_service)  # type: ignore[no-any-return]
 
 
 async def get_tsv_output(
@@ -149,26 +143,15 @@ async def get_tsv_output(
         fp = fp / f"agent_id={agent_id}"
 
     filepath = fp / filename
-    mimetype, _ = mimetypes.guess_type(filepath)
 
-    if int(env.dev_mode):
-        _, stdout, stderr = await ssh.run_command(f"cat {filepath!s}")
-        return TsvOutputFile(
-            filename=filename,
-            variant=variant_id,
-            lineage_seed=lineage_seed_id,
-            generation=generation_id,
-            agent_id=agent_id,
-            content=stdout,
-        )
-
+    _, stdout, stderr = await ssh.run_command(f"cat {filepath!s}")
     return TsvOutputFile(
         filename=filename,
         variant=variant_id,
         lineage_seed=lineage_seed_id,
         generation=generation_id,
         agent_id=agent_id,
-        content=read_tsv_file(filepath),
+        content=stdout,
     )
 
 
@@ -197,7 +180,4 @@ async def get_analysis_plots(
 ) -> list[OutputFile]:
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
-    if int(env.dev_mode):
-        return await get_html_outputs_local(output_id=output_id, ssh_service=ssh_service)
-    else:
-        return get_html_outputs_remote(output_id=output_id)
+    return await get_html_outputs_local(output_id=output_id, ssh_service=ssh_service)
