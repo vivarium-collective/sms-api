@@ -227,40 +227,6 @@ async def get_tsv_outputs_local(output_id: str, ssh_service: SSHService) -> list
     return outputs
 
 
-def get_tsv_output_paths_remote(experiment_id: str) -> list[Path]:
-    outdir_root = Path("/home/FCAM/svc_vivarium/workspace/api_outputs")
-    outdir = outdir_root / experiment_id
-    filepaths = []
-    for root, _, files in outdir.walk():
-        for f in files:
-            fp = root / f
-            if fp.exists() and fp.is_file():
-                filepaths.append(fp)
-    return list(filter(lambda _file: _file.name.endswith(".txt"), filepaths))
-
-
-def get_tsv_manifest_remote(output_id: str) -> list[TsvOutputFile]:
-    import re
-
-    # outdir_root = Path("/home/FCAM/svc_vivarium/workspace/api_outputs")
-    paths = [str(fp) for fp in get_tsv_output_paths_remote(output_id)]
-    outputs = []
-    for p in paths:
-        match = re.search(r"experiment_id=[^/]+/(.*)", p)
-        if match:
-            result = match.group(1)
-            filename = Path(result).name
-            metadata_components = result.replace(f"/{filename}", "").split("/")
-            md = {}
-            for comp in metadata_components:
-                scope, scope_id = comp.split("=")
-                md[scope] = int(scope_id)
-            md["filename"] = filename  # type: ignore[assignment]
-            outputs.append(md)
-            # outputs.append({"metadata": metadata_components, "filename": filename})
-    return [TsvOutputFile(**item) for item in outputs]  # type: ignore[arg-type]
-
-
 async def get_tsv_manifest_local(output_id: str, ssh_service: SSHService) -> list[TsvOutputFile]:
     """Run in DEV"""
     remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
@@ -273,43 +239,6 @@ async def get_tsv_manifest_local(output_id: str, ssh_service: SSHService) -> lis
 
     deserialized = json.loads(stdin.replace("'", '"'))
     return [TsvOutputFile(**item) for item in deserialized]
-
-
-def read_tsv_file(file_path: Path) -> str:
-    """Read an HTML file and return its contents as a single string."""
-    with open(str(file_path), encoding="utf-8") as f:
-        return f.read()
-
-
-def get_tsv_outputs_remote(output_id: str = "analysis_multigen") -> list[OutputFile]:
-    """Run in PROD"""
-
-    def get_tsv_output_paths(outdir_root: Path, experiment_id: str) -> list[Path]:
-        outdir = outdir_root / experiment_id
-        filepaths = []
-        for root, _, files in outdir.walk():
-            for f in files:
-                fp = root / f
-                if fp.exists() and fp.is_file():
-                    filepaths.append(fp)
-        return list(filter(lambda _file: _file.name.endswith(".txt"), filepaths))
-
-    def read_tsv_file(file_path: Path) -> str:
-        """Read an HTML file and return its contents as a single string."""
-        with open(str(file_path), encoding="utf-8") as f:
-            return f.read()
-
-    outdir_root = Path("/home/FCAM/svc_vivarium/workspace/api_outputs")
-    filepaths = get_tsv_output_paths(outdir_root, output_id)
-
-    files = []
-    for path in filepaths:
-        file_id = f"{path.name.replace('.txt', '')}_{path.parent.parts[-1]}"
-        outfile = OutputFile(name=file_id, content=read_tsv_file(path))
-        files.append(outfile)
-
-    sorted_files = sorted(files, key=lambda o: int(o.name.split("=")[-1]))
-    return sorted_files
 
 
 async def get_html_outputs_local(output_id: str, ssh_service: SSHServiceManaged) -> list[OutputFile]:
@@ -328,34 +257,6 @@ async def get_html_outputs_local(output_id: str, ssh_service: SSHServiceManaged)
         output = OutputFile(name=spec["name"], content=spec["content"])
         outputs.append(output)
     return outputs
-
-
-def get_html_outputs_remote(output_id: str = "analysis_multigen") -> list[OutputFile]:
-    def get_html_output_paths(outdir_root: Path, experiment_id: str) -> list[Path]:
-        outdir = outdir_root / experiment_id
-        filepaths = []
-        for root, _, files in outdir.walk():
-            for f in files:
-                fp = root / f
-                if fp.exists() and fp.is_file():
-                    filepaths.append(fp)
-        return list(filter(lambda _file: _file.name.endswith(".html"), filepaths))
-
-    def read_html_file(file_path: Path) -> str:
-        """Read an HTML file and return its contents as a single string."""
-        with open(str(file_path), encoding="utf-8") as f:
-            return f.read()
-
-    outdir_root = Path("/home/FCAM/svc_vivarium/workspace/api_outputs")
-    filepaths = get_html_output_paths(outdir_root, output_id)
-
-    files = []
-    for path in filepaths:
-        file_id = f"{path.name.replace('.html', '')}_{path.parent.parts[-1]}"
-        outfile = OutputFile(name=file_id, content=read_html_file(path))
-        files.append(outfile)
-
-    return files
 
 
 def format_tsv_string(output: OutputFile) -> str:

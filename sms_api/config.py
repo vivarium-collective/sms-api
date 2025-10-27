@@ -81,7 +81,6 @@ class Settings(BaseSettings):
     nats_emitter_url: str = ""
     nats_emitter_magic_word: str = "emitter-magic-word"
 
-    dev_mode: str = "0"
     app_dir: str = f"{REPO_ROOT}/app"
     assets_dir: str = f"{REPO_ROOT}/assets"
     marimo_api_server: str = ""
@@ -103,9 +102,6 @@ class Settings(BaseSettings):
 
     dev_base_url: str = "http://localhost:8888"
     prod_base_url: str = "https://sms.cam.uchc.edu"
-
-    def dev_engaged(self) -> bool:
-        return bool(int(self.dev_mode))
 
 
 @lru_cache
