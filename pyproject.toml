@@ -3,8 +3,7 @@ name = "sms_api"
 version = "0.2.35-dev"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
-# requires-python = ">=3.12,<4.0"
-requires-python = "==3.12.9"
+requires-python = ">=3.12,<4.0"
 readme = "README.md"
 dependencies = [
     "dotenv>=0.9.9,<0.10",
@@ -103,14 +102,14 @@ build-backend = "hatchling.build"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/notebook/*"]
+exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^simulation_configs/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov-report=html"
 
 [tool.deptry]
-exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py", "scratchpads/*", "sms_api/notebook/*"]
+exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py"]
 ignore = ["DEP001", "DEP002", "DEP003", "DEP004"]
 
 [tool.ruff]
@@ -223,7 +222,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "sms_api/notebook/*"]
+exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "simulation_configs/*"]
 
 [tool.ruff.format]
 preview = true
