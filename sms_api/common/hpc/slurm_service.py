@@ -3,6 +3,7 @@ from pathlib import Path
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
+from sms_api.common.storage.file_paths import HPCFilePath
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -56,7 +57,7 @@ class SlurmService:
         return slurm_jobs
 
     async def submit_job(
-        self, local_sbatch_file: Path, remote_sbatch_file: Path, args: tuple[str, ...] | None = None
+        self, local_sbatch_file: Path, remote_sbatch_file: HPCFilePath, args: tuple[str, ...] | None = None
     ) -> int:
         await self.ssh_service.scp_upload(local_file=local_sbatch_file, remote_path=remote_sbatch_file)
         command = f"sbatch --parsable {remote_sbatch_file}"
@@ -119,7 +120,7 @@ class SlurmServiceManaged:
         return slurm_jobs
 
     async def submit_job(
-        self, local_sbatch_file: Path, remote_sbatch_file: Path, args: tuple[str, ...] | None = None
+        self, local_sbatch_file: Path, remote_sbatch_file: HPCFilePath, args: tuple[str, ...] | None = None
     ) -> int:
         await self.ssh_service.scp_upload(local_file=local_sbatch_file, remote_path=remote_sbatch_file)
         command = f"sbatch --parsable {remote_sbatch_file}"

@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
+from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 
 
@@ -23,7 +24,7 @@ async def test_scp_upload_download(ssh_service: SSHService) -> None:
     with open(local_path, "w") as f:
         f.write("hello world")
 
-    remote_path = Path(f"remote_temp_{uuid.uuid4().hex}.txt")
+    remote_path = HPCFilePath(remote_path=Path(f"remote_temp_{uuid.uuid4().hex}.txt"))
     local_path_2 = Path("temp2.txt")
 
     await ssh_service.scp_upload(local_file=local_path, remote_path=remote_path)

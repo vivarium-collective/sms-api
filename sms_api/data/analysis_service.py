@@ -15,7 +15,7 @@ import polars
 
 from sms_api.common.hpc.slurm_service import SlurmServiceManaged
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
-from sms_api.config import Settings
+from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 from sms_api.data.models import AnalysisConfig, OutputFile, TsvOutputFile
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
@@ -72,7 +72,7 @@ class AnalysisServiceHpc(AnalysisService):
 
     def _slurm_script(
         self,
-        slurm_log_file: Path,
+        slurm_log_file: HPCFilePath,
         slurm_job_name: str,
         latest_hash: str,
         config: AnalysisConfig,

@@ -5,7 +5,8 @@ from typing import Any
 
 import polars as pl
 
-from sms_api.config import Settings, get_settings
+from sms_api.common.storage.file_paths import HPCFilePath
+from sms_api.config import get_settings
 from sms_api.data.models import SerializedArray
 
 
@@ -32,9 +33,7 @@ def get_variant_data_dirpath(
     generation: int = 1,
     agent_id: int = 0,
     remote: bool = True,
-) -> Path:
-    settings: Settings = get_settings()
-    base_datapath = Path(settings.simulation_outdir)
+) -> HPCFilePath:
     return (
         get_settings().simulation_outdir
         / experiment_id

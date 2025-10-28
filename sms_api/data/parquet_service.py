@@ -1,5 +1,4 @@
 import logging
-import os
 import re
 import tempfile
 from abc import ABC, abstractmethod
@@ -11,6 +10,7 @@ from anyio import mkdtemp
 
 from sms_api.common.gateway.utils import get_local_simulation_outdir, get_simulation_outdir
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
+from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings, get_settings
 from sms_api.simulation.hpc_utils import (
     get_remote_chunks_dirpath,
@@ -99,11 +99,11 @@ class ParquetService:
 
 class RemoteParquetService(ABC):
     @abstractmethod
-    def get_chunk_path(self, db_id: int, commit_hash: str, chunk_id: int) -> Path:
+    def get_chunk_path(self, db_id: int, commit_hash: str, chunk_id: int) -> HPCFilePath:
         pass
 
     @abstractmethod
-    async def download_chunk(self, remote_chunk_path: Path, local_dirpath: Path | None = None) -> Path:
+    async def download_chunk(self, remote_chunk_path: HPCFilePath, local_dirpath: Path | None = None) -> Path:
         pass
 
     @abstractmethod
@@ -132,7 +132,7 @@ class ParquetServiceHpc(RemoteParquetService):
         remote_dirpath = get_remote_chunks_dirpath(db_id, commit_hash)
         return remote_dirpath / results_fname
 
-    async def download_chunk(self, remote_chunk_path: Path, local_dirpath: Path | None = None) -> Path:
+    async def download_chunk(self, remote_chunk_path: HPCFilePath, local_dirpath: Path | None = None) -> Path:
         # make local mirror for temp
         results_fname = str(remote_chunk_path).split("/")[-1]
         local_dest = local_dirpath or Path(tempfile.mkdtemp())
@@ -144,28 +144,26 @@ class ParquetServiceHpc(RemoteParquetService):
         except Exception as e:
             raise OSError(e) from e
 
-    async def get_available_chunk_paths(self, experiment_id: str, namespace: Namespace) -> list[Path]:
-        experiment_dir = Path(f"{self.settings.slurm_base_path}/{namespace}/sims/{experiment_id}")
-        chunks_dir = Path(
-            os.path.join(
-                experiment_dir,
-                "history",
-                f"experiment_id={experiment_id}",
-                "variant=0",
-                "lineage_seed=0",
-                "generation=1",
-                "agent_id=0",
-            )
+    async def get_available_chunk_paths(self, experiment_id: str) -> list[HPCFilePath]:
+        experiment_dir = get_settings().slurm_base_path / str(get_settings().namespace) / "sims" / experiment_id
+        chunks_dir = (
+            experiment_dir
+            / "history"
+            / f"experiment_id={experiment_id}"
+            / "variant=0"
+            / "lineage_seed=0"
+            / "generation=1"
+            / "agent_id=0"
         )
         ret, stdout, stderr = await self.ssh_service.run_command(f"ls -al {chunks_dir} | grep .pq")
-        filenames = [Path(os.path.join(chunks_dir, fname)) for fname in re.findall(r"(\d+\.pq)", stdout)]
+        filenames = [chunks_dir / fname for fname in re.findall(r"(\d+\.pq)", stdout)]
         return filenames
 
-    async def read_lazy_chunks(self, experiment_id: str, namespace: Namespace) -> tuple[Path, pl.LazyFrame]:
+    async def read_lazy_chunks(self, experiment_id: str) -> tuple[Path, pl.LazyFrame]:
         # TODO: instead use a session so as to not iteratively reauth
         local_chunks_dir = Path(await mkdtemp(dir="datamount", prefix=experiment_id))
-        for chunkpath in await self.get_available_chunk_paths(experiment_id, namespace):
-            local_fp = local_chunks_dir / chunkpath.parts[-1]
+        for chunkpath in await self.get_available_chunk_paths(experiment_id):
+            local_fp = local_chunks_dir / chunkpath.name
             await self.ssh_service.scp_download(local_file=local_fp, remote_path=chunkpath)
 
         return local_chunks_dir, scan_simulation_chunks(local_chunks_dir)
