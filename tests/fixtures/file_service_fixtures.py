@@ -17,7 +17,10 @@ from pathlib import Path
 import pytest_asyncio
 from gcloud.aio.auth import Token
 
-from sms_api.common.storage import FileServiceGCS, FileServiceQumuloS3, FileServiceS3, create_token
+from sms_api.common.storage.file_service_gcs import FileServiceGCS
+from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
+from sms_api.common.storage.file_service_s3 import FileServiceS3
+from sms_api.common.storage.gcs_aio import create_token
 from sms_api.config import get_local_cache_dir
 from sms_api.dependencies import get_file_service, set_file_service
 from tests.fixtures.file_service_local import FileServiceLocal

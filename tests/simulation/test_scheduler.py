@@ -11,7 +11,9 @@ from nats.aio.client import Client as NATSClient
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.storage import FileService, FileServiceQumuloS3, FileServiceS3
+from sms_api.common.storage.file_service import FileService
+from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
+from sms_api.common.storage.file_service_s3 import FileServiceS3
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id

@@ -36,7 +36,7 @@ def get_variant_data_dirpath(
     settings: Settings = get_settings()
     base_datapath = Path(settings.simulation_outdir)
     return (
-        base_datapath
+        get_settings().simulation_outdir
         / experiment_id
         / data_type
         / f"experiment_id={experiment_id}"

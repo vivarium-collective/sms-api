@@ -16,7 +16,7 @@ async def test_analysis_config() -> None:
     assert len(conf.emitter_arg["out_dir"])
 
 
-@pytest.mark.skipif(len(get_settings().slurm_base_path) == 0, reason="slurm base path not supplied")
+@pytest.mark.skipif(len(str(get_settings().slurm_base_path)) == 0, reason="slurm base path not supplied")
 @pytest.mark.asyncio
 def test_load_simulation_config() -> None:
     assets_dir = Path(get_settings().assets_dir)

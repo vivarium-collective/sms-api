@@ -9,7 +9,6 @@ from typing import override
 import polars as pl
 from anyio import mkdtemp
 
-from sms_api.common.gateway.models import Namespace
 from sms_api.common.gateway.utils import get_local_simulation_outdir, get_simulation_outdir
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.config import Settings, get_settings
@@ -99,11 +98,6 @@ class ParquetService:
 
 
 class RemoteParquetService(ABC):
-    settings: Settings
-
-    def __init__(self, settings: Settings | None = None) -> None:
-        self.settings = settings or get_settings()
-
     @abstractmethod
     def get_chunk_path(self, db_id: int, commit_hash: str, chunk_id: int) -> Path:
         pass
@@ -113,11 +107,11 @@ class RemoteParquetService(ABC):
         pass
 
     @abstractmethod
-    async def get_available_chunk_paths(self, experiment_id: str, namespace: Namespace) -> list[Path]:
+    async def get_available_chunk_paths(self, experiment_id: str) -> list[HPCFilePath]:
         pass
 
     @abstractmethod
-    async def read_lazy_chunks(self, experiment_id: str, namespace: Namespace) -> tuple[Path, pl.LazyFrame]:
+    async def read_lazy_chunks(self, experiment_id: str) -> tuple[Path, pl.LazyFrame]:
         pass
 
     @abstractmethod
@@ -128,14 +122,14 @@ class RemoteParquetService(ABC):
 class ParquetServiceHpc(RemoteParquetService):
     @property
     def ssh_service(self) -> SSHService:
-        return get_ssh_service(settings=self.settings)
+        return get_ssh_service()
 
     @override
-    def get_chunk_path(self, db_id: int, commit_hash: str, chunk_id: int, namespace: Namespace | None = None) -> Path:
+    def get_chunk_path(self, db_id: int, commit_hash: str, chunk_id: int) -> HPCFilePath:
         results_fname = f"{chunk_id}.pq"
 
         # get remote dirpath
-        remote_dirpath = get_remote_chunks_dirpath(db_id, commit_hash, namespace or Namespace.TEST)
+        remote_dirpath = get_remote_chunks_dirpath(db_id, commit_hash)
         return remote_dirpath / results_fname
 
     async def download_chunk(self, remote_chunk_path: Path, local_dirpath: Path | None = None) -> Path:

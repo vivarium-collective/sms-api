@@ -16,6 +16,7 @@ import polars
 from sms_api.common.hpc.slurm_service import SlurmServiceManaged
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
 from sms_api.config import Settings
+from sms_api.config import get_settings
 from sms_api.data.models import AnalysisConfig, OutputFile, TsvOutputFile
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
 
@@ -26,9 +27,6 @@ MAX_ANALYSIS_CPUS = 5
 
 
 class AnalysisService(abc.ABC):
-    def __init__(self, env: Settings) -> None:
-        self.env = env
-
     @abc.abstractmethod
     async def dispatch(
         self,
@@ -51,7 +49,7 @@ class AnalysisServiceHpc(AnalysisService):
         ssh: SSHServiceManaged,
     ) -> tuple[str, int]:
         slurmjob_name = get_slurmjob_name(experiment_id=analysis_name, simulator_hash=simulator_hash)
-        base_path = Path(self.env.slurm_base_path)
+        base_path = get_settings().slurm_base_path
         slurm_log_file = base_path / f"prod/htclogs/{slurmjob_name}.out"
 
         slurm_script = self._slurm_script(
@@ -80,7 +78,7 @@ class AnalysisServiceHpc(AnalysisService):
         config: AnalysisConfig,
         analysis_name: str,
     ) -> str:
-        base_path = Path(self.env.slurm_base_path)
+        base_path = get_settings().slurm_base_path
         remote_workspace_dir = base_path / "workspace"
         vecoli_dir = remote_workspace_dir / "vEcoli"
 
@@ -90,10 +88,10 @@ class AnalysisServiceHpc(AnalysisService):
             #SBATCH --time=30:00
             #SBATCH --cpus-per-task {MAX_ANALYSIS_CPUS}
             #SBATCH --mem=10GB
-            #SBATCH --partition={self.env.slurm_partition}
-            #SBATCH --qos={self.env.slurm_qos}
+            #SBATCH --partition={get_settings().slurm_partition}
+            #SBATCH --qos={get_settings().slurm_qos}
             #SBATCH --output={slurm_log_file!s}
-            #SBATCH --nodelist={self.env.slurm_node_list}
+            #SBATCH --nodelist={get_settings().slurm_node_list}
 
             set -e
 

@@ -25,6 +25,12 @@ if os.getenv(ENV_SECRET_ENV_FILE) is not None and os.path.exists(str(os.getenv(E
     load_dotenv(os.getenv(ENV_SECRET_ENV_FILE))
 
 
+class Namespace(StrEnum):
+    DEVELOPMENT = "dev"
+    PRODUCTION = "prod"
+    TEST = "test"
+
+
 class Settings(BaseSettings):
     storage_backend: STORAGE_BACKEND = "s3"
 

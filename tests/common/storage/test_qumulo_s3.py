@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from sms_api.common.storage import FileServiceQumuloS3
+from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
 from sms_api.config import get_settings
 
 

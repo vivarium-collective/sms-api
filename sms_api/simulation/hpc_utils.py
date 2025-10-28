@@ -1,12 +1,12 @@
-import os
 import random
 import string
 import uuid
 from pathlib import Path
 from typing import Any
 
-from sms_api.common.gateway.models import Namespace, RouterConfig
+from sms_api.common.gateway.models import RouterConfig
 from sms_api.config import Settings, get_settings
+from sms_api.config import get_settings
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationRequest,
@@ -18,19 +18,19 @@ VECOLI_REPO_NAME = "vEcoli"
 
 
 def get_slurm_log_file(slurm_job_name: str) -> Path:
-    settings = get_settings()
+    return get_settings().slurm_log_base_path / f"{slurm_job_name}.out"
     slurm_log_remote_path = Path(settings.slurm_log_base_path)
     return slurm_log_remote_path / f"{slurm_job_name}.out"
 
 
 def get_slurm_submit_file(slurm_job_name: str) -> Path:
-    settings = get_settings()
+    return get_settings().slurm_log_base_path / f"{slurm_job_name}.sbatch"
     slurm_log_remote_path = Path(settings.slurm_log_base_path)
     return slurm_log_remote_path / f"{slurm_job_name}.sbatch"
 
 
 def get_vEcoli_repo_dir(simulator_version: SimulatorVersion) -> Path:
-    settings = get_settings()
+    return get_settings().hpc_repo_base_path / simulator_version.git_commit_hash / VECOLI_REPO_NAME
     return Path(settings.hpc_repo_base_path) / simulator_version.git_commit_hash / VECOLI_REPO_NAME
 
 
@@ -43,7 +43,7 @@ def get_parca_dataset_dirname(parca_dataset: ParcaDataset) -> str:
 def get_parca_dataset_dir(parca_dataset: ParcaDataset) -> Path:
     settings = get_settings()
     parca_dataset_dirname = get_parca_dataset_dirname(parca_dataset)
-    return Path(settings.hpc_parca_base_path) / parca_dataset_dirname
+    return get_settings().hpc_parca_base_path / parca_dataset_dirname
 
 
 def get_experiment_path(ecoli_simulation: EcoliSimulation) -> Path:
@@ -51,7 +51,7 @@ def get_experiment_path(ecoli_simulation: EcoliSimulation) -> Path:
     sim_id = ecoli_simulation.database_id
     git_commit_hash = ecoli_simulation.sim_request.simulator.git_commit_hash
     experiment_dirname = f"experiment_{git_commit_hash}_id_{sim_id}"
-    return Path(settings.hpc_sim_base_path) / experiment_dirname
+    return get_settings().hpc_sim_base_path / experiment_dirname
 
 
 def get_correlation_id(ecoli_simulation: EcoliSimulation, random_string: str) -> str:
@@ -75,9 +75,7 @@ def parse_correlation_id(correlation_id: str) -> tuple[int, str, str]:
 
 
 def get_apptainer_image_file(simulator_version: SimulatorVersion) -> Path:
-    settings = get_settings()
-    hpc_image_remote_path = Path(settings.hpc_image_base_path)
-    return hpc_image_remote_path / f"vecoli-{simulator_version.git_commit_hash}.sif"
+    return get_settings().hpc_image_base_path / f"vecoli-{simulator_version.git_commit_hash}.sif"
 
 
 def get_experiment_dirname(database_id: int, git_commit_hash: str) -> str:
@@ -89,16 +87,12 @@ def format_experiment_path(experiment_dirname: str, namespace: Namespace = Names
     return Path(base_path) / experiment_dirname
 
 
-def get_experiment_dirpath(
-    simulation_database_id: int, git_commit_hash: str, namespace: Namespace | None = None
-) -> Path:
+def get_experiment_dirpath(simulation_database_id: int, git_commit_hash: str) -> HPCFilePath:
     experiment_dirname = get_experiment_dirname(database_id=simulation_database_id, git_commit_hash=git_commit_hash)
-    return format_experiment_path(experiment_dirname=experiment_dirname, namespace=namespace or Namespace.TEST)
+    return format_experiment_path(experiment_dirname=experiment_dirname)
 
 
-def get_remote_chunks_dirpath(
-    simulation_database_id: int, git_commit_hash: str, namespace: Namespace | None = None
-) -> Path:
+def get_remote_chunks_dirpath(simulation_database_id: int, git_commit_hash: str) -> HPCFilePath:
     remote_dir_root = get_experiment_dirpath(
         simulation_database_id=simulation_database_id, git_commit_hash=git_commit_hash, namespace=namespace
     )
