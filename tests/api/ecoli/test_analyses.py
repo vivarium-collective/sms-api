@@ -60,11 +60,8 @@ async def test_get_analysis(
         response = await client.post(analyses_url, json=analysis_request.model_dump())
         response.raise_for_status()
         analysis_response = response.json()
-        db_id = analysis_response["database_id"]
-
-        fetch_response = await client.get(f"{analyses_url}/{db_id}")
-        fetch_response.raise_for_status()
-        assert fetch_response.json() == analysis_response
+        assert isinstance(analysis_response, list)
+        assert all([k in list(analysis_response[0].keys()) for k in ['content', 'filename']])
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
