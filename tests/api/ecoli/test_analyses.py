@@ -61,7 +61,7 @@ async def test_get_analysis(
         response.raise_for_status()
         analysis_response = response.json()
         assert isinstance(analysis_response, list)
-        assert all([k in list(analysis_response[0].keys()) for k in ['content', 'filename']])
+        assert all([k in list(analysis_response[0].keys()) for k in ["content", "filename"]])
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
