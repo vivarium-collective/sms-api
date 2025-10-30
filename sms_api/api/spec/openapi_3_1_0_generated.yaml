@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.30-dev
+  version: 0.2.36-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -297,6 +297,12 @@ paths:
       tags:
       - Simulations
       summary: Get/Stream simulation data
+      description: "{\n      \"lineage_seed\": 30,\n      \"generation\": 22,\n  \
+        \    \"variant\": 0,\n      \"agent_id\": \"0000000000000000000000\",\n  \
+        \    \"observables\": {\n        \"bulk\": [\n          \"--TRANS-ACENAPHTHENE-12-DIOL\"\
+        ,\n          \"ACETOLACTSYNI-CPLX\",\n          \"CPD-3729\"\n        ],\n\
+        \        \"genes\": [\n          \"alr\",\n          \"ruvB\"\n        ],\n\
+        \        \"reactions\": []\n      }\n    }"
       operationId: get-ecoli-simulation-data
       parameters:
       - name: id
@@ -307,50 +313,32 @@ paths:
           description: Database ID of the simulation.
           title: Id
         description: Database ID of the simulation.
-      - name: lineage_seed
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 6
-          title: Lineage Seed
-      - name: generation
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 1
-          title: Generation
-      - name: variant
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Variant
-      - name: agent_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Agent Id
       requestBody:
         content:
           application/json:
             schema:
-              type: array
-              items:
-                type: string
+              $ref: '#/components/schemas/SimulationDataRequest'
               default:
-              - bulk
-              title: Observables
+                lineage_seed: 0
+                generation: 1
+                variant: 0
+                agent_id: '0'
+                observables:
+                  bulk:
+                  - --TRANS-ACENAPHTHENE-12-DIOL
+                  - ACETOLACTSYNI-CPLX
+                  - CPD-3729
+                  genes:
+                  - alr
+                  - ruvB
+                  reactions: []
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/SimulationOutputData'
         '422':
           description: Validation Error
           content:
@@ -806,7 +794,7 @@ components:
           type: integer
           title: Id
         status:
-          $ref: '#/components/schemas/JobStatus'
+          $ref: '#/components/schemas/sms_api__data__models__JobStatus'
       type: object
       required:
       - id
@@ -817,8 +805,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-bb6f7ed82f852db2_1760105454665-a9bad6d0de5f8f19_1760105454665
-            simulation_name: sms_single-bb6f7ed82f852db2_1760105454665
+            experiment_id: sms_single-2ec943ae71e87fe9_1761832127042-c5f5372f69fb3e84_1761832127042
+            simulation_name: sms_single-2ec943ae71e87fe9_1761832127042
             metadata: {}
             run_parca: true
             generations: 2
@@ -1058,7 +1046,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-3c1fc18461ccfb72_1760105454568
+          default: sim_smsapi-4c5c7aee93276730_1761832126804
         metadata:
           additionalProperties: true
           type: object
@@ -1345,7 +1333,7 @@ components:
           title: Ref Id
         status:
           anyOf:
-          - $ref: '#/components/schemas/JobStatus'
+          - $ref: '#/components/schemas/sms_api__simulation__models__JobStatus'
           - type: 'null'
         start_time:
           anyOf:
@@ -1370,15 +1358,6 @@ components:
       - job_type
       - ref_id
       title: HpcRun
-    JobStatus:
-      type: string
-      enum:
-      - waiting
-      - queued
-      - running
-      - completed
-      - failed
-      title: JobStatus
     JobType:
       type: string
       enum:
@@ -1530,6 +1509,33 @@ components:
       required:
       - versions
       title: RegisteredSimulators
+    RequestedObservables:
+      properties:
+        bulk:
+          items:
+            type: string
+          type: array
+          title: Bulk
+          default:
+          - --TRANS-ACENAPHTHENE-12-DIOL
+          - ACETOLACTSYNI-CPLX
+          - CPD-3729
+        genes:
+          items:
+            type: string
+          type: array
+          title: Genes
+          default:
+          - alr
+          - ruvB
+        reactions:
+          items:
+            type: string
+          type: array
+          title: Reactions
+          default: []
+      type: object
+      title: RequestedObservables
     SimulationConfig:
       properties:
         experiment_id:
@@ -1591,7 +1597,7 @@ components:
           type: object
           title: Emitter Arg
           default:
-            out_dir: /home/FCAM/svc_vivarium/workspace/api_outputs
+            out_dir: /Users/alexanderpatrie/sms/vEcoli/out
         variants:
           additionalProperties:
             additionalProperties:
@@ -1844,13 +1850,63 @@ components:
       required:
       - experiment_id
       title: SimulationConfig
+    SimulationDataRequest:
+      properties:
+        lineage_seed:
+          type: integer
+          title: Lineage Seed
+          default: 0
+        generation:
+          type: integer
+          title: Generation
+          default: 1
+        variant:
+          type: integer
+          title: Variant
+          default: 0
+        agent_id:
+          type: string
+          title: Agent Id
+          default: '0'
+        observables:
+          $ref: '#/components/schemas/RequestedObservables'
+          default:
+            bulk:
+            - --TRANS-ACENAPHTHENE-12-DIOL
+            - ACETOLACTSYNI-CPLX
+            - CPD-3729
+            genes:
+            - alr
+            - ruvB
+            reactions: []
+      type: object
+      title: SimulationDataRequest
+    SimulationOutputData:
+      properties:
+        bulk:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bulk
+        genes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Genes
+        reactions:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reactions
+      type: object
+      title: SimulationOutputData
     SimulationRun:
       properties:
         id:
           type: integer
           title: Id
         status:
-          $ref: '#/components/schemas/JobStatus'
+          $ref: '#/components/schemas/sms_api__simulation__models__JobStatus'
       type: object
       required:
       - id
@@ -1992,3 +2048,22 @@ components:
       - mass
       - time
       title: WorkerEvent
+    sms_api__data__models__JobStatus:
+      type: string
+      enum:
+      - waiting
+      - queued
+      - running
+      - completed
+      - failed
+      title: JobStatus
+    sms_api__simulation__models__JobStatus:
+      type: string
+      enum:
+      - waiting
+      - pending
+      - queued
+      - running
+      - completed
+      - failed
+      title: JobStatus

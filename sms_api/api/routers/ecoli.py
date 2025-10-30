@@ -11,7 +11,7 @@
 import logging
 
 import fastapi
-from fastapi import BackgroundTasks, Depends, HTTPException
+from fastapi import Depends, HTTPException
 
 from sms_api.api import request_examples
 from sms_api.common.gateway.utils import get_simulator, router_config
@@ -26,6 +26,7 @@ from sms_api.data.models import (
     OutputFile,
     OutputFileMetadata,
     SimulationDataRequest,
+    SimulationOutputData,
     TsvOutputFile,
 )
 from sms_api.data.simulation_data_service import get_bulk_dataframe, get_genes_dataframe
@@ -337,10 +338,29 @@ async def list_simulations() -> list[EcoliSimulationDTO]:
     summary="Get/Stream simulation data",
 )
 async def get_simulation_data(
-    bg_tasks: BackgroundTasks,
     id: int = fastapi.Path(description="Database ID of the simulation."),
-    request: SimulationDataRequest = SimulationDataRequest(),
-):  # -> fastapi.responses.StreamingResponse:
+    request: SimulationDataRequest = request_examples.base_simulation_data_request,
+) -> SimulationOutputData:  # -> fastapi.responses.StreamingResponse:
+    """
+    {
+          "lineage_seed": 30,
+          "generation": 22,
+          "variant": 0,
+          "agent_id": "0000000000000000000000",
+          "observables": {
+            "bulk": [
+              "--TRANS-ACENAPHTHENE-12-DIOL",
+              "ACETOLACTSYNI-CPLX",
+              "CPD-3729"
+            ],
+            "genes": [
+              "alr",
+              "ruvB"
+            ],
+            "reactions": []
+          }
+        }
+    """
     db_service = get_database_service()
     if db_service is None:
         logger.error("Database service is not initialized")
@@ -372,46 +392,7 @@ async def get_simulation_data(
                 response["genes"] = get_genes_dataframe(
                     env=env, variant=variant, experiment_id=expid, seed=seed, generation=gen, agent_id=agent_id
                 ).to_json()
-        return response
+        return SimulationOutputData(**response)
     except Exception as e:
-        logger.exception("Error uploading simulation config")
+        logger.exception("Error getting simulation data")
         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-# @config.router.post(
-#     path="/simulations/{id}/data",
-#     operation_id="get-ecoli-simulation-data",
-#     tags=["Simulations"],
-#     dependencies=[Depends(get_database_service)],
-#     summary="Get/Stream simulation data",
-# )
-# async def get_simulation_data(
-#     bg_tasks: BackgroundTasks,
-#     id: int = fastapi.Path(description="Database ID of the simulation."),
-#     # experiment_id: str = Query(default="sms_multigeneration"),
-#     lineage_seed: int = Query(default=6),
-#     generation: int = Query(default=1),
-#     variant: int = Query(default=0),
-#     agent_id: int = Query(default=0),
-#     observables: list[str] = request_examples.base_observables,
-# ) -> fastapi.responses.StreamingResponse:
-#     db_service = get_database_service()
-#     if db_service is None:
-#         logger.error("Database service is not initialized")
-#         raise HTTPException(status_code=500, detail="Database service is not initialized")
-#     try:
-#         return await simulation_handlers.get_simulation_data(
-#             ssh=get_ssh_service(ENV),
-#             db_service=db_service,
-#             id=id,
-#             lineage_seed=lineage_seed,
-#             generation=generation,
-#             variant=variant,
-#             agent_id=agent_id,
-#             observables=observables,
-#             env=ENV,
-#             bg_tasks=bg_tasks,
-#         )
-#     except Exception as e:
-#         logger.exception("Error uploading simulation config")
-#         raise HTTPException(status_code=500, detail=str(e)) from e

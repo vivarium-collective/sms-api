@@ -12,7 +12,7 @@ Then, add that func to the list within the examples dict comprehension below!
 """
 
 from sms_api.common.utils import unique_id
-from sms_api.data.models import ExperimentAnalysisRequest, PtoolsAnalysisConfig
+from sms_api.data.models import ExperimentAnalysisRequest, PtoolsAnalysisConfig, SimulationDataRequest
 from sms_api.simulation.models import ExperimentRequest
 
 ptools_analysis = ExperimentAnalysisRequest(
@@ -31,3 +31,5 @@ ptools_analysis = ExperimentAnalysisRequest(
 base_simulation = (lambda expid: ExperimentRequest(experiment_id=expid, simulation_name=expid))(unique_id("sms_single"))
 
 base_observables = ["bulk"]
+
+base_simulation_data_request = SimulationDataRequest()

@@ -299,7 +299,7 @@ def get_filtered_query(output_dir, experiment_id, db_filter):
     ]
 
     history_sql_base, _, _ = dataset_sql(output_dir, experiment_ids=[experiment_id])
-    return f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
+    return f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"  # noqa: S608
 
 
 class MoleculeIdType(StrEnum):
@@ -337,7 +337,8 @@ def get_bulk_mtx(output_loaded):
 
 
 def get_plot_df(output_loaded, bulk_sp_plot, sp_trajs):
-    plot_dict = {key: val for (key, val) in zip(bulk_sp_plot, sp_trajs)}
+    # plot_dict = {key: val for (key, val) in zip(bulk_sp_plot, sp_trajs)}
+    plot_dict = dict(zip(bulk_sp_plot, sp_trajs))
 
     plot_dict["time"] = output_loaded["time"]
 

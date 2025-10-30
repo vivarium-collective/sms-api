@@ -451,3 +451,9 @@ class SimulationDataRequest(BaseModel):
     variant: int = 0
     agent_id: str = "0"
     observables: RequestedObservables = RequestedObservables()
+
+
+class SimulationOutputData(BaseModel):
+    bulk: str | None = None
+    genes: str | None = None
+    reactions: str | None = None
