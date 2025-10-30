@@ -14,8 +14,6 @@ from pydantic import Field, RootModel
 from sms_api.common.utils import unique_id
 from sms_api.config import get_settings
 
-ENV = get_settings()
-
 
 @dataclass
 class FlexData:
@@ -285,7 +283,7 @@ class SimulationConfig(BaseModel):
     time_step: float = 1.0
     single_daughters: bool = True
     emitter: str = "parquet"
-    emitter_arg: dict[str, str] = {"out_dir": ENV.simulation_outdir}
+    emitter_arg: dict[str, str] = Field(default_factory=lambda: {"out_dir": str(get_settings().simulation_outdir)})
     variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
     analysis_options: dict[str, Any] = Field(default={})
     gcloud: str | None = None
@@ -334,7 +332,7 @@ class SimulationConfig(BaseModel):
 
     def model_post_init(self, *args: Any) -> None:
         if self.sim_data_path is None:
-            self.sim_data_path = f"{ENV.slurm_base_path}/workspace/kb/simData.cPickle"
+            self.sim_data_path = f"{get_settings().slurm_base_path}/workspace/kb/simData.cPickle"
         for attrname in list(SimulationConfig.model_fields.keys()):
             attr = getattr(self, attrname)
             if attr is None or attr == ["string"]:
@@ -351,7 +349,7 @@ class SimulationConfig(BaseModel):
 
     @classmethod
     def from_base(cls) -> "SimulationConfig":
-        return cls.from_file(fp=Path(ENV.assets_dir) / "sms_base_simulation_config.json")
+        return cls.from_file(fp=Path(get_settings().assets_dir) / "sms_base_simulation_config.json")
 
 
 class SimulationConfiguration(SimulationConfig):
@@ -451,7 +449,9 @@ class ExperimentRequest(BaseModel):
 
         if not self.run_parca:
             # case: use the cached simdata
-            config_kwargs["sim_data_path"] = str(Path(ENV.slurm_base_path) / "workspace/kb/simData.cPickle")
+            config_kwargs["sim_data_path"] = str(
+                get_settings().slurm_base_path / "workspace" / "kb" / "simData.cPickle"
+            )
         return SimulationConfig(**config_kwargs)
 
 

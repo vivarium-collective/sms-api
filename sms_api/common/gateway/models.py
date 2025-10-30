@@ -31,12 +31,6 @@ class ServiceType(StrEnum):
     AUTH = "auth"
 
 
-class Namespace(StrEnum):
-    DEVELOPMENT = "dev"
-    PRODUCTION = "prod"
-    TEST = "test"
-
-
 class ServerMode(StrEnum):
     DEV = "http://localhost:8000"
     PROD = "https://sms.cam.uchc.edu"

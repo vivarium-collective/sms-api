@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sms_api.common.storage import FileServiceGCS
+from sms_api.common.storage.file_service_gcs import FileServiceGCS
 from sms_api.config import get_settings
 from tests.fixtures.file_service_local import FileServiceLocal
 

@@ -58,8 +58,7 @@ async def test_get_outputs(base_router: str, database_service: DatabaseService) 
         config=AnalysisConfig(analysis_options=AnalysisConfigOptions(experiment_id=["sms_multigeneration"])),
     )
 
-    env = get_settings()
-    ssh = get_ssh_service(env)
+    ssh = get_ssh_service()
     analysis_data = await database_service.get_analysis(database_id=analysis.database_id)
     output_id = analysis_data.name
     remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"

@@ -6,7 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from sms_api.common.gateway.models import Namespace, RouterConfig
+from sms_api.common.gateway.models import RouterConfig
+from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import HpcRun, JobType, SimulatorVersion
 
@@ -25,9 +26,7 @@ def get_pinned_outdir() -> Path:
     return get_remote_simulation_outdir(experiment_id="sms_single")
 
 
-def get_remote_simulation_outdir(
-    experiment_id: str, group: str | None = None, user: str | None = None, namespace: Namespace | str | None = None
-) -> Path:
+def get_remote_simulation_outdir(experiment_id: str, group: str | None = None, user: str | None = None) -> Path:
     """Meant to be used modularly based on the given HPC configuration of a given deployment.
     For example, we use uchc specifics by default (user = svc_vivarium, etc). So it should be whatever
     is expected by your HPC.
@@ -38,7 +37,7 @@ def get_remote_simulation_outdir(
     :param namespace: the deployment's namespace. See ``sms_api.common.gateway.models.Namespace`` for
         more details. Defaults to ``Namespace.PRODUCTION``.
     """
-    print(namespace)
+    print(get_settings().namespace)
     return Path(
         # f"/home/{group or 'FCAM'}/{user or 'svc_vivarium'}/{namespace or Namespace.PRODUCTION}/sims/{experiment_id}"
         f"/home/{group or 'FCAM'}/{user or 'svc_vivarium'}/workspace/outputs/{experiment_id}"
@@ -89,8 +88,8 @@ def format_marimo_appname(appname: str) -> str:
         return appname.replace(appname[0], appname[0].upper())
 
 
-def get_remote_outdir(experiment_id: str, namespace: Namespace | None = None) -> Path:
-    return Path(f"/home/FCAM/svc_vivarium/{namespace or Namespace.PRODUCTION}/sims/{experiment_id}")
+def get_remote_outdir(experiment_id: str) -> Path:
+    return Path(f"/home/FCAM/svc_vivarium/{get_settings().namespace}/sims/{experiment_id}")
 
 
 def write_remote_config(

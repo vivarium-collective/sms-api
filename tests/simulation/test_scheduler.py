@@ -11,7 +11,9 @@ from nats.aio.client import Client as NATSClient
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.storage import FileService, FileServiceQumuloS3, FileServiceS3
+from sms_api.common.storage.file_service import FileService
+from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
+from sms_api.common.storage.file_service_s3 import FileServiceS3
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
@@ -126,7 +128,7 @@ async def test_job_scheduler(
     # Submit a toy slurm job which takes 10 seconds to run
     _all_jobs_before_submit: list[SlurmJob] = await slurm_service.get_job_status_squeue()
     settings = get_settings()
-    remote_path = Path(settings.slurm_log_base_path)
+    remote_path = settings.slurm_log_base_path
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_dir = Path(tmpdir)
         # write slurm_template_hello_1s to a temp file
@@ -241,7 +243,7 @@ async def test_job_scheduler_with_storage(
         await scheduler.start_polling(interval_seconds=2)
 
         # Upload helper script to remote host
-        remote_path = Path(settings.slurm_log_base_path)
+        remote_path = settings.slurm_log_base_path
         helpers_script_path = Path(__file__).parent.parent / "fixtures" / "s3_helpers.sh"
 
         with tempfile.TemporaryDirectory() as tmpdir:

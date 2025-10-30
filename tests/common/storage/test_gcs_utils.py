@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 from gcloud.aio.auth import Token
 
-from sms_api.common.storage import ListingItem, download_gcs_file, get_gcs_modified_date, get_listing_of_gcs_path
+from sms_api.common.storage.file_service import ListingItem
+from sms_api.common.storage.gcs_aio import download_gcs_file, get_gcs_modified_date, get_listing_of_gcs_path
 from sms_api.config import get_settings
 
 ROOT_DIR = Path(__file__).parent.parent.parent

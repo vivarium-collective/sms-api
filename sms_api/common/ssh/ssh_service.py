@@ -5,7 +5,8 @@ from typing import Any
 import asyncssh
 from asyncssh import SSHCompletedProcess
 
-from sms_api.config import Settings, get_settings
+from sms_api.common.storage.file_paths import HPCFilePath
+from sms_api.config import get_settings
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -77,21 +78,21 @@ class SSHServiceManaged:
             logger.exception(f"SSH error while running '{command}'")
             raise RuntimeError(f"SSH command error: {str(exc)[:100]}") from exc
 
-    async def scp_upload(self, local_file: Path, remote_path: Path, **kwargs: Any) -> None:
+    async def scp_upload(self, local_file: Path, remote_path: HPCFilePath, **kwargs: Any) -> None:
         if self.conn is None:
             raise RuntimeError("SSH connection not established. Call connect() first.")
         try:
-            await asyncssh.scp(local_file, (self.conn, remote_path), **kwargs)
+            await asyncssh.scp(local_file, (self.conn, remote_path.remote_path), **kwargs)
             logger.info(f"Uploaded {local_file} -> {remote_path}")
         except asyncssh.Error as exc:
             logger.exception(f"Failed to upload {local_file}")
             raise RuntimeError(f"SCP upload failed: {str(exc)[:100]}") from exc
 
-    async def scp_download(self, local_file: Path, remote_path: Path) -> None:
+    async def scp_download(self, local_file: Path, remote_path: HPCFilePath) -> None:
         if self.conn is None:
             raise RuntimeError("SSH connection not established. Call connect() first.")
         try:
-            await asyncssh.scp((self.conn, remote_path), local_file)
+            await asyncssh.scp((self.conn, remote_path.remote_path), local_file)
             logger.info(f"Downloaded {remote_path} -> {local_file}")
         except asyncssh.Error as exc:
             logger.exception(f"Failed to download {remote_path}")
@@ -139,12 +140,12 @@ class SSHService:
                 logger.exception(msg=f"failed to send command {command}, stderr {str(exc)[:100]}", exc_info=exc)
                 raise RuntimeError(f"failed to send command {command}, error {str(exc)[:100]}") from exc
 
-    async def scp_upload(self, local_file: Path, remote_path: Path, **kwargs) -> None:  # type: ignore[no-untyped-def]
+    async def scp_upload(self, local_file: Path, remote_path: HPCFilePath, **kwargs) -> None:  # type: ignore[no-untyped-def]
         async with asyncssh.connect(
             host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=self.known_hosts
         ) as conn:
             try:
-                await asyncssh.scp(srcpaths=local_file, dstpath=(conn, remote_path), **kwargs)
+                await asyncssh.scp(srcpaths=local_file, dstpath=(conn, remote_path.remote_path), **kwargs)
                 logger.info(msg=f"sent file {local_file} to {remote_path}")
             except asyncssh.Error as exc:
                 logger.exception(msg=f"failed to send file {local_file} to {remote_path}", exc_info=exc)
@@ -152,12 +153,12 @@ class SSHService:
                     f"failed to send file {local_file} to {remote_path}, error {str(exc)[:100]}"
                 ) from exc
 
-    async def scp_download(self, local_file: Path, remote_path: Path) -> None:
+    async def scp_download(self, local_file: Path, remote_path: HPCFilePath) -> None:
         async with asyncssh.connect(
             host=self.hostname, username=self.username, client_keys=[self.key_path], known_hosts=self.known_hosts
         ) as conn:
             try:
-                await asyncssh.scp(srcpaths=(conn, remote_path), dstpath=local_file)
+                await asyncssh.scp(srcpaths=(conn, remote_path.remote_path), dstpath=local_file)
                 logger.info(msg=f"retrieved remote file {remote_path} to {local_file}")
             except asyncssh.Error as exc:
                 logger.exception(msg=f"failed to retrieve remote file {remote_path} to {local_file}", exc_info=exc)
@@ -169,8 +170,8 @@ class SSHService:
         pass  # nothing to do here because we don't yet keep the connection around.
 
 
-def get_ssh_service(settings: Settings | None = None) -> SSHService:
-    ssh_settings = settings or get_settings()
+def get_ssh_service() -> SSHService:
+    ssh_settings = get_settings()
     return SSHService(
         hostname=ssh_settings.slurm_submit_host,
         username=ssh_settings.slurm_submit_user,
@@ -179,8 +180,8 @@ def get_ssh_service(settings: Settings | None = None) -> SSHService:
     )
 
 
-def get_ssh_service_managed(settings: Settings | None = None) -> SSHServiceManaged:
-    ssh_settings = settings or get_settings()
+def get_ssh_service_managed() -> SSHServiceManaged:
+    ssh_settings = get_settings()
     return SSHServiceManaged(
         hostname=ssh_settings.slurm_submit_host,
         username=ssh_settings.slurm_submit_user,
