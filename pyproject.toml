@@ -1,9 +1,9 @@
 [project]
 name = "sms_api"
-version = "0.2.36-dev"
+version = "0.2.37-dev"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
-requires-python = ">=3.12,<4.0"
+requires-python = "==3.12.9"
 readme = "README.md"
 dependencies = [
     "aioboto3>=15.4.0",
@@ -42,6 +42,7 @@ dependencies = [
     "types-aioboto3[s3]>=15.4.0",
     "typing-extensions>=4.15.0",
     "uvicorn>=0.38.0",
+    "vecoli>=0.0.2",
     "vegafusion>=2.0.3",
     "vl-convert-python>=1.8.0",
     "xmltodict>=1.0.2",

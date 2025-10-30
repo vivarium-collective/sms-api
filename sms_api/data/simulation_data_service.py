@@ -53,7 +53,7 @@ def get_genes_dataframe(
     seed = 30
     gen = 22
     agent_id = "0000000000000000000000"
-    expid = "sms_multiseed"
+    expid = experiment_id  # "sms_multiseed"
     (
         bulk_ids,
         bulk_ids_biocyc,

@@ -43,10 +43,10 @@ def test_get_bulk_dataframe() -> None:
 @pytest.mark.asyncio
 def test_get_genes_dataframe() -> None:
     variant = 0
-    seed = 9  # 30
+    seed = 5  # 30
     gen = 1  # 22
     agent_id = "0"  # "0000000000000000000000"
-    expid = "sms_multigeneration"  # "sms_multiseed"
+    expid = "sms_multiseed_0-2794dfa74b9cf37c_1759844363435"  # "sms_multiseed"
     env = get_settings()
     ids = ["alr", "ruvB"]
     df = get_genes_dataframe(
