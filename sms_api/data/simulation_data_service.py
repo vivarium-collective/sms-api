@@ -1,6 +1,7 @@
 import itertools
 import os
 from enum import StrEnum
+from typing import Any, LiteralString
 
 import duckdb
 import numpy as np
@@ -8,6 +9,7 @@ import pandas as pd
 from ecoli.library.parquet_emitter import dataset_sql
 from ecoli.library.sim_data import LoadSimData
 
+from sms_api.config import get_settings, Settings
 
 PARTITION_GROUPS = {
     "multiseed": ["experiment_id", "variant"],
@@ -22,18 +24,88 @@ PARTITION_GROUPS = {
     ],
 }
 
+### -- Public -- ###
 
-def get_bulk_df(plot_df):
+
+class ObservableLabelType(StrEnum):
+    BIOCYC = "biocyc"  # currently, bulk_sp_plot
+    COMMON = "common name"
+
+
+def get_bulk_dataframe(
+        experiment_id: str,
+        env: Settings,
+        observable_ids: list[str] | None = None,
+        variant: int = 0,
+        seed: int = 0,
+        generation: int = 0,
+        agent_id: str = '0',
+        label_type: ObservableLabelType = ObservableLabelType.BIOCYC,
+        # cache: bool = False
+) -> pd.DataFrame:
+    df = BulkDataframe(
+        expid=experiment_id,
+        variant=variant,
+        seed=seed,
+        gen=generation,
+        agent_id=agent_id,
+        label_type=label_type,
+        out_dir=env.simulation_outdir,
+        sim_data_path=env.vecoli_simdata_path
+    )
+    # if cache:
+    #     import redis
+    #     r = redis.Redis(host='localhost', port=6379, db=0)
+    # return df[observable_ids] if observable_ids is not None else df
+    return df[df["bulk_molecules"].isin(observable_ids)] if observable_ids is not None else df
+
+
+def BulkDataframe(
+        expid: str,
+        variant: int,
+        seed: int,
+        gen: int,
+        agent_id: str,
+        label_type: ObservableLabelType,
+        out_dir: str,
+        sim_data_path: str
+) -> pd.DataFrame:
+    sim_data = LoadSimData(sim_data_path).sim_data
+    dbf_dict = partitions_dict("single", expid, variant, seed, gen, agent_id)
+    db_filter = get_db_filter(dbf_dict)
+    history_sql_filtered = get_filtered_query(out_dir, expid, db_filter)
+    outputs_loaded = load_outputs(history_sql_filtered)
+    bulk_ids, bulk_ids_biocyc, bulk_names_unique, bulk_common_names, rxn_ids, cistron_data, mrna_cistron_ids, mrna_cistron_names = get_ids(sim_data_path, sim_data)
+    bulk_mtx = get_bulk_mtx(outputs_loaded)
+    sp_trajs = get_sp_trajs(
+        bulk_mtx,
+        bulk_names_unique,
+        MoleculeIdType.BULK if label_type == label_type.BIOCYC else MoleculeIdType.COMMON,
+        bulk_names_unique,
+        bulk_common_names,
+        bulk_ids_biocyc
+    )
+    plot_df = get_plot_df(outputs_loaded, bulk_names_unique, sp_trajs)
+    return _get_bulk_df(plot_df)
+
+
+### -- internal -- ###
+
+def _get_bulk_df(plot_df: pd.DataFrame):
     df_long = plot_df.melt(
         id_vars=["time"],  # Columns to keep as identifier variables
         var_name="bulk_molecules",  # Name for the new column containing original column headers
         value_name="counts",  # Name for the new column containing original column values
     )
-
+    # df_long = plot_df.unpivot(
+    #     index=["time"],  # Columns to keep as identifier variables
+    #     variable_name="bulk_molecules",  # Name for the new column containing original column headers
+    #     value_name="counts",  # Name for the new column containing original column values
+    # )
     return downsample(df_long)
 
 
-def get_genes_df(output_loaded, mrna_cistron_names, mrna_ids):
+def get_genes_df(output_loaded: dict[str, Any], mrna_cistron_names, mrna_ids):
     mrna_mtx = np.stack(output_loaded["listeners__rna_counts__full_mRNA_cistron_counts"])
 
     mrna_idxs = [mrna_cistron_names.index(gene_id) for gene_id in mrna_ids]
@@ -54,7 +126,7 @@ def get_genes_df(output_loaded, mrna_cistron_names, mrna_ids):
     return downsample(mrna_df_long)
 
 
-def get_reactions_df(output_loaded, rxn_ids, select_rxns):
+def get_reactions_df(output_loaded: dict[str, Any], rxn_ids, select_rxns):
     rxns_mtx = np.stack(output_loaded["listeners__fba_results__base_reaction_fluxes"].values)
 
     rxns_idxs = [rxn_ids.index(rxn) for rxn in select_rxns]
@@ -185,6 +257,7 @@ def get_plot_df(output_loaded, bulk_sp_plot, sp_trajs):
     plot_dict["time"] = output_loaded["time"]
 
     return pd.DataFrame(plot_dict)
+    # return pl.DataFrame(plot_dict)
 
 
 def get_output_loaded(history_sql_filtered):
@@ -276,7 +349,10 @@ def get_agents(exp_id, var_id, seed_id, gen_id, outdir):
     return agents
 
 
-def partitions_dict(analysis_type, exp_select, variant_select, seed_select, gen_select, agent_select):
+SelectedPartition = dict[str, int | str]
+
+
+def partitions_dict(analysis_type, exp_select, variant_select, seed_select, gen_select, agent_select) -> dict[str, Any]:
     partitions_req = PARTITION_GROUPS[analysis_type]
     partitions_all = read_partitions(exp_select, variant_select, seed_select, gen_select, agent_select)
 
@@ -287,7 +363,7 @@ def partitions_dict(analysis_type, exp_select, variant_select, seed_select, gen_
     return partitions_dict
 
 
-def get_db_filter(partitions_dict):
+def get_db_filter(partitions_dict) -> LiteralString:
     db_filter_list = []
     for key, value in partitions_dict.items():
         db_filter_list.append(str(key) + "=" + str(value))
@@ -296,7 +372,7 @@ def get_db_filter(partitions_dict):
     return db_filter
 
 
-def read_partitions(exp_select, variant_select, seed_select, gen_select, agent_select):
+def read_partitions(exp_select: str, variant_select: int, seed_select: int, gen_select: int, agent_select: str) -> SelectedPartition:
     partitions_selected = {
         "experiment_id": exp_select,
         "variant": variant_select,
@@ -306,42 +382,4 @@ def read_partitions(exp_select, variant_select, seed_select, gen_select, agent_s
     }
     return partitions_selected
 
-
-class ObservableLabelType(StrEnum):
-    BIOCYC = "biocyc"  # currently, bulk_sp_plot
-    COMMON = "common name"
-
-
-def bulk_dataframe(expid: str, variant: int, seed: int, gen: int, agent_id: str, label_type: ObservableLabelType, out_dir: str, sim_data_path: str) -> pd.DataFrame:
-    sim_data = LoadSimData(sim_data_path).sim_data
-    dbf_dict = partitions_dict("single", expid, variant, seed, gen, agent_id)
-    db_filter = get_db_filter(dbf_dict)
-    history_sql_filtered = get_filtered_query(out_dir, expid, db_filter)
-    outputs_loaded = load_outputs(history_sql_filtered)
-    bulk_ids, bulk_ids_biocyc, bulk_names_unique, bulk_common_names, rxn_ids, cistron_data, mrna_cistron_ids, mrna_cistron_names = get_ids(sim_data_path, sim_data)
-    bulk_mtx = get_bulk_mtx(outputs_loaded)
-    sp_trajs = get_sp_trajs(
-        bulk_mtx,
-        bulk_names_unique,
-        MoleculeIdType.BULK if label_type == label_type.BIOCYC else MoleculeIdType.COMMON,
-        bulk_names_unique,
-        bulk_common_names,
-        bulk_ids_biocyc
-    )
-    plot_df = get_plot_df(outputs_loaded, bulk_names_unique, sp_trajs)
-    return get_bulk_df(plot_df)
-
-
-def test_bulk_dataframe() -> None:
-    expid = "sms_multiseed"
-    variant = 0
-    seed = 30
-    gen = 22
-    agent_id = '0000000000000000000000'
-    home = os.environ['HOME']
-    out_dir = f"{home}/sms/vEcoli/out"
-    sim_data_path = f"{home}/sms/vEcoli/kb/simData.cPickle"
-    label_type = ObservableLabelType.BIOCYC
-    bulk = bulk_dataframe(expid, variant, seed, gen, agent_id, label_type)
-    assert isinstance(bulk, pd.DataFrame)
 

@@ -100,6 +100,7 @@ class Settings(BaseSettings):
     simulation_outdir: str = ""
     local_simulation_outdir: str = ""
     vecoli_config_dir: str = ""
+    vecoli_simdata_path: str = ""
 
     dev_base_url: str = "http://localhost:8888"
     prod_base_url: str = "https://sms.cam.uchc.edu"
