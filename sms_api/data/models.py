@@ -437,3 +437,23 @@ def dict_options(items: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None
         for item in items:
             options.update(item.to_dict())  # type: ignore[arg-type]
     return options
+
+
+class RequestedObservables(BaseModel):
+    bulk: list[str] = ["--TRANS-ACENAPHTHENE-12-DIOL", "ACETOLACTSYNI-CPLX", "CPD-3729"]
+    genes: list[str] = ["alr", "ruvB"]
+    reactions: list[str] = []
+
+
+class SimulationDataRequest(BaseModel):
+    lineage_seed: int = 0
+    generation: int = 1
+    variant: int = 0
+    agent_id: str = "0"
+    observables: RequestedObservables = RequestedObservables()
+
+
+class SimulationOutputData(BaseModel):
+    bulk: str | None = None
+    genes: str | None = None
+    reactions: str | None = None

@@ -11,7 +11,7 @@
 import logging
 
 import fastapi
-from fastapi import BackgroundTasks, Depends, HTTPException, Query
+from fastapi import Depends, HTTPException
 
 from sms_api.api import request_examples
 from sms_api.common.gateway.utils import get_simulator, router_config
@@ -25,8 +25,11 @@ from sms_api.data.models import (
     ExperimentAnalysisRequest,
     OutputFile,
     OutputFileMetadata,
+    SimulationDataRequest,
+    SimulationOutputData,
     TsvOutputFile,
 )
+from sms_api.data.simulation_data_service import get_bulk_dataframe, get_genes_dataframe
 from sms_api.dependencies import get_analysis_service, get_database_service, get_simulation_service
 from sms_api.simulation import ecoli_handlers as simulation_handlers
 from sms_api.simulation.models import (
@@ -335,32 +338,62 @@ async def list_simulations() -> list[EcoliSimulationDTO]:
     summary="Get/Stream simulation data",
 )
 async def get_simulation_data(
-    bg_tasks: BackgroundTasks,
     id: int = fastapi.Path(description="Database ID of the simulation."),
-    # experiment_id: str = Query(default="sms_multigeneration"),
-    lineage_seed: int = Query(default=6),
-    generation: int = Query(default=1),
-    variant: int = Query(default=0),
-    agent_id: int = Query(default=0),
-    observables: list[str] = request_examples.base_observables,
-) -> fastapi.responses.StreamingResponse:
+    request: SimulationDataRequest = request_examples.base_simulation_data_request,
+) -> SimulationOutputData:  # -> fastapi.responses.StreamingResponse:
+    """
+    {
+          "lineage_seed": 30,
+          "generation": 22,
+          "variant": 0,
+          "agent_id": "0000000000000000000000",
+          "observables": {
+            "bulk": [
+              "--TRANS-ACENAPHTHENE-12-DIOL",
+              "ACETOLACTSYNI-CPLX",
+              "CPD-3729"
+            ],
+            "genes": [
+              "alr",
+              "ruvB"
+            ],
+            "reactions": []
+          }
+        }
+    """
     db_service = get_database_service()
     if db_service is None:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        return await simulation_handlers.get_simulation_data(
-            ssh=get_ssh_service(ENV),
-            db_service=db_service,
-            id=id,
-            lineage_seed=lineage_seed,
-            generation=generation,
-            variant=variant,
-            agent_id=agent_id,
-            observables=observables,
-            env=ENV,
-            bg_tasks=bg_tasks,
-        )
+        variant = request.variant
+        seed = request.lineage_seed
+        gen = request.generation
+        agent_id = request.agent_id
+        simulation = await db_service.get_ecoli_simulation(database_id=id)
+        expid = simulation.config.experiment_id
+        env = get_settings()
+
+        response = {}
+        requested_obs = request.observables
+        for obs_type in requested_obs.model_dump():
+            obs: list[str] = getattr(requested_obs, obs_type, [])
+            if obs:
+                if obs_type == "bulk":
+                    response["bulk"] = get_bulk_dataframe(
+                        experiment_id=expid,
+                        env=env,
+                        variant=variant,
+                        seed=seed,
+                        generation=gen,
+                        agent_id=agent_id,
+                        observable_ids=obs,
+                    ).to_json()
+                elif obs_type == "genes":
+                    response["genes"] = get_genes_dataframe(
+                        env=env, variant=variant, experiment_id=expid, seed=seed, generation=gen, agent_id=agent_id
+                    ).to_json()
+        return SimulationOutputData(**response)
     except Exception as e:
-        logger.exception("Error uploading simulation config")
+        logger.exception("Error getting simulation data")
         raise HTTPException(status_code=500, detail=str(e)) from e
