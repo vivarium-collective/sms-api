@@ -81,6 +81,7 @@ LOCAL_DATA_BASEPATH=
 SIMULATION_OUTDIR=  # (remote)
 LOCAL_SIMULATION_OUTDIR= # this should mirror the path structure provided to the HPC $USER, so for example /some/local/location/home/FCAM/svc_vivarium/...etc
 VECOLI_CONFIG_DIR=  # remote, that is
+VECOLI_SIMDATA_PATH=  # path to simData file (should be $SLURM_BASE_PATH/workspace/kb)
 
 # -- Application/UI-level --
 DEV_BASE_URL=http://localhost:8888

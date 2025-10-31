@@ -39,9 +39,6 @@ COPY --chown=appuser:appgroup . /app
 # Sync the project
 RUN uv sync --frozen
 
-# Install ecoli deps
-RUN uv pip install vecoli
-
 # Declare the volume for local cache storage
 VOLUME ["/app/scratch"]
 

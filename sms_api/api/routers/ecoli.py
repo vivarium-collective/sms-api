@@ -377,21 +377,22 @@ async def get_simulation_data(
         response = {}
         requested_obs = request.observables
         for obs_type in requested_obs.model_dump():
-            obs = getattr(requested_obs, obs_type, None)
-            if obs_type == "bulk":
-                response["bulk"] = get_bulk_dataframe(
-                    experiment_id=expid,
-                    env=env,
-                    variant=variant,
-                    seed=seed,
-                    generation=gen,
-                    agent_id=agent_id,
-                    observable_ids=obs,
-                ).to_json()
-            elif obs_type == "genes":
-                response["genes"] = get_genes_dataframe(
-                    env=env, variant=variant, experiment_id=expid, seed=seed, generation=gen, agent_id=agent_id
-                ).to_json()
+            obs: list[str] = getattr(requested_obs, obs_type, [])
+            if obs:
+                if obs_type == "bulk":
+                    response["bulk"] = get_bulk_dataframe(
+                        experiment_id=expid,
+                        env=env,
+                        variant=variant,
+                        seed=seed,
+                        generation=gen,
+                        agent_id=agent_id,
+                        observable_ids=obs,
+                    ).to_json()
+                elif obs_type == "genes":
+                    response["genes"] = get_genes_dataframe(
+                        env=env, variant=variant, experiment_id=expid, seed=seed, generation=gen, agent_id=agent_id
+                    ).to_json()
         return SimulationOutputData(**response)
     except Exception as e:
         logger.exception("Error getting simulation data")

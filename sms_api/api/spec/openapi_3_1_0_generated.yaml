@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.36-dev
+  version: 0.2.38-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -805,8 +805,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-2ec943ae71e87fe9_1761832127042-c5f5372f69fb3e84_1761832127042
-            simulation_name: sms_single-2ec943ae71e87fe9_1761832127042
+            experiment_id: sms_single-35ce753bb1e7dd3a_1761933261139-d0ef764e9bb0064c_1761933261139
+            simulation_name: sms_single-35ce753bb1e7dd3a_1761933261139
             metadata: {}
             run_parca: true
             generations: 2
@@ -1046,7 +1046,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-4c5c7aee93276730_1761832126804
+          default: sim_smsapi-ca8982671c328c59_1761933260914
         metadata:
           additionalProperties: true
           type: object
@@ -1597,7 +1597,7 @@ components:
           type: object
           title: Emitter Arg
           default:
-            out_dir: /Users/alexanderpatrie/sms/vEcoli/out
+            out_dir: /home/FCAM/svc_vivarium/workspace/api_outputs
         variants:
           additionalProperties:
             additionalProperties:
