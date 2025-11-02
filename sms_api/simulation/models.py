@@ -332,7 +332,7 @@ class SimulationConfig(BaseModel):
 
     def model_post_init(self, *args: Any) -> None:
         if self.sim_data_path is None:
-            self.sim_data_path = f"{get_settings().slurm_base_path}/workspace/kb/simData.cPickle"
+            self.sim_data_path = str(get_settings().slurm_base_path / "workspace" / "kb" / "simData.cPickle")
         for attrname in list(SimulationConfig.model_fields.keys()):
             attr = getattr(self, attrname)
             if attr is None or attr == ["string"]:
@@ -341,7 +341,7 @@ class SimulationConfig(BaseModel):
                 delattr(self, attrname)
 
     @classmethod
-    def from_file(cls, fp: Path, config_id: str | None = None) -> "SimulationConfig":
+    def from_file(cls, fp: Path) -> "SimulationConfig":
         filepath = fp
         with open(filepath) as f:
             conf = json.load(f)
