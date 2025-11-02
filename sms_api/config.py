@@ -107,7 +107,6 @@ class Settings(BaseSettings):
     biocyc_password: str = ""
 
     simulation_outdir: HPCFilePath = HPCFilePath(remote_path=Path(""))
-    local_simulation_outdir: ScratchFilePath = ScratchFilePath(local_path=Path(""))
     vecoli_config_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
 
     dev_base_url: str = "http://localhost:8888"

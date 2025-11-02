@@ -31,7 +31,7 @@ class ScratchFilePath(BaseModel):
     """Represents a local scratch file path.
 
     Configuration via JSON in .env files:
-        LOCAL_SIMULATION_OUTDIR={"local_path": "/tmp/scratch"}
+        SCRATCH_DIR={"local_path": "/tmp/scratch"}
     """
 
     local_path: Path
