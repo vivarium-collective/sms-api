@@ -126,8 +126,10 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         set_file_service(FileServiceS3())
     elif _settings.storage_backend == "qumulo":
         set_file_service(FileServiceQumuloS3())
-    else:  # default to gcs
+    elif _settings.storage_backend == "gcs":  # default to gcs
         set_file_service(FileServiceGCS())
+    else:
+        raise ValueError(f"Unsupported storage backend: {_settings.storage_backend}")
 
     # set services that don't require params (currently using hpc)
     set_simulation_service(SimulationServiceHpc())

@@ -5,6 +5,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from sms_api.common.storage.file_paths import S3FilePath
+
 
 class ListingItem(BaseModel):
     Key: str
@@ -15,31 +17,31 @@ class ListingItem(BaseModel):
 
 class FileService(ABC):
     @abstractmethod
-    async def download_file(self, gcs_path: str, file_path: Optional[Path] = None) -> tuple[str, str]:
+    async def download_file(self, s3_path: S3FilePath, file_path: Optional[Path] = None) -> tuple[S3FilePath, str]:
         pass
 
     @abstractmethod
-    async def upload_file(self, file_path: Path, gcs_path: str) -> str:
+    async def upload_file(self, file_path: Path, s3_path: S3FilePath) -> S3FilePath:
         pass
 
     @abstractmethod
-    async def upload_bytes(self, file_contents: bytes, gcs_path: str) -> str:
+    async def upload_bytes(self, file_contents: bytes, s3_path: S3FilePath) -> S3FilePath:
         pass
 
     @abstractmethod
-    async def get_modified_date(self, gcs_path: str) -> datetime:
+    async def get_modified_date(self, s3_path: S3FilePath) -> datetime:
         pass
 
     @abstractmethod
-    async def get_listing(self, gcs_path: str) -> list[ListingItem]:
+    async def get_listing(self, s3_path: S3FilePath) -> list[ListingItem]:
         pass
 
     @abstractmethod
-    async def get_file_contents(self, gcs_path: str) -> bytes | None:
+    async def get_file_contents(self, s3_path: S3FilePath) -> bytes | None:
         pass
 
     @abstractmethod
-    async def delete_file(self, gcs_path: str) -> None:
+    async def delete_file(self, s3_path: S3FilePath) -> None:
         """Delete a file from storage. Raises exception if file doesn't exist or delete fails."""
         pass
 

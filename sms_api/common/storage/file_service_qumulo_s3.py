@@ -10,6 +10,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from typing_extensions import override
 
+from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService, ListingItem
 from sms_api.config import get_local_cache_dir, get_settings
 
@@ -111,105 +112,68 @@ class FileServiceQumuloS3(FileService):
                 # Some other error - log it but continue with upload attempt
                 logger.warning(f"Error checking existence of {bucket}/{key}: {e}")
 
-    def _parse_qumulo_path(self, path: str) -> tuple[str, str]:
-        """
-        Parse path into bucket and key for Qumulo.
-
-        Qumulo uses a single bucket representing the filesystem root,
-        and keys are filesystem paths.
-
-        Supports formats:
-        - s3://bucket/path/to/file
-        - qumulo://path/to/file
-        - /path/to/file
-        - path/to/file
-
-        Returns:
-            tuple: (bucket_name, key_path)
-        """
-        settings = get_settings()
-
-        # Remove protocol prefixes
-        clean_path = path.replace("s3://", "").replace("qumulo://", "")
-
-        # If path starts with /, treat as absolute filesystem path
-        if clean_path.startswith("/"):
-            return settings.storage_qumulo_bucket, clean_path.lstrip("/")
-
-        # If path contains bucket separator
-        if "/" in clean_path:
-            _parts = clean_path.split("/", 1)
-            # Check if first part looks like a bucket name
-            # For Qumulo, typically use the configured bucket
-            return settings.storage_qumulo_bucket, clean_path
-        else:
-            return settings.storage_qumulo_bucket, clean_path
-
     @override
-    async def download_file(self, gcs_path: str, file_path: Optional[Path] = None) -> tuple[str, str]:
+    async def download_file(self, s3_path: S3FilePath, file_path: Optional[Path] = None) -> tuple[S3FilePath, str]:
         """
         Download a file from Qumulo S3 to local filesystem.
 
-        Note: Parameter name kept as 'gcs_path' for interface compatibility,
+        Note: Parameter name kept as 's3_path' for interface compatibility,
         but accepts Qumulo filesystem paths.
         """
-        logger.info(f"Downloading Qumulo file: {gcs_path} to {file_path}")
+        logger.info(f"Downloading Qumulo file: {s3_path} to {file_path}")
         if file_path is None:
             file_path = get_local_cache_dir() / ("temp_file_" + uuid.uuid4().hex)
 
-        bucket, key = self._parse_qumulo_path(gcs_path)
+        bucket, key = get_settings().storage_qumulo_bucket, str(s3_path)
 
         async with self.session.client(**self._get_client_kwargs()) as s3_client:
             try:
                 await s3_client.download_file(bucket, key, str(file_path))
-                full_path = f"qumulo://{bucket}/{key}"
-                logger.info(f"Successfully downloaded {full_path} to {file_path}")
-                return full_path, str(file_path)
+                logger.info(f"Successfully downloaded {s3_path} to {file_path}")
+                return s3_path, str(file_path)
             except ClientError:
                 logger.exception(f"Failed to download {bucket}/{key}")
                 raise
 
     @override
-    async def upload_file(self, file_path: Path, gcs_path: str) -> str:
+    async def upload_file(self, file_path: Path, s3_path: S3FilePath) -> S3FilePath:
         """Upload a file from local filesystem to Qumulo S3."""
-        logger.info(f"Uploading file: {file_path} to Qumulo: {gcs_path}")
-        bucket, key = self._parse_qumulo_path(gcs_path)
+        logger.info(f"Uploading file: {file_path} to Qumulo: {s3_path}")
+        bucket, key = get_settings().storage_qumulo_bucket, str(s3_path)
 
         async with self.session.client(**self._get_client_kwargs()) as s3_client:
             try:
                 # Delete existing file to work around Qumulo's no-overwrite policy
                 await self._delete_if_exists(s3_client, bucket, key)
                 await s3_client.upload_file(str(file_path), bucket, key)
-                full_path = f"qumulo://{bucket}/{key}"
-                logger.info(f"Successfully uploaded {file_path} to {full_path}")
-                return full_path
+                logger.info(f"Successfully uploaded {file_path} to {s3_path}")
+                return s3_path
             except ClientError:
                 logger.exception(f"Failed to upload {file_path} to {bucket}/{key}")
                 raise
 
     @override
-    async def upload_bytes(self, file_contents: bytes, gcs_path: str) -> str:
+    async def upload_bytes(self, file_contents: bytes, s3_path: S3FilePath) -> S3FilePath:
         """Upload bytes directly to Qumulo S3."""
-        logger.info(f"Uploading {len(file_contents)} bytes to Qumulo: {gcs_path}")
-        bucket, key = self._parse_qumulo_path(gcs_path)
+        logger.info(f"Uploading {len(file_contents)} bytes to Qumulo: {s3_path}")
+        bucket, key = get_settings().storage_qumulo_bucket, str(s3_path)
 
         async with self.session.client(**self._get_client_kwargs()) as s3_client:
             try:
                 # Delete existing file to work around Qumulo's no-overwrite policy
                 await self._delete_if_exists(s3_client, bucket, key)
                 await s3_client.put_object(Bucket=bucket, Key=key, Body=file_contents)
-                full_path = f"qumulo://{bucket}/{key}"
-                logger.info(f"Successfully uploaded {len(file_contents)} bytes to {full_path}")
-                return full_path
+                logger.info(f"Successfully uploaded {len(file_contents)} bytes to {s3_path}")
+                return s3_path
             except ClientError:
                 logger.exception(f"Failed to upload bytes to {bucket}/{key}")
                 raise
 
     @override
-    async def get_modified_date(self, gcs_path: str) -> datetime:
+    async def get_modified_date(self, s3_path: S3FilePath) -> datetime:
         """Get the last modified timestamp of a Qumulo object."""
-        logger.info(f"Getting modified date of Qumulo object: {gcs_path}")
-        bucket, key = self._parse_qumulo_path(gcs_path)
+        logger.info(f"Getting modified date of Qumulo object: {s3_path}")
+        bucket, key = get_settings().storage_qumulo_bucket, str(s3_path)
 
         async with self.session.client(**self._get_client_kwargs()) as s3_client:
             try:
@@ -222,15 +186,15 @@ class FileServiceQumuloS3(FileService):
                 raise
 
     @override
-    async def get_listing(self, gcs_path: str) -> list[ListingItem]:
+    async def get_listing(self, s3_path: S3FilePath) -> list[ListingItem]:
         """
         List objects in a Qumulo path prefix.
 
         Returns a list of ListingItem objects for all objects with the given prefix.
         This corresponds to listing a directory in the Qumulo filesystem.
         """
-        logger.info(f"Getting listing of Qumulo path: {gcs_path}")
-        bucket, prefix = self._parse_qumulo_path(gcs_path)
+        logger.info(f"Getting listing of Qumulo path: {s3_path}")
+        bucket, prefix = get_settings().storage_qumulo_bucket, str(s3_path)
 
         # Ensure prefix ends with / for directory-style listing
         if prefix and not prefix.endswith("/"):
@@ -262,10 +226,10 @@ class FileServiceQumuloS3(FileService):
                 raise
 
     @override
-    async def get_file_contents(self, gcs_path: str) -> bytes | None:
+    async def get_file_contents(self, s3_path: S3FilePath) -> bytes | None:
         """Download and return the contents of a Qumulo object as bytes."""
-        logger.info(f"Getting contents of Qumulo object: {gcs_path}")
-        bucket, key = self._parse_qumulo_path(gcs_path)
+        logger.info(f"Getting contents of Qumulo object: {s3_path}")
+        bucket, key = get_settings().storage_qumulo_bucket, str(s3_path)
 
         async with self.session.client(**self._get_client_kwargs()) as s3_client:
             try:
@@ -282,10 +246,10 @@ class FileServiceQumuloS3(FileService):
                 raise
 
     @override
-    async def delete_file(self, gcs_path: str) -> None:
+    async def delete_file(self, s3_path: S3FilePath) -> None:
         """Delete a file from Qumulo S3."""
-        logger.info(f"Deleting Qumulo object: {gcs_path}")
-        bucket, key = self._parse_qumulo_path(gcs_path)
+        logger.info(f"Deleting Qumulo object: {s3_path}")
+        bucket, key = get_settings().storage_qumulo_bucket, str(s3_path)
 
         async with self.session.client(**self._get_client_kwargs()) as s3_client:
             try:

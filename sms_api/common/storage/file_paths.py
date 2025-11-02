@@ -9,6 +9,7 @@ class HPCFilePath(BaseModel):
     Configuration via JSON in .env files:
         HPC_IMAGE_BASE_PATH={"remote_path": "/home/FCAM/svc_vivarium/test/images"}
     """
+
     remote_path: Path
 
     def __str__(self) -> str:
@@ -32,6 +33,7 @@ class ScratchFilePath(BaseModel):
     Configuration via JSON in .env files:
         LOCAL_SIMULATION_OUTDIR={"local_path": "/tmp/scratch"}
     """
+
     local_path: Path
 
     def __str__(self) -> str:
@@ -55,6 +57,7 @@ class S3FilePath(BaseModel):
     Configuration via JSON in .env files:
         S3_DATA_PATH={"s3_path": "/path"}
     """
+
     # bucket: str
     s3_path: Path
 

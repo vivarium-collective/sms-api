@@ -8,12 +8,13 @@ from pathlib import Path
 
 import pytest
 
+from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
 from sms_api.config import get_settings
 
 
 @pytest.mark.skipif(
-    len(get_settings().storage_qumulo_access_key_id) == 0, reason="gcs_credentials.json file not supplied"
+    len(get_settings().storage_qumulo_access_key_id) == 0, reason="qumulo access key id is not supplied"
 )
 @pytest.mark.asyncio
 async def test_qumulo_file_service(file_service_qumulo: FileServiceQumuloS3, tmp_path: Path) -> None:
@@ -21,7 +22,7 @@ async def test_qumulo_file_service(file_service_qumulo: FileServiceQumuloS3, tmp
     Test using Qumulo S3-compatible storage.
 
     Configuration required in .dev_env:
-    - STORAGE_QUMULO_ENDPOINT_URL=http://cfs15.cam.uchc.edu:9000
+    - STORAGE_QUMULO_ENDPOINT_URL=https://cfs15.cam.uchc.edu:9000
     - STORAGE_QUMULO_BUCKET=sms-vivarium
     - STORAGE_QUMULO_ACCESS_KEY_ID=<your-key>
     - STORAGE_QUMULO_SECRET_ACCESS_KEY=<your-secret>
@@ -32,29 +33,30 @@ async def test_qumulo_file_service(file_service_qumulo: FileServiceQumuloS3, tmp
 
     # Upload to Qumulo (using path-based bucket)
     # Qumulo uses filesystem-style paths
-    uploaded_path = await file_service_qumulo.upload_file(test_file, "test/qumulo/test.txt")
+    uploaded_path = await file_service_qumulo.upload_file(test_file, S3FilePath(s3_path=Path("test/qumulo/test.txt")))
     print(f"Uploaded to: {uploaded_path}")
-    assert "qumulo://" in uploaded_path
-    assert "test/qumulo/test.txt" in uploaded_path
+    # assert "qumulo://" in uploaded_path
+    assert "test/qumulo/test.txt" in str(uploaded_path)
 
     # Test upload_bytes
     test_data = b"Binary test data for Qumulo"
-    bytes_path = await file_service_qumulo.upload_bytes(test_data, "test/qumulo/binary.bin")
+    bytes_path = await file_service_qumulo.upload_bytes(test_data, S3FilePath(s3_path=Path("test/qumulo/binary.bin")))
     print(f"Uploaded bytes to: {bytes_path}")
-    assert "qumulo://" in bytes_path
 
     # Download from Qumulo
-    contents = await file_service_qumulo.get_file_contents("test/qumulo/test.txt")
+    contents = await file_service_qumulo.get_file_contents(s3_path=S3FilePath(s3_path=Path("test/qumulo/test.txt")))
     assert contents == b"Qumulo test content from SMS API"
     print(f"Downloaded and verified: {len(contents)} bytes")
 
     # Test binary download
-    binary_contents = await file_service_qumulo.get_file_contents("test/qumulo/binary.bin")
+    binary_contents = await file_service_qumulo.get_file_contents(
+        s3_path=S3FilePath(s3_path=Path("test/qumulo/binary.bin"))
+    )
     assert binary_contents == test_data
     print(f"Binary download verified: {len(binary_contents)} bytes")
 
     # Test listing
-    listing = await file_service_qumulo.get_listing("test/qumulo/")
+    listing = await file_service_qumulo.get_listing(s3_path=S3FilePath(s3_path=Path("test/qumulo/")))
     print(f"Found {len(listing)} files in test/qumulo/")
     assert len(listing) >= 2  # At least our two test files
 
@@ -66,7 +68,7 @@ async def test_qumulo_file_service(file_service_qumulo: FileServiceQumuloS3, tmp
         print(f"  - {item.Key} ({item.Size} bytes)")
 
     # Test get_modified_date
-    modified = await file_service_qumulo.get_modified_date("test/qumulo/test.txt")
+    modified = await file_service_qumulo.get_modified_date(s3_path=S3FilePath(s3_path=Path("test/qumulo/test.txt")))
     print(f"File modified: {modified}")
     assert modified is not None
 
@@ -74,7 +76,7 @@ async def test_qumulo_file_service(file_service_qumulo: FileServiceQumuloS3, tmp
 
 
 @pytest.mark.skipif(
-    len(get_settings().storage_qumulo_access_key_id) == 0, reason="gcs_credentials.json file not supplied"
+    len(get_settings().storage_qumulo_access_key_id) == 0, reason="qumulo access key id is not supplied"
 )
 @pytest.mark.asyncio
 async def test_qumulo_download_to_file(file_service_qumulo: FileServiceQumuloS3, tmp_path: Path) -> None:
@@ -83,12 +85,12 @@ async def test_qumulo_download_to_file(file_service_qumulo: FileServiceQumuloS3,
     test_file = tmp_path / "upload_test.txt"
     test_file.write_text("Test download functionality")
 
-    await file_service_qumulo.upload_file(test_file, "test/qumulo/download_test.txt")
+    await file_service_qumulo.upload_file(test_file, s3_path=S3FilePath(s3_path=Path("test/qumulo/download_test.txt")))
 
     # Download to a specific location
     download_path = tmp_path / "downloaded.txt"
     returned_qumulo_path, returned_local_path = await file_service_qumulo.download_file(
-        "test/qumulo/download_test.txt", download_path
+        s3_path=S3FilePath(s3_path=Path("test/qumulo/download_test.txt")), file_path=download_path
     )
 
     print(f"Downloaded from: {returned_qumulo_path}")
@@ -101,7 +103,7 @@ async def test_qumulo_download_to_file(file_service_qumulo: FileServiceQumuloS3,
 
 
 @pytest.mark.skipif(
-    len(get_settings().storage_qumulo_access_key_id) == 0, reason="gcs_credentials.json file not supplied"
+    len(get_settings().storage_qumulo_access_key_id) == 0, reason="qumulo access key id is not supplied"
 )
 @pytest.mark.asyncio
 async def test_qumulo_path_formats(file_service_qumulo: FileServiceQumuloS3) -> None:
@@ -110,15 +112,14 @@ async def test_qumulo_path_formats(file_service_qumulo: FileServiceQumuloS3) -> 
 
     # Test different path formats
     paths_to_test = [
-        "test/qumulo/path1.txt",  # Relative path
-        "/test/qumulo/path2.txt",  # Absolute-style path
-        "qumulo://test/qumulo/path3.txt",  # Protocol prefix
+        S3FilePath(s3_path=Path("test/qumulo/path1.txt")),  # Relative path
+        S3FilePath(s3_path=Path("/test/qumulo/path2.txt")),  # Absolute-style path
+        S3FilePath(s3_path=Path("qumulo://test/qumulo/path3.txt")),  # Protocol prefix
     ]
 
     for path in paths_to_test:
-        result = await file_service_qumulo.upload_bytes(test_data, path)
+        result = await file_service_qumulo.upload_bytes(test_data, s3_path=path)
         print(f"Path '{path}' -> '{result}'")
-        assert "qumulo://" in result
 
         # Verify we can read it back
         contents = await file_service_qumulo.get_file_contents(path)
