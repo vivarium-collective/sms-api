@@ -1,11 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# STABLE SRI WORKING VERSION:
-# - name: ghcr.io/vivarium-collective/sms-api
-#   newTag: 0.2.15-dev
-
-namespace: sms-api-rke
+namespace: sms-api-eks
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
@@ -14,14 +10,24 @@ images:
 replicas:
   - count: 1
     name: api
+  - count: 0
+    name: haproxy-ssh
 
 resources:
   - ingress.yaml
+  - storageclass-gp3-retain.yaml
   - api-cache-pvc.yaml
   - api-sqlite-pvc.yaml
   - nats-svc.yaml
-  - haproxy-ssh-svc.yaml
   - secret-ghcr.yaml
   - secret-ssh.yaml
-  - ../../config/sms-api-rke
+  - ../../config/sms-api-eks
   - ../../base
+
+patches:
+  - patch: |-
+      - op: remove
+        path: /spec/template/spec/nodeSelector
+    target:
+      kind: Deployment
+      name: api

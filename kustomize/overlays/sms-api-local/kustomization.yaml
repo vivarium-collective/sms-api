@@ -7,14 +7,10 @@ images:
   - name: ghcr.io/vivarium-collective/sms-api
     newTag: 0.2.19-dev
     # STABLE: newTag: 0.2.8
-  - name: docker.io/library/mongo
-    newTag: 8.0.4
 
 replicas:
   - count: 1
     name: api
-  - count: 0
-    name: mongodb
 
 resources:
   - ingress.yaml

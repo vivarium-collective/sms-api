@@ -3,6 +3,6 @@ kind: Kustomization
 
 resources:
   - api.yaml
-  - mongodb.yaml
+#  - localstack.yaml
   - nats.yaml
   - haproxy-ssh.yaml

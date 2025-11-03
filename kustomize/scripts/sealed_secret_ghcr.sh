@@ -13,12 +13,17 @@
 
 # Initialize variables
 CERT_ARG=""
+CONTROLLER_NAME="sealed-secrets-controller"
 
 # Parse optional arguments
 while [[ "$1" == --* ]]; do
   case "$1" in
     --cert)
       CERT_ARG="$2"
+      shift 2
+      ;;
+    --controller-name)
+      CONTROLLER_NAME="$2"
       shift 2
       ;;
     *)
@@ -48,4 +53,4 @@ kubectl create secret docker-registry ${SECRET_NAME} --dry-run=client \
       --docker-username="${USERNAME}" \
       --docker-email="${EMAIL}" \
       --docker-password="${PASSWORD}" \
-      --namespace="${NAMESPACE}" -o yaml | kubeseal --format yaml ${CERT_ARG:+--cert=$CERT_ARG}
+      --namespace="${NAMESPACE}" -o yaml | kubeseal --controller-name=${CONTROLLER_NAME} --format yaml ${CERT_ARG:+--cert=$CERT_ARG}

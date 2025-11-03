@@ -7,7 +7,7 @@ from typing import Literal
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from sms_api.common.storage.file_paths import HPCFilePath, ScratchFilePath
+from sms_api.common.storage.file_paths import HPCFilePath
 
 KV_DRIVER = Literal["file", "s3", "gcs"]
 TS_DRIVER = Literal["zarr", "n5", "zarr3"]
