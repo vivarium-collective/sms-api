@@ -24,6 +24,8 @@ class HPCFilePath(BaseModel):
         return self.remote_path.name
 
     def __truediv__(self, other: str) -> "HPCFilePath":
+        if "{" in other or "}" in other or ":" in other or '"' in other:
+            raise ValueError(f"HPCFilePath can not composing paths from json strings, unexpected arg '{other}'")
         return HPCFilePath(remote_path=self.remote_path / other)
 
 
@@ -48,6 +50,8 @@ class ScratchFilePath(BaseModel):
         return self.local_path.name
 
     def __truediv__(self, other: str) -> "ScratchFilePath":
+        if "{" in other or "}" in other or ":" in other or '"' in other:
+            raise ValueError(f"ScratchFilePath can not composing paths from json strings, unexpected arg '{other}'")
         return ScratchFilePath(local_path=self.local_path / other)
 
 
@@ -73,4 +77,6 @@ class S3FilePath(BaseModel):
         return self.s3_path.name
 
     def __truediv__(self, other: str) -> "S3FilePath":
+        if "{" in other or "}" in other or ":" in other or '"' in other:
+            raise ValueError(f"S3FilePath can not composing paths from json strings, unexpected arg '{other}'")
         return S3FilePath(s3_path=self.s3_path / other)
