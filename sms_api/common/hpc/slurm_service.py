@@ -11,6 +11,7 @@ logger.setLevel(logging.INFO)
 
 class SlurmService:
     ssh_service: SSHService
+    verified_htc_dir: bool = False
 
     def __init__(self, ssh_service: SSHService):
         self.ssh_service = ssh_service
@@ -59,6 +60,9 @@ class SlurmService:
     async def submit_job(
         self, local_sbatch_file: Path, remote_sbatch_file: HPCFilePath, args: tuple[str, ...] | None = None
     ) -> int:
+        if not self.verified_htc_dir:
+            await self.ssh_service.run_command("mkdir -p " + str(remote_sbatch_file.parent))
+            self.verified_htc_dir = True
         await self.ssh_service.scp_upload(local_file=local_sbatch_file, remote_path=remote_sbatch_file)
         command = f"sbatch --parsable {remote_sbatch_file}"
         if args:
@@ -74,6 +78,7 @@ class SlurmService:
 
 class SlurmServiceManaged:
     ssh_service: SSHServiceManaged
+    verified_htc_dir: bool = False
 
     def __init__(self, ssh_service: SSHServiceManaged):
         self.ssh_service = ssh_service
@@ -122,6 +127,9 @@ class SlurmServiceManaged:
     async def submit_job(
         self, local_sbatch_file: Path, remote_sbatch_file: HPCFilePath, args: tuple[str, ...] | None = None
     ) -> int:
+        if not self.verified_htc_dir:
+            await self.ssh_service.run_command("mkdir -p " + str(remote_sbatch_file.parent))
+            self.verified_htc_dir = True
         await self.ssh_service.scp_upload(local_file=local_sbatch_file, remote_path=remote_sbatch_file)
         command = f"sbatch --parsable {remote_sbatch_file}"
         if args:
