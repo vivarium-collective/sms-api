@@ -18,10 +18,10 @@ replicas:
 resources:
   - ingress.yaml
   - api-cache-pvc.yaml
-  - api-sqlite-pvc.yaml
   - nats-svc.yaml
   - haproxy-ssh-svc.yaml
   - secret-ghcr.yaml
+  - secret-shared.yaml
   - secret-ssh.yaml
   - ../../config/sms-api-rke
   - ../../base

@@ -15,13 +15,13 @@ replicas:
 resources:
   - ingress.yaml
   - api-cache-pvc.yaml
-  - api-sqlite-pvc.yaml
   - nats-svc.yaml
   - haproxy-ssh-svc.yaml
   - vivarium-home-pv.yaml
   - vivarium-home-pvc.yaml
   - mongodb-pvc.yaml
   - secret-ghcr.yaml
+  - secret-shared.yaml
   - secret-ssh.yaml
   - ../../config/sms-api-rke
   - ../../base
