@@ -6,8 +6,7 @@ ARG APP_GID=10000
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    openssh-client \
-    sqlite3 && \
+    openssh-client && \
     rm -rf /var/lib/apt/lists/*
 
 # Set environment variables
