@@ -8,7 +8,7 @@ kind: Kustomization
 namespace: sms-api-rke-temp
 
 images:
-  - name: ghcr.io/vivarium-collective/sms-api
+  - name: ghcr.io/biosimulations/sms-api
     newTag: 0.2.44-dev  # 0.2.30-dev
 
 replicas:
