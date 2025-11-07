@@ -16,14 +16,14 @@ async def test_analysis_config() -> None:
     assert len(conf.emitter_arg["out_dir"])
 
 
-@pytest.mark.skipif(len(get_settings().slurm_base_path) == 0, reason="slurm base path not supplied")
 @pytest.mark.asyncio
 def test_load_simulation_config() -> None:
     assets_dir = Path(get_settings().assets_dir)
     config = SimulationConfig.from_file(fp=assets_dir / "sms_base_simulation_config.json")
+    sim_data_path = get_settings().slurm_base_path / "workspace" / "kb" / "simData.cPickle"
     expected_dump = {
         "experiment_id": "<PLACEHOLDER>",
-        "sim_data_path": "/home/FCAM/svc_vivarium/workspace/kb/simData.cPickle",
+        "sim_data_path": str(sim_data_path),
         "suffix_time": True,
         "parca_options": {
             "cpus": 2,

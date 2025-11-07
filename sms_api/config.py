@@ -1,10 +1,13 @@
 import os
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from sms_api.common.storage.file_paths import HPCFilePath
 
 KV_DRIVER = Literal["file", "s3", "gcs"]
 TS_DRIVER = Literal["zarr", "n5", "zarr3"]
@@ -25,7 +28,15 @@ if os.getenv(ENV_SECRET_ENV_FILE) is not None and os.path.exists(str(os.getenv(E
     load_dotenv(os.getenv(ENV_SECRET_ENV_FILE))
 
 
+class Namespace(StrEnum):
+    DEVELOPMENT = "dev"
+    PRODUCTION = "prod"
+    TEST = "test"
+
+
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+
     storage_backend: STORAGE_BACKEND = "s3"
 
     # GCS configuration
@@ -66,13 +77,13 @@ class Settings(BaseSettings):
     slurm_partition: str = ""
     slurm_node_list: str = ""  # comma-separated list of nodes, e.g., "node1,node2"
     slurm_qos: str = ""
-    slurm_log_base_path: str = ""
-    slurm_base_path: str = ""
+    slurm_log_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
+    slurm_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
 
-    hpc_image_base_path: str = ""
-    hpc_parca_base_path: str = ""
-    hpc_repo_base_path: str = ""
-    hpc_sim_base_path: str = ""
+    hpc_image_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
+    hpc_parca_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
+    hpc_repo_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
+    hpc_sim_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
     hpc_sim_config_file: str = "publish.json"
 
     nats_url: str = ""
@@ -81,7 +92,6 @@ class Settings(BaseSettings):
     nats_emitter_url: str = ""
     nats_emitter_magic_word: str = "emitter-magic-word"
 
-    dev_mode: str = "0"
     app_dir: str = f"{REPO_ROOT}/app"
     assets_dir: str = f"{REPO_ROOT}/assets"
     marimo_api_server: str = ""
@@ -90,22 +100,17 @@ class Settings(BaseSettings):
     hpc_user: str = ""
     hpc_group: str = ""
     deployment: str = "prod"
+    namespace: Namespace = Namespace.TEST
 
     # external services
     biocyc_email: str = ""
     biocyc_password: str = ""
 
-    remote_data_basepath: str = ""
-    local_data_basepath: str = ""
-    simulation_outdir: str = ""
-    local_simulation_outdir: str = ""
-    vecoli_config_dir: str = ""
+    simulation_outdir: HPCFilePath = HPCFilePath(remote_path=Path(""))
+    vecoli_config_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
 
     dev_base_url: str = "http://localhost:8888"
     prod_base_url: str = "https://sms.cam.uchc.edu"
-
-    def dev_engaged(self) -> bool:
-        return bool(int(self.dev_mode))
 
 
 @lru_cache

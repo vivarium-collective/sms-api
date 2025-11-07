@@ -9,7 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from sms_api.common.storage import FileServiceGCS, FileServiceQumuloS3, FileServiceS3
+from sms_api.common.storage.file_paths import S3FilePath
+from sms_api.common.storage.file_service_gcs import FileServiceGCS
+from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
+from sms_api.common.storage.file_service_s3 import FileServiceS3
 from sms_api.config import get_settings
 from tests.fixtures.file_service_local import FileServiceLocal
 
@@ -26,14 +29,16 @@ async def test_local_file_service_upload_and_download(file_service_local: FileSe
     test_file.write_text("Hello, World!")
 
     # Upload the file
-    uploaded_path = await file_service_local.upload_file(test_file, "test/upload/test.txt")
-    assert uploaded_path == "test/upload/test.txt"
+    uploaded_path = await file_service_local.upload_file(
+        file_path=test_file, s3_path=S3FilePath(s3_path=Path("test/upload/test.txt"))
+    )
+    assert uploaded_path == S3FilePath(s3_path=Path("test/upload/test.txt"))
 
     # Download the file
     downloaded_gcs_path, downloaded_local_path = await file_service_local.download_file(
-        "test/upload/test.txt", tmp_path / "downloaded.txt"
+        S3FilePath(s3_path=Path("test/upload/test.txt")), tmp_path / "downloaded.txt"
     )
-    assert downloaded_gcs_path == "test/upload/test.txt"
+    assert "test/upload/test.txt" in str(downloaded_gcs_path)
     assert Path(downloaded_local_path).read_text() == "Hello, World!"
 
 
@@ -43,11 +48,13 @@ async def test_local_file_service_upload_bytes(file_service_local: FileServiceLo
     test_data = b"Binary data content"
 
     # Upload bytes
-    uploaded_path = await file_service_local.upload_bytes(test_data, "test/bytes/data.bin")
-    assert uploaded_path == "test/bytes/data.bin"
+    uploaded_path = await file_service_local.upload_bytes(
+        test_data, s3_path=S3FilePath(s3_path=Path("test/bytes/data.bin"))
+    )
+    assert "test/bytes/data.bin" in str(uploaded_path)
 
     # Retrieve contents
-    contents = await file_service_local.get_file_contents("test/bytes/data.bin")
+    contents = await file_service_local.get_file_contents(s3_path=S3FilePath(s3_path=Path("test/bytes/data.bin")))
     assert contents == test_data
 
 
@@ -55,12 +62,12 @@ async def test_local_file_service_upload_bytes(file_service_local: FileServiceLo
 async def test_local_file_service_listing(file_service_local: FileServiceLocal) -> None:
     """Test listing files in a directory."""
     # Upload several files
-    await file_service_local.upload_bytes(b"file1", "test/listing/file1.txt")
-    await file_service_local.upload_bytes(b"file2", "test/listing/file2.txt")
-    await file_service_local.upload_bytes(b"file3", "test/listing/subdir/file3.txt")
+    await file_service_local.upload_bytes(b"file1", S3FilePath(s3_path=Path("test/listing/file1.txt")))
+    await file_service_local.upload_bytes(b"file2", S3FilePath(s3_path=Path("test/listing/file2.txt")))
+    await file_service_local.upload_bytes(b"file3", S3FilePath(s3_path=Path("test/listing/subdir/file3.txt")))
 
     # Get listing
-    listing = await file_service_local.get_listing("test/listing")
+    listing = await file_service_local.get_listing(S3FilePath(s3_path=Path("test/listing")))
     assert len(listing) >= 3
 
     # Check that files are in the listing
@@ -88,11 +95,11 @@ async def test_gcs_file_service(file_service_gcs: FileServiceGCS, tmp_path: Path
     test_file.write_text("GCS test content")
 
     # Upload to GCS
-    uploaded_path = await file_service_gcs.upload_file(test_file, "test/gcs/test.txt")
-    assert "test/gcs/test.txt" in uploaded_path
+    uploaded_path = await file_service_gcs.upload_file(test_file, S3FilePath(s3_path=Path("test/gcs/test.txt")))
+    assert "test/gcs/test.txt" in str(uploaded_path)
 
     # Download from GCS
-    contents = await file_service_gcs.get_file_contents("test/gcs/test.txt")
+    contents = await file_service_gcs.get_file_contents(S3FilePath(s3_path=Path("test/gcs/test.txt")))
     assert contents == b"GCS test content"
 
 
@@ -114,14 +121,17 @@ async def test_s3_file_service(file_service_s3: FileServiceS3, tmp_path: Path) -
     test_file = tmp_path / "s3_test.txt"
     test_file.write_text("S3 test content")
 
-    # Upload to S3 (use s3:// format to ensure bucket is properly parsed)
-    uploaded_path = await file_service_s3.upload_file(test_file, "s3://sms-api-test-1761188321/test/s3/test.txt")
-    assert "s3://" in uploaded_path
-    assert "sms-api-test-1761188321" in uploaded_path
-    assert "test/s3/test.txt" in uploaded_path
+    # Upload to S3
+    uploaded_path = await file_service_s3.upload_file(
+        test_file, S3FilePath(s3_path=Path("/sms-api-test-1761188321/test/s3/test.txt"))
+    )
+    assert "sms-api-test-1761188321" in str(uploaded_path)
+    assert "test/s3/test.txt" in str(uploaded_path)
 
     # Download from S3
-    contents = await file_service_s3.get_file_contents("s3://sms-api-test-1761188321/test/s3/test.txt")
+    contents = await file_service_s3.get_file_contents(
+        S3FilePath(s3_path=Path("/sms-api-test-1761188321/test/s3/test.txt"))
+    )
     assert contents == b"S3 test content"
 
 
@@ -144,12 +154,11 @@ async def test_qumulo_file_service(file_service_qumulo: FileServiceQumuloS3, tmp
     test_file.write_text("Qumulo test content")
 
     # Upload to Qumulo
-    uploaded_path = await file_service_qumulo.upload_file(test_file, "test/qumulo/test.txt")
-    assert "qumulo://" in uploaded_path
-    assert "test/qumulo/test.txt" in uploaded_path
+    uploaded_path = await file_service_qumulo.upload_file(test_file, S3FilePath(s3_path=Path("test/qumulo/test.txt")))
+    assert "test/qumulo/test.txt" in str(uploaded_path)
 
     # Download from Qumulo
-    contents = await file_service_qumulo.get_file_contents("test/qumulo/test.txt")
+    contents = await file_service_qumulo.get_file_contents(S3FilePath(s3_path=Path("test/qumulo/test.txt")))
     assert contents == b"Qumulo test content"
 
 
@@ -174,8 +183,8 @@ async def test_all_backends_have_same_interface(
 
     # Test basic operation
     test_data = b"Interface test"
-    path = await file_service_local.upload_bytes(test_data, "test/interface/data.bin")
+    path = await file_service_local.upload_bytes(test_data, S3FilePath(s3_path=Path("test/interface/data.bin")))
     assert path is not None
 
-    retrieved = await file_service_local.get_file_contents("test/interface/data.bin")
+    retrieved = await file_service_local.get_file_contents(S3FilePath(s3_path=Path("test/interface/data.bin")))
     assert retrieved == test_data

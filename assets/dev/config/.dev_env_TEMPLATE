@@ -76,10 +76,7 @@ BIOCYC_EMAIL="myemail@website.org"
 BIOCYC_PASSWORD="my-super-secret-password!"
 
 # -- important FS remote paths --
-REMOTE_DATA_BASEPATH=
-LOCAL_DATA_BASEPATH=
-SIMULATION_OUTDIR=  # (remote)
-LOCAL_SIMULATION_OUTDIR= # this should mirror the path structure provided to the HPC $USER, so for example /some/local/location/home/FCAM/svc_vivarium/...etc
+SIMULATION_OUTDIR=  # (remote HPCFilePath)
 VECOLI_CONFIG_DIR=  # remote, that is
 
 # -- Application/UI-level --

@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import SSHService
-from sms_api.config import Settings
+from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
     EcoliSimulationDTO,
@@ -30,7 +30,6 @@ async def run_simulation(
     sim_service: SimulationService,
     config: SimulationConfig,
     request: ExperimentRequest,
-    env: Settings,
     logger: logging.Logger,
     db_service: DatabaseService,
     timestamp: str,
@@ -40,7 +39,6 @@ async def run_simulation(
         config=config,
         simulation_name=request.simulation_name,
         simulator_hash=simulator.git_commit_hash,
-        env=env,
         logger=logger,
     )
     simulation_record = await db_service.insert_ecoli_simulation(
@@ -58,14 +56,12 @@ async def get_simulation(db_service: DatabaseService, id: int) -> EcoliSimulatio
     return await db_service.get_ecoli_simulation(database_id=id)
 
 
-async def get_simulation_status(
-    db_service: DatabaseService, id: int, env: Settings, ssh_service: SSHService
-) -> SimulationRun:
+async def get_simulation_status(db_service: DatabaseService, id: int, ssh_service: SSHService) -> SimulationRun:
     sim_record = await db_service.get_ecoli_simulation(database_id=id)
     slurmjob_id = sim_record.job_id
     # slurmjob_id = get_jobid_by_experiment(experiment_id)
     # ssh_service = get_ssh_service()
-    slurm_user = env.slurm_submit_user
+    slurm_user = get_settings().slurm_submit_user
     statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
     status: str = statuses[1].split("\n")[0].split()[-2]
     return SimulationRun(id=int(id), status=JobStatus[status])
@@ -84,7 +80,6 @@ async def get_simulation_data(
     variant: int,
     agent_id: int,
     observables: list[str],
-    env: Settings,
     bg_tasks: BackgroundTasks,
 ) -> StreamingResponse:
     simulation = await db_service.get_ecoli_simulation(database_id=id)
@@ -109,7 +104,7 @@ async def get_simulation_data(
     tmpdir = tempfile.TemporaryDirectory()
     local = Path(tmpdir.name, pq_filename)
     bg_tasks.add_task(tmpdir.cleanup)
-    remote = Path(env.simulation_outdir).parent / "data" / pq_filename
+    remote = get_settings().simulation_outdir.parent / "data" / pq_filename
     await ssh.scp_download(local_file=local, remote_path=remote)
     bg_tasks.add_task(ssh.run_command, f"rm {remote!s}")
 
@@ -144,23 +139,19 @@ async def get_simulation_data(
     return StreamingResponse(generate(pl.read_parquet(local).to_dicts()), media_type="application/json")
 
 
-async def get_simulation_log(
-    db_service: DatabaseService, ssh_service: SSHService, id: int, env: Settings
-) -> fastapi.Response:
-    stdout = await _get_slurm_log(db_service, ssh_service, id, env)
+async def get_simulation_log(db_service: DatabaseService, ssh_service: SSHService, id: int) -> fastapi.Response:
+    stdout = await _get_slurm_log(db_service, ssh_service, id)
     _, _, after = stdout.partition("N E X T F L O W")
     result = "N E X T F L O W" + after
     return fastapi.Response(content=result, media_type="text/plain")
 
 
-async def get_simulation_log_detailed(
-    db_service: DatabaseService, ssh_service: SSHService, id: int, env: Settings
-) -> str:
-    return await _get_slurm_log(db_service=db_service, ssh_service=ssh_service, db_id=id, env=env)
+async def get_simulation_log_detailed(db_service: DatabaseService, ssh_service: SSHService, id: int) -> str:
+    return await _get_slurm_log(db_service=db_service, ssh_service=ssh_service, db_id=id)
 
 
-async def _get_slurm_log(db_service: DatabaseService, ssh_service: SSHService, db_id: int, env: Settings) -> str:
+async def _get_slurm_log(db_service: DatabaseService, ssh_service: SSHService, db_id: int) -> str:
     experiment = await db_service.get_ecoli_simulation(database_id=db_id)
-    remote_log_path = f"{env.slurm_log_base_path!s}/{experiment.job_name}"
+    remote_log_path = f"{get_settings().slurm_log_base_path!s}/{experiment.job_name}"
     returncode, stdout, stderr = await ssh_service.run_command(f"cat {remote_log_path}.out")
     return stdout

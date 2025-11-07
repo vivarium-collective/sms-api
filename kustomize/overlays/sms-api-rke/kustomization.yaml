@@ -9,15 +9,11 @@ namespace: sms-api-rke
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.2.31-dev  # 0.2.30-dev
-  - name: docker.io/library/mongo
-    newTag: 8.0.4
+    newTag: 0.2.44-dev  # 0.2.30-dev
 
 replicas:
   - count: 1
     name: api
-  - count: 0
-    name: mongodb
 
 resources:
   - ingress.yaml
@@ -25,9 +21,6 @@ resources:
   - api-sqlite-pvc.yaml
   - nats-svc.yaml
   - haproxy-ssh-svc.yaml
-  - vivarium-home-pv.yaml
-  - vivarium-home-pvc.yaml
-  - mongodb-pvc.yaml
   - secret-ghcr.yaml
   - secret-ssh.yaml
   - ../../config/sms-api-rke

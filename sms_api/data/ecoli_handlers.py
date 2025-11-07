@@ -1,17 +1,13 @@
 import asyncio
 import logging
-import mimetypes
-from pathlib import Path
 from types import ModuleType
 
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
 from sms_api.common.utils import unique_id
-from sms_api.config import Settings
+from sms_api.config import Settings, get_settings
 from sms_api.data.analysis_service import (
     AnalysisService,
     get_html_outputs_local,
-    get_html_outputs_remote,
-    read_tsv_file,
 )
 from sms_api.data.models import (
     AnalysisRun,
@@ -31,7 +27,6 @@ async def run_analysis(
     request: ExperimentAnalysisRequest,
     simulator: SimulatorVersion,
     analysis_service: AnalysisService,
-    env: Settings,
     logger: logging.Logger,
     db_service: DatabaseService,
     timestamp: str,
@@ -59,13 +54,13 @@ async def run_analysis(
     await asyncio.sleep(3)
 
     run = await get_analysis_status(
-        db_service=db_service, ssh_service=ssh_service, id=analysis_record.database_id, env=env
+        db_service=db_service,
+        ssh_service=ssh_service,
+        id=analysis_record.database_id,
     )
     while run.status.lower() not in ["completed", "failed"]:
         await asyncio.sleep(3)
-        run = await get_analysis_status(
-            db_service=db_service, ssh_service=ssh_service, id=analysis_record.database_id, env=env
-        )
+        run = await get_analysis_status(db_service=db_service, ssh_service=ssh_service, id=analysis_record.database_id)
     if run.status.lower() == "failed":
         raise Exception(f"Analysis Run has failed:\n{run}")
 
@@ -93,7 +88,6 @@ async def run_analysis(
                         request=TsvOutputFileRequest(**file_spec.model_dump()),
                         db_service=db_service,
                         id=analysis_record.database_id,
-                        env=env,
                         ssh=ssh_service,
                     )
                     requested_outputs.append(output)
@@ -114,17 +108,13 @@ async def get_ptools_manifest(
 ) -> list[TsvOutputFile]:
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
-    if int(env.dev_mode):
-        return await analysis_service.get_tsv_manifest_local(output_id=output_id, ssh_service=ssh_service)  # type: ignore[no-any-return]
-    else:
-        return analysis_service.get_tsv_manifest_remote(output_id)  # type: ignore[no-any-return]
+    return await analysis_service.get_tsv_manifest_local(output_id=output_id, ssh_service=ssh_service)  # type: ignore[no-any-return]
 
 
 async def get_tsv_output(
     request: TsvOutputFileRequest,
     db_service: DatabaseService,
     id: int,
-    env: Settings,
     ssh: SSHServiceManaged,
 ) -> TsvOutputFile:
     variant_id = request.variant
@@ -135,7 +125,7 @@ async def get_tsv_output(
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
     fp = (
-        Path(env.simulation_outdir)
+        get_settings().simulation_outdir
         / output_id
         / f"experiment_id={analysis_data.config.analysis_options.experiment_id[0]}"
     )
@@ -149,55 +139,37 @@ async def get_tsv_output(
         fp = fp / f"agent_id={agent_id}"
 
     filepath = fp / filename
-    mimetype, _ = mimetypes.guess_type(filepath)
 
-    if int(env.dev_mode):
-        _, stdout, stderr = await ssh.run_command(f"cat {filepath!s}")
-        return TsvOutputFile(
-            filename=filename,
-            variant=variant_id,
-            lineage_seed=lineage_seed_id,
-            generation=generation_id,
-            agent_id=agent_id,
-            content=stdout,
-        )
-
+    _, stdout, stderr = await ssh.run_command(f"cat {filepath!s}")
     return TsvOutputFile(
         filename=filename,
         variant=variant_id,
         lineage_seed=lineage_seed_id,
         generation=generation_id,
         agent_id=agent_id,
-        content=read_tsv_file(filepath),
+        content=stdout,
     )
 
 
-async def get_analysis_status(
-    db_service: DatabaseService, ssh_service: SSHServiceManaged, id: int, env: Settings
-) -> AnalysisRun:
+async def get_analysis_status(db_service: DatabaseService, ssh_service: SSHServiceManaged, id: int) -> AnalysisRun:
     analysis_record = await db_service.get_analysis(database_id=id)
     slurmjob_id = analysis_record.job_id
     # slurmjob_id = get_jobid_by_experiment(experiment_id)
     # ssh_service = get_ssh_service()
-    slurm_user = env.slurm_submit_user
+    slurm_user = get_settings().slurm_submit_user
     statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
     status: str = statuses[1].split("\n")[0].split()[-2]
     return AnalysisRun(id=id, status=JobStatus[status])
 
 
-async def get_analysis_log(db_service: DatabaseService, id: int, env: Settings, ssh_service: SSHService) -> str:
+async def get_analysis_log(db_service: DatabaseService, id: int, ssh_service: SSHService) -> str:
     analysis_record = await db_service.get_analysis(database_id=id)
-    slurm_logfile = Path(env.slurm_log_base_path) / f"{analysis_record.job_name}.out"
+    slurm_logfile = get_settings().slurm_log_base_path / f"{analysis_record.job_name}.out"
     ret, stdout, stdin = await ssh_service.run_command(f"cat {slurm_logfile!s}")
     return stdout
 
 
-async def get_analysis_plots(
-    db_service: DatabaseService, id: int, env: Settings, ssh_service: SSHServiceManaged
-) -> list[OutputFile]:
+async def get_analysis_plots(db_service: DatabaseService, id: int, ssh_service: SSHServiceManaged) -> list[OutputFile]:
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
-    if int(env.dev_mode):
-        return await get_html_outputs_local(output_id=output_id, ssh_service=ssh_service)
-    else:
-        return get_html_outputs_remote(output_id=output_id)
+    return await get_html_outputs_local(output_id=output_id, ssh_service=ssh_service)

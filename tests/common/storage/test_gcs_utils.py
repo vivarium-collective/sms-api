@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 from gcloud.aio.auth import Token
 
-from sms_api.common.storage import ListingItem, download_gcs_file, get_gcs_modified_date, get_listing_of_gcs_path
+from sms_api.common.storage.file_paths import S3FilePath
+from sms_api.common.storage.file_service import ListingItem
+from sms_api.common.storage.gcs_aio import download_gcs_file, get_gcs_modified_date, get_listing_of_gcs_path
 from sms_api.config import get_settings
 
 ROOT_DIR = Path(__file__).parent.parent.parent
@@ -17,10 +19,10 @@ ROOT_DIR = Path(__file__).parent.parent.parent
 @pytest.mark.asyncio
 async def test_download_gcs_file(temp_test_data_dir: Path, gcs_token: Token) -> None:
     RUN_ID = "61fd573874bc0ce059643515"
-    GCS_PATH = f"simulations/{RUN_ID}/contents/reports.h5"
+    GCS_PATH = S3FilePath(s3_path=Path(f"simulations/{RUN_ID}/contents/reports.h5"))
     LOCAL_PATH = temp_test_data_dir / f"{RUN_ID}.h5"
 
-    await download_gcs_file(gcs_path=GCS_PATH, file_path=LOCAL_PATH, token=gcs_token)
+    await download_gcs_file(s3_path=GCS_PATH, file_path=LOCAL_PATH, token=gcs_token)
 
     assert LOCAL_PATH.exists()
 
@@ -33,9 +35,9 @@ async def test_download_gcs_file(temp_test_data_dir: Path, gcs_token: Token) -> 
 @pytest.mark.asyncio
 async def test_get_gcs_modified_date(gcs_token: Token) -> None:
     RUN_ID = "61fd573874bc0ce059643515"
-    GCS_PATH = f"simulations/{RUN_ID}/contents/reports.h5"
+    GCS_PATH = S3FilePath(s3_path=Path(f"simulations/{RUN_ID}/contents/reports.h5"))
 
-    td = await get_gcs_modified_date(gcs_path=GCS_PATH, token=gcs_token)
+    td = await get_gcs_modified_date(s3_path=GCS_PATH, token=gcs_token)
     assert type(td) is datetime
 
 
@@ -45,8 +47,8 @@ async def test_get_gcs_modified_date(gcs_token: Token) -> None:
 @pytest.mark.asyncio
 async def test_get_listing_of_gcs_path(gcs_token: Token) -> None:
     RUN_ID = "61fd573874bc0ce059643515"
-    GCS_PATH = f"simulations/{RUN_ID}/contents"
+    S3_PATH = S3FilePath(s3_path=Path(f"simulations/{RUN_ID}/contents"))
 
-    files = await get_listing_of_gcs_path(gcs_path=GCS_PATH, token=gcs_token)
+    files = await get_listing_of_gcs_path(s3_path=S3_PATH, token=gcs_token)
     assert len(files) > 0
     assert type(files[0]) is ListingItem

@@ -6,7 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from sms_api.common.gateway.models import Namespace, RouterConfig
+from sms_api.common.gateway.models import RouterConfig
+from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import HpcRun, JobType, SimulatorVersion
 
@@ -19,53 +20,6 @@ def router_config(prefix: str, api_version: str | None = None) -> RouterConfig:
     return RouterConfig(
         router=APIRouter(prefix=f"/{prefix}"), prefix=f"/{api_version or CURRENT_API_VERSION}", dependencies=[]
     )
-
-
-def get_pinned_outdir() -> Path:
-    return get_remote_simulation_outdir(experiment_id="sms_single")
-
-
-def get_remote_simulation_outdir(
-    experiment_id: str, group: str | None = None, user: str | None = None, namespace: Namespace | str | None = None
-) -> Path:
-    """Meant to be used modularly based on the given HPC configuration of a given deployment.
-    For example, we use uchc specifics by default (user = svc_vivarium, etc). So it should be whatever
-    is expected by your HPC.
-
-    :param experiment_id: the experiment ID used to index the saved simulations on disk.
-    :param group: the HPC's group
-    :param user: the HPC's user (defaults to ``svc_vivarium`` for UCHC)
-    :param namespace: the deployment's namespace. See ``sms_api.common.gateway.models.Namespace`` for
-        more details. Defaults to ``Namespace.PRODUCTION``.
-    """
-    print(namespace)
-    return Path(
-        # f"/home/{group or 'FCAM'}/{user or 'svc_vivarium'}/{namespace or Namespace.PRODUCTION}/sims/{experiment_id}"
-        f"/home/{group or 'FCAM'}/{user or 'svc_vivarium'}/workspace/outputs/{experiment_id}"
-    )
-
-
-def get_local_simulation_outdir(experiment_id: str) -> Path:
-    """To really ONLY be used for local dev: that is, without access or attachment to the HPC mount"""
-    return REPO_DIR / "home/FCAM/svc_vivarium/prod/sims" / experiment_id
-
-
-def get_simulation_outdir(experiment_id: str, remote: bool = True, **kwargs: str) -> Path | None:
-    """
-    :param experiment_id: Simulation experiment id.
-    :param remote: If ``True``, use the base path of `/home/<GROUP>/<USER>`. Defaults to ``True``.
-    :param kwargs: ``"group", "user", "deployment"``
-    :return: Path to the simulation outdir.
-    """
-    outdir = (
-        get_remote_simulation_outdir(experiment_id=experiment_id, **kwargs)
-        if remote
-        else get_local_simulation_outdir(experiment_id=experiment_id)
-    )
-    if not outdir.exists():
-        warnings.warn(f"{outdir} does not exist. Defaulting to {REPO_DIR}/home/...etc", stacklevel=2)
-        return None
-    return outdir
 
 
 def format_version(major: int) -> str:
@@ -89,8 +43,8 @@ def format_marimo_appname(appname: str) -> str:
         return appname.replace(appname[0], appname[0].upper())
 
 
-def get_remote_outdir(experiment_id: str, namespace: Namespace | None = None) -> Path:
-    return Path(f"/home/FCAM/svc_vivarium/{namespace or Namespace.PRODUCTION}/sims/{experiment_id}")
+def get_remote_outdir(experiment_id: str) -> Path:
+    return Path(f"/home/FCAM/svc_vivarium/{get_settings().namespace}/sims/{experiment_id}")
 
 
 def write_remote_config(

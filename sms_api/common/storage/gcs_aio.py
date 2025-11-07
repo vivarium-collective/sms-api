@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +8,7 @@ from gcloud.aio.auth import Token
 from gcloud.aio.storage import Storage
 from gcloud.aio.storage.constants import DEFAULT_TIMEOUT
 
+from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import ListingItem
 from sms_api.config import get_settings
 
@@ -47,37 +47,37 @@ async def close_token(token: Token) -> None:
         await token.close()
 
 
-async def download_gcs_file(gcs_path: str, file_path: Path, token: Token) -> str:
-    logger.info(f"Downloading {file_path} to {gcs_path}")
+async def download_gcs_file(s3_path: S3FilePath, file_path: Path, token: Token) -> S3FilePath:
+    logger.info(f"Downloading {file_path} to {s3_path}")
     async with Storage(token=token) as client:
         await client.download_to_filename(
-            bucket=get_settings().storage_gcs_bucket, object_name=gcs_path, filename=str(file_path)
+            bucket=get_settings().storage_gcs_bucket, object_name=str(s3_path), filename=str(file_path)
         )
-        return gcs_path
+        return s3_path
 
 
-async def upload_file_to_gcs(file_path: Path, gcs_path: str, token: Token) -> str:
-    logger.info(f"Uploading {file_path} to {gcs_path}")
+async def upload_file_to_gcs(file_path: Path, s3_path: S3FilePath, token: Token) -> S3FilePath:
+    logger.info(f"Uploading {file_path} to {s3_path}")
     async with Storage(token=token) as client:
         result: dict[str, Any] = await client.upload_from_filename(
-            bucket=get_settings().storage_gcs_bucket, object_name=gcs_path, filename=str(file_path)
+            bucket=get_settings().storage_gcs_bucket, object_name=str(s3_path), filename=str(file_path)
         )
         logger.info(f"Upload result: {result}")
-        return gcs_path
+        return s3_path
 
 
-async def upload_bytes_to_gcs(file_contents: bytes, gcs_path: str, token: Token) -> str:
-    logger.info(f"Uploading {len(file_contents)} bytes to {gcs_path}")
+async def upload_bytes_to_gcs(file_contents: bytes, s3_path: S3FilePath, token: Token) -> S3FilePath:
+    logger.info(f"Uploading {len(file_contents)} bytes to {s3_path}")
     async with Storage(token=token) as client:
-        await client.upload(bucket=get_settings().storage_gcs_bucket, file_data=file_contents, object_name=gcs_path)
-        return gcs_path
+        await client.upload(bucket=get_settings().storage_gcs_bucket, file_data=file_contents, object_name=str(s3_path))
+        return s3_path
 
 
-async def get_gcs_modified_date(gcs_path: str, token: Token) -> datetime:
-    logger.info(f"Getting modified date for {gcs_path}")
+async def get_gcs_modified_date(s3_path: S3FilePath, token: Token) -> datetime:
+    logger.info(f"Getting modified date for {s3_path}")
     async with Storage(token=token) as client:
         metadata: dict[str, Any] = await client.download_metadata(
-            bucket=get_settings().storage_gcs_bucket, object_name=gcs_path
+            bucket=get_settings().storage_gcs_bucket, object_name=str(s3_path)
         )
         return datetime.fromisoformat(metadata["updated"])
 
@@ -98,12 +98,12 @@ async def get_listing_of_gcs(token: Token) -> list[ListingItem]:
         return files
 
 
-async def get_listing_of_gcs_path(gcs_path: str, token: Token) -> list[ListingItem]:
-    logger.info(f"Retrieving file list from {gcs_path}")
+async def get_listing_of_gcs_path(s3_path: S3FilePath, token: Token) -> list[ListingItem]:
+    logger.info(f"Retrieving file list from {s3_path}")
     async with _StorageWithListPrefix(token=token) as _my_client:
         my_client = cast(_StorageWithListPrefix, _my_client)
         metadata: dict[str, Any] = await my_client.list_objects_with_prefix(
-            bucket=get_settings().storage_gcs_bucket, prefix=gcs_path
+            bucket=get_settings().storage_gcs_bucket, prefix=str(s3_path)
         )
         files: list[ListingItem] = [
             ListingItem(
@@ -117,25 +117,11 @@ async def get_listing_of_gcs_path(gcs_path: str, token: Token) -> list[ListingIt
         return files
 
 
-async def get_gcs_file_contents(gcs_path: str, token: Token) -> bytes | None:
-    logger.info(f"Getting file contents for {gcs_path}")
+async def get_gcs_file_contents(s3_path: S3FilePath, token: Token) -> bytes | None:
+    logger.info(f"Getting file contents for {s3_path}")
     try:
         async with Storage(token=token) as client:
-            return await client.download(bucket=get_settings().storage_gcs_bucket, object_name=gcs_path)
+            return await client.download(bucket=get_settings().storage_gcs_bucket, object_name=str(s3_path))
     except FileNotFoundError as e:
         logger.exception(f"File not found: {e.filename}")
         return None
-
-
-async def main() -> None:
-    _settings = get_settings()
-    token = create_token()
-    # await download_gcs_file(gcs_path="local_data/toy_zarr/.zarray", file_path=Path(".zarray"), token=token)
-    print(f"datetime is {await get_gcs_modified_date(gcs_path='local_data/toy_zarr/.zarray', token=token)}")
-    # print(f"datetime is {await get_listing_of_gcs(token=token)}")
-    print(f"datetime is {await get_listing_of_gcs_path(token=token, gcs_path='local_data/toy_zarr')}")
-    await close_token(token)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

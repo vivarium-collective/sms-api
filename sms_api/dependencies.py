@@ -8,8 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService
-from sms_api.common.storage import FileService, FileServiceGCS, FileServiceQumuloS3, FileServiceS3
-from sms_api.config import Settings, get_settings
+from sms_api.common.storage.file_service import FileService
+from sms_api.common.storage.file_service_gcs import FileServiceGCS
+from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
+from sms_api.common.storage.file_service_s3 import FileServiceS3
+from sms_api.config import get_settings
 from sms_api.data.analysis_service import AnalysisService, AnalysisServiceHpc
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
@@ -111,8 +114,8 @@ def get_async_engine(url: str, enable_ssl: bool = True, **engine_params: Any) ->
     return create_async_engine(url, **engine_params)
 
 
-def get_analysis_service(env: Settings) -> AnalysisService:
-    return AnalysisServiceHpc(env)
+def get_analysis_service() -> AnalysisService:
+    return AnalysisServiceHpc()
 
 
 async def init_standalone(enable_ssl: bool = True) -> None:
@@ -123,8 +126,10 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         set_file_service(FileServiceS3())
     elif _settings.storage_backend == "qumulo":
         set_file_service(FileServiceQumuloS3())
-    else:  # default to gcs
+    elif _settings.storage_backend == "gcs":  # default to gcs
         set_file_service(FileServiceGCS())
+    else:
+        raise ValueError(f"Unsupported storage backend: {_settings.storage_backend}")
 
     # set services that don't require params (currently using hpc)
     set_simulation_service(SimulationServiceHpc())

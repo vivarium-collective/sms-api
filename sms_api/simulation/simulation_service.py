@@ -13,6 +13,7 @@ from typing_extensions import override
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
+from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings, get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
@@ -90,7 +91,7 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def submit_experiment_job(
-        self, config: SimulationConfig, simulation_name: str, simulator_hash: str, env: Settings, logger: logging.Logger
+        self, config: SimulationConfig, simulation_name: str, simulator_hash: str, logger: logging.Logger
     ) -> tuple[str, int]:
         pass
 
@@ -136,7 +137,7 @@ class SimulationServiceHpc(SimulationService):
             known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
         )
 
-        software_version_path = Path(settings.hpc_repo_base_path) / git_commit_hash
+        software_version_path = settings.hpc_repo_base_path / git_commit_hash
         test_cmd = f"test -d {software_version_path!s}"
         dir_cmd = f"mkdir -p {software_version_path!s} && cd {software_version_path!s}"
         clone_cmd = f"git clone --branch {git_branch} --single-branch {git_repo_url} {VECOLI_REPO_NAME}"
@@ -434,48 +435,41 @@ class SimulationServiceHpc(SimulationService):
 
     @override
     async def submit_experiment_job(
-        self, config: SimulationConfig, simulation_name: str, simulator_hash: str, env: Settings, logger: logging.Logger
+        self, config: SimulationConfig, simulation_name: str, simulator_hash: str, logger: logging.Logger
     ) -> tuple[str, int]:
         """Used by the /ecoli router"""
 
         async def _dispatch(
-            config: SimulationConfig, simulation_name: str, simulator_hash: str, env: Settings, logger: logging.Logger
+            config: SimulationConfig, simulation_name: str, simulator_hash: str, logger: logging.Logger
         ) -> tuple[str, int]:
             experiment_id = config.experiment_id
             slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
-            base_path = Path(env.slurm_base_path)
-            slurm_log_file = base_path / f"prod/htclogs/{slurmjob_name}.out"
+            slurm_log_file = get_settings().slurm_base_path / "prod" / "htclogs" / f"{slurmjob_name}.out"
 
             slurm_script = _slurm_script(
                 slurm_log_file=slurm_log_file,
                 slurm_job_name=slurmjob_name,
-                env=env,
                 latest_hash=simulator_hash,
                 config=config,
                 simulation_name=simulation_name,
             )
 
-            ssh = get_ssh_service(env)
             slurmjob_id = await _submit_script(
                 config=config,
                 script_content=slurm_script,
                 slurm_job_name=slurmjob_name,
-                env=env,
-                ssh=ssh,
             )
 
             return slurmjob_name, slurmjob_id
 
         def _slurm_script(
-            slurm_log_file: Path,
+            slurm_log_file: HPCFilePath,
             slurm_job_name: str,
-            env: Settings,
             latest_hash: str,
             config: SimulationConfig,
             simulation_name: str,
         ) -> str:
-            base_path = Path(env.slurm_base_path)
-            remote_workspace_dir = base_path / "workspace"
+            remote_workspace_dir = get_settings().slurm_base_path / "workspace"
             vecoli_dir = remote_workspace_dir / "vEcoli"
             # config_dir = vecoli_dir / "configs"
             # conf = config.model_dump_json() or "{}"
@@ -486,10 +480,10 @@ class SimulationServiceHpc(SimulationService):
                 #SBATCH --time=30:00
                 #SBATCH --cpus-per-task {MAX_SIMULATION_CPUS}
                 #SBATCH --mem=8GB
-                #SBATCH --partition={env.slurm_partition}
-                #SBATCH --qos={env.slurm_qos}
+                #SBATCH --partition={get_settings().slurm_partition}
+                #SBATCH --qos={get_settings().slurm_qos}
                 #SBATCH --output={slurm_log_file!s}
-                #SBATCH --nodelist={env.slurm_node_list}
+                #SBATCH --nodelist={get_settings().slurm_node_list}
 
                 set -e
 
@@ -527,16 +521,8 @@ class SimulationServiceHpc(SimulationService):
             config: SimulationConfig,
             script_content: str,
             slurm_job_name: str,
-            env: Settings,
-            ssh: SSHService | None = None,
         ) -> int:
-            settings = env or get_settings()
-            ssh_service = ssh or SSHService(
-                hostname=settings.slurm_submit_host,
-                username=settings.slurm_submit_user,
-                key_path=Path(settings.slurm_submit_key_path),
-                known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-            )
+            ssh_service = get_ssh_service()
             slurm_service = SlurmService(ssh_service=ssh_service)
 
             slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
@@ -555,7 +541,7 @@ class SimulationServiceHpc(SimulationService):
                 )
                 return slurm_jobid
 
-        return await _dispatch(config, simulation_name, simulator_hash, env, logger)
+        return await _dispatch(config, simulation_name, simulator_hash, logger)
 
     @override
     async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
@@ -592,11 +578,11 @@ def simulation_slurm_script(
     config: SimulationConfiguration | None = None,
 ) -> str:
     env = settings or get_settings()
-    base_path = Path(env.slurm_base_path)
+    base_path = env.slurm_base_path
     remote_workspace_dir = base_path / "workspace"
     vecoli_dir = remote_workspace_dir / "vEcoli"
-    slurm_log_file = base_path / f"prod/htclogs/{experiment_id}.out"
-    experiment_outdir = f"/home/FCAM/svc_vivarium/workspace/api_outputs/{config_id}"
+    slurm_log_file = base_path / "prod" / "htclogs" / f"{experiment_id}.out"
+    experiment_outdir = HPCFilePath(remote_path=Path(f"/home/FCAM/svc_vivarium/workspace/api_outputs/{config_id}"))
 
     config_dir = vecoli_dir / "configs"
     latest_hash = "079c43c"
@@ -734,7 +720,7 @@ async def submit_vecoli_job(
     config: SimulationConfiguration | None = None,
 ) -> int:
     # experiment_id = expid or create_experiment_id(config_id=config_id, simulator_hash=simulator_hash)
-    experiment_dir = get_experiment_dir(experiment_id=experiment_id, env=env)
+    experiment_dir = get_experiment_dir(experiment_id=experiment_id)
     experiment_path_parent = experiment_dir.parent
     experiment_id_dir = experiment_dir.name
     slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)

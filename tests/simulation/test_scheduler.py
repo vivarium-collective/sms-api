@@ -11,7 +11,10 @@ from nats.aio.client import Client as NATSClient
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.storage import FileService, FileServiceQumuloS3, FileServiceS3
+from sms_api.common.storage.file_paths import S3FilePath
+from sms_api.common.storage.file_service import FileService
+from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
+from sms_api.common.storage.file_service_s3 import FileServiceS3
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
@@ -126,7 +129,7 @@ async def test_job_scheduler(
     # Submit a toy slurm job which takes 10 seconds to run
     _all_jobs_before_submit: list[SlurmJob] = await slurm_service.get_job_status_squeue()
     settings = get_settings()
-    remote_path = Path(settings.slurm_log_base_path)
+    remote_path = settings.slurm_log_base_path
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_dir = Path(tmpdir)
         # write slurm_template_hello_1s to a temp file
@@ -210,8 +213,8 @@ async def test_job_scheduler_with_storage(
     """
     settings = get_settings()
     test_id = uuid.uuid4().hex[:8]
-    input_key = f"test/slurm/input_{test_id}.txt"
-    output_key = f"test/slurm/output_{test_id}.txt"
+    input_key = S3FilePath(s3_path=Path(f"test/slurm/input_{test_id}.txt"))
+    output_key = S3FilePath(s3_path=Path(f"test/slurm/output_{test_id}.txt"))
 
     # Initialize the appropriate storage service based on storage_type
     storage_service: FileService
@@ -229,7 +232,7 @@ async def test_job_scheduler_with_storage(
         # Step 1: Upload test input file to storage
         print(f"\n=== Step 1: Uploading test input to {storage_type}: {input_key} ===")
         test_input_content = f"Test input file created at {uuid.uuid4()}\n"
-        await storage_service.upload_bytes(file_contents=test_input_content.encode("utf-8"), gcs_path=input_key)
+        await storage_service.upload_bytes(file_contents=test_input_content.encode("utf-8"), s3_path=input_key)
         print(f"✅ Test input uploaded to {storage_type}")
 
         # Step 2: Prepare Slurm job script
@@ -241,7 +244,7 @@ async def test_job_scheduler_with_storage(
         await scheduler.start_polling(interval_seconds=2)
 
         # Upload helper script to remote host
-        remote_path = Path(settings.slurm_log_base_path)
+        remote_path = settings.slurm_log_base_path
         helpers_script_path = Path(__file__).parent.parent / "fixtures" / "s3_helpers.sh"
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -255,8 +258,8 @@ async def test_job_scheduler_with_storage(
             # Prepare the sbatch script with substitutions
             sbatch_content = slurm_template_with_storage
             sbatch_content = sbatch_content.replace("HELPERS_PATH", str(remote_helpers))
-            sbatch_content = sbatch_content.replace("INPUT_KEY", input_key)
-            sbatch_content = sbatch_content.replace("OUTPUT_KEY", output_key)
+            sbatch_content = sbatch_content.replace("INPUT_KEY", str(input_key))
+            sbatch_content = sbatch_content.replace("OUTPUT_KEY", str(output_key))
 
             # Add environment variables for storage access based on storage type
             if storage_type == "aws":

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
+from sms_api.common.storage.file_paths import HPCFilePath
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -10,6 +11,7 @@ logger.setLevel(logging.INFO)
 
 class SlurmService:
     ssh_service: SSHService
+    verified_htc_dir: bool = False
 
     def __init__(self, ssh_service: SSHService):
         self.ssh_service = ssh_service
@@ -56,8 +58,11 @@ class SlurmService:
         return slurm_jobs
 
     async def submit_job(
-        self, local_sbatch_file: Path, remote_sbatch_file: Path, args: tuple[str, ...] | None = None
+        self, local_sbatch_file: Path, remote_sbatch_file: HPCFilePath, args: tuple[str, ...] | None = None
     ) -> int:
+        if not self.verified_htc_dir:
+            await self.ssh_service.run_command("mkdir -p " + str(remote_sbatch_file.parent))
+            self.verified_htc_dir = True
         await self.ssh_service.scp_upload(local_file=local_sbatch_file, remote_path=remote_sbatch_file)
         command = f"sbatch --parsable {remote_sbatch_file}"
         if args:
@@ -73,6 +78,7 @@ class SlurmService:
 
 class SlurmServiceManaged:
     ssh_service: SSHServiceManaged
+    verified_htc_dir: bool = False
 
     def __init__(self, ssh_service: SSHServiceManaged):
         self.ssh_service = ssh_service
@@ -119,8 +125,11 @@ class SlurmServiceManaged:
         return slurm_jobs
 
     async def submit_job(
-        self, local_sbatch_file: Path, remote_sbatch_file: Path, args: tuple[str, ...] | None = None
+        self, local_sbatch_file: Path, remote_sbatch_file: HPCFilePath, args: tuple[str, ...] | None = None
     ) -> int:
+        if not self.verified_htc_dir:
+            await self.ssh_service.run_command("mkdir -p " + str(remote_sbatch_file.parent))
+            self.verified_htc_dir = True
         await self.ssh_service.scp_upload(local_file=local_sbatch_file, remote_path=remote_sbatch_file)
         command = f"sbatch --parsable {remote_sbatch_file}"
         if args:

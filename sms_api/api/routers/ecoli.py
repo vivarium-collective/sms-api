@@ -17,7 +17,6 @@ from sms_api.api import request_examples
 from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.common.ssh.ssh_service import get_ssh_service, get_ssh_service_managed
 from sms_api.common.utils import timestamp
-from sms_api.config import get_settings
 from sms_api.data import ecoli_handlers as data_handlers
 from sms_api.data.models import (
     AnalysisRun,
@@ -35,8 +34,6 @@ from sms_api.simulation.models import (
     ExperimentRequest,
     SimulationRun,
 )
-
-ENV = get_settings()
 
 logger = logging.getLogger(__name__)
 config = router_config(prefix="ecoli")
@@ -63,9 +60,9 @@ async def run_analysis(
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
 
-    analysis_service = get_analysis_service(ENV)
+    analysis_service = get_analysis_service()
 
-    ssh_service = get_ssh_service_managed(ENV)
+    ssh_service = get_ssh_service_managed()
     await ssh_service.connect()
 
     try:
@@ -73,7 +70,6 @@ async def run_analysis(
             request=request,
             simulator=get_simulator(),
             analysis_service=analysis_service,
-            env=ENV,
             db_service=db_service,
             timestamp=timestamp(),
             logger=logger,
@@ -115,10 +111,10 @@ async def get_analysis_status(id: int = fastapi.Path(..., description="Database 
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-    ssh_service = get_ssh_service_managed(ENV)
+    ssh_service = get_ssh_service_managed()
     await ssh_service.connect()
     try:
-        return await data_handlers.get_analysis_status(db_service=db_service, ssh_service=ssh_service, id=id, env=ENV)
+        return await data_handlers.get_analysis_status(db_service=db_service, ssh_service=ssh_service, id=id)
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
@@ -143,7 +139,7 @@ async def get_analysis_log(id: int = fastapi.Path(..., description="Database ID 
         raise HTTPException(status_code=404, detail="Database not found")
     ssh_service = get_ssh_service()
     try:
-        return await data_handlers.get_analysis_log(db_service=db_service, id=id, env=ENV, ssh_service=ssh_service)
+        return await data_handlers.get_analysis_log(db_service=db_service, id=id, ssh_service=ssh_service)
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
@@ -167,11 +163,11 @@ async def get_analysis_plots(
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
 
-    ssh_service = get_ssh_service_managed(ENV)
+    ssh_service = get_ssh_service_managed()
     await ssh_service.connect()
 
     try:
-        return await data_handlers.get_analysis_plots(db_service=db_service, id=id, env=ENV, ssh_service=ssh_service)
+        return await data_handlers.get_analysis_plots(db_service=db_service, id=id, ssh_service=ssh_service)
     except Exception as e:
         logger.exception("Error getting analysis data")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -233,7 +229,6 @@ async def run_simulation(
             sim_service=sim_service,
             config=config,
             request=request,
-            env=ENV,
             logger=logger,
             db_service=db_service,
             timestamp=timestamp(),
@@ -276,7 +271,7 @@ async def get_simulation_status(id: int = fastapi.Path(...)) -> SimulationRun:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
         return await simulation_handlers.get_simulation_status(
-            db_service=db_service, id=id, env=ENV, ssh_service=get_ssh_service(ENV)
+            db_service=db_service, id=id, ssh_service=get_ssh_service()
         )
     except Exception as e:
         logger.exception(
@@ -300,7 +295,9 @@ async def get_simulation_log(id: int = fastapi.Path(...)) -> fastapi.Response:
     ssh_service = get_ssh_service()
     try:
         return await simulation_handlers.get_simulation_log(
-            db_service=db_service, ssh_service=ssh_service, id=id, env=ENV
+            db_service=db_service,
+            ssh_service=ssh_service,
+            id=id,
         )
     except Exception as e:
         logger.exception("""Error getting simulation log.""")
@@ -350,7 +347,7 @@ async def get_simulation_data(
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
         return await simulation_handlers.get_simulation_data(
-            ssh=get_ssh_service(ENV),
+            ssh=get_ssh_service(),
             db_service=db_service,
             id=id,
             lineage_seed=lineage_seed,
@@ -358,7 +355,6 @@ async def get_simulation_data(
             variant=variant,
             agent_id=agent_id,
             observables=observables,
-            env=ENV,
             bg_tasks=bg_tasks,
         )
     except Exception as e:

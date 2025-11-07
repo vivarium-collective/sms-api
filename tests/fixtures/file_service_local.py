@@ -7,6 +7,7 @@ from pathlib import Path
 import aiofiles
 from typing_extensions import override
 
+from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService, ListingItem
 from sms_api.config import get_local_cache_dir
 
@@ -18,71 +19,71 @@ def generate_fake_etag(file_path: Path) -> str:
 
 
 class FileServiceLocal(FileService):
-    # temporary base directory for the mock GCS file store
+    # temporary base directory for the mock S3 file store
     BASE_DIR_PARENT = get_local_cache_dir() / "local_data"
     BASE_DIR_PARENT.mkdir(exist_ok=True)
-    BASE_DIR = BASE_DIR_PARENT / ("gcs_" + uuid.uuid4().hex)
+    BASE_DIR = BASE_DIR_PARENT / ("s3_" + uuid.uuid4().hex)
 
-    gcs_files_written: list[Path] = []
+    s3_files_written: list[Path] = []
 
     def init(self) -> None:
         self.BASE_DIR.mkdir(parents=True, exist_ok=False)
 
     @override
     async def close(self) -> None:
-        # remove all files in the mock gcs file store
+        # remove all files in the mock s3 file store
         shutil.rmtree(self.BASE_DIR)
 
     @override
-    async def download_file(self, gcs_path: str, file_path: Path | None = None) -> tuple[str, str]:
-        logger.info(f"Downloading {gcs_path} to {file_path}")
+    async def download_file(self, s3_path: S3FilePath, file_path: Path | None = None) -> tuple[S3FilePath, str]:
+        logger.info(f"Downloading {s3_path} to {file_path}")
         if file_path is None:
             file_path = get_local_cache_dir() / ("temp_file_" + uuid.uuid4().hex)
-        # copy file from mock gcs to local file system
-        gcs_file_path = self.BASE_DIR / gcs_path
+        # copy file from mock s3 to local file system
+        s3_file_path = self.BASE_DIR / s3_path.s3_path
         local_file_path = Path(file_path)
         local_file_path.parent.mkdir(parents=True, exist_ok=True)
-        async with aiofiles.open(gcs_file_path, mode="rb") as f:
+        async with aiofiles.open(s3_file_path, mode="rb") as f:
             contents = await f.read()
             async with aiofiles.open(local_file_path, mode="wb") as f2:
                 await f2.write(contents)
-        return str(gcs_path), str(local_file_path)
+        return s3_path, str(local_file_path)
 
     @override
-    async def upload_file(self, file_path: Path, gcs_path: str) -> str:
-        logger.info(f"Uploading {file_path} to {gcs_path}")
-        # copy file from local file_path to mock gcs using aoifiles
+    async def upload_file(self, file_path: Path, s3_path: S3FilePath) -> S3FilePath:
+        logger.info(f"Uploading {file_path} to {s3_path}")
+        # copy file from local file_path to mock s3 using aoifiles
         local_file_path = Path(file_path)
-        gcs_file_path = self.BASE_DIR / gcs_path
-        gcs_file_path.parent.mkdir(parents=True, exist_ok=True)
+        s3_file_path = self.BASE_DIR / s3_path.s3_path
+        s3_file_path.parent.mkdir(parents=True, exist_ok=True)
         async with aiofiles.open(local_file_path, mode="rb") as f:
             contents = await f.read()
-            async with aiofiles.open(gcs_file_path, mode="wb") as f2:
+            async with aiofiles.open(s3_file_path, mode="wb") as f2:
                 await f2.write(contents)
-        self.gcs_files_written.append(gcs_file_path)
-        return str(gcs_path)
+        self.s3_files_written.append(s3_file_path)
+        return s3_path
 
     @override
-    async def upload_bytes(self, file_contents: bytes, gcs_path: str) -> str:
-        logger.info(f"Uploading bytes to {gcs_path}")
-        # write bytes to mock gcs
-        gcs_file_path = self.BASE_DIR / gcs_path
-        gcs_file_path.parent.mkdir(parents=True, exist_ok=True)
-        async with aiofiles.open(gcs_file_path, mode="wb") as f:
+    async def upload_bytes(self, file_contents: bytes, s3_path: S3FilePath) -> S3FilePath:
+        logger.info(f"Uploading bytes to {s3_path}")
+        # write bytes to mock s3
+        s3_file_path = self.BASE_DIR / s3_path.s3_path
+        s3_file_path.parent.mkdir(parents=True, exist_ok=True)
+        async with aiofiles.open(s3_file_path, mode="wb") as f:
             await f.write(file_contents)
-        self.gcs_files_written.append(gcs_file_path)
-        return str(gcs_path)
+        self.s3_files_written.append(s3_file_path)
+        return s3_path
 
     @override
-    async def get_modified_date(self, gcs_path: str) -> datetime:
-        # get the modified date of the file in mock gcs
-        gcs_file_path = self.BASE_DIR / gcs_path
-        return datetime.fromtimestamp(gcs_file_path.stat().st_mtime)
+    async def get_modified_date(self, s3_path: S3FilePath) -> datetime:
+        # get the modified date of the file in mock s3
+        s3_file_path = self.BASE_DIR / s3_path.s3_path
+        return datetime.fromtimestamp(s3_file_path.stat().st_mtime)
 
     @override
-    async def get_listing(self, gcs_path: str) -> list[ListingItem]:
-        # get the listing of the directory in mock gcs
-        gcs_dir_path = self.BASE_DIR / gcs_path
+    async def get_listing(self, s3_path: S3FilePath) -> list[ListingItem]:
+        # get the listing of the directory in mock s3
+        s3_dir_path = self.BASE_DIR / s3_path.s3_path
         return [
             ListingItem(
                 Key=str(file.relative_to(self.BASE_DIR)),
@@ -90,22 +91,22 @@ class FileServiceLocal(FileService):
                 LastModified=datetime.fromtimestamp(file.stat().st_mtime),
                 ETag=generate_fake_etag(file),
             )
-            for file in gcs_dir_path.rglob("*")
+            for file in s3_dir_path.rglob("*")
         ]
 
     @override
-    async def get_file_contents(self, gcs_path: str) -> bytes | None:
-        # get the file contents from mock gcs
-        gcs_file_path = self.BASE_DIR / gcs_path
-        if not gcs_file_path.exists():
+    async def get_file_contents(self, s3_path: S3FilePath) -> bytes | None:
+        # get the file contents from mock s3
+        s3_file_path = self.BASE_DIR / s3_path.s3_path
+        if not s3_file_path.exists():
             return None
-        return gcs_file_path.read_bytes()
+        return s3_file_path.read_bytes()
 
     @override
-    async def delete_file(self, gcs_path: str) -> None:
-        # delete the file from mock gcs
-        gcs_file_path = self.BASE_DIR / gcs_path
-        if gcs_file_path.exists():
-            gcs_file_path.unlink()
+    async def delete_file(self, s3_path: S3FilePath) -> None:
+        # delete the file from mock s3
+        s3_file_path = self.BASE_DIR / s3_path.s3_path
+        if s3_file_path.exists():
+            s3_file_path.unlink()
         else:
-            raise FileNotFoundError(f"File {gcs_path} does not exist in local file service.")
+            raise FileNotFoundError(f"File {s3_path} does not exist in local file service.")
