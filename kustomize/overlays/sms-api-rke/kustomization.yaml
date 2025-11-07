@@ -5,7 +5,7 @@ kind: Kustomization
 # - name: ghcr.io/vivarium-collective/sms-api
 #   newTag: 0.2.15-dev
 
-namespace: sms-api-rke
+namespace: sms-api-rke-temp
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
@@ -16,7 +16,7 @@ replicas:
     name: api
 
 resources:
-  - ingress.yaml
+#  - ingress.yaml
   - api-cache-pvc.yaml
   - nats-svc.yaml
   - haproxy-ssh-svc.yaml
