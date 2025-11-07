@@ -2,10 +2,12 @@ import datetime
 from typing import cast
 
 import pytest
-from sqlalchemy import TIMESTAMP, Column, ForeignKey, Integer, MetaData, String, Table, func, insert, select
+from sqlalchemy import TIMESTAMP, Column, ForeignKey, Integer, MetaData, Sequence, String, Table, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 meta_obj = MetaData()
+
+users_table_seq = Sequence(name="users_seq", metadata=meta_obj)
 
 users_table = Table(
     "users",
@@ -32,20 +34,29 @@ async def create_db(async_engine: AsyncEngine) -> None:
 
 
 @pytest.mark.asyncio
-async def test_async(async_db_engine: AsyncEngine) -> None:
-    await create_db(async_db_engine)
+async def test_async(async_postgres_engine: AsyncEngine) -> None:
+    await create_db(async_postgres_engine)
 
     name = "John Doe"
     email = "my_email"
 
-    async with async_db_engine.begin() as conn:
+    async with async_postgres_engine.begin() as conn:
+        # directly call nextval on the sequence to ensure it starts at 1 and compare current value
+        result = await conn.execute(users_table_seq.next_value())
+        val = result.scalar_one()
+        assert val == 1
+        result = await conn.execute(users_table_seq.next_value())
+        val = result.scalar_one()
+        assert val == 2
+
+    async with async_postgres_engine.begin() as conn:
         statement = insert(users_table).values(name=name, email=email)
         print(statement)
         result = await conn.execute(statement=statement)
         assert result.rowcount == 1
         await conn.commit()
 
-    async with async_db_engine.begin() as conn:
+    async with async_postgres_engine.begin() as conn:
         query = select(users_table).where(users_table.c.name == name)
         result = await conn.execute(query)
         first_row = cast(tuple[int, str, str, datetime.datetime], result.first())
