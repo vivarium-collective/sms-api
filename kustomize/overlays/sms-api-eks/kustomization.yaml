@@ -20,6 +20,7 @@ resources:
   - api-sqlite-pvc.yaml
   - nats-svc.yaml
   - secret-ghcr.yaml
+  - secret-shared.yaml
   - secret-ssh.yaml
   - ../../config/sms-api-eks
   - ../../base
