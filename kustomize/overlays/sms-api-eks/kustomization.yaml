@@ -17,7 +17,6 @@ resources:
   - ingress.yaml
   - storageclass-gp3-retain.yaml
   - api-cache-pvc.yaml
-  - api-sqlite-pvc.yaml
   - nats-svc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
