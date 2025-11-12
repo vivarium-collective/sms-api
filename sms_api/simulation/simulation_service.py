@@ -175,7 +175,10 @@ class SimulationServiceHpc(SimulationService):
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
                 build_image_cmd = f"{remote_build_script_relative_path!s} -i {apptainer_image_path!s} -a"
-                nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
+                qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
+                nodelist_clause = (
+                    f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
+                )
                 script_content = dedent(f"""\
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
@@ -183,7 +186,7 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --cpus-per-task 2
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
-                    #SBATCH --qos={settings.slurm_qos}
+                    {qos_clause}
                     #SBATCH --output={slurm_log_file}
                     {nodelist_clause}
 
@@ -243,7 +246,10 @@ class SimulationServiceHpc(SimulationService):
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
-                nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
+                qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
+                nodelist_clause = (
+                    f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
+                )
                 script_content = dedent(f"""\
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
@@ -251,7 +257,7 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --cpus-per-task 3
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
-                    #SBATCH --qos={settings.slurm_qos}
+                    {qos_clause}
                     #SBATCH --output={slurm_log_file}
                     {nodelist_clause}
 
@@ -342,7 +348,10 @@ class SimulationServiceHpc(SimulationService):
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
-                nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
+                qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
+                nodelist_clause = (
+                    f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
+                )
                 script_content = dedent(f"""\
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
@@ -350,7 +359,7 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --cpus-per-task 2
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
-                    #SBATCH --qos={settings.slurm_qos}
+                    {qos_clause}
                     #SBATCH --output={slurm_log_file}
                     {nodelist_clause}
 
@@ -476,7 +485,10 @@ class SimulationServiceHpc(SimulationService):
             vecoli_dir = remote_workspace_dir / "vEcoli"
             # config_dir = vecoli_dir / "configs"
             # conf = config.model_dump_json() or "{}"
-            nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
+            qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
+            nodelist_clause = (
+                f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
+            )
 
             return dedent(f"""\
                 #!/bin/bash
@@ -485,7 +497,7 @@ class SimulationServiceHpc(SimulationService):
                 #SBATCH --cpus-per-task {MAX_SIMULATION_CPUS}
                 #SBATCH --mem=8GB
                 #SBATCH --partition={get_settings().slurm_partition}
-                #SBATCH --qos={get_settings().slurm_qos}
+                {qos_clause}
                 #SBATCH --output={slurm_log_file!s}
                 {nodelist_clause}
 
@@ -593,6 +605,7 @@ def simulation_slurm_script(
 
     conf = config.model_dump_json() if config else ""
     experiment_id = config.experiment_id if config is not None else experiment_id
+    qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
     nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
 
     return dedent(f"""\
@@ -602,7 +615,7 @@ def simulation_slurm_script(
         #SBATCH --cpus-per-task 8
         #SBATCH --mem=8GB
         #SBATCH --partition={env.slurm_partition}
-        #SBATCH --qos={env.slurm_qos}
+        {qos_clause}
         #SBATCH --output={slurm_log_file!s}
         {nodelist_clause}
 

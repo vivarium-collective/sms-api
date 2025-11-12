@@ -280,6 +280,7 @@ class SimulationServiceHpc(SimulationService):
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
                 build_image_cmd = f"{remote_build_script_relative_path!s} -i {apptainer_image_path!s} -a"
+                qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
                 nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
 
                 script_content = dedent(f"""\
@@ -289,7 +290,7 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --cpus-per-task 2
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
-                    #SBATCH --qos={settings.slurm_qos}
+                    {qos_clause}
                     #SBATCH --output={slurm_log_file}
                     {nodelist_clause}
 
@@ -348,6 +349,7 @@ class SimulationServiceHpc(SimulationService):
         # build the submit script
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
+            qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
             nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
 
             with open(local_submit_file, "w") as f:
@@ -358,7 +360,7 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --cpus-per-task 3
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
-                    #SBATCH --qos={settings.slurm_qos}
+                    {qos_clause}
                     #SBATCH --output={slurm_log_file}
                     {nodelist_clause}
 
@@ -448,6 +450,7 @@ class SimulationServiceHpc(SimulationService):
         # build the submit script
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
+            qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
             nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
 
             with open(local_submit_file, "w") as f:
@@ -458,7 +461,7 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --cpus-per-task 2
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
-                    #SBATCH --qos={settings.slurm_qos}
+                    {qos_clause}
                     #SBATCH --output={slurm_log_file}
                     {nodelist_clause}
 
