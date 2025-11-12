@@ -81,6 +81,7 @@ class AnalysisServiceHpc(AnalysisService):
         base_path = get_settings().slurm_base_path
         remote_workspace_dir = base_path / "workspace"
         vecoli_dir = remote_workspace_dir / "vEcoli"
+        nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
 
         return dedent(f"""\
             #!/bin/bash
@@ -91,7 +92,7 @@ class AnalysisServiceHpc(AnalysisService):
             #SBATCH --partition={get_settings().slurm_partition}
             #SBATCH --qos={get_settings().slurm_qos}
             #SBATCH --output={slurm_log_file!s}
-            #SBATCH --nodelist={get_settings().slurm_node_list}
+            {nodelist_clause}
 
             set -e
 

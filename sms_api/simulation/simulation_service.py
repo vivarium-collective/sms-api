@@ -175,6 +175,7 @@ class SimulationServiceHpc(SimulationService):
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
                 build_image_cmd = f"{remote_build_script_relative_path!s} -i {apptainer_image_path!s} -a"
+                nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
                 script_content = dedent(f"""\
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
@@ -184,7 +185,7 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --partition={settings.slurm_partition}
                     #SBATCH --qos={settings.slurm_qos}
                     #SBATCH --output={slurm_log_file}
-                    #SBATCH --nodelist={settings.slurm_node_list}
+                    {nodelist_clause}
 
                     set -e
                     env
@@ -242,6 +243,7 @@ class SimulationServiceHpc(SimulationService):
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
+                nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
                 script_content = dedent(f"""\
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
@@ -251,7 +253,7 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --partition={settings.slurm_partition}
                     #SBATCH --qos={settings.slurm_qos}
                     #SBATCH --output={slurm_log_file}
-                    #SBATCH --nodelist={settings.slurm_node_list}
+                    {nodelist_clause}
 
                     set -e
                     # env
@@ -340,6 +342,7 @@ class SimulationServiceHpc(SimulationService):
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
+                nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
                 script_content = dedent(f"""\
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
@@ -349,7 +352,7 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --partition={settings.slurm_partition}
                     #SBATCH --qos={settings.slurm_qos}
                     #SBATCH --output={slurm_log_file}
-                    #SBATCH --nodelist={settings.slurm_node_list}
+                    {nodelist_clause}
 
                     set -e
                     # env
@@ -473,6 +476,7 @@ class SimulationServiceHpc(SimulationService):
             vecoli_dir = remote_workspace_dir / "vEcoli"
             # config_dir = vecoli_dir / "configs"
             # conf = config.model_dump_json() or "{}"
+            nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
 
             return dedent(f"""\
                 #!/bin/bash
@@ -483,7 +487,7 @@ class SimulationServiceHpc(SimulationService):
                 #SBATCH --partition={get_settings().slurm_partition}
                 #SBATCH --qos={get_settings().slurm_qos}
                 #SBATCH --output={slurm_log_file!s}
-                #SBATCH --nodelist={get_settings().slurm_node_list}
+                {nodelist_clause}
 
                 set -e
 
@@ -589,6 +593,7 @@ def simulation_slurm_script(
 
     conf = config.model_dump_json() if config else ""
     experiment_id = config.experiment_id if config is not None else experiment_id
+    nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
 
     return dedent(f"""\
         #!/bin/bash
@@ -599,7 +604,7 @@ def simulation_slurm_script(
         #SBATCH --partition={env.slurm_partition}
         #SBATCH --qos={env.slurm_qos}
         #SBATCH --output={slurm_log_file!s}
-        #SBATCH --nodelist={env.slurm_node_list}
+        {nodelist_clause}
 
         set -e
 
