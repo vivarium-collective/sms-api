@@ -10,10 +10,14 @@ namespace: sms-api-rke
 images:
   - name: ghcr.io/vivarium-collective/sms-api
     newTag: 0.2.44-dev  # 0.2.30-dev
+  - name: ghcr.io/vivarium-collective/pathway-tools
+    newTag: 0.1.0
 
 replicas:
   - count: 1
     name: api
+  - count: 1
+    name: ptools
 
 resources:
   - ingress.yaml
