@@ -18,6 +18,7 @@ set -u
 # Initialize variables
 CERT_ARG=""
 CONTROLLER_NAME="sealed-secrets-controller"
+CONTROLLER_NAMESPACE="sealed-secrets"
 
 # Parse optional arguments
 while [[ "$1" == --* ]]; do
@@ -28,6 +29,10 @@ while [[ "$1" == --* ]]; do
       ;;
     --controller-name)
       CONTROLLER_NAME="$2"
+      shift 2
+      ;;
+    --controller-namespace)
+      CONTROLLER_NAMESPACE="$2"
       shift 2
       ;;
     *)
@@ -63,4 +68,4 @@ kubectl create secret generic ${SECRET_NAME} --dry-run=client \
       --from-literal=postgres-host="${POSTGRES_HOST}" \
       --from-literal=postgres-port="${POSTGRES_PORT}" \
       --from-literal=postgres-uri="${POSTGRES_URI}" \
-      --namespace="${NAMESPACE}" -o yaml | kubeseal --controller-name=${CONTROLLER_NAME} --format yaml ${CERT_ARG:+--cert=$CERT_ARG}
+      --namespace="${NAMESPACE}" -o yaml | kubeseal --controller-name=${CONTROLLER_NAME} --controller-namespace=${CONTROLLER_NAMESPACE} --format yaml ${CERT_ARG:+--cert=$CERT_ARG}
