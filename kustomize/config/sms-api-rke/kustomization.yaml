@@ -10,3 +10,7 @@ configMapGenerator:
     envs:
       - api.env
       - shared.env
+  - name: ptools-config
+    envs:
+      - ptools.env
+      - shared.env

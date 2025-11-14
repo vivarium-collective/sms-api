@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ptools
+  labels:
+    app: ptools
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ptools
+  template:
+    metadata:
+      labels:
+        app: ptools
+    spec:
+      nodeSelector:
+        vlan: internal
+      securityContext:
+        runAsUser: 17163
+        runAsGroup: 10000
+        fsGroup: 10000
+      containers:
+        - name: ptools
+          image: ghcr.io/vivarium-collective/pathway-tools:0.1.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 1555
+          envFrom:
+            - configMapRef:
+                name: ptools-config
+      imagePullSecrets:
+        - name: ghcr-secret
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: ptools
+  name: ptools
+spec:
+  ports:
+    - name: "1555"
+      port: 1555
+      targetPort: 1555
+  selector:
+    app: ptools
