@@ -11,7 +11,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 declared_version=$(grep -oE '__version__ = \"[^\"]+\"' "${ROOT_DIR}/sms_api/version.py" | awk -F'"' '{print $2}')
 version=${1:-${declared_version}}
 
-default_org="vivarium-collective"  # or, "biosimulations"
+#default_org="vivarium-collective"  # or, "biosimulations"
+default_org="biosimulations". ### temporary, remove later (JCS)
 container_org=${2:-${default_org}}
 
 echo "building and pushing images to ${container_org} for version ${version}"
