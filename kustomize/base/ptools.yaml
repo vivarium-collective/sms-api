@@ -16,10 +16,6 @@ spec:
     spec:
       nodeSelector:
         vlan: internal
-      securityContext:
-        runAsUser: 17163
-        runAsGroup: 10000
-        fsGroup: 10000
       containers:
         - name: ptools
           image: ghcr.io/vivarium-collective/pathway-tools:0.1.0

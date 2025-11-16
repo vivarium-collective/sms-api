@@ -35,3 +35,9 @@ patches:
     target:
       kind: Deployment
       name: api
+  - patch: |-
+      - op: remove
+        path: /spec/template/spec/nodeSelector
+    target:
+      kind: Deployment
+      name: ptools
