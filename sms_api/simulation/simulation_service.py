@@ -183,11 +183,15 @@ class SimulationServiceHpc(SimulationService):
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
                     #SBATCH --time=30:00
+                    #SBATCH --nodes=1
+                    #SBATCH --ntasks=1
                     #SBATCH --cpus-per-task 2
-                    #SBATCH --mem=8GB
+                    #SBATCH --mem=4GB
+                    
                     #SBATCH --partition={settings.slurm_partition}
                     {qos_clause}
                     #SBATCH --output={slurm_log_file}
+                    #SBATCH --error={slurm_log_file}
                     {nodelist_clause}
 
                     set -e
