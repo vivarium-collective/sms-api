@@ -194,8 +194,11 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --error={slurm_log_file}
                     {nodelist_clause}
 
-                    set -e
+                    set -eu
                     env
+                    # allow for user-specific Apptainer directories used during builds.
+                    mkdir -p $APPTAINER_CACHEDIR $APPTAINER_TMPDIR
+
                     mkdir -p {apptainer_image_path.parent!s}
 
                     # if the image already exists, skip the build
