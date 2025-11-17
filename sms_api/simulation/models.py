@@ -378,22 +378,38 @@ class ExperimentMetadata(RootModel):  # type: ignore[type-arg]
     root: dict[str, str] = Field(default_factory=dict)
 
 
+class ObservablesRequest(BaseModel):
+    bulk: list[str] = Field(default=[])
+    genes: list[str] = Field(default=[])
+    reactions: list[str] = Field(default=[])
+
+
 class ExperimentRequest(BaseModel):
     """Used by the /simulation endpoint."""
 
     experiment_id: str
-    simulation_name: str = f"sim_{unique_id()!s}"
+    simulation_name: str = f"sms_{unique_id()!s}"
     metadata: dict[str, Any] = {}
     run_parca: bool = True
-    generations: int = 2
-    n_init_sims: int = 1
+    generations: int = 3
+    n_init_sims: int = 2
     lineage_seed: int = 3
     max_duration: float = 10800.0
     initial_global_time: float = 0.0
     time_step: float = 1.0
     single_daughters: bool = True
     variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
-    analysis_options: dict[str, Any] = Field(default={})
+    analysis_options: dict[str, Any] = Field(
+        default={
+            "cpus": 3,
+            "single": {
+                "mass_fraction_summary": {},
+                "ptools_rxns": {"n_tp": 8},
+                "ptools_rna": {"n_tp": 8},
+                "ptools_proteins": {"n_tp": 8},
+            },
+        }
+    )
     gcloud: str | None = None
     agent_id: str | None = None
     parallel: bool | None = None
@@ -431,6 +447,11 @@ class ExperimentRequest(BaseModel):
     flow: dict[str, Any] = Field(default={})
     initial_state_overrides: list[str] = Field(default=[])
     initial_state: dict[str, Any] = Field(default={})
+    observables: ObservablesRequest = Field(
+        default=ObservablesRequest(
+            bulk=["--TRANS-ACENAPHTHENE-12-DIOL", "ACETOLACTSYNI-CPLX", "CPD-3729"], genes=["deoC", "deoD", "fucU"]
+        )
+    )
 
     def model_post_init(self, context: Any, /) -> None:
         self.experiment_id = unique_id(self.experiment_id)
@@ -452,6 +473,9 @@ class ExperimentRequest(BaseModel):
             config_kwargs["sim_data_path"] = str(
                 get_settings().slurm_base_path / "workspace" / "kb" / "simData.cPickle"
             )
+
+        transform_config = generate_transform_config(self.observables)
+        config_kwargs["analysis_options"].update(transform_config)
         return SimulationConfig(**config_kwargs)
 
 
@@ -465,3 +489,13 @@ class EcoliSimulationDTO(BaseModel):
     last_updated: str = Field(default_factory=lambda: str(datetime.datetime.now()))
     job_name: str | None = None
     job_id: int | None = None
+
+
+def generate_transform_config(
+    observables: ObservablesRequest,
+) -> dict[str, dict[str, dict[str, list[dict[str, str | list[str]]]]]]:
+    trans_request = []
+    for T in ["bulk", "genes"]:
+        if len(T):
+            trans_request.append({"type": T, "observable_ids": getattr(observables, T)})
+    return {"data_transformation": {"ecocyc": {"request": trans_request}}}
