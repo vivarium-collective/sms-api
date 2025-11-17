@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.30-dev
+  version: 0.2.45-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -344,6 +344,7 @@ paths:
                 type: string
               default:
               - bulk
+              - genes
               title: Observables
       responses:
         '200':
@@ -806,7 +807,7 @@ components:
           type: integer
           title: Id
         status:
-          $ref: '#/components/schemas/JobStatus'
+          $ref: '#/components/schemas/sms_api__data__models__JobStatus'
       type: object
       required:
       - id
@@ -817,19 +818,28 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-bb6f7ed82f852db2_1760105454665-a9bad6d0de5f8f19_1760105454665
-            simulation_name: sms_single-bb6f7ed82f852db2_1760105454665
+            experiment_id: sms_experiment-505de2ddf6794432_1763405465780-a1927ead8fd4cd39_1763405465780
+            simulation_name: sms_experiment-505de2ddf6794432_1763405465780
             metadata: {}
             run_parca: true
-            generations: 2
-            n_init_sims: 1
+            generations: 3
+            n_init_sims: 2
             lineage_seed: 3
             max_duration: 10800.0
             initial_global_time: 0.0
             time_step: 1.0
             single_daughters: true
             variants: {}
-            analysis_options: {}
+            analysis_options:
+              cpus: 3
+              single:
+                mass_fraction_summary: {}
+                ptools_proteins:
+                  n_tp: 8
+                ptools_rna:
+                  n_tp: 8
+                ptools_rxns:
+                  n_tp: 8
             division_variable: []
             add_processes: []
             exclude_processes: []
@@ -844,6 +854,16 @@ components:
             flow: {}
             initial_state_overrides: []
             initial_state: {}
+            observables:
+              bulk:
+              - --TRANS-ACENAPHTHENE-12-DIOL
+              - ACETOLACTSYNI-CPLX
+              - CPD-3729
+              genes:
+              - deoC
+              - deoD
+              - fucU
+              reactions: []
         metadata:
           anyOf:
           - $ref: '#/components/schemas/ExperimentMetadata'
@@ -1058,7 +1078,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-3c1fc18461ccfb72_1760105454568
+          default: sms_smsapi-2e1faaf58d3b3a40_1763405465534
         metadata:
           additionalProperties: true
           type: object
@@ -1071,11 +1091,11 @@ components:
         generations:
           type: integer
           title: Generations
-          default: 2
+          default: 3
         n_init_sims:
           type: integer
           title: N Init Sims
-          default: 1
+          default: 2
         lineage_seed:
           type: integer
           title: Lineage Seed
@@ -1115,7 +1135,16 @@ components:
           additionalProperties: true
           type: object
           title: Analysis Options
-          default: {}
+          default:
+            cpus: 3
+            single:
+              mass_fraction_summary: {}
+              ptools_proteins:
+                n_tp: 8
+              ptools_rna:
+                n_tp: 8
+              ptools_rxns:
+                n_tp: 8
         gcloud:
           anyOf:
           - type: string
@@ -1313,6 +1342,18 @@ components:
           type: object
           title: Initial State
           default: {}
+        observables:
+          $ref: '#/components/schemas/ObservablesRequest'
+          default:
+            bulk:
+            - --TRANS-ACENAPHTHENE-12-DIOL
+            - ACETOLACTSYNI-CPLX
+            - CPD-3729
+            genes:
+            - deoC
+            - deoD
+            - fucU
+            reactions: []
       type: object
       required:
       - experiment_id
@@ -1345,7 +1386,7 @@ components:
           title: Ref Id
         status:
           anyOf:
-          - $ref: '#/components/schemas/JobStatus'
+          - $ref: '#/components/schemas/sms_api__simulation__models__JobStatus'
           - type: 'null'
         start_time:
           anyOf:
@@ -1370,15 +1411,6 @@ components:
       - job_type
       - ref_id
       title: HpcRun
-    JobStatus:
-      type: string
-      enum:
-      - waiting
-      - queued
-      - running
-      - completed
-      - failed
-      title: JobStatus
     JobType:
       type: string
       enum:
@@ -1386,6 +1418,28 @@ components:
       - parca
       - build_image
       title: JobType
+    ObservablesRequest:
+      properties:
+        bulk:
+          items:
+            type: string
+          type: array
+          title: Bulk
+          default: []
+        genes:
+          items:
+            type: string
+          type: array
+          title: Genes
+          default: []
+        reactions:
+          items:
+            type: string
+          type: array
+          title: Reactions
+          default: []
+      type: object
+      title: ObservablesRequest
     OutputFile:
       properties:
         name:
@@ -1590,8 +1644,6 @@ components:
             type: string
           type: object
           title: Emitter Arg
-          default:
-            out_dir: /home/FCAM/svc_vivarium/workspace/api_outputs
         variants:
           additionalProperties:
             additionalProperties:
@@ -1850,7 +1902,7 @@ components:
           type: integer
           title: Id
         status:
-          $ref: '#/components/schemas/JobStatus'
+          $ref: '#/components/schemas/sms_api__simulation__models__JobStatus'
       type: object
       required:
       - id
@@ -1992,3 +2044,22 @@ components:
       - mass
       - time
       title: WorkerEvent
+    sms_api__data__models__JobStatus:
+      type: string
+      enum:
+      - waiting
+      - queued
+      - running
+      - completed
+      - failed
+      title: JobStatus
+    sms_api__simulation__models__JobStatus:
+      type: string
+      enum:
+      - waiting
+      - pending
+      - queued
+      - running
+      - completed
+      - failed
+      title: JobStatus

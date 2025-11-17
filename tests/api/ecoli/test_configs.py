@@ -4,7 +4,7 @@ import pytest
 
 from sms_api.config import get_settings
 from sms_api.data.models import AnalysisConfig
-from sms_api.simulation.models import SimulationConfig
+from sms_api.simulation.models import ExperimentRequest, SimulationConfig
 
 
 @pytest.mark.asyncio
@@ -14,6 +14,48 @@ async def test_analysis_config() -> None:
     conf = AnalysisConfig.from_file(fp=conf_path)
     assert conf.analysis_options.experiment_id is not None
     assert len(conf.emitter_arg["out_dir"])
+
+
+@pytest.mark.asyncio
+async def test_config_from_request() -> None:
+    request = ExperimentRequest(experiment_id="sms")
+    config_dump = request.to_config().model_dump()
+    config_dump.pop("experiment_id", None)
+    expected_dump = {
+        "sim_data_path": "/home/FCAM/svc_vivarium/workspace/kb/simData.cPickle",
+        "suffix_time": False,
+        "parca_options": {"cpus": 3},
+        "generations": 3,
+        "n_init_sims": 2,
+        "max_duration": 10800.0,
+        "initial_global_time": 0.0,
+        "time_step": 1.0,
+        "single_daughters": True,
+        "emitter": "parquet",
+        "emitter_arg": {"out_dir": "/home/FCAM/svc_vivarium/workspace/api_outputs"},
+        "analysis_options": {
+            "cpus": 3,
+            "single": {
+                "mass_fraction_summary": {},
+                "ptools_rxns": {"n_tp": 8},
+                "ptools_rna": {"n_tp": 8},
+                "ptools_proteins": {"n_tp": 8},
+            },
+            "data_transformation": {
+                "ecocyc": {
+                    "request": [
+                        {
+                            "type": "bulk",
+                            "observable_ids": ["--TRANS-ACENAPHTHENE-12-DIOL", "ACETOLACTSYNI-CPLX", "CPD-3729"],
+                        },
+                        {"type": "genes", "observable_ids": ["deoC", "deoD", "fucU"]},
+                    ]
+                }
+            },
+        },
+        "lineage_seed": 3,
+    }
+    assert config_dump == expected_dump
 
 
 @pytest.mark.asyncio

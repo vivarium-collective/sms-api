@@ -23,6 +23,9 @@ from sms_api.simulation.tables_orm import create_db
 logger = logging.getLogger(__name__)
 setup_logging(logger)
 
+ROOT_DIR = Path(__file__).parent.parent
+DEFAULT_SIMULATION_CONFIG = ROOT_DIR / "assets" / "sms_experiment.json"
+
 
 def verify_service(service: DatabaseService | SimulationService | None) -> None:
     if service is None:
