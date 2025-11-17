@@ -47,17 +47,17 @@ def get_file_service() -> FileService | None:
 
 # ------- sqlalchemy database service (standalone or pytest) ------
 
-global_db_engine: AsyncEngine | None = None
+global_postgres_engine: AsyncEngine | None = None
 
 
-def set_db_engine(engine: AsyncEngine | None) -> None:
-    global global_db_engine
-    global_db_engine = engine
+def set_postgres_engine(engine: AsyncEngine | None) -> None:
+    global global_postgres_engine
+    global_postgres_engine = engine
 
 
-def get_db_engine() -> AsyncEngine | None:
-    global global_db_engine
-    return global_db_engine
+def get_postgres_engine() -> AsyncEngine | None:
+    global global_postgres_engine
+    return global_postgres_engine
 
 
 # ------- simulation database service (standalone or pytest) ------
@@ -121,43 +121,88 @@ def get_analysis_service() -> AnalysisService:
 async def init_standalone(enable_ssl: bool = True) -> None:
     _settings = get_settings()
 
-    # Initialize file service based on configured backend
-    if _settings.storage_backend == "s3":
-        set_file_service(FileServiceS3())
-    elif _settings.storage_backend == "qumulo":
-        set_file_service(FileServiceQumuloS3())
-    elif _settings.storage_backend == "gcs":  # default to gcs
-        set_file_service(FileServiceGCS())
-    else:
-        raise ValueError(f"Unsupported storage backend: {_settings.storage_backend}")
+    try:
+        # Initialize file service based on configured backend
+        logger.info(f"Initializing file service with backend: {_settings.storage_backend}")
+        if _settings.storage_backend == "s3":
+            set_file_service(FileServiceS3())
+        elif _settings.storage_backend == "qumulo":
+            set_file_service(FileServiceQumuloS3())
+        elif _settings.storage_backend == "gcs":  # default to gcs
+            set_file_service(FileServiceGCS())
+        else:
+            logger.error(f"Unsupported storage backend: {_settings.storage_backend}")
 
-    # set services that don't require params (currently using hpc)
-    set_simulation_service(SimulationServiceHpc())
+        # set services that don't require params (currently using hpc)
+        logger.info("Initializing simulation service (HPC)...")
+        set_simulation_service(SimulationServiceHpc())
+        logger.info("✓ Simulation service initialized")
 
-    sqlite_url = f"sqlite+aiosqlite:///{_settings.sqlite_dbfile}"
-    engine = get_async_engine(
-        url=sqlite_url,
-        echo=True,
-    )
-    logging.warning("calling create_db() to initialize the database tables")
-    await create_db(engine)
-    set_db_engine(engine)
+        # Validate and initialize Postgres connection
+        logger.info("Validating Postgres configuration...")
+        PG_USER = _settings.postgres_user
+        PG_PSWD = _settings.postgres_password
+        PG_DATABASE = _settings.postgres_database
+        PG_HOST = _settings.postgres_host
+        PG_PORT = _settings.postgres_port
+        PG_POOL_SIZE = _settings.postgres_pool_size
+        PG_MAX_OVERFLOW = _settings.postgres_max_overflow
+        PG_POOL_TIMEOUT = _settings.postgres_pool_timeout
+        PG_POOL_RECYCLE = _settings.postgres_pool_recycle
+        if not PG_USER or not PG_PSWD or not PG_DATABASE or not PG_HOST or not PG_PORT:
+            logger.error("Postgres connection settings are not properly configured.")
+        postgres_url = f"postgresql+asyncpg://{PG_USER}:{PG_PSWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
 
-    database = DatabaseServiceSQL(engine)
-    set_database_service(database)
+        logger.info("Initializing postgres connection...")
+        engine = get_async_engine(
+            url=postgres_url,
+            enable_ssl=enable_ssl,
+            echo=False,  # Disable verbose SQL logging (set to True for debugging)
+            pool_size=PG_POOL_SIZE,
+            max_overflow=PG_MAX_OVERFLOW,
+            pool_timeout=PG_POOL_TIMEOUT,
+            pool_recycle=PG_POOL_RECYCLE,
+        )
+        logger.info("Initializing database tables...")
+        await create_db(engine)
+        set_postgres_engine(engine)
+        logger.info("✓ Postgres connection established and tables initialized")
 
-    settings = get_settings()
-    ssh_service = SSHService(
-        hostname=settings.slurm_submit_host,
-        username=settings.slurm_submit_user,
-        key_path=Path(settings.slurm_submit_key_path),
-        known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-    )
-    slurm_service = SlurmService(ssh_service=ssh_service)
+        database = DatabaseServiceSQL(engine)
+        set_database_service(database)
 
-    nats_client = await nats.connect(_settings.nats_url)
-    job_scheduler = JobScheduler(nats_client=nats_client, database_service=database, slurm_service=slurm_service)
-    set_job_scheduler(job_scheduler)
+        # Initialize SSH and Slurm services
+        logger.info("Initializing SSH and Slurm services...")
+        settings = get_settings()
+        ssh_key_path = Path(settings.slurm_submit_key_path)
+        if not ssh_key_path.exists():
+            logger.warning(f"SSH key file not found: {ssh_key_path}")
+        else:
+            logger.info(f"SSH key found at: {ssh_key_path}")
+
+        ssh_service = SSHService(
+            hostname=settings.slurm_submit_host,
+            username=settings.slurm_submit_user,
+            key_path=ssh_key_path,
+            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
+        )
+        slurm_service = SlurmService(ssh_service=ssh_service)
+        logger.info(f"✓ SSH/Slurm services initialized for {settings.slurm_submit_user}@{settings.slurm_submit_host}")
+
+        # Connect to NATS
+        logger.info(f"Connecting to NATS: {_settings.nats_url}")
+        nats_client = await nats.connect(_settings.nats_url)
+        logger.info(f"Connected to NATS: {_settings.nats_url}")
+
+        # Initialize JobScheduler
+        logger.info("Initializing JobScheduler...")
+        job_scheduler = JobScheduler(nats_client=nats_client, database_service=database, slurm_service=slurm_service)
+        set_job_scheduler(job_scheduler)
+        logger.info("✓ JobScheduler initialized")
+
+    except Exception as e:
+        logger.error(f"Failed to initialize JobScheduler: {e}", exc_info=True)
+        raise
 
 
 async def shutdown_standalone() -> None:
@@ -165,7 +210,7 @@ async def shutdown_standalone() -> None:
     if mongodb_service:
         await mongodb_service.close()
 
-    engine = get_db_engine()
+    engine = get_postgres_engine()
     if engine:
         await engine.dispose()
 

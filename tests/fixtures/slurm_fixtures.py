@@ -36,7 +36,7 @@ async def slurm_service(ssh_service: SSHService) -> AsyncGenerator[SlurmService]
 def slurm_template_hello_TEMPLATE() -> str:
     settings = get_settings()
     partition = settings.slurm_partition
-    qos = settings.slurm_qos
+    qos_clause = f"#SBATCH --qos={settings.slurm_qos}" if settings.slurm_qos else ""
     template = dedent(f"""\
         #!/bin/bash
         #SBATCH --job-name=my_test_job        # Job name
@@ -44,7 +44,7 @@ def slurm_template_hello_TEMPLATE() -> str:
         #SBATCH --output=output.txt           # Standard output file
         #SBATCH --error=error.txt             # Standard error file
         #SBATCH --partition={partition}       # Partition or queue name
-        #SBATCH --qos={qos}                   # QOS level
+        {qos_clause}
         #SBATCH --nodes=1                     # Number of nodes
         #SBATCH --ntasks-per-node=1           # Number of tasks per node
         #SBATCH --cpus-per-task=1             # Number of CPU cores per task
@@ -99,14 +99,14 @@ def slurm_template_with_storage() -> str:
     """
     settings = get_settings()
     partition = settings.slurm_partition
-    qos = settings.slurm_qos
+    qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
     template = dedent(f"""\
         #!/bin/bash
         #SBATCH --job-name=storage_test_job   # Job name
         #SBATCH --output=storage_test.out     # Standard output file
         #SBATCH --error=storage_test.err      # Standard error file
         #SBATCH --partition={partition}       # Partition or queue name
-        #SBATCH --qos={qos}                   # QOS level
+        {qos_clause}
         #SBATCH --nodes=1                     # Number of nodes
         #SBATCH --ntasks-per-node=1           # Number of tasks per node
         #SBATCH --cpus-per-task=1             # Number of CPU cores per task

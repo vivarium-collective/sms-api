@@ -33,8 +33,12 @@ MONGODB_COLLECTION_OMEX=BiosimOmex
 MONGODB_COLLECTION_SIMS=BiosimSims
 MONGODB_COLLECTION_COMPARE=BiosimCompare
 
-# SQLite settings
-#SQLITE_DBFILE=
+# PostgreSQL settings
+POSTGRES_USER=devuser
+POSTGRES_PASSWORD=devpassword
+POSTGRES_DATABASE=sms
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
 
 # SLURM (optional, for local dev leave blank or set as needed)
 SLURM_SUBMIT_HOST=

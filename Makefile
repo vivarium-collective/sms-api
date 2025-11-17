@@ -1,9 +1,14 @@
+POSTGRES_USER=sms
+POSTGRES_DB=sms
+LOCAL_POSTGRES_HOST=localhost
+LOCAL_POSTGRES_PORT=5555
 LOCAL_GATEWAY_PORT=8888
 
-LATEST_COMMIT_PATH=assets/simulation/model/latest_commit.txt
+POSTGRES_PORT=5432
 
 CURRENT_VERSION := $(shell uv run python -c "from sms_api import version;print(f'{version.__version__}')")
 
+# "postgresql://sms:$$pw@localhost:$(port)/sms?sslmode=disable""postgresql://sms:$$pw@localhost:$(port)/sms?sslmode=disable"
 
 .PHONY: install
 install: ## Install the uv environment and install the pre-commit hooks
@@ -142,6 +147,25 @@ pgdb-conn:
 pgdb-drop:
 	@dropdb $(dbname)
 
+# --name postgresql
+.PHONY: dbup
+dbup:
+	@service_name="pgdb"; \
+	[ -z "$(port)" ] && port=${LOCAL_POSTGRES_PORT} || port=$(port); \
+	[ -z "$(password)" ] && password=${LOCAL_POSTGRES_PASSWORD} || password=$(password); \
+	docker run -d \
+		--name $$service_name \
+		-e POSTGRES_PASSWORD=$$password \
+		-e POSTGRES_USER=${POSTGRES_USER} \
+		-e POSTGRES_HOST=localhost \
+		-e POSTGRES_DB=${POSTGRES_DB} \
+		-p $$port:${POSTGRES_PORT} \
+		postgres:17
+
+.PHONY: dbdown
+dbdown:
+	@docker rm -f pgdb
+
 .PHONY: mongoup
 mongoup:
 	@docker run -d \
@@ -153,6 +177,18 @@ mongoup:
 natsup:
 	@[ -z "$(port)" ] && port=30050 || port=$(port); \
 	docker run -d --name nats --rm -p $$port:$$port nats
+
+# this command should run psql -h localhost -p 65432 -U alexanderpatrie sms
+.PHONY: pingpg
+pingpg:
+	@[ -z "$(user)" ] && user=${LOCAL_POSTGRES_USER} || user=$(user); \
+	[ -z "$(port)" ] && port=${LOCAL_POSTGRES_PORT} || port=$(port); \
+	psql -h localhost -p $$port -U ${LOCAL_POSTGRES_USER} sms;
+
+.PHONY: pingdb
+pingdb:
+	@uri=$$(make pguri); \
+	psql $$uri
 
 .PHONY: write-latest-commit
 write-latest-commit:
@@ -193,6 +229,12 @@ workflow:
 generate-client:
 	@make spec
 	@uv run ./scripts/generate-api-client.sh
+
+.PHONY: pguri
+pguri:
+	@pg_user=sms; \
+	pg_password=$$(uv run python -c "import dotenv;import os;dotenv.load_dotenv('assets/dev/config/.dev_env');print(os.getenv('POSTGRES_PASSWORD'))"); \
+	echo postgresql://${POSTGRES_USER}:$$pg_password@${LOCAL_POSTGRES_HOST}:${LOCAL_POSTGRES_PORT}/${POSTGRES_DB}
 
 .PHONY: apy
 apy:

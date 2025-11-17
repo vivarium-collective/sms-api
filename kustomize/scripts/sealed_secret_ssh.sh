@@ -9,12 +9,17 @@
 #   and outputs a sealed secret to stdout
 # Example: ./sealed_secret_api.sh remote /path/to/vcell_rsa /path/to/vcell_rsa.pub > output.yaml
 CONTROLLER_NAME="sealed-secrets-controller"
+CONTROLLER_NAMESPACE="sealed-secrets"
 
 # Parse optional arguments
 while [[ "$1" == --* ]]; do
   case "$1" in
     --controller-name)
       CONTROLLER_NAME="$2"
+      shift 2
+      ;;
+    --controller-namespace)
+      CONTROLLER_NAMESPACE="$2"
       shift 2
       ;;
     *)
@@ -39,4 +44,4 @@ PUB_KEY_FILE=$3
 kubectl create secret generic ${SECRET_NAME} --dry-run=client \
       --from-file=ssh-privatekey="${PRIV_KEY_FILE}" \
       --from-file=ssh-publickey="${PUB_KEY_FILE}" \
-      --namespace="${NAMESPACE}" -o yaml | kubeseal --controller-name=${CONTROLLER_NAME} --format yaml
+      --namespace="${NAMESPACE}" -o yaml | kubeseal --controller-name=${CONTROLLER_NAME} --controller-namespace=${CONTROLLER_NAMESPACE} --format yaml

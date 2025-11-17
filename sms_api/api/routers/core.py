@@ -19,7 +19,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sms_api.common.gateway.models import RouterConfig, ServerMode
 from sms_api.dependencies import (
     get_database_service,
-    get_db_engine,
+    get_postgres_engine,
     get_simulation_service,
 )
 from sms_api.simulation import core_handlers
@@ -59,7 +59,7 @@ config = RouterConfig(router=APIRouter(), prefix="/core", dependencies=[])
     response_model=Simulator,
     operation_id="get-latest-simulator",
     tags=["EcoliSim"],
-    dependencies=[Depends(get_database_service), Depends(get_db_engine)],
+    dependencies=[Depends(get_database_service), Depends(get_postgres_engine)],
     summary="Get the latest simulator version",
 )
 async def get_latest_simulator(
@@ -84,7 +84,7 @@ async def get_latest_simulator(
     response_model=RegisteredSimulators,
     operation_id="get-simulator-versions",
     tags=["EcoliSim"],
-    dependencies=[Depends(get_database_service), Depends(get_db_engine)],
+    dependencies=[Depends(get_database_service), Depends(get_postgres_engine)],
     summary="get the list of available simulator versions",
 )
 async def get_simulator_versions() -> RegisteredSimulators:
@@ -131,7 +131,7 @@ async def get_simulator_status(simulator_id: int) -> HpcRun | None:
     response_model=SimulatorVersion,
     operation_id="insert-simulator-version",
     tags=["EcoliSim"],
-    dependencies=[Depends(get_database_service), Depends(get_db_engine)],
+    dependencies=[Depends(get_database_service), Depends(get_postgres_engine)],
     summary="Upload a new simulator (vEcoli) version.",
 )
 async def insert_simulator_version(

@@ -1,0 +1,41 @@
+FROM ubuntu:22.04
+
+ARG APP_UID=17163
+ARG APP_GID=10000
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DISPLAY=:1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    xvfb \
+    libxpm4 \
+    libxpm-dev \
+    libx11-dev \
+    libxt-dev \
+    libxm4 \
+    openssl \
+    ca-certificates \
+    && groupadd -g $APP_GID appgroup \
+    && useradd -m -u $APP_UID -g $APP_GID appuser \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+USER appuser
+
+WORKDIR /app
+
+COPY --chown=appuser:appgroup assets/ptools/aic-export.29.5.tar.gz /app/aic-export.29.5.tar.gz
+COPY --chown=appuser:appgroup assets/ptools /app/ptools
+
+RUN chmod +x /app/aic-export.29.5.tar.gz \
+    && tar xvzf /app/aic-export.29.5.tar.gz \
+    && ./aic-export/pathway-tools/ptools/29.5/install/config-ptools /app/ptools
+
+VOLUME ["/app/scratch"]
+
+EXPOSE 1555
+
+CMD bash -c "\
+    Xvfb :1 -screen 0 1024x768x16 & \
+    sleep 2 && \
+    ./pathway-tools -www -www-server-hostname 0.0.0.0 -port 1555 -python"
