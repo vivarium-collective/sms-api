@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
+from sms_api.data.data_service import download_transforms, TransformData, SimulationOutputData
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
     EcoliSimulationDTO,
@@ -21,7 +22,7 @@ from sms_api.simulation.models import (
     JobStatus,
     SimulationConfig,
     SimulationRun,
-    SimulatorVersion,
+    SimulatorVersion, ObservablesRequest, BaseModel,
 )
 from sms_api.simulation.simulation_service import SimulationService
 
@@ -69,6 +70,48 @@ async def get_simulation_status(db_service: DatabaseService, id: int, ssh_servic
 
 async def list_simulations(db_service: DatabaseService) -> list[EcoliSimulationDTO]:
     return await db_service.list_ecoli_simulations()
+
+
+# variant=0/lineage_seed=1/generation=3/agent_id=000
+async def get_simulation_outputs(
+    ssh: SSHService,
+    bg_tasks: BackgroundTasks,
+    db_service: DatabaseService,
+    id: int,
+    lineage_seed: int = 1,
+    generation: int = 3,
+    variant: int = 0,
+    agent_id: str = "000",
+    observables: ObservablesRequest = ObservablesRequest()
+) -> SimulationOutputData:
+    simulation = await db_service.get_ecoli_simulation(database_id=id)
+    experiment_id = simulation.config.experiment_id
+    # experiment_id = 'sms_multiseed_multigen'
+
+    outputs: SimulationOutputData = await download_transforms(
+        expid=experiment_id,
+        remote_outdir_root=Path(str(get_settings().simulation_outdir)),
+        variant=variant,
+        lineage_seed=lineage_seed,
+        generation=generation,
+        agent_id=agent_id,
+        observables=observables,
+        bg_tasks=bg_tasks
+    )
+
+    def generate(data: list[dict[str, Any]]) -> Generator[bytes, Any, None]:
+        yield b"["
+        first = True
+        for item in data:
+            if not first:
+                yield b","
+            else:
+                first = False
+            yield orjson.dumps(item)
+        yield b"]"
+
+    # return StreamingResponse(generate(pl.read_parquet(local).to_dicts()), media_type="application/json")
+    return outputs
 
 
 async def get_simulation_data(

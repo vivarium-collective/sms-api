@@ -447,6 +447,23 @@ class ExperimentRequest(BaseModel):
     flow: dict[str, Any] = Field(default={})
     initial_state_overrides: list[str] = Field(default=[])
     initial_state: dict[str, Any] = Field(default={})
+    parca_options: dict[str, Any] = Field(default={
+        "cpus": 3,
+        "outdir": "/home/FCAM/svc_vivarium/workspace/outputs",
+        "operons": True,
+        "ribosome_fitting": True,
+        "rnapoly_fitting": True,
+        "remove_rrna_operons": False,
+        "remove_rrff": False,
+        "stable_rrna": False,
+        "new_genes": "off",
+        "debug_parca": False,
+        "load_intermediate": None,
+        "save_intermediates": False,
+        "intermediates_directory": "",
+        "variable_elongation_transcription": True,
+        "variable_elongation_translation": False
+    })
     observables: ObservablesRequest = Field(
         default=ObservablesRequest(
             bulk=["--TRANS-ACENAPHTHENE-12-DIOL", "ACETOLACTSYNI-CPLX", "CPD-3729"], genes=["deoC", "deoD", "fucU"]

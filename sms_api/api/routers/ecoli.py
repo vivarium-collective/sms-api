@@ -18,6 +18,7 @@ from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.common.ssh.ssh_service import get_ssh_service, get_ssh_service_managed
 from sms_api.common.utils import timestamp
 from sms_api.data import ecoli_handlers as data_handlers
+from sms_api.data.data_service import SimulationOutputData
 from sms_api.data.models import (
     AnalysisRun,
     ExperimentAnalysisDTO,
@@ -32,7 +33,7 @@ from sms_api.simulation.models import (
     EcoliSimulationDTO,
     ExperimentMetadata,
     ExperimentRequest,
-    SimulationRun,
+    SimulationRun, ObservablesRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -207,7 +208,7 @@ async def list_analyses() -> list[ExperimentAnalysisDTO]:
     summary="Launches a nextflow-powered vEcoli simulation workflow",
 )
 async def run_simulation(
-    request: ExperimentRequest = request_examples.base_simulation,
+    request: ExperimentRequest = request_examples.wcecoli_fig2_setD4,
     metadata: ExperimentMetadata | None = None,
 ) -> EcoliSimulationDTO:
     # validate services
@@ -335,18 +336,19 @@ async def get_simulation_data(
     bg_tasks: BackgroundTasks,
     id: int = fastapi.Path(description="Database ID of the simulation."),
     # experiment_id: str = Query(default="sms_multigeneration"),
-    lineage_seed: int = Query(default=6),
-    generation: int = Query(default=1),
+    lineage_seed: int = Query(default=1),
+    generation: int = Query(default=3),
     variant: int = Query(default=0),
-    agent_id: int = Query(default=0),
-    observables: list[str] = request_examples.base_observables,
-) -> fastapi.responses.StreamingResponse:
+    agent_id: str = Query(default="000"),
+    observables: ObservablesRequest = request_examples.base_observables,
+) -> SimulationOutputData:  # fastapi.responses.StreamingResponse:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        return await simulation_handlers.get_simulation_data(
+        return await simulation_handlers.get_simulation_outputs(
+            bg_tasks=bg_tasks,
             ssh=get_ssh_service(),
             db_service=db_service,
             id=id,
@@ -354,8 +356,7 @@ async def get_simulation_data(
             generation=generation,
             variant=variant,
             agent_id=agent_id,
-            observables=observables,
-            bg_tasks=bg_tasks,
+            observables=observables
         )
     except Exception as e:
         logger.exception("Error uploading simulation config")
