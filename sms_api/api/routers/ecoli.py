@@ -17,6 +17,7 @@ from sms_api.api import request_examples
 from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.common.ssh.ssh_service import get_ssh_service, get_ssh_service_managed
 from sms_api.common.utils import timestamp
+from sms_api.config import get_settings
 from sms_api.data import ecoli_handlers as data_handlers
 from sms_api.data.data_service import SimulationOutputData
 from sms_api.data.models import (
@@ -33,7 +34,8 @@ from sms_api.simulation.models import (
     EcoliSimulationDTO,
     ExperimentMetadata,
     ExperimentRequest,
-    SimulationRun, ObservablesRequest,
+    ObservablesRequest,
+    SimulationRun,
 )
 
 logger = logging.getLogger(__name__)
@@ -356,8 +358,55 @@ async def get_simulation_data(
             generation=generation,
             variant=variant,
             agent_id=agent_id,
-            observables=observables
+            observables=observables,
         )
     except Exception as e:
         logger.exception("Error uploading simulation config")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/parameters/inputs",
+    operation_id="list-available-simdata",
+    tags=["Simulations"],
+    summary="List all available parameter datasets",
+    dependencies=[Depends(get_database_service)],
+)
+async def list_simdata() -> list[str]:
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Database service is not initialized")
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    ssh = get_ssh_service_managed()
+    await ssh.connect()
+    try:
+        registry_path = get_settings().slurm_base_path.remote_path / "workspace" / "parameter_registry"
+        ret, stdout, _ = await ssh.run_command(f"ls {registry_path!s}")
+        available = stdout.splitlines()
+        await ssh.disconnect()
+        return available
+    except Exception as e:
+        logger.exception("Error fetching available parameter sets")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# @config.router.get(
+#     path="/simulations/{id}/parameters/input/schema",
+#     operation_id="get-inputs-schema",
+#     tags=["Simulations"],
+#     summary="Get the name, type, and nesting of all configurable input(variant=>simData) parameters",
+#     dependencies=[Depends(get_database_service)],
+# )
+# async def get_inputs_schema(
+#         id: int = fastapi.Path(description="Database ID of the simulation."),
+# ) -> list[EcoliSimulationDTO]:
+#     db_service = get_database_service()
+#     if db_service is None:
+#         logger.error("Database service is not initialized")
+#         raise HTTPException(status_code=500, detail="Database service is not initialized")
+#     try:
+#         # return await db_service.list_ecoli_simulations()
+#         return await simulation_handlers.list_simulations(db_service=db_service)
+#     except Exception as e:
+#         logger.exception("Error fetching the uploaded analyses")
+#         raise HTTPException(status_code=500, detail=str(e)) from e

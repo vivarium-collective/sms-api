@@ -6,29 +6,13 @@ DEFAULT_BULK_OBSERVABLES = ["--TRANS-ACENAPHTHENE-12-DIOL", "ACETOLACTSYNI-CPLX"
 DEFAULT_GENES_OBSERVABLES = ["deoC", "deoD", "fucU"]
 DEFAULT_ANALYSIS_OPTIONS = {
     "cpus": 3,
-    "multiseed": {
-      "ptools_rxns": {
-        "n_tp": 8
-      },
-      "ptools_rna": {
-        "n_tp": 8
-      },
-      "ptools_proteins": {
-        "n_tp": 8
-      }
-    },
+    "multiseed": {"ptools_rxns": {"n_tp": 8}, "ptools_rna": {"n_tp": 8}, "ptools_proteins": {"n_tp": 8}},
     "data_transformation": {
-      "ecocyc": {
-        "request": [
-          {
-            "type": "genes",
-            "observable_ids": DEFAULT_GENES_OBSERVABLES
-          },
-          {
-            "type": "bulk",
-            "observable_ids": DEFAULT_BULK_OBSERVABLES
-          }
-        ]
-      }
-    }
-  }
+        "ecocyc": {
+            "request": [
+                {"type": "genes", "observable_ids": DEFAULT_GENES_OBSERVABLES},
+                {"type": "bulk", "observable_ids": DEFAULT_BULK_OBSERVABLES},
+            ]
+        }
+    },
+}

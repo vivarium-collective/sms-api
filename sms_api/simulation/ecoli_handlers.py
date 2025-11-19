@@ -14,15 +14,16 @@ from fastapi.responses import StreamingResponse
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
-from sms_api.data.data_service import download_transforms, TransformData, SimulationOutputData
+from sms_api.data.data_service import SimulationOutputData, download_transforms
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
     EcoliSimulationDTO,
     ExperimentRequest,
     JobStatus,
+    ObservablesRequest,
     SimulationConfig,
     SimulationRun,
-    SimulatorVersion, ObservablesRequest, BaseModel,
+    SimulatorVersion,
 )
 from sms_api.simulation.simulation_service import SimulationService
 
@@ -82,7 +83,7 @@ async def get_simulation_outputs(
     generation: int = 3,
     variant: int = 0,
     agent_id: str = "000",
-    observables: ObservablesRequest = ObservablesRequest()
+    observables: ObservablesRequest | None = None,
 ) -> SimulationOutputData:
     simulation = await db_service.get_ecoli_simulation(database_id=id)
     experiment_id = simulation.config.experiment_id
@@ -90,13 +91,13 @@ async def get_simulation_outputs(
 
     outputs: SimulationOutputData = await download_transforms(
         expid=experiment_id,
-        remote_outdir_root=Path(str(get_settings().simulation_outdir)),
+        remote_outdir_root=get_settings().simulation_outdir.remote_path,
         variant=variant,
         lineage_seed=lineage_seed,
         generation=generation,
         agent_id=agent_id,
-        observables=observables,
-        bg_tasks=bg_tasks
+        observables=observables or ObservablesRequest(),
+        bg_tasks=bg_tasks,
     )
 
     def generate(data: list[dict[str, Any]]) -> Generator[bytes, Any, None]:

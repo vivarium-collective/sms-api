@@ -312,14 +312,14 @@ paths:
         required: false
         schema:
           type: integer
-          default: 6
+          default: 1
           title: Lineage Seed
       - name: generation
         in: query
         required: false
         schema:
           type: integer
-          default: 1
+          default: 3
           title: Generation
       - name: variant
         in: query
@@ -332,32 +332,49 @@ paths:
         in: query
         required: false
         schema:
-          type: integer
-          default: 0
+          type: string
+          default: '000'
           title: Agent Id
       requestBody:
         content:
           application/json:
             schema:
-              type: array
-              items:
-                type: string
+              $ref: '#/components/schemas/ObservablesRequest'
               default:
-              - bulk
-              - genes
-              title: Observables
+                bulk:
+                - --TRANS-ACENAPHTHENE-12-DIOL
+                - ACETOLACTSYNI-CPLX
+                - CPD-3729
+                genes:
+                - deoC
+                - deoD
+                - fucU
+                reactions: []
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/SimulationOutputData'
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/parameters/inputs:
+    get:
+      tags:
+      - Simulations
+      summary: List all available parameter datasets
+      operationId: list-available-simdata
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
   /core/simulator/latest:
     get:
       tags:
@@ -818,28 +835,20 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_experiment-505de2ddf6794432_1763405465780-a1927ead8fd4cd39_1763405465780
-            simulation_name: sms_experiment-505de2ddf6794432_1763405465780
+            experiment_id: wcecoli_fig2_setD4_scaled-3d8fdb6d6143e136_1763579739791
+            simdata_id: wcecoli_fig2_setD4
+            simulation_name: wcecoli_fig2_setD4_scaled
             metadata: {}
-            run_parca: true
-            generations: 3
-            n_init_sims: 2
+            run_parca: false
+            generations: 4
+            n_init_sims: 30
             lineage_seed: 3
             max_duration: 10800.0
             initial_global_time: 0.0
             time_step: 1.0
             single_daughters: true
             variants: {}
-            analysis_options:
-              cpus: 3
-              single:
-                mass_fraction_summary: {}
-                ptools_proteins:
-                  n_tp: 8
-                ptools_rna:
-                  n_tp: 8
-                ptools_rxns:
-                  n_tp: 8
+            analysis_options: {}
             division_variable: []
             add_processes: []
             exclude_processes: []
@@ -848,21 +857,30 @@ components:
             topology: {}
             engine_process_reports: []
             emit_paths: []
+            fail_at_max_duration: false
             inherit_from: []
             spatial_environment_config: {}
             swap_processes: {}
             flow: {}
             initial_state_overrides: []
             initial_state: {}
+            parca_options:
+              cpus: 3
+              debug_parca: false
+              intermediates_directory: ''
+              new_genes: 'off'
+              operons: true
+              remove_rrff: false
+              remove_rrna_operons: false
+              ribosome_fitting: false
+              rnapoly_fitting: false
+              save_intermediates: false
+              stable_rrna: false
+              variable_elongation_transcription: true
+              variable_elongation_translation: false
             observables:
-              bulk:
-              - --TRANS-ACENAPHTHENE-12-DIOL
-              - ACETOLACTSYNI-CPLX
-              - CPD-3729
-              genes:
-              - deoC
-              - deoD
-              - fucU
+              bulk: []
+              genes: []
               reactions: []
         metadata:
           anyOf:
@@ -1075,10 +1093,14 @@ components:
         experiment_id:
           type: string
           title: Experiment Id
+        simdata_id:
+          type: string
+          title: Simdata Id
+          default: default
         simulation_name:
           type: string
           title: Simulation Name
-          default: sms_smsapi-2e1faaf58d3b3a40_1763405465534
+          default: sms_smsapi-77c0f011e4870cb0_1763579739551
         metadata:
           additionalProperties: true
           type: object
@@ -1087,7 +1109,7 @@ components:
         run_parca:
           type: boolean
           title: Run Parca
-          default: true
+          default: false
         generations:
           type: integer
           title: Generations
@@ -1137,14 +1159,26 @@ components:
           title: Analysis Options
           default:
             cpus: 3
-            single:
-              mass_fraction_summary: {}
+            multiseed:
               ptools_proteins:
                 n_tp: 8
               ptools_rna:
                 n_tp: 8
               ptools_rxns:
                 n_tp: 8
+            data_transformation:
+              ecocyc:
+                request:
+                - observable_ids:
+                  - deoC
+                  - deoD
+                  - fucU
+                  type: genes
+                - observable_ids:
+                  - --TRANS-ACENAPHTHENE-12-DIOL
+                  - ACETOLACTSYNI-CPLX
+                  - CPD-3729
+                  type: bulk
         gcloud:
           anyOf:
           - type: string
@@ -1342,17 +1376,30 @@ components:
           type: object
           title: Initial State
           default: {}
+        parca_options:
+          additionalProperties: true
+          type: object
+          title: Parca Options
+          default:
+            cpus: 3
+            outdir: ''
+            operons: true
+            ribosome_fitting: true
+            rnapoly_fitting: true
+            remove_rrna_operons: false
+            remove_rrff: false
+            stable_rrna: false
+            new_genes: 'off'
+            debug_parca: false
+            save_intermediates: false
+            intermediates_directory: ''
+            variable_elongation_transcription: true
+            variable_elongation_translation: false
         observables:
           $ref: '#/components/schemas/ObservablesRequest'
           default:
-            bulk:
-            - --TRANS-ACENAPHTHENE-12-DIOL
-            - ACETOLACTSYNI-CPLX
-            - CPD-3729
-            genes:
-            - deoC
-            - deoD
-            - fucU
+            bulk: []
+            genes: []
             reactions: []
       type: object
       required:
@@ -1663,7 +1710,28 @@ components:
           additionalProperties: true
           type: object
           title: Analysis Options
-          default: {}
+          default:
+            cpus: 3
+            multiseed:
+              ptools_proteins:
+                n_tp: 8
+              ptools_rna:
+                n_tp: 8
+              ptools_rxns:
+                n_tp: 8
+            data_transformation:
+              ecocyc:
+                request:
+                - observable_ids:
+                  - deoC
+                  - deoD
+                  - fucU
+                  type: genes
+                - observable_ids:
+                  - --TRANS-ACENAPHTHENE-12-DIOL
+                  - ACETOLACTSYNI-CPLX
+                  - CPD-3729
+                  type: bulk
         gcloud:
           anyOf:
           - type: string
@@ -1896,6 +1964,23 @@ components:
       required:
       - experiment_id
       title: SimulationConfig
+    SimulationOutputData:
+      properties:
+        experiment_id:
+          type: string
+          title: Experiment Id
+        bulk:
+          type: string
+          title: Bulk
+        genes:
+          type: string
+          title: Genes
+      type: object
+      required:
+      - experiment_id
+      - bulk
+      - genes
+      title: SimulationOutputData
     SimulationRun:
       properties:
         id:
