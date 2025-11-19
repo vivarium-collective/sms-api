@@ -10,7 +10,8 @@ For the endpoint: /core/simulator/versions: core_simulator_versions
 
 Then, add that func to the list within the examples dict comprehension below!
 """
-import json
+
+from pathlib import Path
 
 from sms_api.common.utils import unique_id
 from sms_api.data.models import ExperimentAnalysisRequest, PtoolsAnalysisConfig
@@ -35,19 +36,11 @@ base_simulation = (lambda expid: ExperimentRequest(experiment_id=expid, simulati
 
 # base_observables = ["bulk", "genes"]
 base_observables = ObservablesRequest(
-    bulk=[
-        "--TRANS-ACENAPHTHENE-12-DIOL",
-        "ACETOLACTSYNI-CPLX",
-        "CPD-3729"
-    ],
-    genes=[
-        "deoC",
-        "deoD",
-        "fucU"
-    ]
+    bulk=["--TRANS-ACENAPHTHENE-12-DIOL", "ACETOLACTSYNI-CPLX", "CPD-3729"], genes=["deoC", "deoD", "fucU"]
 )
 
-with open("/Users/alexanderpatrie/sms/sms-api/assets/wcecoli_figure2_setD4.json", "r") as fp:
-    experiment_conf = json.load(fp)
-wcecoli_fig2_setD4 = ExperimentRequest(simulation_name="wcecoli_figure2_setD4", **experiment_conf)
-
+wcecoli_fig2_setD4 = ExperimentRequest.from_config(
+    Path("/Users/alexanderpatrie/sms/sms-api/assets/wcecoli_figure2_setD4_scaled.json"),
+    simulation_name="wcecoli_fig2_setD4_scaled",
+    simdata_id="wcecoli_fig2_setD4",
+)
