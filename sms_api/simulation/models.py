@@ -13,6 +13,7 @@ from pydantic import Field, RootModel
 
 from sms_api.common.utils import unique_id
 from sms_api.config import get_settings
+from sms_api.constants import DEFAULT_ANALYSIS_OPTIONS
 
 
 @dataclass
@@ -283,9 +284,11 @@ class SimulationConfig(BaseModel):
     time_step: float = 1.0
     single_daughters: bool = True
     emitter: str = "parquet"
-    emitter_arg: dict[str, str] = Field(default_factory=lambda: {"out_dir": str(get_settings().simulation_outdir)})
+    emitter_arg: dict[str, str] = Field(
+        default_factory=lambda: {"out_dir": str(get_settings().simulation_outdir.remote_path)}
+    )
     variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
-    analysis_options: dict[str, Any] = Field(default={})
+    analysis_options: dict[str, Any] = Field(default=DEFAULT_ANALYSIS_OPTIONS)
     gcloud: str | None = None
     agent_id: str | None = None
     parallel: bool | None = None
@@ -332,7 +335,9 @@ class SimulationConfig(BaseModel):
 
     def model_post_init(self, *args: Any) -> None:
         if self.sim_data_path is None:
-            self.sim_data_path = str(get_settings().slurm_base_path / "workspace" / "kb" / "simData.cPickle")
+            self.sim_data_path = str(
+                get_settings().slurm_base_path.remote_path / "workspace" / "kb" / "simData.cPickle"
+            )
         for attrname in list(SimulationConfig.model_fields.keys()):
             attr = getattr(self, attrname)
             if attr is None or attr == ["string"]:
@@ -388,9 +393,10 @@ class ExperimentRequest(BaseModel):
     """Used by the /simulation endpoint."""
 
     experiment_id: str
+    simdata_id: str = "default"
     simulation_name: str = f"sms_{unique_id()!s}"
     metadata: dict[str, Any] = {}
-    run_parca: bool = True
+    run_parca: bool = False
     generations: int = 3
     n_init_sims: int = 2
     lineage_seed: int = 3
@@ -399,17 +405,7 @@ class ExperimentRequest(BaseModel):
     time_step: float = 1.0
     single_daughters: bool = True
     variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
-    analysis_options: dict[str, Any] = Field(
-        default={
-            "cpus": 3,
-            "single": {
-                "mass_fraction_summary": {},
-                "ptools_rxns": {"n_tp": 8},
-                "ptools_rna": {"n_tp": 8},
-                "ptools_proteins": {"n_tp": 8},
-            },
-        }
-    )
+    analysis_options: dict[str, Any] = Field(default=DEFAULT_ANALYSIS_OPTIONS)
     gcloud: str | None = None
     agent_id: str | None = None
     parallel: bool | None = None
@@ -447,33 +443,36 @@ class ExperimentRequest(BaseModel):
     flow: dict[str, Any] = Field(default={})
     initial_state_overrides: list[str] = Field(default=[])
     initial_state: dict[str, Any] = Field(default={})
-    parca_options: dict[str, Any] = Field(default={
-        "cpus": 3,
-        "outdir": "/home/FCAM/svc_vivarium/workspace/outputs",
-        "operons": True,
-        "ribosome_fitting": True,
-        "rnapoly_fitting": True,
-        "remove_rrna_operons": False,
-        "remove_rrff": False,
-        "stable_rrna": False,
-        "new_genes": "off",
-        "debug_parca": False,
-        "load_intermediate": None,
-        "save_intermediates": False,
-        "intermediates_directory": "",
-        "variable_elongation_transcription": True,
-        "variable_elongation_translation": False
-    })
-    observables: ObservablesRequest = Field(
-        default=ObservablesRequest(
-            bulk=["--TRANS-ACENAPHTHENE-12-DIOL", "ACETOLACTSYNI-CPLX", "CPD-3729"], genes=["deoC", "deoD", "fucU"]
-        )
+    parca_options: dict[str, Any] = Field(
+        default={
+            "cpus": 3,
+            "outdir": "",
+            "operons": True,
+            "ribosome_fitting": True,
+            "rnapoly_fitting": True,
+            "remove_rrna_operons": False,
+            "remove_rrff": False,
+            "stable_rrna": False,
+            "new_genes": "off",
+            "debug_parca": False,
+            "load_intermediate": None,
+            "save_intermediates": False,
+            "intermediates_directory": "",
+            "variable_elongation_transcription": True,
+            "variable_elongation_translation": False,
+        }
     )
+    observables: ObservablesRequest = Field(default=ObservablesRequest())
 
     def model_post_init(self, context: Any, /) -> None:
         self.experiment_id = unique_id(self.experiment_id)
+        # if not len(self.parca_options.get('outdir', "")):
+        #     self.parca_options['outdir'] = str(get_settings().simulation_outdir.remote_path)
 
     def to_config(self) -> SimulationConfig:
+        if not len(self.parca_options.get("outdir", "")):
+            self.parca_options["outdir"] = str(get_settings().simulation_outdir.remote_path)
+
         attributes = self.model_json_schema()["properties"]
         excluded = ["simdata_id", "metadata"]
         config_kwargs = {}
@@ -488,12 +487,23 @@ class ExperimentRequest(BaseModel):
         if not self.run_parca:
             # case: use the cached simdata
             config_kwargs["sim_data_path"] = str(
-                get_settings().slurm_base_path / "workspace" / "kb" / "simData.cPickle"
+                get_settings().slurm_base_path.remote_path
+                / "workspace"
+                / "parameters"
+                / "registry"
+                / "default"
+                / "simData.cPickle"
             )
 
         transform_config = generate_transform_config(self.observables)
         config_kwargs["analysis_options"].update(transform_config)
         return SimulationConfig(**config_kwargs)
+
+    @classmethod
+    def from_config(cls, fp: Path, **request_kwargs: Any) -> "ExperimentRequest":
+        with fp.open() as f:
+            experiment_conf = json.load(f)
+        return ExperimentRequest(**request_kwargs, **experiment_conf)
 
 
 class EcoliSimulationDTO(BaseModel):

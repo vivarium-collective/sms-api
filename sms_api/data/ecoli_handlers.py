@@ -125,7 +125,7 @@ async def get_tsv_output(
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
     fp = (
-        get_settings().simulation_outdir
+        get_settings().simulation_outdir.remote_path
         / output_id
         / f"experiment_id={analysis_data.config.analysis_options.experiment_id[0]}"
     )

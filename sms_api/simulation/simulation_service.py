@@ -10,6 +10,8 @@ from textwrap import dedent
 
 from typing_extensions import override
 
+from sms_api.api.request_examples import wcecoli_fig2_setD4 as config
+from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
@@ -463,7 +465,7 @@ class SimulationServiceHpc(SimulationService):
         ) -> tuple[str, int]:
             experiment_id = config.experiment_id
             slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
-            slurm_log_file = get_settings().slurm_base_path / "prod" / "htclogs" / f"{slurmjob_name}.out"
+            slurm_log_file = get_settings().slurm_log_base_path / f"{slurmjob_name}.out"
 
             slurm_script = _slurm_script(
                 slurm_log_file=slurm_log_file,
@@ -500,9 +502,9 @@ class SimulationServiceHpc(SimulationService):
             return dedent(f"""\
                 #!/bin/bash
                 #SBATCH --job-name={slurm_job_name}
-                #SBATCH --time=30:00
+                #SBATCH --time=2-00:00:00
                 #SBATCH --cpus-per-task {MAX_SIMULATION_CPUS}
-                #SBATCH --mem=8GB
+                #SBATCH --mem=30GB
                 #SBATCH --partition={get_settings().slurm_partition}
                 {qos_clause}
                 #SBATCH --output={slurm_log_file!s}
@@ -590,6 +592,60 @@ class SimulationServiceHpc(SimulationService):
     @override
     async def close(self) -> None:
         pass
+
+
+def test_write_slurm_script(
+    # config, hash
+) -> str:
+    experiment_id = config.experiment_id
+    latest_hash = get_simulator().git_commit_hash
+    slurm_job_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=latest_hash)
+    slurm_log_file: HPCFilePath = get_settings().slurm_base_path / "prod" / "htclogs" / f"{slurm_job_name}.out"
+    remote_workspace_dir: HPCFilePath = get_settings().slurm_base_path / "workspace"
+    vecoli_dir: HPCFilePath = remote_workspace_dir / "vEcoli"
+    # config_dir = vecoli_dir / "configs"
+    # conf = config.model_dump_json() or "{}"
+    qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
+    nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
+    return dedent(f"""\
+        #!/bin/bash
+        #SBATCH --job-name={slurm_job_name}
+        #SBATCH --time=30:00
+        #SBATCH --cpus-per-task {MAX_SIMULATION_CPUS}
+        #SBATCH --mem=8GB
+        #SBATCH --partition={get_settings().slurm_partition}
+        {qos_clause}
+        #SBATCH --output={slurm_log_file!s}
+        {nodelist_clause}
+        set -e
+        ### set up java and nextflow
+        local_bin=$HOME/.local/bin
+        export JAVA_HOME=$local_bin/java-22
+        export PATH=$JAVA_HOME/bin:$local_bin:$PATH
+        ### configure working dir and binds
+        vecoli_dir={vecoli_dir!s}
+        latest_hash={latest_hash}
+        tmp_config=$(mktemp)
+        echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
+        cd $vecoli_dir
+        ### binds
+        binds="-B $HOME/workspace/vEcoli:/vEcoli"
+        binds+=" -B $HOME/workspace/api_outputs:/out"
+        binds+=" -B $JAVA_HOME:$JAVA_HOME"
+        binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
+        image=$HOME/workspace/images/vecoli-$latest_hash.sif
+        vecoli_image_root=/vEcoli
+        singularity run $binds $image bash -c "
+            export JAVA_HOME=$HOME/.local/bin/java-22
+            export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
+            uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config \"$tmp_config\"
+        "
+    """)
+
+
+def test_write_script() -> None:
+    with open("sms.sbatch", "w") as fp:
+        fp.write(test_write_slurm_script())
 
 
 def simulation_slurm_script(

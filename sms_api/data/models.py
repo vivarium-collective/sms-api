@@ -185,12 +185,12 @@ class ExperimentAnalysisRequest(BaseModel):
     multiexperiment: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
 
     def to_config(self, analysis_name: str) -> AnalysisConfig:
-        experiment_outdir = f"{get_settings().simulation_outdir}/{self.experiment_id}"
+        experiment_outdir = f"{get_settings().simulation_outdir.remote_path!s}/{self.experiment_id}"
         options = AnalysisConfigOptions(
             experiment_id=[self.experiment_id],
             variant_data_dir=[f"{experiment_outdir}/variant_sim_data"],
             validation_data_path=[f"{experiment_outdir}/parca/kb/validationData.cPickle"],
-            outdir=f"{get_settings().simulation_outdir}/{analysis_name}",
+            outdir=f"{get_settings().simulation_outdir!s}/{analysis_name}",
             cpus=MAX_ANALYSIS_CPUS,
             single=dict_options(self.single),
             multidaughter=dict_options(self.multidaughter),
