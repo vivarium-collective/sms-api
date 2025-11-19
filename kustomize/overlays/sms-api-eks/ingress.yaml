@@ -5,37 +5,15 @@ metadata:
   labels:
     app: api-ingress
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/server-snippets: |
-      location /ws {
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_http_version 1.1;
-        proxy_set_header X-Forwarded-Host $http_host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header Host $host;
-        proxy_set_header Connection "upgrade";
-        proxy_cache_bypass $http_upgrade;
-      }
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:564519194679:certificate/59934c30-49ce-4848-af1c-bd268a1ee8df
 spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - sms.cam.uchc.edu
-      secretName: letsencrypt-prod-sms-api-tls
+  ingressClassName: alb
   rules:
-    - host: sms.cam.uchc.edu
+    - host: sms.jcschaff.org
       http:
         paths:
-          - path: /ws
-            pathType: Prefix
-            backend:
-              service:
-                name: api
-                port:
-                  number: 8000
           - path: /
             pathType: Prefix
             backend:
