@@ -115,12 +115,15 @@ class MessagingServiceRedis(MessagingService):
                 try:
                     # Use get_message with timeout to allow periodic checking of stop_event
                     message = await asyncio.wait_for(
-                        self._pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0),
-                        timeout=1.0
+                        self._pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0), timeout=1.0
                     )
 
                     if message is not None and message["type"] == "message":
-                        channel = message["channel"].decode("utf-8") if isinstance(message["channel"], bytes) else message["channel"]
+                        channel = (
+                            message["channel"].decode("utf-8")
+                            if isinstance(message["channel"], bytes)
+                            else message["channel"]
+                        )
                         data = message["data"]
 
                         # Dispatch to the appropriate callback

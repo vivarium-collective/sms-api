@@ -12,7 +12,9 @@ pytest_plugins = ["tests.fixtures.nats_fixtures", "tests.fixtures.redis_fixtures
 
 
 @pytest.mark.asyncio
-async def test_nats_pubsub(nats_subscriber_service: MessagingServiceNATS, nats_producer_service: MessagingServiceNATS) -> None:
+async def test_nats_pubsub(
+    nats_subscriber_service: MessagingServiceNATS, nats_producer_service: MessagingServiceNATS
+) -> None:
     """Test pub/sub functionality with NATS backend."""
     received = asyncio.Event()
     data_holder: dict[str, bytes] = {}
@@ -34,7 +36,9 @@ async def test_nats_pubsub(nats_subscriber_service: MessagingServiceNATS, nats_p
 
 
 @pytest.mark.asyncio
-async def test_redis_pubsub(redis_subscriber_service: MessagingServiceRedis, redis_producer_service: MessagingServiceRedis) -> None:
+async def test_redis_pubsub(
+    redis_subscriber_service: MessagingServiceRedis, redis_producer_service: MessagingServiceRedis
+) -> None:
     """Test pub/sub functionality with Redis backend."""
     received = asyncio.Event()
     data_holder: dict[str, bytes] = {}
@@ -56,7 +60,9 @@ async def test_redis_pubsub(redis_subscriber_service: MessagingServiceRedis, red
 
 
 @pytest.mark.asyncio
-async def test_nats_multiple_messages(nats_subscriber_service: MessagingServiceNATS, nats_producer_service: MessagingServiceNATS) -> None:
+async def test_nats_multiple_messages(
+    nats_subscriber_service: MessagingServiceNATS, nats_producer_service: MessagingServiceNATS
+) -> None:
     """Test receiving multiple messages with NATS backend."""
     messages_received: list[bytes] = []
     expected_count = 10
@@ -80,7 +86,9 @@ async def test_nats_multiple_messages(nats_subscriber_service: MessagingServiceN
 
 
 @pytest.mark.asyncio
-async def test_redis_multiple_messages(redis_subscriber_service: MessagingServiceRedis, redis_producer_service: MessagingServiceRedis) -> None:
+async def test_redis_multiple_messages(
+    redis_subscriber_service: MessagingServiceRedis, redis_producer_service: MessagingServiceRedis
+) -> None:
     """Test receiving multiple messages with Redis backend."""
     messages_received: list[bytes] = []
     expected_count = 10
@@ -104,7 +112,9 @@ async def test_redis_multiple_messages(redis_subscriber_service: MessagingServic
 
 
 @pytest.mark.asyncio
-async def test_nats_multiple_channels(nats_subscriber_service: MessagingServiceNATS, nats_producer_service: MessagingServiceNATS) -> None:
+async def test_nats_multiple_channels(
+    nats_subscriber_service: MessagingServiceNATS, nats_producer_service: MessagingServiceNATS
+) -> None:
     """Test subscribing to multiple channels with NATS backend."""
     channel1_data: dict[str, bytes] = {}
     channel2_data: dict[str, bytes] = {}
@@ -133,7 +143,9 @@ async def test_nats_multiple_channels(nats_subscriber_service: MessagingServiceN
 
 
 @pytest.mark.asyncio
-async def test_redis_multiple_channels(redis_subscriber_service: MessagingServiceRedis, redis_producer_service: MessagingServiceRedis) -> None:
+async def test_redis_multiple_channels(
+    redis_subscriber_service: MessagingServiceRedis, redis_producer_service: MessagingServiceRedis
+) -> None:
     """Test subscribing to multiple channels with Redis backend."""
     channel1_data: dict[str, bytes] = {}
     channel2_data: dict[str, bytes] = {}
