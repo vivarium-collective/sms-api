@@ -1,0 +1,5 @@
+# NEWEST(FIRST NEXTFLOW): "0.2.11-dev"
+# STABLE: "0.2.10-dev"
+# PREVIOUS STABLE: "0.2.8"
+# LATEST STABLE: "0.2.30-dev"
+__version__ = "0.1.2-dev"

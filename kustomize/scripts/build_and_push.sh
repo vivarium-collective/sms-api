@@ -12,15 +12,18 @@ declared_version=$(grep -oE '__version__ = \"[^\"]+\"' "${ROOT_DIR}/sms_api/vers
 version=${1:-${declared_version}}
 
 #default_org="vivarium-collective"  # or, "biosimulations"
-default_org="biosimulations" ### temporary, remove later (JCS)
+default_org="vivarium-collective" ### temporary, remove later (JCS)
 container_org=${2:-${default_org}}
 
 echo "building and pushing images to ${container_org} for version ${version}"
 
-for service in api; do
+for service in api ptools; do
 
   tag="${version}"
   dockerfile="${ROOT_DIR}/Dockerfile-${service}"
+  if [ "$service" == "ptools" ]; then
+    tag=$(grep -oE '__version__ = \"[^\"]+\"' "${ROOT_DIR}/sms_api/ptools_version.py" | awk -F'"' '{print $2}')
+  fi
   image_name="ghcr.io/${container_org}/sms-${service}:${tag}"
 
   docker buildx build --platform=linux/amd64 -f ${dockerfile} --tag ${image_name} "${ROOT_DIR}" \
