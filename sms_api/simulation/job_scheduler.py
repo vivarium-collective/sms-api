@@ -1,13 +1,10 @@
 import asyncio
 import logging
-from typing import Any
 
-import nats
 from async_lru import alru_cache
-from nats.aio.client import Client as NATSClient
-from nats.aio.msg import Msg
 
 from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.messaging.messaging_service import MessagingService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import JobStatus, WorkerEvent, WorkerEventMessagePayload
@@ -18,12 +15,14 @@ logger = logging.getLogger(__name__)
 class JobScheduler:
     database_service: DatabaseService
     slurm_service: SlurmService
-    nats_client: NATSClient
+    messaging_service: MessagingService
     _polling_task: asyncio.Task[None] | None = None
     _stop_event: asyncio.Event
 
-    def __init__(self, nats_client: NATSClient, database_service: DatabaseService, slurm_service: SlurmService):
-        self.nats_client = nats_client
+    def __init__(
+        self, messaging_service: MessagingService, database_service: DatabaseService, slurm_service: SlurmService
+    ):
+        self.messaging_service = messaging_service
         self.database_service = database_service
         self.slurm_service = slurm_service
         self._stop_event = asyncio.Event()
@@ -34,14 +33,13 @@ class JobScheduler:
 
     async def subscribe(self) -> None:
         subject = get_settings().nats_worker_event_subject
-        logger.info(f"Subscribing to NATS messages for subject '{subject}'")
+        logger.info(f"Subscribing to messaging service for subject '{subject}'")
 
-        async def message_handler(msg: Msg) -> Any:
+        async def message_handler(data: bytes) -> None:
             try:
-                subject = msg.subject
-                data = msg.data.decode("utf-8")
-                logger.debug(f"Received message on subject '{subject}': {data}")
-                worker_event_message_payload = WorkerEventMessagePayload.model_validate_json(data)
+                data_str = data.decode("utf-8")
+                logger.debug(f"Received message on subject '{subject}': {data_str}")
+                worker_event_message_payload = WorkerEventMessagePayload.model_validate_json(data_str)
                 worker_event = WorkerEvent.from_message_payload(
                     worker_event_message_payload=worker_event_message_payload
                 )
@@ -53,17 +51,15 @@ class JobScheduler:
                     worker_event, hpcrun_id=hpcrun_id
                 )
             except Exception:
-                logger.exception(f"Exception while handling NATS message: {data}")
+                logger.exception(f"Exception while handling message: {data!r}")
 
-        await self.nats_client.subscribe(subject=subject, cb=message_handler)
-        if self.nats_client.is_connected:
-            logger.info("NATS client is connected and subscription is set up.")
+        await self.messaging_service.subscribe(subject=subject, callback=message_handler)
+        if self.messaging_service.is_connected():
+            logger.info("Messaging service is connected and subscription is set up.")
         else:
-            logger.error("NATS client is not connected.")
+            logger.error("Messaging service is not connected.")
 
     async def start_polling(self, interval_seconds: int = 30) -> None:
-        if self.nats_client is None:
-            self.nats_client = await nats.connect(self.nats_url)
         if self._polling_task is not None and not self._polling_task.done():
             logger.warning("Polling task already running.")
             return
@@ -114,5 +110,5 @@ class JobScheduler:
 
     async def close(self) -> None:
         await self.stop_polling()
-        logger.debug("Closing NATS client connection")
-        await self.nats_client.close()
+        logger.debug("Closing messaging service connection")
+        await self.messaging_service.disconnect()

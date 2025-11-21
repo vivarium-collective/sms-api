@@ -2,11 +2,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import nats
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.messaging.messaging_service import MessagingService
+from sms_api.common.messaging.messaging_service_nats import MessagingServiceNATS
+from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_gcs import FileServiceGCS
@@ -189,14 +191,28 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         slurm_service = SlurmService(ssh_service=ssh_service)
         logger.info(f"✓ SSH/Slurm services initialized for {settings.slurm_submit_user}@{settings.slurm_submit_host}")
 
-        # Connect to NATS
-        logger.info(f"Connecting to NATS: {_settings.nats_url}")
-        nats_client = await nats.connect(_settings.nats_url)
-        logger.info(f"Connected to NATS: {_settings.nats_url}")
+        # Initialize messaging service
+        logger.info("Initializing messaging service...")
+        messaging_service: MessagingService
+
+        # Determine URL (new messaging_url takes precedence over legacy nats_url)
+        messaging_url = _settings.messaging_url or _settings.nats_url
+
+        if _settings.messaging_backend == "redis":
+            logger.info(f"Using Redis messaging backend at {messaging_url}")
+            messaging_service = MessagingServiceRedis()
+        else:  # default to NATS
+            logger.info(f"Using NATS messaging backend at {messaging_url}")
+            messaging_service = MessagingServiceNATS()
+
+        await messaging_service.connect(messaging_url)
+        logger.info("✓ Messaging service connected")
 
         # Initialize JobScheduler
         logger.info("Initializing JobScheduler...")
-        job_scheduler = JobScheduler(nats_client=nats_client, database_service=database, slurm_service=slurm_service)
+        job_scheduler = JobScheduler(
+            messaging_service=messaging_service, database_service=database, slurm_service=slurm_service
+        )
         set_job_scheduler(job_scheduler)
         logger.info("✓ JobScheduler initialized")
 
