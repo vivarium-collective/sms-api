@@ -7,6 +7,8 @@ from nats.aio.client import Client as NATSClient
 # from nats.js import JetStreamContext
 from testcontainers.nats import NatsContainer  # type: ignore[import-untyped]
 
+from sms_api.common.messaging.messaging_service_nats import MessagingServiceNATS
+
 
 @pytest_asyncio.fixture(scope="session")
 async def nats_container_uri() -> AsyncGenerator[str, None]:
@@ -26,6 +28,22 @@ async def nats_producer_client(nats_container_uri: str) -> AsyncGenerator[NATSCl
     client = await nats.connect(nats_container_uri, verbose=True)
     yield client
     await client.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def nats_subscriber_service(nats_container_uri: str) -> AsyncGenerator[MessagingServiceNATS, None]:
+    service = MessagingServiceNATS()
+    await service.connect(nats_container_uri)
+    yield service
+    await service.disconnect()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def nats_producer_service(nats_container_uri: str) -> AsyncGenerator[MessagingServiceNATS, None]:
+    service = MessagingServiceNATS()
+    await service.connect(nats_container_uri)
+    yield service
+    await service.disconnect()
 
 
 # @pytest_asyncio.fixture

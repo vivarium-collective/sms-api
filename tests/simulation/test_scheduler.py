@@ -11,6 +11,7 @@ from nats.aio.client import Client as NATSClient
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.messaging.messaging_service_nats import MessagingServiceNATS
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
@@ -81,8 +82,10 @@ async def test_messaging(
     database_service: DatabaseServiceSQL,
     slurm_service: SlurmService,
 ) -> None:
+    messaging_service_NATS = MessagingServiceNATS()
+    messaging_service_NATS._client = nats_subscriber_client
     scheduler = JobScheduler(
-        nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service
+        messaging_service=messaging_service_NATS, database_service=database_service, slurm_service=slurm_service
     )
     await scheduler.subscribe()
 
@@ -120,8 +123,10 @@ async def test_job_scheduler(
     slurm_service: SlurmService,
     slurm_template_hello_10s: str,
 ) -> None:
+    messaging_service_NATS = MessagingServiceNATS()
+    messaging_service_NATS._client = nats_subscriber_client
     scheduler = JobScheduler(
-        nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service
+        messaging_service=messaging_service_NATS, database_service=database_service, slurm_service=slurm_service
     )
     await scheduler.subscribe()
     await scheduler.start_polling(interval_seconds=1)
@@ -211,6 +216,8 @@ async def test_job_scheduler_with_storage(
 
     Tests run with both storage_type="aws" and storage_type="qumulo" (if configured).
     """
+    messaging_service_NATS = MessagingServiceNATS()
+    messaging_service_NATS._client = nats_subscriber_client
     settings = get_settings()
     test_id = uuid.uuid4().hex[:8]
     input_key = S3FilePath(s3_path=Path(f"test/slurm/input_{test_id}.txt"))
@@ -238,7 +245,7 @@ async def test_job_scheduler_with_storage(
         # Step 2: Prepare Slurm job script
         print("\n=== Step 2: Preparing Slurm job ===")
         scheduler = JobScheduler(
-            nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service
+            messaging_service=messaging_service_NATS, database_service=database_service, slurm_service=slurm_service
         )
         await scheduler.subscribe()
         await scheduler.start_polling(interval_seconds=2)
