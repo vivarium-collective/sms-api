@@ -9,7 +9,7 @@ namespace: sms-api-rke-temp
 
 images:
   - name: ghcr.io/biosimulations/sms-api
-    newTag: 0.2.45-dev  # 0.2.30-dev
+    newTag: 0.2.46-dev  # 0.2.30-dev
   - name: ghcr.io/vivarium-collective/pathway-tools
     newTag: 0.1.0
 
@@ -18,6 +18,10 @@ replicas:
     name: api
   - count: 1
     name: ptools
+  - count: 0
+    name: nats
+  - count: 1
+    name: redis
 
 resources:
 #  - ingress.yaml

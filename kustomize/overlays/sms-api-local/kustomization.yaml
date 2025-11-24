@@ -5,12 +5,16 @@ namespace: sms-api-local
 
 images:
   - name: ghcr.io/biosimulations/sms-api
-    newTag: 0.2.45-dev
+    newTag: 0.2.46-dev
     # STABLE: newTag: 0.2.8
 
 replicas:
   - count: 1
     name: api
+  - count: 0
+    name: nats
+  - count: 1
+    name: redis
 
 resources:
   - ingress.yaml
