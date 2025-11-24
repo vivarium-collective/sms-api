@@ -260,7 +260,7 @@ image:
 .PHONY: exec-api
 exec-api:
 	@[ -z "$(tag)" ] && tag=0.2.8 || tag=$(tag); \
-	docker run --rm --name sms -p 8000:8000 --platform linux/amd64 --entrypoint /usr/bin/env -it ghcr.io/biosimulations/sms-api:$$tag bash
+	docker run --rm --name sms -p 8000:8000 --platform linux/amd64 --entrypoint /usr/bin/env -it ghcr.io/vivarium-collective/sms-api:$$tag bash
 
 .PHONY: exec
 exec:

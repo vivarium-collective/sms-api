@@ -8,7 +8,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: alembic
-          image: ghcr.io/biosimulations/sms-api:latest
+          image: ghcr.io/vivarium-collective/sms-api:latest
           imagePullPolicy: Always
           command: ["uv", "run", "alembic", "upgrade", "head"]
           env:
