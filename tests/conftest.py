@@ -1,4 +1,4 @@
-import pytest  # noqa: F401
+import pytest
 import pytest_asyncio  # noqa: F401
 
 from tests.fixtures.api_fixtures import (  # noqa: F401

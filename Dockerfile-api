@@ -14,7 +14,7 @@ RUN apt-get update && \
 ENV PYTHONUNBUFFERED=1
 
 # Install uv from the GitHub Container Registry
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # create user/group
 RUN groupadd -g $APP_GID appgroup && \
@@ -32,10 +32,20 @@ COPY --chown=appuser:appgroup pyproject.toml /app/pyproject.toml
 RUN uv sync --frozen --no-install-project
 
 # Copy the rest of the application code
-COPY --chown=appuser:appgroup . /app
+COPY --chown=appuser:appgroup sms_api /app/sms_api
+COPY --chown=appuser:appgroup tests /app/tests
+COPY --chown=appuser:appgroup app /app/app
+COPY --chown=appuser:appgroup alembic /app/alembic
+COPY --chown=appuser:appgroup clients /app/clients
+COPY --chown=appuser:appgroup pytest.ini alembic.ini README.md /app/
+COPY --chown=appuser:appgroup assets/simulation /app/assets/simulation
+COPY --chown=appuser:appgroup assets/*.json /app/assets/
 
 # Sync the project
 RUN uv sync --frozen
+
+# Test the project (skip Docker-dependent tests since we're inside a container)
+#RUN SKIP_DOCKER_TESTS=1 uv run python -m pytest
 
 # Declare the volume for local cache storage
 VOLUME ["/app/scratch"]

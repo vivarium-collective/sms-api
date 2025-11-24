@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 
 import nats
+import pytest
 import pytest_asyncio
 from nats.aio.client import Client as NATSClient
 
@@ -8,10 +9,13 @@ from nats.aio.client import Client as NATSClient
 from testcontainers.nats import NatsContainer  # type: ignore[import-untyped]
 
 from sms_api.common.messaging.messaging_service_nats import MessagingServiceNATS
+from tests.docker_utils import SKIP_DOCKER_REASON, SKIP_DOCKER_TESTS
 
 
 @pytest_asyncio.fixture(scope="session")
 async def nats_container_uri() -> AsyncGenerator[str, None]:
+    if SKIP_DOCKER_TESTS:
+        pytest.skip(SKIP_DOCKER_REASON)
     with NatsContainer() as nats_container:
         yield nats_container.nats_uri()
 
