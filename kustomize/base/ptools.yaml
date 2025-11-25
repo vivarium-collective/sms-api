@@ -5,7 +5,7 @@ metadata:
   labels:
     app: ptools
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: ptools
@@ -14,14 +14,13 @@ spec:
       labels:
         app: ptools
     spec:
-      nodeSelector:
-        vlan: internal
       containers:
         - name: ptools
-          image: ghcr.io/vivarium-collective/pathway-tools:0.1.0
+          image: ghcr.io/vivarium-collective/sms-ptools:0.1.0
           imagePullPolicy: Always
           ports:
             - containerPort: 1555
+            - containerPort: 5008
           envFrom:
             - configMapRef:
                 name: ptools-config
@@ -37,8 +36,11 @@ metadata:
   name: ptools
 spec:
   ports:
-    - name: "1555"
-      port: 1555
+    - name: "8000"
+      port: 8000
       targetPort: 1555
+    - name: "9000"
+      port: 9000
+      targetPort: 5008
   selector:
     app: ptools
