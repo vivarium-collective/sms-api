@@ -36,11 +36,11 @@ metadata:
   name: ptools
 spec:
   ports:
-    - name: "8000"
-      port: 8000
+    - name: "1555"
+      port: 1555
       targetPort: 1555
-    - name: "9000"
-      port: 9000
+    - name: "5008"
+      port: 5008
       targetPort: 5008
   selector:
     app: ptools

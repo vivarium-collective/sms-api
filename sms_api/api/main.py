@@ -25,6 +25,7 @@ from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from starlette import templating
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import RedirectResponse
 
 from sms_api.common.gateway.models import ServerMode
 from sms_api.common.gateway.utils import format_marimo_appname
@@ -150,9 +151,12 @@ templates = Jinja2Templates(directory=templates_dir)
 
 
 # -- main-level endpoints -- #
+@app.get("/")
+async def redirect_old_path() -> RedirectResponse:
+    return RedirectResponse(url="/home")
 
 
-@app.get("/", tags=["SMS API"])
+@app.get("/home", tags=["SMS API"])
 async def home(request: Request) -> templating._TemplateResponse:
     app_info = [
         ("Analyze", "Run Simulation Analyses"),
