@@ -212,9 +212,7 @@ def _(exp_select, get_variants, mo):
 
 @app.cell
 def _(exp_select, get_seeds, mo, variant_select):
-    seed_select = mo.ui.dropdown(
-        options=get_seeds(exp_id=exp_select.value, var_id=variant_select.value)
-    )
+    seed_select = mo.ui.dropdown(options=get_seeds(exp_id=exp_select.value, var_id=variant_select.value))
     return (seed_select,)
 
 
@@ -309,21 +307,19 @@ def _(mo, select_pathway):
 
 @app.cell
 def _(mo):
-    molecule_id_type = mo.ui.radio(
-        options=["Common name", "BioCyc ID"], value="Common name"
-    )
+    molecule_id_type = mo.ui.radio(options=["Common name", "BioCyc ID"], value="Common name")
 
     return (molecule_id_type,)
 
 
 @app.cell
 def _(
-        bulk_common_names,
-        bulk_names_unique,
-        bulk_override,
-        mo,
-        molecule_id_type,
-        select_pathway,
+    bulk_common_names,
+    bulk_names_unique,
+    bulk_override,
+    mo,
+    molecule_id_type,
+    select_pathway,
 ):
     if molecule_id_type.value == "Common name":
         molecule_id_options = bulk_common_names
@@ -402,13 +398,9 @@ def _(mo):
 
     y_scale_mrna = mo.ui.dropdown(options=["linear", "log", "symlog"], value="linear")
 
-    monomer_label_type = mo.ui.radio(
-        options=["common name", "BioCyc ID"], value="common name"
-    )
+    monomer_label_type = mo.ui.radio(options=["common name", "BioCyc ID"], value="common name")
 
-    y_scale_monomers = mo.ui.dropdown(
-        options=["linear", "log", "symlog"], value="symlog"
-    )
+    y_scale_monomers = mo.ui.dropdown(options=["linear", "log", "symlog"], value="symlog")
     return monomer_label_type, rna_label_type, y_scale_monomers, y_scale_mrna
 
 
@@ -436,12 +428,12 @@ def _(mo, mrna_select_plot, rna_label_type, y_scale_mrna):
 
 @app.cell
 def _(
-        mo,
-        mrna_cistron_names,
-        mrna_gene_ids,
-        mrna_override,
-        rna_label_type,
-        select_pathway,
+    mo,
+    mrna_cistron_names,
+    mrna_gene_ids,
+    mrna_override,
+    rna_label_type,
+    select_pathway,
 ):
     if rna_label_type.value == "gene name":
         rna_label_options = mrna_cistron_names
@@ -459,12 +451,12 @@ def _(
 
 @app.cell
 def _(
-        mo,
-        monomer_ids,
-        monomer_label_type,
-        monomer_names,
-        protein_override,
-        select_pathway,
+    mo,
+    monomer_ids,
+    monomer_label_type,
+    monomer_names,
+    protein_override,
+    select_pathway,
 ):
     monomer_label_dict = {"common name": monomer_names, "BioCyc ID": monomer_ids}
 
@@ -630,9 +622,7 @@ def _(mo):
 
 @app.cell
 def _(mo, rxn_ids, rxn_override, select_pathway):
-    select_rxns = mo.ui.multiselect(
-        options=rxn_ids, value=rxn_override(select_pathway.value), max_selections=500
-    )
+    select_rxns = mo.ui.multiselect(options=rxn_ids, value=rxn_override(select_pathway.value), max_selections=500)
     y_scale_rxns = mo.ui.dropdown(options=["linear", "log", "symlog"], value="symlog")
     mo.hstack(
         [
@@ -692,17 +682,15 @@ def _(create_duckdb_conn, os, wd_root):
 
 @app.cell
 def _(
-        conn,
-        db_filter,
-        history_sql_base,
-        ndlist_to_ndarray,
-        read_stacked_columns,
+    conn,
+    db_filter,
+    history_sql_base,
+    ndlist_to_ndarray,
+    read_stacked_columns,
 ):
     history_sql_subquery = f"SELECT * FROM ({history_sql_base}) WHERE {db_filter}"
 
-    subquery = read_stacked_columns(
-        history_sql_subquery, ["listeners__monomer_counts"], order_results=False
-    )
+    subquery = read_stacked_columns(history_sql_subquery, ["listeners__monomer_counts"], order_results=False)
 
     sql_monomer_validation = f"""
             WITH unnested_counts AS (
@@ -730,11 +718,11 @@ def _(
 
 @app.cell
 def _(
-        get_simulated_validation_counts,
-        get_val_ids,
-        monomer_counts,
-        sim_data,
-        validation_data,
+    get_simulated_validation_counts,
+    get_val_ids,
+    monomer_counts,
+    sim_data,
+    validation_data,
 ):
     sim_monomer_ids = sim_data.process.translation.monomer_data["id"]
     wisniewski_ids = validation_data.protein.wisniewski2014Data["monomerId"]
@@ -767,22 +755,18 @@ def _(
 
 @app.cell
 def _(mo):
-    val_dataset_select = mo.ui.dropdown(
-        options=["Schmidt 2015", "Wisniewski 2014"], value="Schmidt 2015"
-    )
-    val_label_type = mo.ui.dropdown(
-        options=["Common Name", "BioCyc ID"], value="Common Name"
-    )
+    val_dataset_select = mo.ui.dropdown(options=["Schmidt 2015", "Wisniewski 2014"], value="Schmidt 2015")
+    val_label_type = mo.ui.dropdown(options=["Common Name", "BioCyc ID"], value="Common Name")
     return val_dataset_select, val_label_type
 
 
 @app.cell
 def _(
-        mo,
-        protein_val_override,
-        select_pathway,
-        val_dataset_select,
-        val_options,
+    mo,
+    protein_val_override,
+    select_pathway,
+    val_dataset_select,
+    val_options,
 ):
     val_id_select = mo.ui.multiselect(
         options=val_options[val_dataset_select.value]["id"],
@@ -843,21 +827,17 @@ def _(alt, np, pearsonr, pl, val_id_select, val_options):
     def val_chart(dataset_name):
         data_val = val_options[dataset_name]["data"]
         data_sim = val_options[dataset_name]["sim"]
-        data_idxs = [
-            val_options[dataset_name]["id"].index(name) for name in val_id_select.value
-        ]
+        data_idxs = [val_options[dataset_name]["id"].index(name) for name in val_id_select.value]
         data_val_filtered = data_val[data_idxs]
         data_sim_filtered = data_sim[data_idxs]
 
         chart = (
             alt.Chart(
-                pl.DataFrame(
-                    {
-                        dataset_name: np.log10(data_val_filtered + 1),
-                        "sim": np.log10(data_sim_filtered + 1),
-                        "protein": val_id_select.value,
-                    }
-                )
+                pl.DataFrame({
+                    dataset_name: np.log10(data_val_filtered + 1),
+                    "sim": np.log10(data_sim_filtered + 1),
+                    "protein": val_id_select.value,
+                })
             )
             .mark_point()
             .encode(
@@ -866,10 +846,7 @@ def _(alt, np, pearsonr, pl, val_id_select, val_options):
                 tooltip=["protein:N"],
             )
             .properties(
-                title="Pearson r: %0.2f"
-                      % pearsonr(
-                    np.log10(data_sim_filtered + 1), np.log10(data_val_filtered + 1)
-                )[0]
+                title="Pearson r: %0.2f" % pearsonr(np.log10(data_sim_filtered + 1), np.log10(data_val_filtered + 1))[0]
             )
         )
 
@@ -911,9 +888,7 @@ def _(exp_select, os, wd_root):
                 )
             )
 
-            variant_folders = [
-                folder for folder in vars_ls if not folder.startswith(".")
-            ]
+            variant_folders = [folder for folder in vars_ls if not folder.startswith(".")]
 
             variants = [var.split("variant=")[1] for var in variant_folders]
 
@@ -962,9 +937,7 @@ def _(exp_select, os, wd_root):
 
         return gens
 
-    def get_agents(
-            exp_id, var_id, seed_id, gen_id, outdir=os.path.join(wd_root, "out")
-    ):
+    def get_agents(exp_id, var_id, seed_id, gen_id, outdir=os.path.join(wd_root, "out")):
         try:
             agents_ls = os.listdir(
                 os.path.join(
@@ -978,9 +951,7 @@ def _(exp_select, os, wd_root):
                 )
             )
 
-            agent_folders = [
-                folder for folder in agents_ls if not folder.startswith(".")
-            ]
+            agent_folders = [folder for folder in agents_ls if not folder.startswith(".")]
             agents = [agent.split("agent_id=")[1] for agent in agent_folders]
         except (FileNotFoundError, TypeError):
             agents = ["N/A"]
@@ -1054,21 +1025,21 @@ def _():
 
 @app.cell
 def _(
-        bulk_common_names,
-        bulk_names_unique,
-        molecule_id_type,
-        monomer_ids,
-        monomer_label_type,
-        monomer_names,
-        mrna_cistron_names,
-        mrna_gene_ids,
-        np,
-        os,
-        pd,
-        rna_label_type,
-        rxn_ids,
-        val_dataset_select,
-        val_options,
+    bulk_common_names,
+    bulk_names_unique,
+    molecule_id_type,
+    monomer_ids,
+    monomer_label_type,
+    monomer_names,
+    mrna_cistron_names,
+    mrna_gene_ids,
+    np,
+    os,
+    pd,
+    rna_label_type,
+    rxn_ids,
+    val_dataset_select,
+    val_options,
 ):
     pathway_dir = "pathways"
 
@@ -1096,9 +1067,7 @@ def _(
     def read_presets(pathway_name):
         preset_dict = {}
         if isinstance(pathway_name, str):
-            preset_table = pd.read_csv(
-                os.path.join(pathway_dir, "pathways.txt"), header=0, sep="\t"
-            )
+            preset_table = pd.read_csv(os.path.join(pathway_dir, "pathways.txt"), header=0, sep="\t")
             pathway_df = preset_table[preset_table["name"] == pathway_name]
 
             preset_dict["reactions"] = read_columns(pathway_df["reactions"])
@@ -1126,9 +1095,7 @@ def _(
             if rna_label_type.value == "gene name":
                 preset_gene_names = []
                 for gene_id in preset_final["genes"]:
-                    preset_gene_names.append(
-                        mrna_cistron_names[mrna_gene_ids.index(gene_id)]
-                    )
+                    preset_gene_names.append(mrna_cistron_names[mrna_gene_ids.index(gene_id)])
                 preset_final["genes"] = preset_gene_names
 
             preset_final["compounds"] = np.array(preset_dict["compounds"])[
@@ -1138,17 +1105,13 @@ def _(
             preset_final["compounds"] = np.unique(preset_final["compounds"]).tolist()
 
             preset_final["proteins"] = list(
-                np.array(preset_final["compounds"])[
-                    np.isin(preset_final["compounds"], monomer_ids)
-                ]
+                np.array(preset_final["compounds"])[np.isin(preset_final["compounds"], monomer_ids)]
             )
 
             if molecule_id_type.value == "Common name":
                 preset_compound_names = []
                 for name in preset_final["compounds"]:
-                    preset_compound_names.append(
-                        bulk_common_names[bulk_names_unique.index(name)]
-                    )
+                    preset_compound_names.append(bulk_common_names[bulk_names_unique.index(name)])
                 preset_final["compounds"] = preset_compound_names
 
             if monomer_label_type.value == "common name":
@@ -1183,9 +1146,7 @@ def _(
         protein_list = protein_override(preset_name)
         dataset_name = val_dataset_select.value
         protein_ids_val = val_options[dataset_name]["id"]
-        protein_val = list(
-            np.array(protein_list)[np.isin(protein_list, protein_ids_val)]
-        )
+        protein_val = list(np.array(protein_list)[np.isin(protein_list, protein_ids_val)])
         return protein_val
 
     return (

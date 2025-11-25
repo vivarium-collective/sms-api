@@ -1,10 +1,10 @@
 import itertools
 import os
 import pickle
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
-from pathlib import Path
 from enum import StrEnum
+from pathlib import Path
 
 import duckdb
 import numpy as np
@@ -15,6 +15,19 @@ from reconstruction.ecoli.simulation_data import SimulationDataEcoli
 from validation.ecoli.validation_data import ValidationDataEcoli
 
 from sms_api.config import Settings
+
+PARTITION_GROUPS = {
+    "multiseed": ["experiment_id", "variant"],
+    "multigeneration": ["experiment_id", "variant", "lineage_seed"],
+    "multidaughter": ["experiment_id", "variant", "lineage_seed", "generation"],
+    "single": [
+        "experiment_id",
+        "variant",
+        "lineage_seed",
+        "generation",
+        "agent_id",
+    ],
+}
 
 
 class AnalysisType(StrEnum):
@@ -71,14 +84,12 @@ class SimulationDataService(ABC):
             monomer_idx = self.labels.monomer_names.index(monomer_name)
             monomer_traj = monomer_mtx[:, monomer_idx]
             return monomer_traj
+
         monomer_mtx = np.stack(output_loaded["listeners__monomer_counts"])
         monomer_trajs = [
-            get_monomer_traj(monomer_label_type, monomer_id, monomer_mtx)
-            for monomer_id in monomer_select_plot
+            get_monomer_traj(monomer_label_type, monomer_id, monomer_mtx) for monomer_id in monomer_select_plot
         ]
-        monomer_plot_dict = {
-            key: val for (key, val) in zip(monomer_select_plot, monomer_trajs)
-        }
+        monomer_plot_dict = {key: val for (key, val) in zip(monomer_select_plot, monomer_trajs)}
         monomer_plot_dict["time"] = output_loaded["time"]
         monomer_plot_df = pd.DataFrame(monomer_plot_dict)
         monomer_df_long = monomer_plot_df.melt(
@@ -89,9 +100,7 @@ class SimulationDataService(ABC):
         return SimulationDataService.downsample(monomer_df_long)
 
     def get_rxns_df(self, output_loaded: pd.DataFrame, select_rxns: list[str]):
-        rxns_mtx = np.stack(
-            output_loaded["listeners__fba_results__base_reaction_fluxes"].values
-        )
+        rxns_mtx = np.stack(output_loaded["listeners__fba_results__base_reaction_fluxes"].values)
         rxns_idxs = [self.labels.rxn_ids.index(rxn) for rxn in select_rxns]
         rxn_trajs = [rxns_mtx[:, rxn_idx] for rxn_idx in rxns_idxs]
         plot_rxns_dict = {key: val for (key, val) in zip(select_rxns, rxn_trajs)}
@@ -114,16 +123,11 @@ class SimulationDataService(ABC):
             mrna_idx = mrna_cistron_names.index(mrna_name)
             mrna_traj = mrna_mtx[:, mrna_idx]
             return mrna_traj
-        mrna_mtx = np.stack(
-            output_loaded["listeners__rna_counts__full_mRNA_cistron_counts"]
-        )
-        mrna_trajs = [
-            get_mrna_traj(rna_label_type, mrna_id, mrna_mtx) for mrna_id in mrna_select_plot
-        ]
+
+        mrna_mtx = np.stack(output_loaded["listeners__rna_counts__full_mRNA_cistron_counts"])
+        mrna_trajs = [get_mrna_traj(rna_label_type, mrna_id, mrna_mtx) for mrna_id in mrna_select_plot]
         # mrna_trajs = [mrna_mtx[:, mrna_idx] for mrna_idx in mrna_idxs]
-        mrna_plot_dict = {
-            key: val for (key, val) in zip(mrna_select_plot, mrna_trajs)
-        }
+        mrna_plot_dict = {key: val for (key, val) in zip(mrna_select_plot, mrna_trajs)}
         mrna_plot_dict["time"] = output_loaded["time"]
         mrna_plot_df = pd.DataFrame(mrna_plot_dict)
         mrna_df_long = mrna_plot_df.melt(
@@ -133,8 +137,8 @@ class SimulationDataService(ABC):
         )
         return SimulationDataService.downsample(mrna_df_long)
 
-    def get_bulk_df(self, output_loaded: pd.DataFrame, bulk_sp_plot: list[str]):
-        sp_trajs = self._get_sp_trajs(output_loaded, bulk_sp_plot)
+    def get_bulk_df(self, output_loaded: pd.DataFrame, molecule_id_type: str, bulk_sp_plot: list[str]):
+        sp_trajs = self._get_sp_trajs(output_loaded, molecule_id_type, bulk_sp_plot)
         plot_dict = {key: val for (key, val) in zip(bulk_sp_plot, sp_trajs)}
         plot_dict["time"] = output_loaded["time"]
         plot_df = pd.DataFrame(plot_dict)
@@ -145,14 +149,24 @@ class SimulationDataService(ABC):
         )
         return SimulationDataService.downsample(df_long)
 
-    def get_outputs(self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str) -> pd.DataFrame:
+    def get_outputs(
+        self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str
+    ) -> pd.DataFrame:
         def partitions_dict(analysis_type: AnalysisType, partitions_all: dict[str, str | int]):
-            partitions_req = partition_groups[analysis_type]
+            partitions_req = PARTITION_GROUPS[analysis_type]
             partitions_dict = {}
             for partition in partitions_req:
                 partitions_dict[partition] = partitions_all[partition]
             partitions_dict["experiment_id"] = f"'{partitions_dict['experiment_id']}'"
             return partitions_dict
+
+        def get_db_filter(partitions_dict):
+            db_filter_list = []
+            for key, value in partitions_dict.items():
+                db_filter_list.append(str(key) + "=" + str(value))
+            db_filter = " AND ".join(db_filter_list)
+            return db_filter
+
         dbf_dict = partitions_dict(analysis_type, partitions_all)
         db_filter = get_db_filter(dbf_dict)
         pq_columns = [
@@ -161,33 +175,30 @@ class SimulationDataService(ABC):
             "listeners__rna_counts__full_mRNA_cistron_counts",
             "listeners__monomer_counts",
         ]
-        history_sql_base, _, _ = dataset_sql(
-            os.path.join(str(self.wd_root), "out"), experiment_ids=[exp_select]
+        history_sql_base, _, _ = dataset_sql(os.path.join(str(self.wd_root), "out"), experiment_ids=[exp_select])
+        history_sql_filtered = (
+            f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
         )
-        history_sql_filtered = f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
         outputs_df = duckdb.sql(history_sql_filtered).df()
         return outputs_df.groupby("time", as_index=False).sum()
 
-    def _get_sp_trajs(self, output_loaded: pd.DataFrame, bulk_sp_plot: list[str]):
-        def get_bulk_sp_traj(sp_input, bulk_mtx):
-            if molecule_id_type.value == "Common name":
-                sp_name = bulk_names_unique[bulk_common_names.index(sp_input)]
-            elif molecule_id_type.value == "BioCyc ID":
+    def _get_sp_trajs(self, output_loaded: pd.DataFrame, molecule_id_type: str, bulk_sp_plot: list[str]):
+        def get_bulk_sp_traj(molecule_id_type: str, sp_input, bulk_mtx):
+            if molecule_id_type == "Common name":
+                sp_name = self.labels.bulk_names_unique[self.labels.bulk_common_names.index(sp_input)]
+            elif molecule_id_type == "BioCyc ID":
                 sp_name = sp_input
-            sp_idxs = [
-                index for index, item in enumerate(bulk_ids_biocyc) if item == sp_name
-            ]
+            sp_idxs = [index for index, item in enumerate(self.labels.bulk_ids_biocyc) if item == sp_name]
             bulk_sp_traj = np.sum(bulk_mtx[:, sp_idxs], 1)
             return bulk_sp_traj
+
         bulk_mtx = np.stack(output_loaded["bulk"].values)
-        sp_trajs = [get_bulk_sp_traj(bulk_id, bulk_mtx) for bulk_id in bulk_sp_plot]
+        sp_trajs = [get_bulk_sp_traj(molecule_id_type, bulk_id, bulk_mtx) for bulk_id in bulk_sp_plot]
         return sp_trajs
 
     def _get_labels(self) -> Labels:
         def get_common_names(bulk_names: list[str], sim_data: SimulationDataEcoli):
-            bulk_common_names = [
-                sim_data.common_names.get_common_name(name) for name in bulk_names
-            ]
+            bulk_common_names = [sim_data.common_names.get_common_name(name) for name in bulk_names]
             duplicates = []
             for item in bulk_common_names:
                 if bulk_common_names.count(item) > 1 and item not in duplicates:
@@ -216,10 +227,7 @@ class SimulationDataService(ABC):
         cistron_data = sim_data.process.transcription.cistron_data
         mrna_cistron_ids = cistron_data["id"][cistron_data["is_mRNA"]].tolist()
         mrna_gene_ids = [cistron_id.strip("_RNA") for cistron_id in mrna_cistron_ids]
-        mrna_cistron_names = [
-            sim_data.common_names.get_common_name(cistron_id)
-            for cistron_id in mrna_cistron_ids
-        ]
+        mrna_cistron_names = [sim_data.common_names.get_common_name(cistron_id) for cistron_id in mrna_cistron_ids]
         monomer_ids = sim_data.process.translation.monomer_data["id"].tolist()
         monomer_ids = [id[:-3] for id in monomer_ids]
         monomer_names = get_common_names(monomer_ids, sim_data)
@@ -233,5 +241,5 @@ class SimulationDataService(ABC):
             mrna_gene_ids=mrna_gene_ids,
             mrna_cistron_names=mrna_cistron_names,
             monomer_ids=monomer_ids,
-            monomer_names=monomer_names
+            monomer_names=monomer_names,
         )
