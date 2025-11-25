@@ -15,6 +15,14 @@ from sms_api.config import get_settings
 MAX_ANALYSIS_CPUS = 3
 
 
+### -- simulation data -- ###
+
+class SimulationOutputData(BaseModel):
+    experiment_id: str
+    bulk: str
+    genes: str
+
+
 ### -- analyses -- ###
 
 

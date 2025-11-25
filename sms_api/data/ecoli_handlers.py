@@ -1,6 +1,9 @@
 import asyncio
 import logging
 from types import ModuleType
+from typing import Generator, Any
+
+from fastapi import BackgroundTasks
 
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
 from sms_api.common.utils import unique_id
@@ -9,6 +12,7 @@ from sms_api.data.analysis_service import (
     AnalysisService,
     get_html_outputs_local,
 )
+from sms_api.data.load_outputs import load_seed
 from sms_api.data.models import (
     AnalysisRun,
     ExperimentAnalysisDTO,
@@ -17,7 +21,7 @@ from sms_api.data.models import (
     OutputFile,
     OutputFileMetadata,
     TsvOutputFile,
-    TsvOutputFileRequest,
+    TsvOutputFileRequest, SimulationOutputData,
 )
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import SimulatorVersion
@@ -173,3 +177,52 @@ async def get_analysis_plots(db_service: DatabaseService, id: int, ssh_service: 
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
     return await get_html_outputs_local(output_id=output_id, ssh_service=ssh_service)
+
+
+async def get_simulation_data(
+    ssh: SSHService,
+    db_service: DatabaseService,
+    id: int,
+    lineage_seed: int,
+    # generation: int,
+    variant: int,
+    # agent_id: int,
+    # observables: list[str],
+    bg_tasks: BackgroundTasks,
+    # sim_id: str
+) -> SimulationOutputData:
+    # simulation = await db_service.get_ecoli_simulation(database_id=id)
+    # experiment_id = simulation.config.experiment_id
+    # sim_id = simulation.name
+    env = get_settings()
+    outdir_root = env.simulation_outdir.remote_path
+    experiment_id = "wcecoli_fig2_setD4_scaled-c6263425684df8c0_1763578699104-449b7de3d0de10a5_1763578788396"
+    sim_id = "wcecoli_figure2_setD4"
+    data = await load_seed(
+        outdir_root=outdir_root,
+        expid=experiment_id,
+        seed=lineage_seed,
+        sim_name=sim_id,
+        variant=variant,
+        ssh=ssh
+    )
+    data['experiment_id'] = experiment_id
+
+    return SimulationOutputData(**data)
+
+
+async def test_load_seed():
+    env = get_settings()
+    outdir_root = env.simulation_outdir.remote_path
+    expid = "wcecoli_fig2_setD4_scaled-c6263425684df8c0_1763578699104-449b7de3d0de10a5_1763578788396"
+    sim_id = "wcecoli_figure2_setD4"
+    seed = 3
+    variant = 0
+    data = await load_seed(
+        outdir_root=outdir_root,
+        expid=expid,
+        seed=seed,
+        sim_name=sim_id,
+        variant=variant
+    )
+    print(data)

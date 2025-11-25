@@ -386,14 +386,26 @@ class ExperimentRequest(BaseModel):
     metadata: dict[str, Any] = {}
     run_parca: bool = True
     generations: int = 2
-    n_init_sims: int = 1
-    lineage_seed: int = 3
+    n_init_sims: int = 4
+    lineage_seed: int = 0
     max_duration: float = 10800.0
     initial_global_time: float = 0.0
     time_step: float = 1.0
     single_daughters: bool = True
     variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
-    analysis_options: dict[str, Any] = Field(default={})
+    analysis_options: dict[str, Any] = Field(default={
+        "multiseed": {
+            "ptools_rna": {
+                "n_tp": 8
+            },
+            "ptools_rxns": {
+                "n_tp": 8
+            },
+            "ptools_proteins": {
+                "n_tp": 8
+            }
+        }
+    })
     gcloud: str | None = None
     agent_id: str | None = None
     parallel: bool | None = None

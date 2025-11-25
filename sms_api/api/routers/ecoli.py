@@ -2,16 +2,20 @@
 /analyses: this router is dedicated to the running and output retrieval of
     simulation analysis jobs/workflows
 """
-
+import io
 # TODO: do we require simulation/analysis configs that are supersets of the original configs:
 #   IE: where do we provide this special config: in vEcoli or API?
 # TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
 # TODO: labkey preprocessing
 
 import logging
+from typing import Literal
 
 import fastapi
+import orjson
+import polars
 from fastapi import BackgroundTasks, Depends, HTTPException, Query
+from starlette.responses import StreamingResponse
 
 from sms_api.api import request_examples
 from sms_api.common.gateway.utils import get_simulator, router_config
@@ -24,7 +28,7 @@ from sms_api.data.models import (
     ExperimentAnalysisRequest,
     OutputFile,
     OutputFileMetadata,
-    TsvOutputFile,
+    TsvOutputFile, SimulationOutputData,
 )
 from sms_api.dependencies import get_analysis_service, get_database_service, get_simulation_service
 from sms_api.simulation import ecoli_handlers as simulation_handlers
@@ -336,27 +340,25 @@ async def get_simulation_data(
     id: int = fastapi.Path(description="Database ID of the simulation."),
     # experiment_id: str = Query(default="sms_multigeneration"),
     lineage_seed: int = Query(default=6),
-    generation: int = Query(default=1),
     variant: int = Query(default=0),
-    agent_id: int = Query(default=0),
-    observables: list[str] = request_examples.base_observables,
-) -> fastapi.responses.StreamingResponse:
+    # agent_id: int = Query(default=0),
+    # observables: list[str] = request_examples.base_observables,
+) -> SimulationOutputData:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        return await simulation_handlers.get_simulation_data(
+        data: SimulationOutputData = await data_handlers.get_simulation_data(
             ssh=get_ssh_service(),
             db_service=db_service,
             id=id,
             lineage_seed=lineage_seed,
-            generation=generation,
             variant=variant,
-            agent_id=agent_id,
-            observables=observables,
-            bg_tasks=bg_tasks,
+            bg_tasks=bg_tasks
+
         )
+        return data
     except Exception as e:
         logger.exception("Error uploading simulation config")
         raise HTTPException(status_code=500, detail=str(e)) from e

@@ -36,6 +36,16 @@ services:
     networks:
       - smsnet
 
+  nats:
+    image: nats
+    container_name: nats
+    environment:
+      NATS_URL: nats://localhost:30050
+    ports:
+      - "30050:4222"
+    networks:
+      - smsnet
+
 networks:
   smsnet:
     driver: bridge
