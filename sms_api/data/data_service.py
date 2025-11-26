@@ -6,18 +6,18 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-import duckdb
+import duckdb  # type: ignore[import-untyped]
 import numpy as np
 import pandas as pd
-from ecoli.library.parquet_emitter import (
+from ecoli.library.parquet_emitter import (  # type: ignore[import-untyped]
     create_duckdb_conn,
     dataset_sql,
     ndlist_to_ndarray,
     read_stacked_columns,
 )
-from ecoli.library.sim_data import LoadSimData
-from reconstruction.ecoli.simulation_data import SimulationDataEcoli
-from validation.ecoli.validation_data import ValidationDataEcoli
+from ecoli.library.sim_data import LoadSimData  # type: ignore[import-untyped]
+from reconstruction.ecoli.simulation_data import SimulationDataEcoli  # type: ignore[import-untyped]
+from validation.ecoli.validation_data import ValidationDataEcoli  # type: ignore[import-untyped]
 
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings
@@ -120,7 +120,7 @@ class SimulationDataService(ABC):
         self, output_loaded: pd.DataFrame, monomer_label_type: str, monomer_select_plot: list[str]
     ) -> pd.DataFrame:
         def get_monomer_traj(
-            monomer_label_type: str, monomer_input: str, monomer_mtx: np.ndarray[tuple[Any, ...], np.dtype[np._ScalarT]]
+            monomer_label_type: str, monomer_input: str, monomer_mtx: np.ndarray[tuple[Any, ...], np.dtype[Any]]
         ):
             if monomer_label_type == "common name":
                 monomer_name = monomer_input
@@ -185,7 +185,7 @@ class SimulationDataService(ABC):
         return SimulationDataService.downsample(mrna_df_long)
 
     def get_bulk_df(self, output_loaded: pd.DataFrame, molecule_id_type: str, bulk_sp_plot: list[str]) -> pd.DataFrame:
-        sp_trajs: list[np.ndarray[tuple[Any, ...], np.dtype[np._ScalarT]]] = self._get_sp_trajs(
+        sp_trajs: list[np.ndarray[tuple[Any, ...], np.dtype[Any]]] = self._get_sp_trajs(
             output_loaded, molecule_id_type, bulk_sp_plot
         )
         plot_dict = {key: val for (key, val) in zip(bulk_sp_plot, sp_trajs)}
@@ -244,9 +244,9 @@ class SimulationDataService(ABC):
 
     def _get_sp_trajs(
         self, output_loaded: pd.DataFrame, molecule_id_type: str, bulk_sp_plot: list[str]
-    ) -> list[np.ndarray[tuple[Any, ...], np.dtype[np._ScalarT]]]:
+    ) -> list[np.ndarray[tuple[Any, ...], np.dtype[Any]]]:
         def get_bulk_sp_traj(
-            molecule_id_type: str, sp_input: str, bulk_mtx: np.ndarray[tuple[Any, ...], np.dtype[np._ScalarT]]
+            molecule_id_type: str, sp_input: str, bulk_mtx: np.ndarray[tuple[Any, ...], np.dtype[Any]]
         ) -> Any:
             if molecule_id_type == "Common name":
                 sp_name = self.labels.bulk_names_unique[self.labels.bulk_common_names.index(sp_input)]

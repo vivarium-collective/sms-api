@@ -45,6 +45,7 @@ def _():
     from wholecell.utils.protein_counts import get_simulated_validation_counts
     from reconstruction.ecoli.simulation_data import SimulationDataEcoli
     from validation.ecoli.validation_data import ValidationDataEcoli
+
     return alt, get_simulated_validation_counts, mo, np, os, pd, pearsonr, pl
 
 
@@ -90,13 +91,13 @@ def _(mo, np, os, pd):
     )
 
     pathway_dir = "pathways"
-    select_pathway = mo.ui.dropdown(options=get_pathways(pathway_dir), searchable=True, value='3-dehydroquinate biosynthesis I')
+    select_pathway = mo.ui.dropdown(
+        options=get_pathways(pathway_dir), searchable=True, value="3-dehydroquinate biosynthesis I"
+    )
 
     y_scale = mo.ui.dropdown(options=["linear", "log", "symlog"], value="linear")
 
-    molecule_id_type = mo.ui.radio(
-        options=["Common name", "BioCyc ID"], value="BioCyc ID"
-    )
+    molecule_id_type = mo.ui.radio(options=["Common name", "BioCyc ID"], value="BioCyc ID")
     return (
         analysis_select,
         molecule_id_type,
@@ -138,22 +139,20 @@ def _(PARTITION_GROUPS, analysis_select, partitions_display):
 def _(env, mo, os):
     exp_select = mo.ui.dropdown(
         options=os.listdir(str(env.simulation_outdir.remote_path)),
-        value='wcecoli_fig2_setD4_scaled-c6263425684df8c0_1763578699104-449b7de3d0de10a5_1763578788396'
+        value="wcecoli_fig2_setD4_scaled-c6263425684df8c0_1763578699104-449b7de3d0de10a5_1763578788396",
     )
     return (exp_select,)
 
 
 @app.cell
 def _(exp_select, get_variants, mo):
-    variant_select = mo.ui.dropdown(options=get_variants(exp_id=exp_select.value), value='0')
+    variant_select = mo.ui.dropdown(options=get_variants(exp_id=exp_select.value), value="0")
     return (variant_select,)
 
 
 @app.cell
 def _(exp_select, get_seeds, mo, variant_select):
-    seed_select = mo.ui.dropdown(
-        options=get_seeds(exp_id=exp_select.value, var_id=variant_select.value), value="22"
-    )
+    seed_select = mo.ui.dropdown(options=get_seeds(exp_id=exp_select.value, var_id=variant_select.value), value="22")
     return (seed_select,)
 
 
@@ -165,7 +164,7 @@ def _(exp_select, get_gens, mo, seed_select, variant_select):
             var_id=variant_select.value,
             seed_id=seed_select.value,
         ),
-        value="3"
+        value="3",
     )
     return (gen_select,)
 
@@ -179,7 +178,7 @@ def _(exp_select, gen_select, get_agents, mo, seed_select, variant_select):
             seed_id=seed_select.value,
             gen_id=gen_select.value,
         ),
-        value="000"
+        value="000",
     )
     return (agent_select,)
 
@@ -205,7 +204,7 @@ def _(AnalysisType, analysis_select, data_service, exp_select, partitions):
     output_loaded = data_service.get_outputs(
         analysis_type=AnalysisType[analysis_select.value.upper()],
         partitions_all=partitions,
-        exp_select=exp_select.value
+        exp_select=exp_select.value,
     )
     return (output_loaded,)
 
@@ -287,7 +286,9 @@ def _(
 ):
     dfds_long = data_service.get_bulk_df(output_loaded, molecule_id_type.value, bulk_sp_plot.value)
     mo.ui.altair_chart(
-        alt.Chart(dfds_long).mark_line().encode(
+        alt.Chart(dfds_long)
+        .mark_line()
+        .encode(
             x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4)),
             y=alt.Y("counts:Q", scale=alt.Scale(type=y_scale.value)),
             color="Compounds:N",
@@ -315,13 +316,9 @@ def _(mo):
 
     y_scale_mrna = mo.ui.dropdown(options=["linear", "log", "symlog"], value="linear")
 
-    monomer_label_type = mo.ui.radio(
-        options=["common name", "BioCyc ID"], value="common name"
-    )
+    monomer_label_type = mo.ui.radio(options=["common name", "BioCyc ID"], value="common name")
 
-    y_scale_monomers = mo.ui.dropdown(
-        options=["linear", "log", "symlog"], value="symlog"
-    )
+    y_scale_monomers = mo.ui.dropdown(options=["linear", "log", "symlog"], value="symlog")
     return monomer_label_type, rna_label_type, y_scale_monomers, y_scale_mrna
 
 
@@ -401,7 +398,9 @@ def _(
 ):
     mrna_dfds_long = data_service.get_mrna_df(output_loaded, rna_label_type.value, mrna_select_plot.value)
     mo.ui.altair_chart(
-        alt.Chart(mrna_dfds_long).mark_line().encode(
+        alt.Chart(mrna_dfds_long)
+        .mark_line()
+        .encode(
             x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4)),
             y=alt.Y("counts:Q", scale=alt.Scale(type=y_scale_mrna.value)),
             color="Genes:N",
@@ -452,7 +451,9 @@ def _(
     monomer_dfds_long = data_service.get_monomers_df(output_loaded, monomer_label_type.value, monomer_select_plot.value)
 
     mo.ui.altair_chart(
-        alt.Chart(monomer_dfds_long).mark_line().encode(
+        alt.Chart(monomer_dfds_long)
+        .mark_line()
+        .encode(
             x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4)),
             y=alt.Y("counts:Q", scale=alt.Scale(type=y_scale_monomers.value)),
             color="protein names:N",
@@ -476,9 +477,7 @@ def _(mo):
 
 @app.cell
 def _(mo, rxn_ids, rxn_override, select_pathway):
-    select_rxns = mo.ui.multiselect(
-        options=rxn_ids, value=rxn_override(select_pathway.value), max_selections=500
-    )
+    select_rxns = mo.ui.multiselect(options=rxn_ids, value=rxn_override(select_pathway.value), max_selections=500)
     y_scale_rxns = mo.ui.dropdown(options=["linear", "log", "symlog"], value="symlog")
     mo.hstack(
         [
@@ -497,7 +496,9 @@ def _(mo, rxn_ids, rxn_override, select_pathway):
 def _(alt, data_service, mo, output_loaded, select_rxns, y_scale_rxns):
     rxns_dfds_long = data_service.get_rxns_df(output_loaded, select_rxns.value)
     mo.ui.altair_chart(
-        alt.Chart(rxns_dfds_long).mark_line().encode(
+        alt.Chart(rxns_dfds_long)
+        .mark_line()
+        .encode(
             x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4)),
             y=alt.Y("flux:Q", scale=alt.Scale(type=y_scale_rxns.value)),
             color="reaction_id:N",
@@ -521,7 +522,7 @@ def _(
     monomer_counts = data_service.get_monomer_counts(
         exp_select=exp_select.value,
         analysis_type=AnalysisType[analysis_select.value.upper()],
-        partitions_all=partitions
+        partitions_all=partitions,
     )
     sim_monomer_ids = sim_data.process.translation.monomer_data["id"]
     wisniewski_ids = validation_data.protein.wisniewski2014Data["monomerId"]
@@ -554,12 +555,8 @@ def _(
 
 @app.cell
 def _(mo):
-    val_dataset_select = mo.ui.dropdown(
-        options=["Schmidt 2015", "Wisniewski 2014"], value="Schmidt 2015"
-    )
-    val_label_type = mo.ui.dropdown(
-        options=["Common Name", "BioCyc ID"], value="Common Name"
-    )
+    val_dataset_select = mo.ui.dropdown(options=["Schmidt 2015", "Wisniewski 2014"], value="Schmidt 2015")
+    val_label_type = mo.ui.dropdown(options=["Common Name", "BioCyc ID"], value="Common Name")
     return val_dataset_select, val_label_type
 
 
@@ -630,21 +627,17 @@ def _(alt, mo, np, pearsonr, pl, val_id_select, val_options):
     def val_chart(dataset_name):
         data_val = val_options[dataset_name]["data"]
         data_sim = val_options[dataset_name]["sim"]
-        data_idxs = [
-            val_options[dataset_name]["id"].index(name) for name in val_id_select.value
-        ]
+        data_idxs = [val_options[dataset_name]["id"].index(name) for name in val_id_select.value]
         data_val_filtered = data_val[data_idxs]
         data_sim_filtered = data_sim[data_idxs]
 
         chart = (
             alt.Chart(
-                pl.DataFrame(
-                    {
-                        dataset_name: np.log10(data_val_filtered + 1),
-                        "sim": np.log10(data_sim_filtered + 1),
-                        "protein": val_id_select.value,
-                    }
-                )
+                pl.DataFrame({
+                    dataset_name: np.log10(data_val_filtered + 1),
+                    "sim": np.log10(data_sim_filtered + 1),
+                    "protein": val_id_select.value,
+                })
             )
             .mark_point()
             .encode(
@@ -653,10 +646,7 @@ def _(alt, mo, np, pearsonr, pl, val_id_select, val_options):
                 tooltip=["protein:N"],
             )
             .properties(
-                title="Pearson r: %0.2f"
-                % pearsonr(
-                    np.log10(data_sim_filtered + 1), np.log10(data_val_filtered + 1)
-                )[0]
+                title="Pearson r: %0.2f" % pearsonr(np.log10(data_sim_filtered + 1), np.log10(data_val_filtered + 1))[0]
             )
         )
 
@@ -698,9 +688,7 @@ def _(data_service, exp_select, os):
                 )
             )
 
-            variant_folders = [
-                folder for folder in vars_ls if not folder.startswith(".")
-            ]
+            variant_folders = [folder for folder in vars_ls if not folder.startswith(".")]
 
             variants = [var.split("variant=")[1] for var in variant_folders]
 
@@ -749,9 +737,7 @@ def _(data_service, exp_select, os):
 
         return gens
 
-    def get_agents(
-        exp_id, var_id, seed_id, gen_id, outdir=str(data_service.outputs_dir.remote_path)
-    ):
+    def get_agents(exp_id, var_id, seed_id, gen_id, outdir=str(data_service.outputs_dir.remote_path)):
         try:
             agents_ls = os.listdir(
                 os.path.join(
@@ -765,9 +751,7 @@ def _(data_service, exp_select, os):
                 )
             )
 
-            agent_folders = [
-                folder for folder in agents_ls if not folder.startswith(".")
-            ]
+            agent_folders = [folder for folder in agents_ls if not folder.startswith(".")]
             agents = [agent.split("agent_id=")[1] for agent in agent_folders]
         except (FileNotFoundError, TypeError):
             agents = ["N/A"]
@@ -825,9 +809,7 @@ def _(
     def read_presets(pathway_name):
         preset_dict = {}
         if isinstance(pathway_name, str):
-            preset_table = pd.read_csv(
-                os.path.join(pathway_dir, "pathways.txt"), header=0, sep="\t"
-            )
+            preset_table = pd.read_csv(os.path.join(pathway_dir, "pathways.txt"), header=0, sep="\t")
             pathway_df = preset_table[preset_table["name"] == pathway_name]
 
             preset_dict["reactions"] = read_columns(pathway_df["reactions"])
@@ -867,9 +849,7 @@ def _(
             if rna_label_type.value == "gene name":
                 preset_gene_names = []
                 for gene_id in preset_final["genes"]:
-                    preset_gene_names.append(
-                        mrna_cistron_names[mrna_gene_ids.index(gene_id)]
-                    )
+                    preset_gene_names.append(mrna_cistron_names[mrna_gene_ids.index(gene_id)])
                 preset_final["genes"] = preset_gene_names
 
             preset_final["compounds"] = np.array(preset_dict["compounds"])[
@@ -879,17 +859,13 @@ def _(
             preset_final["compounds"] = np.unique(preset_final["compounds"]).tolist()
 
             preset_final["proteins"] = list(
-                np.array(preset_final["compounds"])[
-                    np.isin(preset_final["compounds"], monomer_ids)
-                ]
+                np.array(preset_final["compounds"])[np.isin(preset_final["compounds"], monomer_ids)]
             )
 
             if molecule_id_type.value == "Common name":
                 preset_compound_names = []
                 for name in preset_final["compounds"]:
-                    preset_compound_names.append(
-                        bulk_common_names[bulk_names_unique.index(name)]
-                    )
+                    preset_compound_names.append(bulk_common_names[bulk_names_unique.index(name)])
                 preset_final["compounds"] = preset_compound_names
 
             if monomer_label_type.value == "common name":
@@ -924,9 +900,7 @@ def _(
         protein_list = protein_override(preset_name)
         dataset_name = val_dataset_select.value
         protein_ids_val = val_options[dataset_name]["id"]
-        protein_val = list(
-            np.array(protein_list)[np.isin(protein_list, protein_ids_val)]
-        )
+        protein_val = list(np.array(protein_list)[np.isin(protein_list, protein_ids_val)])
         return protein_val
 
     return (
