@@ -3,7 +3,8 @@ name = "sms_api"
 version = "0.2.45-dev"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
-requires-python = ">=3.12,<4.0"
+# requires-python = ">=3.12,<4.0"
+requires-python = "==3.12.9"
 readme = "README.md"
 dependencies = [
     "uvicorn>=0.34.3,<0.35",
@@ -45,6 +46,7 @@ dependencies = [
     "aiofiles>=24.1.0",
     "aioboto3>=13.3.0",
     "types-aioboto3[s3]>=13.3.0",
+    "vecoli>=0.0.2",
 ]
 
 [project.urls]
@@ -107,6 +109,10 @@ build-backend = "hatchling.build"
 files = ["sms_api", "tests", "app"]
 strict = true
 exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*"]
+
+[[tool.mypy.overrides]]
+module = "sms_api.data.data_service"
+disable_error_code = ["call-overload", "assignment"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

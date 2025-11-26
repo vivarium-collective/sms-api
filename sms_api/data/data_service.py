@@ -6,7 +6,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-import duckdb  # type: ignore[import-untyped]
+import duckdb
 import numpy as np
 import pandas as pd
 from ecoli.library.parquet_emitter import (  # type: ignore[import-untyped]
@@ -120,14 +120,14 @@ class SimulationDataService(ABC):
                 GROUP BY experiment_id, variant, lineage_seed, generation, agent_id
                 """
         monomer_counts = self.conn.sql(sql_monomer_validation).pl()
-        return ndlist_to_ndarray(monomer_counts["avgCounts"])
+        return ndlist_to_ndarray(monomer_counts["avgCounts"])  # type: ignore[no-any-return]
 
     def get_monomers_df(
         self, output_loaded: pd.DataFrame, monomer_label_type: str, monomer_select_plot: list[str]
     ) -> pd.DataFrame:
         def get_monomer_traj(
             monomer_label_type: str, monomer_input: str, monomer_mtx: np.ndarray[tuple[Any, ...], np.dtype[Any]]
-        ):
+        ) -> np.ndarray[tuple[Any, ...], Any]:
             if monomer_label_type == "common name":
                 monomer_name = monomer_input
             if monomer_label_type == "BioCyc ID":
@@ -167,7 +167,7 @@ class SimulationDataService(ABC):
     def get_mrna_df(
         self, output_loaded: pd.DataFrame, rna_label_type: str, mrna_select_plot: list[str]
     ) -> pd.DataFrame:
-        def get_mrna_traj(rna_label_type: str, mrna_input, mrna_mtx):
+        def get_mrna_traj(rna_label_type: str, mrna_input: str, mrna_mtx: np.ndarray) -> np.ndarray:
             mrna_cistron_names = self.labels.mrna_cistron_names
             if rna_label_type == "gene name":
                 mrna_name = mrna_input
@@ -195,7 +195,7 @@ class SimulationDataService(ABC):
             output_loaded, molecule_id_type, bulk_sp_plot
         )
         plot_dict = {key: val for (key, val) in zip(bulk_sp_plot, sp_trajs)}
-        plot_dict["time"] = output_loaded["time"]  # type: ignore[assignment]
+        plot_dict["time"] = output_loaded["time"]
 
         plot_df = pd.DataFrame(plot_dict)
         df_long = plot_df.melt(
