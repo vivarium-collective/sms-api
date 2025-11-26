@@ -1,6 +1,6 @@
 import itertools
 import pickle
-from abc import ABC
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -78,6 +78,12 @@ class SimulationDataService(ABC):
         assert isinstance(self.validation_data, ValidationDataEcoli)
         self.labels = self._get_labels()
         self.conn = create_duckdb_conn(str(env.simulation_outdir.remote_path), False, 1)
+
+    @abstractmethod
+    def get_outputs(
+        self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str
+    ) -> pd.DataFrame:
+        pass
 
     @classmethod
     def downsample(cls, df_long: pd.DataFrame) -> pd.DataFrame:
@@ -199,25 +205,21 @@ class SimulationDataService(ABC):
         )
         return SimulationDataService.downsample(df_long)
 
-    def get_outputs(
-        self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str
-    ) -> pd.DataFrame:
-        # dbf_dict = self.partitions_dict(analysis_type, partitions_all)
-        # db_filter = self.get_db_filter(dbf_dict)
-        db_filter = self._get_db_filter(analysis_type, partitions_all)
-        pq_columns = [
-            "bulk",
-            "listeners__fba_results__base_reaction_fluxes",
-            "listeners__rna_counts__full_mRNA_cistron_counts",
-            "listeners__monomer_counts",
-        ]
-
-        history_sql_base, _, _ = self._get_sql_base(exp_select)
-        history_sql_filtered = (
-            f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
-        )
-        outputs_df: pd.DataFrame = duckdb.sql(history_sql_filtered).df()
-        return outputs_df.groupby("time", as_index=False).sum()
+    def get_common_names(self, names: list[str], sim_data: SimulationDataEcoli | None = None) -> list[str]:
+        if sim_data is None:
+            sim_data = self.sim_data
+        bulk_names = names
+        bulk_common_names = [sim_data.common_names.get_common_name(name) for name in bulk_names]
+        duplicates = []
+        for item in bulk_common_names:
+            if bulk_common_names.count(item) > 1 and item not in duplicates:
+                duplicates.append(item)
+        for dup in duplicates:
+            sp_idxs = [index for index, item in enumerate(bulk_common_names) if item == dup]
+            for sp_idx in sp_idxs:
+                bulk_rename = str(bulk_common_names[sp_idx]) + f"[{bulk_names[sp_idx]}]"
+                bulk_common_names[sp_idx] = bulk_rename
+        return bulk_common_names
 
     def _get_sql_base(self, exp_select: str) -> tuple[str, str, str]:
         history, conf, success = dataset_sql(str(self.outputs_dir.remote_path), experiment_ids=[exp_select])
@@ -259,22 +261,6 @@ class SimulationDataService(ABC):
         bulk_mtx = np.stack(output_loaded["bulk"].values)
         sp_trajs = [get_bulk_sp_traj(molecule_id_type, bulk_id, bulk_mtx) for bulk_id in bulk_sp_plot]
         return sp_trajs
-
-    def get_common_names(self, names: list[str], sim_data: SimulationDataEcoli | None = None) -> list[str]:
-        if sim_data is None:
-            sim_data = self.sim_data
-        bulk_names = names
-        bulk_common_names = [sim_data.common_names.get_common_name(name) for name in bulk_names]
-        duplicates = []
-        for item in bulk_common_names:
-            if bulk_common_names.count(item) > 1 and item not in duplicates:
-                duplicates.append(item)
-        for dup in duplicates:
-            sp_idxs = [index for index, item in enumerate(bulk_common_names) if item == dup]
-            for sp_idx in sp_idxs:
-                bulk_rename = str(bulk_common_names[sp_idx]) + f"[{bulk_names[sp_idx]}]"
-                bulk_common_names[sp_idx] = bulk_rename
-        return bulk_common_names
 
     def _get_labels(self) -> Labels:
         def get_common_names(bulk_names: list[str], sim_data: SimulationDataEcoli) -> list[str]:
@@ -323,3 +309,25 @@ class SimulationDataService(ABC):
             monomer_ids=monomer_ids,
             monomer_names=monomer_names,
         )
+
+
+class SimulationDataServiceFS(SimulationDataService):
+    def get_outputs(
+        self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str
+    ) -> pd.DataFrame:
+        # dbf_dict = self.partitions_dict(analysis_type, partitions_all)
+        # db_filter = self.get_db_filter(dbf_dict)
+        db_filter = self._get_db_filter(analysis_type, partitions_all)
+        pq_columns = [
+            "bulk",
+            "listeners__fba_results__base_reaction_fluxes",
+            "listeners__rna_counts__full_mRNA_cistron_counts",
+            "listeners__monomer_counts",
+        ]
+
+        history_sql_base, _, _ = self._get_sql_base(exp_select)
+        history_sql_filtered = (
+            f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
+        )
+        outputs_df: pd.DataFrame = duckdb.sql(history_sql_filtered).df()
+        return outputs_df.groupby("time", as_index=False).sum()
