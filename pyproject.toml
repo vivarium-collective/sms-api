@@ -163,12 +163,12 @@ ignore = [
 #    "B008",
 #    # B026 Star-arg unpacking after a keyword argument is strongly discouraged
 #    "B026",
-    # B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-    "B904",
+     # B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
+     "B904",
 #    # C414 Unnecessary `list` call within `tuple()`
 #    "C414",
 #    # C416 Unnecessary `list` comprehension (rewrite using `list()`)
-#    "C416",
+     "C416",
 #    # C417 Unnecessary `map` usage (rewrite using a `list` comprehension)
 #    "C417",
 #    # C419 Unnecessary list comprehension
@@ -240,3 +240,4 @@ source = ["sms_api", "client"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
+"sms_api/data/data_service.py" = ["S608", "S101"]
