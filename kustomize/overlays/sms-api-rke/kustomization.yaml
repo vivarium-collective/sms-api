@@ -5,7 +5,7 @@ kind: Kustomization
 # - name: ghcr.io/vivarium-collective/sms-api
 #   newTag: 0.2.15-dev
 
-namespace: sms-api-rke-temp
+namespace: sms-api-rke
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
