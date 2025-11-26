@@ -11,15 +11,15 @@ images:
 replicas:
   - count: 1
     name: api
-  - count: 0
-    name: nats
+  - count: 1
+    name: ptools
   - count: 1
     name: redis
 
 resources:
   - ingress.yaml
   - api-cache-pvc.yaml
-  - nats-svc.yaml
+  - redis-svc.yaml
   - haproxy-ssh-svc.yaml
   - vivarium-home-pv.yaml
   - vivarium-home-pvc.yaml

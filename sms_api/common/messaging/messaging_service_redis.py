@@ -2,9 +2,8 @@
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, override
 
-import redis.asyncio as redis
 from redis.asyncio.client import PubSub, Redis
 
 from sms_api.common.messaging.messaging_service import MessageHandler, MessagingService
@@ -17,25 +16,27 @@ class MessagingServiceRedis(MessagingService):
 
     def __init__(self) -> None:
         """Initialize the Redis messaging service."""
-        self._client: Redis[bytes] | None = None
+        self._client: Redis | None = None
         self._pubsub: PubSub | None = None
         self._subscriptions: dict[str, MessageHandler] = {}
         self._listener_task: asyncio.Task[None] | None = None
         self._stop_event: asyncio.Event = asyncio.Event()
 
-    async def connect(self, url: str, **kwargs: Any) -> None:
+    @override
+    async def connect(self, host: str, port: int, **kwargs: Any) -> None:
         """Connect to the Redis server.
 
         Args:
-            url: Redis server URL (e.g., "redis://localhost:6379")
+            host: Redis server host (e.g. localhost)
+            port: Redis server port (e.g. 6379)
             **kwargs: Additional Redis connection parameters
         """
         if self._client is not None:
             logger.warning("Redis client is already connected")
             return
 
-        logger.info(f"Connecting to Redis server at {url}")
-        self._client = redis.from_url(url, **kwargs)
+        logger.info(f"Connecting to Redis server at host:port {host}:{port}")
+        self._client = Redis(host=host, port=port, **kwargs)
 
         # Test the connection
         await self._client.ping()
@@ -43,6 +44,7 @@ class MessagingServiceRedis(MessagingService):
         self._pubsub = self._client.pubsub()
         logger.info("Successfully connected to Redis server")
 
+    @override
     async def disconnect(self) -> None:
         """Disconnect from the Redis server."""
         if self._listener_task is not None and not self._listener_task.done():
@@ -62,6 +64,7 @@ class MessagingServiceRedis(MessagingService):
             self._client = None
             logger.info("Disconnected from Redis server")
 
+    @override
     async def publish(self, subject: str, data: bytes) -> None:
         """Publish a message to a Redis channel.
 
@@ -78,6 +81,7 @@ class MessagingServiceRedis(MessagingService):
         await self._client.publish(subject, data)
         logger.debug(f"Published message to channel '{subject}'")
 
+    @override
     async def subscribe(self, subject: str, callback: MessageHandler) -> None:
         """Subscribe to a Redis channel with a callback handler.
 

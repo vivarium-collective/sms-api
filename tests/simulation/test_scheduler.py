@@ -7,11 +7,10 @@ import uuid
 from pathlib import Path
 
 import pytest
-from nats.aio.client import Client as NATSClient
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.messaging.messaging_service_nats import MessagingServiceNATS
+from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
@@ -77,15 +76,13 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_messaging(
-    nats_subscriber_client: NATSClient,
-    nats_producer_client: NATSClient,
+    redis_subscriber_service: MessagingServiceRedis,
+    redis_producer_service: MessagingServiceRedis,
     database_service: DatabaseServiceSQL,
     slurm_service: SlurmService,
 ) -> None:
-    messaging_service_NATS = MessagingServiceNATS()
-    messaging_service_NATS._client = nats_subscriber_client
     scheduler = JobScheduler(
-        messaging_service=messaging_service_NATS, database_service=database_service, slurm_service=slurm_service
+        messaging_service=redis_subscriber_service, database_service=database_service, slurm_service=slurm_service
     )
     await scheduler.subscribe()
 
@@ -103,9 +100,9 @@ async def test_messaging(
     )
 
     # send worker messages to the broker
-    await nats_producer_client.publish(
-        subject=get_settings().nats_worker_event_subject,
-        payload=worker_event.model_dump_json(exclude_unset=True).encode("utf-8"),
+    await redis_producer_service.publish(
+        subject=get_settings().redis_channel,
+        data=worker_event.model_dump_json(exclude_unset=True).encode("utf-8"),
     )
     # get the updated state of the job
     await asyncio.sleep(0.1)
@@ -118,15 +115,13 @@ async def test_messaging(
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_job_scheduler(
-    nats_subscriber_client: NATSClient,
+    redis_subscriber_service: MessagingServiceRedis,
     database_service: DatabaseServiceSQL,
     slurm_service: SlurmService,
     slurm_template_hello_10s: str,
 ) -> None:
-    messaging_service_NATS = MessagingServiceNATS()
-    messaging_service_NATS._client = nats_subscriber_client
     scheduler = JobScheduler(
-        messaging_service=messaging_service_NATS, database_service=database_service, slurm_service=slurm_service
+        messaging_service=redis_subscriber_service, database_service=database_service, slurm_service=slurm_service
     )
     await scheduler.subscribe()
     await scheduler.start_polling(interval_seconds=1)
@@ -198,7 +193,7 @@ async def test_job_scheduler(
     ],
 )
 async def test_job_scheduler_with_storage(
-    nats_subscriber_client: NATSClient,
+    redis_subscriber_service: MessagingServiceRedis,
     database_service: DatabaseServiceSQL,
     slurm_service: SlurmService,
     slurm_template_with_storage: str,
@@ -216,8 +211,6 @@ async def test_job_scheduler_with_storage(
 
     Tests run with both storage_type="aws" and storage_type="qumulo" (if configured).
     """
-    messaging_service_NATS = MessagingServiceNATS()
-    messaging_service_NATS._client = nats_subscriber_client
     settings = get_settings()
     test_id = uuid.uuid4().hex[:8]
     input_key = S3FilePath(s3_path=Path(f"test/slurm/input_{test_id}.txt"))
@@ -245,7 +238,7 @@ async def test_job_scheduler_with_storage(
         # Step 2: Prepare Slurm job script
         print("\n=== Step 2: Preparing Slurm job ===")
         scheduler = JobScheduler(
-            messaging_service=messaging_service_NATS, database_service=database_service, slurm_service=slurm_service
+            messaging_service=redis_subscriber_service, database_service=database_service, slurm_service=slurm_service
         )
         await scheduler.subscribe()
         await scheduler.start_polling(interval_seconds=2)

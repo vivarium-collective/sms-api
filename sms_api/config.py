@@ -92,18 +92,14 @@ class Settings(BaseSettings):
     hpc_parca_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
     hpc_repo_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
     hpc_sim_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
-    hpc_sim_config_file: str = "publish.json"
+    hpc_sim_config_file: str = "default_with_publish.json"
 
-    # Messaging configuration
-    messaging_backend: Literal["nats", "redis"] = "nats"  # Type of messaging backend to use
-    messaging_url: str = ""  # Connection URL for messaging service
-    messaging_worker_event_subject: str = "worker.events"  # Subject/channel for worker events
-
-    # Legacy NATS configuration (deprecated, use messaging_* settings instead)
-    nats_url: str = ""
-    nats_worker_event_subject: str = "worker.events"
-    nats_emitter_url: str = ""
-    nats_emitter_magic_word: str = "emitter-magic-word"
+    redis_internal_host: str = ""
+    redis_internal_port: int = -1
+    redis_external_host: str = ""
+    redis_external_port: int = -1
+    redis_channel: str = "worker.events"
+    redis_emitter_magic_word: str = "emitter-magic-word"
 
     app_dir: str = f"{REPO_ROOT}/app"
     assets_dir: str = f"{REPO_ROOT}/assets"

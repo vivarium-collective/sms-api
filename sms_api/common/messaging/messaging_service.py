@@ -9,14 +9,15 @@ MessageHandler = Callable[[bytes], Awaitable[None]]
 
 
 class MessagingService(ABC):
-    """Abstract base class for messaging services (NATS, Redis, etc.)."""
+    """Abstract base class for messaging services (Redis, etc.)."""
 
     @abstractmethod
-    async def connect(self, url: str, **kwargs: Any) -> None:
+    async def connect(self, host: str, port: int, **kwargs: Any) -> None:
         """Connect to the messaging service.
 
         Args:
-            url: Connection URL for the messaging service
+            host: Connection host for the messaging service
+            port: Connection port for the messaging service
             **kwargs: Additional connection parameters
         """
         pass

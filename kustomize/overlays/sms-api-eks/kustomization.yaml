@@ -15,8 +15,6 @@ replicas:
   - count: 1
     name: ptools
   - count: 0
-    name: nats
-  - count: 0
     name: redis
   - count: 0
     name: haproxy-ssh
@@ -25,7 +23,6 @@ resources:
   - ingress.yaml
   - storageclass-gp3-retain.yaml
   - api-cache-pvc.yaml
-  - nats-svc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
   - secret-ssh.yaml

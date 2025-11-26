@@ -32,17 +32,9 @@ from tests.fixtures.mongodb_fixtures import (  # noqa: F401
     mongo_test_database,
     mongodb_container,
 )
-from tests.fixtures.nats_fixtures import (  # noqa: F401
-    # jetstream_client,
-    nats_container_uri,
-    nats_producer_client,
-    nats_producer_service,
-    nats_subscriber_client,
-    nats_subscriber_service,
-)
 from tests.fixtures.postgres_fixtures import async_postgres_engine, database_service, postgres_url  # noqa: F401
 from tests.fixtures.redis_fixtures import (  # noqa: F401
-    redis_container_uri,
+    redis_container_host_and_port,
     redis_producer_service,
     redis_subscriber_service,
 )

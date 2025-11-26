@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
-from sms_api.common.messaging.messaging_service_nats import MessagingServiceNATS
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
 from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.common.storage.file_service import FileService
@@ -192,20 +191,12 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         logger.info(f"✓ SSH/Slurm services initialized for {settings.slurm_submit_user}@{settings.slurm_submit_host}")
 
         # Initialize messaging service
-        logger.info("Initializing messaging service...")
-        messaging_service: MessagingService
+        redis_host = _settings.redis_internal_host
+        redis_port = _settings.redis_internal_port
+        logger.info(f"Initializing Redis messaging service at host:port {redis_host}:{redis_port}...")
+        messaging_service: MessagingService = MessagingServiceRedis()
 
-        # Determine URL (new messaging_url takes precedence over legacy nats_url)
-        messaging_url = _settings.messaging_url or _settings.nats_url
-
-        if _settings.messaging_backend == "redis":
-            logger.info(f"Using Redis messaging backend at {messaging_url}")
-            messaging_service = MessagingServiceRedis()
-        else:  # default to NATS
-            logger.info(f"Using NATS messaging backend at {messaging_url}")
-            messaging_service = MessagingServiceNATS()
-
-        await messaging_service.connect(messaging_url)
+        await messaging_service.connect(host=redis_host, port=redis_port)
         logger.info("✓ Messaging service connected")
 
         # Initialize JobScheduler

@@ -32,13 +32,13 @@ class JobScheduler:
         return await self.database_service.get_hpcrun_id_by_correlation_id(correlation_id=correlation_id)
 
     async def subscribe(self) -> None:
-        subject = get_settings().nats_worker_event_subject
-        logger.info(f"Subscribing to messaging service for subject '{subject}'")
+        channel = get_settings().redis_channel
+        logger.info(f"Subscribing to messaging service for channel '{channel}'")
 
         async def message_handler(data: bytes) -> None:
             try:
                 data_str = data.decode("utf-8")
-                logger.debug(f"Received message on subject '{subject}': {data_str}")
+                logger.debug(f"Received message on channel '{channel}': {data_str}")
                 worker_event_message_payload = WorkerEventMessagePayload.model_validate_json(data_str)
                 worker_event = WorkerEvent.from_message_payload(
                     worker_event_message_payload=worker_event_message_payload
@@ -53,7 +53,7 @@ class JobScheduler:
             except Exception:
                 logger.exception(f"Exception while handling message: {data!r}")
 
-        await self.messaging_service.subscribe(subject=subject, callback=message_handler)
+        await self.messaging_service.subscribe(subject=channel, callback=message_handler)
         if self.messaging_service.is_connected():
             logger.info("Messaging service is connected and subscription is set up.")
         else:

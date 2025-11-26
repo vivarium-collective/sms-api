@@ -18,15 +18,13 @@ replicas:
     name: api
   - count: 1
     name: ptools
-  - count: 0
-    name: nats
   - count: 1
     name: redis
 
 resources:
 #  - ingress.yaml
   - api-cache-pvc.yaml
-  - nats-svc.yaml
+  - redis-svc.yaml
   - haproxy-ssh-svc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
