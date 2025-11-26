@@ -2937,7 +2937,6 @@ dependencies = [
     { name = "types-aioboto3", extra = ["s3"] },
     { name = "typing-extensions" },
     { name = "uvicorn" },
-    { name = "vecoli" },
     { name = "vegafusion" },
     { name = "vl-convert-python" },
     { name = "xmltodict" },
@@ -2969,6 +2968,9 @@ docs = [
     { name = "sphinx" },
     { name = "sphinx-autodoc-typehints" },
     { name = "sphinx-rtd-theme" },
+]
+notebook = [
+    { name = "vecoli" },
 ]
 
 [package.metadata]
@@ -3009,7 +3011,6 @@ requires-dist = [
     { name = "types-aioboto3", extras = ["s3"], specifier = ">=13.3.0" },
     { name = "typing-extensions", specifier = ">=4.14.0,<5" },
     { name = "uvicorn", specifier = ">=0.34.3,<0.35" },
-    { name = "vecoli", specifier = ">=0.0.2" },
     { name = "vegafusion", specifier = ">=2.0.2,<3" },
     { name = "vl-convert-python", specifier = ">=1.8.0,<2" },
     { name = "xmltodict", specifier = ">=0.14.2" },
@@ -3042,6 +3043,7 @@ docs = [
     { name = "sphinx-autodoc-typehints", specifier = ">=3.2.0,<4" },
     { name = "sphinx-rtd-theme", specifier = ">=3.0.2,<4" },
 ]
+notebook = [{ name = "vecoli", specifier = ">=0.0.2" }]
 
 [[package]]
 name = "sniffio"

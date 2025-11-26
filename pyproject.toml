@@ -46,7 +46,6 @@ dependencies = [
     "aiofiles>=24.1.0",
     "aioboto3>=13.3.0",
     "types-aioboto3[s3]>=13.3.0",
-    "vecoli>=0.0.2",
 ]
 
 [project.urls]
@@ -79,6 +78,9 @@ docs = [
     "sphinx>=8.2.3,<9",
     "sphinx-autodoc-typehints>=3.2.0,<4",
     "sphinx-rtd-theme>=3.0.2,<4",
+]
+notebook = [
+    "vecoli>=0.0.2",
 ]
 
 [tool.uv]
@@ -120,7 +122,7 @@ addopts = "--cov-report=html"
 
 [tool.deptry]
 exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py"]
-ignore = ["DEP002", "DEP003", "DEP004"]
+ignore = ["DEP002", "DEP003", "DEP004", "DEP001"]
 
 [tool.ruff]
 target-version = "py39"
