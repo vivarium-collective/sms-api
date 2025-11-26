@@ -1,5 +1,7 @@
 import marimo
 
+from sms_api.data.data_service import SimulationDataServiceFS
+
 __generated_with = "0.15.0"
 app = marimo.App(width="medium")
 
@@ -51,10 +53,10 @@ def _():
 
 @app.cell
 def _(env):
-    from data_service import SimulationDataService, PARTITION_GROUPS, AnalysisType
+    from sms_api.data.data_service import SimulationDataServiceFS, PARTITION_GROUPS, AnalysisType
 
-    data_service = SimulationDataService(env=env)
-    return AnalysisType, PARTITION_GROUPS, SimulationDataService, data_service
+    data_service = SimulationDataServiceFS(env=env)
+    return AnalysisType, PARTITION_GROUPS, SimulationDataServiceFS, data_service
 
 
 @app.cell
@@ -818,7 +820,7 @@ def _(
 
         return preset_dict
 
-    def preset_override(preset_name, data_service: SimulationDataService):
+    def preset_override(preset_name, data_service: SimulationDataServiceFS):
         # rxn ids
         # mrna_gene_ids
         # bulk_names_unique
