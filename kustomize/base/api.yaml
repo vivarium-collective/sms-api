@@ -60,6 +60,9 @@ spec:
           volumeMounts:
             - name: api-cache-pvc
               mountPath: /app/scratch
+            - name: vivarium-home-pvc
+              mountPath: /home/FCAM/svc_vivarium
+              subPath: svc_vivarium
             - name: slurm-submit-key-file
               mountPath: /run/secrets/slurm_submit_key_file
             - name: ssh-known-hosts
@@ -69,6 +72,9 @@ spec:
         - name: api-cache-pvc
           persistentVolumeClaim:
             claimName: api-cache-pvc
+        - name: vivarium-home-pvc
+          persistentVolumeClaim:
+            claimName: vivarium-home-pvc
         - name: slurm-submit-key-file
           secret:
             defaultMode: 256 # 0400
