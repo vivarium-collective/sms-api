@@ -9,15 +9,15 @@ from typing import Any
 import duckdb
 import numpy as np
 import pandas as pd
-from ecoli.library.parquet_emitter import (  # type: ignore[import-untyped]
+from ecoli.library.parquet_emitter import (
     create_duckdb_conn,
     dataset_sql,
     ndlist_to_ndarray,
     read_stacked_columns,
 )
-from ecoli.library.sim_data import LoadSimData  # type: ignore[import-untyped]
-from reconstruction.ecoli.simulation_data import SimulationDataEcoli  # type: ignore[import-untyped]
-from validation.ecoli.validation_data import ValidationDataEcoli  # type: ignore[import-untyped]
+from ecoli.library.sim_data import LoadSimData
+from reconstruction.ecoli.simulation_data import SimulationDataEcoli
+from validation.ecoli.validation_data import ValidationDataEcoli
 
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings

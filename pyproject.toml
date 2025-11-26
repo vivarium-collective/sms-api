@@ -114,7 +114,7 @@ exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", 
 
 [[tool.mypy.overrides]]
 module = "sms_api.data.data_service"
-disable_error_code = ["call-overload", "assignment"]
+disable_error_code = ["call-overload", "assignment", "import-untyped"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
