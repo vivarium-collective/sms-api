@@ -5,7 +5,7 @@ namespace: sms-api-local
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.2.47-dev
+    newTag: 0.2.48-dev
     # STABLE: newTag: 0.2.8
 
 replicas:
