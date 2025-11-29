@@ -132,7 +132,6 @@ class SimulationServiceHpc(SimulationService):
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
-                build_image_cmd = f"{remote_build_script_relative_path!s} -i {apptainer_image_path!s} -a"
                 qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
                 nodelist_clause = (
                     f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
@@ -154,7 +153,29 @@ class SimulationServiceHpc(SimulationService):
 
                     set -eu
                     env
-                    # allow for user-specific Apptainer directories used during builds.
+
+                    # Check if apptainer is available, if not create a temporary wrapper for singularity
+                    if ! command -v apptainer &> /dev/null; then
+                        if command -v singularity &> /dev/null; then
+                            echo "apptainer not found, creating temporary wrapper for singularity"
+                            JOB_BIN_DIR="/tmp/slurm_job_${{SLURM_JOB_ID}}_bin"
+                            mkdir -p "$JOB_BIN_DIR"
+                            echo '#!/bin/bash' > "$JOB_BIN_DIR/apptainer"
+                            echo 'exec singularity "$@"' >> "$JOB_BIN_DIR/apptainer"
+                            chmod +x "$JOB_BIN_DIR/apptainer"
+                            export PATH="$JOB_BIN_DIR:$PATH"
+
+                            # Ensure cleanup on exit
+                            trap "rm -rf '$JOB_BIN_DIR'" EXIT
+                        else
+                            echo "ERROR: Neither apptainer nor singularity found in PATH"
+                            exit 1
+                        fi
+                    fi
+
+                    # Set Apptainer directories with defaults if not already set
+                    export APPTAINER_CACHEDIR=${{APPTAINER_CACHEDIR:-$HOME/.apptainer/cache}}
+                    export APPTAINER_TMPDIR=${{APPTAINER_TMPDIR:-$HOME/.apptainer/tmp}}
                     mkdir -p $APPTAINER_CACHEDIR $APPTAINER_TMPDIR
 
                     # Step 1: Clone repository if needed
@@ -186,8 +207,18 @@ class SimulationServiceHpc(SimulationService):
 
                     echo "Building vEcoli image for commit {simulator_version.git_commit_hash} on $(hostname)..."
 
+                    # Save repo path as absolute path (in NFS home directory)
                     cd "$REPO_PATH"
-                    {build_image_cmd}
+                    REPO_ABS_PATH="$(pwd)"
+                    BUILD_SCRIPT="$REPO_ABS_PATH/{remote_build_script_relative_path!s}"
+
+                    # Change to /tmp to avoid NFS root_squash issues with setuid binaries
+                    echo "Changing to /tmp to avoid NFS root_squash restrictions..."
+                    cd /tmp
+
+                    # Build with absolute paths
+                    echo "Running build script from /tmp with absolute paths..."
+                    "$BUILD_SCRIPT" -i {apptainer_image_path!s} -a
 
                     # if the image does not exist after the build, fail the job
                     if [ ! -f {apptainer_image_path!s} ]; then
