@@ -146,19 +146,33 @@ async def test_job_scheduler(
     simulation, slurm_job, hpc_run = await insert_job(database_service=database_service, slurmjobid=job_id)
     assert hpc_run.status == JobStatus.RUNNING
 
-    # Wait for the job to receive a RUNNING status
-    await asyncio.sleep(5)
+    # Poll until the job receives a RUNNING status (or timeout after 30 seconds)
+    max_wait = 30
+    start_time = asyncio.get_event_loop().time()
+    running_hpcrun: HpcRun | None = None
 
-    # Check if the job is in the database
-    running_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+    while asyncio.get_event_loop().time() - start_time < max_wait:
+        await asyncio.sleep(2)
+        running_hpcrun = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+        if running_hpcrun and running_hpcrun.status == JobStatus.RUNNING:
+            break
+
+    # Check if the job is in the database with RUNNING status
     assert running_hpcrun is not None
     assert running_hpcrun.status == JobStatus.RUNNING
 
-    # Wait for the job to receive a COMPLETE status
-    await asyncio.sleep(20)
+    # Poll until the job receives a COMPLETED status (or timeout after 30 seconds)
+    max_wait_complete = 30
+    start_time_complete = asyncio.get_event_loop().time()
+    completed_hpcrun: HpcRun | None = None
 
-    # Check if the job is in the database
-    completed_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+    while asyncio.get_event_loop().time() - start_time_complete < max_wait_complete:
+        await asyncio.sleep(2)
+        completed_hpcrun = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+        if completed_hpcrun and completed_hpcrun.status == JobStatus.COMPLETED:
+            break
+
+    # Check if the job is in the database with COMPLETED status
     assert completed_hpcrun is not None
     assert completed_hpcrun.status == JobStatus.COMPLETED
 

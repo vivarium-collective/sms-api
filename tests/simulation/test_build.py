@@ -31,12 +31,7 @@ async def test_build(
         git_commit_hash=latest_commit_hash, git_repo_url=repo_url, git_branch=main_branch
     )
 
-    # clone the repository if needed
-    await simulation_service_slurm.clone_repository_if_needed(
-        git_commit_hash=simulator.git_commit_hash, git_repo_url=simulator.git_repo_url, git_branch=simulator.git_branch
-    )
-
-    # build the image
+    # Submit build job (which now includes cloning the repository)
     job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
     assert job_id is not None
 

@@ -49,27 +49,11 @@ class ConcreteSimulationService(SimulationService):
         raise NotImplementedError
 
     @override
-    async def clone_repository_if_needed(
-        self,
-        git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
-        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-        git_branch: str = "master",
-    ) -> None:
-        """
-        Clone a git repository to a remote directory and return the path to the cloned repository.
-        :param git_commit_hash: The commit hash to checkout after cloning.
-        :param repo_url: The URL of the git repository to clone.
-        :param branch: The branch to clone.
-        """
-        raise NotImplementedError
-
-    @override
     async def close(self) -> None:
         raise NotImplementedError
 
 
 class SimulationServiceMockCloneAndBuild(ConcreteSimulationService):
-    clone_repo_args: tuple[str, str, str] = ("", "", "")
     submit_build_args: tuple[SimulatorVersion] = (
         SimulatorVersion(database_id=0, git_branch="", git_repo_url="", git_commit_hash=""),
     )
@@ -79,22 +63,12 @@ class SimulationServiceMockCloneAndBuild(ConcreteSimulationService):
         self.expected_build_slurm_job_id = expected_build_slurm_job_id
 
     @override
-    async def clone_repository_if_needed(
-        self,
-        git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
-        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-        git_branch: str = "master",
-    ) -> None:
-        self.clone_repo_args = (git_commit_hash, git_repo_url, git_branch)
-
-    @override
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
         self.submit_build_args = (simulator_version,)
         return self.expected_build_slurm_job_id
 
 
 class SimulationServiceMockParca(ConcreteSimulationService):
-    clone_repo_args: tuple[str, str, str] = ("", "", "")
     submit_parca_args: tuple[ParcaDataset] = (
         ParcaDataset(
             database_id=0,

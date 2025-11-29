@@ -71,21 +71,6 @@ class SimulationService(ABC):
         pass
 
     @abstractmethod
-    async def clone_repository_if_needed(
-        self,
-        git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
-        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
-        git_branch: str = "messages",
-    ) -> None:
-        """
-        Clone a git repository to a remote directory and return the path to the cloned repository.
-        :param git_commit_hash: The commit hash to checkout after cloning.
-        :param repo_url: The URL of the git repository to clone.
-        :param branch: The branch to clone.
-        """
-        pass
-
-    @abstractmethod
     async def close(self) -> None:
         pass
 
@@ -121,33 +106,6 @@ class SimulationServiceHpc(SimulationService):
 
         self._latest_commit_hash = latest_commit_hash
         return latest_commit_hash
-
-    @override
-    async def clone_repository_if_needed(
-        self,
-        git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
-        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
-        git_branch: str = "messages",
-    ) -> None:
-        settings = get_settings()
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-
-        software_version_path = settings.hpc_repo_base_path / git_commit_hash
-        test_cmd = f"test -d {software_version_path!s}"
-        dir_cmd = f"mkdir -p {software_version_path!s} && cd {software_version_path!s}"
-        clone_cmd = f"git clone --branch {git_branch} --single-branch {git_repo_url} {VECOLI_REPO_NAME}"
-        # skip if directory exists, otherwise create it and clone the repo
-        command = f"{test_cmd} || ({dir_cmd} && {clone_cmd} && cd {VECOLI_REPO_NAME} && git checkout {git_commit_hash})"
-        return_code, stdout, stderr = await ssh_service.run_command(command=command)
-        if return_code != 0:
-            raise RuntimeError(
-                f"Failed to clone repo {git_repo_url} branch {git_branch} hash {git_commit_hash}: {stderr.strip()}"
-            )
 
     @override
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
@@ -199,6 +157,25 @@ class SimulationServiceHpc(SimulationService):
                     # allow for user-specific Apptainer directories used during builds.
                     mkdir -p $APPTAINER_CACHEDIR $APPTAINER_TMPDIR
 
+                    # Step 1: Clone repository if needed
+                    echo "=== Step 1: Cloning repository ==="
+                    REPO_PATH="{remote_vEcoli_path!s}"
+
+                    if [ ! -d "$REPO_PATH" ]; then
+                        echo "Repository not found. Cloning..."
+                        mkdir -p "{remote_vEcoli_path.parent!s}"
+                        cd "{remote_vEcoli_path.parent!s}"
+                        git clone --branch {simulator_version.git_branch} \\
+                                  --single-branch {simulator_version.git_repo_url} {VECOLI_REPO_NAME}
+                        cd {VECOLI_REPO_NAME}
+                        git checkout {simulator_version.git_commit_hash}
+                        echo "Repository cloned successfully to $REPO_PATH"
+                    else
+                        echo "Repository already exists at $REPO_PATH"
+                    fi
+
+                    # Step 2: Build Apptainer image
+                    echo "=== Step 2: Building Apptainer image ==="
                     mkdir -p {apptainer_image_path.parent!s}
 
                     # if the image already exists, skip the build
@@ -207,9 +184,9 @@ class SimulationServiceHpc(SimulationService):
                         exit 0
                     fi
 
-                    echo "Building vEcoli image for commit {simulator_version.git_commit_hash} on $(hostname) ..."
+                    echo "Building vEcoli image for commit {simulator_version.git_commit_hash} on $(hostname)..."
 
-                    cd {remote_vEcoli_path!s}
+                    cd "$REPO_PATH"
                     {build_image_cmd}
 
                     # if the image does not exist after the build, fail the job
