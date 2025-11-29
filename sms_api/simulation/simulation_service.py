@@ -454,25 +454,40 @@ class SimulationServiceHpc(SimulationService):
                     cd {remote_vEcoli_repo_path!s}
 
                     # create custom config file mapped to /out/configs/ directory
-                    #  copy the template config file from the remote vEcoli repo
-                    #  replace CORRELATION_ID_REPLACE_ME with the correlation_id
-                    #  replace REDIS_HOST_REPLACE_ME with the redis host
-                    #  replace REDIS_PORT_REPLACE_ME with the redis port
-                    #  replace REDIS_CHANNEL_REPLACE_ME with the redis channel
-                    #
-                    config_template_file={remote_vEcoli_repo_path!s}/configs/{hpc_sim_config_file}
                     mkdir -p {experiment_path_parent!s}/configs
-                    config_file={experiment_path_parent!s}/configs/{hpc_sim_config_file}_{experiment_id}.json
-                    cp $config_template_file $config_file
-                    sed -i "s/CORRELATION_ID_REPLACE_ME/{correlation_id}/g" $config_file
-                    sed -i "s/REDIS_HOST_REPLACE_ME/{get_settings().redis_external_host}/g" $config_file
-                    sed -i "s/REDIS_PORT_REPLACE_ME/{get_settings().redis_external_port}/g" $config_file
-                    sed -i "s/REDIS_CHANNEL_REPLACE_ME/{get_settings().redis_channel}/g" $config_file
+
+                    # Check if the config template file exists (newer repos with messaging)
+                    config_template_file={remote_vEcoli_repo_path!s}/configs/{hpc_sim_config_file}
+                    default_config_file={remote_vEcoli_repo_path!s}/configs/default.json
+
+                    if [ -f "$config_template_file" ]; then
+                        echo "Using config template: {hpc_sim_config_file} (with messaging support)"
+                        config_file={experiment_path_parent!s}/configs/{hpc_sim_config_file}_{experiment_id}.json
+                        cp "$config_template_file" "$config_file"
+                        # Replace template variables for messaging
+                        sed -i "s/CORRELATION_ID_REPLACE_ME/{correlation_id}/g" "$config_file"
+                        sed -i "s/REDIS_HOST_REPLACE_ME/{get_settings().redis_external_host}/g" "$config_file"
+                        sed -i "s/REDIS_PORT_REPLACE_ME/{get_settings().redis_external_port}/g" "$config_file"
+                        sed -i "s/REDIS_CHANNEL_REPLACE_ME/{get_settings().redis_channel}/g" "$config_file"
+                    elif [ -f "$default_config_file" ]; then
+                        echo "Using default config: default.json (older repo without messaging)"
+                        config_file={experiment_path_parent!s}/configs/default_{experiment_id}.json
+                        # Copy default config without template replacements
+                        cp "$default_config_file" "$config_file"
+                    else
+                        echo "ERROR: Neither {hpc_sim_config_file} nor default.json found in configs/"
+                        exit 1
+                    fi
 
                     git -C ./configs diff HEAD >> ./source-info/git_diff.txt
+
+                    # Determine the config path inside the container (bind mount at /out/configs/)
+                    config_filename=$(basename "$config_file")
+                    container_config_path="/out/configs/$config_filename"
+
                     singularity run $binds $image uv run \\
                          --env-file /vEcoli/.env /vEcoli/ecoli/experiments/ecoli_master_sim.py \\
-                         --config /out/configs/{hpc_sim_config_file}_{experiment_id}.json \\
+                         --config "$container_config_path" \\
                          --generations 1 --emitter parquet --emitter_arg out_dir='/out' \\
                          --experiment_id {experiment_id} \\
                          --daughter_outdir "/out/{experiment_id}" \\
