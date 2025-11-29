@@ -17,7 +17,6 @@ from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings, get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
-    VECOLI_REPO_NAME,
     get_apptainer_image_file,
     get_experiment_dir,
     get_experiment_path,
@@ -126,8 +125,6 @@ class SimulationServiceHpc(SimulationService):
         remote_vEcoli_path = get_vEcoli_repo_dir(simulator_version=simulator_version)
         apptainer_image_path = get_apptainer_image_file(simulator_version=simulator_version)
 
-        remote_build_script_relative_path = Path("runscripts") / "container" / "build-image.sh"
-
         # build the submit script
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
@@ -154,79 +151,137 @@ class SimulationServiceHpc(SimulationService):
                     set -eu
                     env
 
-                    # Check if apptainer is available, if not create a temporary wrapper for singularity
-                    if ! command -v apptainer &> /dev/null; then
-                        if command -v singularity &> /dev/null; then
-                            echo "apptainer not found, creating temporary wrapper for singularity"
-                            JOB_BIN_DIR="/tmp/slurm_job_${{SLURM_JOB_ID}}_bin"
-                            mkdir -p "$JOB_BIN_DIR"
-                            echo '#!/bin/bash' > "$JOB_BIN_DIR/apptainer"
-                            echo 'exec singularity "$@"' >> "$JOB_BIN_DIR/apptainer"
-                            chmod +x "$JOB_BIN_DIR/apptainer"
-                            export PATH="$JOB_BIN_DIR:$PATH"
-
-                            # Ensure cleanup on exit
-                            trap "rm -rf '$JOB_BIN_DIR'" EXIT
-                        else
-                            echo "ERROR: Neither apptainer nor singularity found in PATH"
-                            exit 1
-                        fi
+                    # Determine which container runtime to use (prefer apptainer over singularity)
+                    if command -v apptainer &> /dev/null; then
+                        CONTAINER_CMD="apptainer"
+                        echo "Using apptainer for container build"
+                    elif command -v singularity &> /dev/null; then
+                        CONTAINER_CMD="singularity"
+                        echo "Using singularity for container build"
+                    else
+                        echo "ERROR: Neither apptainer nor singularity found in PATH"
+                        exit 1
                     fi
 
-                    # Set Apptainer directories with defaults if not already set
+                    # Set Apptainer/Singularity cache directories with defaults if not already set
                     export APPTAINER_CACHEDIR=${{APPTAINER_CACHEDIR:-$HOME/.apptainer/cache}}
                     export APPTAINER_TMPDIR=${{APPTAINER_TMPDIR:-$HOME/.apptainer/tmp}}
                     mkdir -p $APPTAINER_CACHEDIR $APPTAINER_TMPDIR
 
                     # Step 1: Clone repository if needed
                     echo "=== Step 1: Cloning repository ==="
-                    REPO_PATH="{remote_vEcoli_path!s}"
+                    FINAL_REPO_PATH="{remote_vEcoli_path!s}"
 
-                    if [ ! -d "$REPO_PATH" ]; then
-                        echo "Repository not found. Cloning..."
-                        mkdir -p "{remote_vEcoli_path.parent!s}"
-                        cd "{remote_vEcoli_path.parent!s}"
-                        git clone --branch {simulator_version.git_branch} \\
-                                  --single-branch {simulator_version.git_repo_url} {VECOLI_REPO_NAME}
-                        cd {VECOLI_REPO_NAME}
-                        git checkout {simulator_version.git_commit_hash}
-                        echo "Repository cloned successfully to $REPO_PATH"
+                    if [ -d "$FINAL_REPO_PATH" ]; then
+                        echo "Repository already exists at $FINAL_REPO_PATH"
+                        # If repo already exists and image exists, skip everything
+                        if [ -f {apptainer_image_path!s} ]; then
+                            echo "Image {apptainer_image_path!s} already exists. Skipping build."
+                            exit 0
+                        fi
+                        # Use existing repo for build
+                        TMP_REPO_PATH="$FINAL_REPO_PATH"
+                        MOVE_REPO=false
                     else
-                        echo "Repository already exists at $REPO_PATH"
+                        echo "Repository not found. Cloning to /tmp..."
+                        # Clone to /tmp to avoid NFS issues during build
+                        TMP_REPO_PATH="/tmp/slurm_job_${{SLURM_JOB_ID}}_vEcoli"
+                        cd /tmp
+                        git clone --branch {simulator_version.git_branch} \\
+                                  --single-branch {simulator_version.git_repo_url} "$TMP_REPO_PATH"
+                        cd "$TMP_REPO_PATH"
+                        git checkout {simulator_version.git_commit_hash}
+                        echo "Repository cloned successfully to $TMP_REPO_PATH"
+                        MOVE_REPO=true
+                        # Cleanup temp repo on exit (if we fail before moving)
+                        trap "rm -rf '$TMP_REPO_PATH'" EXIT
                     fi
 
                     # Step 2: Build Apptainer image
                     echo "=== Step 2: Building Apptainer image ==="
                     mkdir -p {apptainer_image_path.parent!s}
 
-                    # if the image already exists, skip the build
-                    if [ -f {apptainer_image_path!s} ]; then
-                        echo "Image {apptainer_image_path!s} already exists. Skipping build."
-                        exit 0
+                    echo "Building vEcoli image for commit {simulator_version.git_commit_hash} on $(hostname)..."
+                    echo "Building from $TMP_REPO_PATH (local filesystem)"
+
+                    cd "$TMP_REPO_PATH"
+
+                    # Get git info
+                    GIT_HASH=$(git rev-parse HEAD)
+                    GIT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "detached")
+                    TIMESTAMP=$(date '+%Y%m%d.%H%M%S')
+
+                    # Create git diff
+                    mkdir -p source-info
+                    git diff HEAD > source-info/git_diff.txt
+
+                    # Create repo.tar (respecting .dockerignore)
+                    echo "Creating repo tarball..."
+                    EXCLUDE_PATTERNS=$(mktemp)
+                    if [ -f .dockerignore ]; then
+                        grep -v "^#" .dockerignore | grep -v "^$" | grep -v "^!" | while read -r pattern; do
+                            if [[ "$pattern" == /* ]]; then
+                                echo ".${{pattern}}/*" >> "$EXCLUDE_PATTERNS"
+                            elif [[ "$pattern" == */ ]]; then
+                                echo "./${{pattern}}*" >> "$EXCLUDE_PATTERNS"
+                            else
+                                echo "./${{pattern}}" >> "$EXCLUDE_PATTERNS"
+                                echo "./${{pattern}}/*" >> "$EXCLUDE_PATTERNS"
+                            fi
+                        done
                     fi
 
-                    echo "Building vEcoli image for commit {simulator_version.git_commit_hash} on $(hostname)..."
+                    FIND_CMD="find . -type f"
+                    while read -r pattern; do
+                        FIND_CMD="$FIND_CMD ! -path \\"$pattern\\""
+                    done < "$EXCLUDE_PATTERNS"
 
-                    # Save repo path as absolute path (in NFS home directory)
-                    cd "$REPO_PATH"
-                    REPO_ABS_PATH="$(pwd)"
-                    BUILD_SCRIPT="$REPO_ABS_PATH/{remote_build_script_relative_path!s}"
+                    TEMP_FILE_LIST=$(mktemp)
+                    eval "$FIND_CMD -print0" > "$TEMP_FILE_LIST"
+                    tar -cf repo.tar --null -T "$TEMP_FILE_LIST"
+                    rm -f "$EXCLUDE_PATTERNS" "$TEMP_FILE_LIST"
+                    echo "Created repo.tar ($(du -sh repo.tar | awk '{{print $1}}'))"
 
-                    # Change to /tmp to avoid NFS root_squash issues with setuid binaries
-                    echo "Changing to /tmp to avoid NFS root_squash restrictions..."
-                    cd /tmp
+                    # Process .env file for environment variables
+                    DOT_ENV_VARS="    "
+                    if [ -f .env ]; then
+                        echo "Processing .env for Singularity environment..."
+                        while IFS= read -r line || [ -n "$line" ]; do
+                            if [[ -n "$line" && ! "$line" =~ ^[[:space:]]*# ]]; then
+                                line=${{line#export }}
+                                DOT_ENV_VARS+="export $line; "
+                            fi
+                        done < .env
+                        echo "Found $(echo "$DOT_ENV_VARS" | grep -c 'export ') environment variables"
+                    fi
 
-                    # Build with absolute paths
-                    echo "Running build script from /tmp with absolute paths..."
-                    "$BUILD_SCRIPT" -i {apptainer_image_path!s} -a
+                    # Build container image
+                    echo "=== Building Container Image: {apptainer_image_path!s} ==="
+                    echo "=== git hash $GIT_HASH, git branch $GIT_BRANCH ==="
 
-                    # if the image does not exist after the build, fail the job
-                    if [ ! -f {apptainer_image_path!s} ]; then
-                        echo "Image build failed. Image not found at {apptainer_image_path!s}."
+                    if ! $CONTAINER_CMD build --fakeroot --force \\
+                        --build-arg git_hash="$GIT_HASH" \\
+                        --build-arg git_branch="$GIT_BRANCH" \\
+                        --build-arg timestamp="$TIMESTAMP" \\
+                        --build-arg dot_env_vars="$DOT_ENV_VARS" \\
+                        {apptainer_image_path!s} runscripts/container/Singularity; then
+                        echo "ERROR: Container build failed."
                         exit 1
                     fi
+                    echo "Container build successful!"
+
+                    # Cleanup temp files
+                    rm -f source-info/git_diff.txt repo.tar
 
                     echo "Build completed. Image saved to {apptainer_image_path!s}."
+
+                    # Step 3: Move repository to final location if needed
+                    if [ "$MOVE_REPO" = true ]; then
+                        echo "=== Step 3: Moving repository to final location ==="
+                        mkdir -p "{remote_vEcoli_path.parent!s}"
+                        mv "$TMP_REPO_PATH" "$FINAL_REPO_PATH"
+                        echo "Repository moved to $FINAL_REPO_PATH"
+                    fi
                     """)
                 f.write(script_content)
 
