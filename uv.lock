@@ -2104,7 +2104,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess" },
+    { name = "ptyprocess", marker = "sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450 }
 wheels = [
@@ -2934,7 +2934,7 @@ wheels = [
 
 [[package]]
 name = "sms-api"
-version = "0.2.46.dev0"
+version = "0.2.47.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "aioboto3" },
@@ -2973,6 +2973,7 @@ dependencies = [
     { name = "types-aioboto3", extra = ["s3"] },
     { name = "typing-extensions" },
     { name = "uvicorn" },
+    { name = "vecoli" },
     { name = "vegafusion" },
     { name = "vl-convert-python" },
     { name = "xmltodict" },
@@ -3004,9 +3005,6 @@ docs = [
     { name = "sphinx" },
     { name = "sphinx-autodoc-typehints" },
     { name = "sphinx-rtd-theme" },
-]
-notebook = [
-    { name = "vecoli" },
 ]
 
 [package.metadata]
@@ -3047,6 +3045,7 @@ requires-dist = [
     { name = "types-aioboto3", extras = ["s3"], specifier = ">=13.3.0" },
     { name = "typing-extensions", specifier = ">=4.14.0,<5" },
     { name = "uvicorn", specifier = ">=0.34.3,<0.35" },
+    { name = "vecoli", specifier = ">=0.0.4" },
     { name = "vegafusion", specifier = ">=2.0.2,<3" },
     { name = "vl-convert-python", specifier = ">=1.8.0,<2" },
     { name = "xmltodict", specifier = ">=0.14.2" },
@@ -3079,7 +3078,6 @@ docs = [
     { name = "sphinx-autodoc-typehints", specifier = ">=3.2.0,<4" },
     { name = "sphinx-rtd-theme", specifier = ">=3.0.2,<4" },
 ]
-notebook = [{ name = "vecoli", specifier = ">=0.0.4" }]
 
 [[package]]
 name = "snowballstemmer"
