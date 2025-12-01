@@ -39,7 +39,7 @@ RUN uv sync --frozen --no-install-project
 COPY --chown=appuser:appgroup . /app
 
 # Sync the project
-RUN uv sync --frozen --group notebook
+RUN uv sync --frozen
 
 # Declare the volume for local cache storage
 VOLUME ["/app/scratch"]
