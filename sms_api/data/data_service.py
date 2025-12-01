@@ -120,7 +120,7 @@ class SimulationDataService(ABC):
                 GROUP BY experiment_id, variant, lineage_seed, generation, agent_id
                 """
         monomer_counts = self.conn.sql(sql_monomer_validation).pl()
-        return ndlist_to_ndarray(monomer_counts["avgCounts"])  # type: ignore[no-any-return]
+        return ndlist_to_ndarray(monomer_counts["avgCounts"])
 
     def get_monomers_df(
         self, output_loaded: pd.DataFrame, monomer_label_type: str, monomer_select_plot: list[str]
@@ -136,12 +136,12 @@ class SimulationDataService(ABC):
             monomer_traj = monomer_mtx[:, monomer_idx]
             return monomer_traj
 
-        monomer_mtx = np.stack(output_loaded["listeners__monomer_counts"])
+        monomer_mtx = np.stack(output_loaded["listeners__monomer_counts"])  # type: ignore[call-overload]
         monomer_trajs = [
             get_monomer_traj(monomer_label_type, monomer_id, monomer_mtx) for monomer_id in monomer_select_plot
         ]
         monomer_plot_dict = {key: val for (key, val) in zip(monomer_select_plot, monomer_trajs)}
-        monomer_plot_dict["time"] = output_loaded["time"]
+        monomer_plot_dict["time"] = output_loaded["time"]  # type: ignore[assignment]
         monomer_plot_df = pd.DataFrame(monomer_plot_dict)
         monomer_df_long = monomer_plot_df.melt(
             id_vars=["time"],
@@ -151,7 +151,7 @@ class SimulationDataService(ABC):
         return SimulationDataService.downsample(monomer_df_long)
 
     def get_rxns_df(self, output_loaded: pd.DataFrame, select_rxns: list[str]) -> pd.DataFrame:
-        rxns_mtx = np.stack(output_loaded["listeners__fba_results__base_reaction_fluxes"].values)
+        rxns_mtx = np.stack(output_loaded["listeners__fba_results__base_reaction_fluxes"].values)  # type: ignore[call-overload]
         rxns_idxs = [self.labels.rxn_ids.index(rxn) for rxn in select_rxns]
         rxn_trajs = [rxns_mtx[:, rxn_idx] for rxn_idx in rxns_idxs]
         plot_rxns_dict = {key: val for (key, val) in zip(select_rxns, rxn_trajs)}
@@ -177,11 +177,11 @@ class SimulationDataService(ABC):
             mrna_traj = mrna_mtx[:, mrna_idx]
             return mrna_traj
 
-        mrna_mtx = np.stack(output_loaded["listeners__rna_counts__full_mRNA_cistron_counts"])
+        mrna_mtx = np.stack(output_loaded["listeners__rna_counts__full_mRNA_cistron_counts"])  # type: ignore[call-overload]
         mrna_trajs = [get_mrna_traj(rna_label_type, mrna_id, mrna_mtx) for mrna_id in mrna_select_plot]
         # mrna_trajs = [mrna_mtx[:, mrna_idx] for mrna_idx in mrna_idxs]
         mrna_plot_dict = {key: val for (key, val) in zip(mrna_select_plot, mrna_trajs)}
-        mrna_plot_dict["time"] = output_loaded["time"]
+        mrna_plot_dict["time"] = output_loaded["time"]  # type: ignore[assignment]
         mrna_plot_df = pd.DataFrame(mrna_plot_dict)
         mrna_df_long = mrna_plot_df.melt(
             id_vars=["time"],  # Columns to keep as identifier variables
@@ -195,7 +195,7 @@ class SimulationDataService(ABC):
             output_loaded, molecule_id_type, bulk_sp_plot
         )
         plot_dict = {key: val for (key, val) in zip(bulk_sp_plot, sp_trajs)}
-        plot_dict["time"] = output_loaded["time"]
+        plot_dict["time"] = output_loaded["time"]  # type: ignore[assignment]
 
         plot_df = pd.DataFrame(plot_dict)
         df_long = plot_df.melt(
@@ -209,7 +209,7 @@ class SimulationDataService(ABC):
         if sim_data is None:
             sim_data = self.sim_data
         bulk_names = names
-        bulk_common_names = [sim_data.common_names.get_common_name(name) for name in bulk_names]
+        bulk_common_names = [sim_data.common_names.get_common_name(name) for name in bulk_names]  # type: ignore[no-untyped-call]
         duplicates = []
         for item in bulk_common_names:
             if bulk_common_names.count(item) > 1 and item not in duplicates:
@@ -258,13 +258,13 @@ class SimulationDataService(ABC):
             bulk_sp_traj = np.sum(bulk_mtx[:, sp_idxs], 1)
             return bulk_sp_traj
 
-        bulk_mtx = np.stack(output_loaded["bulk"].values)
+        bulk_mtx = np.stack(output_loaded["bulk"].values)  # type: ignore[call-overload]
         sp_trajs = [get_bulk_sp_traj(molecule_id_type, bulk_id, bulk_mtx) for bulk_id in bulk_sp_plot]
         return sp_trajs
 
     def _get_labels(self) -> Labels:
         def get_common_names(bulk_names: list[str], sim_data: SimulationDataEcoli) -> list[str]:
-            bulk_common_names = [sim_data.common_names.get_common_name(name) for name in bulk_names]
+            bulk_common_names = [sim_data.common_names.get_common_name(name) for name in bulk_names]  # type: ignore[no-untyped-call]
             duplicates = []
             for item in bulk_common_names:
                 if bulk_common_names.count(item) > 1 and item not in duplicates:
@@ -293,7 +293,7 @@ class SimulationDataService(ABC):
         cistron_data = sim_data.process.transcription.cistron_data
         mrna_cistron_ids = cistron_data["id"][cistron_data["is_mRNA"]].tolist()
         mrna_gene_ids = [cistron_id.strip("_RNA") for cistron_id in mrna_cistron_ids]
-        mrna_cistron_names = [sim_data.common_names.get_common_name(cistron_id) for cistron_id in mrna_cistron_ids]
+        mrna_cistron_names = [sim_data.common_names.get_common_name(cistron_id) for cistron_id in mrna_cistron_ids]  # type: ignore[no-untyped-call]
         monomer_ids = sim_data.process.translation.monomer_data["id"].tolist()
         monomer_ids = [id[:-3] for id in monomer_ids]
         monomer_names = get_common_names(monomer_ids, sim_data)

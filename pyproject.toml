@@ -80,7 +80,7 @@ docs = [
     "sphinx-rtd-theme>=3.0.2,<4",
 ]
 notebook = [
-    "vecoli>=0.0.2",
+    "vecoli>=0.0.4",
 ]
 
 [tool.uv]
@@ -112,9 +112,9 @@ files = ["sms_api", "tests", "app"]
 strict = true
 exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*"]
 
-[[tool.mypy.overrides]]
-module = "sms_api.data.data_service"
-disable_error_code = ["call-overload", "assignment", "import-untyped", "import-not-found"]
+# [[tool.mypy.overrides]]
+# module = "sms_api.data.data_service"
+# disable_error_code = ["call-overload", "assignment", "import-untyped", "import-not-found"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

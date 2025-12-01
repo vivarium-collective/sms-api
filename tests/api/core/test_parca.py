@@ -1,6 +1,7 @@
 import pytest
 
 import sms_api
+import sms_api.api
 from sms_api.api.client import Client
 from sms_api.api.client.api.ecoli_sim.get_parca_status import asyncio as get_parca_status_async
 from sms_api.api.client.api.ecoli_sim.get_parca_versions import asyncio as get_parca_versions_async
