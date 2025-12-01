@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.30-dev
+  version: 0.2.46-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -806,7 +806,7 @@ components:
           type: integer
           title: Id
         status:
-          $ref: '#/components/schemas/JobStatus'
+          $ref: '#/components/schemas/sms_api__data__models__JobStatus'
       type: object
       required:
       - id
@@ -817,8 +817,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-bb6f7ed82f852db2_1760105454665-a9bad6d0de5f8f19_1760105454665
-            simulation_name: sms_single-bb6f7ed82f852db2_1760105454665
+            experiment_id: sms_single-41b29221b7d3aca4_1764187546861-925d4a9e6e5f4645_1764187546862
+            simulation_name: sms_single-41b29221b7d3aca4_1764187546861
             metadata: {}
             run_parca: true
             generations: 2
@@ -1058,7 +1058,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-3c1fc18461ccfb72_1760105454568
+          default: sim_smsapi-c745bb77e09a6337_1764187543482
         metadata:
           additionalProperties: true
           type: object
@@ -1345,7 +1345,7 @@ components:
           title: Ref Id
         status:
           anyOf:
-          - $ref: '#/components/schemas/JobStatus'
+          - $ref: '#/components/schemas/sms_api__simulation__models__JobStatus'
           - type: 'null'
         start_time:
           anyOf:
@@ -1370,15 +1370,6 @@ components:
       - job_type
       - ref_id
       title: HpcRun
-    JobStatus:
-      type: string
-      enum:
-      - waiting
-      - queued
-      - running
-      - completed
-      - failed
-      title: JobStatus
     JobType:
       type: string
       enum:
@@ -1590,8 +1581,6 @@ components:
             type: string
           type: object
           title: Emitter Arg
-          default:
-            out_dir: /home/FCAM/svc_vivarium/workspace/api_outputs
         variants:
           additionalProperties:
             additionalProperties:
@@ -1850,7 +1839,7 @@ components:
           type: integer
           title: Id
         status:
-          $ref: '#/components/schemas/JobStatus'
+          $ref: '#/components/schemas/sms_api__simulation__models__JobStatus'
       type: object
       required:
       - id
@@ -1992,3 +1981,22 @@ components:
       - mass
       - time
       title: WorkerEvent
+    sms_api__data__models__JobStatus:
+      type: string
+      enum:
+      - waiting
+      - queued
+      - running
+      - completed
+      - failed
+      title: JobStatus
+    sms_api__simulation__models__JobStatus:
+      type: string
+      enum:
+      - waiting
+      - pending
+      - queued
+      - running
+      - completed
+      - failed
+      title: JobStatus

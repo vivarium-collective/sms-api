@@ -8,7 +8,8 @@ CONFIGURE_FILE_HANDLER = False
 
 @pytest.fixture(scope="session", autouse=True)
 def configure_logging() -> None:
-    # pass  # noqa: F401. to ensure logging is configured before any tests run
+    # pass
+    # ...to ensure logging is configured before any tests run
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -30,7 +31,8 @@ def configure_logging() -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def logger() -> logging.Logger:
-    # pass  # noqa: F401. to ensure logging is configured before any tests run
+    # pass
+    # ...to ensure logging is configured before any tests run
     logger = logging.getLogger("sms_api:pytest")
     logger.info("Logging is configured for the test session.")
     return logger

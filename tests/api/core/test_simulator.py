@@ -5,6 +5,7 @@ from typing import cast
 import pytest
 
 import sms_api
+import sms_api.api
 from sms_api.api.client import Client
 from sms_api.api.client.api.ecoli_sim.get_simulator_status import asyncio as get_simulator_status_async
 from sms_api.api.client.api.ecoli_sim.get_simulator_versions import asyncio as get_simulator_versions_async

@@ -1,9 +1,9 @@
 [project]
 name = "sms_api"
-version = "0.2.45-dev"
+version = "0.2.47-dev"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
-requires-python = ">=3.12,<4.0"
+requires-python = "==3.12.9"
 readme = "README.md"
 dependencies = [
     "uvicorn>=0.34.3,<0.35",
@@ -45,6 +45,7 @@ dependencies = [
     "aiofiles>=24.1.0",
     "aioboto3>=13.3.0",
     "types-aioboto3[s3]>=13.3.0",
+    "vecoli>=0.0.4"
 ]
 
 [project.urls]
@@ -78,6 +79,9 @@ docs = [
     "sphinx-autodoc-typehints>=3.2.0,<4",
     "sphinx-rtd-theme>=3.0.2,<4",
 ]
+# notebook = [
+#     "vecoli>=0.0.4",
+# ]
 
 [tool.uv]
 default-groups = [
@@ -108,13 +112,17 @@ files = ["sms_api", "tests", "app"]
 strict = true
 exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*"]
 
+# [[tool.mypy.overrides]]
+# module = "sms_api.data.data_service"
+# disable_error_code = ["call-overload", "assignment", "import-untyped", "import-not-found"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov-report=html"
 
 [tool.deptry]
 exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py"]
-ignore = ["DEP002", "DEP003", "DEP004"]
+ignore = ["DEP002", "DEP003", "DEP004", "DEP001"]
 
 [tool.ruff]
 target-version = "py39"
@@ -163,12 +171,12 @@ ignore = [
 #    "B008",
 #    # B026 Star-arg unpacking after a keyword argument is strongly discouraged
 #    "B026",
-    # B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-    "B904",
+     # B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
+     "B904",
 #    # C414 Unnecessary `list` call within `tuple()`
 #    "C414",
 #    # C416 Unnecessary `list` comprehension (rewrite using `list()`)
-#    "C416",
+     "C416",
 #    # C417 Unnecessary `map` usage (rewrite using a `list` comprehension)
 #    "C417",
 #    # C419 Unnecessary list comprehension
@@ -240,3 +248,4 @@ source = ["sms_api", "client"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
+"sms_api/data/data_service.py" = ["S608", "S101"]
