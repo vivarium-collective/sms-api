@@ -9,7 +9,6 @@ app = marimo.App(width="medium")
 @app.cell
 def _():
     from sms_api.config import get_settings
-    from sms_api.common.storage.file_paths import HPCFilePath
 
     env = get_settings()
     return (env,)
@@ -17,43 +16,24 @@ def _():
 
 @app.cell
 def _():
-    import marimo as mo
     import os
-    import pickle
+
+    import altair as alt
+    import marimo as mo
     import numpy as np
     import pandas as pd
-    import duckdb
-    import sys
-    import altair as alt
     import polars as pl
     from scipy.stats import pearsonr
-    import itertools
-
-    import itertools
-    import os
-    import pickle
-    from abc import ABC, abstractmethod
-    from dataclasses import dataclass
-    from pathlib import Path
-    from enum import StrEnum
-
-    from ecoli.library.sim_data import LoadSimData
-    from ecoli.library.parquet_emitter import (
-        dataset_sql,
-        ndlist_to_ndarray,
-        read_stacked_columns,
-        create_duckdb_conn,
-    )
     from wholecell.utils.protein_counts import get_simulated_validation_counts
-    from reconstruction.ecoli.simulation_data import SimulationDataEcoli
-    from validation.ecoli.validation_data import ValidationDataEcoli
 
-    return alt, get_simulated_validation_counts, mo, np, os, pd, pearsonr, pl
+    from sms_api.config import get_settings
+
+    return alt, get_simulated_validation_counts, mo, np, os, pd, pearsonr, pl, get_settings
 
 
 @app.cell
 def _(env):
-    from sms_api.data.data_service import SimulationDataServiceFS, PARTITION_GROUPS, AnalysisType
+    from sms_api.data.data_service import PARTITION_GROUPS, AnalysisType, SimulationDataServiceFS
 
     data_service = SimulationDataServiceFS(env=env)
     return AnalysisType, PARTITION_GROUPS, SimulationDataServiceFS, data_service
@@ -61,7 +41,7 @@ def _(env):
 
 @app.cell
 def _(data_service):
-    wd_root = str(data_service.wd_root)
+    # wd_root = str(data_service.wd_root)
     sim_data = data_service.sim_data
     validation_data = data_service.validation_data
     mrna_cistron_names = data_service.labels.mrna_cistron_names
@@ -248,7 +228,11 @@ def _(mo):
     <p style="font-family: Arial, sans-serif;">
         </p>
 
-    **Compound Molecule Counts:** The "bulk" store in the vEcoli model tracks individual molecule counts of modeled comopunds, namely, transcription units, RNAs, proteins, complexes, metabolites and small molecules. In this section, we generate time course plots of user selected compounds. If no pathway is selected, you may specify compounds to plot from the following menu, using their BioCyc IDs or display names.
+    **Compound Molecule Counts:** The "bulk" store in the vEcoli model tracks
+    individual molecule counts of modeled comopunds, namely, transcription units, RNAs,
+    proteins, complexes, metabolites and small molecules. In this section, we generate
+    time course plots of user selected compounds. If no pathway is selected, you may
+    specify compounds to plot from the following menu, using their BioCyc IDs or display names.
     """
     )
     return
@@ -306,7 +290,8 @@ def _(mo):
     <p style="font-family: Arial, sans-serif;">
         </p>
 
-    **mRNA Counts:** In this section, we generate time course plots of selected mRNA cistron counts. If no pathway is selected, mRNAs may be specified with gene names or their BioCyc IDs.
+    **mRNA Counts:** In this section, we generate time course plots of selected mRNA cistron counts.
+    If no pathway is selected, mRNAs may be specified with gene names or their BioCyc IDs.
     """
     )
     return
@@ -417,7 +402,9 @@ def _(mo):
         """
     <p style="font-family: Arial, sans-serif;">
         </p>
-    **Protein Monomer Counts:** This time course plot visualizes the protein content of the simulation output in terms of monomer counts. Monomers to plot can be specified with their BioCyc IDs or display names.
+    **Protein Monomer Counts:** This time course plot visualizes the protein content of the
+    simulation output in terms of monomer counts. Monomers to plot can be specified with their
+    BioCyc IDs or display names.
     """
     )
     return
@@ -471,7 +458,8 @@ def _(mo):
     <p style="font-family: Arial, sans-serif;">
         </p>
 
-    **Metabolic Reaction Fluxes:** In this plot, we visualize time course of metabolic reaction fluxes. Individual reactions can be selected using their BioCyc IDs
+    **Metabolic Reaction Fluxes:** In this plot, we visualize time course of metabolic reaction fluxes.
+    Individual reactions can be selected using their BioCyc IDs
     """
     )
     return
@@ -601,7 +589,12 @@ def _(mo):
         """
     <p style="font-family: Arial, sans-serif;">
         </p>
-    **Protein Count Validation:** This is a scatter plot comparing simulated average protein counts to experimental proteomics datasets. This is applicable to proteins overlapping the modeled proteins and either of the validation datasets. You may choose to visualize all available proteins or pathway specific proteins. Alternatively, the attached drop down menu can be used to select proteins using their BioCyc IDs or display names.
+    **Protein Count Validation:** This is a scatter plot comparing simulated average
+    protein counts to experimental proteomics datasets. This is applicable to proteins
+    overlapping the modeled proteins and either of the validation datasets.
+    You may choose to visualize all available proteins or pathway specific proteins.
+    Alternatively, the attached drop down menu can be used to select proteins using
+    their BioCyc IDs or display names.
     """
     )
     return

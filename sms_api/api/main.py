@@ -68,13 +68,10 @@ ENV = get_settings()
 assets_dir = Path(ENV.assets_dir)
 ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
 UI_NAMES = [
-    # "analyze",
     "antibiotic",
     "biofactory",
-    "experiment",
-    "explore",
-    # "inference",
-    # "single_cell",
+    "explore",  # uses dataservice, with nfs
+    # "single_cell",  # uses /core router w/ generated client, no nfs
 ]
 
 
@@ -138,9 +135,6 @@ for filename in sorted(os.listdir(ui_dir)):
         if "analyze" in filename:
             app_name = "Analyze"
             desc = "Run Simulation Analyses"
-        elif "experiment" in filename:
-            app_name = "Experiment"
-            desc = "Run a Simulation Experiment"
         elif "explore" in filename:
             app_name = "Explore"
             desc = "Introspect and explore simulation data"
@@ -159,11 +153,10 @@ templates = Jinja2Templates(directory=templates_dir)
 @app.get("/", tags=["SMS API"])
 async def home(request: Request) -> templating._TemplateResponse:
     app_info = [
-        # ("Analyze", "Run Simulation Analyses"),
         ("Antibiotic", "Explore new possibilities"),
         ("Biofactory", "Create new strains"),
-        ("Experiment", "Design and run simulation experiments"),
         ("Explore", "Introspect and explore simulation data"),
+        # ("Single Cell", "interactive"),
     ]
     return templates.TemplateResponse(
         request, "home.html", {"request": request, "app_names": app_info, "marimo_path_prefix": "/ws"}
