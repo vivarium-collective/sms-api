@@ -22,7 +22,7 @@ spec:
         fsGroup: 10000
       containers:
         - name: api
-          image: ghcr.io/biosimulations/sms-api:0.2.45-dev  # 0.2.30-dev
+          image: ghcr.io/biosimulations/sms-api:0.2.50-dev  # 0.2.45-dev  # 0.2.30-dev
           # STABLE SRI WORKING VERSION: image: ghcr.io/biosimulations/sms-api:0.2.15-dev
           imagePullPolicy: Always
           ports:
