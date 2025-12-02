@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.14.17"
+__generated_with = "0.18.1"
 app = marimo.App(
     width="medium",
     app_title="Atlantis - Single Cell",
@@ -19,14 +19,14 @@ def _():
 
 @app.cell
 def _(mo):
-    mo.md(
-        r"""
+    mo.md(r"""
     # EcoliSim: Interactive Simulation Interface
-    Welcome to **EcoliSim**, a browser-based interface for running and analyzing whole-cell *E. coli* simulations. This notebook is powered by [Marimo](https://github.com/marimo-team/marimo) and provides lightweight access to *E. coli* models relevant to microbial dynamics, biomanufacturing, and antibiotic response.
+    Welcome to **EcoliSim**, a browser-based interface for running and analyzing whole-cell *E. coli* simulations.
+    This notebook is powered by [Marimo](https://github.com/marimo-team/marimo) and provides lightweight access
+    to *E. coli* models relevant to microbial dynamics, biomanufacturing, and antibiotic response.
 
     Use the controls in each section to simulate growth, visualize outcomes, and explore parameter spaces.
-    """
-    )
+    """)
     return
 
 
@@ -36,42 +36,34 @@ def _():
     # this service provides the data as needed specifically by the notebooks
     # have listeners for the registered callbacks
 
-    import os
-    import json
     import asyncio
+    import json
     import time
-    import logging
-    from pprint import pp, pformat
-    from pathlib import Path
+    from collections.abc import Generator
     from contextlib import contextmanager
-    from enum import StrEnum, Enum
-    from typing import Generator
+    from enum import Enum, StrEnum
+    from pprint import pformat
 
+    import altair as alt
     import marimo as mo
     import polars as pl
-    import altair as alt
-    from altair import Chart
-    from fastapi import HTTPException
-    from httpx import AsyncClient, QueryParams, Client, HTTPStatusError, Timeout
+    from httpx import Client, HTTPStatusError, Timeout
 
-    from sms_api.simulation.models import (
-        SimulatorVersion,
-        EcoliSimulationRequest,
-        EcoliExperiment,
-        WorkerEvent,
-        ParcaDataset,
-        BaseModel,
-        JobStatus,
-    )
     from sms_api.config import get_settings
-    from app.api.simulations import EcoliSim
-    from app.api.client_wrapper import ClientWrapper
+    from sms_api.simulation.models import (
+        BaseModel,
+        EcoliExperiment,
+        EcoliSimulationRequest,
+        JobStatus,
+        ParcaDataset,
+        WorkerEvent,
+    )
+    # from app.api.simulations import EcoliSim
+    # from app.api.client_wrapper import ClientWrapper
 
-    logger = logging.getLogger(__file__)
+    # logger = logging.getLogger(__file__)
 
     def display_dto(dto: BaseModel | None = None) -> mo.Html | None:
-        from pprint import pformat
-
         if not dto:
             return None
         return mo.md(f"```python\n{pformat(dto.dict())}\n```")
@@ -103,13 +95,14 @@ def _():
 def _(Client, Generator, StrEnum, Timeout, contextmanager, get_settings):
     # -- api client and call setup -- #
 
-    SIMULATION_TEST_ID = 3
+    # SIMULATION_TEST_ID = 3
 
     def get_base_url() -> str:
         settings = get_settings()
         api_server_url = settings.marimo_api_server
         if not len(api_server_url):
-            api_server_url = "http://localhost:8000"
+            # api_server_url = "http://localhost:8000"
+            api_server_url = "https://sms.cam.uchc.edu"
         return f"{api_server_url}/core"
 
     @contextmanager
@@ -398,7 +391,7 @@ async def _(
     EcoliExperiment,
     asyncio,
     on_run_simulation,
-    request: "EcoliSimulationRequest",
+    request,
     run_simulation_button,
     set_is_polling,
 ):
@@ -415,7 +408,7 @@ async def _(
 @app.cell
 def _(
     EcoliExperiment,
-    experiment: "EcoliExperiment | None",
+    experiment,
     set_simulation_id,
 ):
     # get simulation id
@@ -520,7 +513,7 @@ def _(
             if icounter:
                 set_counter(icounter)
         else:
-            print(f"Not polling")
+            print("Not polling")
 
     return (on_poll,)
 
@@ -590,16 +583,16 @@ def _(get_events_df, get_is_polling, mo, stack_items):
 @app.cell
 def _(mo):
     # notebook (edit-mode) specific
-    sidenav = mo.sidebar([
-        mo.md("# SMS API"),
-        mo.nav_menu(
-            {
-                "https://sms-api.readthedocs.io/en/latest/": f"{mo.icon('pajamas:doc-text')} Documentation",
-                "https://github.com/vivarium-collective/sms-api": f"{mo.icon('pajamas:github')} GitHub",
-            },
-            orientation="vertical",
-        ),
-    ])
+    # sidenav = mo.sidebar([
+    #     mo.md("# SMS API"),
+    #     mo.nav_menu(
+    #         {
+    #             "https://sms-api.readthedocs.io/en/latest/": f"{mo.icon('pajamas:doc-text')} Documentation",
+    #             "https://github.com/vivarium-collective/sms-api": f"{mo.icon('pajamas:github')} GitHub",
+    #         },
+    #         orientation="vertical",
+    #     ),
+    # ])
 
     # app menu content (upper-right-hand)
     menu_content = {
@@ -608,8 +601,8 @@ def _(mo):
         "https://covertlab.github.io/vEcoli/": f"{mo.icon('cil:fingerprint')} vEcoli",
     }
     nav = mo.nav_menu(menu_content, orientation="horizontal")
-    nav
-    return
+    nav  # noqa: B018
+    return nav
 
 
 @app.cell
@@ -627,7 +620,8 @@ def _(get_events, get_events_df, latest_chart, mo):
             - _Explore_: Explore the available simulation data in real-time and create customized analysis plots
             - _Visualize_: Visualize the simulation data in real time as a mass fraction plot.
             - _Configure_: Parameterize and configure the simulation. _(Coming Soon)_
-            - _{mo.icon("pepicons-pop:refresh")}_: Click the dropdown menu to the left of the refresh button and select "off". The simulation will still run, but data retrieval will be paused.
+            - _{mo.icon("pepicons-pop:refresh")}_: Click the dropdown menu to the left of the refresh button
+                and select "off". The simulation will still run, but data retrieval will be paused.
         """).callout(kind="info")
 
     params = mo.md(f"""
@@ -644,8 +638,8 @@ def _(get_events, get_events_df, latest_chart, mo):
         f"{mo.icon('material-symbols:help-outline-rounded')} Help": how_to,
     })
 
-    how_to_display = mo.accordion({f"{mo.icon('material-symbols:help-outline-rounded')}": how_to})
-    tabs
+    how_to_display = mo.accordion({f"{mo.icon('material-symbols:help-outline-rounded')}": how_to})  # noqa: F841
+    tabs  # noqa: B018
     return
 
 
@@ -755,6 +749,7 @@ def _(spinner):
 @app.cell
 def _():
     import requests
+
     from sms_api.simulation.models import SimulationConfig
 
     def post_wcm_config(config: dict, config_id: str = "test", url_base: str = "http://localhost:8888"):
@@ -815,7 +810,9 @@ def _(requests):
 
 @app.cell
 def _(mo):
-    mo.md(r"""### Customize and Upload Config""")
+    mo.md(r"""
+    ### Customize and Upload Config
+    """)
     return
 
 
@@ -883,7 +880,7 @@ def _(config, get_config_ui, json, mo):
 
 @app.cell
 def _(SimulationConfig, json, set_config, ui):
-    set_config(SimulationConfig(**{k: json.loads(v) for k, v in ui.value.items()}))
+    set_config(SimulationConfig(experiment_id="single_cell_test", **{k: json.loads(v) for k, v in ui.value.items()}))
     return
 
 
@@ -913,7 +910,9 @@ def _(config_id):
 
 @app.cell
 def _(mo):
-    mo.md(r"""### Use that config to run an experiment workflow""")
+    mo.md(r"""
+    ### Use that config to run an experiment workflow
+    """)
     return
 
 

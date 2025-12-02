@@ -5,11 +5,15 @@ app = marimo.App(width="medium")
 
 
 @app.cell
-def _(mo):
+def _(mo) -> None:
     mo.md(
         r"""
     # EcoliSim: Interactive Simulation Interface
-    Welcome to **EcoliSim**, a browser-based interface for running and analyzing whole-cell *E. coli* simulations. This notebook is powered by [Marimo](https://github.com/marimo-team/marimo) and provides lightweight access to *E. coli* models relevant to microbial dynamics, biomanufacturing, and antibiotic response.
+    Welcome to **EcoliSim**, a browser-based interface for running and
+    analyzing whole-cell *E. coli* simulations. This notebook is powered
+    by [Marimo](https://github.com/marimo-team/marimo) and provides lightweight
+    access to *E. coli* models relevant to microbial dynamics, biomanufacturing,
+    and antibiotic response.
 
     Use the controls in each section to simulate growth, visualize outcomes, and explore parameter spaces.
     """
@@ -18,17 +22,15 @@ def _(mo):
 
 
 @app.cell
-def _():
+def _() -> tuple:
     import marimo as mo
     import numpy as np
 
-    from app.api.simulations import EcoliSim
-
-    return EcoliSim, mo, np
+    return mo, np
 
 
 @app.cell
-def _(mo):
+def _(mo) -> None:
     mo.md(
         r"""
     ## Biomanufacturing
