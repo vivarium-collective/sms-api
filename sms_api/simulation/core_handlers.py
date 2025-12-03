@@ -2,7 +2,7 @@ import logging
 import random
 import string
 
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import HTTPException
 
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.database_service import DatabaseService
@@ -72,7 +72,6 @@ async def upload_simulator(
     git_branch: str,
     simulation_service_slurm: SimulationService | SimulationServiceHpc | None = None,
     database_service: DatabaseService | None = None,
-    background_tasks: BackgroundTasks | None = None,
 ) -> SimulatorVersion:
     if not simulation_service_slurm:
         simulation_service_slurm = get_simulation_service()
@@ -96,32 +95,20 @@ async def upload_simulator(
             simulator = _simulator
             break
 
-    # insert the latest commit into the database
+    # insert the latest commit into the database and submit build job
     if simulator is None:
         simulator = await database_service.insert_simulator(
             git_commit_hash=commit_hash, git_repo_url=git_repo_url, git_branch=git_branch
         )
 
-        async def dispatch_job() -> None:
-            # clone the repository if needed
-            await simulation_service_slurm.clone_repository_if_needed(
-                git_commit_hash=simulator.git_commit_hash,
-                git_repo_url=simulator.git_repo_url,
-                git_branch=simulator.git_branch,
-            )
-            # build the image
-            build_slurmjobid = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
-            await database_service.insert_hpcrun(
-                slurmjobid=build_slurmjobid,
-                job_type=JobType.BUILD_IMAGE,
-                ref_id=simulator.database_id,
-                correlation_id="N/A",
-            )
-
-        if background_tasks is not None:
-            background_tasks.add_task(dispatch_job)
-        else:
-            await dispatch_job()
+        # Submit build job (which now includes cloning the repository)
+        build_slurmjobid = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
+        await database_service.insert_hpcrun(
+            slurmjobid=build_slurmjobid,
+            job_type=JobType.BUILD_IMAGE,
+            ref_id=simulator.database_id,
+            correlation_id="N/A",
+        )
 
     return simulator
 
@@ -131,7 +118,6 @@ async def run_parca(
     simulation_service_slurm: SimulationService | None = None,
     database_service: DatabaseService | None = None,
     parca_config: dict[str, int | float | str] | None = None,
-    background_tasks: BackgroundTasks | None = None,
 ) -> ParcaDataset:
     if not simulation_service_slurm:
         simulation_service_slurm = get_simulation_service()
@@ -147,21 +133,15 @@ async def run_parca(
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=parca_config or {})
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
-    async def dispatch_job() -> None:
-        # run parca
-        parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
-        _hpc_run = await database_service.insert_hpcrun(
-            slurmjobid=parca_slurmjobid,
-            job_type=JobType.PARCA,
-            ref_id=parca_dataset.database_id,
-            correlation_id="N/A",
-        )
+    # Submit parca job
+    parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
+    _hpc_run = await database_service.insert_hpcrun(
+        slurmjobid=parca_slurmjobid,
+        job_type=JobType.PARCA,
+        ref_id=parca_dataset.database_id,
+        correlation_id="N/A",
+    )
 
-    # submit run parca
-    if background_tasks is not None:
-        background_tasks.add_task(dispatch_job)
-    else:
-        await dispatch_job()
     return parca_dataset
 
 

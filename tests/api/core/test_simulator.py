@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 from typing import cast
 
@@ -51,15 +50,7 @@ async def test_insert_simulator_version(
     assert simulator_status.job_type == sms_api.api.client.models.job_type.JobType.BUILD_IMAGE
     assert simulator_status.ref_id == returned_simulator_version_dto.database_id
 
-    # wait for background tasks to complete
-    await asyncio.sleep(2)
-
-    # verify that background tasks were executed
-    assert simulation_service_mock_clone_and_build.clone_repo_args == (
-        expected_commit_hash,
-        expected_git_repo_url,
-        expected_git_branch,
-    )
+    # Verify that the build job was submitted (cloning now happens in the SBATCH script)
     created_at: datetime.datetime | None = None
     if returned_simulator_version_dto.created_at is not UNSET:
         created_at = cast(datetime.datetime, returned_simulator_version_dto.created_at)

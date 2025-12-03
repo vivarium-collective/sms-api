@@ -8,10 +8,13 @@ from testcontainers.postgres import PostgresContainer  # type: ignore [import-un
 from sms_api.dependencies import get_database_service, get_postgres_engine, set_database_service, set_postgres_engine
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.tables_orm import create_db
+from tests.docker_utils import SKIP_DOCKER_REASON, SKIP_DOCKER_TESTS
 
 
 @pytest.fixture(scope="module")
 def postgres_url() -> Generator[str, None, None]:
+    if SKIP_DOCKER_TESTS:
+        pytest.skip(SKIP_DOCKER_REASON)
     with PostgresContainer("postgres:15") as postgres:
         url = postgres.get_connection_url().replace("postgresql+psycopg2://", "postgresql+asyncpg://")
         yield url
