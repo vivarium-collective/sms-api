@@ -7,6 +7,10 @@ on:
         description: "Version to build and push (optional)"
         required: false
         default: ""
+      service:
+          description: "Service to build and push (optional, choose one of: api || ptools)"
+          required: false
+          default: "api"
 
 jobs:
   build-and-push:
@@ -29,9 +33,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
+      # - name: Make script executable
+      #   run: chmod +x ./scripts/build_action.sh
       - name: Make script executable
-        run: chmod +x ./scripts/build_action.sh
+        run: chmod +x ./scripts/github_action_build.sh
 
       - name: Run build and push script
         run: |
-          ./scripts/build_action.sh "${{ inputs.version }}"
+          ./scripts/github_action_build.sh "${{ inputs.version }}"
