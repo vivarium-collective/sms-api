@@ -5,25 +5,29 @@ kind: Kustomization
 # - name: ghcr.io/vivarium-collective/sms-api
 #   newTag: 0.2.15-dev
 
-namespace: sms-api-rke-temp
+namespace: sms-api-rke
 
 images:
-  - name: ghcr.io/biosimulations/sms-api
-    newTag: 0.2.50-dev  # 0.2.45-dev  # 0.2.30-dev
-  - name: ghcr.io/vivarium-collective/pathway-tools
-    newTag: 0.1.0
+  - name: ghcr.io/vivarium-collective/sms-api
+    newTag: 0.2.50-dev  # 0.2.49-dev 0.2.30-dev
+  - name: ghcr.io/vivarium-collective/sms-ptools
+    newTag: 0.2.48-dev
 
 replicas:
   - count: 1
     name: api
   - count: 1
     name: ptools
+  - count: 1
+    name: redis
 
 resources:
-#  - ingress.yaml
+  - ingress.yaml
   - api-cache-pvc.yaml
-  - nats-svc.yaml
+  - redis-svc.yaml
   - haproxy-ssh-svc.yaml
+  - vivarium-home-pv.yaml
+  - vivarium-home-pvc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
   - secret-ssh.yaml

@@ -4,6 +4,6 @@ kind: Kustomization
 resources:
   - api.yaml
 #  - localstack.yaml
-  - nats.yaml
+  - redis.yaml
   - ptools.yaml
   - haproxy-ssh.yaml

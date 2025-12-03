@@ -22,8 +22,7 @@ spec:
         fsGroup: 10000
       containers:
         - name: api
-          image: ghcr.io/biosimulations/sms-api:0.2.50-dev  # 0.2.45-dev  # 0.2.30-dev
-          # STABLE SRI WORKING VERSION: image: ghcr.io/biosimulations/sms-api:0.2.15-dev
+          image: ghcr.io/vivarium-collective/sms-api:0.2.50-dev  # 0.2.45-dev 0.2.30-dev
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
@@ -61,6 +60,9 @@ spec:
           volumeMounts:
             - name: api-cache-pvc
               mountPath: /app/scratch
+            - name: vivarium-home-pvc
+              mountPath: /home/FCAM/svc_vivarium
+              subPath: svc_vivarium
             - name: slurm-submit-key-file
               mountPath: /run/secrets/slurm_submit_key_file
             - name: ssh-known-hosts
@@ -70,6 +72,9 @@ spec:
         - name: api-cache-pvc
           persistentVolumeClaim:
             claimName: api-cache-pvc
+        - name: vivarium-home-pvc
+          persistentVolumeClaim:
+            claimName: vivarium-home-pvc
         - name: slurm-submit-key-file
           secret:
             defaultMode: 256 # 0400
