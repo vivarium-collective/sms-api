@@ -3,13 +3,13 @@ kind: Kustomization
 
 # STABLE SRI WORKING VERSION:
 # - name: ghcr.io/vivarium-collective/sms-api
-#   newTag: 0.2.53-dev
+#   newTag: 0.2.54-dev
 
 namespace: sms-api-rke
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.2.54-dev
+    newTag: 0.2.55-dev
   - name: ghcr.io/vivarium-collective/sms-ptools
     newTag: 0.2.48-dev
 
