@@ -53,7 +53,7 @@ COPY --chown=appuser:appgroup clients /app/clients
 COPY --chown=appuser:appgroup pytest.ini alembic.ini README.md /app/
 COPY --chown=appuser:appgroup assets/simulation /app/assets/simulation
 COPY --chown=appuser:appgroup assets/*.json /app/assets/
-
+COPY --chown=appuser:appgroup assets/app /app/assets/app
 # Sync the project
 RUN uv sync --frozen
 
