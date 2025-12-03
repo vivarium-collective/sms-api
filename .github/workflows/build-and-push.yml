@@ -10,7 +10,7 @@ on:
       service:
           description: "Service to build and push (optional, choose one of: api || ptools)"
           required: false
-          default: "api"
+          default: ""
 
 jobs:
   build-and-push:
@@ -40,4 +40,4 @@ jobs:
 
       - name: Run build and push script
         run: |
-          ./scripts/github_action_build.sh "${{ inputs.version }}"
+          ./scripts/github_action_build.sh "${{ inputs.version }}" "${{ inputs.service }}"
