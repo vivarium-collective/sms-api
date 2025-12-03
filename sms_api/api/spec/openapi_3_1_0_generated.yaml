@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.53-dev
+  version: 0.2.54-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -827,8 +827,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-687ce29d38bb9fed_1764735263658-0d9a3132fc57ffe8_1764735263658
-            simulation_name: sms_single-687ce29d38bb9fed_1764735263658
+            experiment_id: sms_single-5e437368bebbd098_1764793456721-651cab237832db20_1764793456721
+            simulation_name: sms_single-5e437368bebbd098_1764793456721
             metadata: {}
             run_parca: true
             generations: 2
@@ -1068,7 +1068,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-46a4eeded10101b9_1764735263169
+          default: sim_smsapi-790911b241589d64_1764793455889
         metadata:
           additionalProperties: true
           type: object

@@ -2,4 +2,4 @@
 # STABLE: "0.2.10-dev"
 # PREVIOUS STABLE: "0.2.8"
 # LATEST STABLE: "0.2.54-dev"
-__version__ = "0.2.55-dev"
+__version__ = "0.2.54-dev"
