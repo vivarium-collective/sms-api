@@ -1,0 +1,137 @@
+"""
+Template for new Marimo notebooks
+================================================================================================================================================
+This template serves to be the starting point for all new Marimo UIs.
+To get started, simply do the following:
+
+1. Copy the template as a new Marimo module:
+    ```bash
+    cp app/ui/ui_template app/ui/<NOTEBOOK_NAME>.py
+    ```
+
+2. Delegate the logic of your new notebook in the following manner:
+    - **User-specified parameter collection/Data Display/UI Content**: use the ``marimo.ui`` library to create interactive
+        user input (essentially ``<input>`` elements) whose states are collected by the Data Loading/Transformation function
+        below and used to parameterize the subsequent data transformations therein. **Note that the input to these ui components
+        may be static files that are read-in, simData, validationData, or any data that parameterizes the UI components themselves.**
+        For example, the ``explore.py`` UI uses a statically defined ``pathways.txt`` file to parameterize a ``marimo.ui.dropdown``
+        element whose content are the pathways defined in file. For more information, see the Marimo documentation for user input
+        elements at: https://docs.marimo.io/api/inputs/
+            Input:
+                simData, validationData, or any other custom data.
+            Output:
+                Data Loading/Transformation parameters (variant, generation, seed, experiment_id, etc. Whatever is required
+                for the data loader as explained below)
+
+    - **Data Loading/Transformation**: instantiate the ``sms_api.data.data_service.SimulationDataServiceFS`` class. The
+        ``SimulationDataService`` interface allows for implementations with uniquely different simulation
+        output file sources. Let the naming convention for new implementations of this interface be as such:
+        ``SimulationDataService<SOURCE_DOMAIN>``, where ``<SOURCE_DOMAIN>`` denotes where the simulation output
+        files (for now, parquet) are stored. Currently, the only implementation is ``SimulationDataServiceFS``, where
+        ``FS`` stands for "File System" which in this case allows you to compose new notebooks as if you were
+        using your own local filesystem, except with a different ``$HOME`` (``wd_root``, for example). **Note that
+        you may want to extend an implementation (i.e.; ``SimulationDataServiceFS``) to fit the desired functionality of your new notebook.
+        In this case, please do the following:
+            2a. Create a new class in the ``sms_api.data.data_service`` module which inherits that original implementation (NOT
+                the ``SimulationDataService`` base class), and whose name is ``SimulationDataService<SOURCE_DOMAIN><SPECIFIED_DOMAIN>`` where
+                ``<SPECIFIED_DOMAIN>`` should explain the extended functionality (for example ``SimulationDataServiceFSAutoEncoder`` would
+                mean that the data service reads raw simulation outputs (pq files) using the inherited IO logic and performs further
+                autoencoding logic.
+            2b. In cell #4 below, replace the ``SimulationDataFS`` import with the ``SimulationDataService<SOURCE_DOMAIN><SPECIFIED_DOMAIN>``
+               implementation you created during #2a
+
+            Input:
+                Experiment ID, Partitioning spec, and any other params you require **collected from Marimo components**
+
+            Output:
+                A Dataframe whose content is presented as the end-user notebook display data. (Mostly dfs that are plotted with Altair)
+
+3. Assuming you are developing these notebooks using ``marimo edit`` (which if you are not, you absolutely need to), ensuring that #1 and #2 are
+performed as specified above after spinning up the notebook will then allow you to create new cells!
+================================================================================================================================================
+"""
+
+
+import marimo
+
+__generated_with = "0.18.1"
+app = marimo.App(width="medium")
+
+
+@app.cell
+def _():
+    # /// script
+    # [tool.marimo.display]
+    # theme = "dark"
+    # ///
+    return
+
+
+@app.cell
+def _():
+    from sms_api.config import get_settings
+
+    env = get_settings()
+    return (env,)
+
+
+@app.cell
+def _():
+    import os
+    from pathlib import Path
+
+    import altair as alt
+    import marimo as mo
+    import numpy as np
+    import pandas as pd
+    import polars as pl
+    from scipy.stats import pearsonr
+    from wholecell.utils.protein_counts import get_simulated_validation_counts
+
+    return (
+        Path,
+        alt,
+        get_simulated_validation_counts,
+        mo,
+        np,
+        os,
+        pd,
+        pearsonr,
+        pl,
+    )
+
+
+@app.cell
+def _(env):
+    from sms_api.data.data_service import PARTITION_GROUPS, AnalysisType, SimulationDataServiceFS
+
+    data_service = SimulationDataServiceFS(env=env)
+    return (
+        AnalysisType,
+        PARTITION_GROUPS,
+        SimulationDataServiceFS,
+        data_service,
+    )
+
+
+@app.cell
+def _(data_service):
+    # wd_root = str(data_service.wd_root)
+    sim_data = data_service.sim_data
+    validation_data = data_service.validation_data
+    mrna_cistron_names = data_service.labels.mrna_cistron_names
+    monomer_names = data_service.labels.monomer_names
+    monomer_ids = data_service.labels.monomer_ids
+    rxn_ids = data_service.labels.rxn_ids
+    return (
+        monomer_ids,
+        monomer_names,
+        mrna_cistron_names,
+        rxn_ids,
+        sim_data,
+        validation_data,
+    )
+
+
+if __name__ == "__main__":
+    app.run()
