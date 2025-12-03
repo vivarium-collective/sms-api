@@ -1,0 +1,41 @@
+services:
+  api:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile-api
+    image: ghcr.io/vivarium-collective/sms-api:latest
+    container_name: api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks:
+      - smsnet
+
+  ptools:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile-ptools
+    image: ghcr.io/vivarium-collective/pathway-tools:0.1.1
+    container_name: ptools
+    ports:
+      - "1555:1555"
+    networks:
+      - smsnet
+
+  db:
+    image: postgres:17
+    container_name: postgresql
+    environment:
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_USER: devuser
+      POSTGRES_DB: sms
+    ports:
+      - "5432:5432"
+    networks:
+      - smsnet
+
+networks:
+  smsnet:
+    driver: bridge
