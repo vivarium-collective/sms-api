@@ -6,6 +6,15 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
+    # /// script
+    # [tool.marimo.display]
+    # theme = "dark"
+    # ///
+    return
+
+
+@app.cell
+def _():
     from sms_api.config import get_settings
 
     env = get_settings()
