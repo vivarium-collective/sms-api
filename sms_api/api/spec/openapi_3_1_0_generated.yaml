@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.46-dev
+  version: 0.2.53-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -644,10 +644,20 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
   /:
     get:
+      summary: Redirect Old Path
+      operationId: redirect_old_path__get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /home:
+    get:
       tags:
       - SMS API
       summary: Home
-      operationId: home__get
+      operationId: home_home_get
       responses:
         '200':
           description: Successful Response
@@ -817,12 +827,12 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-41b29221b7d3aca4_1764187546861-925d4a9e6e5f4645_1764187546862
-            simulation_name: sms_single-41b29221b7d3aca4_1764187546861
+            experiment_id: sms_single-687ce29d38bb9fed_1764735263658-0d9a3132fc57ffe8_1764735263658
+            simulation_name: sms_single-687ce29d38bb9fed_1764735263658
             metadata: {}
             run_parca: true
             generations: 2
-            n_init_sims: 1
+            n_init_sims: 3
             lineage_seed: 3
             max_duration: 10800.0
             initial_global_time: 0.0
@@ -1058,7 +1068,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-c745bb77e09a6337_1764187543482
+          default: sim_smsapi-46a4eeded10101b9_1764735263169
         metadata:
           additionalProperties: true
           type: object
@@ -1075,7 +1085,7 @@ components:
         n_init_sims:
           type: integer
           title: N Init Sims
-          default: 1
+          default: 3
         lineage_seed:
           type: integer
           title: Lineage Seed
