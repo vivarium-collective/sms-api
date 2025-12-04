@@ -22,7 +22,6 @@ replicas:
 resources:
   - ingress.yaml
   - storageclass-gp3-retain.yaml
-  - vivarium-home-pv.yaml
   - vivarium-home-pvc.yaml
   - api-cache-pvc.yaml
   - secret-ghcr.yaml
