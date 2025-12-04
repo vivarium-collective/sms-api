@@ -3,7 +3,7 @@ import pickle
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 import duckdb
 import numpy as np
@@ -96,6 +96,7 @@ class SimulationDataService(ABC):
         df_ds = df_long[np.isin(df_long["time"], tp_ds)]
         return df_ds
 
+    @abstractmethod
     def get_monomer_counts(
         self, exp_select: str, analysis_type: AnalysisType, partitions_all: dict[str, str | int]
     ) -> np.ndarray[tuple[Any, ...], np.dtype[Any]]:
@@ -125,9 +126,13 @@ class SimulationDataService(ABC):
         monomer_counts = self.conn.sql(sql_monomer_validation).pl()
         return ndlist_to_ndarray(monomer_counts["avgCounts"])
 
+    def get_common_names(self, names: list[str], exp_select: str) -> list[str]:
+        pass
+
     def get_monomers_df(
-        self, output_loaded: pd.DataFrame, monomer_label_type: str, monomer_select_plot: list[str]
+        self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str, monomer_label_type: str, monomer_select_plot: list[str]
     ) -> pd.DataFrame:
+        output_loaded = self.get_outputs(analysis_type=analysis_type, partitions_all=partitions_all, exp_select=exp_select)
         def get_monomer_traj(
             monomer_label_type: str, monomer_input: str, monomer_mtx: np.ndarray[tuple[Any, ...], np.dtype[Any]]
         ) -> np.ndarray[tuple[Any, ...], Any]:
@@ -153,7 +158,8 @@ class SimulationDataService(ABC):
         )
         return SimulationDataService.downsample(monomer_df_long)
 
-    def get_rxns_df(self, output_loaded: pd.DataFrame, select_rxns: list[str]) -> pd.DataFrame:
+    def get_rxns_df(self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str, select_rxns: list[str]) -> pd.DataFrame:
+        output_loaded = self.get_outputs(analysis_type=analysis_type, partitions_all=partitions_all, exp_select=exp_select)
         rxns_mtx = np.stack(output_loaded["listeners__fba_results__base_reaction_fluxes"].values)  # type: ignore[call-overload]
         rxns_idxs = [self.labels.rxn_ids.index(rxn) for rxn in select_rxns]
         rxn_trajs = [rxns_mtx[:, rxn_idx] for rxn_idx in rxns_idxs]
@@ -168,8 +174,9 @@ class SimulationDataService(ABC):
         return SimulationDataService.downsample(rxns_df_long)
 
     def get_mrna_df(
-        self, output_loaded: pd.DataFrame, rna_label_type: str, mrna_select_plot: list[str]
+        self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str, rna_label_type: str, mrna_select_plot: list[str]
     ) -> pd.DataFrame:
+        output_loaded = self.get_outputs(analysis_type=analysis_type, partitions_all=partitions_all, exp_select=exp_select)
         def get_mrna_traj(rna_label_type: str, mrna_input: str, mrna_mtx: np.ndarray) -> np.ndarray:
             mrna_cistron_names = self.labels.mrna_cistron_names
             if rna_label_type == "gene name":
@@ -193,7 +200,8 @@ class SimulationDataService(ABC):
         )
         return SimulationDataService.downsample(mrna_df_long)
 
-    def get_bulk_df(self, output_loaded: pd.DataFrame, molecule_id_type: str, bulk_sp_plot: list[str]) -> pd.DataFrame:
+    def get_bulk_df(self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str, molecule_id_type: str, bulk_sp_plot: list[str]) -> pd.DataFrame:
+        output_loaded = self.get_outputs(analysis_type=analysis_type, partitions_all=partitions_all, exp_select=exp_select)
         sp_trajs: list[np.ndarray[tuple[Any, ...], np.dtype[Any]]] = self._get_sp_trajs(
             output_loaded, molecule_id_type, bulk_sp_plot
         )
@@ -208,6 +216,82 @@ class SimulationDataService(ABC):
         )
         return SimulationDataService.downsample(df_long)
 
+
+
+class SimulationDataServiceFS(SimulationDataService):
+    wd_root: HPCFilePath
+    outputs_dir: HPCFilePath
+    sim_data: SimulationDataEcoli
+    validation_data: ValidationDataEcoli
+    labels: Labels
+    output_loaded: pd.DataFrame
+
+    def __init__(self, env: Settings):
+        """
+        NOTE: ``wd_root`` is essentially ~/workspace
+        """
+        self.wd_root = HPCFilePath(remote_path=Path(env.slurm_base_path.remote_path / "workspace"))
+        self.outputs_dir = env.simulation_outdir
+        kb_dir = self.wd_root / "parameters" / "registry" / "default"
+        self.sim_data = LoadSimData(str(kb_dir / "simData.cPickle")).sim_data
+        with open(str(kb_dir / "validationData.cPickle"), "rb") as f:
+            self.validation_data = pickle.load(f)  # noqa: S301
+        assert isinstance(self.validation_data, ValidationDataEcoli)
+        self.labels = self._get_labels()
+        self.conn = create_duckdb_conn(str(env.simulation_outdir.remote_path), False, 1)
+
+    @override
+    def get_outputs(
+        self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str
+    ) -> pd.DataFrame:
+        # dbf_dict = self.partitions_dict(analysis_type, partitions_all)
+        # db_filter = self.get_db_filter(dbf_dict)
+        db_filter = self._get_db_filter(analysis_type, partitions_all)
+        pq_columns = [
+            "bulk",
+            "listeners__fba_results__base_reaction_fluxes",
+            "listeners__rna_counts__full_mRNA_cistron_counts",
+            "listeners__monomer_counts",
+        ]
+
+        history_sql_base, _, _ = self._get_sql_base(exp_select)
+        history_sql_filtered = (
+            f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
+        )
+        outputs_df: pd.DataFrame = duckdb.sql(history_sql_filtered).df()
+        return outputs_df.groupby("time", as_index=False).sum()
+
+    @override xxxxxxx
+    def get_monomer_counts(
+        self, exp_select: str, analysis_type: AnalysisType, partitions_all: dict[str, str | int]
+    ) -> np.ndarray[tuple[Any, ...], np.dtype[Any]]:
+        history_sql_base, _, _ = self._get_sql_base(exp_select)
+        db_filter = self._get_db_filter(analysis_type, partitions_all)
+        history_sql_subquery = f"SELECT * FROM ({history_sql_base}) WHERE {db_filter}"
+        subquery = read_stacked_columns(history_sql_subquery, ["listeners__monomer_counts"], order_results=False)
+        sql_monomer_validation = f"""
+                WITH unnested_counts AS (
+                    SELECT unnest(listeners__monomer_counts) AS counts,
+                        generate_subscripts(listeners__monomer_counts, 1) AS idx,
+                        experiment_id, variant, lineage_seed, generation, agent_id
+                    FROM ({subquery})
+                ),
+                avg_counts AS (
+                    SELECT avg(counts) AS avgCounts,
+                        experiment_id, variant, lineage_seed,
+                        generation, agent_id, idx
+                    FROM unnested_counts
+                    GROUP BY experiment_id, variant, lineage_seed,
+                        generation, agent_id, idx
+                )
+                SELECT list(avgCounts ORDER BY idx) AS avgCounts
+                FROM avg_counts
+                GROUP BY experiment_id, variant, lineage_seed, generation, agent_id
+                """
+        monomer_counts = self.conn.sql(sql_monomer_validation).pl()
+        return ndlist_to_ndarray(monomer_counts["avgCounts"])
+
+    @override
     def get_common_names(self, names: list[str], sim_data: SimulationDataEcoli | None = None) -> list[str]:
         if sim_data is None:
             sim_data = self.sim_data
@@ -264,6 +348,7 @@ class SimulationDataService(ABC):
         bulk_mtx = np.stack(output_loaded["bulk"].values)  # type: ignore[call-overload]
         sp_trajs = [get_bulk_sp_traj(molecule_id_type, bulk_id, bulk_mtx) for bulk_id in bulk_sp_plot]
         return sp_trajs
+
 
     def _get_labels(self) -> Labels:
         def get_common_names(bulk_names: list[str], sim_data: SimulationDataEcoli) -> list[str]:
