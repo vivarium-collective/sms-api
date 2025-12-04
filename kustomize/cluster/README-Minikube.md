@@ -153,15 +153,15 @@ for vcell-rest, vcell-api and s3proxy services
 sudo minikube tunnel
 ```
 
-### expose NATS message broker to UCH routable ip address
+### expose Redis message broker to UCH routable ip address
 
-for nats service to receive status messages from simulation workers on HPC cluster
+for redis service to receive status messages from simulation workers on HPC cluster
 
 ```bash
 export EXTERNAL_IP=$(ifconfig | grep 155.37 | awk '{print $2}' | cut -d'-' -f1)
 export DEV_NAMESPACE=remote
 # bypass services of type LoadBalancer or NodePort - directly export deployment ports
-sudo kubectl port-forward --address ${EXTERNAL_IP} -n ${DEV_NAMESPACE} deployment/nats 4222:4222
+sudo kubectl port-forward --address ${EXTERNAL_IP} -n ${DEV_NAMESPACE} deployment/redis 6379:6379
 # set jmshost_sim_external to $EXTERNAL_IP in ./config/jimdev/submit.env
 sed -i '' "s/jmshost_sim_external=.*/jmshost_sim_external=${EXTERNAL_IP}/" ./config/jimdev/submit.env
 ```

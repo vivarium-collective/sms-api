@@ -21,7 +21,7 @@ def setup_logging(logger: logging.Logger) -> None:
     root_logger.addHandler(console_handler)
     logger.addHandler(console_handler)
 
-    # Enable NATS client logging
-    nats_logger = logging.getLogger("nats")
-    nats_logger.setLevel(logging.DEBUG)
-    nats_logger.addHandler(console_handler)
+    # Enable Redis client logging
+    redis_logger = logging.getLogger("rediscluster")
+    redis_logger.setLevel(logging.DEBUG)
+    redis_logger.addHandler(console_handler)

@@ -7,10 +7,10 @@ import uuid
 from pathlib import Path
 
 import pytest
-from nats.aio.client import Client as NATSClient
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
@@ -76,13 +76,13 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_messaging(
-    nats_subscriber_client: NATSClient,
-    nats_producer_client: NATSClient,
+    redis_subscriber_service: MessagingServiceRedis,
+    redis_producer_service: MessagingServiceRedis,
     database_service: DatabaseServiceSQL,
     slurm_service: SlurmService,
 ) -> None:
     scheduler = JobScheduler(
-        nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service
+        messaging_service=redis_subscriber_service, database_service=database_service, slurm_service=slurm_service
     )
     await scheduler.subscribe()
 
@@ -100,9 +100,9 @@ async def test_messaging(
     )
 
     # send worker messages to the broker
-    await nats_producer_client.publish(
-        subject=get_settings().nats_worker_event_subject,
-        payload=worker_event.model_dump_json(exclude_unset=True).encode("utf-8"),
+    await redis_producer_service.publish(
+        subject=get_settings().redis_channel,
+        data=worker_event.model_dump_json(exclude_unset=True).encode("utf-8"),
     )
     # get the updated state of the job
     await asyncio.sleep(0.1)
@@ -115,13 +115,13 @@ async def test_messaging(
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_job_scheduler(
-    nats_subscriber_client: NATSClient,
+    redis_subscriber_service: MessagingServiceRedis,
     database_service: DatabaseServiceSQL,
     slurm_service: SlurmService,
     slurm_template_hello_10s: str,
 ) -> None:
     scheduler = JobScheduler(
-        nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service
+        messaging_service=redis_subscriber_service, database_service=database_service, slurm_service=slurm_service
     )
     await scheduler.subscribe()
     await scheduler.start_polling(interval_seconds=1)
@@ -146,19 +146,33 @@ async def test_job_scheduler(
     simulation, slurm_job, hpc_run = await insert_job(database_service=database_service, slurmjobid=job_id)
     assert hpc_run.status == JobStatus.RUNNING
 
-    # Wait for the job to receive a RUNNING status
-    await asyncio.sleep(5)
+    # Poll until the job receives a RUNNING status (or timeout after 30 seconds)
+    max_wait = 30
+    start_time = asyncio.get_event_loop().time()
+    running_hpcrun: HpcRun | None = None
 
-    # Check if the job is in the database
-    running_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+    while asyncio.get_event_loop().time() - start_time < max_wait:
+        await asyncio.sleep(2)
+        running_hpcrun = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+        if running_hpcrun and running_hpcrun.status == JobStatus.RUNNING:
+            break
+
+    # Check if the job is in the database with RUNNING status
     assert running_hpcrun is not None
     assert running_hpcrun.status == JobStatus.RUNNING
 
-    # Wait for the job to receive a COMPLETE status
-    await asyncio.sleep(20)
+    # Poll until the job receives a COMPLETED status (or timeout after 30 seconds)
+    max_wait_complete = 30
+    start_time_complete = asyncio.get_event_loop().time()
+    completed_hpcrun: HpcRun | None = None
 
-    # Check if the job is in the database
-    completed_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+    while asyncio.get_event_loop().time() - start_time_complete < max_wait_complete:
+        await asyncio.sleep(2)
+        completed_hpcrun = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+        if completed_hpcrun and completed_hpcrun.status == JobStatus.COMPLETED:
+            break
+
+    # Check if the job is in the database with COMPLETED status
     assert completed_hpcrun is not None
     assert completed_hpcrun.status == JobStatus.COMPLETED
 
@@ -193,7 +207,7 @@ async def test_job_scheduler(
     ],
 )
 async def test_job_scheduler_with_storage(
-    nats_subscriber_client: NATSClient,
+    redis_subscriber_service: MessagingServiceRedis,
     database_service: DatabaseServiceSQL,
     slurm_service: SlurmService,
     slurm_template_with_storage: str,
@@ -238,7 +252,7 @@ async def test_job_scheduler_with_storage(
         # Step 2: Prepare Slurm job script
         print("\n=== Step 2: Preparing Slurm job ===")
         scheduler = JobScheduler(
-            nats_client=nats_subscriber_client, database_service=database_service, slurm_service=slurm_service
+            messaging_service=redis_subscriber_service, database_service=database_service, slurm_service=slurm_service
         )
         await scheduler.subscribe()
         await scheduler.start_polling(interval_seconds=2)

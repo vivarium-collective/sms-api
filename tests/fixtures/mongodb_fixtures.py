@@ -7,12 +7,16 @@ from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.asynchronous.database import AsyncDatabase
 from testcontainers.mongodb import MongoDbContainer  # type: ignore [import-untyped]
 
+from tests.docker_utils import SKIP_DOCKER_REASON, SKIP_DOCKER_TESTS
+
 MONGODB_DATABASE_NAME = "mydatabase"
 MONGODB_COLLECTION_NAME = "mycollection"
 
 
 @pytest.fixture(scope="session")
 def mongodb_container() -> MongoDbContainer:
+    if SKIP_DOCKER_TESTS:
+        pytest.skip(SKIP_DOCKER_REASON)
     with MongoDbContainer() as container:
         container.start()
         yield container

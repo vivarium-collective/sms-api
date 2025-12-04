@@ -17,7 +17,6 @@ from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings, get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
-    VECOLI_REPO_NAME,
     get_apptainer_image_file,
     get_experiment_dir,
     get_experiment_path,
@@ -71,21 +70,6 @@ class SimulationService(ABC):
         pass
 
     @abstractmethod
-    async def clone_repository_if_needed(
-        self,
-        git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
-        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
-        git_branch: str = "messages",
-    ) -> None:
-        """
-        Clone a git repository to a remote directory and return the path to the cloned repository.
-        :param git_commit_hash: The commit hash to checkout after cloning.
-        :param repo_url: The URL of the git repository to clone.
-        :param branch: The branch to clone.
-        """
-        pass
-
-    @abstractmethod
     async def close(self) -> None:
         pass
 
@@ -123,33 +107,6 @@ class SimulationServiceHpc(SimulationService):
         return latest_commit_hash
 
     @override
-    async def clone_repository_if_needed(
-        self,
-        git_commit_hash: str,  # first 7 characters of the commit hash are used for the directory name
-        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
-        git_branch: str = "messages",
-    ) -> None:
-        settings = get_settings()
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-
-        software_version_path = settings.hpc_repo_base_path / git_commit_hash
-        test_cmd = f"test -d {software_version_path!s}"
-        dir_cmd = f"mkdir -p {software_version_path!s} && cd {software_version_path!s}"
-        clone_cmd = f"git clone --branch {git_branch} --single-branch {git_repo_url} {VECOLI_REPO_NAME}"
-        # skip if directory exists, otherwise create it and clone the repo
-        command = f"{test_cmd} || ({dir_cmd} && {clone_cmd} && cd {VECOLI_REPO_NAME} && git checkout {git_commit_hash})"
-        return_code, stdout, stderr = await ssh_service.run_command(command=command)
-        if return_code != 0:
-            raise RuntimeError(
-                f"Failed to clone repo {git_repo_url} branch {git_branch} hash {git_commit_hash}: {stderr.strip()}"
-            )
-
-    @override
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
         settings = get_settings()
         ssh_service = SSHService(
@@ -168,13 +125,10 @@ class SimulationServiceHpc(SimulationService):
         remote_vEcoli_path = get_vEcoli_repo_dir(simulator_version=simulator_version)
         apptainer_image_path = get_apptainer_image_file(simulator_version=simulator_version)
 
-        remote_build_script_relative_path = Path("runscripts") / "container" / "build-image.sh"
-
         # build the submit script
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
-                build_image_cmd = f"{remote_build_script_relative_path!s} -i {apptainer_image_path!s} -a"
                 qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
                 nodelist_clause = (
                     f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
@@ -196,29 +150,138 @@ class SimulationServiceHpc(SimulationService):
 
                     set -eu
                     env
-                    # allow for user-specific Apptainer directories used during builds.
-                    mkdir -p $APPTAINER_CACHEDIR $APPTAINER_TMPDIR
 
-                    mkdir -p {apptainer_image_path.parent!s}
-
-                    # if the image already exists, skip the build
-                    if [ -f {apptainer_image_path!s} ]; then
-                        echo "Image {apptainer_image_path!s} already exists. Skipping build."
-                        exit 0
-                    fi
-
-                    echo "Building vEcoli image for commit {simulator_version.git_commit_hash} on $(hostname) ..."
-
-                    cd {remote_vEcoli_path!s}
-                    {build_image_cmd}
-
-                    # if the image does not exist after the build, fail the job
-                    if [ ! -f {apptainer_image_path!s} ]; then
-                        echo "Image build failed. Image not found at {apptainer_image_path!s}."
+                    # Determine which container runtime to use (prefer apptainer over singularity)
+                    if command -v apptainer &> /dev/null; then
+                        CONTAINER_CMD="apptainer"
+                        echo "Using apptainer for container build"
+                    elif command -v singularity &> /dev/null; then
+                        CONTAINER_CMD="singularity"
+                        echo "Using singularity for container build"
+                    else
+                        echo "ERROR: Neither apptainer nor singularity found in PATH"
                         exit 1
                     fi
 
+                    # Set Apptainer/Singularity cache directories with defaults if not already set
+                    export APPTAINER_CACHEDIR=${{APPTAINER_CACHEDIR:-$HOME/.apptainer/cache}}
+                    export APPTAINER_TMPDIR=${{APPTAINER_TMPDIR:-$HOME/.apptainer/tmp}}
+                    mkdir -p $APPTAINER_CACHEDIR $APPTAINER_TMPDIR
+
+                    # Step 1: Clone repository if needed
+                    echo "=== Step 1: Cloning repository ==="
+                    FINAL_REPO_PATH="{remote_vEcoli_path!s}"
+
+                    if [ -d "$FINAL_REPO_PATH" ]; then
+                        echo "Repository already exists at $FINAL_REPO_PATH"
+                        # If repo already exists and image exists, skip everything
+                        if [ -f {apptainer_image_path!s} ]; then
+                            echo "Image {apptainer_image_path!s} already exists. Skipping build."
+                            exit 0
+                        fi
+                        # Use existing repo for build
+                        TMP_REPO_PATH="$FINAL_REPO_PATH"
+                        MOVE_REPO=false
+                    else
+                        echo "Repository not found. Cloning to /tmp..."
+                        # Clone to /tmp to avoid NFS issues during build
+                        TMP_REPO_PATH="/tmp/slurm_job_${{SLURM_JOB_ID}}_vEcoli"
+                        cd /tmp
+                        git clone --branch {simulator_version.git_branch} \\
+                                  --single-branch {simulator_version.git_repo_url} "$TMP_REPO_PATH"
+                        cd "$TMP_REPO_PATH"
+                        git checkout {simulator_version.git_commit_hash}
+                        echo "Repository cloned successfully to $TMP_REPO_PATH"
+                        MOVE_REPO=true
+                        # Cleanup temp repo on exit (if we fail before moving)
+                        trap "rm -rf '$TMP_REPO_PATH'" EXIT
+                    fi
+
+                    # Step 2: Build Apptainer image
+                    echo "=== Step 2: Building Apptainer image ==="
+                    mkdir -p {apptainer_image_path.parent!s}
+
+                    echo "Building vEcoli image for commit {simulator_version.git_commit_hash} on $(hostname)..."
+                    echo "Building from $TMP_REPO_PATH (local filesystem)"
+
+                    cd "$TMP_REPO_PATH"
+
+                    # Get git info
+                    GIT_HASH=$(git rev-parse HEAD)
+                    GIT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "detached")
+                    TIMESTAMP=$(date '+%Y%m%d.%H%M%S')
+
+                    # Create git diff
+                    mkdir -p source-info
+                    git diff HEAD > source-info/git_diff.txt
+
+                    # Create repo.tar (respecting .dockerignore)
+                    echo "Creating repo tarball..."
+                    EXCLUDE_PATTERNS=$(mktemp)
+                    if [ -f .dockerignore ]; then
+                        grep -v "^#" .dockerignore | grep -v "^$" | grep -v "^!" | while read -r pattern; do
+                            if [[ "$pattern" == /* ]]; then
+                                echo ".${{pattern}}/*" >> "$EXCLUDE_PATTERNS"
+                            elif [[ "$pattern" == */ ]]; then
+                                echo "./${{pattern}}*" >> "$EXCLUDE_PATTERNS"
+                            else
+                                echo "./${{pattern}}" >> "$EXCLUDE_PATTERNS"
+                                echo "./${{pattern}}/*" >> "$EXCLUDE_PATTERNS"
+                            fi
+                        done
+                    fi
+
+                    FIND_CMD="find . -type f"
+                    while read -r pattern; do
+                        FIND_CMD="$FIND_CMD ! -path \\"$pattern\\""
+                    done < "$EXCLUDE_PATTERNS"
+
+                    TEMP_FILE_LIST=$(mktemp)
+                    eval "$FIND_CMD -print0" > "$TEMP_FILE_LIST"
+                    tar -cf repo.tar --null -T "$TEMP_FILE_LIST"
+                    rm -f "$EXCLUDE_PATTERNS" "$TEMP_FILE_LIST"
+                    echo "Created repo.tar ($(du -sh repo.tar | awk '{{print $1}}'))"
+
+                    # Process .env file for environment variables
+                    DOT_ENV_VARS="    "
+                    if [ -f .env ]; then
+                        echo "Processing .env for Singularity environment..."
+                        while IFS= read -r line || [ -n "$line" ]; do
+                            if [[ -n "$line" && ! "$line" =~ ^[[:space:]]*# ]]; then
+                                line=${{line#export }}
+                                DOT_ENV_VARS+="export $line; "
+                            fi
+                        done < .env
+                        echo "Found $(echo "$DOT_ENV_VARS" | grep -c 'export ') environment variables"
+                    fi
+
+                    # Build container image
+                    echo "=== Building Container Image: {apptainer_image_path!s} ==="
+                    echo "=== git hash $GIT_HASH, git branch $GIT_BRANCH ==="
+
+                    if ! $CONTAINER_CMD build --fakeroot --force \\
+                        --build-arg git_hash="$GIT_HASH" \\
+                        --build-arg git_branch="$GIT_BRANCH" \\
+                        --build-arg timestamp="$TIMESTAMP" \\
+                        --build-arg dot_env_vars="$DOT_ENV_VARS" \\
+                        {apptainer_image_path!s} runscripts/container/Singularity; then
+                        echo "ERROR: Container build failed."
+                        exit 1
+                    fi
+                    echo "Container build successful!"
+
+                    # Cleanup temp files
+                    rm -f source-info/git_diff.txt repo.tar
+
                     echo "Build completed. Image saved to {apptainer_image_path!s}."
+
+                    # Step 3: Move repository to final location if needed
+                    if [ "$MOVE_REPO" = true ]; then
+                        echo "=== Step 3: Moving repository to final location ==="
+                        mkdir -p "{remote_vEcoli_path.parent!s}"
+                        mv "$TMP_REPO_PATH" "$FINAL_REPO_PATH"
+                        echo "Repository moved to $FINAL_REPO_PATH"
+                    fi
                     """)
                 f.write(script_content)
 
@@ -390,51 +453,46 @@ class SimulationServiceHpc(SimulationService):
                     image="{apptainer_image_path!s}"
                     cd {remote_vEcoli_repo_path!s}
 
-                    # # scrape the slurm log file for the magic word and publish to NATS
-                    # export NATS_URL={settings.nats_emitter_url}
-                    # if [ -z "$NATS_URL" ]; then
-                    #     echo "NATS_URL environment variable is not set."
-                    # else
-                    #     tail -F {slurm_log_file!s} | while read -r line; do
-                    #         if echo "$line" | grep -q "{settings.nats_emitter_magic_word}"; then
-                    #             clean_line="$(echo "$line" | sed \
-                    #                -e 's/{settings.nats_emitter_magic_word}//g' \
-                    #                -e "s/'/\\&quot;/g" )"
-                    #             nats pub {settings.nats_worker_event_subject} "'$clean_line'"
-                    #         fi
-                    #     done &
-                    #     SCRAPE_PID=$!
-                    #     TAIL_PID=$(pgrep -P $SCRAPE_PID tail)
-                    # fi
-
                     # create custom config file mapped to /out/configs/ directory
-                    #  copy the template config file from the remote vEcoli repo
-                    #  replace CORRELATION_ID_REPLACE_ME with the correlation_id
-                    #
-                    config_template_file={remote_vEcoli_repo_path!s}/configs/{hpc_sim_config_file}
                     mkdir -p {experiment_path_parent!s}/configs
-                    config_file={experiment_path_parent!s}/configs/{hpc_sim_config_file}_{experiment_id}.json
-                    cp $config_template_file $config_file
-                    sed -i "s/CORRELATION_ID_REPLACE_ME/{correlation_id}/g" $config_file
+
+                    # Check if the config template file exists (newer repos with messaging)
+                    config_template_file={remote_vEcoli_repo_path!s}/configs/{hpc_sim_config_file}
+                    default_config_file={remote_vEcoli_repo_path!s}/configs/default.json
+
+                    if [ -f "$config_template_file" ]; then
+                        echo "Using config template: {hpc_sim_config_file} (with messaging support)"
+                        config_file={experiment_path_parent!s}/configs/{hpc_sim_config_file}_{experiment_id}.json
+                        cp "$config_template_file" "$config_file"
+                        # Replace template variables for messaging
+                        sed -i "s/CORRELATION_ID_REPLACE_ME/{correlation_id}/g" "$config_file"
+                        sed -i "s/REDIS_HOST_REPLACE_ME/{get_settings().redis_external_host}/g" "$config_file"
+                        sed -i "s/REDIS_PORT_REPLACE_ME/{get_settings().redis_external_port}/g" "$config_file"
+                        sed -i "s/REDIS_CHANNEL_REPLACE_ME/{get_settings().redis_channel}/g" "$config_file"
+                    elif [ -f "$default_config_file" ]; then
+                        echo "Using default config: default.json (older repo without messaging)"
+                        config_file={experiment_path_parent!s}/configs/default_{experiment_id}.json
+                        # Copy default config without template replacements
+                        cp "$default_config_file" "$config_file"
+                    else
+                        echo "ERROR: Neither {hpc_sim_config_file} nor default.json found in configs/"
+                        exit 1
+                    fi
 
                     git -C ./configs diff HEAD >> ./source-info/git_diff.txt
+
+                    # Determine the config path inside the container (bind mount at /out/configs/)
+                    config_filename=$(basename "$config_file")
+                    container_config_path="/out/configs/$config_filename"
+
                     singularity run $binds $image uv run \\
                          --env-file /vEcoli/.env /vEcoli/ecoli/experiments/ecoli_master_sim.py \\
-                         --config /out/configs/{hpc_sim_config_file}_{experiment_id}.json \\
+                         --config "$container_config_path" \\
                          --generations 1 --emitter parquet --emitter_arg out_dir='/out' \\
                          --experiment_id {experiment_id} \\
                          --daughter_outdir "/out/{experiment_id}" \\
                          --sim_data_path "/parca/{parca_dataset_dirname}/kb/simData.cPickle" \\
                          --fail_at_max_duration
-
-                    # if [ -n "$SCRAPE_PID" ]; then
-                    #     echo "Waiting for scrape to finish..."
-                    #     sleep 10  # give time for the scrape to finish
-                    #     kill $SCRAPE_PID || true  # kill the scrape process if it is still running
-                    #     kill $TAIL_PID || true  # kill the tail process if it is still running
-                    # else
-                    #     echo "No scrape process found."
-                    # fi
 
                     # if the experiment directory is empty after the run, fail the job
                     if [ ! "$(ls -A {experiment_path!s})" ]; then

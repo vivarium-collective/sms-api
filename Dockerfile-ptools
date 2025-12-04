@@ -6,7 +6,11 @@ ARG APP_GID=10000
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Fix GPG keys and update package lists
+RUN rm -rf /var/lib/apt/lists/* && \
+    apt-get clean && \
+    apt-get update --allow-releaseinfo-change && \
+    apt-get install -y --no-install-recommends \
     build-essential \
     xvfb \
     libxpm4 \
@@ -20,22 +24,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd -m -u $APP_UID -g $APP_GID appuser \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-USER appuser
-
 WORKDIR /app
 
-COPY --chown=appuser:appgroup assets/ptools/aic-export.29.5.tar.gz /app/aic-export.29.5.tar.gz
-COPY --chown=appuser:appgroup assets/ptools /app/ptools
-
-RUN chmod +x /app/aic-export.29.5.tar.gz \
-    && tar xvzf /app/aic-export.29.5.tar.gz \
-    && ./aic-export/pathway-tools/ptools/29.5/install/config-ptools /app/ptools
+ADD assets/ptools/aic-export.29.5.tar.gz /app/
+RUN mkdir -p /app/ptools && \
+    ./aic-export/pathway-tools/ptools/29.5/install/config-ptools /app/ptools
 
 VOLUME ["/app/scratch"]
+ENV SERVER_HOST_NAME=ptools.sms-api-eks.svc.cluster.local
 
 EXPOSE 1555
-
+EXPOSE 5008
+#
 CMD bash -c "\
     Xvfb :1 -screen 0 1024x768x16 & \
     sleep 2 && \
-    ./pathway-tools -www -www-server-hostname 0.0.0.0 -port 1555 -python"
+    /app/pathway-tools -www -www-server-hostname ${SERVER_HOST_NAME} -port 1555 -python"

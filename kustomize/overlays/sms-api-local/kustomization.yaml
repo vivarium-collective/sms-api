@@ -4,18 +4,22 @@ kind: Kustomization
 namespace: sms-api-local
 
 images:
-  - name: ghcr.io/biosimulations/sms-api
-    newTag: 0.2.45-dev
+  - name: ghcr.io/vivarium-collective/sms-api
+    newTag: 0.2.48-dev
     # STABLE: newTag: 0.2.8
 
 replicas:
   - count: 1
     name: api
+  - count: 1
+    name: ptools
+  - count: 1
+    name: redis
 
 resources:
   - ingress.yaml
   - api-cache-pvc.yaml
-  - nats-svc.yaml
+  - redis-svc.yaml
   - haproxy-ssh-svc.yaml
   - vivarium-home-pv.yaml
   - vivarium-home-pvc.yaml

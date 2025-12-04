@@ -29,7 +29,56 @@ spec:
     - host: sms.cam.uchc.edu
       http:
         paths:
+          - path: /openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
           - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          - path: /home
+            pathType: Exact
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          - path: /core
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          - path: /version
             pathType: Prefix
             backend:
               service:
@@ -40,6 +89,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: api
+                name: ptools
                 port:
-                  number: 8000
+                  number: 1555

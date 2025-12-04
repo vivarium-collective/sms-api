@@ -23,10 +23,11 @@ data:
         balance roundrobin
         option tcp-check
         default-server inter 5s fall 3 rise 3 maxconn 200
-        server submit1 mantis-sub-1.cam.uchc.edu:22 check
-        server submit2 mantis-sub-2.cam.uchc.edu:22 check
         server submit3 mantis-sub-3.cam.uchc.edu:22 check
         server submit4 mantis-sub-4.cam.uchc.edu:22 check
         server submit5 mantis-sub-5.cam.uchc.edu:22 check
         server submit6 mantis-sub-6.cam.uchc.edu:22 check
         server submit7 mantis-sub-7.cam.uchc.edu:22 check
+        server submit8 mantis-sub-8.cam.uchc.edu:22 check
+        server submit9 mantis-sub-9.cam.uchc.edu:22 check
+        server submit10 mantis-sub-10.cam.uchc.edu:22 check

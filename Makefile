@@ -173,10 +173,10 @@ mongoup:
 		-p $(port):$(port) \
 		mongo
 
-.PHONY: natsup
-natsup:
+.PHONY: redisup
+redisup:
 	@[ -z "$(port)" ] && port=30050 || port=$(port); \
-	docker run -d --name nats --rm -p $$port:$$port nats
+	docker run -d --name redis --rm -p $$port:$$port redis
 
 # this command should run psql -h localhost -p 65432 -U alexanderpatrie sms
 .PHONY: pingpg
@@ -260,7 +260,7 @@ image:
 .PHONY: exec-api
 exec-api:
 	@[ -z "$(tag)" ] && tag=0.2.8 || tag=$(tag); \
-	docker run --rm --name sms -p 8000:8000 --platform linux/amd64 --entrypoint /usr/bin/env -it ghcr.io/biosimulations/sms-api:$$tag bash
+	docker run --rm --name sms -p 8000:8000 --platform linux/amd64 --entrypoint /usr/bin/env -it ghcr.io/vivarium-collective/sms-api:$$tag bash
 
 .PHONY: exec
 exec:
@@ -280,7 +280,7 @@ available_simulation_configs:
 
 .PHONY: compose
 compose:
-	@docker rm -f api nats; \
+	@docker rm -f api redis; \
 	docker rmi sms-api; \
 	docker compose build; \
 	docker compose up

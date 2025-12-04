@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: nats
+  name: redis
 spec:
   selector:
-    app: nats
+    app: redis
   ports:
-    - name: nats
+    - name: redis
       protocol: TCP
-      port: 4222
-      targetPort: 4222
+      port: 6379
+      targetPort: 6379
       nodePort: 30050 # unique port for same cluster across different namespaces
   type: NodePort

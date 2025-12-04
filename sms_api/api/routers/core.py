@@ -13,7 +13,7 @@
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 # from sms_api.api.request_examples import examples
 from sms_api.common.gateway.models import RouterConfig, ServerMode
@@ -135,7 +135,6 @@ async def get_simulator_status(simulator_id: int) -> HpcRun | None:
     summary="Upload a new simulator (vEcoli) version.",
 )
 async def insert_simulator_version(
-    background_tasks: BackgroundTasks,
     simulator: Simulator,
 ) -> SimulatorVersion:
     # verify simulator request
@@ -160,7 +159,6 @@ async def insert_simulator_version(
                 git_branch=simulator.git_branch,
                 simulation_service_slurm=sim_service,
                 database_service=db_service,
-                background_tasks=background_tasks,
             )
         except Exception as e:
             logger.exception("Error inserting simulator version.")
@@ -176,9 +174,7 @@ async def insert_simulator_version(
     tags=["EcoliSim"],
     summary="Run a parameter calculation",
 )
-async def run_parameter_calculator(
-    background_tasks: BackgroundTasks, parca_request: ParcaDatasetRequest
-) -> ParcaDataset:
+async def run_parameter_calculator(parca_request: ParcaDatasetRequest) -> ParcaDataset:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Simulation database service is not initialized")
@@ -195,7 +191,6 @@ async def run_parameter_calculator(
             simulation_service_slurm=sim_service,
             database_service=db_service,
             parca_config=parca_request.parca_config,
-            background_tasks=background_tasks,
         )
     except Exception as e:
         logger.exception("Error running PARCA")

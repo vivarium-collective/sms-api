@@ -31,6 +31,8 @@ jobs:
 
       - name: Make script executable
         run: chmod +x ./scripts/build_action.sh
+      # - name: Make script executable
+      #   run: chmod +x ./scripts/github_action_build.sh
 
       - name: Run build and push script
         run: |

@@ -1,9 +1,16 @@
 import marimo
 
-from sms_api.data.data_service import SimulationDataServiceFS
-
-__generated_with = "0.15.0"
+__generated_with = "0.18.1"
 app = marimo.App(width="medium")
+
+
+@app.cell
+def _():
+    # /// script
+    # [tool.marimo.display]
+    # theme = "dark"
+    # ///
+    return
 
 
 @app.cell
@@ -17,6 +24,7 @@ def _():
 @app.cell
 def _():
     import os
+    from pathlib import Path
 
     import altair as alt
     import marimo as mo
@@ -26,9 +34,17 @@ def _():
     from scipy.stats import pearsonr
     from wholecell.utils.protein_counts import get_simulated_validation_counts
 
-    from sms_api.config import get_settings
-
-    return alt, get_simulated_validation_counts, mo, np, os, pd, pearsonr, pl, get_settings
+    return (
+        Path,
+        alt,
+        get_simulated_validation_counts,
+        mo,
+        np,
+        os,
+        pd,
+        pearsonr,
+        pl,
+    )
 
 
 @app.cell
@@ -36,7 +52,12 @@ def _(env):
     from sms_api.data.data_service import PARTITION_GROUPS, AnalysisType, SimulationDataServiceFS
 
     data_service = SimulationDataServiceFS(env=env)
-    return AnalysisType, PARTITION_GROUPS, SimulationDataServiceFS, data_service
+    return (
+        AnalysisType,
+        PARTITION_GROUPS,
+        SimulationDataServiceFS,
+        data_service,
+    )
 
 
 @app.cell
@@ -59,7 +80,7 @@ def _(data_service):
 
 
 @app.cell
-def _(mo, np, os, pd):
+def _(Path, mo, np, os, pd):
     def get_pathways(pathway_dir):
         pathway_file = os.path.join(pathway_dir, "pathways.txt")
         pathway_df = pd.read_csv(pathway_file, sep="\t")
@@ -72,7 +93,7 @@ def _(mo, np, os, pd):
         value="single",
     )
 
-    pathway_dir = "pathways"
+    pathway_dir = str(Path(__file__).parent.parent.parent / "assets" / "app" / "pathways")
     select_pathway = mo.ui.dropdown(
         options=get_pathways(pathway_dir), searchable=True, value="3-dehydroquinate biosynthesis I"
     )
@@ -193,13 +214,11 @@ def _(AnalysisType, analysis_select, data_service, exp_select, partitions):
 
 @app.cell
 def _(mo):
-    mo.md(
-        r"""
+    mo.md(r"""
     <h1 style="font-family: monospace, sans-serif;">
         SMS Data Explorer
     </h1>
-    """
-    )
+    """)
     return
 
 
@@ -223,8 +242,7 @@ def _(mo, select_pathway):
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
+    mo.md("""
     <p style="font-family: Arial, sans-serif;">
         </p>
 
@@ -233,8 +251,7 @@ def _(mo):
     proteins, complexes, metabolites and small molecules. In this section, we generate
     time course plots of user selected compounds. If no pathway is selected, you may
     specify compounds to plot from the following menu, using their BioCyc IDs or display names.
-    """
-    )
+    """)
     return
 
 
@@ -285,15 +302,13 @@ def _(
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
+    mo.md("""
     <p style="font-family: Arial, sans-serif;">
         </p>
 
     **mRNA Counts:** In this section, we generate time course plots of selected mRNA cistron counts.
     If no pathway is selected, mRNAs may be specified with gene names or their BioCyc IDs.
-    """
-    )
+    """)
     return
 
 
@@ -350,7 +365,6 @@ def _(
         value=mrna_override(select_pathway.value),
         max_selections=500,
     )
-
     return (mrna_select_plot,)
 
 
@@ -398,15 +412,13 @@ def _(
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
+    mo.md("""
     <p style="font-family: Arial, sans-serif;">
         </p>
     **Protein Monomer Counts:** This time course plot visualizes the protein content of the
     simulation output in terms of monomer counts. Monomers to plot can be specified with their
     BioCyc IDs or display names.
-    """
-    )
+    """)
     return
 
 
@@ -453,15 +465,13 @@ def _(
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
+    mo.md("""
     <p style="font-family: Arial, sans-serif;">
         </p>
 
     **Metabolic Reaction Fluxes:** In this plot, we visualize time course of metabolic reaction fluxes.
     Individual reactions can be selected using their BioCyc IDs
-    """
-    )
+    """)
     return
 
 
@@ -585,8 +595,7 @@ def _(data_service, sim_data, val_label_type):
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
+    mo.md("""
     <p style="font-family: Arial, sans-serif;">
         </p>
     **Protein Count Validation:** This is a scatter plot comparing simulated average
@@ -595,8 +604,7 @@ def _(mo):
     You may choose to visualize all available proteins or pathway specific proteins.
     Alternatively, the attached drop down menu can be used to select proteins using
     their BioCyc IDs or display names.
-    """
-    )
+    """)
     return
 
 
@@ -758,7 +766,7 @@ def _(data_service, exp_select, os):
 
 @app.cell
 def _(
-    SimulationDataService,
+    SimulationDataServiceFS,
     agent_select,
     data_service,
     exp_select,

@@ -5,6 +5,15 @@ app = marimo.App(width="medium")
 
 
 @app.cell
+def _():
+    # /// script
+    # [tool.marimo.display]
+    # theme = "dark"
+    # ///
+    return
+
+
+@app.cell
 def _(mo) -> None:
     mo.md(
         r"""
