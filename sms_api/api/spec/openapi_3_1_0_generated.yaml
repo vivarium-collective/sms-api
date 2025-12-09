@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.54-dev
+  version: 0.2.55-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -827,12 +827,12 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-5e437368bebbd098_1764793456721-651cab237832db20_1764793456721
-            simulation_name: sms_single-5e437368bebbd098_1764793456721
+            experiment_id: sms_single-37ea86e42919c832_1765289362136-b45fab3417199469_1765289362136
+            simulation_name: sms_single-37ea86e42919c832_1765289362136
             metadata: {}
             run_parca: true
             generations: 2
-            n_init_sims: 3
+            n_init_sims: 1
             lineage_seed: 3
             max_duration: 10800.0
             initial_global_time: 0.0
@@ -1068,7 +1068,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-790911b241589d64_1764793455889
+          default: sim_smsapi-238a8098fdabc797_1765289361897
         metadata:
           additionalProperties: true
           type: object
@@ -1085,7 +1085,7 @@ components:
         n_init_sims:
           type: integer
           title: N Init Sims
-          default: 3
+          default: 1
         lineage_seed:
           type: integer
           title: Lineage Seed
