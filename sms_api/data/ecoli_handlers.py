@@ -1,8 +1,10 @@
 import asyncio
 import logging
+from pathlib import Path
 from types import ModuleType
 
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
+from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import unique_id
 from sms_api.config import Settings, get_settings
 from sms_api.data.analysis_service import (
@@ -138,17 +140,23 @@ async def get_tsv_output(
     if agent_id is not None:
         fp = fp / f"agent_id={agent_id}"
 
-    filepath = fp / filename
+    filepath: HPCFilePath = fp / filename
 
-    _, stdout, stderr = await ssh.run_command(f"cat {filepath!s}")
-    return TsvOutputFile(
-        filename=filename,
-        variant=variant_id,
-        lineage_seed=lineage_seed_id,
-        generation=generation_id,
-        agent_id=agent_id,
-        content=stdout,
-    )
+    tmpdir = "/tmp"  # noqa: S108
+    local = Path(tmpdir) / filename
+    if not local.exists():
+        print(f"{local!s} does not yet exist!")
+        await ssh.scp_download(local_file=local, remote_path=filepath)
+    with open(local) as tmp_path:
+        file_content = tmp_path.read()
+        return TsvOutputFile(
+            filename=filename,
+            variant=variant_id,
+            lineage_seed=lineage_seed_id,
+            generation=generation_id,
+            agent_id=agent_id,
+            content=file_content,
+        )
 
 
 async def get_analysis_status(db_service: DatabaseService, ssh_service: SSHServiceManaged, id: int) -> AnalysisRun:

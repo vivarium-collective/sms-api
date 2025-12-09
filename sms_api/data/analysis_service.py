@@ -103,6 +103,7 @@ class AnalysisServiceHpc(AnalysisService):
             local_bin=$HOME/.local/bin
             export JAVA_HOME=$local_bin/java-22
             export PATH=$JAVA_HOME/bin:$local_bin:$PATH
+            ## export UV_PROJECT_ENVIRONMENT=disabled
 
             ### configure working dir and binds
             vecoli_dir={vecoli_dir!s}
@@ -118,6 +119,7 @@ class AnalysisServiceHpc(AnalysisService):
 
             ### binds
             binds="-B $HOME/workspace/vEcoli:/vEcoli"
+            binds+=" -B $HOME/.local/share/uv:/root/.local/share/uv"
             binds+=" -B $HOME/workspace/api_outputs:/out"
             binds+=" -B $JAVA_HOME:$JAVA_HOME"
             binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
@@ -126,13 +128,14 @@ class AnalysisServiceHpc(AnalysisService):
             vecoli_image_root=/vEcoli
 
             mkdir -p {remote_workspace_dir!s}/api_outputs/{analysis_name}
+            ## export UV_PROJECT_ENVIRONMENT=disabled
             singularity run $binds $image bash -c "
                 export JAVA_HOME=$HOME/.local/bin/java-22
                 export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-                uv run --env-file /vEcoli/.env /vEcoli/runscripts/analysis.py --config \"$tmp_config\"
+                uv run --no-cache --env-file /vEcoli/.env /vEcoli/runscripts/analysis.py --config \"$tmp_config\"
             "
-            cd {remote_workspace_dir!s}
-            uv run python scripts/archive_dir.py {remote_workspace_dir!s}/api_outputs/{analysis_name}
+            ## cd {remote_workspace_dir!s}
+            ## uv run python scripts/archive_dir.py {remote_workspace_dir!s}/api_outputs/{analysis_name}
         """)
 
     async def _submit_script(
