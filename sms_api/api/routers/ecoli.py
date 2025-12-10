@@ -8,20 +8,17 @@
 # TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
 # TODO: labkey preprocessing
 import logging
-from collections.abc import Awaitable
-from typing import Any, Callable, TypeVar
 
 import fastapi
 from fastapi import BackgroundTasks, Depends, HTTPException, Query
 
 from sms_api.api import request_examples
-from sms_api.common.gateway.utils import router_config
-from sms_api.common.ssh.ssh_service import SSHServiceManaged, get_ssh_service, get_ssh_service_managed
+from sms_api.common.gateway.utils import missing_experiment_error, router_config
+from sms_api.common.ssh.ssh_service import get_ssh_service, get_ssh_service_managed
 from sms_api.common.utils import timestamp
 from sms_api.data import ecoli_handlers as data_handlers
 from sms_api.data import handlers as analysis_handlers
 from sms_api.data.models import (
-    AnalysisConfig,
     AnalysisDomain,
     AnalysisRun,
     ExperimentAnalysisDTO,
@@ -42,37 +39,6 @@ logger = logging.getLogger(__name__)
 config = router_config(prefix="ecoli")
 
 
-def get_analysis_request_config(request: ExperimentAnalysisRequest, analysis_name: str) -> AnalysisConfig:
-    return request.to_config(analysis_name=analysis_name)
-
-
-F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
-
-
-def connect_ssh(func: F) -> Any:
-    async def wrapper(*args: Any, **kwargs: Any) -> Any:
-        instance = args[0]
-        ssh_service: SSHServiceManaged = (
-            kwargs.get("ssh_service") if not getattr(instance, "ssh_service", None) else instance.ssh_service
-        )
-        # ssh_service = kwargs.get('ssh_service', get_ssh_service_managed())
-        try:
-            print(f"Connecting ssh for function: {func.__name__}!")
-            await ssh_service.connect()
-            print(f"Connected: {ssh_service.connected}")
-            return await func(*args, **kwargs)
-        finally:
-            print(f"Disconnecting ssh for function: {func.__name__}!")
-            await ssh_service.disconnect()
-            print(f"Connected: {ssh_service.connected}")
-
-    return wrapper
-
-
-def missing_experiment_error(exp_id: str) -> None:
-    raise Exception(f"There is no experiment with an id of: {exp_id} in the database yet!")
-
-
 ###### -- analyses -- ######
 
 
@@ -83,7 +49,6 @@ def missing_experiment_error(exp_id: str) -> None:
     summary="Run an analysis",
     dependencies=[
         Depends(get_database_service),
-        # Depends(get_ssh_svc)
     ],
 )
 async def run_analysis(

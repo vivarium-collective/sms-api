@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from sms_api.api.routers.ecoli import connect_ssh
+from sms_api.common.gateway.utils import connect_ssh
 from sms_api.common.ssh.ssh_service import get_ssh_service_managed
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings

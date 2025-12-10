@@ -825,8 +825,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-26d6_1765372362153
-            simulation_name: sms_single-26d6_1765372362153
+            experiment_id: sms_single-4a32_1765372818531
+            simulation_name: sms_single-4a32_1765372818531
             metadata: {}
             run_parca: false
             generations: 2
@@ -1068,7 +1068,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-5fe0_1765372360983
+          default: sim_smsapi-5933_1765372818319
         metadata:
           additionalProperties: true
           type: object
