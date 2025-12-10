@@ -3,6 +3,8 @@
     simulation analysis jobs/workflows
 """
 
+import asyncio
+
 # TODO: do we require simulation/analysis configs that are supersets of the original configs:
 #   IE: where do we provide this special config: in vEcoli or API?
 # TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
@@ -13,17 +15,17 @@ import fastapi
 from fastapi import BackgroundTasks, Depends, HTTPException, Query
 
 from sms_api.api import request_examples
-from sms_api.common.gateway.utils import missing_experiment_error, router_config
+from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.common.ssh.ssh_service import get_ssh_service, get_ssh_service_managed
 from sms_api.common.utils import timestamp
 from sms_api.data import ecoli_handlers as data_handlers
-from sms_api.data import handlers as analysis_handlers
+from sms_api.data.analysis_service import AnalysisServiceHpc
 from sms_api.data.models import (
-    AnalysisDomain,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
     OutputFile,
+    OutputFileMetadata,
     TsvOutputFile,
 )
 from sms_api.dependencies import get_database_service, get_simulation_service
@@ -44,7 +46,7 @@ config = router_config(prefix="ecoli")
 
 @config.router.post(
     path="/analyses",
-    operation_id="run-simulation-analysis",
+    operation_id="run-analysis",
     tags=["Analyses"],
     summary="Run an analysis",
     dependencies=[
@@ -52,8 +54,8 @@ config = router_config(prefix="ecoli")
     ],
 )
 async def run_analysis(
-    request: ExperimentAnalysisRequest = request_examples.analysis_api_multiseed,
-) -> list[TsvOutputFile]:
+    request: ExperimentAnalysisRequest = request_examples.analysis_ptools,
+) -> list[TsvOutputFile | OutputFileMetadata]:
     # get services
     db_service = get_database_service()
     if db_service is None:
@@ -61,45 +63,24 @@ async def run_analysis(
 
     ssh_service = get_ssh_service_managed()
     await ssh_service.connect()
+    if not ssh_service.connected:
+        logger.debug("The ssh service is not connected!")
+        await asyncio.sleep(1.111)
+        await ssh_service.connect()
+
+    analysis_service = AnalysisServiceHpc()
 
     try:
-        # 1. check if expid-specified simulation exists in db first
-        simulations = await db_service.list_ecoli_simulations()
-        in_db = any([simulation.config.experiment_id == request.experiment_id for simulation in simulations])
-        if not in_db:
-            missing_experiment_error(request.experiment_id)
-
-        # 2. if in db, that means that the analysis exists, so download
-        experiment_id = request.experiment_id
-        # TODO: should this be unique? (No...)
-        analysis_name = (
-            "sms_analysis-03ff8218c86170fe_1761645234195"
-            if experiment_id == analysis_handlers.DEFAULT_EXPERIMENT
-            # else get_data_id(exp_id=experiment_id, scope="analysis")
-            else f"sms_analysis-{experiment_id}"
+        simulator = get_simulator()
+        return await data_handlers.run_analysis(
+            request=request,
+            simulator=simulator,
+            analysis_service=analysis_service,
+            logger=logger,
+            db_service=db_service,
+            timestamp=timestamp(),
+            ssh_service=ssh_service,
         )
-
-        # 3. iterate over requested analysis outputs and format
-        outputs: list[TsvOutputFile] = []
-        requested_domains = request.requested
-        for analysis_type in AnalysisDomain.to_list():
-            domain_request = requested_domains.get(analysis_type)
-            if domain_request is not None:
-                output_filenames = [
-                    f"{fname}_{analysis_type}.txt" for fname in analysis_handlers.PtoolsAnalysisType.to_list()
-                ]
-                analysis_config = request.to_config(analysis_name=analysis_name)
-
-                for filename in output_filenames:
-                    print(f"Requested file: {filename}")
-                    output: TsvOutputFile = await analysis_handlers.get_ptools_output(
-                        ssh=ssh_service,
-                        analysis_request=request,
-                        analysis_request_config=analysis_config,
-                        filename=filename,
-                    )
-                    outputs.append(output)
-        return outputs
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e

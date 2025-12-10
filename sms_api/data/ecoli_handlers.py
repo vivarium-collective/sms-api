@@ -5,8 +5,8 @@ from types import ModuleType
 
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
 from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.common.utils import unique_id
-from sms_api.config import Settings, get_settings
+from sms_api.common.utils import get_data_id
+from sms_api.config import REPO_ROOT, Settings, get_settings
 from sms_api.data.analysis_service import (
     AnalysisService,
     get_html_outputs_local,
@@ -34,8 +34,9 @@ async def run_analysis(
     timestamp: str,
     ssh_service: SSHServiceManaged,
 ) -> list[OutputFileMetadata | TsvOutputFile]:
-    # dispatch and process analysis run
-    analysis_name = unique_id(scope="sms_analysis")
+    # TODO: first check if its in the db: if not, then do the dispatch/insert/poll workflow,
+    #    otherwise, skip to the download section
+    analysis_name = get_data_id(exp_id=request.experiment_id, scope="analysis")
     config = request.to_config(analysis_name=analysis_name)
     slurmjob_name, slurmjob_id = await analysis_service.dispatch(
         config=config,
@@ -119,6 +120,9 @@ async def get_tsv_output(
     id: int,
     ssh: SSHServiceManaged,
 ) -> TsvOutputFile:
+    if not ssh.connected:
+        await ssh.connect()
+
     variant_id = request.variant
     lineage_seed_id = request.lineage_seed
     generation_id = request.generation
@@ -142,21 +146,27 @@ async def get_tsv_output(
 
     filepath: HPCFilePath = fp / filename
 
-    tmpdir = "/tmp"  # noqa: S108
-    local = Path(tmpdir) / filename
+    # tmpdir = "/tmp"
+    cache_dir = f"{REPO_ROOT}/.results_cache"
+    local = Path(cache_dir) / filename
     if not local.exists():
         print(f"{local!s} does not yet exist!")
-        await ssh.scp_download(local_file=local, remote_path=filepath)
-    with open(local) as tmp_path:
-        file_content = tmp_path.read()
-        return TsvOutputFile(
-            filename=filename,
-            variant=variant_id,
-            lineage_seed=lineage_seed_id,
-            generation=generation_id,
-            agent_id=agent_id,
-            content=file_content,
-        )
+        if not ssh.connected:
+            await ssh.connect()
+        try:
+            await ssh.scp_download(local_file=local, remote_path=filepath)
+        except Exception:
+            print(f"There was an issue downloading {filepath!s} to {local!s}")
+
+    file_content = local.read_text()
+    return TsvOutputFile(
+        filename=filename,
+        variant=variant_id,
+        lineage_seed=lineage_seed_id,
+        generation=generation_id,
+        agent_id=agent_id,
+        content=file_content,
+    )
 
 
 async def get_analysis_status(db_service: DatabaseService, ssh_service: SSHServiceManaged, id: int) -> AnalysisRun:
@@ -165,7 +175,12 @@ async def get_analysis_status(db_service: DatabaseService, ssh_service: SSHServi
     # slurmjob_id = get_jobid_by_experiment(experiment_id)
     # ssh_service = get_ssh_service()
     slurm_user = get_settings().slurm_submit_user
-    statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
+    if not ssh_service.connected:
+        await ssh_service.connect()
+    try:
+        statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
+    except Exception:
+        statuses = await ssh_service.run_command(f"sacct -j {slurmjob_id}")
     status: str = statuses[1].split("\n")[0].split()[-2]
     return AnalysisRun(id=id, status=JobStatus[status])
 

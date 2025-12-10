@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.57-dev
+  version: 0.2.58-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -23,23 +23,33 @@ paths:
       tags:
       - Analyses
       summary: Run an analysis
-      operationId: run-simulation-analysis
+      operationId: run-analysis
       requestBody:
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
-                experiment_id: api_multiseed
+                experiment_id: sms_multiseed_0-2794dfa74b9cf37c_1759844363435
+                multigeneration:
+                - name: ptools_rxns
+                  n_tp: 8
+                  variant: 0
+                - name: ptools_proteins
+                  n_tp: 10
+                  variant: 0
+                - name: ptools_rna
+                  n_tp: 10
+                  variant: 0
                 multiseed:
                 - name: ptools_rxns
                   n_tp: 8
                   variant: 0
                 - name: ptools_proteins
-                  n_tp: 8
+                  n_tp: 10
                   variant: 0
                 - name: ptools_rna
-                  n_tp: 8
+                  n_tp: 10
                   variant: 0
       responses:
         '200':
@@ -48,9 +58,11 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: '#/components/schemas/TsvOutputFile'
+                  anyOf:
+                  - $ref: '#/components/schemas/TsvOutputFile'
+                  - $ref: '#/components/schemas/OutputFileMetadata'
                 type: array
-                title: Response Run-Simulation-Analysis
+                title: Response Run-Analysis
         '422':
           description: Validation Error
           content:
@@ -825,8 +837,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-6c4d_1765384067609
-            simulation_name: sms_single-6c4d_1765384067609
+            experiment_id: sms_single-8bda_1765401304305
+            simulation_name: sms_single-8bda_1765401304305
             metadata: {}
             run_parca: false
             generations: 2
@@ -1068,7 +1080,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-cb96_1765384067380
+          default: sim_smsapi-74e3_1765401304054
         metadata:
           additionalProperties: true
           type: object

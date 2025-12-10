@@ -27,8 +27,8 @@ def get_analysis_ptools() -> ExperimentAnalysisRequest:
                 name=PtoolsAnalysisType.REACTIONS,
                 n_tp=8,
             ),
-            PtoolsAnalysisConfig(name=PtoolsAnalysisType.PROTEINS, n_tp=8),
-            PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8),
+            PtoolsAnalysisConfig(name=PtoolsAnalysisType.PROTEINS, n_tp=10),
+            PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=10),
         ],
     )
 

@@ -49,8 +49,10 @@ class AnalysisServiceHpc(AnalysisService):
         ssh: SSHServiceManaged,
     ) -> tuple[str, int]:
         slurmjob_name = get_slurmjob_name(experiment_id=analysis_name, simulator_hash=simulator_hash)
-        base_path = get_settings().slurm_base_path
-        slurm_log_file = base_path / f"prod/htclogs/{slurmjob_name}.out"
+        env = get_settings()
+        # base_path = env.slurm_base_path
+        slurm_log_file = env.slurm_log_base_path / f"{slurmjob_name}.out"
+        # slurm_log_file = base_path / f"prod/htclogs/{slurmjob_name}.out"
 
         slurm_script = self._slurm_script(
             slurm_log_file=slurm_log_file,
@@ -148,6 +150,8 @@ class AnalysisServiceHpc(AnalysisService):
     ) -> int:
         ssh_service = ssh
         slurm_service = SlurmServiceManaged(ssh_service=ssh_service)
+        if not slurm_service.ssh_service.connected:
+            await slurm_service.ssh_service.connect()
 
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
         with tempfile.TemporaryDirectory() as tmpdir:
