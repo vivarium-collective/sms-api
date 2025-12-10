@@ -57,6 +57,11 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def delete_ecoli_simulation(self, database_id: int) -> None:
+        """Used by the /ecoli router"""
+        pass
+
+    @abstractmethod
     async def list_ecoli_simulations(self) -> list[EcoliSimulationDTO]:
         """Used by the /ecoli router"""
         pass
@@ -285,6 +290,17 @@ class DatabaseServiceSQL(DatabaseService):
             if orm_experiment is None:
                 raise RuntimeError(f"Experiment {database_id} not found")
             return orm_experiment.to_dto()
+
+    @override
+    async def delete_ecoli_simulation(self, database_id: int) -> None:
+        """Used to remove simulations created by the /ecoli router"""
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_experiment: ORMExperiment | None = await self._get_orm_ecoli_experiment(
+                session, database_id=database_id
+            )
+            if orm_experiment is None:
+                raise Exception(f"Experiment with id {database_id} not found in the database")
+            await session.delete(orm_experiment)
 
     @override
     async def list_ecoli_simulations(self) -> list[EcoliSimulationDTO]:

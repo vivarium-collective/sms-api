@@ -11,7 +11,7 @@ from typing import Any
 from pydantic import BaseModel as _BaseModel
 from pydantic import Field, RootModel
 
-from sms_api.common.utils import unique_id
+from sms_api.common.utils import get_data_id, unique_id
 from sms_api.config import get_settings
 
 
@@ -381,10 +381,10 @@ class ExperimentMetadata(RootModel):  # type: ignore[type-arg]
 class ExperimentRequest(BaseModel):
     """Used by the /simulation endpoint."""
 
-    experiment_id: str
+    experiment_id: str | None = None
     simulation_name: str = f"sim_{unique_id()!s}"
     metadata: dict[str, Any] = {}
-    run_parca: bool = True
+    run_parca: bool = False
     generations: int = 2
     n_init_sims: int = 1
     lineage_seed: int = 3
@@ -433,7 +433,11 @@ class ExperimentRequest(BaseModel):
     initial_state: dict[str, Any] = Field(default={})
 
     def model_post_init(self, context: Any, /) -> None:
-        self.experiment_id = unique_id(self.experiment_id)
+        if self.experiment_id is None:
+            self.experiment_id = get_data_id(
+                exp_id=f"{self.n_init_sims}seeds_{self.generations}gens", scope="experiment"
+            )
+        self.simulation_name = self.experiment_id
 
     def to_config(self) -> SimulationConfig:
         attributes = self.model_json_schema()["properties"]
@@ -450,7 +454,7 @@ class ExperimentRequest(BaseModel):
         if not self.run_parca:
             # case: use the cached simdata
             config_kwargs["sim_data_path"] = str(
-                get_settings().slurm_base_path / "workspace" / "kb" / "simData.cPickle"
+                get_settings().slurm_base_path / "workspace" / "parameters" / "registry" / "default" / "simData.cPickle"
             )
         return SimulationConfig(**config_kwargs)
 

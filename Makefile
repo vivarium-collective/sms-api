@@ -27,6 +27,15 @@ check: ## Run code quality tools.
 	@echo "🚀 Checking for obsolete dependencies: Running deptry"
 	@uv run deptry .
 
+.PHONY: clean_cache
+clean_cache:
+	@rm -rf .pytest_cache
+	@rm -rf .mypy_cache
+	@rm -rf .ruff_cache
+	@find . -name '__pycache__' -exec rm -r {} + -o -name '*.pyc' -delete
+	@uv cache clean
+	@rm -rf .results_cache && mkdir .results_cache && touch .results_cache/.gitkeep
+
 .PHONY: clean
 clean:
 	@rm -rf .pytest_cache

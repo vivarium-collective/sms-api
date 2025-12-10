@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.54-dev
+  version: 0.2.57-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -23,14 +23,14 @@ paths:
       tags:
       - Analyses
       summary: Run an analysis
-      operationId: run-analysis
+      operationId: run-simulation-analysis
       requestBody:
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
-                experiment_id: sms_multiseed_0-2794dfa74b9cf37c_1759844363435
+                experiment_id: api_multiseed
                 multiseed:
                 - name: ptools_rxns
                   n_tp: 8
@@ -48,11 +48,9 @@ paths:
             application/json:
               schema:
                 items:
-                  anyOf:
-                  - $ref: '#/components/schemas/OutputFileMetadata'
-                  - $ref: '#/components/schemas/TsvOutputFile'
+                  $ref: '#/components/schemas/TsvOutputFile'
                 type: array
-                title: Response Run-Analysis
+                title: Response Run-Simulation-Analysis
         '422':
           description: Validation Error
           content:
@@ -827,12 +825,12 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-5e437368bebbd098_1764793456721-651cab237832db20_1764793456721
-            simulation_name: sms_single-5e437368bebbd098_1764793456721
+            experiment_id: sms_single-6c4d_1765384067609
+            simulation_name: sms_single-6c4d_1765384067609
             metadata: {}
-            run_parca: true
+            run_parca: false
             generations: 2
-            n_init_sims: 3
+            n_init_sims: 1
             lineage_seed: 3
             max_duration: 10800.0
             initial_global_time: 0.0
@@ -1063,12 +1061,14 @@ components:
     ExperimentRequest:
       properties:
         experiment_id:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Experiment Id
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-790911b241589d64_1764793455889
+          default: sim_smsapi-cb96_1765384067380
         metadata:
           additionalProperties: true
           type: object
@@ -1077,7 +1077,7 @@ components:
         run_parca:
           type: boolean
           title: Run Parca
-          default: true
+          default: false
         generations:
           type: integer
           title: Generations
@@ -1085,7 +1085,7 @@ components:
         n_init_sims:
           type: integer
           title: N Init Sims
-          default: 3
+          default: 1
         lineage_seed:
           type: integer
           title: Lineage Seed
@@ -1324,8 +1324,6 @@ components:
           title: Initial State
           default: {}
       type: object
-      required:
-      - experiment_id
       title: ExperimentRequest
       description: Used by the /simulation endpoint.
     HTTPValidationError:
@@ -1471,11 +1469,8 @@ components:
       properties:
         name:
           type: string
-          enum:
-          - ptools_rxns
-          - ptools_rna
-          - ptools_proteins
           title: Name
+          default: ptools_rxns
         n_tp:
           type: integer
           title: N Tp
@@ -1507,13 +1502,12 @@ components:
           - type: 'null'
           title: Files
       type: object
-      required:
-      - name
       title: PtoolsAnalysisConfig
-      description: ":param name: (str) Analysis module name (One of [\"ptools_rxns\"\
-        , \"ptools_rna\", \"ptools_proteins\"])\n:param n_tp: (int) Number of timepoints/columns\
-        \ to use in the tsv\n:param files: (list[OutputFileMetadata]) Specification\
-        \ of files requested to be returned\n    with the completion of the analysis."
+      description: ":param name: (str) Analysis module type name...\n    (One of [\"\
+        ptools_rxns\", \"ptools_rna\", \"ptools_proteins\"]). Defaults to \"ptools_rxns\"\
+        .\n:param n_tp: (int) Number of timepoints/columns to use in the tsv\n:param\
+        \ files: (list[OutputFileMetadata]) Specification of files requested to be\
+        \ returned\n    with the completion of the analysis."
     RegisteredSimulators:
       properties:
         versions:
