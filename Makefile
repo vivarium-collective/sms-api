@@ -34,6 +34,7 @@ clean_cache:
 	@rm -rf .ruff_cache
 	@find . -name '__pycache__' -exec rm -r {} + -o -name '*.pyc' -delete
 	@uv cache clean
+	@rm -rf .results_cache && mkdir .results_cache
 
 .PHONY: clean
 clean:

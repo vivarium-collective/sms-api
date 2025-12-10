@@ -240,3 +240,4 @@ assets/simulation/model/parameters/
 libsms/
 scratchpads/
 *.tar.gz
+.results_cache/*
