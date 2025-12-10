@@ -45,7 +45,10 @@ dependencies = [
     "aiofiles>=24.1.0",
     "aioboto3>=13.3.0",
     "types-aioboto3[s3]>=13.3.0",
-    "vecoli>=0.0.4"
+    "vecoli>=0.0.4",
+    "wordfreq>=3.1.1",
+    "nltk>=3.9.2",
+    "wordfilter>=0.2.7",
 ]
 
 [project.urls]
