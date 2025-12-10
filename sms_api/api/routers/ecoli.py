@@ -52,7 +52,7 @@ config = router_config(prefix="ecoli")
     ],
 )
 async def run_analysis(
-    request: ExperimentAnalysisRequest = request_examples.analysis_ptools,
+    request: ExperimentAnalysisRequest = request_examples.analysis_api_multiseed,
 ) -> list[TsvOutputFile]:
     # get services
     db_service = get_database_service()
@@ -76,7 +76,7 @@ async def run_analysis(
             "sms_analysis-03ff8218c86170fe_1761645234195"
             if experiment_id == analysis_handlers.DEFAULT_EXPERIMENT
             # else get_data_id(exp_id=experiment_id, scope="analysis")
-            else experiment_id
+            else f"sms_analysis-{experiment_id}"
         )
 
         # 3. iterate over requested analysis outputs and format

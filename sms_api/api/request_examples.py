@@ -52,6 +52,21 @@ def get_analysis_wcecoli_setD4() -> ExperimentAnalysisRequest:
     )
 
 
+def get_analysis_api_multiseed() -> ExperimentAnalysisRequest:
+    expid = "api_multiseed"
+    return ExperimentAnalysisRequest(
+        experiment_id=expid,
+        multiseed=[
+            PtoolsAnalysisConfig(
+                name=PtoolsAnalysisType.REACTIONS,
+                n_tp=8,
+            ),
+            PtoolsAnalysisConfig(name=PtoolsAnalysisType.PROTEINS, n_tp=8),
+            PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8),
+        ],
+    )
+
+
 def get_simulation_request(sim_id: str, gens: int, seeds: int) -> ExperimentRequest:
     sim_id = unique_id("sms_experiment")
     return ExperimentRequest(
@@ -70,6 +85,7 @@ def get_simulation_base() -> ExperimentRequest:
 # example analyses
 analysis_ptools = get_analysis_ptools()
 analysis_wcecoli_setD4 = get_analysis_wcecoli_setD4()
+analysis_api_multiseed = get_analysis_api_multiseed()
 
 # example simulations
 base_simulation = (lambda expid: ExperimentRequest(experiment_id=expid, simulation_name=expid))(unique_id("sms_single"))
