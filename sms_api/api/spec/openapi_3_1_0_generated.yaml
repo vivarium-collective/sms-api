@@ -3,6 +3,45 @@ info:
   title: sms-api
   version: 0.2.55-dev
 paths:
+  /v1/ecoli/analysis:
+    post:
+      tags:
+      - Analyses
+      summary: Run an analysis
+      operationId: run-simulation-analysis
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentAnalysisRequest'
+              default:
+                experiment_id: sms_multiseed_0-2794dfa74b9cf37c_1759844363435
+                multiseed:
+                - name: ptools_rxns
+                  n_tp: 8
+                  variant: 0
+                - name: ptools_proteins
+                  n_tp: 8
+                  variant: 0
+                - name: ptools_rna
+                  n_tp: 8
+                  variant: 0
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TsvOutputFile'
+                type: array
+                title: Response Run-Simulation-Analysis
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/ecoli/analyses:
     get:
       tags:
@@ -827,8 +866,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-37ea86e42919c832_1765289362136-b45fab3417199469_1765289362136
-            simulation_name: sms_single-37ea86e42919c832_1765289362136
+            experiment_id: sms_single-0fb78f92c1e3426b_1765340818866-01f6b8e3813a37dc_1765340818866
+            simulation_name: sms_single-0fb78f92c1e3426b_1765340818866
             metadata: {}
             run_parca: true
             generations: 2
@@ -1068,7 +1107,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-238a8098fdabc797_1765289361897
+          default: sim_smsapi-4fddb6a576a5f57f_1765340818625
         metadata:
           additionalProperties: true
           type: object
@@ -1471,11 +1510,8 @@ components:
       properties:
         name:
           type: string
-          enum:
-          - ptools_rxns
-          - ptools_rna
-          - ptools_proteins
           title: Name
+          default: ptools_rxns
         n_tp:
           type: integer
           title: N Tp
@@ -1507,13 +1543,12 @@ components:
           - type: 'null'
           title: Files
       type: object
-      required:
-      - name
       title: PtoolsAnalysisConfig
-      description: ":param name: (str) Analysis module name (One of [\"ptools_rxns\"\
-        , \"ptools_rna\", \"ptools_proteins\"])\n:param n_tp: (int) Number of timepoints/columns\
-        \ to use in the tsv\n:param files: (list[OutputFileMetadata]) Specification\
-        \ of files requested to be returned\n    with the completion of the analysis."
+      description: ":param name: (str) Analysis module type name...\n    (One of [\"\
+        ptools_rxns\", \"ptools_rna\", \"ptools_proteins\"]). Defaults to \"ptools_rxns\"\
+        .\n:param n_tp: (int) Number of timepoints/columns to use in the tsv\n:param\
+        \ files: (list[OutputFileMetadata]) Specification of files requested to be\
+        \ returned\n    with the completion of the analysis."
     RegisteredSimulators:
       properties:
         versions:

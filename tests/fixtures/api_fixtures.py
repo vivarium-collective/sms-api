@@ -13,7 +13,8 @@ from sms_api.api.client import Client
 from sms_api.api.main import app
 from sms_api.api.request_examples import base_simulation, ptools_analysis
 from sms_api.config import REPO_ROOT, get_settings
-from sms_api.data.models import ExperimentAnalysisRequest
+from sms_api.data.handlers import DEFAULT_ANALYSIS, DEFAULT_EXPERIMENT
+from sms_api.data.models import AnalysisConfig, ExperimentAnalysisRequest, PtoolsAnalysisConfig, PtoolsAnalysisType
 
 # from sms_api.data.biocyc_service import BiocycService
 from sms_api.latest_commit import write_latest_commit
@@ -130,3 +131,17 @@ async def ecoli_simulation() -> EcoliSimulationDTO:
 @pytest_asyncio.fixture(scope="session")
 async def base_router() -> str:
     return "/v1/ecoli"
+
+
+@pytest_asyncio.fixture(scope="session")
+async def ptools_analysis_request() -> ExperimentAnalysisRequest:
+    expid = DEFAULT_EXPERIMENT
+    return ExperimentAnalysisRequest(
+        experiment_id=expid, multiseed=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8, variant=0)]
+    )
+
+
+@pytest_asyncio.fixture(scope="session")
+async def analysis_request_config(ptools_analysis_request: ExperimentAnalysisRequest) -> AnalysisConfig:
+    analysis_name = DEFAULT_ANALYSIS
+    return ptools_analysis_request.to_config(analysis_name=analysis_name)

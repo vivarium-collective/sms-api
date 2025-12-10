@@ -25,6 +25,10 @@ class SSHServiceManaged:
         self.known_hosts = str(known_hosts) if known_hosts else None
         self.conn: asyncssh.SSHClientConnection | None = None
 
+    @property
+    def connected(self) -> bool:
+        return self.conn is not None
+
     async def connect(self) -> None:
         if self.conn is not None:  # and self.conn._connection_made():
             logger.debug("SSH Connection has already been made.")

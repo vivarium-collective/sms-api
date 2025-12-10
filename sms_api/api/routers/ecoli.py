@@ -16,9 +16,12 @@ from fastapi import BackgroundTasks, Depends, HTTPException, Query
 from sms_api.api import request_examples
 from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.common.ssh.ssh_service import get_ssh_service, get_ssh_service_managed
-from sms_api.common.utils import timestamp
+from sms_api.common.utils import timestamp, unique_id
 from sms_api.data import ecoli_handlers as data_handlers
+from sms_api.data import handlers as analysis_handlers
+from sms_api.data.handlers import PtoolsAnalysisType
 from sms_api.data.models import (
+    AnalysisDomain,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
@@ -40,6 +43,67 @@ config = router_config(prefix="ecoli")
 
 
 ###### -- analyses -- ######
+
+
+@config.router.post(
+    path="/analysis",
+    operation_id="run-simulation-analysis",
+    tags=["Analyses"],
+    summary="Run an analysis",
+    dependencies=[
+        Depends(get_database_service),
+        # Depends(get_ssh_svc)
+    ],
+)
+async def run_simulation_analysis(
+    request: ExperimentAnalysisRequest = request_examples.ptools_analysis,
+) -> list[TsvOutputFile]:
+    analysis_name = (
+        "sms_analysis-03ff8218c86170fe_1761645234195"
+        if request.experiment_id == analysis_handlers.DEFAULT_EXPERIMENT
+        else unique_id(scope="sms_analysis")
+    )
+
+    # get services
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+    ssh_service = get_ssh_service_managed()
+    await ssh_service.connect()
+
+    try:
+        # 1: check to see if such an analysis request exists in db
+        # ========================================================
+        # 1a.1: if it doesnt, dispatch new job
+        # 1a.2: poll status
+
+        # 1b.1: if the analysis does exist, skip directly to 2
+
+        # 2: download files, cache if needed
+        # ==================================
+        outputs: list[TsvOutputFile] = []
+        requested_domains = request.requested
+        for analysis_type in AnalysisDomain.to_list():
+            domain_request = requested_domains.get(analysis_type)
+            if domain_request is not None:
+                output_filenames = [f"{fname}_{analysis_type}.txt" for fname in PtoolsAnalysisType.to_list()]
+                analysis_config = request.to_config(analysis_name=analysis_name)
+
+                for filename in output_filenames:
+                    print(f"Requested file: {filename}")
+                    output: TsvOutputFile = await analysis_handlers.get_ptools_output(
+                        ssh=ssh_service,
+                        analysis_request=request,
+                        analysis_request_config=analysis_config,
+                        filename=filename,
+                    )
+                    outputs.append(output)
+        return outputs
+    except Exception as e:
+        logger.exception("Error fetching the simulation analysis file.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await ssh_service.disconnect()
 
 
 @config.router.post(

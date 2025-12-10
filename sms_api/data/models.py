@@ -2,14 +2,14 @@ import json
 import os
 import pathlib
 from dataclasses import asdict, dataclass
-from enum import StrEnum
-from typing import Any, Literal
+from typing import Any
 
 import numpy
 import numpy as np
 import orjson
 from pydantic import BaseModel, ConfigDict, Field
 
+from sms_api.common import StrEnumBase
 from sms_api.config import get_settings
 
 MAX_ANALYSIS_CPUS = 3
@@ -57,15 +57,34 @@ class AnalysisModuleConfig(BaseModel):
         return {self.name: {}}
 
 
+class AnalysisDomain(StrEnumBase):
+    MULTIVARIANT = "multivariant"
+    MULTISEED = "multiseed"
+    MULTIGENERATION = "multigeneration"
+    SINGLE = "single"
+    MULTIDAUGHTER = "multidaughter"
+    MULTIEXPERIMENT = "multiexperiment"
+
+
+class PtoolsAnalysisType(StrEnumBase):
+    REACTIONS = "ptools_rxns"
+    RNA = "ptools_rna"
+    PROTEINS = "ptools_proteins"
+
+
+# PtoolsAnalysisName: Literal[PtoolsAnalysisType.REACTIONS, PtoolsAnalysisType.RNA, PtoolsAnalysisType.PROTEINS] | str
+
+
 class PtoolsAnalysisConfig(BaseModel):
     """
-    :param name: (str) Analysis module name (One of ["ptools_rxns", "ptools_rna", "ptools_proteins"])
+    :param name: (str) Analysis module type name...
+        (One of ["ptools_rxns", "ptools_rna", "ptools_proteins"]). Defaults to "ptools_rxns".
     :param n_tp: (int) Number of timepoints/columns to use in the tsv
     :param files: (list[OutputFileMetadata]) Specification of files requested to be returned
         with the completion of the analysis.
     """
 
-    name: Literal["ptools_rxns", "ptools_rna", "ptools_proteins"]
+    name: str = PtoolsAnalysisType.REACTIONS.value
     n_tp: int = 8
     variant: int = 0
     generation: int | None = None
@@ -74,11 +93,12 @@ class PtoolsAnalysisConfig(BaseModel):
     files: list[OutputFileMetadata] | None = None
 
     def model_post_init(self, context: Any, /) -> None:
+        self.name = self.name or PtoolsAnalysisType.REACTIONS
         for attrname in list(PtoolsAnalysisConfig.model_fields.keys()):
             if getattr(self, attrname, None) is None:
                 delattr(self, attrname)
 
-    def to_dict(self) -> dict[Literal["ptools_rxns", "ptools_rna", "ptools_proteins"], dict[str, int]]:
+    def to_dict(self) -> dict[str, dict[str, int]]:
         return {self.name: {"n_tp": self.n_tp}}
 
 
@@ -202,6 +222,16 @@ class ExperimentAnalysisRequest(BaseModel):
         emitter_arg = {"out_dir": str(get_settings().simulation_outdir.remote_path)}
         return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
 
+    @property
+    def requested(self) -> dict[str, list[AnalysisModuleConfig | PtoolsAnalysisConfig]]:
+        requested = {}
+        for domain in AnalysisDomain.to_list():
+            domain_requests = getattr(self, domain, None)
+            if domain_requests is not None:
+                # requested += domain_requests
+                requested[domain] = domain_requests
+        return requested
+
 
 class ExperimentAnalysisDTO(BaseModel):
     """Example schema:
@@ -278,7 +308,7 @@ class ExperimentAnalysisDTO(BaseModel):
     job_id: int | None = None
 
 
-class JobStatus(StrEnum):
+class JobStatus(StrEnumBase):
     WAITING = "waiting"
     QUEUED = "queued"
     RUNNING = "running"
@@ -434,5 +464,5 @@ def dict_options(items: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None
     options: dict[str, Any] = {}
     if items is not None:
         for item in items:
-            options.update(item.to_dict())  # type: ignore[arg-type]
+            options.update(item.to_dict())
     return options
