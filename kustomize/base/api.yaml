@@ -22,7 +22,7 @@ spec:
         fsGroup: 10000
       containers:
         - name: api
-          image: ghcr.io/vivarium-collective/sms-api:0.2.56-dev  # KNOWN STABLE: 0.2.54-dev, 0.2.30-dev
+          image: ghcr.io/vivarium-collective/sms-api:0.2.57-dev  # KNOWN STABLE: 0.2.56-dev, 0.2.30-dev
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
