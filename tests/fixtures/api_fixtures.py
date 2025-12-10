@@ -11,7 +11,8 @@ from httpx import ASGITransport
 
 from sms_api.api.client import Client
 from sms_api.api.main import app
-from sms_api.api.request_examples import base_simulation, ptools_analysis
+from sms_api.api.request_examples import analysis_ptools as ptools_analysis
+from sms_api.api.request_examples import base_simulation
 from sms_api.config import REPO_ROOT, get_settings
 from sms_api.data.handlers import DEFAULT_ANALYSIS, DEFAULT_EXPERIMENT
 from sms_api.data.models import AnalysisConfig, ExperimentAnalysisRequest, PtoolsAnalysisConfig, PtoolsAnalysisType

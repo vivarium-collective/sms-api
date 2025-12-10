@@ -3,7 +3,22 @@ info:
   title: sms-api
   version: 0.2.55-dev
 paths:
-  /v1/ecoli/analysis:
+  /v1/ecoli/analyses:
+    get:
+      tags:
+      - Analyses
+      summary: List all analysis specs uploaded to the database
+      operationId: list-analyses
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ExperimentAnalysisDTO'
+                type: array
+                title: Response List-Analyses
     post:
       tags:
       - Analyses
@@ -36,62 +51,6 @@ paths:
                   $ref: '#/components/schemas/TsvOutputFile'
                 type: array
                 title: Response Run-Simulation-Analysis
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses:
-    get:
-      tags:
-      - Analyses
-      summary: List all analysis specs uploaded to the database
-      operationId: list-analyses
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/ExperimentAnalysisDTO'
-                type: array
-                title: Response List-Analyses
-    post:
-      tags:
-      - Analyses
-      summary: Run an analysis
-      operationId: run-analysis
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ExperimentAnalysisRequest'
-              default:
-                experiment_id: sms_multiseed_0-2794dfa74b9cf37c_1759844363435
-                multiseed:
-                - name: ptools_rxns
-                  n_tp: 8
-                  variant: 0
-                - name: ptools_proteins
-                  n_tp: 8
-                  variant: 0
-                - name: ptools_rna
-                  n_tp: 8
-                  variant: 0
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                items:
-                  anyOf:
-                  - $ref: '#/components/schemas/OutputFileMetadata'
-                  - $ref: '#/components/schemas/TsvOutputFile'
-                type: array
-                title: Response Run-Analysis
         '422':
           description: Validation Error
           content:
@@ -866,10 +825,10 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-0fb78f92c1e3426b_1765340818866-01f6b8e3813a37dc_1765340818866
-            simulation_name: sms_single-0fb78f92c1e3426b_1765340818866
+            experiment_id: sms_single-26d6_1765372362153
+            simulation_name: sms_single-26d6_1765372362153
             metadata: {}
-            run_parca: true
+            run_parca: false
             generations: 2
             n_init_sims: 1
             lineage_seed: 3
@@ -1102,12 +1061,14 @@ components:
     ExperimentRequest:
       properties:
         experiment_id:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Experiment Id
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-4fddb6a576a5f57f_1765340818625
+          default: sim_smsapi-5fe0_1765372360983
         metadata:
           additionalProperties: true
           type: object
@@ -1116,7 +1077,7 @@ components:
         run_parca:
           type: boolean
           title: Run Parca
-          default: true
+          default: false
         generations:
           type: integer
           title: Generations
@@ -1363,8 +1324,6 @@ components:
           title: Initial State
           default: {}
       type: object
-      required:
-      - experiment_id
       title: ExperimentRequest
       description: Used by the /simulation endpoint.
     HTTPValidationError:

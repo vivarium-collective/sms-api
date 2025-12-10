@@ -1,7 +1,9 @@
 import os
+from typing import Any
 
 import pytest
 
+from sms_api.api.routers.ecoli import connect_ssh
 from sms_api.common.ssh.ssh_service import get_ssh_service_managed
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
@@ -103,3 +105,16 @@ async def test_get_ptools_output() -> None:
     finally:
         await ssh.disconnect()
         print(f"SSH CONNECTED: {ssh.connected}")
+
+
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.asyncio
+async def test_connect_ssh() -> None:
+    @connect_ssh
+    async def func(x: float, y: float, **kwargs: Any) -> float:
+        return x + y
+
+    ssh = get_ssh_service_managed()
+    z = await func(11.11, 2.2, ssh_service=ssh)
+    print(z)
+    assert not ssh.connected

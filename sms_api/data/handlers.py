@@ -34,7 +34,7 @@ from sms_api.simulation.models import SimulatorVersion
 logger = logging.getLogger(__name__)
 
 
-CACHE_DIR: APIFilePath = get_settings().cache_dir
+CACHE_DIR: APIFilePath = APIFilePath(get_settings().cache_dir)
 DEFAULT_EXPERIMENT = "sms_multiseed_0-2794dfa74b9cf37c_1759844363435"
 DEFAULT_ANALYSIS = "sms_analysis-03ff8218c86170fe_1761645234195"
 
@@ -178,6 +178,7 @@ async def get_ptools_output(
     # save to cache dir if not exists
     if not local.exists():
         logger.info(f"{local!s} not yet in the cache, downloading it now...")
+
         await ssh.scp_download(local_file=local, remote_path=remote)
     else:
         logger.info(f"File already exists in the cache :): {local!s}")
