@@ -158,12 +158,7 @@ async def get_ptools_output(
     outdir = partition.to_dirpath(env.simulation_outdir)
     if not ssh.connected:
         raise RuntimeError("The SSH service is not connected but needs to be!")
-    fp = outdir.remote_path if isinstance(outdir, HPCFilePath) else outdir / filename
-
-    # ret, exists, stderr = await ssh.run_command(f"[ -f {fp!s} ] && echo '1' || echo '0'")
-    # # case: fp does not exist and thus a new analysis should be run
-    # if not bool(int(exists)):
-    #     pass
+    fp: Path = (outdir.remote_path if isinstance(outdir, HPCFilePath) else outdir) / filename
 
     # cache dir should be source of file
     remote = HPCFilePath(remote_path=fp)
@@ -178,7 +173,6 @@ async def get_ptools_output(
     # save to cache dir if not exists
     if not local.exists():
         logger.info(f"{local!s} not yet in the cache, downloading it now...")
-
         await ssh.scp_download(local_file=local, remote_path=remote)
     else:
         logger.info(f"File already exists in the cache :): {local!s}")
@@ -478,7 +472,8 @@ async def get_tsv_output(
 
     filepath: HPCFilePath = fp / filename
 
-    tmpdir = "/tmp"  # noqa: S108
+    tmpdir = Path(__file__).parent.parent.parent / ".results_cache"
+
     local = Path(tmpdir) / filename
     if not local.exists():
         print(f"{local!s} does not yet exist!")
