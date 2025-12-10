@@ -122,7 +122,7 @@ class Settings(BaseSettings):
     simulation_outdir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     analysis_outdir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     vecoli_config_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
-    cache_dir: APIFilePath = APIFilePath("")
+    cache_dir: str = f"{REPO_ROOT}/.results_cache"
 
     dev_base_url: str = "http://localhost:8888"
     prod_base_url: str = "https://sms.cam.uchc.edu"

@@ -102,7 +102,7 @@ def connect_ssh(func: F) -> Any:
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         instance = args[0]
         ssh_service: SSHServiceManaged = (
-            kwargs.get("ssh_service") if not getattr(instance, "ssh_service", None) else instance.ssh_service
+            kwargs.get("ssh_service") if not getattr(instance, "ssh_service", None) else instance.ssh_service  # type: ignore[assignment]
         )
         # ssh_service = kwargs.get('ssh_service', get_ssh_service_managed())
         try:
