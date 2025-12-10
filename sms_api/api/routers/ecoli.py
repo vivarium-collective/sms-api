@@ -19,7 +19,6 @@ from sms_api.common.ssh.ssh_service import get_ssh_service, get_ssh_service_mana
 from sms_api.common.utils import timestamp, unique_id
 from sms_api.data import ecoli_handlers as data_handlers
 from sms_api.data import handlers as analysis_handlers
-from sms_api.data.handlers import PtoolsAnalysisType
 from sms_api.data.models import (
     AnalysisDomain,
     AnalysisRun,
@@ -86,7 +85,9 @@ async def run_simulation_analysis(
         for analysis_type in AnalysisDomain.to_list():
             domain_request = requested_domains.get(analysis_type)
             if domain_request is not None:
-                output_filenames = [f"{fname}_{analysis_type}.txt" for fname in PtoolsAnalysisType.to_list()]
+                output_filenames = [
+                    f"{fname}_{analysis_type}.txt" for fname in analysis_handlers.PtoolsAnalysisType.to_list()
+                ]
                 analysis_config = request.to_config(analysis_name=analysis_name)
 
                 for filename in output_filenames:

@@ -1,50 +1,40 @@
 import asyncio
 import logging
 import os
-import warnings
-from abc import ABC, abstractmethod
-from enum import StrEnum
 from pathlib import Path
-from pprint import pp
 from types import ModuleType
-from typing import override, Any, Literal, Callable
+from typing import Any, Literal
 
-import pytest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from sms_api.common import StrEnumBase
-from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged, get_ssh_service_managed
+from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import unique_id
-from sms_api.config import Settings, get_settings
+from sms_api.config import APIFilePath, Settings, get_settings
 from sms_api.data.analysis_service import (
     AnalysisService,
     get_html_outputs_local,
 )
 from sms_api.data.models import (
+    AnalysisConfig,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
     JobStatus,
     OutputFile,
     OutputFileMetadata,
+    PtoolsAnalysisConfig,
     TsvOutputFile,
     TsvOutputFileRequest,
-    PtoolsAnalysisConfig,
-    AnalysisModuleConfig, AnalysisConfig
 )
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import SimulatorVersion, EcoliSimulationDTO
-
+from sms_api.simulation.models import SimulatorVersion
 
 logger = logging.getLogger(__name__)
 
 
-class APIFilePath(Path):
-    pass
-
-
-CACHE_DIR = APIFilePath("/tmp")
+CACHE_DIR: APIFilePath = get_settings().cache_dir
 DEFAULT_EXPERIMENT = "sms_multiseed_0-2794dfa74b9cf37c_1759844363435"
 DEFAULT_ANALYSIS = "sms_analysis-03ff8218c86170fe_1761645234195"
 
@@ -82,14 +72,8 @@ class PartitionRequest(BaseModel):
     @property
     def partitions(self) -> dict[str, str | int | None]:
         data = self.model_dump()
-        components = ['lineage_seed', 'generation', 'agent_id']
-        return dict(zip(
-            components,
-            list(map(
-                lambda c: data.get(c, None),
-                components
-            ))
-        ))
+        components = ["lineage_seed", "generation", "agent_id"]
+        return dict(zip(components, list(map(lambda c: data.get(c, None), components))))
 
     def to_dirpath(self, outdir_root: HPCFilePath | Path) -> HPCFilePath | Path:
         """
@@ -98,12 +82,13 @@ class PartitionRequest(BaseModel):
         """
         # format for either simulation outdir (no self.name is passed)...
         #   or an analysis outdir (self.name is passed WITH expid)
-        identifier = f"/{self.experiment_id}" if self.name is None else f"{self.name}/experiment_id={self.experiment_id}"
+        identifier = (
+            f"/{self.experiment_id}" if self.name is None else f"{self.name}/experiment_id={self.experiment_id}"
+        )
         # variant is specified in the path regardless
         identifier += f"/variant={self.variant}"
 
         # append specified partition components
-        data = self.model_dump()
         for component_name, component_val in self.partitions.items():
             if component_val is not None:
                 identifier += f"/{component_name}={component_val}"
@@ -115,44 +100,27 @@ class PartitionRequest(BaseModel):
 
     @classmethod
     def from_ptools_analysis_request(
-            cls,
-            experiment_id: str,
-            config: PtoolsAnalysisConfig,
-            analysis_name: str = DEFAULT_ANALYSIS
+        cls, experiment_id: str, config: PtoolsAnalysisConfig, analysis_name: str = DEFAULT_ANALYSIS
     ) -> "PartitionRequest":
-        comp_types = ['lineage_seed', 'generation', 'agent_id']
-        components = dict(zip(
-            comp_types,
-            list(map(
-                lambda ctype: getattr(config, ctype, None),
-                comp_types
-            ))
-        ))
+        comp_types = ["lineage_seed", "generation", "agent_id"]
+        components = dict(zip(comp_types, list(map(lambda ctype: getattr(config, ctype, None), comp_types))))
         return PartitionRequest(
             experiment_id=experiment_id,
             name=analysis_name,
             type=PartitionType.ANALYSIS,
             variant=config.variant,
-            **components
+            **components,
         )
 
 
 def get_ptools_analysis_request(expid: str = DEFAULT_EXPERIMENT) -> ExperimentAnalysisRequest:
     return ExperimentAnalysisRequest(
-        experiment_id=expid,
-        multiseed=[
-            PtoolsAnalysisConfig(
-                name=PtoolsAnalysisType.REACTIONS,
-                n_tp=8,
-                variant=0
-            )
-        ]
+        experiment_id=expid, multiseed=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8, variant=0)]
     )
 
 
 def get_ptools_analysis_request_config(
-    ptools_analysis_request: ExperimentAnalysisRequest,
-    analysis_name: str = DEFAULT_ANALYSIS
+    ptools_analysis_request: ExperimentAnalysisRequest, analysis_name: str = DEFAULT_ANALYSIS
 ) -> AnalysisConfig:
     return ptools_analysis_request.to_config(analysis_name=analysis_name)
 
@@ -161,12 +129,13 @@ async def get_ptools_output(
     ssh: SSHServiceManaged,
     analysis_request: ExperimentAnalysisRequest,
     analysis_request_config: AnalysisConfig,
-    filename: str = "ptools_rna_multiseed.txt"
+    filename: str = "ptools_rna_multiseed.txt",
 ) -> TsvOutputFile:
     """
     Read the contents of a given ptools analysis output TSV file as a formalized ``TsvOutputFile`` DTO.
 
-    NOTE: This function assumes that the fp (on line 191) actually exists. It should be called AFTER checking for the presence of the analysis run in the first place.
+    NOTE: This function assumes that the fp (on line 191) actually exists.
+    It should be called AFTER checking for the presence of the analysis run in the first place.
 
     :param ssh: (``SSHServiceManaged``) ssh service instance
     :param analysis_request: (``ExperimentAnalysisRequest``) request-specified analysis request payload DTO
@@ -174,17 +143,16 @@ async def get_ptools_output(
     :param filename: (``str``) which analysis output file to fetch
     :return: ``TSVOutputFile``
     """
-    ptools_modname: str = list(analysis_request_config.analysis_options.multiseed.keys())[0]
+    # ptools_modname: str = list(analysis_request_config.analysis_options.multiseed.keys())[0]
+    ptools_modname: str = next(iter(list(analysis_request_config.analysis_options.multiseed.keys())))
     config = PtoolsAnalysisConfig(name=ptools_modname, n_tp=8)
     analysis_outdir = analysis_request_config.analysis_options.outdir
     if analysis_outdir is None:
-        raise ValueError(f'Outdir is None, meaning an analysis probably has not been run!')
+        raise ValueError("Outdir is None, meaning an analysis probably has not been run!")
 
-    analysis_name: str = analysis_outdir.split('/')[-1]
+    analysis_name: str = analysis_outdir.split("/")[-1]
     partition: PartitionRequest = PartitionRequest.from_ptools_analysis_request(
-        experiment_id=analysis_request.experiment_id,
-        config=config,
-        analysis_name=analysis_name
+        experiment_id=analysis_request.experiment_id, config=config, analysis_name=analysis_name
     )
     env = get_settings()
     outdir = partition.to_dirpath(env.simulation_outdir)
@@ -203,16 +171,16 @@ async def get_ptools_output(
     if not local_dir.exists():
         os.mkdir(str(local_dir))
     else:
-        logger.info(f'A cache already exists for {local_dir!s}')
+        logger.info(f"A cache already exists for {local_dir!s}")
 
     local = local_dir / filename
 
     # save to cache dir if not exists
     if not local.exists():
-        logger.info(f'{local!s} not yet in the cache, downloading it now...')
+        logger.info(f"{local!s} not yet in the cache, downloading it now...")
         await ssh.scp_download(local_file=local, remote_path=remote)
     else:
-        logger.info(f'File already exists in the cache :): {local!s}')
+        logger.info(f"File already exists in the cache :): {local!s}")
 
     # read from cache dir
     content = local.read_text()
@@ -222,20 +190,14 @@ async def get_ptools_output(
         lineage_seed=partition.lineage_seed,
         generation=partition.generation,
         agent_id=partition.agent_id,
-        content=content
+        content=content,
     )
 
 
-async def find_analysis(
-    exp_id: str,
-    db_service: DatabaseService
-) -> ExperimentAnalysisDTO | None:
+async def find_analysis(exp_id: str, db_service: DatabaseService) -> ExperimentAnalysisDTO | None:
     analyses: list[ExperimentAnalysisDTO] = await db_service.list_analyses()
     try:
-        return next(
-            a for a in analyses
-            if a.config.analysis_options.experiment_id[0] == exp_id
-        )
+        return next(a for a in analyses if a.config.analysis_options.experiment_id[0] == exp_id)
     except StopIteration:
         return None
 
@@ -250,19 +212,19 @@ async def run_new_analysis(
     ssh_service: SSHServiceManaged,
 ) -> list[OutputFileMetadata | TsvOutputFile]:
     """
-        1. check db for record of analysis
+    1. check db for record of analysis
 
-        2.a.1. if #1 exists, then get_analysis(). IF #1 exists, then there is a cached file
-        2.a.2. get_filepath()
-        2.a.3. download cached file as DTO content
+    2.a.1. if #1 exists, then get_analysis(). IF #1 exists, then there is a cached file
+    2.a.2. get_filepath()
+    2.a.3. download cached file as DTO content
 
-        OR
+    OR
 
-        2.b.1. if #1 does NOT exist, then dispatch analysis job
-        2.b.2. insert analysis to db
-        2.b.3. get analysis status (poll)
-        2.b.4. download ptools tsv to /tmp (or cache dir)
-        2.b.5. download cached file as DTO content
+    2.b.1. if #1 does NOT exist, then dispatch analysis job
+    2.b.2. insert analysis to db
+    2.b.3. get analysis status (poll)
+    2.b.4. download ptools tsv to /tmp (or cache dir)
+    2.b.5. download cached file as DTO content
     """
     # dispatch and process analysis run
     analysis_name = unique_id(scope="sms_analysis")
@@ -337,19 +299,19 @@ async def run_analysis(
     ssh_service: SSHServiceManaged,
 ) -> list[OutputFileMetadata | TsvOutputFile]:
     """
-        1. check db for record of analysis
+    1. check db for record of analysis
 
-        2.a.1. if #1 exists, then get_analysis(). IF #1 exists, then there is a cached file
-        2.a.2. get_filepath()
-        2.a.3. download cached file as DTO content
+    2.a.1. if #1 exists, then get_analysis(). IF #1 exists, then there is a cached file
+    2.a.2. get_filepath()
+    2.a.3. download cached file as DTO content
 
-        OR
+    OR
 
-        2.b.1. if #1 does NOT exist, then dispatch analysis job
-        2.b.2. insert analysis to db
-        2.b.3. get analysis status (poll)
-        2.b.4. download ptools tsv to /tmp (or cache dir)
-        2.b.5. download cached file as DTO content
+    2.b.1. if #1 does NOT exist, then dispatch analysis job
+    2.b.2. insert analysis to db
+    2.b.3. get analysis status (poll)
+    2.b.4. download ptools tsv to /tmp (or cache dir)
+    2.b.5. download cached file as DTO content
     """
     # dispatch and process analysis run
     analysis_name = unique_id(scope="sms_analysis")
@@ -436,13 +398,13 @@ async def get_tsv_filepath(
     variant_id: int | None = None,
     lineage_seed_id: int | None = None,
     generation_id: int | None = None,
-    agent_id: str | None = None
+    agent_id: str | None = None,
 ) -> HPCFilePath:
     output_id = analysis_data.name
     fp = (
-            get_settings().simulation_outdir
-            / output_id
-            / f"experiment_id={analysis_data.config.analysis_options.experiment_id[0]}"
+        get_settings().simulation_outdir
+        / output_id
+        / f"experiment_id={analysis_data.config.analysis_options.experiment_id[0]}"
     )
     if variant_id is not None:
         fp = fp / f"variant={variant_id}"
@@ -463,9 +425,9 @@ async def download_tsv(
     variant_id: int,
     lineage_seed_id: int,
     generation_id: int,
-    agent_id: str
+    agent_id: str,
 ) -> TsvOutputFile:
-    tmpdir = CACHE_DIR  # noqa: S108
+    tmpdir = CACHE_DIR
     local_cached = tmpdir / filename
     if not local_cached.exists():
         print(f"{local_cached!s} does not yet exist!")

@@ -174,13 +174,13 @@ ignore = [
      # B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
      "B904",
 #    # C414 Unnecessary `list` call within `tuple()`
-#    "C414",
+     "C414",
 #    # C416 Unnecessary `list` comprehension (rewrite using `list()`)
      "C416",
 #    # C417 Unnecessary `map` usage (rewrite using a `list` comprehension)
-#    "C417",
+     "C417",
 #    # C419 Unnecessary list comprehension
-#    "C419",
+     "C419",
 #    # E501 Line too long (131 > 120)
 #    "E501",
 #    # E722 Do not use bare `except`

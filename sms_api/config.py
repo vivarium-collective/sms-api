@@ -34,6 +34,10 @@ class Namespace(StrEnum):
     TEST = "test"
 
 
+class APIFilePath(Path):
+    pass
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
@@ -116,7 +120,9 @@ class Settings(BaseSettings):
     biocyc_password: str = ""
 
     simulation_outdir: HPCFilePath = HPCFilePath(remote_path=Path(""))
+    analysis_outdir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     vecoli_config_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
+    cache_dir: APIFilePath = APIFilePath("")
 
     dev_base_url: str = "http://localhost:8888"
     prod_base_url: str = "https://sms.cam.uchc.edu"
