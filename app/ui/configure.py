@@ -51,9 +51,9 @@ def _(mo) -> None:
     - Specify multivariant simulations
     - Configure pre-simulation parameter calculation
     - Configure post-simulation analyses
-    
+
     For example, consider a user that has created new Ecoli variants, along with corresponding analyses which
-    compare strain variants under different feeding strategies. The user may use this notebook to create a 
+    compare strain variants under different feeding strategies. The user may use this notebook to create a
     simulation experiment configuration that, when used to parameterize an SMS API simulation request:
     a.) runs the base parameter calculation, b.) instantiates the variants as specified by the config,
     c.) runs a multivariant simulation, and d.) runs the aforementioned post-processing. **This notebook

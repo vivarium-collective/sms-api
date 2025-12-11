@@ -1,14 +1,14 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.58-dev
+  version: 0.2.59-dev
 paths:
-  /v1/ecoli/analyses:
+  /api/v1/analyses:
     get:
       tags:
       - Analyses
       summary: List all analysis specs uploaded to the database
-      operationId: list-analyses
+      operationId: api-list-analyses
       responses:
         '200':
           description: Successful Response
@@ -18,12 +18,12 @@ paths:
                 items:
                   $ref: '#/components/schemas/ExperimentAnalysisDTO'
                 type: array
-                title: Response List-Analyses
+                title: Response Api-List-Analyses
     post:
       tags:
       - Analyses
       summary: Run an analysis
-      operationId: run-analysis
+      operationId: api-run-analysis
       requestBody:
         content:
           application/json:
@@ -31,16 +31,6 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multiseed_0-2794dfa74b9cf37c_1759844363435
-                multigeneration:
-                - name: ptools_rxns
-                  n_tp: 8
-                  variant: 0
-                - name: ptools_proteins
-                  n_tp: 10
-                  variant: 0
-                - name: ptools_rna
-                  n_tp: 10
-                  variant: 0
                 multiseed:
                 - name: ptools_rxns
                   n_tp: 8
@@ -62,19 +52,19 @@ paths:
                   - $ref: '#/components/schemas/TsvOutputFile'
                   - $ref: '#/components/schemas/OutputFileMetadata'
                 type: array
-                title: Response Run-Analysis
+                title: Response Api-Run-Analysis
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}:
+  /api/v1/analyses/{id}:
     get:
       tags:
       - Analyses
       summary: Retrieve an experiment analysis spec from the database
-      operationId: get-analysis
+      operationId: api-get-analysis
       parameters:
       - name: id
         in: path
@@ -95,12 +85,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}/status:
+  /api/v1/analyses/{id}/status:
     get:
       tags:
       - Analyses
       summary: Get the status of an existing experiment analysis run
-      operationId: get-analysis-status
+      operationId: api-get-analysis-status
       parameters:
       - name: id
         in: path
@@ -123,12 +113,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}/log:
+  /api/v1/analyses/{id}/log:
     get:
       tags:
       - Analyses
       summary: Get the log of an existing experiment analysis run
-      operationId: get-analysis-log
+      operationId: api-get-analysis-log
       parameters:
       - name: id
         in: path
@@ -145,20 +135,20 @@ paths:
             application/json:
               schema:
                 type: string
-                title: Response Get-Analysis-Log
+                title: Response Api-Get-Analysis-Log
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/analyses/{id}/plots:
+  /api/v1/analyses/{id}/plots:
     get:
       tags:
       - Analyses
       summary: Get an array of HTML files representing all plot outputs of a given
         analysis.
-      operationId: get-analysis-plots
+      operationId: api-get-analysis-plots
       parameters:
       - name: id
         in: path
@@ -177,19 +167,19 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/OutputFile'
-                title: Response Get-Analysis-Plots
+                title: Response Api-Get-Analysis-Plots
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations:
+  /api/v1/simulations:
     get:
       tags:
       - Simulations
       summary: List all simulation specs uploaded to the database
-      operationId: list-ecoli-simulations
+      operationId: api-list-ecoli-simulations
       responses:
         '200':
           description: Successful Response
@@ -199,17 +189,17 @@ paths:
                 items:
                   $ref: '#/components/schemas/EcoliSimulationDTO'
                 type: array
-                title: Response List-Ecoli-Simulations
+                title: Response Api-List-Ecoli-Simulations
     post:
       tags:
       - Simulations
       summary: Launches a nextflow-powered vEcoli simulation workflow
-      operationId: run-ecoli-simulation
+      operationId: api-run-ecoli-simulation
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Body_run-ecoli-simulation'
+              $ref: '#/components/schemas/Body_api-run-ecoli-simulation'
       responses:
         '200':
           description: Successful Response
@@ -223,12 +213,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/{id}:
+  /api/v1/simulations/{id}:
     get:
       tags:
       - Simulations
       summary: Get Simulation
-      operationId: get-ecoli-simulation
+      operationId: api-get-ecoli-simulation
       parameters:
       - name: id
         in: path
@@ -251,12 +241,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/{id}/status:
+  /api/v1/simulations/{id}/status:
     get:
       tags:
       - Simulations
       summary: Get the simulation status record by its ID
-      operationId: get-ecoli-simulation-status
+      operationId: api-get-ecoli-simulation-status
       parameters:
       - name: id
         in: path
@@ -277,12 +267,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/{id}/log:
+  /api/v1/simulations/{id}/log:
     post:
       tags:
       - Simulations
       summary: Get the simulation log record of a given experiment
-      operationId: get-ecoli-simulation-log
+      operationId: api-get-ecoli-simulation-log
       parameters:
       - name: id
         in: path
@@ -302,12 +292,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/ecoli/simulations/{id}/data:
+  /api/v1/simulations/{id}/data:
     post:
       tags:
       - Simulations
       summary: Get/Stream simulation data
-      operationId: get-ecoli-simulation-data
+      operationId: api-get-ecoli-simulation-data
       parameters:
       - name: id
         in: path
@@ -652,6 +642,360 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses:
+    get:
+      tags:
+      - Analyses
+      summary: List all analysis specs uploaded to the database
+      operationId: list-analyses
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ExperimentAnalysisDTO'
+                type: array
+                title: Response List-Analyses
+    post:
+      tags:
+      - Analyses
+      summary: Run an analysis
+      operationId: run-analysis
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentAnalysisRequest'
+              default:
+                experiment_id: sms_multiseed_0-2794dfa74b9cf37c_1759844363435
+                multiseed:
+                - name: ptools_rxns
+                  n_tp: 8
+                  variant: 0
+                - name: ptools_proteins
+                  n_tp: 10
+                  variant: 0
+                - name: ptools_rna
+                  n_tp: 10
+                  variant: 0
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  anyOf:
+                  - $ref: '#/components/schemas/TsvOutputFile'
+                  - $ref: '#/components/schemas/OutputFileMetadata'
+                type: array
+                title: Response Run-Analysis
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses/{id}:
+    get:
+      tags:
+      - Analyses
+      summary: Retrieve an experiment analysis spec from the database
+      operationId: get-analysis
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentAnalysisDTO'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses/{id}/status:
+    get:
+      tags:
+      - Analyses
+      summary: Get the status of an existing experiment analysis run
+      operationId: get-analysis-status
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the analysis
+          title: Id
+        description: Database ID of the analysis
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisRun'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses/{id}/log:
+    get:
+      tags:
+      - Analyses
+      summary: Get the log of an existing experiment analysis run
+      operationId: get-analysis-log
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the analysis
+          title: Id
+        description: Database ID of the analysis
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: string
+                title: Response Get-Analysis-Log
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/analyses/{id}/plots:
+    get:
+      tags:
+      - Analyses
+      summary: Get an array of HTML files representing all plot outputs of a given
+        analysis.
+      operationId: get-analysis-plots
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the analysis
+          title: Id
+        description: Database ID of the analysis
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OutputFile'
+                title: Response Get-Analysis-Plots
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/simulations:
+    get:
+      tags:
+      - Simulations
+      summary: List all simulation specs uploaded to the database
+      operationId: list-ecoli-simulations
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/EcoliSimulationDTO'
+                type: array
+                title: Response List-Ecoli-Simulations
+    post:
+      tags:
+      - Simulations
+      summary: Launches a nextflow-powered vEcoli simulation workflow
+      operationId: run-ecoli-simulation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Body_run-ecoli-simulation'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EcoliSimulationDTO'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/simulations/{id}:
+    get:
+      tags:
+      - Simulations
+      summary: Get Simulation
+      operationId: get-ecoli-simulation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the simulation
+          title: Id
+        description: Database ID of the simulation
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EcoliSimulationDTO'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/simulations/{id}/status:
+    get:
+      tags:
+      - Simulations
+      summary: Get the simulation status record by its ID
+      operationId: get-ecoli-simulation-status
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationRun'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/simulations/{id}/log:
+    post:
+      tags:
+      - Simulations
+      summary: Get the simulation log record of a given experiment
+      operationId: get-ecoli-simulation-log
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ecoli/simulations/{id}/data:
+    post:
+      tags:
+      - Simulations
+      summary: Get/Stream simulation data
+      operationId: get-ecoli-simulation-data
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the simulation.
+          title: Id
+        description: Database ID of the simulation.
+      - name: lineage_seed
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 6
+          title: Lineage Seed
+      - name: generation
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1
+          title: Generation
+      - name: variant
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Variant
+      - name: agent_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Agent Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+              default:
+              - bulk
+              title: Observables
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /:
     get:
       summary: Redirect Old Path
@@ -832,13 +1176,51 @@ components:
       - id
       - status
       title: AnalysisRun
+    Body_api-run-ecoli-simulation:
+      properties:
+        request:
+          $ref: '#/components/schemas/ExperimentRequest'
+          default:
+            experiment_id: sms_single-7ecd_1765494209750
+            simulation_name: sms_single-7ecd_1765494209750
+            metadata: {}
+            run_parca: false
+            generations: 2
+            n_init_sims: 1
+            lineage_seed: 3
+            max_duration: 10800.0
+            initial_global_time: 0.0
+            time_step: 1.0
+            single_daughters: true
+            variants: {}
+            analysis_options: {}
+            division_variable: []
+            add_processes: []
+            exclude_processes: []
+            processes: []
+            process_configs: {}
+            topology: {}
+            engine_process_reports: []
+            emit_paths: []
+            inherit_from: []
+            spatial_environment_config: {}
+            swap_processes: {}
+            flow: {}
+            initial_state_overrides: []
+            initial_state: {}
+        metadata:
+          anyOf:
+          - $ref: '#/components/schemas/ExperimentMetadata'
+          - type: 'null'
+      type: object
+      title: Body_api-run-ecoli-simulation
     Body_run-ecoli-simulation:
       properties:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-8bda_1765401304305
-            simulation_name: sms_single-8bda_1765401304305
+            experiment_id: sms_single-7ecd_1765494209750
+            simulation_name: sms_single-7ecd_1765494209750
             metadata: {}
             run_parca: false
             generations: 2
@@ -1080,7 +1462,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-74e3_1765401304054
+          default: sim_smsapi-0dd9_1765494209725
         metadata:
           additionalProperties: true
           type: object

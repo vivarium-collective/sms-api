@@ -57,7 +57,7 @@ APP_ORIGINS = [
     "https://sms.cam.uchc.edu",
 ]
 APP_ROUTERS = [
-    # "api",
+    "api",
     # "antibiotics",
     # "biofactory",
     "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
