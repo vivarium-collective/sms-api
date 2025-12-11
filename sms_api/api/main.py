@@ -28,7 +28,6 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import RedirectResponse
 
 from sms_api.common.gateway.models import ServerMode
-from sms_api.common.gateway.utils import format_marimo_appname
 from sms_api.config import get_settings
 from sms_api.dependencies import (
     get_job_scheduler,
@@ -58,19 +57,21 @@ APP_ORIGINS = [
     "https://sms.cam.uchc.edu",
 ]
 APP_ROUTERS = [
-    "ecoli",
-    "antibiotics",
-    "biofactory",
-    "inference",
-    "variants",
+    # "api",
+    # "antibiotics",
+    # "biofactory",
     "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
+    "ecoli",
+    # "inference",
+    # "variants",
 ]
 ENV = get_settings()
 assets_dir = Path(ENV.assets_dir)
 ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
 UI_NAMES = [
-    "antibiotic",
-    "biofactory",
+    # "antibiotic",
+    # "biofactory",
+    "configure",  # no dataservice needed; possible uses though!
     "explore",  # uses dataservice, with nfs
     # "single_cell",  # uses /core router w/ generated client, no nfs
 ]
@@ -133,17 +134,9 @@ server = marimo.create_asgi_app()
 app_filenames = [f"{modname}.py" for modname in UI_NAMES]
 for filename in sorted(os.listdir(ui_dir)):
     if filename in app_filenames:
-        if "analyze" in filename:
-            app_name = "Analyze"
-            desc = "Run Simulation Analyses"
-        elif "explore" in filename:
-            app_name = "Explore"
-            desc = "Introspect and explore simulation data"
-        else:
-            app_name = format_marimo_appname(os.path.splitext(filename)[0])
-            desc = "Click Me!"
-        app_path = os.path.join(ui_dir, filename)
-        server = server.with_app(path=f"/{app_name}", root=app_path)
+        app_name = filename.replace(".py", "").capitalize()
+        app_path = ui_dir / filename
+        server = server.with_app(path=f"/{app_name}", root=app_path.__str__())
 
 templates = Jinja2Templates(directory=templates_dir)
 
@@ -157,8 +150,9 @@ async def redirect_old_path() -> RedirectResponse:
 @app.get("/home", tags=["SMS API"])
 async def home(request: Request) -> templating._TemplateResponse:
     app_info = [
-        ("Antibiotic", "Explore new possibilities"),
-        ("Biofactory", "Create new strains"),
+        # ("Antibiotic", "Explore new possibilities"),
+        # ("Biofactory", "Create new strains"),
+        ("Configure", "Invent and configure new Ecoli experiments"),
         ("Explore", "Introspect and explore simulation data"),
         # ("Single Cell", "interactive"),
     ]
