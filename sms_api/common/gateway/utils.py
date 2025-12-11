@@ -1,4 +1,5 @@
 import datetime
+import functools
 import json
 import warnings
 from collections.abc import Awaitable
@@ -22,10 +23,15 @@ PINNED_OUTDIR = REPO_DIR / "out" / "sms_single"
 CURRENT_API_VERSION = "v1"
 
 
-def router_config(prefix: str, api_version: str | None = None) -> RouterConfig:
-    return RouterConfig(
-        router=APIRouter(prefix=f"/{prefix}"), prefix=f"/{api_version or CURRENT_API_VERSION}", dependencies=[]
+def router_config(prefix: str, api_version: str | None = None, version_major: bool = True) -> RouterConfig:
+    version = f"/{api_version or CURRENT_API_VERSION}"
+    pref = f"/{prefix}"
+    config = (
+        RouterConfig(router=APIRouter(prefix=version), prefix=pref, dependencies=[])
+        if not version_major
+        else RouterConfig(router=APIRouter(prefix=pref), prefix=version, dependencies=[])
     )
+    return config
 
 
 def format_version(major: int) -> str:
@@ -99,6 +105,7 @@ F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
 
 
 def connect_ssh(func: F) -> Any:
+    @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         instance = args[0]
         ssh_service: SSHServiceManaged = (
