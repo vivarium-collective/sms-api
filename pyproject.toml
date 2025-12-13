@@ -46,9 +46,7 @@ dependencies = [
     "aioboto3>=13.3.0",
     "types-aioboto3[s3]>=13.3.0",
     "vecoli>=0.0.4",
-    "wordfreq>=3.1.1",
-    "nltk>=3.9.2",
-    "wordfilter>=0.2.7",
+    "simhash>=2.1.2",
 ]
 
 [project.urls]
@@ -73,6 +71,7 @@ dev = [
     "debugpy>=1.8.16",
     "ipdb>=0.13.13",
     "types-aiofiles>=25.1.0.20251011",
+    "types-hnswlib>=0.8.0.20250227",
 ]
 docs = [
     "mkdocs>=1.4.2,<2",
@@ -82,6 +81,10 @@ docs = [
     "sphinx-autodoc-typehints>=3.2.0,<4",
     "sphinx-rtd-theme>=3.0.2,<4",
 ]
+embedding = [
+    "hnswlib>=0.8.0",
+    "sentence-transformers>=5.2.0",
+]
 # notebook = [
 #     "vecoli>=0.0.4",
 # ]
@@ -90,6 +93,7 @@ docs = [
 default-groups = [
     "dev",
     "docs",
+    "embedding"
 ]
 
 [tool.hatch.build.targets.sdist]

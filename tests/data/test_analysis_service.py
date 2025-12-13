@@ -1,12 +1,18 @@
+import json
+import logging
 import os
 from typing import Any
 
 import pytest
+from pydantic import BaseModel
 
-from sms_api.common.gateway.utils import connect_ssh
-from sms_api.common.ssh.ssh_service import get_ssh_service_managed
+from sms_api.api import request_examples
+from sms_api.api.request_examples import analysis_ptools
+from sms_api.common.gateway.utils import connect_ssh, generate_analysis_request, get_simulator
+from sms_api.common.ssh.ssh_service import SSHServiceManaged, get_ssh_service_managed
 from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.config import get_settings
+from sms_api.config import REPO_ROOT, get_settings
+from sms_api.data import sim_analysis_service as sas
 from sms_api.data.handlers import (
     CACHE_DIR,
     DEFAULT_ANALYSIS,
@@ -18,10 +24,14 @@ from sms_api.data.handlers import (
 )
 from sms_api.data.models import (
     AnalysisConfig,
+    AnalysisDomain,
     ExperimentAnalysisRequest,
     PtoolsAnalysisConfig,
     TsvOutputFile,
 )
+from sms_api.data.sim_analysis_service import AnalysisServiceHpc
+
+GENERATE_ARTIFACTS = True
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
@@ -111,10 +121,118 @@ async def test_get_ptools_output() -> None:
 @pytest.mark.asyncio
 async def test_connect_ssh() -> None:
     @connect_ssh
-    async def func(x: float, y: float, **kwargs: Any) -> float:
-        return x + y
+    async def generate(x: float, y: float, **kwargs: Any) -> float:
+        z = x + y
+        ssh_svc: SSHServiceManaged = kwargs["ssh_service"]
+        cmd = f'echo "{z}" > /home/FCAM/svc_vivarium/workspace/test_connect_ssh.txt'
+        await ssh_svc.run_command(cmd)
+        return z
+
+    @connect_ssh
+    async def check(**kwargs):
+        ssh_svc: SSHServiceManaged = kwargs.get("ssh_service")
+        test_path = "/home/FCAM/svc_vivarium/workspace/test_connect_ssh.txt"
+        ret, stdout, stderr = await ssh_svc.run_command(f"cat {test_path}")
+        print(stdout)
 
     ssh = get_ssh_service_managed()
-    z = await func(11.11, 2.2, ssh_service=ssh)
+    z = await generate(11.11, 2.2, ssh_service=ssh)
+    await check(ssh_service=ssh)
     print(z)
     assert not ssh.connected
+
+
+@pytest.mark.asyncio
+async def test_collect_parameters() -> None:
+    svc = sas.AnalysisServiceHpc()
+    request = analysis_ptools
+    simulator_hash = get_simulator().git_commit_hash
+
+    (experiment_id, analysis_name, analysis_config, slurmjob_name, slurm_log_file) = svc._collect_parameters(
+        request=request, simulator_hash=simulator_hash
+    )
+    print()
+
+
+@pytest.mark.asyncio
+async def test_analysis_roundtrip(analysis_service: AnalysisServiceHpc, logger: logging.Logger) -> None:
+    # generate/write config JSON
+    exp_id = "publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273"
+    requested_configs = AnalysisDomain.to_list()
+    request: ExperimentAnalysisRequest = generate_analysis_request(
+        experiment_id=exp_id, requested_configs=requested_configs
+    )
+
+    # parameterize the generation of slurm script with config/request
+    simulator_hash = get_simulator().git_commit_hash
+    (experiment_id, analysis_name, analysis_config, slurmjob_name, slurm_log_file) = (
+        analysis_service._collect_parameters(request=request, simulator_hash=simulator_hash)
+    )
+
+    # generate and dispatch script
+    slurm_script = analysis_service.generate_slurm_script(
+        slurm_log_file=slurm_log_file,
+        slurm_job_name=slurmjob_name,
+        latest_hash=simulator_hash,
+        config=analysis_config,
+        analysis_name=analysis_name,
+    )
+
+    if GENERATE_ARTIFACTS:
+        # write vEcoli config JSON
+        with open(f"{REPO_ROOT}/assets/artifacts/{analysis_name}.json", "w") as fp:
+            json.dump(analysis_config.model_dump(), fp, indent=4)
+        # write corresponding sbatch
+        with open(f"{REPO_ROOT}/assets/artifacts/{analysis_name}.sbatch", "w") as fp:
+            fp.write(slurm_script)
+
+    # dispatch analysis SLURM job
+    slurmjob_name, slurmjob_id = await analysis_service.dispatch_analysis(
+        request=request, logger=logger, simulator_hash=simulator_hash, analysis_name=analysis_name
+    )
+
+    # poll status
+
+    # scp download to .results_cache / store to vecdb
+
+    # return loaded outputs as dtos
+
+
+@pytest.mark.asyncio
+async def test_generate_slurm_script(
+    analysis_service: AnalysisServiceHpc, ptools_analysis_config: AnalysisConfig
+) -> None:
+    request = request_examples.analysis_ptools2
+    simulator_hash = get_simulator().git_commit_hash
+
+    (experiment_id, analysis_name, analysis_config, slurmjob_name, slurm_log_file) = (
+        analysis_service._collect_parameters(request=request, simulator_hash=simulator_hash)
+    )
+    slurm_script = analysis_service.generate_slurm_script(
+        slurm_log_file=slurm_log_file,
+        slurm_job_name=slurmjob_name,
+        latest_hash=simulator_hash,
+        config=analysis_config,
+        analysis_name=analysis_name,
+    )
+
+    with open(f"assets/{analysis_name}.sbatch", "w") as fp:
+        fp.write(slurm_script)
+
+
+@pytest.mark.asyncio
+async def test_parse_request(analysis_service: AnalysisServiceHpc) -> None:
+    request = analysis_ptools
+
+    env = get_settings()
+    name = analysis_service.generate_analysis_name(experiment_id=request.experiment_id)
+
+    exported: AnalysisConfig = request.to_config(analysis_name=name, env=env)
+    imported: AnalysisConfig = AnalysisConfig.from_request(request=request, analysis_name=name)
+
+    def serialize(dto: BaseModel) -> dict:
+        return dto.model_dump()
+
+    assert serialize(exported) == serialize(imported)
+
+    print()

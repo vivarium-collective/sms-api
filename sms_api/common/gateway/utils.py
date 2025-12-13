@@ -6,6 +6,7 @@ from collections.abc import Awaitable
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
+import numpy as np
 from fastapi import APIRouter
 
 from sms_api.common.gateway.models import RouterConfig
@@ -13,10 +14,12 @@ from sms_api.common.ssh.ssh_service import SSHServiceManaged
 from sms_api.config import get_settings
 from sms_api.data.models import (
     AnalysisConfig,
+    AnalysisDomain,
     ExperimentAnalysisRequest,
+    PtoolsAnalysisConfig,
+    PtoolsAnalysisType,
 )
-from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import HpcRun, JobType, SimulatorVersion
+from sms_api.simulation.models import SimulatorVersion
 
 REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
 PINNED_OUTDIR = REPO_DIR / "out" / "sms_single"
@@ -36,15 +39,6 @@ def router_config(prefix: str, api_version: str | None = None, version_major: bo
 
 def format_version(major: int) -> str:
     return f"v{major}"
-
-
-def root_prefix(major: int) -> str:
-    return f"/api/{format_version(major)}"
-
-
-async def get_simulation_hpcrun(simulation_id: int, db_service: DatabaseService) -> HpcRun | None:
-    hpcrun = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
-    return hpcrun
 
 
 def format_marimo_appname(appname: str) -> str:
@@ -127,3 +121,34 @@ def connect_ssh(func: F) -> Any:
 
 def missing_experiment_error(exp_id: str) -> None:
     raise Exception(f"There is no experiment with an id of: {exp_id} in the database yet!")
+
+
+def generate_analysis_request(
+    experiment_id: str,
+    requested_configs: list[str | AnalysisDomain] | None = None,
+    truncated: bool = True,
+    n_tp: int | None = None,
+    n_tp_max: int | None = None,
+) -> ExperimentAnalysisRequest:
+    requested = dict(zip(requested_configs or AnalysisDomain.to_list(sort=True), [r for r in requested_configs]))
+    for conf_domain in requested:
+        configs = list(
+            map(
+                lambda a_type: PtoolsAnalysisConfig(
+                    name=a_type, n_tp=np.random.randint(2, n_tp_max or 10) if n_tp is None else n_tp
+                ),
+                PtoolsAnalysisType.to_list(),
+            )
+        )
+        requested[conf_domain] = configs
+
+    requested["experiment_id"] = experiment_id
+
+    if not truncated:
+        return ExperimentAnalysisRequest(**requested)
+
+    return ExperimentAnalysisRequest(
+        experiment_id=requested["experiment_id"],
+        multiseed=requested["multiseed"],
+        multigeneration=requested["multigeneration"],
+    )

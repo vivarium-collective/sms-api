@@ -10,7 +10,7 @@ import orjson
 from pydantic import BaseModel, ConfigDict, Field
 
 from sms_api.common import StrEnumBase
-from sms_api.config import get_settings
+from sms_api.config import Settings
 
 MAX_ANALYSIS_CPUS = 3
 
@@ -58,12 +58,12 @@ class AnalysisModuleConfig(BaseModel):
 
 
 class AnalysisDomain(StrEnumBase):
+    MULTIEXPERIMENT = "multiexperiment"
     MULTIVARIANT = "multivariant"
     MULTISEED = "multiseed"
     MULTIGENERATION = "multigeneration"
-    SINGLE = "single"
     MULTIDAUGHTER = "multidaughter"
-    MULTIEXPERIMENT = "multiexperiment"
+    SINGLE = "single"
 
 
 class PtoolsAnalysisType(StrEnumBase):
@@ -196,6 +196,7 @@ class AnalysisConfig(BaseModel):
 
 class ExperimentAnalysisRequest(BaseModel):
     experiment_id: str
+    analysis_name: str | None = None
     # analysis_name: str = Field(default=f"analysis_{unique_id()!s}")
     single: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multidaughter: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
@@ -204,13 +205,18 @@ class ExperimentAnalysisRequest(BaseModel):
     multivariant: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multiexperiment: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
 
-    def to_config(self, analysis_name: str) -> AnalysisConfig:
-        experiment_outdir = f"{get_settings().simulation_outdir}/{self.experiment_id}"
+    def model_post_init(self, context: Any, /) -> None:
+        if self.analysis_name is None:
+            self.analysis_name = f"sms-analysis_{self.experiment_id}"
+
+    def to_config(self, analysis_name: str, env: Settings) -> AnalysisConfig:
+        simulation_outdir = env.simulation_outdir.remote_path
+        experiment_outdir = str(simulation_outdir / self.experiment_id)
         options = AnalysisConfigOptions(
             experiment_id=[self.experiment_id],
             variant_data_dir=[f"{experiment_outdir}/variant_sim_data"],
             validation_data_path=[f"{experiment_outdir}/parca/kb/validationData.cPickle"],
-            outdir=f"{get_settings().simulation_outdir}/{analysis_name}",
+            outdir=f"{env.analysis_outdir.remote_path!s}/{analysis_name}",
             cpus=MAX_ANALYSIS_CPUS,
             single=dict_options(self.single),
             multidaughter=dict_options(self.multidaughter),
@@ -219,7 +225,7 @@ class ExperimentAnalysisRequest(BaseModel):
             multivariant=dict_options(self.multivariant),
             multiseed=dict_options(self.multiseed),
         )
-        emitter_arg = {"out_dir": str(get_settings().simulation_outdir.remote_path)}
+        emitter_arg = {"out_dir": str(simulation_outdir)}
         return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
 
     @property
