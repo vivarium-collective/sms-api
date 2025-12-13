@@ -9,6 +9,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport
 
+from sms_api.api import request_examples
 from sms_api.api.client import Client
 from sms_api.api.main import app
 from sms_api.api.request_examples import analysis_ptools as ptools_analysis
@@ -146,3 +147,13 @@ async def ptools_analysis_request() -> ExperimentAnalysisRequest:
 async def analysis_request_config(ptools_analysis_request: ExperimentAnalysisRequest) -> AnalysisConfig:
     analysis_name = DEFAULT_ANALYSIS
     return ptools_analysis_request.to_config(analysis_name=analysis_name)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def ptools_analysis_config() -> AnalysisConfig:
+    return AnalysisConfig.from_file(fp=Path(f"{REPO_ROOT}/assets/analysis-bf15-20251212.json"))
+
+
+@pytest_asyncio.fixture(scope="function")
+async def analysis_request_ptools() -> ExperimentAnalysisRequest:
+    return request_examples.analysis_ptools

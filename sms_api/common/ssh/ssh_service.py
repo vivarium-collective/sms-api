@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,18 @@ class SSHServiceManaged:
     @property
     def connected(self) -> bool:
         return self.conn is not None
+
+    async def verify_connection(self, t_wait: float | None = None) -> bool:
+        while not self.connected:
+            logger.warning(
+                f"SSH Service not connected. Attempting a reconnect {f'in {t_wait}s' if t_wait is not None else 'now'}..."
+            )
+            if t_wait is not None:
+                await asyncio.sleep(t_wait)
+            await self.connect()
+            await asyncio.sleep(1.1)
+
+        return self.connected
 
     async def connect(self) -> None:
         if self.conn is not None:  # and self.conn._connection_made():
