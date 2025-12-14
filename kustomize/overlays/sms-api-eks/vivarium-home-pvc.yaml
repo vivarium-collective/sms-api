@@ -2,13 +2,11 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: vivarium-home-pvc
-  labels:
-    app: api
-#    this is a fake volume not mounted to HPC.
 spec:
   accessModes:
-    - ReadWriteOnce
-  storageClassName: gp3
+    - ReadWriteMany
+  storageClassName: efs-sc-static
   resources:
     requests:
-      storage: 20Gi
+      storage: 100Gi
+  volumeName: efs-pcs-root-pv
