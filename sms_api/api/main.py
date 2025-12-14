@@ -19,9 +19,10 @@ from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
 
+import fastapi_swagger_dark as fsd
 import marimo
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from starlette import templating
 from starlette.middleware.cors import CORSMiddleware
@@ -61,7 +62,7 @@ APP_ROUTERS = [
     # "antibiotics",
     # "biofactory",
     "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
-    "ecoli",
+    # "ecoli",
     # "inference",
     # "variants",
 ]
@@ -104,7 +105,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     await shutdown_standalone()
 
 
-app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan, redoc_url="/documentation")
+app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan, redoc_url="/documentation", docs_url=None)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -112,11 +113,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],  # TODO: change origins back to allowed
 )
+
+app_router = APIRouter()
+fsd.install(app_router, path="/docs")
+app.include_router(app_router)
+
 for api_name in APP_ROUTERS:
     try:
         api = importlib.import_module(f"sms_api.api.routers.{api_name}")
         app.include_router(
-            api.config.router,
+            router=api.config.router,
             prefix=api.config.prefix,
             dependencies=api.config.dependencies,
         )

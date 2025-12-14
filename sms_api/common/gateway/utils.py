@@ -130,7 +130,8 @@ def generate_analysis_request(
     n_tp: int | None = None,
     n_tp_max: int | None = None,
 ) -> ExperimentAnalysisRequest:
-    requested = dict(zip(requested_configs or AnalysisDomain.to_list(sort=True), [r for r in requested_configs]))
+    req_configs = requested_configs or AnalysisDomain.to_list(sort=True)
+    requested: dict[str, list[PtoolsAnalysisConfig]] = dict(zip(req_configs, [r for r in req_configs]))
     for conf_domain in requested:
         configs = list(
             map(

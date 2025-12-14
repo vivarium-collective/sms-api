@@ -2,7 +2,7 @@ import json
 import os
 import pathlib
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 
 import numpy
 import numpy as np
@@ -10,12 +10,18 @@ import orjson
 from pydantic import BaseModel, ConfigDict, Field
 
 from sms_api.common import StrEnumBase
+from sms_api.common.utils import get_uuid
 from sms_api.config import Settings
 
 MAX_ANALYSIS_CPUS = 3
 
 
 ### -- analyses -- ###
+
+
+P = ParamSpec("P")
+
+R = TypeVar("R")
 
 
 class TsvOutputFileRequest(BaseModel):
@@ -209,6 +215,9 @@ class ExperimentAnalysisRequest(BaseModel):
         if self.analysis_name is None:
             self.analysis_name = f"sms-analysis_{self.experiment_id}"
 
+    def reset_name(self) -> None:
+        self.analysis_name = get_uuid(scope="analysis")
+
     def to_config(self, analysis_name: str, env: Settings) -> AnalysisConfig:
         simulation_outdir = env.simulation_outdir.remote_path
         experiment_outdir = str(simulation_outdir / self.experiment_id)
@@ -324,6 +333,11 @@ class JobStatus(StrEnumBase):
 
 class AnalysisRun(BaseModel):
     id: int
+    status: JobStatus
+
+
+class AnalysisStatus(BaseModel):
+    database_id: int
     status: JobStatus
 
 

@@ -7,7 +7,7 @@ import asyncssh
 from asyncssh import SSHCompletedProcess
 
 from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.config import get_settings
+from sms_api.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -30,15 +30,38 @@ class SSHServiceManaged:
     def connected(self) -> bool:
         return self.conn is not None
 
-    async def verify_connection(self, t_wait: float | None = None) -> bool:
-        while not self.connected:
-            logger.warning(
-                f"SSH Service not connected. Attempting a reconnect {f'in {t_wait}s' if t_wait is not None else 'now'}..."
+    async def verify_connection(self, retry: bool = True, t_wait: float | None = None, _max_iter: int = 3) -> bool:
+        """
+        Verify that this instance is connected with ssh, and optionally attempt a retry loop if not.
+        This should be run PRIOR to executing any ``SSHServiceManaged``-dependent logic.
+
+        :param retry: If ``True``, attempt connection retry of a total of ``_max_iter`` attempts.
+        :param t_wait: Amount of wait time to execute in running retry loop. Defaults to ``0.3``.
+        :param _max_iter: Max number of retry attempts to execute when a connection cannot be established
+            with ssh, if ``retry`` is ``True``. Defaults to ``3``.
+
+        :return: (``bool``) Whether the analysis_service's ssh instance is connected (it should be!)
+        """
+        if not self.connected and retry:
+            logger.info(
+                f""" \
+                SSH Service not connected. Attempting a reconnect {f"in {t_wait}s" if t_wait is not None else "now"}...
+                """.upper()
             )
-            if t_wait is not None:
-                await asyncio.sleep(t_wait)
-            await self.connect()
-            await asyncio.sleep(1.1)
+            i = 0
+            while not self.connected:
+                if i == _max_iter:
+                    raise RuntimeError(f"Couldnt connect ssh service after {i} attempts!")
+                if t_wait is not None:
+                    await asyncio.sleep(t_wait)
+                else:
+                    await asyncio.sleep(0.3)
+
+                await self.connect()
+                if self.connected:
+                    break
+                else:
+                    i += 1
 
         return self.connected
 
@@ -197,8 +220,8 @@ def get_ssh_service() -> SSHService:
     )
 
 
-def get_ssh_service_managed() -> SSHServiceManaged:
-    ssh_settings = get_settings()
+def get_ssh_service_managed(env: Settings | None = None) -> SSHServiceManaged:
+    ssh_settings = env or get_settings()
     return SSHServiceManaged(
         hostname=ssh_settings.slurm_submit_host,
         username=ssh_settings.slurm_submit_user,
