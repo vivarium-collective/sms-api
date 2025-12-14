@@ -12,4 +12,4 @@
     storageClassName: efs-sc-static
     csi:
       driver: efs.csi.aws.com
-      volumeHandle: ${EFS_FILE_SYSTEM_ID}  # Will be replaced by script
+      volumeHandle: fs-01091f9c46bbc4567  # Will be replaced by script
