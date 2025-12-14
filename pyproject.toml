@@ -47,6 +47,7 @@ dependencies = [
     "types-aioboto3[s3]>=13.3.0",
     "vecoli>=0.0.4",
     "simhash>=2.1.2",
+    "fastapi-swagger-dark>=0.0.9",
 ]
 
 [project.urls]

@@ -22,7 +22,9 @@ DEFAULT_NUM_GENERATIONS = 4
 
 def get_analysis_multiseed_multigen() -> ExperimentAnalysisRequest:
     request = ExperimentAnalysisRequest(
-        experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
+        analysis_name="ANALYSIS_TEST",
+        # experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
+        experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
         multiseed=[
             PtoolsAnalysisConfig(
                 name=PtoolsAnalysisType.REACTIONS,
@@ -37,9 +39,9 @@ def get_analysis_multiseed_multigen() -> ExperimentAnalysisRequest:
             ),
             PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=5),
         ],
+        experiment_index=False,
     )
 
-    request.reset_name()
     return request
 
 
@@ -115,7 +117,6 @@ def get_simulation_base() -> ExperimentRequest:
 
 # example analyses
 analysis_ptools = get_analysis_ptools()
-analysis_ptools2 = get_analysis_ptools2()
 analysis_wcecoli_setD4 = get_analysis_wcecoli_setD4()
 analysis_api_multiseed = get_analysis_api_multiseed()
 analysis_multiseed_multigen = get_analysis_multiseed_multigen()

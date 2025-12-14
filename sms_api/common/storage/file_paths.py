@@ -8,6 +8,9 @@ class HPCFilePath(BaseModel):
 
     Configuration via JSON in .env files:
         HPC_IMAGE_BASE_PATH={"remote_path": "/home/FCAM/svc_vivarium/test/images"}
+
+    Attributes:
+        remote_path: (``pathlib.Path``)
     """
 
     remote_path: Path

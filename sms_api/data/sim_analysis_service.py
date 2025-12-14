@@ -13,7 +13,7 @@ from sms_api.common.ssh.ssh_service import SSHServiceManaged, get_ssh_service_ma
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import get_uuid
 from sms_api.config import Settings, get_settings
-from sms_api.data.models import AnalysisConfig, AnalysisRun, ExperimentAnalysisRequest, JobStatus
+from sms_api.data.models import AnalysisConfig, ExperimentAnalysisRequest
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
 
 logger = logging.getLogger(__name__)
@@ -83,11 +83,11 @@ class AnalysisServiceHpc(AnalysisService):
         logger: logging.Logger,
         simulator_hash: str | None = None,
         analysis_name: str | None = None,
-    ) -> tuple[str, int]:
+    ) -> tuple[str, int, AnalysisConfig]:
         # collect params
-        (experiment_id, analysis_name, analysis_config, slurmjob_name, slurm_log_file) = self._collect_parameters(
-            request=request, simulator_hash=simulator_hash
-        )
+        slurmjob_name, slurm_log_file = self._collect_parameters(request=request, simulator_hash=simulator_hash)
+        experiment_id = request.experiment_id
+        analysis_config = request.to_config(analysis_name=analysis_name, env=self.env)
 
         # gen script
         slurm_script = self.generate_slurm_script(
@@ -115,7 +115,7 @@ class AnalysisServiceHpc(AnalysisService):
             fp.write(slurm_script)
         print()
 
-        return slurmjob_name, slurmjob_id
+        return slurmjob_name, slurmjob_id, analysis_config
 
     @override
     async def available_output_filepaths(self, analysis_name: str) -> list[HPCFilePath]:
@@ -184,7 +184,10 @@ class AnalysisServiceHpc(AnalysisService):
             binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
 
             ### execute analysis
+            analysis_outdir={config.analysis_options.outdir!s}
+            rm -rf \"$analysis_outdir\"
             mkdir -p {config.analysis_options.outdir!s}
+
             singularity run $binds $image bash -c "
                 export JAVA_HOME=$HOME/.local/bin/java-22
                 export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
@@ -192,7 +195,7 @@ class AnalysisServiceHpc(AnalysisService):
             "
 
             ### optionally, remove uploaded fp
-            ### rm -f \"$config_fp\"
+            rm -f \"$config_fp\"
         """)
 
     @connect_ssh
@@ -216,20 +219,9 @@ class AnalysisServiceHpc(AnalysisService):
             )
             return slurm_jobid
 
-    async def get_analysis_status(self, slurmjob_id: int, analysis_db_id: int) -> AnalysisRun:
-        slurm_user = self.env.slurm_submit_user
-        if not self.ssh.connected:
-            await self.ssh.connect()
-        try:
-            statuses = await self.ssh.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
-        except Exception:
-            statuses = await self.ssh.run_command(f"sacct -j {slurmjob_id}")
-        status: str = statuses[1].split("\n")[0].split()[-2]
-        return AnalysisRun(id=analysis_db_id, status=JobStatus[status])
-
     def _collect_parameters(
         self, request: ExperimentAnalysisRequest, simulator_hash: str | None = None
-    ) -> tuple[str, str, AnalysisConfig, str, HPCFilePath]:
+    ) -> tuple[str, HPCFilePath]:
         # vEcoli workflow params
         experiment_id = request.experiment_id
         analysis_name = self.generate_analysis_name()  # self.generate_analysis_name(experiment_id)
@@ -240,4 +232,6 @@ class AnalysisServiceHpc(AnalysisService):
             experiment_id=analysis_name, simulator_hash=simulator_hash or get_simulator().git_commit_hash
         )
         slurm_log_file = self.env.slurm_log_base_path / f"{slurmjob_name}.out"
-        return experiment_id, analysis_name, analysis_config, slurmjob_name, slurm_log_file
+        # return experiment_id, analysis_name, analysis_config, slurmjob_name, slurm_log_file
+
+        return slurmjob_name, slurm_log_file

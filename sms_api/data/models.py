@@ -78,9 +78,6 @@ class PtoolsAnalysisType(StrEnumBase):
     PROTEINS = "ptools_proteins"
 
 
-# PtoolsAnalysisName: Literal[PtoolsAnalysisType.REACTIONS, PtoolsAnalysisType.RNA, PtoolsAnalysisType.PROTEINS] | str
-
-
 class PtoolsAnalysisConfig(BaseModel):
     """
     :param name: (str) Analysis module type name...
@@ -109,52 +106,6 @@ class PtoolsAnalysisConfig(BaseModel):
 
 
 class AnalysisConfigOptions(BaseModel):
-    """Schema for analysis module configs:
-
-    "single": {},
-    "multidaughter": {},
-    "multigeneration": {
-      "replication": {},
-      "ribosome_components": {},
-      "ribosome_crowding": {},
-      "ribosome_production": {},
-      "ribosome_usage": {},
-      "rna_decay_03_high": {},
-      "ptools_rxns": {
-        "n_tp": 8
-      },
-      "ptools_rna": {
-        "n_tp": 8
-      },
-      "ptools_proteins": {
-        "n_tp": 8
-      }
-    },
-    "multiseed": {
-      "protein_counts_validation": {},
-      "ribosome_spacing": {},
-      "subgenerational_expression_table":
-      "ptools_rxns": {
-        "n_tp": 8
-      },
-      "ptools_rna": {
-        "n_tp": 8
-      },
-      "ptools_proteins": {
-        "n_tp": 8
-      }
-    },
-    "multivariant": {
-      "average_monomer_counts": {},
-      "cell_mass": {},
-      "doubling_time_hist": {
-        "skip_n_gens": 1
-      },
-      "doubling_time_line": {}
-    },
-    "multiexperiment": {}
-    """
-
     experiment_id: list[str]
     variant_data_dir: list[str] | None = None
     validation_data_path: list[str] | None = None
@@ -210,10 +161,14 @@ class ExperimentAnalysisRequest(BaseModel):
     multiseed: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multivariant: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multiexperiment: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    experiment_index: bool = True
 
     def model_post_init(self, context: Any, /) -> None:
         if self.analysis_name is None:
-            self.analysis_name = f"sms-analysis_{self.experiment_id}"
+            self.analysis_name = (
+                f"sms-analysis_{self.experiment_id}" if self.experiment_index else get_uuid(scope="analysis")
+            )
+        delattr(self, "experiment_index")
 
     def reset_name(self) -> None:
         self.analysis_name = get_uuid(scope="analysis")
@@ -249,70 +204,16 @@ class ExperimentAnalysisRequest(BaseModel):
 
 
 class ExperimentAnalysisDTO(BaseModel):
-    """Example schema:
-    {
-        "database_id": 1,
-        "name": "ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634",
-        "config": {
-          "analysis_options": {
-            "experiment_id": [
-              "sms_multigeneration_0-67ed3dbe116f78d9_1759364318634"
-            ],
-            "variant_data_dir": [
-              "/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/variant_sim_data"
-            ],
-            "validation_data_path": [
-              "/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/parca/kb/validationData.cPickle"
-            ],
-            "outdir":
-                "/home/FCAM/svc_vivarium/workspace/api_outputs/ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634",
-            "cpus": 3,
-            "single": {},
-            "multidaughter": {},
-            "multigeneration": {
-              "ptools_rxns": {
-                "n_tp": 8,
-                "files": [
-                  {
-                     "filename": "ptools_rxns_multigen.txt",
-                     "variant": 0,
-                     "lineage_seed": 0
-                  }
-                ]
-              },
-              "ptools_rna": {
-                "n_tp": 8,
-                "files": [
-                  {
-                     "filename": "ptools_rna_multigen.txt",
-                     "variant": 0,
-                     "lineage_seed": 0
-                  }
-                ]
-              },
-              "ptools_proteins": {
-                "n_tp": 8,
-                "files": [
-                  {
-                     "filename": "ptools_proteins_multigen.txt",
-                     "variant": 0,
-                     "lineage_seed": 0
-                  }
-                ]
-              }
-            },
-            "multiseed": {},
-            "multivariant": {},
-            "multiexperiment": {}
-          },
-          "emitter_arg": {
-            "out_dir": "/home/FCAM/svc_vivarium/workspace/api_outputs"
-          }
-        },
-        "last_updated": "2025-10-02 00:50:39.764349",
-        "job_name": "sms-079c43c-ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634-e5qu7p",
-        "job_id": 812320
-      }
+    """DTO returned by /analyses .. endpoints
+
+    Attributes:
+        database_id: (``int``) unique identifier of analysis record.
+        name: (``str``) analysis name.
+        config: (``AnalysisConfig``) data model whose serialized format
+            represents a valid analysis config ingestible by vEcoli.
+        job_name: (``str | None``) SLURM analysis job name referenced by sbatch directives.
+        job_id: (``int | None``) SLURM analysis job id generated by the ``sbatch`` evocation.
+            Defaults to ``None`` (such that this object can be partially instantiated).
     """
 
     database_id: int

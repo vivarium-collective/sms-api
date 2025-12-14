@@ -106,6 +106,21 @@ def get_job_scheduler() -> JobScheduler | None:
     return global_job_scheduler
 
 
+# ------ messaging/cache service (modular standalone: new/arbitrary channels ----
+
+global_messaging_service: MessagingService | None = None
+
+
+def set_messaging_service(service: MessagingService | None) -> None:
+    global global_messaging_service
+    global_job_scheduler = service
+
+
+def get_messaging_service() -> MessagingService | None:
+    global global_messaging_service
+    return global_messaging_service
+
+
 # ------ initialized standalone application (standalone) ------
 
 
@@ -198,6 +213,7 @@ async def init_standalone(enable_ssl: bool = True) -> None:
 
         await messaging_service.connect(host=redis_host, port=redis_port)
         logger.info("✓ Messaging service connected")
+        set_messaging_service(messaging_service)
 
         # Initialize JobScheduler
         logger.info("Initializing JobScheduler...")
@@ -233,3 +249,15 @@ async def shutdown_standalone() -> None:
     if job_scheduler:
         await job_scheduler.close()
         set_job_scheduler(None)
+
+
+async def test_get_messaging_service():
+    from sms_api.dependencies import get_job_scheduler, get_settings, init_standalone
+
+    await init_standalone()
+    msg_service = get_job_scheduler().messaging_service
+    env = get_settings()
+    host = env.redis_internal_host
+    port = env.redis_internal_port
+    await msg_service.connect(host, port)
+    return msg_service, "test_gateway"

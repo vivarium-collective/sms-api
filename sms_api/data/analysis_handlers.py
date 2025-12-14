@@ -1,15 +1,17 @@
 import asyncio
 import logging
+import os
 from pathlib import Path
 from types import ModuleType
 
+from sms_api.common import StrEnumBase
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import get_data_id
 from sms_api.config import REPO_ROOT, Settings, get_settings
 from sms_api.data.analysis_utils import get_html_outputs_local
-from sms_api.data.sim_analysis_service import AnalysisServiceHpc
 from sms_api.data.models import (
+    AnalysisDomain,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
@@ -19,6 +21,7 @@ from sms_api.data.models import (
     TsvOutputFile,
     TsvOutputFileRequest,
 )
+from sms_api.data.sim_analysis_service import AnalysisServiceHpc
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import SimulatorVersion
 
@@ -31,23 +34,18 @@ async def run_analysis(
     db_service: DatabaseService,
     timestamp: str,
 ) -> list[OutputFileMetadata | TsvOutputFile]:
-    """
-    TODO: first check if its in the db: if not, then do the dispatch/insert/poll workflow,
-       otherwise, skip to the download section
-    """
     # 0. TODO: first check if analysis with same analysis options specs exist in db. If so,
     #       SKIP directly to reading from cache
-
     # 1. -- collect params --
-    analysis_name = get_data_id(exp_id=request.experiment_id, scope="analysis")
-    config = request.to_config(analysis_name=analysis_name, env=analysis_service.env)
+    analysis_name: str = (
+        get_data_id(exp_id=request.experiment_id, scope="analysis")
+        if request.analysis_name is None
+        else request.analysis_name
+    )
 
     # 2. -- dispatch slurm job --
-    slurmjob_name, slurmjob_id = await analysis_service.dispatch_analysis(
-        request=request,
-        logger=logger,
-        simulator_hash=simulator.git_commit_hash,
-        analysis_name=analysis_name
+    slurmjob_name, slurmjob_id, config = await analysis_service.dispatch_analysis(
+        request=request, logger=logger, simulator_hash=simulator.git_commit_hash, analysis_name=analysis_name
     )
 
     # 3. -- insert analysis to db --
@@ -60,71 +58,91 @@ async def run_analysis(
     )
 
     # 4. -- status poll --
-    await asyncio.sleep(3)
-    run = await get_analysis_status(
-        db_service=db_service,
-        ssh_service=analysis_service.ssh,
-        id=analysis_record.database_id,
-    )
-    while run.status.lower() not in ["completed", "failed"]:
-        await asyncio.sleep(3)
-        # run = await get_analysis_status(
-        #   db_service=db_service,
-        #   ssh_service=analysis_service.ssh,
-        #   id=analysis_record.database_id)
-
-        run = await analysis_service.get_analysis_status(
-            slurmjob_id=slurmjob_id,
-            analysis_db_id=analysis_record.database_id
-        )
-    if run.status.lower() == "failed":
-        raise Exception(f"Analysis Run has failed:\n{run}")
+    await asyncio.sleep(1.111)
+    run = await poll_status(analysis_record=analysis_record, db_service=db_service, analysis_service=analysis_service)
+    logger.info(f"ANALYSIS RUN:\n{run}")
 
     # 5. -- fetch requested outputs --
     # 5a. recurse outdir for available paths
     available_paths: list[HPCFilePath] = await analysis_service.available_output_filepaths(analysis_name)
 
-    results = []
-    for path in available_paths:
-        # 5b. check if path is relevant to request
-        # 5c1. if it is relevant, check if exists in cache...
-        # 5c2. if it isnt in the cache, check in cold store. If in cold store,
-        #   parse dto from cold store and background task cp to cache
-        # 5c3. if it is in the cache, parse dto from cache and background task cp from cache to cold store
-        # 6. parse dto as per 5c3 by using the request (analysis name, exp id, etc)...
-        #   along with the path filename to decipher dto name attr
-        # 7. append dto to results
-        pass
+    results: list[TsvOutputFile] = []
+    # for path in available_paths:
+    for domain, configs in request.requested.items():
+        for config in configs:
+            requested_filename = f"{config.name}_{AnalysisDomain[domain.upper()]}.txt"
+            relevant_files = find_relevant_files(requested_filename, available_paths)
 
-    # requested_outputs = []
-    # analysis_types = ["single", "multiseed", "multigeneration", "multivariant", "multiexperiment"]
-    # for analysis_type in analysis_types:
-    #     analyses = getattr(request, analysis_type, None)
-    #     if analyses is not None:
-    #         for analysis in analyses:
-    #             analysis_name = analysis.name
-    #             if "multigeneration" in analysis_name:
-    #                 analysis_name = analysis_name.replace("multigeneration", "multigen")
-    #             fname = f"{analysis_name}_{analysis_type}"
-    #             fname += ".txt" if "ptools" in analysis_name else ".html"
-    #             metadata_kwargs: dict[str, str | int] = {}
-    #             for param in ["variant", "lineage_seed", "agent_id", "generation"]:
-    #                 kwarg_val = getattr(analysis, param, None)
-    #                 if kwarg_val is not None:
-    #                     metadata_kwargs[param] = kwarg_val
-    #             metadata_kwargs["filename"] = fname
-    #             files = [OutputFileMetadata(**metadata_kwargs)]  # type: ignore[arg-type]
-    #             for file_spec in files:
-    #                 output = await get_tsv_output(
-    #                     request=TsvOutputFileRequest(**file_spec.model_dump()),
-    #                     db_service=db_service,
-    #                     id=analysis_record.database_id,
-    #                     ssh=analysis_service.ssh,
-    #                 )
-    #                 requested_outputs.append(output)
-
+            for remote_path in relevant_files:
+                # TODO: better save to cache
+                # check/make analysis_i output cache dir
+                cached_dir = Path(analysis_service.env.cache_dir) / analysis_name
+                if not cached_dir.exists():
+                    os.mkdir(cached_dir)
+                # check if file exists in cache, if not, download
+                local = cached_dir / requested_filename
+                if not local.exists():
+                    await analysis_service.ssh.scp_download(local_file=local, remote_path=remote_path)
+                # NOW, open in tmp context manager and form dto
+                file_content = local.read_text()
+                output = TsvOutputFile(filename=requested_filename, content=file_content)
+                results.append(output)
     # 8. -- return results --
     return results
+
+
+async def get_analysis_status(
+    ref: int | ExperimentAnalysisDTO,
+    db_service: DatabaseService,
+    analysis_service: AnalysisServiceHpc,
+) -> AnalysisRun:
+    """
+    If a database_id is passed, an analysis record should NOT Be
+    :param ref: (``int<ExperimentAnalysisDTO.database_id> | ExperimentAnalysisDTO>``) One of an instance of
+        objects stored and read in the "analyses" db table, OR the database_id of such an aforementioned
+        instance. **_NOTE: really, the <POST>/analyses endpoint should pass the DTO to this param, and the
+        modular status/other endpoints should pass the db id.
+    :param db_service:
+    :param analysis_service:
+    :return:
+    """
+    analysis_record: ExperimentAnalysisDTO = (
+        await db_service.get_analysis(database_id=ref) if isinstance(ref, int) else ref
+    )
+    slurmjob_id = analysis_record.job_id
+    slurm_user = analysis_service.env.slurm_submit_user
+    ssh_service = analysis_service.ssh
+    if not ssh_service.connected:
+        await ssh_service.connect()
+
+    try:
+        statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
+    except Exception:
+        statuses = await ssh_service.run_command(f"sacct -j {slurmjob_id}")
+    finally:
+        status: str = statuses[1].split("\n")[0].split()[-2]
+    return AnalysisRun(id=analysis_record.database_id, status=JobStatus[status])
+
+
+async def poll_status(
+    analysis_record: ExperimentAnalysisDTO, db_service: DatabaseService, analysis_service: AnalysisServiceHpc
+) -> AnalysisRun:
+    await asyncio.sleep(3)
+    run = await get_analysis_status(
+        ref=analysis_record,
+        db_service=db_service,
+        analysis_service=analysis_service,
+    )
+    while run.status.lower() not in ["completed", "failed"]:
+        await asyncio.sleep(3)
+        run = await get_analysis_status(
+            ref=analysis_record,
+            db_service=db_service,
+            analysis_service=analysis_service,
+        )
+    if run.status.lower() == "failed":
+        raise Exception(f"Analysis Run has failed:\n{run}")
+    return run
 
 
 async def get_analysis(db_service: DatabaseService, id: int) -> ExperimentAnalysisDTO:
@@ -198,20 +216,19 @@ async def get_tsv_output(
     )
 
 
-async def get_analysis_status(db_service: DatabaseService, ssh_service: SSHServiceManaged, id: int) -> AnalysisRun:
-    analysis_record = await db_service.get_analysis(database_id=id)
-    slurmjob_id = analysis_record.job_id
-    # slurmjob_id = get_jobid_by_experiment(experiment_id)
-    # ssh_service = get_ssh_service()
-    slurm_user = get_settings().slurm_submit_user
-    if not ssh_service.connected:
-        await ssh_service.connect()
+def explode_qubits() -> int:
+    x = 2
     try:
-        statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
-    except Exception:
-        statuses = await ssh_service.run_command(f"sacct -j {slurmjob_id}")
-    status: str = statuses[1].split("\n")[0].split()[-2]
-    return AnalysisRun(id=id, status=JobStatus[status])
+        y = x**x
+        print(f"try: {x}")
+        raise Exception("RAISE")
+    except:
+        y = y**y
+        print(f"except {y}")
+    finally:
+        y = y**y
+        print(f"finally: {y}")
+        return y
 
 
 async def get_analysis_log(db_service: DatabaseService, id: int, ssh_service: SSHService) -> str:
@@ -225,3 +242,7 @@ async def get_analysis_plots(db_service: DatabaseService, id: int, ssh_service: 
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
     return await get_html_outputs_local(output_id=output_id, ssh_service=ssh_service)
+
+
+def find_relevant_files(requested_filename: str, available_paths: list[HPCFilePath]) -> list[HPCFilePath]:
+    return [fp for fp in filter(lambda fpath: requested_filename in str(fpath.remote_path), available_paths)]
