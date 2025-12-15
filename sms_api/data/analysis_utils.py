@@ -1,54 +1,21 @@
 # -- utils -- #
 
 
-import functools
 import io
 import json
 import tempfile
 import zipfile
-from collections.abc import Awaitable, Coroutine, Generator
+from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Callable
+from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import polars
-from typing_extensions import Concatenate
 
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
-from sms_api.data.models import OutputFile, P, R, TsvOutputFile
-
-
-def connect_ssh(
-    func: Callable[Concatenate[Any, P], Awaitable[R]],
-) -> Callable[[tuple[Any, ...], dict[str, Any]], Coroutine[Any, Any, Any]]:
-    """
-    Decorator for classes that rely on a persistent "sticky" SSH service connection
-        for long-running tasks, like analyses.
-
-    :param func: (Callable) Instance method of which this func wraps.
-    :return:
-    """
-
-    @functools.wraps(func)
-    async def wrapper(*args: Any, **kwargs: Any) -> Any:
-        instance = args[0]
-        ssh_service: SSHServiceManaged = (
-            kwargs.get("ssh_service") if not getattr(instance, "ssh_service", None) else instance.ssh_service  # type: ignore[assignment]
-        )
-        # ssh_service = kwargs.get('ssh_service', get_ssh_service_managed())
-        try:
-            print(f"Connecting ssh for function: {func.__name__}!")
-            await ssh_service.connect()
-            print(f"Connected: {ssh_service.connected}")
-            return await func(*args, **kwargs)
-        finally:
-            print(f"Disconnecting ssh for function: {func.__name__}!")
-            await ssh_service.disconnect()
-            print(f"Connected: {ssh_service.connected}")
-
-    return wrapper
+from sms_api.data.models import OutputFile, TsvOutputFile
 
 
 def get_experiment_id_from_tag(experiment_tag: str) -> str:

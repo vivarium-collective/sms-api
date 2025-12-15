@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sms_api.common import StrEnumBase
 from sms_api.common.models import DataId
 from sms_api.common.utils import get_data_id, get_uuid
-from sms_api.config import Settings
+from sms_api.config import Settings, get_settings
 
 MAX_ANALYSIS_CPUS = 3
 
@@ -174,9 +174,15 @@ class ExperimentAnalysisRequest(BaseModel):
     def reset_name(self) -> None:
         self.analysis_name = get_uuid(scope="analysis")
 
-    def to_config(self, analysis_name: str | DataId, env: Settings) -> AnalysisConfig:
-        if isinstance(analysis_name, DataId):
-            analysis_name = analysis_name.label
+    def to_config(self, analysis_name: str | DataId | None = None, env: Settings | None = None) -> AnalysisConfig:
+        if env is None:
+            env = get_settings()
+        if analysis_name is None and self.analysis_name is not None:
+            analysis_name = self.analysis_name
+        else:
+            if isinstance(analysis_name, DataId):
+                analysis_name = analysis_name.label
+
         simulation_outdir = env.simulation_outdir.remote_path
         experiment_outdir = str(simulation_outdir / self.experiment_id)
         options = AnalysisConfigOptions(

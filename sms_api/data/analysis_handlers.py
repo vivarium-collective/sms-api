@@ -1,6 +1,13 @@
+"""
+Simulation analysis handler for SMS API simulation experiment outputs.
+
+NOTE: this module is essentially "analysis_handlers_hpc". TODO: abstract this into interface
+"""
+
 import asyncio
 import logging
 import os
+from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
 
@@ -10,20 +17,21 @@ from starlette.requests import Request
 
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
 from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.common.utils import get_data_id
-from sms_api.config import REPO_ROOT, Settings, get_settings
+from sms_api.common.utils import get_data_id, timestamp
+from sms_api.config import Settings, get_settings
 from sms_api.data.analysis_service import AnalysisService, AnalysisServiceHpc
 from sms_api.data.analysis_utils import get_html_outputs_local
 from sms_api.data.models import (
     AnalysisDomain,
+    AnalysisModuleConfig,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
     JobStatus,
     OutputFile,
     OutputFileMetadata,
+    PtoolsAnalysisConfig,
     TsvOutputFile,
-    TsvOutputFileRequest,
 )
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import SimulatorVersion
@@ -40,18 +48,53 @@ async def handle_analysis(
     analysis_service: AnalysisServiceHpc,
     logger: logging.Logger,
     db_service: DatabaseService,
-    timestamp: str,
     _request: Request,
-) -> list[OutputFileMetadata | TsvOutputFile]:
-    # TODO: use request, _request, and analysis_service.env to dynamically generate requested filepaths
-    # TODO: if above check returns true, SKIP DIRECTLY TO DOWNLOAD BLOCK
+) -> Sequence[OutputFileMetadata | TsvOutputFile]:
     analysis_name: str = (
         get_data_id(exp_id=request.experiment_id, scope="analysis")
         if request.analysis_name is None
         else request.analysis_name
     )
-    # get_uuid(scope="analysis")
+    analysis_cache: Path | None = get_analysis_cache(
+        request=request, _request=_request, env=analysis_service.env, analysis_name=analysis_name
+    )
 
+    if analysis_cache is None:
+        run, analysis_cache = await dispatch_new_analysis(
+            request=request,
+            _request=_request,
+            analysis_name=analysis_name,
+            simulator=simulator,
+            analysis_service=analysis_service,
+            logger=logger,
+            db_service=db_service,
+        )
+
+    # check available
+    available_paths: list[HPCFilePath] = await analysis_service.get_available_output_paths(analysis_name)
+
+    # download available
+    return await download_available(
+        available_paths=available_paths,
+        requested=request.requested,
+        analysis_cache=analysis_cache,
+        ssh=analysis_service.ssh,
+        logger=logger,
+    )
+
+
+# === AnalysisDispatch ===
+
+
+async def dispatch_new_analysis(
+    request: ExperimentAnalysisRequest,
+    analysis_name: str,
+    simulator: SimulatorVersion,
+    analysis_service: AnalysisServiceHpc,
+    logger: logging.Logger,
+    db_service: DatabaseService,
+    _request: Request,
+) -> tuple[AnalysisRun, Path]:
     # dispatch slurm
     slurmjob_name, slurmjob_id, config = await analysis_service.dispatch_analysis(
         request=request, logger=logger, simulator_hash=simulator.git_commit_hash, analysis_name=analysis_name
@@ -61,74 +104,20 @@ async def handle_analysis(
     analysis_record = await db_service.insert_analysis(
         name=analysis_name,
         config=config,
-        last_updated=timestamp,
+        last_updated=timestamp(),
         job_name=slurmjob_name,
         job_id=slurmjob_id,
     )
 
     # poll
     await asyncio.sleep(1.111)
-    _ = await poll_status(analysis_record=analysis_record, db_service=db_service, analysis_service=analysis_service)
+    run = await poll_status(analysis_record=analysis_record, db_service=db_service, analysis_service=analysis_service)
 
-    # check available
-    available_paths: list[HPCFilePath] = await analysis_service.available_output_filepaths(analysis_name)
-
-    # download requested available to cache and generate dto outputs
-    results: list[TsvOutputFile] = []
-    for domain, configs in request.requested.items():
-        for config in configs:
-            requested_filename = f"{config.name}_{AnalysisDomain[domain.upper()]}.txt"
-            relevant_files = find_relevant_files(requested_filename, available_paths)
-
-            for remote_path in relevant_files:
-                # TODO: better save to cache
-                cached_dir = Path(analysis_service.env.cache_dir) / _request.state.session_id / analysis_name
-                # cached_dir = Path(analysis_service.env.cache_dir) / analysis_name
-                if not cached_dir.exists():
-                    os.mkdir(cached_dir)
-                local = cached_dir / requested_filename
-                if not local.exists():
-                    await analysis_service.ssh.scp_download(local_file=local, remote_path=remote_path)
-
-                verification = verify_result(local, 5)
-                if not verification:
-                    logger.info("WARNING: resulting num cols/tps do not match requested.")
-                file_content = local.read_text()
-                output = TsvOutputFile(filename=requested_filename, content=file_content)
-                results.append(output)
-
-    return results
-
-
-def check_analysis_cache(
-    request: ExperimentAnalysisRequest,
-    analysis_service: AnalysisService,
-    analysis_name: str,
-    _request: Request
-) -> CacheQueryResult | Path:
-    exists = []
-    missing = []
-    for domain, configs in request.requested.items():
-        for config in configs:
-            requested_filename = f"{config.name}_{AnalysisDomain[domain.upper()]}.txt"
-            # TODO: better save to cache
-            cached_dir = Path(analysis_service.env.cache_dir) / _request.state.session_id / analysis_name
-            # cached_dir = Path(analysis_service.env.cache_dir) / analysis_name
-            if not cached_dir.exists():
-                cached_dir.mkdir()
-                return cached_dir
-            local = cached_dir / requested_filename
-            exists.append(local) if local.exists() else missing.append(local)
-
-    return CacheQueryResult(
-        exists=exists, missing=missing
-    )
-
-
-def verify_result(local_result_path: Path, expected_n_tp: int) -> bool:
-    tsv_data = pd.read_csv(local_result_path, sep="\t")
-    actual_cols = [col for col in tsv_data.columns if col.startswith("t")]
-    return len(actual_cols) == expected_n_tp
+    # make cache dir for analysis
+    cached_dir = Path(analysis_service.env.cache_dir) / _request.state.session_id / analysis_name
+    if not cached_dir.exists():
+        os.mkdir(cached_dir)
+    return run, cached_dir
 
 
 async def get_analysis_status(
@@ -185,6 +174,43 @@ async def poll_status(
     return run
 
 
+async def get_analysis_log(db_service: DatabaseService, id: int, ssh_service: SSHService) -> str:
+    analysis_record = await db_service.get_analysis(database_id=id)
+    slurm_logfile = get_settings().slurm_log_base_path / f"{analysis_record.job_name}.out"
+    ret, stdout, stdin = await ssh_service.run_command(f"cat {slurm_logfile!s}")
+    return stdout
+
+
+# === AnalysisStorage ===
+
+
+def get_analysis_cache(
+    request: ExperimentAnalysisRequest, env: Settings, analysis_name: str, _request: Request
+) -> Path | None:
+    """
+    Gets the dirpath of the analysis:
+        where:
+            ``analysis_cache = <BASE_CACHE_DIR_ROOT> / <USER_CACHE_DIR_ROOT> / <ANALYSIS_NAME>``
+        and
+            ``analysis_result_download_location = analysis_cache``
+    """
+    cache_dir = Path(env.cache_dir) / _request.state.session_id / analysis_name
+    return cache_dir if cache_dir.exists() else None
+
+
+def find_relevant_files(requested_filename: str, available_paths: list[HPCFilePath]) -> list[HPCFilePath]:
+    return [fp for fp in filter(lambda fpath: requested_filename in str(fpath.remote_path), available_paths)]
+
+
+def verify_result(local_result_path: Path, expected_n_tp: int) -> bool:
+    tsv_data = pd.read_csv(local_result_path, sep="\t")
+    actual_cols = [col for col in tsv_data.columns if col.startswith("t")]
+    return len(actual_cols) == expected_n_tp
+
+
+# === AnalysisInfo ===
+
+
 async def get_analysis(db_service: DatabaseService, id: int) -> ExperimentAnalysisDTO:
     return await db_service.get_analysis(database_id=id)
 
@@ -201,73 +227,38 @@ async def get_ptools_manifest(
     return await analysis_service.get_tsv_manifest_local(output_id=output_id, ssh_service=ssh_service)  # type: ignore[no-any-return]
 
 
-async def get_tsv_output(
-    request: TsvOutputFileRequest,
-    db_service: DatabaseService,
-    id: int,
+# === AnalysisOutputData ===
+
+
+async def download_available(
+    available_paths: list[HPCFilePath],
+    requested: dict[str, list[AnalysisModuleConfig | PtoolsAnalysisConfig]],
+    analysis_cache: Path,
     ssh: SSHServiceManaged,
-) -> TsvOutputFile:
-    if not ssh.connected:
-        await ssh.connect()
-
-    variant_id = request.variant
-    lineage_seed_id = request.lineage_seed
-    generation_id = request.generation
-    agent_id = request.agent_id
-    filename = request.filename
-    analysis_data = await db_service.get_analysis(database_id=id)
-    output_id = analysis_data.name
-    fp = (
-        get_settings().simulation_outdir
-        / output_id
-        / f"experiment_id={analysis_data.config.analysis_options.experiment_id[0]}"
-    )
-    if variant_id is not None:
-        fp = fp / f"variant={variant_id}"
-    if lineage_seed_id is not None:
-        fp = fp / f"lineage_seed={lineage_seed_id}"
-    if generation_id is not None:
-        fp = fp / f"generation={generation_id}"
-    if agent_id is not None:
-        fp = fp / f"agent_id={agent_id}"
-
-    filepath: HPCFilePath = fp / filename
-
-    # tmpdir = "/tmp"
-    cache_dir = f"{REPO_ROOT}/.results_cache"
-    local = Path(cache_dir) / filename
-    if not local.exists():
-        print(f"{local!s} does not yet exist!")
-        if not ssh.connected:
-            await ssh.connect()
-        try:
-            await ssh.scp_download(local_file=local, remote_path=filepath)
-        except Exception:
-            print(f"There was an issue downloading {filepath!s} to {local!s}")
-
-    file_content = local.read_text()
-    return TsvOutputFile(
-        filename=filename,
-        variant=variant_id,
-        lineage_seed=lineage_seed_id,
-        generation=generation_id,
-        agent_id=agent_id,
-        content=file_content,
-    )
-
-
-async def get_analysis_log(db_service: DatabaseService, id: int, ssh_service: SSHService) -> str:
-    analysis_record = await db_service.get_analysis(database_id=id)
-    slurm_logfile = get_settings().slurm_log_base_path / f"{analysis_record.job_name}.out"
-    ret, stdout, stdin = await ssh_service.run_command(f"cat {slurm_logfile!s}")
-    return stdout
+    logger: logging.Logger,
+) -> list[TsvOutputFile]:
+    results: list[TsvOutputFile] = []
+    if len(available_paths):
+        # download requested available to cache and generate dto outputs
+        for domain, configs in requested.items():
+            for config in configs:
+                requested_filename = f"{config.name}_{AnalysisDomain[domain.upper()]}.txt"
+                relevant_files = find_relevant_files(requested_filename, available_paths)
+                for remote_path in relevant_files:
+                    # TODO: better save to cache
+                    local = analysis_cache / requested_filename
+                    if not local.exists():
+                        await ssh.scp_download(local_file=local, remote_path=remote_path)
+                    verification = verify_result(local, 5)
+                    if not verification:
+                        logger.info("WARNING: resulting num cols/tps do not match requested.")
+                    file_content = local.read_text()
+                    output = TsvOutputFile(filename=requested_filename, content=file_content)
+                    results.append(output)
+    return results
 
 
 async def get_analysis_plots(db_service: DatabaseService, id: int, ssh_service: SSHServiceManaged) -> list[OutputFile]:
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
     return await get_html_outputs_local(output_id=output_id, ssh_service=ssh_service)
-
-
-def find_relevant_files(requested_filename: str, available_paths: list[HPCFilePath]) -> list[HPCFilePath]:
-    return [fp for fp in filter(lambda fpath: requested_filename in str(fpath.remote_path), available_paths)]

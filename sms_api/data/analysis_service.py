@@ -4,10 +4,13 @@ import abc
 import json
 import logging
 import tempfile
+from collections.abc import Awaitable
 from functools import wraps
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, override
+from typing import Any, Callable, override
+
+import pandas as pd
 
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.hpc.slurm_service import SlurmServiceManaged
@@ -15,7 +18,7 @@ from sms_api.common.ssh.ssh_service import SSHServiceManaged, get_ssh_service_ma
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import get_uuid
 from sms_api.config import Settings
-from sms_api.data.models import AnalysisConfig, ExperimentAnalysisRequest
+from sms_api.data.models import AnalysisConfig, ExperimentAnalysisRequest, TsvOutputFile
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
 
 logger = logging.getLogger(__name__)
@@ -25,16 +28,16 @@ logger.setLevel(logging.INFO)
 MAX_ANALYSIS_CPUS = 5
 
 
-def connect_ssh(func) -> Any:
+def connect_ssh(func: Callable[..., Any]) -> Callable[..., Awaitable[Any]]:
     @wraps(func)
-    async def wrapper(self: "AnalysisService", **kwargs) -> Any:
+    async def wrapper(instance: "AnalysisService | AnalysisServiceHpc", **kwargs: Any) -> Any:
         try:
-            if self.ssh.connected:
+            if instance.ssh.connected:
                 raise RuntimeError()
-            await self.ssh.connect()
-            return await func(self, **kwargs)
+            await instance.ssh.connect()
+            return await func(instance, **kwargs)
         finally:
-            await self.ssh.disconnect()
+            await instance.ssh.disconnect()
 
     return wrapper
 
@@ -52,19 +55,31 @@ class AnalysisService(abc.ABC):
         self,
         request: ExperimentAnalysisRequest,
         logger: logging.Logger,
+        analysis_name: str,
         simulator_hash: str | None = None,
-        analysis_name: str | None = None,
-    ) -> tuple[str, int]:
+    ) -> tuple[str, int, AnalysisConfig]:
         pass
 
     @abc.abstractmethod
-    async def available_output_filepaths(self, analysis_name: str) -> list[HPCFilePath]:
+    async def get_available_output_paths(self, analysis_name: str) -> list[HPCFilePath]:
+        pass
+
+    @abc.abstractmethod
+    async def download_analysis_output(
+        self, local_cache_dir: Path, requested_filename: str, remote_path: HPCFilePath
+    ) -> TsvOutputFile:
         pass
 
     @classmethod
     def generate_analysis_name(cls, experiment_id: str | None = None, _n_sections: int = 1) -> str:
         dataid: str = get_uuid(scope="analysis", data_id=experiment_id, n_sections=_n_sections)
         return dataid
+
+    @classmethod
+    def verify_result(cls, local_result_path: Path, expected_n_tp: int) -> bool:
+        tsv_data = pd.read_csv(local_result_path, sep="\t")
+        actual_cols = [col for col in tsv_data.columns if col.startswith("t")]
+        return len(actual_cols) == expected_n_tp
 
 
 class AnalysisServiceHpc(AnalysisService):
@@ -80,8 +95,8 @@ class AnalysisServiceHpc(AnalysisService):
         self,
         request: ExperimentAnalysisRequest,
         logger: logging.Logger,
+        analysis_name: str,
         simulator_hash: str | None = None,
-        analysis_name: str | None = None,
     ) -> tuple[str, int, AnalysisConfig]:
         # collect params
         slurmjob_name, slurm_log_file = self._collect_slurm_parameters(
@@ -101,25 +116,16 @@ class AnalysisServiceHpc(AnalysisService):
 
         # submit script
         slurmjob_id = await self.submit_slurm_script(
-            # config, experiment_id, script_content, slurm_job_name
             config=analysis_config,
             experiment_id=experiment_id,
             script_content=slurm_script,
             slurm_job_name=slurmjob_name,
         )
 
-        # debugging
-        logger.info(f"ANALYSIS JOB LOGFILE: {slurm_log_file!s}")
-        logger.info(f"ANALYSIS JOBID (id: {slurmjob_id})\nFOR EXPERIMENT: {experiment_id}")
-        logger.info(f"ANALYSIS NAME: {analysis_name}")
-        with open(f"{analysis_name}.sbatch", "w") as fp:
-            fp.write(slurm_script)
-        print()
-
         return slurmjob_name, slurmjob_id, analysis_config
 
     @override
-    async def available_output_filepaths(self, analysis_name: str) -> list[HPCFilePath]:
+    async def get_available_output_paths(self, analysis_name: str) -> list[HPCFilePath]:
         analysis_dirpath = self.env.analysis_outdir / analysis_name
         cmd = f'find "{analysis_dirpath!s}" -type f'
         if not self.ssh.connected:
@@ -130,6 +136,21 @@ class AnalysisServiceHpc(AnalysisService):
         except Exception:
             logger.exception("could not get the filepaths that are available")
             return []
+
+    @override
+    async def download_analysis_output(
+        self, local_cache_dir: Path, requested_filename: str, remote_path: HPCFilePath
+    ) -> TsvOutputFile:
+        local = local_cache_dir / requested_filename
+
+        if not local.exists():
+            await self.ssh.scp_download(local_file=local, remote_path=remote_path)
+        verification = self.verify_result(local, 5)
+        if not verification:
+            logger.info("WARNING: resulting num cols/tps do not match requested.")
+        file_content = local.read_text()
+        output = TsvOutputFile(filename=requested_filename, content=file_content)
+        return output
 
     def generate_slurm_script(
         self,

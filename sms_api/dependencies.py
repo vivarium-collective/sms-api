@@ -14,7 +14,7 @@ from sms_api.common.storage.file_service_gcs import FileServiceGCS
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
 from sms_api.common.storage.file_service_s3 import FileServiceS3
 from sms_api.config import get_settings
-from sms_api.data.analysis_service import AnalysisService, AnalysisServiceHpc
+from sms_api.data.analysis_service import AnalysisServiceHpc
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.job_scheduler import JobScheduler
@@ -33,15 +33,15 @@ def verify_service(service: DatabaseService | SimulationService | None) -> None:
 
 # ------ analysis service (standalone or pytest): including because we want a homogenous env ------
 
-global_analysis_service: AnalysisService | None = None
+global_analysis_service: AnalysisServiceHpc | None = None
 
 
-def set_analysis_service(analysis_service: AnalysisService | None) -> None:
+def set_analysis_service(analysis_service: AnalysisServiceHpc | None) -> None:
     global global_analysis_service
     global_analysis_service = analysis_service
 
 
-def get_analysis_service() -> AnalysisService | None:
+def get_analysis_service() -> AnalysisServiceHpc | None:
     global global_analysis_service
     return global_analysis_service
 
@@ -286,15 +286,3 @@ async def shutdown_standalone() -> None:
     if job_scheduler:
         await job_scheduler.close()
         set_job_scheduler(None)
-
-
-async def test_get_messaging_service():
-    from sms_api.dependencies import get_job_scheduler, get_settings, init_standalone
-
-    await init_standalone()
-    msg_service = get_job_scheduler().messaging_service
-    env = get_settings()
-    host = env.redis_internal_host
-    port = env.redis_internal_port
-    await msg_service.connect(host, port)
-    return msg_service, "test_gateway"
