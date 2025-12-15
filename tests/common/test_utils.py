@@ -1,6 +1,6 @@
 import pytest
 
-from sms_api.common.utils import unique_id, get_uuid
+from sms_api.common.utils import get_uuid, unique_id
 
 
 @pytest.mark.asyncio
@@ -16,7 +16,5 @@ async def test_get_uuid() -> None:
     scope = "analysis"
     data_id = "myexperiment_id"
     uid = get_uuid(scope)
-    print()
-
     uid2 = get_uuid(scope, data_id)
-    print()
+    assert uid != uid2

@@ -4,6 +4,7 @@ from tests.fixtures.api_fixtures import (  # noqa: F401
     analysis_config_path,
     # biocyc_service,
     analysis_request,
+    analysis_request_base,
     analysis_request_config,
     analysis_request_ptools,
     base_router,

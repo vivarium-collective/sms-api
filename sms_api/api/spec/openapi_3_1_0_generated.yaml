@@ -30,7 +30,7 @@ paths:
             schema:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
-                experiment_id: sms_multiseed_0-2794dfa74b9cf37c_1759844363435
+                experiment_id: publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273
                 analysis_name: ANALYSIS_TEST
                 multigeneration:
                 - name: ptools_rxns
@@ -699,6 +699,17 @@ paths:
               schema:
                 type: string
                 title: Response Get Version Version Get
+  /session:
+    get:
+      summary: Get Session Id
+      operationId: get_session_id_session_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSession'
 components:
   schemas:
     AnalysisConfig:
@@ -820,8 +831,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single_3738_20251214
-            simulation_name: sms_single_3738_20251214
+            experiment_id: sms_single_2d54_20251215
+            simulation_name: sms_single_2d54_20251215
             metadata: {}
             run_parca: false
             generations: 2
@@ -1035,7 +1046,7 @@ components:
         experiment_index:
           type: boolean
           title: Experiment Index
-          default: true
+          default: false
       type: object
       required:
       - experiment_id
@@ -1055,7 +1066,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi_9223_20251214
+          default: sim_smsapi_bc28_20251215
         metadata:
           additionalProperties: true
           type: object
@@ -1913,6 +1924,15 @@ components:
       required:
       - filename
       title: TsvOutputFile
+    UserSession:
+      properties:
+        session:
+          type: string
+          title: Session
+      type: object
+      required:
+      - session
+      title: UserSession
     ValidationError:
       properties:
         loc:

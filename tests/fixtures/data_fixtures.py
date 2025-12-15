@@ -3,7 +3,7 @@ from typing import Any
 import numpy as np
 import pytest_asyncio
 
-from sms_api.data.sim_analysis_service import AnalysisServiceHpc
+from sms_api.data.analysis_service import AnalysisServiceHpc
 
 
 @pytest_asyncio.fixture(scope="function")

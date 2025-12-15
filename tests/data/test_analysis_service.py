@@ -12,7 +12,7 @@ from sms_api.common.gateway.utils import connect_ssh, generate_analysis_request,
 from sms_api.common.ssh.ssh_service import SSHServiceManaged, get_ssh_service_managed
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import REPO_ROOT, get_settings
-from sms_api.data import sim_analysis_service as sas
+from sms_api.data import analysis_service as sas
 from sms_api.data._handlers import (
     CACHE_DIR,
     DEFAULT_ANALYSIS,
@@ -22,6 +22,7 @@ from sms_api.data._handlers import (
     get_ptools_analysis_request_config,
     get_ptools_output,
 )
+from sms_api.data.analysis_service import AnalysisServiceHpc
 from sms_api.data.models import (
     AnalysisConfig,
     AnalysisDomain,
@@ -29,7 +30,6 @@ from sms_api.data.models import (
     PtoolsAnalysisConfig,
     TsvOutputFile,
 )
-from sms_api.data.sim_analysis_service import AnalysisServiceHpc
 
 GENERATE_ARTIFACTS = True
 

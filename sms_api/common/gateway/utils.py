@@ -11,6 +11,7 @@ from fastapi import APIRouter
 
 from sms_api.common.gateway.models import RouterConfig
 from sms_api.common.ssh.ssh_service import SSHServiceManaged
+from sms_api.common.utils import get_data_id
 from sms_api.config import get_settings
 from sms_api.data.models import (
     AnalysisConfig,
@@ -125,13 +126,14 @@ def missing_experiment_error(exp_id: str) -> None:
 
 def generate_analysis_request(
     experiment_id: str,
+    analysis_name: str | None = None,
     requested_configs: list[str | AnalysisDomain] | None = None,
     truncated: bool = True,
     n_tp: int | None = None,
     n_tp_max: int | None = None,
 ) -> ExperimentAnalysisRequest:
     req_configs = requested_configs or AnalysisDomain.to_list(sort=True)
-    requested: dict[str, list[PtoolsAnalysisConfig]] = dict(zip(req_configs, [r for r in req_configs]))
+    requested: dict[str, list[PtoolsAnalysisConfig] | str] = dict(zip(req_configs, [r for r in req_configs]))
     for conf_domain in requested:
         configs = list(
             map(
@@ -144,12 +146,14 @@ def generate_analysis_request(
         requested[conf_domain] = configs
 
     requested["experiment_id"] = experiment_id
+    requested["analysis_name"] = analysis_name or (get_data_id(scope="analysis"))
 
     if not truncated:
         return ExperimentAnalysisRequest(**requested)
 
     return ExperimentAnalysisRequest(
         experiment_id=requested["experiment_id"],
+        analysis_name=requested["analysis_name"],
         multiseed=requested["multiseed"],
         multigeneration=requested["multigeneration"],
     )

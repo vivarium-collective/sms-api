@@ -1,4 +1,3 @@
-import dataclasses
 import datetime
 import secrets
 import typing
@@ -26,23 +25,7 @@ class DataString(str):
         return self.content.split("-")[0]
 
 
-@dataclasses.dataclass
-class WordBank:
-    size: int = 150_000
-
-    @property
-    def terms(self) -> list[str]:
-        return self._safe_word_list(self.size)
-
-    @classmethod
-    def safe_word_list(cls, bank_size: int) -> list[str]:
-        prefixes = [f"{hashed(bank_size)}" for _ in range(bank_size)]
-        return prefixes
-
-
-def get_uuid(
-    scope: str | None = None, data_id: str | None = None, n_sections: int = 1, return_string: bool = True
-) -> str | DataId:
+def get_uuid(scope: str | None = None, data_id: str | None = None, n_sections: int = 1) -> str:
     if not scope:
         scope = "smsapi"
     if not data_id:
@@ -51,7 +34,7 @@ def get_uuid(
         data_id += f"-{get_salt(scope)}"
 
     item_id = DataId(scope=scope, label=data_id, timestamp=timestamp())
-    return item_id.str() if return_string else item_id
+    return item_id.str()
 
 
 def i_random(start: int = 0, stop: int = 100_000) -> int:
@@ -62,16 +45,6 @@ def hashed(data: typing.Any, salt: str | None = None) -> int:
     if salt is None:
         salt = str(uuid.uuid4())
     return int(str(hash(salt + str(data)) & 0xFFFF)[:2])
-
-
-def unique_token(i: int, salt: str, bank_size: int = 150_000) -> str:
-    english_bank = WordBank.safe_word_list(bank_size)
-    return f"{english_bank[i].replace("'", '')}_{hash(salt + str(i)) & 0xFFFF}"
-
-
-def new_token(experiment_id: str) -> str:
-    i = i_random()
-    return unique_token(i=i, salt=experiment_id)
 
 
 def get_data_id(

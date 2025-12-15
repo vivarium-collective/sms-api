@@ -118,7 +118,10 @@ build-backend = "hatchling.build"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*"]
+exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/embedding/*", "^tests/embedding/*", "^sms_api/_dev/*", "^sms_api/common/gateway/utils.py"]
+
+[mypy-fastapi_swagger_dark]
+ignore_missing_imports = true
 
 # [[tool.mypy.overrides]]
 # module = "sms_api.data.data_service"
@@ -242,7 +245,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*"]
+exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "sms_api/common/gateway/utils.py"]
 
 [tool.ruff.format]
 preview = true

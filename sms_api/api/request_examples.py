@@ -23,8 +23,8 @@ DEFAULT_NUM_GENERATIONS = 4
 def get_analysis_multiseed_multigen() -> ExperimentAnalysisRequest:
     request = ExperimentAnalysisRequest(
         analysis_name="ANALYSIS_TEST",
-        # experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
-        experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
+        experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
+        # experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
         multiseed=[
             PtoolsAnalysisConfig(
                 name=PtoolsAnalysisType.REACTIONS,
@@ -120,6 +120,10 @@ analysis_ptools = get_analysis_ptools()
 analysis_wcecoli_setD4 = get_analysis_wcecoli_setD4()
 analysis_api_multiseed = get_analysis_api_multiseed()
 analysis_multiseed_multigen = get_analysis_multiseed_multigen()
+analysis_request_base = generate_analysis_request(
+    experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
+    requested_configs=[AnalysisDomain.MULTIGENERATION, AnalysisDomain.MULTISEED],
+)
 
 # example simulations
 base_simulation = (lambda expid: ExperimentRequest(experiment_id=expid, simulation_name=expid))(unique_id("sms_single"))
