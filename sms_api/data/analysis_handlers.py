@@ -5,6 +5,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pandas as pd
+from pydantic import BaseModel
 from starlette.requests import Request
 
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
@@ -26,6 +27,11 @@ from sms_api.data.models import (
 )
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import SimulatorVersion
+
+
+class CacheQueryResult(BaseModel):
+    exists: list[Path]
+    missing: list[Path]
 
 
 async def handle_analysis(
@@ -92,6 +98,31 @@ async def handle_analysis(
                 results.append(output)
 
     return results
+
+
+def check_analysis_cache(
+    request: ExperimentAnalysisRequest,
+    analysis_service: AnalysisService,
+    analysis_name: str,
+    _request: Request
+) -> CacheQueryResult | Path:
+    exists = []
+    missing = []
+    for domain, configs in request.requested.items():
+        for config in configs:
+            requested_filename = f"{config.name}_{AnalysisDomain[domain.upper()]}.txt"
+            # TODO: better save to cache
+            cached_dir = Path(analysis_service.env.cache_dir) / _request.state.session_id / analysis_name
+            # cached_dir = Path(analysis_service.env.cache_dir) / analysis_name
+            if not cached_dir.exists():
+                cached_dir.mkdir()
+                return cached_dir
+            local = cached_dir / requested_filename
+            exists.append(local) if local.exists() else missing.append(local)
+
+    return CacheQueryResult(
+        exists=exists, missing=missing
+    )
 
 
 def verify_result(local_result_path: Path, expected_n_tp: int) -> bool:
