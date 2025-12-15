@@ -10,7 +10,8 @@ import orjson
 from pydantic import BaseModel, ConfigDict, Field
 
 from sms_api.common import StrEnumBase
-from sms_api.common.utils import get_uuid
+from sms_api.common.models import DataId
+from sms_api.common.utils import get_data_id, get_uuid
 from sms_api.config import Settings
 
 MAX_ANALYSIS_CPUS = 3
@@ -161,19 +162,21 @@ class ExperimentAnalysisRequest(BaseModel):
     multiseed: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multivariant: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multiexperiment: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
-    experiment_index: bool = True
+    experiment_index: bool = False
 
     def model_post_init(self, context: Any, /) -> None:
         if self.analysis_name is None:
             self.analysis_name = (
-                f"sms-analysis_{self.experiment_id}" if self.experiment_index else get_uuid(scope="analysis")
+                f"sms-analysis_{self.experiment_id}" if self.experiment_index else get_data_id(scope="analysis")
             )
         delattr(self, "experiment_index")
 
     def reset_name(self) -> None:
         self.analysis_name = get_uuid(scope="analysis")
 
-    def to_config(self, analysis_name: str, env: Settings) -> AnalysisConfig:
+    def to_config(self, analysis_name: str | DataId, env: Settings) -> AnalysisConfig:
+        if isinstance(analysis_name, DataId):
+            analysis_name = analysis_name.label
         simulation_outdir = env.simulation_outdir.remote_path
         experiment_outdir = str(simulation_outdir / self.experiment_id)
         options = AnalysisConfigOptions(

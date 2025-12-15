@@ -4,11 +4,14 @@ import os
 from pathlib import Path
 from types import ModuleType
 
-from sms_api.common import StrEnumBase
+import pandas as pd
+from starlette.requests import Request
+
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import get_data_id
 from sms_api.config import REPO_ROOT, Settings, get_settings
+from sms_api.data.analysis_service import AnalysisService, AnalysisServiceHpc
 from sms_api.data.analysis_utils import get_html_outputs_local
 from sms_api.data.models import (
     AnalysisDomain,
@@ -21,34 +24,34 @@ from sms_api.data.models import (
     TsvOutputFile,
     TsvOutputFileRequest,
 )
-from sms_api.data.sim_analysis_service import AnalysisServiceHpc
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import SimulatorVersion
 
 
-async def run_analysis(
+async def handle_analysis(
     request: ExperimentAnalysisRequest,
     simulator: SimulatorVersion,
     analysis_service: AnalysisServiceHpc,
     logger: logging.Logger,
     db_service: DatabaseService,
     timestamp: str,
+    _request: Request,
 ) -> list[OutputFileMetadata | TsvOutputFile]:
-    # 0. TODO: first check if analysis with same analysis options specs exist in db. If so,
-    #       SKIP directly to reading from cache
-    # 1. -- collect params --
+    # TODO: use request, _request, and analysis_service.env to dynamically generate requested filepaths
+    # TODO: if above check returns true, SKIP DIRECTLY TO DOWNLOAD BLOCK
     analysis_name: str = (
         get_data_id(exp_id=request.experiment_id, scope="analysis")
         if request.analysis_name is None
         else request.analysis_name
     )
+    # get_uuid(scope="analysis")
 
-    # 2. -- dispatch slurm job --
+    # dispatch slurm
     slurmjob_name, slurmjob_id, config = await analysis_service.dispatch_analysis(
         request=request, logger=logger, simulator_hash=simulator.git_commit_hash, analysis_name=analysis_name
     )
 
-    # 3. -- insert analysis to db --
+    # insert new analysis
     analysis_record = await db_service.insert_analysis(
         name=analysis_name,
         config=config,
@@ -57,17 +60,15 @@ async def run_analysis(
         job_id=slurmjob_id,
     )
 
-    # 4. -- status poll --
+    # poll
     await asyncio.sleep(1.111)
-    run = await poll_status(analysis_record=analysis_record, db_service=db_service, analysis_service=analysis_service)
-    logger.info(f"ANALYSIS RUN:\n{run}")
+    _ = await poll_status(analysis_record=analysis_record, db_service=db_service, analysis_service=analysis_service)
 
-    # 5. -- fetch requested outputs --
-    # 5a. recurse outdir for available paths
+    # check available
     available_paths: list[HPCFilePath] = await analysis_service.available_output_filepaths(analysis_name)
 
+    # download requested available to cache and generate dto outputs
     results: list[TsvOutputFile] = []
-    # for path in available_paths:
     for domain, configs in request.requested.items():
         for config in configs:
             requested_filename = f"{config.name}_{AnalysisDomain[domain.upper()]}.txt"
@@ -79,22 +80,30 @@ async def run_analysis(
                 # cached_dir = Path(analysis_service.env.cache_dir) / analysis_name
                 if not cached_dir.exists():
                     os.mkdir(cached_dir)
-                # check if file exists in cache, if not, download
                 local = cached_dir / requested_filename
                 if not local.exists():
                     await analysis_service.ssh.scp_download(local_file=local, remote_path=remote_path)
-                # NOW, open in tmp context manager and form dto
+
+                verification = verify_result(local, 5)
+                if not verification:
+                    logger.info("WARNING: resulting num cols/tps do not match requested.")
                 file_content = local.read_text()
                 output = TsvOutputFile(filename=requested_filename, content=file_content)
                 results.append(output)
-    # 8. -- return results --
+
     return results
+
+
+def verify_result(local_result_path: Path, expected_n_tp: int) -> bool:
+    tsv_data = pd.read_csv(local_result_path, sep="\t")
+    actual_cols = [col for col in tsv_data.columns if col.startswith("t")]
+    return len(actual_cols) == expected_n_tp
 
 
 async def get_analysis_status(
     ref: int | ExperimentAnalysisDTO,
     db_service: DatabaseService,
-    analysis_service: AnalysisServiceHpc,
+    analysis_service: AnalysisService,
 ) -> AnalysisRun:
     """
     If a database_id is passed, an analysis record should NOT Be
@@ -214,21 +223,6 @@ async def get_tsv_output(
         agent_id=agent_id,
         content=file_content,
     )
-
-
-def explode_qubits() -> int:
-    x = 2
-    try:
-        y = x**x
-        print(f"try: {x}")
-        raise Exception("RAISE")
-    except:
-        y = y**y
-        print(f"except {y}")
-    finally:
-        y = y**y
-        print(f"finally: {y}")
-        return y
 
 
 async def get_analysis_log(db_service: DatabaseService, id: int, ssh_service: SSHService) -> str:

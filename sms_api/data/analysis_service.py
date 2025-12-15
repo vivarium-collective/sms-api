@@ -63,7 +63,7 @@ class AnalysisService(abc.ABC):
 
     @classmethod
     def generate_analysis_name(cls, experiment_id: str | None = None, _n_sections: int = 1) -> str:
-        dataid: str = get_uuid(scope="analysis", data_id=experiment_id, n_sections=_n_sections, return_string=True)
+        dataid: str = get_uuid(scope="analysis", data_id=experiment_id, n_sections=_n_sections)
         return dataid
 
 
