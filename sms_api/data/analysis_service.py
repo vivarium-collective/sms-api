@@ -1,78 +1,137 @@
+# ================================= new implementation ================================================= #
+
 import abc
-import io
 import json
 import logging
 import tempfile
-import zipfile
-from collections.abc import Generator
-from io import BytesIO
+from functools import wraps
 from pathlib import Path
 from textwrap import dedent
-from typing import Any
-from zipfile import ZIP_DEFLATED, ZipFile
+from typing import Any, override
 
-import polars
-
+from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.hpc.slurm_service import SlurmServiceManaged
-from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
+from sms_api.common.ssh.ssh_service import SSHServiceManaged, get_ssh_service_managed
 from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.config import get_settings
-from sms_api.data.models import AnalysisConfig, OutputFile, TsvOutputFile
+from sms_api.common.utils import get_uuid
+from sms_api.config import Settings
+from sms_api.data.models import AnalysisConfig, ExperimentAnalysisRequest
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+
 MAX_ANALYSIS_CPUS = 5
 
 
+def connect_ssh(func) -> Any:
+    @wraps(func)
+    async def wrapper(self: "AnalysisService", **kwargs) -> Any:
+        try:
+            if self.ssh.connected:
+                raise RuntimeError()
+            await self.ssh.connect()
+            return await func(self, **kwargs)
+        finally:
+            await self.ssh.disconnect()
+
+    return wrapper
+
+
 class AnalysisService(abc.ABC):
+    env: Settings
+    ssh: SSHServiceManaged
+
+    def __init__(self, env: Settings):
+        self.env = env
+        self.ssh = get_ssh_service_managed(self.env)
+
     @abc.abstractmethod
-    async def dispatch(
+    async def dispatch_analysis(
         self,
-        config: AnalysisConfig,
-        analysis_name: str,
-        simulator_hash: str,
+        request: ExperimentAnalysisRequest,
         logger: logging.Logger,
-        ssh: SSHServiceManaged,
+        simulator_hash: str | None = None,
+        analysis_name: str | None = None,
     ) -> tuple[str, int]:
         pass
 
+    @abc.abstractmethod
+    async def available_output_filepaths(self, analysis_name: str) -> list[HPCFilePath]:
+        pass
+
+    @classmethod
+    def generate_analysis_name(cls, experiment_id: str | None = None, _n_sections: int = 1) -> str:
+        dataid: str = get_uuid(scope="analysis", data_id=experiment_id, n_sections=_n_sections, return_string=True)
+        return dataid
+
 
 class AnalysisServiceHpc(AnalysisService):
-    async def dispatch(
-        self,
-        config: AnalysisConfig,
-        analysis_name: str,
-        simulator_hash: str,
-        logger: logging.Logger,
-        ssh: SSHServiceManaged,
-    ) -> tuple[str, int]:
-        slurmjob_name = get_slurmjob_name(experiment_id=analysis_name, simulator_hash=simulator_hash)
-        env = get_settings()
-        # base_path = env.slurm_base_path
-        slurm_log_file = env.slurm_log_base_path / f"{slurmjob_name}.out"
-        # slurm_log_file = base_path / f"prod/htclogs/{slurmjob_name}.out"
+    env: Settings
+    ssh: SSHServiceManaged
 
-        slurm_script = self._slurm_script(
+    @property
+    def slurm_service(self) -> SlurmServiceManaged:
+        return SlurmServiceManaged(ssh_service=self.ssh)
+
+    @override
+    async def dispatch_analysis(
+        self,
+        request: ExperimentAnalysisRequest,
+        logger: logging.Logger,
+        simulator_hash: str | None = None,
+        analysis_name: str | None = None,
+    ) -> tuple[str, int, AnalysisConfig]:
+        # collect params
+        slurmjob_name, slurm_log_file = self._collect_slurm_parameters(
+            request=request, simulator_hash=simulator_hash, analysis_name=analysis_name
+        )
+        experiment_id = request.experiment_id
+        analysis_config = request.to_config(analysis_name=analysis_name, env=self.env)
+
+        # gen script
+        slurm_script = self.generate_slurm_script(
             slurm_log_file=slurm_log_file,
             slurm_job_name=slurmjob_name,
-            latest_hash=simulator_hash,
-            config=config,
+            latest_hash=simulator_hash or get_simulator().git_commit_hash,
+            config=analysis_config,
             analysis_name=analysis_name,
         )
 
-        slurmjob_id = await self._submit_script(
-            config=config,
-            experiment_id=config.analysis_options.experiment_id[0],
+        # submit script
+        slurmjob_id = await self.submit_slurm_script(
+            # config, experiment_id, script_content, slurm_job_name
+            config=analysis_config,
+            experiment_id=experiment_id,
             script_content=slurm_script,
             slurm_job_name=slurmjob_name,
-            ssh=ssh,
         )
 
-        return slurmjob_name, slurmjob_id
+        # debugging
+        logger.info(f"ANALYSIS JOB LOGFILE: {slurm_log_file!s}")
+        logger.info(f"ANALYSIS JOBID (id: {slurmjob_id})\nFOR EXPERIMENT: {experiment_id}")
+        logger.info(f"ANALYSIS NAME: {analysis_name}")
+        with open(f"{analysis_name}.sbatch", "w") as fp:
+            fp.write(slurm_script)
+        print()
 
-    def _slurm_script(
+        return slurmjob_name, slurmjob_id, analysis_config
+
+    @override
+    async def available_output_filepaths(self, analysis_name: str) -> list[HPCFilePath]:
+        analysis_dirpath = self.env.analysis_outdir / analysis_name
+        cmd = f'find "{analysis_dirpath!s}" -type f'
+        if not self.ssh.connected:
+            await self.ssh.connect()
+        try:
+            ret, out, err = await self.ssh.run_command(cmd)
+            return [HPCFilePath(remote_path=Path(fp)) for fp in out.splitlines()]
+        except Exception:
+            logger.exception("could not get the filepaths that are available")
+            return []
+
+    def generate_slurm_script(
         self,
         slurm_log_file: HPCFilePath,
         slurm_job_name: str,
@@ -80,21 +139,21 @@ class AnalysisServiceHpc(AnalysisService):
         config: AnalysisConfig,
         analysis_name: str,
     ) -> str:
-        base_path = get_settings().slurm_base_path
+        base_path = self.env.slurm_base_path.remote_path
         remote_workspace_dir = base_path / "workspace"
         vecoli_dir = remote_workspace_dir / "vEcoli"
-        qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
-        nodelist_clause = (
-            f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
-        )
+        config_dir = vecoli_dir / "configs"
+
+        qos_clause = f"#SBATCH --qos={self.env.slurm_qos}" if self.env.slurm_qos else ""
+        nodelist_clause = f"#SBATCH --nodelist={self.env.slurm_node_list}" if self.env.slurm_node_list else ""
 
         return dedent(f"""\
             #!/bin/bash
             #SBATCH --job-name={slurm_job_name}
             #SBATCH --time=30:00
             #SBATCH --cpus-per-task {MAX_ANALYSIS_CPUS}
-            #SBATCH --mem=10GB
-            #SBATCH --partition={get_settings().slurm_partition}
+            #SBATCH --mem=8GB
+            #SBATCH --partition={self.env.slurm_partition}
             {qos_clause}
             #SBATCH --output={slurm_log_file!s}
             {nodelist_clause}
@@ -110,12 +169,11 @@ class AnalysisServiceHpc(AnalysisService):
             ### configure working dir and binds
             vecoli_dir={vecoli_dir!s}
             latest_hash={latest_hash}
+            image=$HOME/workspace/images/vecoli-$latest_hash.sif
+            vecoli_image_root=/vEcoli
 
-            tmp_config=$(mktemp)
-            echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
-            uv run --no-cache python $HOME/workspace/scripts/write_config.py \
-              --name {analysis_name} \
-              --config_path "$tmp_config"
+            config_fp={config_dir!s}/{analysis_name}.json
+            echo '{json.dumps(config.model_dump())}' > \"$config_fp\"
 
             cd $vecoli_dir
 
@@ -126,167 +184,53 @@ class AnalysisServiceHpc(AnalysisService):
             binds+=" -B $JAVA_HOME:$JAVA_HOME"
             binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
 
-            image=$HOME/workspace/images/vecoli-$latest_hash.sif
-            vecoli_image_root=/vEcoli
+            ### remove existing dir if needed and recreate
+            analysis_outdir={config.analysis_options.outdir!s}
+            if [ -d \"$analysis_outdir\" ]; then
+                rm -rf \"$analysis_outdir\"
+            fi
+            mkdir -p {config.analysis_options.outdir!s}
 
-            mkdir -p {remote_workspace_dir!s}/api_outputs/{analysis_name}
-            ## export UV_PROJECT_ENVIRONMENT=disabled
+            ### execute analysis
             singularity run $binds $image bash -c "
                 export JAVA_HOME=$HOME/.local/bin/java-22
                 export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-                uv run --no-cache --env-file /vEcoli/.env /vEcoli/runscripts/analysis.py --config \"$tmp_config\"
+                uv run --no-cache --env-file /vEcoli/.env /vEcoli/runscripts/analysis.py --config \"$config_fp\"
             "
-            ## cd {remote_workspace_dir!s}
-            ## uv run python scripts/archive_dir.py {remote_workspace_dir!s}/api_outputs/{analysis_name}
+
+            ### optionally, remove uploaded fp
+            rm -f \"$config_fp\"
         """)
 
-    async def _submit_script(
-        self,
-        config: AnalysisConfig,
-        experiment_id: str,
-        script_content: str,
-        slurm_job_name: str,
-        ssh: SSHServiceManaged,
+    @connect_ssh
+    async def submit_slurm_script(
+        self, config: AnalysisConfig, experiment_id: str, script_content: str, slurm_job_name: str
     ) -> int:
-        ssh_service = ssh
-        slurm_service = SlurmServiceManaged(ssh_service=ssh_service)
-        if not slurm_service.ssh_service.connected:
-            await slurm_service.ssh_service.connect()
-
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
+
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
                 f.write(script_content)
 
-            slurm_jobid = await slurm_service.submit_job(
+            ssh_connected: bool = await self.slurm_service.ssh_service.verify_connection(retry=False)
+            if not ssh_connected:
+                logger.info(f"Warning: SSH is not connected in {__file__}.")
+                await self.slurm_service.ssh_service.connect()
+
+            slurm_jobid = await self.slurm_service.submit_job(
                 local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid
 
+    def _collect_slurm_parameters(
+        self, request: ExperimentAnalysisRequest, analysis_name: str, simulator_hash: str | None = None
+    ) -> tuple[str, HPCFilePath]:
+        # SLURM params
+        slurmjob_name = get_slurmjob_name(
+            experiment_id=analysis_name, simulator_hash=simulator_hash or get_simulator().git_commit_hash
+        )
+        slurm_log_file = self.env.slurm_log_base_path / f"{slurmjob_name}.out"
+        # return experiment_id, analysis_name, analysis_config, slurmjob_name, slurm_log_file
 
-# -- utils -- #
-
-
-def get_experiment_id_from_tag(experiment_tag: str) -> str:
-    parts = experiment_tag.split("-")
-    parts.remove(parts[-1])
-    return "-".join(parts)
-
-
-def get_analysis_dir(outdir: Path, experiment_id: str) -> Path:
-    return outdir / experiment_id / "analyses"
-
-
-def get_analysis_paths(analysis_dir: Path) -> set[Path]:
-    paths = set()
-    for root, _, files in analysis_dir.walk():
-        for fname in files:
-            fp = root / fname
-            if fp.exists():
-                paths.add(fp)
-    return paths
-
-
-def generate_zip_buffer(file_paths: list[tuple[Path, str]]) -> Generator[Any]:
-    """
-    Generator function to stream a zip file dynamically.
-    """
-    # Use BytesIO as an in-memory file-like object for chunks
-    buffer = BytesIO()
-    with ZipFile(buffer, "w", ZIP_DEFLATED) as zip_file:
-        for file_path, arcname in file_paths:
-            # arcname is the filename inside the zip (can handle non-unique names)
-            zip_file.write(file_path, arcname=arcname)
-    buffer.seek(0)
-    yield from buffer
-
-
-def unzip_archive(zip_path: Path, dest_dir: Path) -> str:
-    zip_path = Path(zip_path).resolve()
-    dest_dir = Path(dest_dir).resolve()
-
-    if not zip_path.is_file():
-        raise FileNotFoundError(f"{zip_path} does not exist or is not a file")
-
-    if not dest_dir.is_dir():
-        raise NotADirectoryError(f"{dest_dir} does not exist or is not a directory")
-
-    with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        zip_ref.extractall(dest_dir)
-
-    return str(dest_dir)
-
-
-async def get_tsv_outputs_local(output_id: str, ssh_service: SSHService) -> list[OutputFile]:
-    """Run in DEV"""
-    remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-    ret, stdin, stdout = await ssh_service.run_command(
-        dedent(f"""
-                cd /home/FCAM/svc_vivarium/workspace \
-                    && {remote_uv_executable} run scripts/ptools_outputs.py --output_id {output_id}
-            """)
-    )
-
-    deserialized = json.loads(stdin.replace("'", '"'))
-    outputs = []
-    for spec in deserialized:
-        output = OutputFile(name=spec["name"], content=spec["content"])
-        outputs.append(output)
-    return outputs
-
-
-async def get_tsv_manifest_local(output_id: str, ssh_service: SSHService) -> list[TsvOutputFile]:
-    """Run in DEV"""
-    remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-    ret, stdin, stdout = await ssh_service.run_command(
-        dedent(f"""
-                cd /home/FCAM/svc_vivarium/workspace \
-                    && {remote_uv_executable} run scripts/ptools_outputs.py --output_id {output_id} --manifest
-            """)
-    )
-
-    deserialized = json.loads(stdin.replace("'", '"'))
-    return [TsvOutputFile(**item) for item in deserialized]
-
-
-async def get_html_outputs_local(output_id: str, ssh_service: SSHServiceManaged) -> list[OutputFile]:
-    """Run in DEV"""
-    remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-    ret, stdin, stdout = await ssh_service.run_command(
-        dedent(f"""
-                cd /home/FCAM/svc_vivarium/workspace \
-                    && {remote_uv_executable} run scripts/html_outputs.py --output_id {output_id}
-            """)
-    )
-
-    deserialized = json.loads(stdin.replace("'", '"'))
-    outputs = []
-    for spec in deserialized:
-        output = OutputFile(name=spec["name"], content=spec["content"])
-        outputs.append(output)
-    return outputs
-
-
-def format_tsv_string(output: OutputFile) -> str:
-    raw_string = output.content
-    return raw_string.encode("utf-8").decode("unicode_escape")
-
-
-def format_html_string(output: OutputFile) -> str:
-    raw_string = output.content
-    return raw_string.encode("utf-8").decode("unicode_escape")
-
-
-def tsv_string_to_polars_df(output: OutputFile) -> polars.DataFrame:
-    formatted = format_tsv_string(output)
-    return polars.read_csv(io.StringIO(formatted), separator="\t")
-
-
-def write_tsvs(data: list[OutputFile]) -> None:
-    lines = [(output.name, "".join(output.content).split("\n")) for output in data]
-    with tempfile.TemporaryDirectory() as tmpdir:
-        for filename, filedata in lines:
-            with open(Path(tmpdir) / filename, "w") as f:
-                for item in filedata:
-                    f.write(f"{item}\n")
+        return slurmjob_name, slurm_log_file

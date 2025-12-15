@@ -75,8 +75,8 @@ async def run_analysis(
 
             for remote_path in relevant_files:
                 # TODO: better save to cache
-                # check/make analysis_i output cache dir
-                cached_dir = Path(analysis_service.env.cache_dir) / analysis_name
+                cached_dir = Path(analysis_service.env.cache_dir) / _request.state.session_id / analysis_name
+                # cached_dir = Path(analysis_service.env.cache_dir) / analysis_name
                 if not cached_dir.exists():
                     os.mkdir(cached_dir)
                 # check if file exists in cache, if not, download

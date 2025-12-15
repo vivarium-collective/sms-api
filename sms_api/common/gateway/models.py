@@ -8,6 +8,10 @@ import fastapi
 from pydantic import BaseModel
 
 
+class UserSession(BaseModel):
+    session: str
+
+
 @dc.dataclass
 class RouterConfig:
     router: fastapi.APIRouter

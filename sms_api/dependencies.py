@@ -31,6 +31,41 @@ def verify_service(service: DatabaseService | SimulationService | None) -> None:
         raise HTTPException(status_code=500, detail=f"{service.__module__} is not initialized")
 
 
+# ------ analysis service (standalone or pytest): including because we want a homogenous env ------
+
+global_analysis_service: AnalysisService | None = None
+
+
+def set_analysis_service(analysis_service: AnalysisService | None) -> None:
+    global global_analysis_service
+    global_analysis_service = analysis_service
+
+
+def get_analysis_service() -> AnalysisService | None:
+    global global_analysis_service
+    return global_analysis_service
+
+
+# ------ sessions (standalone or pytest) ------
+
+UserSessionsType = dict[str, dict[str, float]]
+
+UserSessions: UserSessionsType
+
+
+global_user_sessions: UserSessionsType = {}
+
+
+def set_user_sessions(sessions: UserSessionsType) -> None:
+    global global_user_sessions
+    global_user_sessions = sessions
+
+
+def get_user_sessions() -> UserSessionsType:
+    global global_user_sessions
+    return global_user_sessions
+
+
 # ------ file service (standalone or pytest) ------
 
 global_file_service: FileService | None = None
@@ -113,7 +148,7 @@ global_messaging_service: MessagingService | None = None
 
 def set_messaging_service(service: MessagingService | None) -> None:
     global global_messaging_service
-    global_job_scheduler = service
+    global_job_scheduler = service  # noqa: F841
 
 
 def get_messaging_service() -> MessagingService | None:
@@ -130,12 +165,10 @@ def get_async_engine(url: str, enable_ssl: bool = True, **engine_params: Any) ->
     return create_async_engine(url, **engine_params)
 
 
-def get_analysis_service() -> AnalysisService:
-    return AnalysisServiceHpc()
-
-
 async def init_standalone(enable_ssl: bool = True) -> None:
     _settings = get_settings()
+    analysis_service = AnalysisServiceHpc(_settings)
+    set_analysis_service(analysis_service)
 
     try:
         # Initialize file service based on configured backend
@@ -222,6 +255,10 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         )
         set_job_scheduler(job_scheduler)
         logger.info("✓ JobScheduler initialized")
+
+        # initialize sessions
+        sessions: UserSessionsType = {}
+        set_user_sessions(sessions)
 
     except Exception as e:
         logger.error(f"Failed to initialize JobScheduler: {e}", exc_info=True)

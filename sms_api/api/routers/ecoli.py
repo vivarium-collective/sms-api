@@ -3,23 +3,24 @@
     simulation analysis jobs/workflows
 """
 
-import asyncio
-
 # TODO: do we require simulation/analysis configs that are supersets of the original configs:
 #   IE: where do we provide this special config: in vEcoli or API?
 # TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
 # TODO: labkey preprocessing
 import logging
+from typing import cast
 
 import fastapi
 from fastapi import BackgroundTasks, Depends, HTTPException, Query
+from starlette.requests import Request
 
 from sms_api.api import request_examples
 from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.common.ssh.ssh_service import get_ssh_service, get_ssh_service_managed
 from sms_api.common.utils import timestamp
-from sms_api.data import ecoli_handlers as data_handlers
-from sms_api.data.analysis_service import AnalysisServiceHpc
+from sms_api.config import get_settings
+from sms_api.data import analysis_handlers
+from sms_api.data.analysis_service import AnalysisService, AnalysisServiceHpc
 from sms_api.data.models import (
     AnalysisRun,
     ExperimentAnalysisDTO,
@@ -28,7 +29,7 @@ from sms_api.data.models import (
     OutputFileMetadata,
     TsvOutputFile,
 )
-from sms_api.dependencies import get_database_service, get_simulation_service
+from sms_api.dependencies import get_analysis_service, get_database_service, get_simulation_service
 from sms_api.simulation import ecoli_handlers as simulation_handlers
 from sms_api.simulation.models import (
     EcoliSimulationDTO,
@@ -36,6 +37,8 @@ from sms_api.simulation.models import (
     ExperimentRequest,
     SimulationRun,
 )
+
+ENV = get_settings()
 
 logger = logging.getLogger(__name__)
 config = router_config(prefix="ecoli")
@@ -54,38 +57,31 @@ config = router_config(prefix="ecoli")
     ],
 )
 async def run_analysis(
-    request: ExperimentAnalysisRequest = request_examples.analysis_ptools,
+    _request: Request,
+    request: ExperimentAnalysisRequest = request_examples.analysis_multiseed_multigen,
 ) -> list[TsvOutputFile | OutputFileMetadata]:
-    # get services
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-
-    ssh_service = get_ssh_service_managed()
-    await ssh_service.connect()
-    if not ssh_service.connected:
-        logger.debug("The ssh service is not connected!")
-        await asyncio.sleep(1.111)
-        await ssh_service.connect()
-
-    analysis_service = AnalysisServiceHpc()
+    analysis_service = get_analysis_service() or AnalysisServiceHpc(env=ENV)
 
     try:
         simulator = get_simulator()
-        return await data_handlers.run_analysis(
+        return await analysis_handlers.handle_analysis(
             request=request,
             simulator=simulator,
             analysis_service=analysis_service,
             logger=logger,
             db_service=db_service,
             timestamp=timestamp(),
-            ssh_service=ssh_service,
+            _request=_request,
         )
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
-        await ssh_service.disconnect()
+        if analysis_service.ssh.connected:
+            await analysis_service.ssh.disconnect()
 
 
 @config.router.get(
@@ -100,7 +96,7 @@ async def get_analysis_spec(id: int) -> ExperimentAnalysisDTO:
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
-        return await data_handlers.get_analysis(db_service=db_service, id=id)
+        return await analysis_handlers.get_analysis(db_service=db_service, id=id)
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -117,10 +113,9 @@ async def get_analysis_status(id: int = fastapi.Path(..., description="Database 
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-    ssh_service = get_ssh_service_managed()
-    await ssh_service.connect()
+    aservice = cast(AnalysisService, get_analysis_service() or AnalysisServiceHpc(env=ENV))
     try:
-        return await data_handlers.get_analysis_status(db_service=db_service, ssh_service=ssh_service, id=id)
+        return await analysis_handlers.get_analysis_status(db_service=db_service, analysis_service=aservice, ref=id)
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
@@ -129,7 +124,9 @@ async def get_analysis_status(id: int = fastapi.Path(..., description="Database 
         )
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
-        await ssh_service.disconnect()
+        ssh = aservice.ssh
+        if ssh.connected:
+            await ssh.disconnect()
 
 
 @config.router.get(
@@ -145,7 +142,7 @@ async def get_analysis_log(id: int = fastapi.Path(..., description="Database ID 
         raise HTTPException(status_code=404, detail="Database not found")
     ssh_service = get_ssh_service()
     try:
-        return await data_handlers.get_analysis_log(db_service=db_service, id=id, ssh_service=ssh_service)
+        return await analysis_handlers.get_analysis_log(db_service=db_service, id=id, ssh_service=ssh_service)
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
@@ -173,7 +170,7 @@ async def get_analysis_plots(
     await ssh_service.connect()
 
     try:
-        return await data_handlers.get_analysis_plots(db_service=db_service, id=id, ssh_service=ssh_service)
+        return await analysis_handlers.get_analysis_plots(db_service=db_service, id=id, ssh_service=ssh_service)
     except Exception as e:
         logger.exception("Error getting analysis data")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -195,7 +192,7 @@ async def list_analyses() -> list[ExperimentAnalysisDTO]:
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
         # return await db_service.list_analyses()
-        return await data_handlers.list_analyses(db_service=db_service)
+        return await analysis_handlers.list_analyses(db_service=db_service)
     except Exception as e:
         logger.exception("Error fetching the uploaded analyses")
         raise HTTPException(status_code=500, detail=str(e)) from e
