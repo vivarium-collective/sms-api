@@ -3,7 +3,10 @@ from typing import Any
 import numpy as np
 import pytest_asyncio
 
+from sms_api.config import get_settings
 from sms_api.data.analysis_service import AnalysisServiceHpc
+
+ENV = get_settings()
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -34,4 +37,4 @@ async def data_fixture() -> dict[str, np.ndarray]:
 
 @pytest_asyncio.fixture(scope="function")
 async def analysis_service() -> AnalysisServiceHpc:
-    return AnalysisServiceHpc()
+    return AnalysisServiceHpc(ENV)
