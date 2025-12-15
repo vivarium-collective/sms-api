@@ -8,7 +8,7 @@
 # TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
 # TODO: labkey preprocessing
 import logging
-from typing import cast
+from collections.abc import Sequence
 
 import fastapi
 from fastapi import BackgroundTasks, Depends, HTTPException, Query
@@ -20,7 +20,7 @@ from sms_api.common.ssh.ssh_service import get_ssh_service, get_ssh_service_mana
 from sms_api.common.utils import timestamp
 from sms_api.config import get_settings
 from sms_api.data import analysis_handlers
-from sms_api.data.analysis_service import AnalysisService, AnalysisServiceHpc
+from sms_api.data.analysis_service import AnalysisServiceHpc
 from sms_api.data.models import (
     AnalysisRun,
     ExperimentAnalysisDTO,
@@ -58,8 +58,8 @@ config = router_config(prefix="api", version_major=False)
 )
 async def run_analysis(
     _request: Request,
-    request: ExperimentAnalysisRequest = request_examples.analysis_multiseed_multigen,
-) -> list[TsvOutputFile | OutputFileMetadata]:
+    request: ExperimentAnalysisRequest = request_examples.analysis_request_base,
+) -> Sequence[TsvOutputFile | OutputFileMetadata]:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
@@ -73,7 +73,6 @@ async def run_analysis(
             analysis_service=analysis_service,
             logger=logger,
             db_service=db_service,
-            timestamp=timestamp(),
             _request=_request,
         )
     except Exception as e:
@@ -113,7 +112,7 @@ async def get_analysis_status(id: int = fastapi.Path(..., description="Database 
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-    aservice = cast(AnalysisService, get_analysis_service() or AnalysisServiceHpc(env=ENV))
+    aservice = get_analysis_service() or AnalysisServiceHpc(env=ENV)
     try:
         return await analysis_handlers.get_analysis_status(db_service=db_service, analysis_service=aservice, ref=id)
     except Exception as e:
