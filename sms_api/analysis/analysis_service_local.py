@@ -1,6 +1,7 @@
 import json
 import logging
 import random
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -39,7 +40,7 @@ class AnalysisServiceLocal:
         expid: str,
         analysis_name: str,
         analysis_config: AnalysisConfig,
-        requested: dict[str, list[AnalysisModuleConfig | PtoolsAnalysisConfig]]
+        requested: dict[str, list[AnalysisModuleConfig | PtoolsAnalysisConfig]],
     ) -> Sequence[TsvOutputFile]:
         # exec analysis
         ret = self.execute_analysis(expid=expid, name=analysis_name, config=analysis_config)
@@ -69,13 +70,18 @@ class AnalysisServiceLocal:
         validation_data_path = exp_outdir / "parca" / "kb" / "validationData.cPickle"
         config_name = "API_TEST"
         analysis_outdir = Path(env.cache_dir) / name
+        tmpdir = tempfile.TemporaryDirectory()
+        conf_path = str(Path(tmpdir.name) / "tmp.json")
+        with open(conf_path, "w") as f:
+            json.dump(config.model_dump(), f, indent=3)
+        # (env.vecoli_config_dir / config_name)!s
         cmd = textwrap.dedent(f""" \
             rm -rf {analysis_outdir!s};
             mkdir -p {analysis_outdir!s};
 
             cd {env.vecoli_config_dir.parent!s};
             uv run --env-file .env runscripts/analysis.py \\
-                --config {(env.vecoli_config_dir / config_name)!s}.json \\
+                --config {conf_path} \\
                 --variant_data_dir {variant_data_dir!s} \\
                 --validation_data_path {validation_data_path!s} \\
                 --outdir {analysis_outdir!s} \\
@@ -84,6 +90,7 @@ class AnalysisServiceLocal:
 
         ret = self._execute_command(cmd)
         # config = self._get_config(analysis_outdir=analysis_outdir, simulation_outdir=simulation_outdir)
+        tmpdir.cleanup()
         return ret
 
     def _get_config(self, analysis_outdir: Path, simulation_outdir: Path) -> AnalysisConfig:

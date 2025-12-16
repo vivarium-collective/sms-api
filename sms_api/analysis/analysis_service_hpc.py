@@ -1,27 +1,19 @@
 # ================================= new implementation ================================================= #
 
-import abc
 import json
 import logging
 import random
 import tempfile
-import textwrap
-from collections.abc import Awaitable
-from functools import wraps
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Callable, override
-
-import pandas as pd
+from typing import override
 
 from sms_api.analysis.analysis_service import AnalysisService, connect_ssh
-from sms_api.common.gateway.utils import get_simulator
-from sms_api.common.hpc.slurm_service import SlurmServiceManaged
-from sms_api.common.ssh.ssh_service import SSHServiceManaged, get_ssh_service_managed
-from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.common.utils import get_uuid
-from sms_api.config import Settings
 from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisRequest, TsvOutputFile
+from sms_api.common.gateway.utils import get_simulator
+from sms_api.common.ssh.ssh_service import SSHServiceManaged
+from sms_api.common.storage.file_paths import HPCFilePath
+from sms_api.config import Settings
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
 
 __all__ = ["AnalysisServiceHpc", "RemoteScriptService"]
@@ -42,8 +34,8 @@ class RemoteScriptService:
         self.ssh_service = ssh_service
 
     def new_job_id(self) -> int:
-        start: int = 10 ** 11
-        end: int = 10 ** 15
+        start: int = 10**11
+        end: int = 10**15
         return random.randint(start, end)
 
     async def execute_script(
@@ -83,7 +75,7 @@ class AnalysisServiceHpc(AnalysisService):
     env: Settings
     ssh: SSHServiceManaged
     script_service: RemoteScriptService
-    
+
     @property
     def script_service(self) -> RemoteScriptService:
         return RemoteScriptService(ssh_service=self.ssh)
@@ -232,8 +224,7 @@ class AnalysisServiceHpc(AnalysisService):
                 await self.ssh.connect()
 
             return await self.script_service.execute_script(
-                local_script_fp=local_submit_file,
-                remote_script_fp=slurm_submit_file
+                local_script_fp=local_submit_file, remote_script_fp=slurm_submit_file
             )
 
     def _collect_script_parameters(
@@ -247,11 +238,6 @@ class AnalysisServiceHpc(AnalysisService):
         return job_name, log_file
 
 
-
-
-
-
-
 # class AnalysisServiceLocal(AnalysisService):
 #     async def dispatch_analysis(
 #         self,
@@ -261,4 +247,3 @@ class AnalysisServiceHpc(AnalysisService):
 #         simulator_hash: str | None = None,
 #     ) -> tuple[str, int, AnalysisConfig]:
 #
-

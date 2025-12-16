@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.59-dev
+  version: 0.2.61-dev
 paths:
   /api/v1/analyses:
     get:
@@ -30,27 +30,27 @@ paths:
             schema:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
-                experiment_id: publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273
-                analysis_name: analysis-f5c8-20251216
+                experiment_id: sms_multigeneration
+                analysis_name: analysis-5acf-20251216
                 multigeneration:
                 - name: ptools_rxns
-                  n_tp: 8
-                  variant: 0
-                - name: ptools_rna
-                  n_tp: 7
-                  variant: 0
-                - name: ptools_proteins
                   n_tp: 5
-                  variant: 0
-                multiseed:
-                - name: ptools_rxns
-                  n_tp: 7
                   variant: 0
                 - name: ptools_rna
                   n_tp: 3
                   variant: 0
                 - name: ptools_proteins
-                  n_tp: 9
+                  n_tp: 8
+                  variant: 0
+                multiseed:
+                - name: ptools_rxns
+                  n_tp: 6
+                  variant: 0
+                - name: ptools_rna
+                  n_tp: 6
+                  variant: 0
+                - name: ptools_proteins
+                  n_tp: 2
                   variant: 0
       responses:
         '200':
@@ -837,8 +837,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single_f548_20251216
-            simulation_name: sms_single_f548_20251216
+            experiment_id: sms_single_6d16_20251216
+            simulation_name: sms_single_6d16_20251216
             metadata: {}
             run_parca: false
             generations: 2
@@ -1072,7 +1072,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi_1349_20251216
+          default: sim_smsapi_b764_20251216
         metadata:
           additionalProperties: true
           type: object

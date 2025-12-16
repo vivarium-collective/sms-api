@@ -39,9 +39,10 @@ from sms_api.simulation.models import (
 )
 
 ENV = get_settings()
+REMOTE_JOB_EXECUTION: bool = ENV.remote_job_execution
 
 logger = logging.getLogger(__name__)
-config = router_config(prefix="ecoli")
+config = router_config(prefix="api", version_major=False)
 
 
 ###### -- analyses -- ######
@@ -77,9 +78,6 @@ async def run_analysis(
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
-    # finally:
-    #     if analysis_service.ssh.connected:
-    #         await analysis_service.ssh.disconnect()
 
 
 @config.router.get(
@@ -111,7 +109,7 @@ async def get_analysis_status(id: int = fastapi.Path(..., description="Database 
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-    aservice = get_analysis_service(env=ENV)
+    aservice = AnalysisServiceLocal(db_service=db_service, env=ENV)
     try:
         return await analysis_handlers.get_analysis_status(db_service=db_service, analysis_service=aservice, ref=id)
     except Exception as e:

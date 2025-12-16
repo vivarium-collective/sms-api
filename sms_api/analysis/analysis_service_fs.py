@@ -1,28 +1,18 @@
 # ================================= new implementation ================================================= #
 
-import abc
 import json
 import logging
-import random
 import subprocess
 import tempfile
-import textwrap
-from collections.abc import Awaitable
-from functools import wraps
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Callable, override
-
-import pandas as pd
+from typing import override
 
 from sms_api.analysis.analysis_service import AnalysisService, connect_ssh
-from sms_api.common.gateway.utils import get_simulator
-from sms_api.common.hpc.slurm_service import SlurmServiceManaged
-from sms_api.common.ssh.ssh_service import SSHServiceManaged, get_ssh_service_managed
-from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.common.utils import get_uuid
-from sms_api.config import Settings
 from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisRequest, TsvOutputFile
+from sms_api.common.gateway.utils import get_simulator
+from sms_api.common.storage.file_paths import HPCFilePath
+from sms_api.config import Settings
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
 
 __all__ = ["AnalysisServiceFS"]
@@ -40,6 +30,7 @@ class AnalysisServiceFS(AnalysisService):
     is completely dependent on the NFS mount and should be used ONLY if remote
     execution is not available.
     """
+
     env: Settings
 
     @override
@@ -74,7 +65,7 @@ class AnalysisServiceFS(AnalysisService):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,  # merge stderr into stdout
             text=True,  # get strings, not bytes
-            bufsize=1  # line-buffered
+            bufsize=1,  # line-buffered
         )
 
         # Stream output line by line
@@ -104,7 +95,7 @@ class AnalysisServiceFS(AnalysisService):
 
     @override
     async def download_analysis_output(
-            self, local_cache_dir: Path, requested_filename: str, remote_path: HPCFilePath
+        self, local_cache_dir: Path, requested_filename: str, remote_path: HPCFilePath
     ) -> TsvOutputFile:
         local = local_cache_dir / requested_filename
 
@@ -118,12 +109,12 @@ class AnalysisServiceFS(AnalysisService):
         return output
 
     def generate_script(
-            self,
-            slurm_log_file: HPCFilePath,
-            slurm_job_name: str,
-            latest_hash: str,
-            config: AnalysisConfig,
-            analysis_name: str,
+        self,
+        slurm_log_file: HPCFilePath,
+        slurm_job_name: str,
+        latest_hash: str,
+        config: AnalysisConfig,
+        analysis_name: str,
     ) -> str:
         base_path = self.env.slurm_base_path.remote_path
         remote_workspace_dir = base_path / "workspace"
@@ -182,7 +173,7 @@ class AnalysisServiceFS(AnalysisService):
 
     @connect_ssh
     async def submit_script(
-            self, config: AnalysisConfig, experiment_id: str, script_content: str, slurm_job_name: str
+        self, config: AnalysisConfig, experiment_id: str, script_content: str, slurm_job_name: str
     ) -> tuple[int, str, str, int]:
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
 
@@ -197,12 +188,11 @@ class AnalysisServiceFS(AnalysisService):
                 await self.ssh.connect()
 
             return await self.script_service.execute_script(
-                local_script_fp=local_submit_file,
-                remote_script_fp=slurm_submit_file
+                local_script_fp=local_submit_file, remote_script_fp=slurm_submit_file
             )
 
     def _collect_script_parameters(
-            self, request: ExperimentAnalysisRequest, analysis_name: str, simulator_hash: str | None = None
+        self, request: ExperimentAnalysisRequest, analysis_name: str, simulator_hash: str | None = None
     ) -> tuple[str, HPCFilePath]:
         # SLURM params
         job_name = get_slurmjob_name(
@@ -210,6 +200,3 @@ class AnalysisServiceFS(AnalysisService):
         )
         log_file = self.env.slurm_log_base_path / f"{job_name}.out"
         return job_name, log_file
-
-
-

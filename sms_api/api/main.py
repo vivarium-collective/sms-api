@@ -19,10 +19,9 @@ from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
 
-import fastapi_swagger_dark as fsd  # type: ignore[import-untyped]
 import marimo
 import uvicorn
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from starlette import templating
 from starlette.middleware.cors import CORSMiddleware
@@ -59,7 +58,7 @@ APP_ORIGINS = [
     "https://sms.cam.uchc.edu",
 ]
 APP_ROUTERS = [
-    "api",
+    "ecoli",
     # "antibiotics",
     # "biofactory",
     "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
