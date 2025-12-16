@@ -41,7 +41,7 @@ class AnalysisServiceLocal:
         ret, config = self.execute_analysis(expid=expid, name=analysis_name)
 
         # store in db
-        job_id = random.randint(10 * 11, 10**13)
+        job_id = random.randint(1111, 221111)
         job_name = analysis_name + f"-{str(uuid.uuid4())[:4]}"
         record = await self.insert_analysis(
             analysis_name=analysis_name, job_id=job_id, config=config, job_name=job_name

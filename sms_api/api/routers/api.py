@@ -78,9 +78,6 @@ async def run_analysis(
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
-    # finally:
-    #     if analysis_service.ssh.connected:
-    #         await analysis_service.ssh.disconnect()
 
 
 @config.router.get(

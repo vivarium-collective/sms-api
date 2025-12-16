@@ -121,7 +121,8 @@ analysis_wcecoli_setD4 = get_analysis_wcecoli_setD4()
 analysis_api_multiseed = get_analysis_api_multiseed()
 analysis_multiseed_multigen = get_analysis_multiseed_multigen()
 analysis_request_base = generate_analysis_request(
-    experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
+    # experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
+    experiment_id="sms_multigeneration",
     requested_configs=[AnalysisDomain.MULTIGENERATION, AnalysisDomain.MULTISEED],
 )
 

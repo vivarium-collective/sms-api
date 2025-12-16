@@ -44,19 +44,6 @@ class CacheQueryResult(BaseModel):
     missing: list[Path]
 
 
-# HandlerCallback = Callable[
-#     [
-#         ExperimentAnalysisRequest,
-#         SimulatorVersion,
-#         AnalysisService | AnalysisServiceHpc | AnalysisServiceSlurm | AnalysisServiceLocal,
-#         logging.Logger,
-#         DatabaseService,
-#         Request,
-#     ],
-#     Awaitable[Sequence[OutputFileMetadata | TsvOutputFile] | Sequence[TsvOutputFile]],
-# ]
-
-
 async def handle(
     request: ExperimentAnalysisRequest,
     simulator: SimulatorVersion,
@@ -74,14 +61,7 @@ async def handle(
     :param _request:
     :return:
     """
-    # handler: HandlerCallback | None = None
-    # if analysis_service.env.remote_job_execution:
-    #     handler = handle_analysis_slurm
-    # else:
     handler = handle_analysis_local
-    # if not handler:
-    #     raise ValueError(f'You must pass an env variable for REMOTE_JOB_EXECUTION (bool)')
-
     return await handler(
         request=request,
         simulator=simulator,
