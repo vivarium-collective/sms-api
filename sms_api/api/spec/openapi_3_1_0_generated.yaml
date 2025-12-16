@@ -31,20 +31,26 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273
-                analysis_name: ANALYSIS_TEST
+                analysis_name: analysis-f5c8-20251216
                 multigeneration:
                 - name: ptools_rxns
-                  n_tp: 5
+                  n_tp: 8
                   variant: 0
                 - name: ptools_rna
+                  n_tp: 7
+                  variant: 0
+                - name: ptools_proteins
                   n_tp: 5
                   variant: 0
                 multiseed:
                 - name: ptools_rxns
-                  n_tp: 5
+                  n_tp: 7
                   variant: 0
                 - name: ptools_rna
-                  n_tp: 5
+                  n_tp: 3
+                  variant: 0
+                - name: ptools_proteins
+                  n_tp: 9
                   variant: 0
       responses:
         '200':
@@ -820,7 +826,7 @@ components:
           type: integer
           title: Id
         status:
-          $ref: '#/components/schemas/sms_api__data__models__JobStatus'
+          $ref: '#/components/schemas/sms_api__analysis__models__JobStatus'
       type: object
       required:
       - id
@@ -831,8 +837,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single_ba23_20251215
-            simulation_name: sms_single_ba23_20251215
+            experiment_id: sms_single_f548_20251216
+            simulation_name: sms_single_f548_20251216
             metadata: {}
             run_parca: false
             generations: 2
@@ -1066,7 +1072,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi_c131_20251215
+          default: sim_smsapi_1349_20251216
         metadata:
           additionalProperties: true
           type: object
@@ -1992,7 +1998,7 @@ components:
       - mass
       - time
       title: WorkerEvent
-    sms_api__data__models__JobStatus:
+    sms_api__analysis__models__JobStatus:
       type: string
       enum:
       - waiting

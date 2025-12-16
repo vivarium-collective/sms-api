@@ -1,14 +1,14 @@
 import pytest
 
+from sms_api.analysis.analysis_service_slurm import AnalysisService, AnalysisServiceHpc, connect_ssh
+from sms_api.analysis.models import (
+    AnalysisConfig,
+)
 from sms_api.api import request_examples
 from sms_api.api.request_examples import analysis_ptools
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import SSHServiceManaged
 from sms_api.config import get_settings
-from sms_api.data.analysis_service import AnalysisService, AnalysisServiceHpc, connect_ssh
-from sms_api.data.models import (
-    AnalysisConfig,
-)
 
 ENV = get_settings()
 GENERATE_ARTIFACTS = True

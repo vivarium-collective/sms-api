@@ -15,13 +15,11 @@ import pandas as pd
 from pydantic import BaseModel
 from starlette.requests import Request
 
-from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
-from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.common.utils import get_data_id, timestamp
-from sms_api.config import Settings, get_settings
-from sms_api.data.analysis_service import AnalysisService, AnalysisServiceHpc
-from sms_api.data.analysis_utils import get_html_outputs_local
-from sms_api.data.models import (
+from sms_api.analysis import AnalysisService, AnalysisServiceFS, AnalysisServiceSlurm
+from sms_api.analysis.analysis_service_local import AnalysisServiceLocal
+from sms_api.analysis.analysis_utils import get_html_outputs_local
+from sms_api.analysis.models import (
+    AnalysisConfig,
     AnalysisDomain,
     AnalysisModuleConfig,
     AnalysisRun,
@@ -33,6 +31,10 @@ from sms_api.data.models import (
     PtoolsAnalysisConfig,
     TsvOutputFile,
 )
+from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
+from sms_api.common.storage.file_paths import HPCFilePath
+from sms_api.common.utils import get_data_id, timestamp
+from sms_api.config import Settings, get_settings
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import SimulatorVersion
 
@@ -42,10 +44,74 @@ class CacheQueryResult(BaseModel):
     missing: list[Path]
 
 
-async def handle_analysis(
+# HandlerCallback = Callable[
+#     [
+#         ExperimentAnalysisRequest,
+#         SimulatorVersion,
+#         AnalysisService | AnalysisServiceHpc | AnalysisServiceSlurm | AnalysisServiceLocal,
+#         logging.Logger,
+#         DatabaseService,
+#         Request,
+#     ],
+#     Awaitable[Sequence[OutputFileMetadata | TsvOutputFile] | Sequence[TsvOutputFile]],
+# ]
+
+
+async def handle(
     request: ExperimentAnalysisRequest,
     simulator: SimulatorVersion,
-    analysis_service: AnalysisServiceHpc,
+    analysis_service: AnalysisServiceLocal,
+    logger: logging.Logger,
+    _request: Request,
+) -> Sequence[OutputFileMetadata | TsvOutputFile]:
+    """
+    Execute an analysis request.
+
+    :param request:
+    :param simulator:
+    :param analysis_service:
+    :param logger:
+    :param _request:
+    :return:
+    """
+    # handler: HandlerCallback | None = None
+    # if analysis_service.env.remote_job_execution:
+    #     handler = handle_analysis_slurm
+    # else:
+    handler = handle_analysis_local
+    # if not handler:
+    #     raise ValueError(f'You must pass an env variable for REMOTE_JOB_EXECUTION (bool)')
+
+    return await handler(
+        request=request,
+        simulator=simulator,
+        analysis_service=analysis_service,
+        logger=logger,
+        _request=_request
+    )
+
+
+async def handle_analysis_local(
+    request: ExperimentAnalysisRequest,
+    simulator: SimulatorVersion,
+    analysis_service: AnalysisServiceLocal,
+    logger: logging.Logger,
+    _request: Request,
+) -> Sequence[TsvOutputFile]:
+    analysis_name: str = (
+        get_data_id(exp_id=request.experiment_id, scope="analysis")
+        if request.analysis_name is None
+        else request.analysis_name
+    )
+    expid = request.experiment_id
+    requested_analyses = request.requested
+    return await analysis_service.run_analysis(expid=expid, analysis_name=analysis_name, requested=requested_analyses)
+
+
+async def handle_analysis_slurm(
+    request: ExperimentAnalysisRequest,
+    simulator: SimulatorVersion,
+    analysis_service: AnalysisServiceSlurm,
     logger: logging.Logger,
     db_service: DatabaseService,
     _request: Request,
@@ -83,6 +149,27 @@ async def handle_analysis(
     )
 
 
+def create_analysis_cache(env: Settings, _request: Request, analysis_name: str) -> Path:
+    # make cache dir for analysis
+    cached_dir = Path(env.cache_dir) / _request.state.session_id / analysis_name
+    if not cached_dir.exists():
+        os.mkdir(cached_dir)
+    return cached_dir
+
+
+async def insert_analysis(
+    db_service: DatabaseService, analysis_name: str, config: AnalysisConfig, job_name: str, job_id: int
+):
+    # insert new analysis
+    return await db_service.insert_analysis(
+        name=analysis_name,
+        config=config,
+        last_updated=timestamp(),
+        job_name=job_name,
+        job_id=job_id,
+    )
+
+
 # === AnalysisDispatch ===
 
 
@@ -90,7 +177,7 @@ async def dispatch_new_analysis(
     request: ExperimentAnalysisRequest,
     analysis_name: str,
     simulator: SimulatorVersion,
-    analysis_service: AnalysisServiceHpc,
+    analysis_service: AnalysisServiceSlurm,
     logger: logging.Logger,
     db_service: DatabaseService,
     _request: Request,
@@ -101,12 +188,8 @@ async def dispatch_new_analysis(
     )
 
     # insert new analysis
-    analysis_record = await db_service.insert_analysis(
-        name=analysis_name,
-        config=config,
-        last_updated=timestamp(),
-        job_name=slurmjob_name,
-        job_id=slurmjob_id,
+    analysis_record = await insert_analysis(
+        analysis_name=analysis_name, config=config, job_name=slurmjob_name, job_id=slurmjob_id, db_service=db_service
     )
 
     # poll
@@ -114,9 +197,7 @@ async def dispatch_new_analysis(
     run = await poll_status(analysis_record=analysis_record, db_service=db_service, analysis_service=analysis_service)
 
     # make cache dir for analysis
-    cached_dir = Path(analysis_service.env.cache_dir) / _request.state.session_id / analysis_name
-    if not cached_dir.exists():
-        os.mkdir(cached_dir)
+    cached_dir = create_analysis_cache(env=analysis_service.env, _request=_request, analysis_name=analysis_name)
     return run, cached_dir
 
 
@@ -154,7 +235,7 @@ async def get_analysis_status(
 
 
 async def poll_status(
-    analysis_record: ExperimentAnalysisDTO, db_service: DatabaseService, analysis_service: AnalysisServiceHpc
+    analysis_record: ExperimentAnalysisDTO, db_service: DatabaseService, analysis_service: AnalysisServiceSlurm
 ) -> AnalysisRun:
     await asyncio.sleep(3)
     run = await get_analysis_status(

@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import InstrumentedAttribute
 from typing_extensions import override
 
+from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.common.hpc.models import SlurmJob
-from sms_api.data.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.simulation.models import (
     EcoliSimulation,
     EcoliSimulationDTO,

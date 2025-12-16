@@ -9,6 +9,11 @@ import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport
 
+from sms_api.analysis.models import (
+    AnalysisConfig,
+    AnalysisDomain,
+    ExperimentAnalysisRequest,
+)
 from sms_api.api import request_examples
 from sms_api.api import request_examples as examples
 from sms_api.api.client import Client
@@ -16,11 +21,6 @@ from sms_api.api.main import app
 from sms_api.common.gateway.utils import generate_analysis_request
 from sms_api.common.utils import get_uuid
 from sms_api.config import REPO_ROOT, get_settings
-from sms_api.data.models import (
-    AnalysisConfig,
-    AnalysisDomain,
-    ExperimentAnalysisRequest,
-)
 
 # from sms_api.data.biocyc_service import BiocycService
 from sms_api.latest_commit import write_latest_commit

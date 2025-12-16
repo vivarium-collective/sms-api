@@ -11,9 +11,9 @@ For the endpoint: /core/simulator/versions: core_simulator_versions
 Then, add that func to the list within the examples dict comprehension below!
 """
 
+from sms_api.analysis.models import AnalysisDomain, ExperimentAnalysisRequest, PtoolsAnalysisConfig, PtoolsAnalysisType
 from sms_api.common.gateway.utils import generate_analysis_request
 from sms_api.common.utils import unique_id
-from sms_api.data.models import AnalysisDomain, ExperimentAnalysisRequest, PtoolsAnalysisConfig, PtoolsAnalysisType
 from sms_api.simulation.models import ExperimentRequest
 
 DEFAULT_NUM_SEEDS = 30

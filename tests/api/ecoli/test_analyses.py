@@ -4,11 +4,11 @@ import logging
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from sms_api.analysis.models import AnalysisConfig, AnalysisConfigOptions, AnalysisDomain, ExperimentAnalysisRequest
 from sms_api.api.main import app
 from sms_api.common.gateway.utils import generate_analysis_request
 from sms_api.common.utils import get_uuid, timestamp, unique_id
 from sms_api.config import get_settings
-from sms_api.data.models import AnalysisConfig, AnalysisConfigOptions, AnalysisDomain, ExperimentAnalysisRequest
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_slurmjob_name
 

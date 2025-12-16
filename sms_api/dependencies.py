@@ -14,7 +14,6 @@ from sms_api.common.storage.file_service_gcs import FileServiceGCS
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
 from sms_api.common.storage.file_service_s3 import FileServiceS3
 from sms_api.config import get_settings
-from sms_api.data.analysis_service import AnalysisServiceHpc
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.job_scheduler import JobScheduler
@@ -29,21 +28,6 @@ def verify_service(service: DatabaseService | SimulationService | None) -> None:
     if service is None:
         logger.error(f"{service.__module__} is not initialized")
         raise HTTPException(status_code=500, detail=f"{service.__module__} is not initialized")
-
-
-# ------ analysis service (standalone or pytest): including because we want a homogenous env ------
-
-global_analysis_service: AnalysisServiceHpc | None = None
-
-
-def set_analysis_service(analysis_service: AnalysisServiceHpc | None) -> None:
-    global global_analysis_service
-    global_analysis_service = analysis_service
-
-
-def get_analysis_service() -> AnalysisServiceHpc | None:
-    global global_analysis_service
-    return global_analysis_service
 
 
 # ------ sessions (standalone or pytest) ------
@@ -167,8 +151,6 @@ def get_async_engine(url: str, enable_ssl: bool = True, **engine_params: Any) ->
 
 async def init_standalone(enable_ssl: bool = True) -> None:
     _settings = get_settings()
-    analysis_service = AnalysisServiceHpc(_settings)
-    set_analysis_service(analysis_service)
 
     try:
         # Initialize file service based on configured backend

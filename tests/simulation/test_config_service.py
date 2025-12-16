@@ -9,7 +9,7 @@ async def test_get_default_config() -> None:
     env = get_settings()
     config_service = ConfigServiceHpc(env)
     config_dir = config_service.config_dir()
-    flat_files_dir = config_service.new_genes_dir().remote_path.parent
-    variants_dir = config_service.variants_dir()
+    _ = config_service.new_genes_dir().remote_path.parent
+    _ = config_service.variants_dir()
 
     assert str(config_dir.remote_path.parent) == str(config_service.vecoli_root_dir().remote_path)

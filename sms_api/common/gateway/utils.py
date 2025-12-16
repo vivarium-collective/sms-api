@@ -13,7 +13,7 @@ from sms_api.common.gateway.models import RouterConfig
 from sms_api.common.ssh.ssh_service import SSHServiceManaged
 from sms_api.common.utils import get_data_id
 from sms_api.config import get_settings
-from sms_api.data.models import (
+from sms_api.analysis.models import (
     AnalysisConfig,
     AnalysisDomain,
     ExperimentAnalysisRequest,

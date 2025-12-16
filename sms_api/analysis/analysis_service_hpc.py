@@ -3,7 +3,9 @@
 import abc
 import json
 import logging
+import random
 import tempfile
+import textwrap
 from collections.abc import Awaitable
 from functools import wraps
 from pathlib import Path
@@ -12,14 +14,18 @@ from typing import Any, Callable, override
 
 import pandas as pd
 
+from sms_api.analysis.analysis_service import AnalysisService, connect_ssh
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.hpc.slurm_service import SlurmServiceManaged
 from sms_api.common.ssh.ssh_service import SSHServiceManaged, get_ssh_service_managed
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import get_uuid
 from sms_api.config import Settings
-from sms_api.data.models import AnalysisConfig, ExperimentAnalysisRequest, TsvOutputFile
+from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisRequest, TsvOutputFile
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
+
+__all__ = ["AnalysisServiceHpc", "RemoteScriptService"]
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -28,67 +34,59 @@ logger.setLevel(logging.INFO)
 MAX_ANALYSIS_CPUS = 5
 
 
-def connect_ssh(func: Callable[..., Any]) -> Callable[..., Awaitable[Any]]:
-    @wraps(func)
-    async def wrapper(instance: "AnalysisService | AnalysisServiceHpc", **kwargs: Any) -> Any:
-        try:
-            if instance.ssh.connected:
-                raise RuntimeError()
-            await instance.ssh.connect()
-            return await func(instance, **kwargs)
-        finally:
-            await instance.ssh.disconnect()
+class RemoteScriptService:
+    verified_htc_dir: bool = False
+    ssh_service: SSHServiceManaged
 
-    return wrapper
+    def __init__(self, ssh_service: SSHServiceManaged):
+        self.ssh_service = ssh_service
 
+    def new_job_id(self) -> int:
+        start: int = 10 ** 11
+        end: int = 10 ** 15
+        return random.randint(start, end)
 
-class AnalysisService(abc.ABC):
-    env: Settings
-    ssh: SSHServiceManaged
+    async def execute_script(
+        self, local_script_fp: Path, remote_script_fp: HPCFilePath, args: tuple[str, ...] | None = None
+    ) -> tuple[int, str, str, int]:
+        """Run the given sbatch script as a non-slurm (synchronous) job. Used if SLURM is not
+        available. Since analyses should be blocking anyway, this is fine.
 
-    def __init__(self, env: Settings):
-        self.env = env
-        self.ssh = get_ssh_service_managed(self.env)
+        :param local_script_fp: Temp file path to which dynamically generated script content is saved (ephemeral)
+        :param remote_script_fp: Remote location to which you want to save and run this script.
+        :param args: remote script args that can be passed from gateway to remote, if any.
+        :return:
+        """
+        if not self.verified_htc_dir:
+            await self.ssh_service.run_command("mkdir -p " + str(remote_script_fp.parent))
+            self.verified_htc_dir = True
+        await self.ssh_service.scp_upload(local_file=local_script_fp, remote_path=remote_script_fp)
+        exec_command = f"{remote_script_fp}"
+        if args:
+            for arg in args:
+                exec_command += f" {arg}"
+        command = dedent(f""" \
+            chmod +x {remote_script_fp!s};
+            {exec_command}
+        """)
+        return_code, stdout, stderr = await self.ssh_service.run_command(command=command)
+        if return_code != 0:
+            raise Exception(
+                f"failed to get job status with command {command} return code {return_code} stderr {stderr[:100]}"
+            )
+        job_id = self.new_job_id()
 
-    @abc.abstractmethod
-    async def dispatch_analysis(
-        self,
-        request: ExperimentAnalysisRequest,
-        logger: logging.Logger,
-        analysis_name: str,
-        simulator_hash: str | None = None,
-    ) -> tuple[str, int, AnalysisConfig]:
-        pass
-
-    @abc.abstractmethod
-    async def get_available_output_paths(self, analysis_name: str) -> list[HPCFilePath]:
-        pass
-
-    @abc.abstractmethod
-    async def download_analysis_output(
-        self, local_cache_dir: Path, requested_filename: str, remote_path: HPCFilePath
-    ) -> TsvOutputFile:
-        pass
-
-    @classmethod
-    def generate_analysis_name(cls, experiment_id: str | None = None, _n_sections: int = 1) -> str:
-        dataid: str = get_uuid(scope="analysis", data_id=experiment_id, n_sections=_n_sections)
-        return dataid
-
-    @classmethod
-    def verify_result(cls, local_result_path: Path, expected_n_tp: int) -> bool:
-        tsv_data = pd.read_csv(local_result_path, sep="\t")
-        actual_cols = [col for col in tsv_data.columns if col.startswith("t")]
-        return len(actual_cols) == expected_n_tp
+        return return_code, stdout, stderr, job_id
 
 
 class AnalysisServiceHpc(AnalysisService):
     env: Settings
     ssh: SSHServiceManaged
-
+    script_service: RemoteScriptService
+    
     @property
-    def slurm_service(self) -> SlurmServiceManaged:
-        return SlurmServiceManaged(ssh_service=self.ssh)
+    def script_service(self) -> RemoteScriptService:
+        return RemoteScriptService(ssh_service=self.ssh)
 
     @override
     async def dispatch_analysis(
@@ -99,30 +97,32 @@ class AnalysisServiceHpc(AnalysisService):
         simulator_hash: str | None = None,
     ) -> tuple[str, int, AnalysisConfig]:
         # collect params
-        slurmjob_name, slurm_log_file = self._collect_slurm_parameters(
+        job_name, log_file = self._collect_script_parameters(
             request=request, simulator_hash=simulator_hash, analysis_name=analysis_name
         )
         experiment_id = request.experiment_id
         analysis_config = request.to_config(analysis_name=analysis_name, env=self.env)
 
         # gen script
-        slurm_script = self.generate_slurm_script(
-            slurm_log_file=slurm_log_file,
-            slurm_job_name=slurmjob_name,
+        slurm_script = self.generate_script(
+            slurm_log_file=log_file,
+            slurm_job_name=job_name,
             latest_hash=simulator_hash or get_simulator().git_commit_hash,
             config=analysis_config,
             analysis_name=analysis_name,
         )
 
+        with open(f"assets/artifacts/{analysis_name}_HPC.sbatch", "w") as f:
+            f.write(slurm_script)
+
         # submit script
-        slurmjob_id = await self.submit_slurm_script(
+        ret, stdout, stderr, job_id = await self.submit_script(
             config=analysis_config,
             experiment_id=experiment_id,
             script_content=slurm_script,
-            slurm_job_name=slurmjob_name,
+            slurm_job_name=job_name,
         )
-
-        return slurmjob_name, slurmjob_id, analysis_config
+        return job_name, job_id, analysis_config
 
     @override
     async def get_available_output_paths(self, analysis_name: str) -> list[HPCFilePath]:
@@ -152,7 +152,7 @@ class AnalysisServiceHpc(AnalysisService):
         output = TsvOutputFile(filename=requested_filename, content=file_content)
         return output
 
-    def generate_slurm_script(
+    def generate_script(
         self,
         slurm_log_file: HPCFilePath,
         slurm_job_name: str,
@@ -170,14 +170,6 @@ class AnalysisServiceHpc(AnalysisService):
 
         return dedent(f"""\
             #!/bin/bash
-            #SBATCH --job-name={slurm_job_name}
-            #SBATCH --time=30:00
-            #SBATCH --cpus-per-task {MAX_ANALYSIS_CPUS}
-            #SBATCH --mem=8GB
-            #SBATCH --partition={self.env.slurm_partition}
-            {qos_clause}
-            #SBATCH --output={slurm_log_file!s}
-            {nodelist_clause}
 
             set -e
 
@@ -224,9 +216,9 @@ class AnalysisServiceHpc(AnalysisService):
         """)
 
     @connect_ssh
-    async def submit_slurm_script(
+    async def submit_script(
         self, config: AnalysisConfig, experiment_id: str, script_content: str, slurm_job_name: str
-    ) -> int:
+    ) -> tuple[int, str, str, int]:
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -234,24 +226,39 @@ class AnalysisServiceHpc(AnalysisService):
             with open(local_submit_file, "w") as f:
                 f.write(script_content)
 
-            ssh_connected: bool = await self.slurm_service.ssh_service.verify_connection(retry=False)
+            ssh_connected: bool = await self.ssh.verify_connection(retry=False)
             if not ssh_connected:
                 logger.info(f"Warning: SSH is not connected in {__file__}.")
-                await self.slurm_service.ssh_service.connect()
+                await self.ssh.connect()
 
-            slurm_jobid = await self.slurm_service.submit_job(
-                local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+            return await self.script_service.execute_script(
+                local_script_fp=local_submit_file,
+                remote_script_fp=slurm_submit_file
             )
-            return slurm_jobid
 
-    def _collect_slurm_parameters(
+    def _collect_script_parameters(
         self, request: ExperimentAnalysisRequest, analysis_name: str, simulator_hash: str | None = None
     ) -> tuple[str, HPCFilePath]:
         # SLURM params
-        slurmjob_name = get_slurmjob_name(
+        job_name = get_slurmjob_name(
             experiment_id=analysis_name, simulator_hash=simulator_hash or get_simulator().git_commit_hash
         )
-        slurm_log_file = self.env.slurm_log_base_path / f"{slurmjob_name}.out"
-        # return experiment_id, analysis_name, analysis_config, slurmjob_name, slurm_log_file
+        log_file = self.env.slurm_log_base_path / f"{job_name}.out"
+        return job_name, log_file
 
-        return slurmjob_name, slurm_log_file
+
+
+
+
+
+
+# class AnalysisServiceLocal(AnalysisService):
+#     async def dispatch_analysis(
+#         self,
+#         request: ExperimentAnalysisRequest,
+#         logger: logging.Logger,
+#         analysis_name: str,
+#         simulator_hash: str | None = None,
+#     ) -> tuple[str, int, AnalysisConfig]:
+#
+

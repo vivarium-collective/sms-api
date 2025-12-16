@@ -15,7 +15,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import polars
 
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
-from sms_api.data.models import OutputFile, TsvOutputFile
+from sms_api.analysis.models import OutputFile, TsvOutputFile
 
 
 def get_experiment_id_from_tag(experiment_tag: str) -> str:
