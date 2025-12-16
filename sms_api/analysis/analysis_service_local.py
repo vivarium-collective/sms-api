@@ -35,20 +35,24 @@ class AnalysisServiceLocal:
         self.db_service = db_service
 
     async def run_analysis(
-        self, expid: str, analysis_name: str, requested: dict[str, list[AnalysisModuleConfig | PtoolsAnalysisConfig]]
+        self,
+        expid: str,
+        analysis_name: str,
+        analysis_config: AnalysisConfig,
+        requested: dict[str, list[AnalysisModuleConfig | PtoolsAnalysisConfig]]
     ) -> Sequence[TsvOutputFile]:
         # exec analysis
-        ret, config = self.execute_analysis(expid=expid, name=analysis_name)
+        ret = self.execute_analysis(expid=expid, name=analysis_name, config=analysis_config)
 
         # store in db
         job_id = random.randint(1111, 221111)
         job_name = analysis_name + f"-{str(uuid.uuid4())[:4]}"
         record = await self.insert_analysis(
-            analysis_name=analysis_name, job_id=job_id, config=config, job_name=job_name
+            analysis_name=analysis_name, job_id=job_id, config=analysis_config, job_name=job_name
         )
 
         # get available
-        analysis_dir = Path(config.analysis_options.outdir)
+        analysis_dir = Path(analysis_config.analysis_options.outdir)
         available = self.get_available_output_paths(analysis_dirpath=analysis_dir)
 
         # download available
@@ -56,7 +60,7 @@ class AnalysisServiceLocal:
             available_paths=available, requested=requested, analysis_cache=analysis_dir, logger=logger
         )
 
-    def execute_analysis(self, expid: str, name: str) -> tuple[int, AnalysisConfig]:
+    def execute_analysis(self, expid: str, name: str, config: AnalysisConfig) -> int:
         env = self.env
         workspace_dir = env.vecoli_config_dir.parent.parent
         simulation_outdir = workspace_dir / ".results_cache"
@@ -79,8 +83,8 @@ class AnalysisServiceLocal:
         """)
 
         ret = self._execute_command(cmd)
-        config = self._get_config(analysis_outdir=analysis_outdir, simulation_outdir=simulation_outdir)
-        return ret, config
+        # config = self._get_config(analysis_outdir=analysis_outdir, simulation_outdir=simulation_outdir)
+        return ret
 
     def _get_config(self, analysis_outdir: Path, simulation_outdir: Path) -> AnalysisConfig:
         with open(str(analysis_outdir / "metadata.json")) as f:

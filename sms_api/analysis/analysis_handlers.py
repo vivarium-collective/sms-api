@@ -34,7 +34,7 @@ from sms_api.analysis.models import (
 from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import get_data_id, timestamp
-from sms_api.config import Settings, get_settings
+from sms_api.config import Settings, get_settings, REPO_ROOT
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import SimulatorVersion
 
@@ -85,7 +85,8 @@ async def handle_analysis_local(
     )
     expid = request.experiment_id
     requested_analyses = request.requested
-    return await analysis_service.run_analysis(expid=expid, analysis_name=analysis_name, requested=requested_analyses)
+    config = request.to_config(analysis_name=analysis_name)
+    return await analysis_service.run_analysis(analysis_config=config, expid=expid, analysis_name=analysis_name, requested=requested_analyses)
 
 
 async def handle_analysis_slurm(

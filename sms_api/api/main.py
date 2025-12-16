@@ -109,7 +109,13 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     await shutdown_standalone()
 
 
-app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan, redoc_url="/documentation", docs_url=None)
+app = FastAPI(
+    title=APP_TITLE,
+    version=APP_VERSION,
+    lifespan=lifespan,
+    redoc_url="/documentation",
+    # docs_url=None
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -124,9 +130,9 @@ app.add_middleware(
     middleware.SMSMiddlewareApiRouterRedirect,
 )
 
-app_router = APIRouter()
-fsd.install(app_router, path="/docs")
-app.include_router(app_router)
+# app_router = APIRouter()
+# fsd.install(app_router, path="/docs")
+# app.include_router(app_router)
 
 for api_name in APP_ROUTERS:
     try:
