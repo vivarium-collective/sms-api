@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import random
@@ -6,6 +7,7 @@ import tempfile
 import textwrap
 import uuid
 from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import pandas as pd
@@ -26,6 +28,11 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
+MAX_PROCESS_POOL_WORKERS = 2
+
+executor = ProcessPoolExecutor(max_workers=MAX_PROCESS_POOL_WORKERS)
+
+
 class AnalysisServiceLocal:
     env: Settings
     db_service: DatabaseService
@@ -42,7 +49,11 @@ class AnalysisServiceLocal:
         requested: dict[str, list[PtoolsAnalysisConfig]],
     ) -> Sequence[TsvOutputFile]:
         # exec analysis
-        ret = self.execute_analysis(expid=expid, name=analysis_name, config=analysis_config)
+        # ret = self.execute_analysis(expid=expid, name=analysis_name, config=analysis_config)
+        ret = await asyncio.get_running_loop().run_in_executor(
+            executor,
+            lambda: self.execute_analysis(expid=expid, name=analysis_name, config=analysis_config),
+        )
         if ret > 0:
             raise RuntimeError("The analysis failed.")
 
