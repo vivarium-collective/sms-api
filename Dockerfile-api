@@ -15,7 +15,10 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Set environment variables
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1
 
 # Install uv from the GitHub Container Registry
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
