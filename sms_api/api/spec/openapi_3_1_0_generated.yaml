@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.61-dev
+  version: 0.2.63-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -31,26 +31,26 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: analysis-47d6-20251216
+                analysis_name: analysis-62ee-20251216
                 multigeneration:
                 - name: ptools_rxns
-                  n_tp: 8
+                  n_tp: 9
                   variant: 0
                 - name: ptools_rna
-                  n_tp: 7
+                  n_tp: 2
                   variant: 0
                 - name: ptools_proteins
-                  n_tp: 7
+                  n_tp: 2
                   variant: 0
                 multiseed:
                 - name: ptools_rxns
-                  n_tp: 7
-                  variant: 0
-                - name: ptools_rna
                   n_tp: 5
                   variant: 0
+                - name: ptools_rna
+                  n_tp: 2
+                  variant: 0
                 - name: ptools_proteins
-                  n_tp: 8
+                  n_tp: 4
                   variant: 0
       responses:
         '200':
@@ -837,8 +837,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single_1b21_20251216
-            simulation_name: sms_single_1b21_20251216
+            experiment_id: sms_single_4e56_20251216
+            simulation_name: sms_single_4e56_20251216
             metadata: {}
             run_parca: false
             generations: 2
@@ -1072,7 +1072,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi_7832_20251216
+          default: sim_smsapi_7513_20251216
         metadata:
           additionalProperties: true
           type: object

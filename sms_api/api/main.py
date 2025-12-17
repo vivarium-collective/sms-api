@@ -125,9 +125,6 @@ app.add_middleware(
 app.add_middleware(
     middleware.SMSMiddlewareInitSession,
 )
-app.add_middleware(
-    middleware.SMSMiddlewareApiRouterRedirect,
-)
 
 # app_router = APIRouter()
 # fsd.install(app_router, path="/docs")

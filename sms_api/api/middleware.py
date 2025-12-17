@@ -18,7 +18,6 @@ from sms_api.dependencies import (
 
 __all__ = [
     "SMSMiddleware",
-    "SMSMiddlewareApiRouterRedirect",
     "SMSMiddlewareInitSession",
     "clear_user_cache",
     "create_user_cache_dir",
@@ -69,14 +68,6 @@ class SMSMiddlewareInitSession(SMSMiddleware):
             )
 
         return response
-
-
-class SMSMiddlewareApiRouterRedirect(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: ResponseCallback) -> Response:
-        if request.url.path.startswith("/v1/ecoli/"):
-            rest_of_path = request.url.path[len("/v1/ecoli") :]
-            request.scope["path"] = "/api/v1" + rest_of_path
-        return await call_next(request)
 
 
 def get_user_cache_dirpath(env: Settings, session_id: str) -> Path:
