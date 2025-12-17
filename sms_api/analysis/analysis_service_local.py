@@ -39,7 +39,7 @@ class AnalysisServiceLocal:
         expid: str,
         analysis_name: str,
         analysis_config: AnalysisConfig,
-        requested: dict[str, list[AnalysisModuleConfig | PtoolsAnalysisConfig]],
+        requested: dict[str, list[PtoolsAnalysisConfig]],
     ) -> Sequence[TsvOutputFile]:
         # exec analysis
         ret = self.execute_analysis(expid=expid, name=analysis_name, config=analysis_config)
@@ -111,10 +111,49 @@ class AnalysisServiceLocal:
     @classmethod
     def get_available_output_paths(cls, analysis_dirpath: Path) -> list[Path]:
         """This should search locally, so env.analysis_outdir should be {REPO_ROOT}/.results_cache/{analysis_name}"""
-        return [p for p in analysis_dirpath.rglob("*") if p.is_file()]
+        return [p for p in analysis_dirpath.rglob("*") if p.is_file() and str(p).endswith(".txt")]
 
     @classmethod
     def download_available(
+        cls,
+        available_paths: list[Path],
+        requested: dict[str, list[PtoolsAnalysisConfig]],
+        analysis_cache: Path,
+        logger: logging.Logger,
+    ) -> list[TsvOutputFile]:
+        results: list[TsvOutputFile] = []
+        if len(available_paths):
+            for output_fp in available_paths:
+                # pre-download verification
+                if not output_fp.exists():
+                    logger.info(f"WARNING: the following file does not exist: {output_fp!s}")
+                    continue
+
+                fparts = output_fp.parts[-1].split("_")
+                domain = fparts[-1].replace(".txt", "")
+                requested_output = "_".join(fparts[:2])
+                domain_reqs = requested[domain]
+                req = next(filter(lambda r: r.name == requested_output, domain_reqs))
+                expected_n_tp = req.n_tp
+                verification = cls._verify_result(output_fp, expected_n_tp)
+                if not verification:
+                    logger.info("WARNING: resulting num cols/tps do not match requested.")
+
+                # create dtos
+                file_content = output_fp.read_text()
+                output = TsvOutputFile(filename=requested_output, content=file_content)
+                results.append(output)
+
+        return results
+
+    @classmethod
+    def _verify_result(cls, local_result_path: Path, expected_n_tp: int) -> bool:
+        tsv_data = pd.read_csv(local_result_path, sep="\t")
+        actual_cols = [col for col in tsv_data.columns if col.startswith("t")]
+        return len(actual_cols) == expected_n_tp
+
+    @classmethod
+    def _download_available(
         cls,
         available_paths: list[Path],
         requested: dict[str, list[AnalysisModuleConfig | PtoolsAnalysisConfig]],
@@ -142,12 +181,6 @@ class AnalysisServiceLocal:
     @classmethod
     def _find_relevant_files(cls, requested_filename: str, available_paths: list[Path]) -> list[Path]:
         return [fp for fp in filter(lambda fpath: requested_filename in str(fpath), available_paths)]
-
-    @classmethod
-    def _verify_result(cls, local_result_path: Path, expected_n_tp: int) -> bool:
-        tsv_data = pd.read_csv(local_result_path, sep="\t")
-        actual_cols = [col for col in tsv_data.columns if col.startswith("t")]
-        return len(actual_cols) == expected_n_tp
 
     @classmethod
     def _execute_command(cls, cmd: str) -> int:

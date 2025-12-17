@@ -198,7 +198,7 @@ class ExperimentAnalysisRequest(BaseModel):
         return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
 
     @property
-    def requested(self) -> dict[str, list[AnalysisModuleConfig | PtoolsAnalysisConfig]]:
+    def requested(self) -> dict[str, list[PtoolsAnalysisConfig]]:
         requested = {}
         for domain in AnalysisDomain.to_list():
             domain_requests = getattr(self, domain, None)

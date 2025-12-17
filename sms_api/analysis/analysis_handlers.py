@@ -21,7 +21,6 @@ from sms_api.analysis.analysis_utils import get_html_outputs_local
 from sms_api.analysis.models import (
     AnalysisConfig,
     AnalysisDomain,
-    AnalysisModuleConfig,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
@@ -293,7 +292,7 @@ async def get_ptools_manifest(
 
 async def download_available(
     available_paths: list[HPCFilePath],
-    requested: dict[str, list[AnalysisModuleConfig | PtoolsAnalysisConfig]],
+    requested: dict[str, list[PtoolsAnalysisConfig]],
     analysis_cache: Path,
     ssh: SSHServiceManaged,
     logger: logging.Logger,

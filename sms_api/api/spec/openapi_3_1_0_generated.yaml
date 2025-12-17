@@ -31,26 +31,26 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: analysis-b4f5-20251217
+                analysis_name: analysis-3876-20251217
                 multigeneration:
                 - name: ptools_rxns
-                  n_tp: 3
-                  variant: 0
-                - name: ptools_rna
-                  n_tp: 5
-                  variant: 0
-                - name: ptools_proteins
-                  n_tp: 4
-                  variant: 0
-                multiseed:
-                - name: ptools_rxns
                   n_tp: 5
                   variant: 0
                 - name: ptools_rna
-                  n_tp: 5
+                  n_tp: 7
                   variant: 0
                 - name: ptools_proteins
                   n_tp: 8
+                  variant: 0
+                multiseed:
+                - name: ptools_rxns
+                  n_tp: 7
+                  variant: 0
+                - name: ptools_rna
+                  n_tp: 3
+                  variant: 0
+                - name: ptools_proteins
+                  n_tp: 5
                   variant: 0
       responses:
         '200':
@@ -837,8 +837,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single_7639_20251217
-            simulation_name: sms_single_7639_20251217
+            experiment_id: sms_single_3063_20251217
+            simulation_name: sms_single_3063_20251217
             metadata: {}
             run_parca: false
             generations: 2
@@ -1072,7 +1072,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi_5d10_20251217
+          default: sim_smsapi_8d19_20251217
         metadata:
           additionalProperties: true
           type: object
