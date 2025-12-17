@@ -1,7 +1,6 @@
 import json
 import logging
 import random
-import shutil
 import subprocess
 import tempfile
 import textwrap

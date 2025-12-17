@@ -42,7 +42,7 @@ ENV = get_settings()
 REMOTE_JOB_EXECUTION: bool = ENV.remote_job_execution
 
 logger = logging.getLogger(__name__)
-config = router_config(prefix="api", version_major=False)
+config = router_config(prefix="ecoli")
 
 
 ###### -- analyses -- ######

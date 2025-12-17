@@ -3,7 +3,7 @@ info:
   title: sms-api
   version: 0.2.61-dev
 paths:
-  /api/v1/analyses:
+  /v1/ecoli/analyses:
     get:
       tags:
       - Analyses
@@ -31,26 +31,26 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: analysis-5acf-20251216
+                analysis_name: analysis-47d6-20251216
                 multigeneration:
                 - name: ptools_rxns
-                  n_tp: 5
+                  n_tp: 8
                   variant: 0
                 - name: ptools_rna
-                  n_tp: 3
+                  n_tp: 7
                   variant: 0
                 - name: ptools_proteins
-                  n_tp: 8
+                  n_tp: 7
                   variant: 0
                 multiseed:
                 - name: ptools_rxns
-                  n_tp: 6
+                  n_tp: 7
                   variant: 0
                 - name: ptools_rna
-                  n_tp: 6
+                  n_tp: 5
                   variant: 0
                 - name: ptools_proteins
-                  n_tp: 2
+                  n_tp: 8
                   variant: 0
       responses:
         '200':
@@ -70,7 +70,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/analyses/{id}:
+  /v1/ecoli/analyses/{id}:
     get:
       tags:
       - Analyses
@@ -96,7 +96,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/analyses/{id}/status:
+  /v1/ecoli/analyses/{id}/status:
     get:
       tags:
       - Analyses
@@ -124,7 +124,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/analyses/{id}/log:
+  /v1/ecoli/analyses/{id}/log:
     get:
       tags:
       - Analyses
@@ -153,7 +153,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/analyses/{id}/plots:
+  /v1/ecoli/analyses/{id}/plots:
     get:
       tags:
       - Analyses
@@ -185,7 +185,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/simulations:
+  /v1/ecoli/simulations:
     get:
       tags:
       - Simulations
@@ -224,7 +224,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/simulations/{id}:
+  /v1/ecoli/simulations/{id}:
     get:
       tags:
       - Simulations
@@ -252,7 +252,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/simulations/{id}/status:
+  /v1/ecoli/simulations/{id}/status:
     get:
       tags:
       - Simulations
@@ -278,7 +278,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/simulations/{id}/log:
+  /v1/ecoli/simulations/{id}/log:
     post:
       tags:
       - Simulations
@@ -303,7 +303,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/simulations/{id}/data:
+  /v1/ecoli/simulations/{id}/data:
     post:
       tags:
       - Simulations
@@ -837,8 +837,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single_6d16_20251216
-            simulation_name: sms_single_6d16_20251216
+            experiment_id: sms_single_1b21_20251216
+            simulation_name: sms_single_1b21_20251216
             metadata: {}
             run_parca: false
             generations: 2
@@ -1072,7 +1072,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi_b764_20251216
+          default: sim_smsapi_7832_20251216
         metadata:
           additionalProperties: true
           type: object
