@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.15.0"
+__generated_with = "0.18.1"
 app = marimo.App(width="medium")
 
 
@@ -19,13 +19,12 @@ def _():
     import json
     import os
 
-    return mo, os
+    return json, mo, os
 
 
 @app.cell
 def _(mo):
-    mo.md(
-        r"""
+    mo.md(r"""
     # SMS Interactive Simulation Interface
     Welcome to **SMS (Simulating Microbial Systems)**, a browser-based interface for running and
     analyzing whole-cell *E. coli* simulations. This notebook is powered
@@ -34,15 +33,13 @@ def _(mo):
     and antibiotic response.
 
     Use the controls in each section to interact with data.
-    """
-    )
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    mo.md(
-        r"""
+    mo.md(r"""
     ## Experiment Configuration
 
     This section focuses on the configuration/parameterization of **SMS Ecoli Experiments**.
@@ -59,8 +56,7 @@ def _(mo):
     a.) runs the base parameter calculation, b.) instantiates the variants as specified by the config,
     c.) runs a multivariant simulation, and d.) runs the aforementioned post-processing. **This notebook
     is under active development and is expected to change without notice; we've been busy :) **
-    """
-    )
+    """)
     return
 
 
@@ -175,7 +171,6 @@ def _(config_default, config_service, generate_config_fields, mo):
     """.join(fields_list_parca)
 
     parca_form_md = mo.md(md_base_str_parca + md_body_parca)
-
     return parca_form_fields, parca_form_md
 
 
@@ -530,7 +525,6 @@ def _(variant_loader, variant_params_input, variant_select, variant_switch):
         if not isinstance(variant_params_input, type(None)):
             if variant_params_input.value:
                 variant_options["variants"] = variant_loader[variant_select.value](variant_params_input.value)
-
     return (variant_options,)
 
 
@@ -814,7 +808,8 @@ def _(parca_form):
 
     parca_options = {}
 
-    parca_options["parca_options"] = parca_form.value
+    if getattr(parca_form, "value", None):
+        parca_options["parca_options"] = parca_form.value
     return emitter_options, parca_options
 
 
@@ -871,24 +866,13 @@ def _(config_final, config_save_name, json, mo):
         return data
 
     mo.download(data=on_download, filename=export_filename, mimetype="application/json", label="save config")
-
-    return (save_button,)
+    return
 
 
 @app.cell
 def _(mo):
     get_button_val, set_button_val = mo.state(0)
     return
-
-
-# @app.cell
-# def _(config_final, config_save_name, config_service, mo, save_button):
-#     mo.stop(not save_button.value)
-#     if len(config_save_name.value) > 0:
-#         # save_config(config_save_name.value, config_dir, config_final)
-#         config_service.export_config(config_save_name.value, config_final)
-#
-#     return
 
 
 @app.cell

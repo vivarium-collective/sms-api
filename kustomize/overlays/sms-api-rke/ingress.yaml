@@ -36,6 +36,13 @@ spec:
                 name: api
                 port:
                   number: 8000
+          - path: /documentation
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
           - path: /docs
             pathType: Prefix
             backend:
