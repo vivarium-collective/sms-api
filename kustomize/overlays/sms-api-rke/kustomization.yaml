@@ -9,7 +9,7 @@ namespace: sms-api-rke
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.2.68-dev
+    newTag: 0.2.69-dev
   - name: ghcr.io/vivarium-collective/sms-ptools
     newTag: 0.2.48-dev
 

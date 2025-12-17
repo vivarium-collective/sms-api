@@ -9,6 +9,7 @@ import uuid
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -50,9 +51,18 @@ class AnalysisServiceLocal:
     ) -> Sequence[TsvOutputFile]:
         # exec analysis
         # ret = self.execute_analysis(expid=expid, name=analysis_name, config=analysis_config)
+        vecoli_dir = self.env.vecoli_config_dir.parent
+        workspace_dir = vecoli_dir.parent
+
         ret = await asyncio.get_running_loop().run_in_executor(
             executor,
-            lambda: self.execute_analysis(expid=expid, name=analysis_name, config=analysis_config),
+            execute_analysis_worker,
+            expid,
+            str(workspace_dir),
+            analysis_name,
+            analysis_config.model_dump(),
+            self.env.cache_dir,
+            str(vecoli_dir),
         )
         if ret > 0:
             raise RuntimeError("The analysis failed.")
@@ -117,7 +127,7 @@ class AnalysisServiceLocal:
         )
 
     def get_analysis_dir(self, analysis_name: str) -> Path:
-        return Path(self.env.cache_dir) / analysis_name
+        return get_analysis_dir(cache_dir=self.env.cache_dir, analysis_name=analysis_name)
 
     @classmethod
     def get_available_output_paths(cls, analysis_dirpath: Path) -> list[Path]:
@@ -208,3 +218,57 @@ class AnalysisServiceLocal:
             for line in process.stdout:
                 logger.info(line.rstrip())
         return process.wait()
+
+
+# top-level, outside the class
+def execute_analysis_worker(
+    expid: str, workspace_dir: str, analysis_name: str, config_json: dict[str, Any], env_cache_dir: str, vecoli_dir: str
+) -> int:
+    ws_dir = Path(workspace_dir)
+    simulation_outdir = ws_dir / ".results_cache"
+    exp_outdir = simulation_outdir / expid  # env.simulation_outdir / args.expid
+    variant_data_dir = exp_outdir / "variant_sim_data"
+    validation_data_path = exp_outdir / "parca" / "kb" / "validationData.cPickle"
+    analysis_outdir = get_analysis_dir(cache_dir=env_cache_dir, analysis_name=analysis_name)
+    tmpdir = tempfile.TemporaryDirectory()
+    conf_path = str(Path(tmpdir.name) / "tmp.json")
+    with open(conf_path, "w") as f:
+        json.dump(config_json, f, indent=3)
+    # (env.vecoli_config_dir / config_name)!s
+    cmd = textwrap.dedent(f""" \
+        rm -rf {analysis_outdir!s};
+        mkdir -p {analysis_outdir!s};
+        cd {vecoli_dir};
+        uv run --env-file .env runscripts/analysis.py \\
+            --config {conf_path} \\
+            --variant_data_dir {variant_data_dir!s} \\
+            --validation_data_path {validation_data_path!s} \\
+            --outdir {analysis_outdir!s} \\
+            --experiment_id {expid}
+    """)
+    ret = run_command(cmd)
+    # config = self._get_config(analysis_outdir=analysis_outdir, simulation_outdir=simulation_outdir)
+    tmpdir.cleanup()
+    return ret
+
+
+def get_analysis_dir(cache_dir: str, analysis_name: str) -> Path:
+    return Path(cache_dir) / analysis_name
+
+
+def run_command(cmd: str, log: logging.Logger | None = None) -> int:
+    if log is None:
+        log = logger
+    process = subprocess.Popen(  # noqa: S602
+        cmd,
+        shell=True,
+        executable="/bin/bash",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    if process.stdout:
+        for line in process.stdout:
+            log.info(line.rstrip())
+    return process.wait()

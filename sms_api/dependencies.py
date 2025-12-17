@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from sms_api.analysis.analysis_service_local import executor
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
@@ -248,6 +249,7 @@ async def init_standalone(enable_ssl: bool = True) -> None:
 
 
 async def shutdown_standalone() -> None:
+    executor.shutdown(wait=False)
     mongodb_service = get_database_service()
     if mongodb_service:
         await mongodb_service.close()
