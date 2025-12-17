@@ -27,7 +27,6 @@ from starlette import templating
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import RedirectResponse
 
-from sms_api.api import middleware
 from sms_api.common.gateway.models import ServerMode, UserSession
 from sms_api.config import get_settings
 from sms_api.dependencies import (
@@ -104,7 +103,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         yield
     finally:
         await job_scheduler.close()
-    middleware.clear_user_cache(get_settings())
+    # middleware.clear_user_cache(get_settings())
     await shutdown_standalone()
 
 
@@ -122,9 +121,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],  # TODO: change origins back to allowed
 )
-app.add_middleware(
-    middleware.SMSMiddlewareInitSession,
-)
+# app.add_middleware(
+#     middleware.SMSMiddlewareInitSession,
+# )
 
 # app_router = APIRouter()
 # fsd.install(app_router, path="/docs")

@@ -1,11 +1,11 @@
 import logging
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from sms_api.analysis.analysis_service_local import executor
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
@@ -25,10 +25,33 @@ logger = logging.getLogger(__name__)
 setup_logging(logger)
 
 
+MAX_PROCESS_POOL_WORKERS = 2
+
+
 def verify_service(service: DatabaseService | SimulationService | None) -> None:
     if service is None:
         logger.error(f"{service.__module__} is not initialized")
         raise HTTPException(status_code=500, detail=f"{service.__module__} is not initialized")
+
+
+executor: ProcessPoolExecutor | None = None
+
+
+def get_executor() -> ProcessPoolExecutor | None:
+    global executor
+    return executor
+
+
+async def init_executor() -> None:
+    global executor
+    executor = ProcessPoolExecutor(max_workers=MAX_PROCESS_POOL_WORKERS)
+
+
+async def shutdown_executor() -> None:
+    global executor
+    if executor:
+        executor.shutdown(wait=False)
+        executor = None
 
 
 # ------ sessions (standalone or pytest) ------
@@ -240,8 +263,9 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         logger.info("✓ JobScheduler initialized")
 
         # initialize sessions
-        sessions: UserSessionsType = {}
-        set_user_sessions(sessions)
+        # sessions: UserSessionsType = {}
+        # set_user_sessions(sessions)
+        await init_executor()
 
     except Exception as e:
         logger.error(f"Failed to initialize JobScheduler: {e}", exc_info=True)
@@ -249,7 +273,6 @@ async def init_standalone(enable_ssl: bool = True) -> None:
 
 
 async def shutdown_standalone() -> None:
-    executor.shutdown(wait=False)
     mongodb_service = get_database_service()
     if mongodb_service:
         await mongodb_service.close()
@@ -270,3 +293,4 @@ async def shutdown_standalone() -> None:
     if job_scheduler:
         await job_scheduler.close()
         set_job_scheduler(None)
+    await shutdown_executor()

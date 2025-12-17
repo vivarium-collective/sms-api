@@ -1,13 +1,13 @@
 import asyncio
 import json
 import logging
+import os
 import random
 import subprocess
 import tempfile
 import textwrap
 import uuid
 from collections.abc import Sequence
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -23,15 +23,11 @@ from sms_api.analysis.models import (
 )
 from sms_api.common.utils import timestamp
 from sms_api.config import Settings
+from sms_api.dependencies import get_executor
 from sms_api.simulation.database_service import DatabaseService
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
-
-MAX_PROCESS_POOL_WORKERS = 2
-
-executor = ProcessPoolExecutor(max_workers=MAX_PROCESS_POOL_WORKERS)
 
 
 class AnalysisServiceLocal:
@@ -53,6 +49,10 @@ class AnalysisServiceLocal:
         # ret = self.execute_analysis(expid=expid, name=analysis_name, config=analysis_config)
         vecoli_dir = self.env.vecoli_config_dir.parent
         workspace_dir = vecoli_dir.parent
+
+        executor = get_executor()
+        if executor is None:
+            raise ValueError("No executor created!")
 
         ret = await asyncio.get_running_loop().run_in_executor(
             executor,
@@ -150,20 +150,23 @@ class AnalysisServiceLocal:
                     logger.info(f"WARNING: the following file does not exist: {output_fp!s}")
                     continue
 
-                fparts = output_fp.parts[-1].split("_")
-                domain = fparts[-1].replace(".txt", "")
-                requested_output = "_".join(fparts[:2])
-                domain_reqs = requested[domain]
-                req = next(filter(lambda r: r.name == requested_output, domain_reqs))
-                expected_n_tp = req.n_tp
-                verification = cls._verify_result(output_fp, expected_n_tp)
-                if not verification:
-                    logger.info("WARNING: resulting num cols/tps do not match requested.")
+                # fparts = output_fp.parts[-1].split("_")
+                # domain = fparts[-1].replace(".txt", "")
+                # requested_output = "_".join(fparts[:2])
+                # domain_reqs = requested[domain]
+                # req = next(filter(lambda r: r.name == requested_output, domain_reqs))
+                # expected_n_tp = req.n_tp
+                # verification = cls._verify_result(output_fp, expected_n_tp)
+                # if not verification:
+                #     logger.info("WARNING: resulting num cols/tps do not match requested.")
 
+                fparts = output_fp.parts[-1].split("_")
+                requested_output = "_".join(fparts[:2])
                 # create dtos
                 file_content = output_fp.read_text()
                 output = TsvOutputFile(filename=requested_output, content=file_content)
                 results.append(output)
+                os.remove(output_fp)
 
         return results
 
