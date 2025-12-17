@@ -130,7 +130,7 @@ def add_variant_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_slurmjob_name(experiment_id: str, simulator_hash: str = "079c43c") -> str:
-    random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
+    random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
     return f"sms-{simulator_hash}-{experiment_id}-{random_suffix}"
 
 

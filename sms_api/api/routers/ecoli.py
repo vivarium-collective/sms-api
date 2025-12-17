@@ -16,6 +16,7 @@ from starlette.requests import Request
 
 from sms_api.analysis import analysis_handlers
 from sms_api.analysis.analysis_service_local import AnalysisServiceLocal
+from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm
 from sms_api.analysis.models import (
     AnalysisRun,
     ExperimentAnalysisDTO,
@@ -109,7 +110,7 @@ async def get_analysis_status(id: int = fastapi.Path(..., description="Database 
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-    aservice = AnalysisServiceLocal(db_service=db_service, env=ENV)
+    aservice = AnalysisServiceSlurm(env=ENV)
     try:
         return await analysis_handlers.get_analysis_status(db_service=db_service, analysis_service=aservice, ref=id)
     except Exception as e:

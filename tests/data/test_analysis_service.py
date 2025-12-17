@@ -1,6 +1,7 @@
 import pytest
 
-from sms_api.analysis.analysis_service_slurm import AnalysisService, AnalysisServiceHpc, connect_ssh
+from sms_api.analysis.analysis_service import AnalysisService, connect_ssh
+from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm
 from sms_api.analysis.models import (
     AnalysisConfig,
 )
@@ -34,7 +35,7 @@ async def test_connect_ssh() -> None:
         ret, stdout, stderr = await ssh_svc.run_command(f"rm -f {testpath}")
         return None
 
-    analysis_service = AnalysisServiceHpc(ENV)
+    analysis_service = AnalysisServiceSlurm(ENV)
     z = await generate(analysis_service, 11.11, 2.2)
     await cleanup(analysis_service)
     print(z)
@@ -43,7 +44,7 @@ async def test_connect_ssh() -> None:
 
 @pytest.mark.asyncio
 async def test_generate_slurm_script(
-    analysis_service: AnalysisServiceHpc, ptools_analysis_config: AnalysisConfig
+    analysis_service: AnalysisServiceSlurm, ptools_analysis_config: AnalysisConfig
 ) -> None:
     request = request_examples.analysis_ptools
     simulator_hash = get_simulator().git_commit_hash
@@ -66,7 +67,7 @@ async def test_generate_slurm_script(
 
 
 @pytest.mark.asyncio
-async def test_parse_request(analysis_service: AnalysisServiceHpc) -> None:
+async def test_parse_request(analysis_service: AnalysisServiceSlurm) -> None:
     request = analysis_ptools
 
     env = get_settings()

@@ -28,7 +28,7 @@ async def test_list_simulations(
             sim_data_path="/pytest/kb/simData.cPickle",
             suffix_time=False,
             parca_options={"cpus": 3},
-            generations=randint(1, 1000),  # noqa: S311
+            generations=randint(1, 1000),
             max_duration=10800,
             initial_global_time=0,
             time_step=1,
@@ -38,7 +38,7 @@ async def test_list_simulations(
         )
         last_updated_i = str(datetime.datetime.now())
         job_name_i = get_slurmjob_name(experiment_id=name_i)
-        job_id_i = randint(10000, 1000000)  # noqa: S311
+        job_id_i = randint(10000, 1000000)
         sim_i = await database_service.insert_ecoli_simulation(
             name=name_i,
             config=config_i,
@@ -81,7 +81,7 @@ async def test_get_simulation(database_service: DatabaseServiceSQL) -> None:
         sim_data_path="/pytest/kb/simData.cPickle",
         suffix_time=False,
         parca_options={"cpus": 3},
-        generations=randint(1, 1000),  # noqa: S311
+        generations=randint(1, 1000),
         max_duration=10800,
         initial_global_time=0,
         time_step=1,
@@ -91,7 +91,7 @@ async def test_get_simulation(database_service: DatabaseServiceSQL) -> None:
     )
     last_updated_i = str(datetime.datetime.now())
     job_name_i = get_slurmjob_name(experiment_id=name_i)
-    job_id_i = randint(10000, 1000000)  # noqa: S311
+    job_id_i = randint(10000, 1000000)
     sim_i = await database_service.insert_ecoli_simulation(
         name=name_i,
         config=config_i,

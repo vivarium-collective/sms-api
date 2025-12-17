@@ -14,10 +14,10 @@ from sms_api.analysis.models import (
     AnalysisConfig,
     AnalysisDomain,
     AnalysisModuleConfig,
+    ExperimentAnalysisDTO,
     PtoolsAnalysisConfig,
     TsvOutputFile,
 )
-from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import timestamp
 from sms_api.config import Settings
 from sms_api.simulation.database_service import DatabaseService
@@ -43,16 +43,18 @@ class AnalysisServiceLocal:
     ) -> Sequence[TsvOutputFile]:
         # exec analysis
         ret = self.execute_analysis(expid=expid, name=analysis_name, config=analysis_config)
+        if ret > 0:
+            raise RuntimeError("The analysis failed.")
 
         # store in db
         job_id = random.randint(1111, 221111)
         job_name = analysis_name + f"-{str(uuid.uuid4())[:4]}"
-        record = await self.insert_analysis(
+        _: ExperimentAnalysisDTO = await self.insert_analysis(
             analysis_name=analysis_name, job_id=job_id, config=analysis_config, job_name=job_name
         )
 
         # get available
-        analysis_dir = Path(env.cache_dir) / name
+        analysis_dir = self.get_analysis_dir(analysis_name=analysis_name)
         available = self.get_available_output_paths(analysis_dirpath=analysis_dir)
 
         # download available
@@ -67,8 +69,7 @@ class AnalysisServiceLocal:
         exp_outdir = simulation_outdir / expid  # env.simulation_outdir / args.expid
         variant_data_dir = exp_outdir / "variant_sim_data"
         validation_data_path = exp_outdir / "parca" / "kb" / "validationData.cPickle"
-        config_name = "API_TEST"
-        analysis_outdir = Path(env.cache_dir) / name
+        analysis_outdir = self.get_analysis_dir(analysis_name=name)
         tmpdir = tempfile.TemporaryDirectory()
         conf_path = str(Path(tmpdir.name) / "tmp.json")
         with open(conf_path, "w") as f:
@@ -92,17 +93,9 @@ class AnalysisServiceLocal:
         tmpdir.cleanup()
         return ret
 
-    def _get_config(self, analysis_outdir: Path, simulation_outdir: Path) -> AnalysisConfig:
-        with open(str(analysis_outdir / "metadata.json")) as f:
-            analysis_options = json.load(f)
-        config = {"emitter_arg": {"out_dir": str(simulation_outdir)}, "analysis_options": analysis_options}
-        with tempfile.TemporaryDirectory() as tmp:
-            fp = Path(tmp) / "_.json"
-            with open(str(fp), "w") as f:
-                json.dump(config, f, indent=3)
-            return AnalysisConfig.from_file(fp=fp)
-
-    async def insert_analysis(self, analysis_name: str, config: AnalysisConfig, job_name: str, job_id: int):
+    async def insert_analysis(
+        self, analysis_name: str, config: AnalysisConfig, job_name: str, job_id: int
+    ) -> ExperimentAnalysisDTO:
         # insert new analysis
         return await self.db_service.insert_analysis(
             name=analysis_name,
@@ -111,6 +104,9 @@ class AnalysisServiceLocal:
             job_name=job_name,
             job_id=job_id,
         )
+
+    def get_analysis_dir(self, analysis_name: str) -> Path:
+        return Path(self.env.cache_dir) / analysis_name
 
     @classmethod
     def get_available_output_paths(cls, analysis_dirpath: Path) -> list[Path]:
@@ -132,7 +128,7 @@ class AnalysisServiceLocal:
                 for config in configs:
                     requested_filename = f"{config.name}_{AnalysisDomain[domain.upper()]}.txt"
                     relevant_files = cls._find_relevant_files(requested_filename, available_paths)
-                    for remote_path in relevant_files:
+                    for _ in relevant_files:
                         # TODO: better save to cache
                         local = analysis_cache / requested_filename
                         verification = cls._verify_result(local, 5)
@@ -144,7 +140,7 @@ class AnalysisServiceLocal:
         return results
 
     @classmethod
-    def _find_relevant_files(cls, requested_filename: str, available_paths: list[Path]) -> list[HPCFilePath]:
+    def _find_relevant_files(cls, requested_filename: str, available_paths: list[Path]) -> list[Path]:
         return [fp for fp in filter(lambda fpath: requested_filename in str(fpath), available_paths)]
 
     @classmethod
@@ -155,7 +151,7 @@ class AnalysisServiceLocal:
 
     @classmethod
     def _execute_command(cls, cmd: str) -> int:
-        process = subprocess.Popen(
+        process = subprocess.Popen(  # noqa: S602
             cmd,
             shell=True,
             executable="/bin/bash",

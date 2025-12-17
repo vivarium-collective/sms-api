@@ -61,7 +61,7 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
         job_state="RUNNING",
     )
 
-    random_string = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311 doesn't need to be secure
+    random_string = "".join(random.choices(string.hexdigits, k=7))
     correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string)
     hpcrun = await database_service.insert_hpcrun(
         slurmjobid=slurm_job.job_id,

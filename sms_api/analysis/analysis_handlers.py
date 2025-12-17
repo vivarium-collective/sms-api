@@ -15,8 +15,8 @@ import pandas as pd
 from pydantic import BaseModel
 from starlette.requests import Request
 
-from sms_api.analysis import AnalysisService, AnalysisServiceSlurm
 from sms_api.analysis.analysis_service_local import AnalysisServiceLocal
+from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm
 from sms_api.analysis.analysis_utils import get_html_outputs_local
 from sms_api.analysis.models import (
     AnalysisConfig,
@@ -128,9 +128,9 @@ async def handle_analysis_slurm(
     )
 
 
-def create_analysis_cache(env: Settings, _request: Request, analysis_name: str) -> Path:
+def create_analysis_cache(env: Settings, session_id: str, analysis_name: str) -> Path:
     # make cache dir for analysis
-    cached_dir = Path(env.cache_dir) / _request.state.session_id / analysis_name
+    cached_dir = Path(env.cache_dir) / session_id / analysis_name
     if not cached_dir.exists():
         os.mkdir(cached_dir)
     return cached_dir
@@ -138,7 +138,7 @@ def create_analysis_cache(env: Settings, _request: Request, analysis_name: str) 
 
 async def insert_analysis(
     db_service: DatabaseService, analysis_name: str, config: AnalysisConfig, job_name: str, job_id: int
-):
+) -> ExperimentAnalysisDTO:
     # insert new analysis
     return await db_service.insert_analysis(
         name=analysis_name,
@@ -176,14 +176,15 @@ async def dispatch_new_analysis(
     run = await poll_status(analysis_record=analysis_record, db_service=db_service, analysis_service=analysis_service)
 
     # make cache dir for analysis
-    cached_dir = create_analysis_cache(env=analysis_service.env, _request=_request, analysis_name=analysis_name)
+    session_id: str = _request.state.session_id
+    cached_dir = create_analysis_cache(env=analysis_service.env, session_id=session_id, analysis_name=analysis_name)
     return run, cached_dir
 
 
 async def get_analysis_status(
     ref: int | ExperimentAnalysisDTO,
     db_service: DatabaseService,
-    analysis_service: AnalysisService,
+    analysis_service: AnalysisServiceSlurm,
 ) -> AnalysisRun:
     """
     If a database_id is passed, an analysis record should NOT Be

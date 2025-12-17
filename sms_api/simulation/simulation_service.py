@@ -117,7 +117,7 @@ class SimulationServiceHpc(SimulationService):
         )
         slurm_service = SlurmService(ssh_service=ssh_service)
 
-        random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
+        random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
         slurm_job_name = f"build-image-{simulator_version.git_commit_hash}-{random_suffix}"
 
         slurm_log_file = get_slurm_log_file(slurm_job_name=slurm_job_name)
@@ -303,7 +303,7 @@ class SimulationServiceHpc(SimulationService):
         slurm_service = SlurmService(ssh_service=ssh_service)
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
 
-        random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
+        random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
         slurm_job_name = f"parca-{simulator_version.git_commit_hash}-{parca_dataset.database_id}-{random_suffix}"
 
         slurm_log_file = get_slurm_log_file(slurm_job_name=slurm_job_name)
@@ -394,7 +394,7 @@ class SimulationServiceHpc(SimulationService):
         slurm_service = SlurmService(ssh_service=ssh_service)
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
 
-        random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))  # noqa: S311
+        random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
         slurm_job_name = f"sim-{simulator_version.git_commit_hash}-{ecoli_simulation.database_id}-{random_suffix}"
 
         slurm_log_file = get_slurm_log_file(slurm_job_name=slurm_job_name)

@@ -74,7 +74,6 @@ class RemoteScriptService:
 class AnalysisServiceHpc(AnalysisService):
     env: Settings
     ssh: SSHServiceManaged
-    script_service: RemoteScriptService
 
     @property
     def script_service(self) -> RemoteScriptService:
@@ -156,10 +155,6 @@ class AnalysisServiceHpc(AnalysisService):
         remote_workspace_dir = base_path / "workspace"
         vecoli_dir = remote_workspace_dir / "vEcoli"
         config_dir = vecoli_dir / "configs"
-
-        qos_clause = f"#SBATCH --qos={self.env.slurm_qos}" if self.env.slurm_qos else ""
-        nodelist_clause = f"#SBATCH --nodelist={self.env.slurm_node_list}" if self.env.slurm_node_list else ""
-
         return dedent(f"""\
             #!/bin/bash
 
