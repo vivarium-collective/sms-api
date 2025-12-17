@@ -52,7 +52,7 @@ class AnalysisServiceLocal:
         )
 
         # get available
-        analysis_dir = Path(analysis_config.analysis_options.outdir)
+        analysis_dir = Path(env.cache_dir) / name
         available = self.get_available_output_paths(analysis_dirpath=analysis_dir)
 
         # download available
