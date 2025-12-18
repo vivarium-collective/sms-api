@@ -265,7 +265,7 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         # initialize sessions
         # sessions: UserSessionsType = {}
         # set_user_sessions(sessions)
-        await init_executor()
+        # await init_executor()
 
     except Exception as e:
         logger.error(f"Failed to initialize JobScheduler: {e}", exc_info=True)
@@ -293,4 +293,4 @@ async def shutdown_standalone() -> None:
     if job_scheduler:
         await job_scheduler.close()
         set_job_scheduler(None)
-    await shutdown_executor()
+    # await shutdown_executor()

@@ -27,7 +27,7 @@ from starlette import templating
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import RedirectResponse
 
-from sms_api.common.gateway.models import ServerMode, UserSession
+from sms_api.common.gateway.models import ServerMode
 from sms_api.config import get_settings
 from sms_api.dependencies import (
     get_job_scheduler,
@@ -107,13 +107,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     await shutdown_standalone()
 
 
-app = FastAPI(
-    title=APP_TITLE,
-    version=APP_VERSION,
-    lifespan=lifespan,
-    redoc_url="/documentation",
-    # docs_url=None
-)
+app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan, redoc_url="/documentation", docs_url="/docs")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -188,10 +182,10 @@ async def get_version() -> str:
     return APP_VERSION
 
 
-@app.get("/session")
-async def get_session_id(request: Request) -> UserSession:
-    session_id = request.state.session_id
-    return UserSession(session=session_id)
+# @app.get("/session")
+# async def get_session_id(request: Request) -> UserSession:
+#     session_id = request.state.session_id
+#     return UserSession(session=session_id)
 
 
 # -- mount marimo apps to FastAPI root -- #
