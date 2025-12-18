@@ -1,12 +1,11 @@
 import pytest
 
 from sms_api.analysis.analysis_service import AnalysisService, connect_ssh
-from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm
+from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm, RequestPayload
 from sms_api.analysis.models import (
     AnalysisConfig,
 )
 from sms_api.api import request_examples
-from sms_api.api.request_examples import analysis_ptools
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.ssh.ssh_service import SSHServiceManaged
 from sms_api.config import get_settings
@@ -49,13 +48,13 @@ async def test_generate_slurm_script(
     request = request_examples.analysis_ptools
     simulator_hash = get_simulator().git_commit_hash
     name = "test_generate_slurm_script"
-    analysis_config = request.to_config(analysis_name=name)
+    analysis_config = request.to_config(analysis_name=name, env=ENV)
 
     slurmjob_name, slurm_log_file = analysis_service._collect_slurm_parameters(
         request=request, simulator_hash=simulator_hash, analysis_name=name
     )
 
-    slurm_script = analysis_service.generate_slurm_script(
+    slurm_script = analysis_service._generate_slurm_script(
         slurm_log_file=slurm_log_file,
         slurm_job_name=slurmjob_name,
         latest_hash=simulator_hash,
@@ -67,15 +66,10 @@ async def test_generate_slurm_script(
 
 
 @pytest.mark.asyncio
-async def test_parse_request(analysis_service: AnalysisServiceSlurm) -> None:
-    request = analysis_ptools
+async def test_normalize() -> None:
+    from sms_api.api.request_examples import analysis_request_base
 
-    env = get_settings()
-    name = analysis_service.generate_analysis_name(experiment_id=request.experiment_id)
-
-    exported: AnalysisConfig = request.to_config(analysis_name=name, env=env)
-    imported: AnalysisConfig = AnalysisConfig.from_request(request=request, analysis_name=name)
-
-    assert exported.model_dump() == imported.model_dump()
-
-    print()
+    origin = analysis_request_base.model_dump()
+    payload1 = RequestPayload(data=origin)
+    h1 = payload1.hash()
+    assert h1 == RequestPayload(data=origin).hash()

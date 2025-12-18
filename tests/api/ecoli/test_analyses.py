@@ -44,10 +44,10 @@ async def test_get_analysis(
 ) -> None:
     transport = ASGITransport(app=app)
     slurmjob_name = get_slurmjob_name(experiment_id=analysis_request.experiment_id)
-    analysis_request.analysis_name = get_uuid(scope="test_get_analysis")
+    name = get_uuid(scope="test_get_analysis")
     analysis_record = await database_service.insert_analysis(
-        name=get_uuid(scope="test_get_analysis"),
-        config=analysis_request.to_config(env=ENV),
+        name=name,
+        config=analysis_request.to_config(analysis_name=name, env=ENV),
         last_updated=timestamp(),
         job_name=slurmjob_name,
         job_id=111122,
@@ -84,7 +84,7 @@ async def test_generate_analysis_request() -> None:
         experiment_id="test_experiment", analysis_name="analysis_test", requested_configs=AnalysisDomain.to_list()
     )
 
-    analysis_name = request.analysis_name or get_uuid(scope="analysis")
+    analysis_name = get_uuid(scope="analysis")
     config = request.to_config(analysis_name=analysis_name, env=ENV)
 
     env = get_settings()
