@@ -86,6 +86,7 @@ async def handle_run_analysis_slurm(
     analysis_request_cache = Path(analysis_service.env.cache_dir) / payload_hash
     analysis_name: str = get_data_id(scope="analysis")
 
+    results: list[TsvOutputFile] = []
     # 2. if not, run an analysis
     if not analysis_request_cache.exists():
         # 2a. mk local cache
@@ -104,21 +105,26 @@ async def handle_run_analysis_slurm(
         )
         # 2e. poll status
         _run = await analysis_service.poll_status(dto=dto)
-    else:
-        config = request.to_config(analysis_name=analysis_name, env=analysis_service.env)
-
-    # check available in specified HPC dir for analysis_config.outdir
-    available_paths: list[HPCFilePath] = await analysis_service.get_available_output_paths(
-        remote_analysis_outdir=HPCFilePath(remote_path=Path(config.analysis_options.outdir))  # type: ignore[arg-type]
-    )
-
-    # download available
-    results: list[TsvOutputFile] = []
-    for remote_path in available_paths:
-        output_i: TsvOutputFile = await analysis_service.download_analysis_output(
-            local_dir=analysis_request_cache, remote_path=remote_path
+        # check available in specified HPC dir for analysis_config.outdir
+        available_paths: list[HPCFilePath] = await analysis_service.get_available_output_paths(
+            remote_analysis_outdir=HPCFilePath(remote_path=Path(config.analysis_options.outdir))  # type: ignore[arg-type]
         )
-        results.append(output_i)
+
+        # download available
+        for remote_path in available_paths:
+            output_i: TsvOutputFile = await analysis_service.download_analysis_output(
+                local_dir=analysis_request_cache, remote_path=remote_path
+            )
+            results.append(output_i)
+    else:
+        # config = request.to_config(analysis_name=analysis_name, env=analysis_service.env)
+        for fp in analysis_request_cache.iterdir():
+            filename = fp.parts[-1]
+            if filename.endswith(".txt"):
+                file_content = fp.read_text()
+                output_i = TsvOutputFile(filename=filename, content=file_content)
+                results.append(output_i)
+
     return results
 
 
