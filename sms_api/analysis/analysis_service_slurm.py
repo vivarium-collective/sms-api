@@ -120,8 +120,8 @@ class AnalysisServiceSlurm:
             raise Exception(f"Analysis Run has failed:\n{run}")
         return run
 
-    async def get_available_output_paths(self, analysis_cache_dir: Path) -> list[HPCFilePath]:
-        cmd = f'find "{analysis_cache_dir!s}" -type f'
+    async def get_available_output_paths(self, remote_analysis_outdir: HPCFilePath) -> list[HPCFilePath]:
+        cmd = f'find "{remote_analysis_outdir!s}" -type f'
         if not self.ssh.connected:
             await self.ssh.connect()
         try:

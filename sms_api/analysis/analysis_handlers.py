@@ -84,13 +84,13 @@ async def handle_run_analysis_slurm(
     # 1. check if hashed/cached payload exists
     payload_hash = RequestPayload(data=request.model_dump()).hash()
     analysis_request_cache = Path(analysis_service.env.cache_dir) / payload_hash
+    analysis_name: str = get_data_id(scope="analysis")
 
     # 2. if not, run an analysis
     if not analysis_request_cache.exists():
         # 2a. mk local cache
         os.mkdir(analysis_request_cache)
         # 2c. dispatch job
-        analysis_name: str = get_data_id(scope="analysis")
         jobname, jobid, config = await analysis_service.dispatch_analysis(
             request=request, logger=logger, analysis_name=analysis_name, simulator_hash=simulator.git_commit_hash
         )
@@ -104,10 +104,12 @@ async def handle_run_analysis_slurm(
         )
         # 2e. poll status
         _run = await analysis_service.poll_status(dto=dto)
+    else:
+        config = request.to_config(analysis_name=analysis_name, env=analysis_service.env)
 
     # check available in specified HPC dir for analysis_config.outdir
     available_paths: list[HPCFilePath] = await analysis_service.get_available_output_paths(
-        analysis_cache_dir=analysis_request_cache
+        remote_analysis_outdir=HPCFilePath(remote_path=Path(config.analysis_options.outdir))  # type: ignore[arg-type]
     )
 
     # download available
