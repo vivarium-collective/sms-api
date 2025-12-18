@@ -11,6 +11,8 @@ For the endpoint: /core/simulator/versions: core_simulator_versions
 Then, add that func to the list within the examples dict comprehension below!
 """
 
+import random
+
 from sms_api.analysis.models import AnalysisDomain, ExperimentAnalysisRequest, PtoolsAnalysisConfig, PtoolsAnalysisType
 from sms_api.common.gateway.utils import generate_analysis_request
 from sms_api.common.utils import unique_id
@@ -18,6 +20,27 @@ from sms_api.simulation.models import ExperimentRequest
 
 DEFAULT_NUM_SEEDS = 30
 DEFAULT_NUM_GENERATIONS = 4
+
+
+def get_test_ptools() -> ExperimentAnalysisRequest:
+    def rand_ntp(start: int = 3, stop: int = 22) -> int:
+        return random.randint(start, stop)
+
+    return ExperimentAnalysisRequest(
+        experiment_id="sms_multigeneration",
+        multiseed=[
+            PtoolsAnalysisConfig(
+                name=PtoolsAnalysisType.REACTIONS,
+                n_tp=rand_ntp(),
+            )
+        ],
+        multigeneration=[
+            PtoolsAnalysisConfig(
+                name=PtoolsAnalysisType.REACTIONS,
+                n_tp=rand_ntp(),
+            )
+        ],
+    )
 
 
 def get_analysis_multiseed_multigen() -> ExperimentAnalysisRequest:
@@ -123,6 +146,7 @@ analysis_request_base = generate_analysis_request(
     experiment_id="sms_multigeneration",
     requested_configs=[AnalysisDomain.MULTIGENERATION, AnalysisDomain.MULTISEED],
 )
+analysis_test_ptools = get_test_ptools()
 
 # example simulations
 base_simulation = (lambda expid: ExperimentRequest(experiment_id=expid, simulation_name=expid))(unique_id("sms_single"))

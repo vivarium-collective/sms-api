@@ -58,7 +58,7 @@ config = router_config(prefix="ecoli")
 )
 async def run_analysis(
     _request: Request,
-    request: ExperimentAnalysisRequest = request_examples.analysis_request_base,
+    request: ExperimentAnalysisRequest = request_examples.analysis_test_ptools,
 ) -> Sequence[TsvOutputFile | OutputFileMetadata]:
     db_service = get_database_service()
     if db_service is None:

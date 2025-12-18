@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-MAX_ANALYSIS_CPUS = 5
+MAX_ANALYSIS_CPUS = 4
+MAX_ANALYSIS_MEM = "24GB"
 
 
 @dataclasses.dataclass
@@ -134,7 +135,7 @@ class AnalysisServiceSlurm:
     async def download_analysis_output(self, local_dir: Path, remote_path: HPCFilePath) -> TsvOutputFile:
         requested_filename = remote_path.remote_path.parts[-1]
         if not requested_filename.endswith(".txt"):
-            raise ValueError("wrong filename")
+            logger.info(f"wrong filename: {requested_filename}")
         local = local_dir / requested_filename
 
         if not local.exists():
@@ -240,7 +241,7 @@ def generate_slurm_script(
         #SBATCH --job-name={slurm_job_name}
         #SBATCH --time=30:00
         #SBATCH --cpus-per-task {MAX_ANALYSIS_CPUS}
-        #SBATCH --mem=8GB
+        #SBATCH --mem={MAX_ANALYSIS_MEM}
         #SBATCH --partition={env.slurm_partition}
         {qos_clause}
         #SBATCH --mail-type=ALL

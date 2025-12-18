@@ -134,7 +134,7 @@ async def ecoli_simulation() -> EcoliSimulationDTO:
 @pytest_asyncio.fixture(scope="session")
 async def base_router() -> str:
     # return "/v1/ecoli"
-    return "/api/v1"
+    return "/v1/ecoli"
 
 
 @pytest_asyncio.fixture(scope="session")

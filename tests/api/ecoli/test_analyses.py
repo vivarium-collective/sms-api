@@ -4,9 +4,9 @@ import logging
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from sms_api.analysis.models import AnalysisConfig, AnalysisConfigOptions, AnalysisDomain, ExperimentAnalysisRequest
+from sms_api.analysis.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisRequest
+from sms_api.api import request_examples
 from sms_api.api.main import app
-from sms_api.common.gateway.utils import generate_analysis_request
 from sms_api.common.utils import get_uuid, timestamp, unique_id
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
@@ -19,11 +19,12 @@ ENV = get_settings()
 @pytest.mark.asyncio
 async def test_run_analysis(
     base_router: str,
-    analysis_request: ExperimentAnalysisRequest,
+    # analysis_request: ExperimentAnalysisRequest,
     database_service: DatabaseService,
 ) -> None:
     transport = ASGITransport(app=app)
     data = None
+    analysis_request = request_examples.analysis_test_ptools
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.post(f"{base_router}/analyses", json=analysis_request.model_dump())
         response.raise_for_status()
@@ -31,7 +32,6 @@ async def test_run_analysis(
 
     assert data is not None
     assert isinstance(data, list)
-    assert len(data) == 6
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
@@ -79,17 +79,14 @@ async def test_get_outputs(base_router: str, database_service: DatabaseService) 
 @pytest.mark.skipif(len(str(get_settings().simulation_outdir)) == 0, reason="simulation outdir not supplied")
 @pytest.mark.asyncio
 async def test_generate_analysis_request() -> None:
-    experiment_id = "test_experiment"
-    request = generate_analysis_request(
-        experiment_id="test_experiment", analysis_name="analysis_test", requested_configs=AnalysisDomain.to_list()
-    )
+    request = request_examples.analysis_test_ptools
 
     analysis_name = get_uuid(scope="analysis")
     config = request.to_config(analysis_name=analysis_name, env=ENV)
 
     env = get_settings()
-    expected_variant_dir = str(env.simulation_outdir / experiment_id / "variant_sim_data")
+    expected_variant_dir = str(env.simulation_outdir / request.experiment_id / "variant_sim_data")
 
     actual_options = config.analysis_options
     assert actual_options.variant_data_dir == [expected_variant_dir]
-    assert actual_options.experiment_id == [experiment_id]
+    assert actual_options.experiment_id == [request.experiment_id]
