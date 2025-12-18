@@ -94,9 +94,6 @@ class AnalysisServiceSlurm:
             analysis_name=analysis_name,
         )
 
-        with open(f"assets/artifacts/{analysis_name}.sbatch", "w") as f:
-            f.write(slurm_script)
-
         # submit script
         slurmjob_id = await self._submit_slurm_script(
             config=analysis_config,
