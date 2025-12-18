@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from sms_api.common import StrEnumBase
 from sms_api.common.models import DataId
-from sms_api.common.utils import get_data_id, get_uuid
 from sms_api.config import Settings, get_settings
 
 MAX_ANALYSIS_CPUS = 3
@@ -150,34 +149,26 @@ class AnalysisConfig(BaseModel):
 
 class ExperimentAnalysisRequest(BaseModel):
     experiment_id: str
-    analysis_name: str | None = None
-    # analysis_name: str = Field(default=f"analysis_{unique_id()!s}")
     single: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multidaughter: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multigeneration: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multiseed: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multivariant: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multiexperiment: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
-    experiment_index: bool = False
 
-    def model_post_init(self, context: Any, /) -> None:
-        if self.analysis_name is None:
-            self.analysis_name = (
-                f"sms-analysis_{self.experiment_id}" if self.experiment_index else get_data_id(scope="analysis")
-            )
-        delattr(self, "experiment_index")
+    def to_config(self, analysis_name: str | DataId, env: Settings) -> AnalysisConfig:
+        """
+        Convert a request to a vecoli-compliant, serializable AnalysisConfig.
 
-    def reset_name(self) -> None:
-        self.analysis_name = get_uuid(scope="analysis")
-
-    def to_config(self, analysis_name: str | DataId | None = None, env: Settings | None = None) -> AnalysisConfig:
+        :param analysis_name: for the value of
+            analysis_options.outdir in HPC: <env.analysis_outdir.remote_path> / analysis_name
+        :param env: Settings instance which parameterizes HPC paths
+        :return: ``AnalysisConfig``
+        """
         if env is None:
             env = get_settings()
-        if analysis_name is None and self.analysis_name is not None:
-            analysis_name = self.analysis_name
-        else:
-            if isinstance(analysis_name, DataId):
-                analysis_name = analysis_name.label
+        if isinstance(analysis_name, DataId):
+            analysis_name = analysis_name.label
 
         simulation_outdir = env.simulation_outdir.remote_path
         experiment_outdir = str(simulation_outdir / self.experiment_id)

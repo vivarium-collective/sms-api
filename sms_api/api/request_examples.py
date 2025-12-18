@@ -22,7 +22,6 @@ DEFAULT_NUM_GENERATIONS = 4
 
 def get_analysis_multiseed_multigen() -> ExperimentAnalysisRequest:
     request = ExperimentAnalysisRequest(
-        analysis_name="ANALYSIS_TEST",
         experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
         # experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
         multiseed=[
@@ -39,7 +38,6 @@ def get_analysis_multiseed_multigen() -> ExperimentAnalysisRequest:
             ),
             PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=5),
         ],
-        experiment_index=False,
     )
 
     return request

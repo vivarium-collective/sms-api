@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.70-dev
+  version: 0.2.71-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -31,26 +31,25 @@ paths:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
                 experiment_id: sms_multigeneration
-                analysis_name: analysis-fd52-20251217
                 multigeneration:
                 - name: ptools_rxns
-                  n_tp: 8
+                  n_tp: 9
                   variant: 0
                 - name: ptools_rna
-                  n_tp: 3
+                  n_tp: 4
                   variant: 0
                 - name: ptools_proteins
-                  n_tp: 2
+                  n_tp: 5
                   variant: 0
                 multiseed:
                 - name: ptools_rxns
-                  n_tp: 8
+                  n_tp: 7
                   variant: 0
                 - name: ptools_rna
-                  n_tp: 3
+                  n_tp: 5
                   variant: 0
                 - name: ptools_proteins
-                  n_tp: 6
+                  n_tp: 3
                   variant: 0
       responses:
         '200':
@@ -705,17 +704,6 @@ paths:
               schema:
                 type: string
                 title: Response Get Version Version Get
-  /session:
-    get:
-      summary: Get Session Id
-      operationId: get_session_id_session_get
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserSession'
 components:
   schemas:
     AnalysisConfig:
@@ -837,8 +825,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single_cf47_20251217
-            simulation_name: sms_single_cf47_20251217
+            experiment_id: sms_single_3d10_20251218
+            simulation_name: sms_single_3d10_20251218
             metadata: {}
             run_parca: false
             generations: 2
@@ -990,11 +978,6 @@ components:
         experiment_id:
           type: string
           title: Experiment Id
-        analysis_name:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Analysis Name
         single:
           anyOf:
           - items:
@@ -1049,10 +1032,6 @@ components:
             type: array
           - type: 'null'
           title: Multiexperiment
-        experiment_index:
-          type: boolean
-          title: Experiment Index
-          default: false
       type: object
       required:
       - experiment_id
@@ -1072,7 +1051,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi_9b29_20251217
+          default: sim_smsapi_ac21_20251218
         metadata:
           additionalProperties: true
           type: object
@@ -1930,15 +1909,6 @@ components:
       required:
       - filename
       title: TsvOutputFile
-    UserSession:
-      properties:
-        session:
-          type: string
-          title: Session
-      type: object
-      required:
-      - session
-      title: UserSession
     ValidationError:
       properties:
         loc:

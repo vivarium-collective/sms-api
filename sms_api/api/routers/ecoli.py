@@ -15,7 +15,6 @@ from fastapi import BackgroundTasks, Depends, HTTPException, Query
 from starlette.requests import Request
 
 from sms_api.analysis import analysis_handlers
-from sms_api.analysis.analysis_service_local import AnalysisServiceLocal
 from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm
 from sms_api.analysis.models import (
     AnalysisRun,
@@ -40,7 +39,6 @@ from sms_api.simulation.models import (
 )
 
 ENV = get_settings()
-REMOTE_JOB_EXECUTION: bool = ENV.remote_job_execution
 
 logger = logging.getLogger(__name__)
 config = router_config(prefix="ecoli")
@@ -65,16 +63,18 @@ async def run_analysis(
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-    analysis_service = AnalysisServiceLocal(env=ENV, db_service=db_service)
+    # analysis_service = AnalysisServiceLocal(env=ENV, db_service=db_service)
+    analysis_service = AnalysisServiceSlurm(env=ENV)
 
     try:
         simulator = get_simulator()
-        return await analysis_handlers.handle(
+        return await analysis_handlers.handle_run_analysis(
             request=request,
             simulator=simulator,
             analysis_service=analysis_service,
             logger=logger,
             _request=_request,
+            db_service=db_service,
         )
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
@@ -93,7 +93,7 @@ async def get_analysis_spec(id: int) -> ExperimentAnalysisDTO:
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
-        return await analysis_handlers.get_analysis(db_service=db_service, id=id)
+        return await analysis_handlers.handle_get_analysis(db_service=db_service, id=id)
     except Exception as e:
         logger.exception("Error fetching the simulation analysis file.")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -112,7 +112,9 @@ async def get_analysis_status(id: int = fastapi.Path(..., description="Database 
         raise HTTPException(status_code=404, detail="Database not found")
     aservice = AnalysisServiceSlurm(env=ENV)
     try:
-        return await analysis_handlers.get_analysis_status(db_service=db_service, analysis_service=aservice, ref=id)
+        return await analysis_handlers.handle_get_analysis_status(
+            db_service=db_service, analysis_service=aservice, ref=id
+        )
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
@@ -139,7 +141,7 @@ async def get_analysis_log(id: int = fastapi.Path(..., description="Database ID 
         raise HTTPException(status_code=404, detail="Database not found")
     ssh_service = get_ssh_service()
     try:
-        return await analysis_handlers.get_analysis_log(db_service=db_service, id=id, ssh_service=ssh_service)
+        return await analysis_handlers.handle_get_analysis_log(db_service=db_service, id=id, ssh_service=ssh_service)
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
@@ -167,7 +169,7 @@ async def get_analysis_plots(
     await ssh_service.connect()
 
     try:
-        return await analysis_handlers.get_analysis_plots(db_service=db_service, id=id, ssh_service=ssh_service)
+        return await analysis_handlers.handle_get_analysis_plots(db_service=db_service, id=id, ssh_service=ssh_service)
     except Exception as e:
         logger.exception("Error getting analysis data")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -189,7 +191,7 @@ async def list_analyses() -> list[ExperimentAnalysisDTO]:
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
         # return await db_service.list_analyses()
-        return await analysis_handlers.list_analyses(db_service=db_service)
+        return await analysis_handlers.handle_list_analyses(db_service=db_service)
     except Exception as e:
         logger.exception("Error fetching the uploaded analyses")
         raise HTTPException(status_code=500, detail=str(e)) from e
