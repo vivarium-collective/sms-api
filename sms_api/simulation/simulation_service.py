@@ -141,7 +141,6 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --ntasks=1
                     #SBATCH --cpus-per-task 2
                     #SBATCH --mem=4GB
-
                     #SBATCH --partition={settings.slurm_partition}
                     {qos_clause}
                     #SBATCH --output={slurm_log_file}

@@ -70,12 +70,7 @@ def get_analysis_ptools() -> ExperimentAnalysisRequest:
     return ExperimentAnalysisRequest(
         experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
         multiseed=[
-            PtoolsAnalysisConfig(
-                name=PtoolsAnalysisType.REACTIONS,
-                n_tp=8,
-            ),
-            PtoolsAnalysisConfig(name=PtoolsAnalysisType.PROTEINS, n_tp=10),
-            PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=10),
+            PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8),
         ],
     )
 

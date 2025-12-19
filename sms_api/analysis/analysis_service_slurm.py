@@ -44,7 +44,7 @@ class RequestPayload:
 
     def hash(self) -> str:
         normalized = normalize_json(self.data)
-        b_rep = json.dumps(normalized, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        b_rep = json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         return hashlib.sha256(b_rep).hexdigest()
 
 
