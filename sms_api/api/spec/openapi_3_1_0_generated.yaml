@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.57-dev
+  version: 0.2.56.dev1
 paths:
   /v1/ecoli/analyses:
     get:

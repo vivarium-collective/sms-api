@@ -243,3 +243,4 @@ scratchpads/
 
 # Secret data files (kustomize overlays)
 kustomize/overlays/**/secrets_sms_eks.dat
+*.bak
