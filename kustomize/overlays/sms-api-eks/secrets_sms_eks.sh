@@ -44,6 +44,7 @@ function generate_ssh_known_hosts_configmap() {
 
     # Send SSM command to retrieve SSH host keys
     local command_id=$(aws ssm send-command \
+        --region us-east-1 \
         --instance-ids "${instance_id}" \
         --document-name "AWS-RunShellScript" \
         --parameters 'commands=["cd /etc/ssh && for f in ssh_host_*.pub; do echo -n \"login-node.pcs.internal \"; cat $f; done"]' \
@@ -56,6 +57,7 @@ function generate_ssh_known_hosts_configmap() {
 
     # Retrieve command output
     local host_keys=$(aws ssm get-command-invocation \
+        --region us-east-1 \
         --command-id "${command_id}" \
         --instance-id "${instance_id}" \
         --query "StandardOutputContent" \
