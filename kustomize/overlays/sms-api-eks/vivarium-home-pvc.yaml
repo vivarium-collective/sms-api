@@ -5,7 +5,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: efs-sc-static
+  storageClassName: fsx-sc-static
   resources:
     requests:
       storage: 100Gi

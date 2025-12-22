@@ -22,6 +22,7 @@ replicas:
 resources:
   - ingress.yaml
   - storageclass-gp3-retain.yaml
+  - efs-pcs-root-pv.yaml
   - vivarium-home-pvc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
@@ -30,6 +31,16 @@ resources:
   - ../../base
 
 patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/1/mountPath
+        value: /mnt/fsx/home/svc_vivarium
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/1/subPath
+        value: home/svc_vivarium
+    target:
+      kind: Deployment
+      name: api
   - patch: |-
       - op: remove
         path: /spec/template/spec/nodeSelector

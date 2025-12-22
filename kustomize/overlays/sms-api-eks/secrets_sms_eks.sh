@@ -108,27 +108,41 @@ ${SCRIPTS_DIR}/sealed_secret_ssh.sh --controller-name sealed-secrets --controlle
 echo "✓ secret-ssh.yaml generated"
 
 echo ""
-echo "=== Updating EFS Persistent Volume Configuration ==="
+echo "=== Updating FSx Persistent Volume Configuration ==="
 
-# Get EFS file system ID from CloudFormation stack
-echo "Retrieving EFS file system ID from CloudFormation stack smscdk-shared..."
-EFS_ID=$(aws cloudformation describe-stacks \
-  --stack-name smscdk-shared \
-  --query 'Stacks[0].Outputs[?OutputKey==`EfsFileSystemId`].OutputValue' \
-  --output text)
+# Get FSx file system details
+echo "Retrieving FSx file system details..."
+FSX_INFO=$(aws fsx describe-file-systems \
+  --region us-east-1 \
+  --query 'FileSystems[?FileSystemType==`LUSTRE`] | [0].{Id:FileSystemId,DNS:DNSName,Mount:LustreConfiguration.MountName}' \
+  --output json)
 
-if [ -z "$EFS_ID" ]; then
-    echo "ERROR: Failed to retrieve EFS file system ID from CloudFormation stack"
+FSX_ID=$(echo "$FSX_INFO" | jq -r '.Id')
+FSX_DNS=$(echo "$FSX_INFO" | jq -r '.DNS')
+FSX_MOUNT=$(echo "$FSX_INFO" | jq -r '.Mount')
+
+if [ -z "$FSX_ID" ] || [ "$FSX_ID" == "null" ]; then
+    echo "ERROR: Failed to retrieve FSx file system ID"
     exit 1
 fi
 
-echo "✓ EFS file system ID: ${EFS_ID}"
+echo "✓ FSx file system ID: ${FSX_ID}"
+echo "✓ FSx DNS name: ${FSX_DNS}"
+echo "✓ FSx mount name: ${FSX_MOUNT}"
 
-# Patch the EFS PV YAML file (in-place)
-EFS_PV_FILE="${SECRETS_DIR}/efs-pcs-root-pv.yaml"
-echo "Updating EFS PersistentVolume YAML with actual file system ID..."
-sed -i.bak "s/\${EFS_FILE_SYSTEM_ID}/${EFS_ID}/" "${EFS_PV_FILE}"
-echo "✓ EFS PersistentVolume YAML updated: ${EFS_PV_FILE}"
+# Update the FSx PV YAML file with actual values
+FSX_PV_FILE="${SECRETS_DIR}/efs-pcs-root-pv.yaml"
+echo "Updating FSx PersistentVolume YAML with actual file system details..."
+
+# Replace placeholders with actual values (creates .bak file)
+sed -i.bak \
+  -e "s/\${FSX_ID}/${FSX_ID}/g" \
+  -e "s/\${FSX_DNS}/${FSX_DNS}/g" \
+  -e "s/\${FSX_MOUNT}/${FSX_MOUNT}/g" \
+  "${FSX_PV_FILE}"
+
+echo "✓ FSx PersistentVolume YAML updated: ${FSX_PV_FILE}"
+echo "  (Original backed up to: ${FSX_PV_FILE}.bak)"
 
 echo ""
-echo "=== All secrets, ConfigMaps, and EFS configuration files generated successfully! ==="
+echo "=== All secrets, ConfigMaps, and FSx configuration files generated successfully! ==="
