@@ -23,7 +23,6 @@ replicas:
 
 resources:
   - ingress.yaml
-  - api-cache-pvc.yaml
   - redis-svc.yaml
   - haproxy-ssh-svc.yaml
   - vivarium-home-pv.yaml
