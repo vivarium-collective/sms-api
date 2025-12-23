@@ -5,13 +5,14 @@ import hashlib
 import json
 import logging
 import tempfile
+from collections.abc import Awaitable
+from functools import wraps
 from pathlib import Path
 from textwrap import dedent
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 
-from sms_api.analysis.analysis_service import connect_ssh
 from sms_api.analysis.models import (
     AnalysisConfig,
     AnalysisRun,
@@ -26,9 +27,6 @@ from sms_api.common.ssh.ssh_service import SSHServiceManaged, get_ssh_service_ma
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
-
-__all__ = ["AnalysisServiceSlurm"]
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -46,6 +44,20 @@ class RequestPayload:
         normalized = normalize_json(self.data)
         b_rep = json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         return hashlib.sha256(b_rep).hexdigest()
+
+
+def connect_ssh(func: Callable[..., Any]) -> Callable[..., Awaitable[Any]]:
+    @wraps(func)
+    async def wrapper(self: "AnalysisServiceSlurm", **kwargs: Any) -> Any:
+        try:
+            if self.ssh.connected:
+                raise RuntimeError()
+            await self.ssh.connect()
+            return await func(self, **kwargs)
+        finally:
+            await self.ssh.disconnect()
+
+    return wrapper
 
 
 def normalize_json(obj: Any) -> Any:

@@ -1,7 +1,7 @@
 import pytest
 
-from sms_api.analysis.analysis_service import AnalysisService, connect_ssh
-from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm, RequestPayload
+from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm, RequestPayload, connect_ssh
+from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm as AnalysisService
 from sms_api.analysis.models import (
     AnalysisConfig,
 )

@@ -4,16 +4,16 @@ Simulation analysis handler for SMS API simulation experiment outputs.
 NOTE: this module is essentially "analysis_handlers_hpc". TODO: abstract this into interface
 """
 
+import json
 import logging
 import os
 from collections.abc import Sequence
 from pathlib import Path
+from textwrap import dedent
 
 from starlette.requests import Request
 
-from sms_api.analysis.analysis_service_local import AnalysisServiceLocal
 from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm, RequestPayload
-from sms_api.analysis.analysis_utils import get_html_outputs_local
 from sms_api.analysis.models import (
     AnalysisRun,
     ExperimentAnalysisDTO,
@@ -41,12 +41,6 @@ async def handle_run_analysis(
     """
     Execute an analysis request.
     """
-    # handler = (
-    #     handle_run_analysis_slurm if isinstance(analysis_service, AnalysisServiceSlurm) else handle_run_analysis_local
-    # )
-    # return await handler(
-    #     request=request, simulator=simulator, analysis_service=analysis_service, logger=logger, _request=_request
-    # )
     return await handle_run_analysis_slurm(
         request=request,
         simulator=simulator,
@@ -54,22 +48,6 @@ async def handle_run_analysis(
         logger=logger,
         _request=_request,
         db_service=db_service,
-    )
-
-
-async def handle_run_analysis_local(
-    request: ExperimentAnalysisRequest,
-    simulator: SimulatorVersion,
-    analysis_service: AnalysisServiceLocal,
-    logger: logging.Logger,
-    _request: Request,
-) -> Sequence[TsvOutputFile]:
-    analysis_name: str = get_data_id(scope="analysis")
-    expid = request.experiment_id
-    requested_analyses = request.requested
-    config = request.to_config(analysis_name=analysis_name, env=analysis_service.env)
-    return await analysis_service.run_analysis(
-        analysis_config=config, expid=expid, analysis_name=analysis_name, requested=requested_analyses
     )
 
 
@@ -170,3 +148,21 @@ async def handle_get_analysis_plots(
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
     return await get_html_outputs_local(output_id=output_id, ssh_service=ssh_service)
+
+
+async def get_html_outputs_local(output_id: str, ssh_service: SSHServiceManaged) -> list[OutputFile]:
+    """Run in DEV"""
+    remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
+    ret, stdin, stdout = await ssh_service.run_command(
+        dedent(f"""
+                cd /home/FCAM/svc_vivarium/workspace \
+                    && {remote_uv_executable} run scripts/html_outputs.py --output_id {output_id}
+            """)
+    )
+
+    deserialized = json.loads(stdin.replace("'", '"'))
+    outputs = []
+    for spec in deserialized:
+        output = OutputFile(name=spec["name"], content=spec["content"])
+        outputs.append(output)
+    return outputs
