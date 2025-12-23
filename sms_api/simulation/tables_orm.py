@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from sms_api.data.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisDTO
+from sms_api.analysis.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisDTO
 from sms_api.simulation.models import (
     EcoliSimulationDTO,
     ExperimentMetadata,

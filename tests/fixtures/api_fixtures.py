@@ -92,7 +92,7 @@ async def simulation_config() -> SimulationConfig:
         sim_data_path="/pytest/kb/simData.cPickle",
         suffix_time=False,
         parca_options={"cpus": 3},
-        generations=randint(1, 1000),  # noqa: S311
+        generations=randint(1, 1000),
         max_duration=10800,
         initial_global_time=0,
         time_step=1,
@@ -114,7 +114,7 @@ async def ecoli_simulation() -> EcoliSimulationDTO:
             sim_data_path="/pytest/kb/simData.cPickle",
             suffix_time=False,
             parca_options={"cpus": 3},
-            generations=randint(1, 1000),  # noqa: S311
+            generations=randint(1, 1000),
             max_duration=10800,
             initial_global_time=0,
             time_step=1,
@@ -125,7 +125,7 @@ async def ecoli_simulation() -> EcoliSimulationDTO:
         metadata=ExperimentMetadata(root={"requester": f"{pytest_fixture}:{db_id}", "context": "pytest"}),
         last_updated=str(datetime.datetime.now()),
         job_name=get_slurmjob_name(experiment_id=pytest_fixture),
-        job_id=randint(10000, 1000000),  # noqa: S311
+        job_id=randint(10000, 1000000),
     )
 
 

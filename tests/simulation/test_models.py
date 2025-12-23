@@ -16,8 +16,8 @@ from sms_api.simulation.models import (
 
 @pytest.mark.asyncio
 async def test_save_request_to_mongo(database_service: DatabaseServiceSQL) -> None:
-    param1_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
-    param2_value = random.random()  # noqa: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
+    param1_value = random.random()
+    param2_value = random.random()
 
     for simulator in await database_service.list_simulators():
         await database_service.delete_simulator(simulator_id=simulator.database_id)

@@ -1,0 +1,266 @@
+import json
+import pathlib
+import random
+from typing import Any, ParamSpec, TypeVar
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from sms_api.common import StrEnumBase
+from sms_api.common.models import DataId
+from sms_api.config import Settings, get_settings
+
+MAX_ANALYSIS_CPUS = 3
+
+
+### -- analyses -- ###
+
+
+P = ParamSpec("P")
+
+R = TypeVar("R")
+
+
+class TsvOutputFileRequest(BaseModel):
+    # analysis_id: int
+    filename: str
+    variant: int = 0
+    lineage_seed: int | None = None
+    generation: int | None = None
+    agent_id: str | None = None
+
+
+class OutputFileMetadata(BaseModel):
+    filename: str
+    variant: int = 0
+    lineage_seed: int | None = None
+    generation: int | None = None
+    agent_id: str | None = None
+    content: str | None = None
+
+    def model_post_init(self, *args: Any) -> None:
+        trim_attributes(self, OutputFileMetadata)
+
+
+class TsvOutputFile(OutputFileMetadata):
+    pass
+
+
+class OutputFile(BaseModel):
+    name: str
+    content: str
+
+
+class AnalysisModuleConfig(BaseModel):
+    name: str
+    files: list[OutputFileMetadata] | None = None
+    model_config = ConfigDict(extra="allow")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {self.name: {}}
+
+
+class AnalysisDomain(StrEnumBase):
+    MULTIEXPERIMENT = "multiexperiment"
+    MULTIVARIANT = "multivariant"
+    MULTISEED = "multiseed"
+    MULTIGENERATION = "multigeneration"
+    MULTIDAUGHTER = "multidaughter"
+    SINGLE = "single"
+
+
+class PtoolsAnalysisType(StrEnumBase):
+    REACTIONS = "ptools_rxns"
+    RNA = "ptools_rna"
+    PROTEINS = "ptools_proteins"
+
+
+class PtoolsAnalysisConfig(BaseModel):
+    """
+    :param name: (str) Analysis module type name...
+        (One of ["ptools_rxns", "ptools_rna", "ptools_proteins"]). Defaults to "ptools_rxns".
+    :param n_tp: (int) Number of timepoints/columns to use in the tsv
+    :param files: (list[OutputFileMetadata]) Specification of files requested to be returned
+        with the completion of the analysis.
+    """
+
+    name: str = PtoolsAnalysisType.REACTIONS.value
+    n_tp: int = 8
+    variant: int = 0
+    generation: int | None = None
+    lineage_seed: int | None = None
+    agent_id: int | None = None
+    files: list[OutputFileMetadata] | None = None
+
+    def model_post_init(self, context: Any, /) -> None:
+        self.name = self.name or PtoolsAnalysisType.REACTIONS
+        for attrname in list(PtoolsAnalysisConfig.model_fields.keys()):
+            if getattr(self, attrname, None) is None:
+                delattr(self, attrname)
+
+    def to_dict(self) -> dict[str, dict[str, int]]:
+        return {self.name: {"n_tp": self.n_tp}}
+
+
+class AnalysisConfigOptions(BaseModel):
+    experiment_id: list[str]
+    variant_data_dir: list[str] | None = None
+    validation_data_path: list[str] | None = None
+    outdir: str | None = None
+    cpus: int = 3
+    single: dict[str, Any] = {}
+    multidaughter: dict[str, Any] = {}
+    multigeneration: dict[str, dict[str, Any]] = {}
+    multiseed: dict[str, dict[str, Any]] = {}
+    multivariant: dict[str, dict[str, Any]] = {}
+    multiexperiment: dict[str, Any] = {}
+
+
+class AnalysisConfig(BaseModel):
+    analysis_options: AnalysisConfigOptions
+    emitter_arg: dict[str, str] = Field(default={"out_dir": ""})
+
+    @classmethod
+    def from_file(cls, fp: pathlib.Path, config_id: str | None = None) -> "AnalysisConfig":
+        filepath = fp
+        with open(filepath) as f:
+            conf = json.load(f)
+        options = AnalysisConfigOptions(**conf["analysis_options"])
+        return cls(analysis_options=options, emitter_arg=conf["emitter_arg"])
+
+    @classmethod
+    def from_request(cls, request: "ExperimentAnalysisRequest", analysis_name: str) -> "AnalysisConfig":
+        output_dir = pathlib.Path(f"/home/FCAM/svc_vivarium/workspace/api_outputs/{request.experiment_id}")
+
+        options = AnalysisConfigOptions(
+            experiment_id=[request.experiment_id],
+            variant_data_dir=[str(output_dir / "variant_sim_data")],
+            validation_data_path=[str(output_dir / "parca/kb/validationData.cPickle")],
+            outdir=str(output_dir.parent / analysis_name),
+            single=dict_options(request.single),
+            multidaughter=dict_options(request.multidaughter),
+            multigeneration=dict_options(request.multigeneration),
+            multiexperiment=dict_options(request.multiexperiment),
+            multivariant=dict_options(request.multivariant),
+            multiseed=dict_options(request.multiseed),
+        )
+        emitter_arg = {"out_dir": str(output_dir.parent)}
+        return cls(analysis_options=options, emitter_arg=emitter_arg)
+
+
+class ExperimentAnalysisRequest(BaseModel):
+    experiment_id: str
+    single: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    multidaughter: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    multigeneration: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    multiseed: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    multivariant: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    multiexperiment: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+
+    def to_config(self, analysis_name: str | DataId, env: Settings) -> AnalysisConfig:
+        """
+        Convert a request to a vecoli-compliant, serializable AnalysisConfig.
+
+        :param analysis_name: for the value of
+            analysis_options.outdir in HPC: <env.analysis_outdir.remote_path> / analysis_name
+        :param env: Settings instance which parameterizes HPC paths
+        :return: ``AnalysisConfig``
+        """
+        if env is None:
+            env = get_settings()
+        if isinstance(analysis_name, DataId):
+            analysis_name = analysis_name.label
+
+        simulation_outdir = env.simulation_outdir.remote_path
+        experiment_outdir = str(simulation_outdir / self.experiment_id)
+        options = AnalysisConfigOptions(
+            experiment_id=[self.experiment_id],
+            variant_data_dir=[f"{experiment_outdir}/variant_sim_data"],
+            validation_data_path=[f"{experiment_outdir}/parca/kb/validationData.cPickle"],
+            outdir=f"{env.analysis_outdir.remote_path!s}/{analysis_name}",
+            cpus=MAX_ANALYSIS_CPUS,
+            single=dict_options(self.single),
+            multidaughter=dict_options(self.multidaughter),
+            multigeneration=dict_options(self.multigeneration),
+            multiexperiment=dict_options(self.multiexperiment),
+            multivariant=dict_options(self.multivariant),
+            multiseed=dict_options(self.multiseed),
+        )
+        emitter_arg = {"out_dir": str(simulation_outdir)}
+        return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
+
+    @property
+    def requested(self) -> dict[str, list[PtoolsAnalysisConfig]]:
+        requested = {}
+        for domain in AnalysisDomain.to_list():
+            domain_requests = getattr(self, domain, None)
+            if domain_requests is not None:
+                # requested += domain_requests
+                requested[domain] = domain_requests
+        return requested
+
+
+class ExperimentAnalysisDTO(BaseModel):
+    """DTO returned by /analyses .. endpoints
+
+    Attributes:
+        database_id: (``int``) unique identifier of analysis record.
+        name: (``str``) analysis name.
+        config: (``AnalysisConfig``) data model whose serialized format
+            represents a valid analysis config ingestible by vEcoli.
+        job_name: (``str | None``) SLURM analysis job name referenced by sbatch directives.
+        job_id: (``int | None``) SLURM analysis job id generated by the ``sbatch`` evocation.
+            Defaults to ``None`` (such that this object can be partially instantiated).
+    """
+
+    database_id: int
+    name: str
+    config: AnalysisConfig
+    last_updated: str
+    job_name: str | None = None
+    job_id: int | None = None
+
+
+class JobStatus(StrEnumBase):
+    WAITING = "waiting"
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class AnalysisRun(BaseModel):
+    id: int
+    status: JobStatus
+
+
+class AnalysisStatus(BaseModel):
+    database_id: int
+    status: JobStatus
+
+
+def trim_attributes(instance: BaseModel, cls: type[BaseModel]) -> None:
+    for attrname in list(cls.model_fields.keys()):
+        if "analysis_type" not in attrname:
+            attr = getattr(instance, attrname, None)
+            if attr is None or attr == ["string"]:
+                delattr(instance, attrname)
+            if isinstance(attr, (list, dict)) and not len(attr):
+                delattr(instance, attrname)
+
+
+def dict_options(items: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None) -> dict[str, Any]:
+    options: dict[str, Any] = {}
+    if items is not None:
+        for item in items:
+            options.update(item.to_dict())
+    return options
+
+
+class JobId(int):
+    start: int = 10**11
+    end: int = 10**15
+
+    @classmethod
+    def new(cls) -> "JobId":
+        value = random.randint(JobId.start, JobId.end)
+        return JobId(value)

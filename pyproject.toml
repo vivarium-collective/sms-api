@@ -213,7 +213,7 @@ ignore = [
 #    "S603",
 #    # S608 Possible SQL injection vector through string-based query construction
 #    "S608",
-     "S311",
+     # "S311",
 #    # SIM101 Multiple `isinstance` calls for expression, merge into a single call
 #    "SIM101",
 #    # SIM105 Use `contextlib.suppress(KeyError)` instead of `try`-`except`-`pass`
@@ -222,6 +222,8 @@ ignore = [
 #    "SIM108",
 #    # SIM118 Use `key not in dict` instead of `key not in dict.keys()`
 #    "SIM118",
+    "S311",
+    #  Standard pseudo-random generators are not suitable for cryptographic purposes
     # TRY002 Create your own exception
     "TRY002",
     # TRY003 Avoid specifying long messages outside the exception class
