@@ -4,7 +4,9 @@ from tests.fixtures.api_fixtures import (  # noqa: F401
     analysis_config_path,
     # biocyc_service,
     analysis_request,
+    analysis_request_base,
     analysis_request_config,
+    analysis_request_ptools,
     base_router,
     ecoli_simulation,
     experiment_request,
@@ -12,10 +14,12 @@ from tests.fixtures.api_fixtures import (  # noqa: F401
     in_memory_api_client,
     latest_commit_hash,
     local_base_url,
+    ptools_analysis_config,
     ptools_analysis_request,
     simulation_config,
     workspace_image_hash,
 )
+from tests.fixtures.data_fixtures import analysis_service, data_fixture, simulation_data  # noqa: F401
 from tests.fixtures.file_service_fixtures import (  # noqa: F401
     file_service_gcs,
     file_service_gcs_test_base_path,
