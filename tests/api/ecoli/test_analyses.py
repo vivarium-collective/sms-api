@@ -4,11 +4,11 @@ from textwrap import dedent
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from sms_api.analysis.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisRequest
 from sms_api.api.main import app
 from sms_api.common.ssh.ssh_service import get_ssh_service
 from sms_api.common.utils import unique_id
 from sms_api.config import get_settings
-from sms_api.data.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisRequest
 from sms_api.simulation.database_service import DatabaseService
 
 
