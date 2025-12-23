@@ -57,11 +57,10 @@ APP_ORIGINS = [
     "https://sms.cam.uchc.edu",
 ]
 APP_ROUTERS = [
-    "ecoli",
     # "antibiotics",
     # "biofactory",
     "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
-    # "ecoli",
+    "ecoli",
     # "inference",
     # "variants",
 ]
@@ -75,8 +74,6 @@ UI_NAMES = [
     "explore",  # uses dataservice, with nfs
     # "single_cell",  # uses /core router w/ generated client, no nfs
 ]
-
-sessions: dict[str, dict[str, float]] = {}
 
 
 # -- app configuration: lifespan and middleware -- #
@@ -103,7 +100,6 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         yield
     finally:
         await job_scheduler.close()
-    # middleware.clear_user_cache(get_settings())
     await shutdown_standalone()
 
 
@@ -115,13 +111,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],  # TODO: change origins back to allowed
 )
-# app.add_middleware(
-#     middleware.SMSMiddlewareInitSession,
-# )
-
-# app_router = APIRouter()
-# fsd.install(app_router, path="/docs")
-# app.include_router(app_router)
 
 for api_name in APP_ROUTERS:
     try:
@@ -180,12 +169,6 @@ async def check_health() -> dict[str, str]:
 @app.get("/version", tags=["SMS API"])
 async def get_version() -> str:
     return APP_VERSION
-
-
-# @app.get("/session")
-# async def get_session_id(request: Request) -> UserSession:
-#     session_id = request.state.session_id
-#     return UserSession(session=session_id)
 
 
 # -- mount marimo apps to FastAPI root -- #

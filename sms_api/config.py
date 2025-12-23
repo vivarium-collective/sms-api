@@ -119,9 +119,6 @@ class Settings(BaseSettings):
     biocyc_email: str = ""
     biocyc_password: str = ""
 
-    dev_base_url: str = "http://localhost:8888"
-    prod_base_url: str = "https://sms.cam.uchc.edu"
-
     data_base_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     parca_registry_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     simulation_config_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
