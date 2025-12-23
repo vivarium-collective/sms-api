@@ -2,7 +2,7 @@ import json
 import os
 import pathlib
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 
 import numpy
 import numpy as np
@@ -10,12 +10,19 @@ import orjson
 from pydantic import BaseModel, ConfigDict, Field
 
 from sms_api.common import StrEnumBase
-from sms_api.config import get_settings
+from sms_api.common.models import DataId
+from sms_api.common.utils import get_data_id, get_uuid
+from sms_api.config import Settings, get_settings
 
 MAX_ANALYSIS_CPUS = 3
 
 
 ### -- analyses -- ###
+
+
+P = ParamSpec("P")
+
+R = TypeVar("R")
 
 
 class TsvOutputFileRequest(BaseModel):
@@ -58,21 +65,18 @@ class AnalysisModuleConfig(BaseModel):
 
 
 class AnalysisDomain(StrEnumBase):
+    MULTIEXPERIMENT = "multiexperiment"
     MULTIVARIANT = "multivariant"
     MULTISEED = "multiseed"
     MULTIGENERATION = "multigeneration"
-    SINGLE = "single"
     MULTIDAUGHTER = "multidaughter"
-    MULTIEXPERIMENT = "multiexperiment"
+    SINGLE = "single"
 
 
 class PtoolsAnalysisType(StrEnumBase):
     REACTIONS = "ptools_rxns"
     RNA = "ptools_rna"
     PROTEINS = "ptools_proteins"
-
-
-# PtoolsAnalysisName: Literal[PtoolsAnalysisType.REACTIONS, PtoolsAnalysisType.RNA, PtoolsAnalysisType.PROTEINS] | str
 
 
 class PtoolsAnalysisConfig(BaseModel):
@@ -103,52 +107,6 @@ class PtoolsAnalysisConfig(BaseModel):
 
 
 class AnalysisConfigOptions(BaseModel):
-    """Schema for analysis module configs:
-
-    "single": {},
-    "multidaughter": {},
-    "multigeneration": {
-      "replication": {},
-      "ribosome_components": {},
-      "ribosome_crowding": {},
-      "ribosome_production": {},
-      "ribosome_usage": {},
-      "rna_decay_03_high": {},
-      "ptools_rxns": {
-        "n_tp": 8
-      },
-      "ptools_rna": {
-        "n_tp": 8
-      },
-      "ptools_proteins": {
-        "n_tp": 8
-      }
-    },
-    "multiseed": {
-      "protein_counts_validation": {},
-      "ribosome_spacing": {},
-      "subgenerational_expression_table":
-      "ptools_rxns": {
-        "n_tp": 8
-      },
-      "ptools_rna": {
-        "n_tp": 8
-      },
-      "ptools_proteins": {
-        "n_tp": 8
-      }
-    },
-    "multivariant": {
-      "average_monomer_counts": {},
-      "cell_mass": {},
-      "doubling_time_hist": {
-        "skip_n_gens": 1
-      },
-      "doubling_time_line": {}
-    },
-    "multiexperiment": {}
-    """
-
     experiment_id: list[str]
     variant_data_dir: list[str] | None = None
     validation_data_path: list[str] | None = None
@@ -196,6 +154,7 @@ class AnalysisConfig(BaseModel):
 
 class ExperimentAnalysisRequest(BaseModel):
     experiment_id: str
+    analysis_name: str | None = None
     # analysis_name: str = Field(default=f"analysis_{unique_id()!s}")
     single: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multidaughter: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
@@ -203,14 +162,34 @@ class ExperimentAnalysisRequest(BaseModel):
     multiseed: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multivariant: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multiexperiment: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
+    experiment_index: bool = False
 
-    def to_config(self, analysis_name: str) -> AnalysisConfig:
-        experiment_outdir = f"{get_settings().simulation_outdir}/{self.experiment_id}"
+    def model_post_init(self, context: Any, /) -> None:
+        if self.analysis_name is None:
+            self.analysis_name = (
+                f"sms-analysis_{self.experiment_id}" if self.experiment_index else get_data_id(scope="analysis")
+            )
+        delattr(self, "experiment_index")
+
+    def reset_name(self) -> None:
+        self.analysis_name = get_uuid(scope="analysis")
+
+    def to_config(self, analysis_name: str | DataId | None = None, env: Settings | None = None) -> AnalysisConfig:
+        if env is None:
+            env = get_settings()
+        if analysis_name is None and self.analysis_name is not None:
+            analysis_name = self.analysis_name
+        else:
+            if isinstance(analysis_name, DataId):
+                analysis_name = analysis_name.label
+
+        simulation_outdir = env.simulation_outdir.remote_path
+        experiment_outdir = str(simulation_outdir / self.experiment_id)
         options = AnalysisConfigOptions(
             experiment_id=[self.experiment_id],
             variant_data_dir=[f"{experiment_outdir}/variant_sim_data"],
             validation_data_path=[f"{experiment_outdir}/parca/kb/validationData.cPickle"],
-            outdir=f"{get_settings().simulation_outdir}/{analysis_name}",
+            outdir=f"{env.analysis_outdir.remote_path!s}/{analysis_name}",
             cpus=MAX_ANALYSIS_CPUS,
             single=dict_options(self.single),
             multidaughter=dict_options(self.multidaughter),
@@ -219,7 +198,7 @@ class ExperimentAnalysisRequest(BaseModel):
             multivariant=dict_options(self.multivariant),
             multiseed=dict_options(self.multiseed),
         )
-        emitter_arg = {"out_dir": str(get_settings().simulation_outdir.remote_path)}
+        emitter_arg = {"out_dir": str(simulation_outdir)}
         return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
 
     @property
@@ -234,70 +213,16 @@ class ExperimentAnalysisRequest(BaseModel):
 
 
 class ExperimentAnalysisDTO(BaseModel):
-    """Example schema:
-    {
-        "database_id": 1,
-        "name": "ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634",
-        "config": {
-          "analysis_options": {
-            "experiment_id": [
-              "sms_multigeneration_0-67ed3dbe116f78d9_1759364318634"
-            ],
-            "variant_data_dir": [
-              "/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/variant_sim_data"
-            ],
-            "validation_data_path": [
-              "/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/parca/kb/validationData.cPickle"
-            ],
-            "outdir":
-                "/home/FCAM/svc_vivarium/workspace/api_outputs/ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634",
-            "cpus": 3,
-            "single": {},
-            "multidaughter": {},
-            "multigeneration": {
-              "ptools_rxns": {
-                "n_tp": 8,
-                "files": [
-                  {
-                     "filename": "ptools_rxns_multigen.txt",
-                     "variant": 0,
-                     "lineage_seed": 0
-                  }
-                ]
-              },
-              "ptools_rna": {
-                "n_tp": 8,
-                "files": [
-                  {
-                     "filename": "ptools_rna_multigen.txt",
-                     "variant": 0,
-                     "lineage_seed": 0
-                  }
-                ]
-              },
-              "ptools_proteins": {
-                "n_tp": 8,
-                "files": [
-                  {
-                     "filename": "ptools_proteins_multigen.txt",
-                     "variant": 0,
-                     "lineage_seed": 0
-                  }
-                ]
-              }
-            },
-            "multiseed": {},
-            "multivariant": {},
-            "multiexperiment": {}
-          },
-          "emitter_arg": {
-            "out_dir": "/home/FCAM/svc_vivarium/workspace/api_outputs"
-          }
-        },
-        "last_updated": "2025-10-02 00:50:39.764349",
-        "job_name": "sms-079c43c-ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634-e5qu7p",
-        "job_id": 812320
-      }
+    """DTO returned by /analyses .. endpoints
+
+    Attributes:
+        database_id: (``int``) unique identifier of analysis record.
+        name: (``str``) analysis name.
+        config: (``AnalysisConfig``) data model whose serialized format
+            represents a valid analysis config ingestible by vEcoli.
+        job_name: (``str | None``) SLURM analysis job name referenced by sbatch directives.
+        job_id: (``int | None``) SLURM analysis job id generated by the ``sbatch`` evocation.
+            Defaults to ``None`` (such that this object can be partially instantiated).
     """
 
     database_id: int
@@ -318,6 +243,11 @@ class JobStatus(StrEnumBase):
 
 class AnalysisRun(BaseModel):
     id: int
+    status: JobStatus
+
+
+class AnalysisStatus(BaseModel):
+    database_id: int
     status: JobStatus
 
 
