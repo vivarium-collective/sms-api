@@ -86,3 +86,5 @@ VECOLI_CONFIG_DIR=  # remote, that is
 # -- Application/UI-level --
 DEV_BASE_URL=http://localhost:8888
 PROD_BASE_URL=
+
+REMOTE_JOB_EXECUTION=

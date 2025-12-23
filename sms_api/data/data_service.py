@@ -2,7 +2,6 @@ import itertools
 import pickle
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +18,7 @@ from ecoli.library.sim_data import LoadSimData
 from reconstruction.ecoli.simulation_data import SimulationDataEcoli
 from validation.ecoli.validation_data import ValidationDataEcoli
 
+from sms_api.common import StrEnumBase
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings
 
@@ -36,10 +36,12 @@ PARTITION_GROUPS = {
 }
 
 
-class AnalysisType(StrEnum):
+class AnalysisType(StrEnumBase):
+    MULTIEXPERIMENT = "multiexperiment"
     MULTIVARIANT = "multivariant"
     MULTISEED = "multiseed"
     MULTIGENERATION = "multigeneration"
+    MULTIDAUGHTER = "multidaughter"
     SINGLE = "single"
 
 

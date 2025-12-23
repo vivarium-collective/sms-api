@@ -5,8 +5,9 @@ from typing import Any
 
 import polars as pl
 
+from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
 from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.config import get_settings
+from sms_api.config import Settings, get_settings
 from sms_api.data.models import SerializedArray
 
 
@@ -53,3 +54,10 @@ def write_json_for_slurm(data: dict[str, Any], outdir: Path, filename: str) -> P
     with filepath.open("w") as f:
         json.dump(data, f, indent=2)
     return filepath
+
+
+async def get_cache_service(env: Settings | None = None) -> MessagingServiceRedis:
+    msg_service = MessagingServiceRedis()
+    env = env or get_settings()
+    await msg_service.connect(host=env.redis_internal_host, port=env.redis_internal_port)
+    return msg_service

@@ -1,4 +1,6 @@
 import logging
+import shutil
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -13,8 +15,7 @@ from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_gcs import FileServiceGCS
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
 from sms_api.common.storage.file_service_s3 import FileServiceS3
-from sms_api.config import get_settings
-from sms_api.data.analysis_service import AnalysisService, AnalysisServiceHpc
+from sms_api.config import REPO_ROOT, get_settings
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.job_scheduler import JobScheduler
@@ -25,10 +26,53 @@ logger = logging.getLogger(__name__)
 setup_logging(logger)
 
 
+MAX_PROCESS_POOL_WORKERS = 2
+
+
 def verify_service(service: DatabaseService | SimulationService | None) -> None:
     if service is None:
         logger.error(f"{service.__module__} is not initialized")
         raise HTTPException(status_code=500, detail=f"{service.__module__} is not initialized")
+
+
+executor: ProcessPoolExecutor | None = None
+
+
+def get_executor() -> ProcessPoolExecutor | None:
+    global executor
+    return executor
+
+
+async def init_executor() -> None:
+    global executor
+    executor = ProcessPoolExecutor(max_workers=MAX_PROCESS_POOL_WORKERS)
+
+
+async def shutdown_executor() -> None:
+    global executor
+    if executor:
+        executor.shutdown(wait=False)
+        executor = None
+
+
+# ------ sessions (standalone or pytest) ------
+
+UserSessionsType = dict[str, dict[str, float]]
+
+UserSessions: UserSessionsType
+
+
+global_user_sessions: UserSessionsType = {}
+
+
+def set_user_sessions(sessions: UserSessionsType) -> None:
+    global global_user_sessions
+    global_user_sessions = sessions
+
+
+def get_user_sessions() -> UserSessionsType:
+    global global_user_sessions
+    return global_user_sessions
 
 
 # ------ file service (standalone or pytest) ------
@@ -106,6 +150,21 @@ def get_job_scheduler() -> JobScheduler | None:
     return global_job_scheduler
 
 
+# ------ messaging/cache service (modular standalone: new/arbitrary channels ----
+
+global_messaging_service: MessagingService | None = None
+
+
+def set_messaging_service(service: MessagingService | None) -> None:
+    global global_messaging_service
+    global_job_scheduler = service  # noqa: F841
+
+
+def get_messaging_service() -> MessagingService | None:
+    global global_messaging_service
+    return global_messaging_service
+
+
 # ------ initialized standalone application (standalone) ------
 
 
@@ -113,10 +172,6 @@ def get_async_engine(url: str, enable_ssl: bool = True, **engine_params: Any) ->
     if not enable_ssl:
         engine_params["connect_args"] = {"ssl": "disable"}
     return create_async_engine(url, **engine_params)
-
-
-def get_analysis_service() -> AnalysisService:
-    return AnalysisServiceHpc()
 
 
 async def init_standalone(enable_ssl: bool = True) -> None:
@@ -198,6 +253,7 @@ async def init_standalone(enable_ssl: bool = True) -> None:
 
         await messaging_service.connect(host=redis_host, port=redis_port)
         logger.info("✓ Messaging service connected")
+        set_messaging_service(messaging_service)
 
         # Initialize JobScheduler
         logger.info("Initializing JobScheduler...")
@@ -206,6 +262,11 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         )
         set_job_scheduler(job_scheduler)
         logger.info("✓ JobScheduler initialized")
+
+        # initialize sessions
+        # sessions: UserSessionsType = {}
+        # set_user_sessions(sessions)
+        # await init_executor()
 
     except Exception as e:
         logger.error(f"Failed to initialize JobScheduler: {e}", exc_info=True)
@@ -233,3 +294,6 @@ async def shutdown_standalone() -> None:
     if job_scheduler:
         await job_scheduler.close()
         set_job_scheduler(None)
+    for dirpath in [p for p in Path(f"{REPO_ROOT}/.results_cache").rglob("*") if p.is_dir()]:
+        shutil.rmtree(dirpath)
+    # await shutdown_executor()

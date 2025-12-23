@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.2.57-dev
+  version: 0.2.75-dev
 paths:
   /v1/ecoli/analyses:
     get:
@@ -23,21 +23,15 @@ paths:
       tags:
       - Analyses
       summary: Run an analysis
-      operationId: run-simulation-analysis
+      operationId: run-analysis
       requestBody:
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
-                experiment_id: api_multiseed
+                experiment_id: sms_multiseed_0-2794dfa74b9cf37c_1759844363435
                 multiseed:
-                - name: ptools_rxns
-                  n_tp: 8
-                  variant: 0
-                - name: ptools_proteins
-                  n_tp: 8
-                  variant: 0
                 - name: ptools_rna
                   n_tp: 8
                   variant: 0
@@ -48,9 +42,11 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: '#/components/schemas/TsvOutputFile'
+                  anyOf:
+                  - $ref: '#/components/schemas/TsvOutputFile'
+                  - $ref: '#/components/schemas/OutputFileMetadata'
                 type: array
-                title: Response Run-Simulation-Analysis
+                title: Response Run-Analysis
         '422':
           description: Validation Error
           content:
@@ -779,18 +775,6 @@ components:
       required:
       - experiment_id
       title: AnalysisConfigOptions
-      description: "Schema for analysis module configs:\n\n\"single\": {},\n\"multidaughter\"\
-        : {},\n\"multigeneration\": {\n  \"replication\": {},\n  \"ribosome_components\"\
-        : {},\n  \"ribosome_crowding\": {},\n  \"ribosome_production\": {},\n  \"\
-        ribosome_usage\": {},\n  \"rna_decay_03_high\": {},\n  \"ptools_rxns\": {\n\
-        \    \"n_tp\": 8\n  },\n  \"ptools_rna\": {\n    \"n_tp\": 8\n  },\n  \"ptools_proteins\"\
-        : {\n    \"n_tp\": 8\n  }\n},\n\"multiseed\": {\n  \"protein_counts_validation\"\
-        : {},\n  \"ribosome_spacing\": {},\n  \"subgenerational_expression_table\"\
-        :\n  \"ptools_rxns\": {\n    \"n_tp\": 8\n  },\n  \"ptools_rna\": {\n    \"\
-        n_tp\": 8\n  },\n  \"ptools_proteins\": {\n    \"n_tp\": 8\n  }\n},\n\"multivariant\"\
-        : {\n  \"average_monomer_counts\": {},\n  \"cell_mass\": {},\n  \"doubling_time_hist\"\
-        : {\n    \"skip_n_gens\": 1\n  },\n  \"doubling_time_line\": {}\n},\n\"multiexperiment\"\
-        : {}"
     AnalysisModuleConfig:
       properties:
         name:
@@ -814,7 +798,7 @@ components:
           type: integer
           title: Id
         status:
-          $ref: '#/components/schemas/sms_api__data__models__JobStatus'
+          $ref: '#/components/schemas/sms_api__analysis__models__JobStatus'
       type: object
       required:
       - id
@@ -825,8 +809,8 @@ components:
         request:
           $ref: '#/components/schemas/ExperimentRequest'
           default:
-            experiment_id: sms_single-6c4d_1765384067609
-            simulation_name: sms_single-6c4d_1765384067609
+            experiment_id: sms_single_6951_20251219
+            simulation_name: sms_single_6951_20251219
             metadata: {}
             run_parca: false
             generations: 2
@@ -965,31 +949,14 @@ components:
       - config
       - last_updated
       title: ExperimentAnalysisDTO
-      description: "Example schema:\n{\n    \"database_id\": 1,\n    \"name\": \"\
-        ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634\",\n\
-        \    \"config\": {\n      \"analysis_options\": {\n        \"experiment_id\"\
-        : [\n          \"sms_multigeneration_0-67ed3dbe116f78d9_1759364318634\"\n\
-        \        ],\n        \"variant_data_dir\": [\n          \"/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/variant_sim_data\"\
-        \n        ],\n        \"validation_data_path\": [\n          \"/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration_0-67ed3dbe116f78d9_1759364318634/parca/kb/validationData.cPickle\"\
-        \n        ],\n        \"outdir\":\n            \"/home/FCAM/svc_vivarium/workspace/api_outputs/ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634\"\
-        ,\n        \"cpus\": 3,\n        \"single\": {},\n        \"multidaughter\"\
-        : {},\n        \"multigeneration\": {\n          \"ptools_rxns\": {\n    \
-        \        \"n_tp\": 8,\n            \"files\": [\n              {\n       \
-        \          \"filename\": \"ptools_rxns_multigen.txt\",\n                 \"\
-        variant\": 0,\n                 \"lineage_seed\": 0\n              }\n   \
-        \         ]\n          },\n          \"ptools_rna\": {\n            \"n_tp\"\
-        : 8,\n            \"files\": [\n              {\n                 \"filename\"\
-        : \"ptools_rna_multigen.txt\",\n                 \"variant\": 0,\n       \
-        \          \"lineage_seed\": 0\n              }\n            ]\n         \
-        \ },\n          \"ptools_proteins\": {\n            \"n_tp\": 8,\n       \
-        \     \"files\": [\n              {\n                 \"filename\": \"ptools_proteins_multigen.txt\"\
-        ,\n                 \"variant\": 0,\n                 \"lineage_seed\": 0\n\
-        \              }\n            ]\n          }\n        },\n        \"multiseed\"\
-        : {},\n        \"multivariant\": {},\n        \"multiexperiment\": {}\n  \
-        \    },\n      \"emitter_arg\": {\n        \"out_dir\": \"/home/FCAM/svc_vivarium/workspace/api_outputs\"\
-        \n      }\n    },\n    \"last_updated\": \"2025-10-02 00:50:39.764349\",\n\
-        \    \"job_name\": \"sms-079c43c-ptools_analysis-sms_multigeneration_0-67ed3dbe116f78d9_1759364318634-e5qu7p\"\
-        ,\n    \"job_id\": 812320\n  }"
+      description: "DTO returned by /analyses .. endpoints\n\nAttributes:\n    database_id:\
+        \ (``int``) unique identifier of analysis record.\n    name: (``str``) analysis\
+        \ name.\n    config: (``AnalysisConfig``) data model whose serialized format\n\
+        \        represents a valid analysis config ingestible by vEcoli.\n    job_name:\
+        \ (``str | None``) SLURM analysis job name referenced by sbatch directives.\n\
+        \    job_id: (``int | None``) SLURM analysis job id generated by the ``sbatch``\
+        \ evocation.\n        Defaults to ``None`` (such that this object can be partially\
+        \ instantiated)."
     ExperimentAnalysisRequest:
       properties:
         experiment_id:
@@ -1068,7 +1035,7 @@ components:
         simulation_name:
           type: string
           title: Simulation Name
-          default: sim_smsapi-cb96_1765384067380
+          default: sim_smsapi_a711_20251219
         metadata:
           additionalProperties: true
           type: object
@@ -1985,7 +1952,7 @@ components:
       - mass
       - time
       title: WorkerEvent
-    sms_api__data__models__JobStatus:
+    sms_api__analysis__models__JobStatus:
       type: string
       enum:
       - waiting

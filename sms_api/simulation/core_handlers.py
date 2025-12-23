@@ -180,7 +180,7 @@ async def run_simulation(
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
     # dispatch and insert hpc job
-    random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311 doesn't need to be secure
+    random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))
     correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string_7_hex)
     sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
         ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
