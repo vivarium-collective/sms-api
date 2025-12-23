@@ -1,6 +1,6 @@
 [project]
 name = "sms_api"
-version = "0.2.57-dev"
+version = "0.2.74-dev0"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
 requires-python = "==3.12.9"
@@ -45,10 +45,9 @@ dependencies = [
     "aiofiles>=24.1.0",
     "aioboto3>=13.3.0",
     "types-aioboto3[s3]>=13.3.0",
-    "vecoli>=0.0.4",
-    "wordfreq>=3.1.1",
-    "nltk>=3.9.2",
-    "wordfilter>=0.2.7",
+    "simhash>=2.1.2",
+    "fastapi-swagger-dark>=0.0.9",
+    "vecoli>=1.1.2.post1",
 ]
 
 [project.urls]
@@ -72,7 +71,7 @@ dev = [
     "types-xmltodict>=0.14.0.20241009",
     "debugpy>=1.8.16",
     "ipdb>=0.13.13",
-    "types-aiofiles>=25.1.0.20251011",
+    "types-aiofiles>=25.1.0.20251011"
 ]
 docs = [
     "mkdocs>=1.4.2,<2",
@@ -82,14 +81,11 @@ docs = [
     "sphinx-autodoc-typehints>=3.2.0,<4",
     "sphinx-rtd-theme>=3.0.2,<4",
 ]
-# notebook = [
-#     "vecoli>=0.0.4",
-# ]
 
 [tool.uv]
 default-groups = [
     "dev",
-    "docs",
+    "docs"
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -113,7 +109,10 @@ build-backend = "hatchling.build"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*"]
+exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/_dev/*", "^sms_api/common/gateway/utils.py"]
+
+[mypy-fastapi_swagger_dark]
+ignore_missing_imports = true
 
 # [[tool.mypy.overrides]]
 # module = "sms_api.data.data_service"
@@ -212,6 +211,7 @@ ignore = [
 #    "S603",
 #    # S608 Possible SQL injection vector through string-based query construction
 #    "S608",
+     "S311",
 #    # SIM101 Multiple `isinstance` calls for expression, merge into a single call
 #    "SIM101",
 #    # SIM105 Use `contextlib.suppress(KeyError)` instead of `try`-`except`-`pass`
@@ -237,7 +237,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*"]
+exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "sms_api/common/gateway/utils.py", "notes/*"]
 
 [tool.ruff.format]
 preview = true
