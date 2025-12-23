@@ -1,6 +1,6 @@
 [project]
 name = "sms_api"
-version = "0.2.75"
+version = "0.2.74-dev0"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
 requires-python = "==3.12.9"
@@ -71,8 +71,7 @@ dev = [
     "types-xmltodict>=0.14.0.20241009",
     "debugpy>=1.8.16",
     "ipdb>=0.13.13",
-    "types-aiofiles>=25.1.0.20251011",
-    "types-hnswlib>=0.8.0.20250227",
+    "types-aiofiles>=25.1.0.20251011"
 ]
 docs = [
     "mkdocs>=1.4.2,<2",
@@ -82,19 +81,11 @@ docs = [
     "sphinx-autodoc-typehints>=3.2.0,<4",
     "sphinx-rtd-theme>=3.0.2,<4",
 ]
-embedding = [
-    "hnswlib>=0.8.0",
-    "sentence-transformers>=5.2.0",
-]
-# notebook = [
-#     "vecoli>=0.0.4",
-# ]
 
 [tool.uv]
 default-groups = [
     "dev",
-    "docs",
-    "embedding"
+    "docs"
 ]
 
 [tool.hatch.build.targets.sdist]
