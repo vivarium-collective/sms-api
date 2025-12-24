@@ -2,7 +2,6 @@ import logging
 from typing import override
 
 from sms_api.common.hpc.models import SlurmJob
-from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
     EcoliSimulation,
@@ -24,7 +23,6 @@ class ConcreteSimulationService(SimulationService):
     @override
     async def get_latest_commit_hash(
         self,
-        ssh_service: SSHService | None = None,
         git_repo_url: str = "https://github.com/CovertLab/vEcoli",
         git_branch: str = "master",
     ) -> str:

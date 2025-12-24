@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.client_wrapper import fetch_simulation_data
 from sms_api.api.main import app
-from sms_api.common.ssh.ssh_service import SSHService
+from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_slurmjob_name
@@ -17,7 +17,7 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 @pytest.mark.asyncio
 async def test_list_simulations(
-    experiment_request: ExperimentRequest, database_service: DatabaseServiceSQL, ssh_service: SSHService
+    experiment_request: ExperimentRequest, database_service: DatabaseServiceSQL, ssh_session_service: SSHSessionService
 ) -> None:
     n = 3
     inserted_sims = []
@@ -28,7 +28,7 @@ async def test_list_simulations(
             sim_data_path="/pytest/kb/simData.cPickle",
             suffix_time=False,
             parca_options={"cpus": 3},
-            generations=randint(1, 1000),  # noqa: S311
+            generations=randint(1, 1000),
             max_duration=10800,
             initial_global_time=0,
             time_step=1,
@@ -38,7 +38,7 @@ async def test_list_simulations(
         )
         last_updated_i = str(datetime.datetime.now())
         job_name_i = get_slurmjob_name(experiment_id=name_i)
-        job_id_i = randint(10000, 1000000)  # noqa: S311
+        job_id_i = randint(10000, 1000000)
         sim_i = await database_service.insert_ecoli_simulation(
             name=name_i,
             config=config_i,
@@ -61,7 +61,7 @@ async def test_run_simulation(
     ecoli_simulation: EcoliSimulationDTO,
     database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
-    ssh_service: SSHService,
+    ssh_session_service: SSHSessionService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -81,7 +81,7 @@ async def test_get_simulation(database_service: DatabaseServiceSQL) -> None:
         sim_data_path="/pytest/kb/simData.cPickle",
         suffix_time=False,
         parca_options={"cpus": 3},
-        generations=randint(1, 1000),  # noqa: S311
+        generations=randint(1, 1000),
         max_duration=10800,
         initial_global_time=0,
         time_step=1,
@@ -91,7 +91,7 @@ async def test_get_simulation(database_service: DatabaseServiceSQL) -> None:
     )
     last_updated_i = str(datetime.datetime.now())
     job_name_i = get_slurmjob_name(experiment_id=name_i)
-    job_id_i = randint(10000, 1000000)  # noqa: S311
+    job_id_i = randint(10000, 1000000)
     sim_i = await database_service.insert_ecoli_simulation(
         name=name_i,
         config=config_i,
@@ -112,7 +112,7 @@ async def test_get_simulation_status(
     experiment_request: ExperimentRequest,
     database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
-    ssh_service: SSHService,
+    ssh_session_service: SSHSessionService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -135,7 +135,7 @@ async def test_get_simulation_log(
     experiment_request: ExperimentRequest,
     database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
-    ssh_service: SSHService,
+    ssh_session_service: SSHSessionService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -168,7 +168,7 @@ async def test_run_fetch_simulation(
     experiment_request: ExperimentRequest,
     database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
-    ssh_service: SSHService,
+    ssh_session_service: SSHSessionService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -189,7 +189,7 @@ async def test_fetch_simulation(
     experiment_request: ExperimentRequest,
     database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
-    ssh_service: SSHService,
+    ssh_session_service: SSHSessionService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -206,7 +206,7 @@ async def test_fetch_simulation(
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_fetch_simulation_data(
-    base_router: str, database_service: DatabaseServiceSQL, ssh_service: SSHService
+    base_router: str, database_service: DatabaseServiceSQL, ssh_session_service: SSHSessionService
 ) -> None:
     transport = ASGITransport(app=app)
     df = await fetch_simulation_data(

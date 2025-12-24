@@ -9,13 +9,18 @@ import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport
 
+from sms_api.analysis.models import (
+    AnalysisConfig,
+    AnalysisDomain,
+    ExperimentAnalysisRequest,
+)
+from sms_api.api import request_examples
+from sms_api.api import request_examples as examples
 from sms_api.api.client import Client
 from sms_api.api.main import app
-from sms_api.api.request_examples import analysis_ptools as ptools_analysis
-from sms_api.api.request_examples import base_simulation
+from sms_api.common.gateway.utils import generate_analysis_request
+from sms_api.common.utils import get_uuid
 from sms_api.config import REPO_ROOT, get_settings
-from sms_api.data.handlers import DEFAULT_ANALYSIS, DEFAULT_EXPERIMENT
-from sms_api.data.models import AnalysisConfig, ExperimentAnalysisRequest, PtoolsAnalysisConfig, PtoolsAnalysisType
 
 # from sms_api.data.biocyc_service import BiocycService
 from sms_api.latest_commit import write_latest_commit
@@ -27,9 +32,7 @@ from sms_api.simulation.models import (
     SimulationConfig,
 )
 
-# @pytest_asyncio.fixture(scope="function")
-# async def biocyc_service() -> BiocycService:
-#     return BiocycService()
+ENV = get_settings()
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -39,8 +42,6 @@ async def local_base_url() -> str:
 
 @pytest_asyncio.fixture(scope="function")
 async def fastapi_app() -> FastAPI:
-    # app.dependency_overrides[get_database_service] = lambda: database_service
-    # app.dependency_overrides[get_simulation_service] = lambda: simulation_service_slurm
     return app
 
 
@@ -77,12 +78,13 @@ async def analysis_config_path() -> Path:
 
 @pytest_asyncio.fixture(scope="session")
 async def analysis_request() -> ExperimentAnalysisRequest:
-    return ptools_analysis
+    # return ptools_analysis
+    return examples.analysis_multiseed_multigen
 
 
 @pytest_asyncio.fixture(scope="session")
 async def experiment_request() -> ExperimentRequest:
-    return base_simulation
+    return examples.base_simulation
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -92,7 +94,7 @@ async def simulation_config() -> SimulationConfig:
         sim_data_path="/pytest/kb/simData.cPickle",
         suffix_time=False,
         parca_options={"cpus": 3},
-        generations=randint(1, 1000),  # noqa: S311
+        generations=randint(1, 1000),
         max_duration=10800,
         initial_global_time=0,
         time_step=1,
@@ -114,7 +116,7 @@ async def ecoli_simulation() -> EcoliSimulationDTO:
             sim_data_path="/pytest/kb/simData.cPickle",
             suffix_time=False,
             parca_options={"cpus": 3},
-            generations=randint(1, 1000),  # noqa: S311
+            generations=randint(1, 1000),
             max_duration=10800,
             initial_global_time=0,
             time_step=1,
@@ -125,7 +127,7 @@ async def ecoli_simulation() -> EcoliSimulationDTO:
         metadata=ExperimentMetadata(root={"requester": f"{pytest_fixture}:{db_id}", "context": "pytest"}),
         last_updated=str(datetime.datetime.now()),
         job_name=get_slurmjob_name(experiment_id=pytest_fixture),
-        job_id=randint(10000, 1000000),  # noqa: S311
+        job_id=randint(10000, 1000000),
     )
 
 
@@ -136,13 +138,23 @@ async def base_router() -> str:
 
 @pytest_asyncio.fixture(scope="session")
 async def ptools_analysis_request() -> ExperimentAnalysisRequest:
-    expid = DEFAULT_EXPERIMENT
-    return ExperimentAnalysisRequest(
-        experiment_id=expid, multiseed=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8, variant=0)]
-    )
+    return examples.analysis_ptools
 
 
 @pytest_asyncio.fixture(scope="session")
 async def analysis_request_config(ptools_analysis_request: ExperimentAnalysisRequest) -> AnalysisConfig:
-    analysis_name = DEFAULT_ANALYSIS
-    return ptools_analysis_request.to_config(analysis_name=analysis_name)
+    uid: str = get_uuid(scope="test_analysis")
+    return ptools_analysis_request.to_config(analysis_name=uid, env=ENV)
+
+
+@pytest_asyncio.fixture(scope="function")
+async def analysis_request_ptools() -> ExperimentAnalysisRequest:
+    return request_examples.analysis_ptools
+
+
+@pytest_asyncio.fixture(scope="function")
+async def analysis_request_base() -> ExperimentAnalysisRequest:
+    return generate_analysis_request(
+        experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
+        requested_configs=[AnalysisDomain.MULTIGENERATION, AnalysisDomain.MULTISEED],
+    )

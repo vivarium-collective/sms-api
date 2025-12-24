@@ -1,23 +1,23 @@
 import json
-import os
 import pathlib
-from dataclasses import asdict, dataclass
-from typing import Any
+import random
+from typing import Any, ParamSpec, TypeVar
 
-import numpy
-import numpy as np
-import orjson
 from pydantic import BaseModel, ConfigDict, Field
 
 from sms_api.common import StrEnumBase
 from sms_api.common.models import DataId
-from sms_api.common.utils import get_data_id, get_uuid
 from sms_api.config import Settings, get_settings
 
 MAX_ANALYSIS_CPUS = 3
 
 
 ### -- analyses -- ###
+
+
+P = ParamSpec("P")
+
+R = TypeVar("R")
 
 
 class TsvOutputFileRequest(BaseModel):
@@ -149,34 +149,26 @@ class AnalysisConfig(BaseModel):
 
 class ExperimentAnalysisRequest(BaseModel):
     experiment_id: str
-    analysis_name: str | None = None
-    # analysis_name: str = Field(default=f"analysis_{unique_id()!s}")
     single: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multidaughter: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multigeneration: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multiseed: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multivariant: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multiexperiment: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
-    experiment_index: bool = False
 
-    def model_post_init(self, context: Any, /) -> None:
-        if self.analysis_name is None:
-            self.analysis_name = (
-                f"sms-analysis_{self.experiment_id}" if self.experiment_index else get_data_id(scope="analysis")
-            )
-        delattr(self, "experiment_index")
+    def to_config(self, analysis_name: str | DataId, env: Settings) -> AnalysisConfig:
+        """
+        Convert a request to a vecoli-compliant, serializable AnalysisConfig.
 
-    def reset_name(self) -> None:
-        self.analysis_name = get_uuid(scope="analysis")
-
-    def to_config(self, analysis_name: str | DataId | None = None, env: Settings | None = None) -> AnalysisConfig:
+        :param analysis_name: for the value of
+            analysis_options.outdir in HPC: <env.analysis_outdir.remote_path> / analysis_name
+        :param env: Settings instance which parameterizes HPC paths
+        :return: ``AnalysisConfig``
+        """
         if env is None:
             env = get_settings()
-        if analysis_name is None and self.analysis_name is not None:
-            analysis_name = self.analysis_name
-        else:
-            if isinstance(analysis_name, DataId):
-                analysis_name = analysis_name.label
+        if isinstance(analysis_name, DataId):
+            analysis_name = analysis_name.label
 
         simulation_outdir = env.simulation_outdir.remote_path
         experiment_outdir = str(simulation_outdir / self.experiment_id)
@@ -197,7 +189,7 @@ class ExperimentAnalysisRequest(BaseModel):
         return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
 
     @property
-    def requested(self) -> dict[str, list[AnalysisModuleConfig | PtoolsAnalysisConfig]]:
+    def requested(self) -> dict[str, list[PtoolsAnalysisConfig]]:
         requested = {}
         for domain in AnalysisDomain.to_list():
             domain_requests = getattr(self, domain, None)
@@ -246,135 +238,6 @@ class AnalysisStatus(BaseModel):
     status: JobStatus
 
 
-### -- biocyc -- ###
-
-
-class BiocycComponentData(BaseModel):
-    id: str
-    orgid: str
-    frameid: str
-    detail: str
-    parent: dict[str, dict[str, str]] = Field(default_factory=dict)
-
-
-class BiocycCompound(BiocycComponentData):
-    cml: dict[str, Any]
-    cls: str | None = None
-    # common_name: dict
-
-
-class BiocycReaction(BiocycComponentData):
-    ec_number: dict[str, Any]
-    right: list[dict[str, Any]]
-    enzymatic_reaction: dict[str, Any]
-    left: list[dict[str, Any]]
-
-
-class BiocycComponent(BaseModel):
-    id: str  # loadedjson['obj_id']
-    pgdb: dict[str, Any]  # ['data']['ptools-xml']['metadata']['PGDB']
-    data: BiocycCompound | BiocycReaction  # ['data']['ptools-xml']['Compound'] FOR EXAMPLE
-
-
-@dataclass
-class BiocycData:
-    obj_id: str
-    org_id: str
-    data: dict[str, Any]
-    request: dict[str, Any]
-    dest_dirpath: pathlib.Path | None = None
-
-    @property
-    def filepath(self) -> pathlib.Path:
-        dest_fp = self.dest_dirpath or pathlib.Path("assets/biocyc")
-        return dest_fp / f"{self.obj_id}.json"
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict())
-
-    def to_dto(self) -> BiocycComponent:
-        data = self
-        ptools_data = data.data["ptools-xml"]
-        pgdb = ptools_data["metadata"]["PGDB"]
-        data_key = next(
-            iter([key for key in ptools_data if not key.startswith("@") and not key.startswith("metadata")])
-        )
-        raw_component = ptools_data[data_key]
-        comp_data = {}
-        for k, v in raw_component.items():
-            if "common" in k or "subclass" in k or "synonym" in k:
-                continue
-            if "class" in k:
-                k = "cls"
-            if k.startswith("@"):
-                k = k.replace("@", "").replace("-", "_")
-            comp_data[k.lower()] = v
-        data_type = BiocycCompound if "Compound" in data_key else BiocycReaction
-        return BiocycComponent(id=data.obj_id, pgdb=pgdb, data=data_type(**comp_data))
-
-    def export(self, fp: pathlib.Path | None = None) -> None:
-        try:
-            exp = self.to_dict()
-            fp = fp or self.filepath
-            with open(fp, "w") as f:
-                json.dump(exp, f, indent=4)
-            print(f"Successfully wrote: {fp}")
-        except OSError:
-            print(f"Could not write for {self.obj_id}")
-
-
-@dataclass
-class Credentials:
-    username: str | None = None
-    password: str | None = None
-    config: dict[str, Any] | None = None
-
-    def to_dict(self) -> dict[str, str | None]:
-        d = asdict(self)
-        d.pop("config", None)
-        return d
-
-
-@dataclass
-class BiocycCredentials(Credentials):
-    def to_dict(self) -> dict[str, str | None]:
-        return {"email": self.username, "password": self.password}
-
-    @classmethod
-    def from_env(cls, env_fp: pathlib.Path, config: dict[str, Any] | None = None) -> "BiocycCredentials":
-        import dotenv
-
-        dotenv.load_dotenv(env_fp)
-        print("loading", env_fp)
-        return cls(username=os.getenv("BIOCYC_EMAIL"), password=os.getenv("BIOCYC_PASSWORD"), config=config)
-
-
-class SerializedArray:
-    __slots__ = ("_value", "shape")
-
-    def __init__(self, arr: numpy.ndarray) -> None:
-        self._value = self.serialize(arr)
-
-    def serialize(self, arr: numpy.ndarray) -> bytes:
-        self.shape = arr.shape
-        return orjson.dumps(numpy.ravel(arr, order="C").tolist())
-
-    def deserialize(self) -> numpy.ndarray:
-        arr: np.ndarray = np.array(orjson.loads(self._value))
-        return arr.reshape(self.shape)
-
-    @property
-    def value(self) -> numpy.ndarray:
-        return self.deserialize()
-
-    @value.setter
-    def value(self, value: np.ndarray) -> None:
-        self._value = self.serialize(value)
-
-
 def trim_attributes(instance: BaseModel, cls: type[BaseModel]) -> None:
     for attrname in list(cls.model_fields.keys()):
         if "analysis_type" not in attrname:
@@ -391,3 +254,13 @@ def dict_options(items: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None
         for item in items:
             options.update(item.to_dict())
     return options
+
+
+class JobId(int):
+    start: int = 10**11
+    end: int = 10**15
+
+    @classmethod
+    def new(cls) -> "JobId":
+        value = random.randint(JobId.start, JobId.end)
+        return JobId(value)

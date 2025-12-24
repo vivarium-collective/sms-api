@@ -12,8 +12,8 @@ from fastapi import BackgroundTasks
 from fastapi.responses import StreamingResponse
 
 from sms_api.common.gateway.utils import get_simulator
-from sms_api.common.ssh.ssh_service import SSHService
 from sms_api.config import get_settings
+from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
     EcoliSimulationDTO,
@@ -56,13 +56,14 @@ async def get_simulation(db_service: DatabaseService, id: int) -> EcoliSimulatio
     return await db_service.get_ecoli_simulation(database_id=id)
 
 
-async def get_simulation_status(db_service: DatabaseService, id: int, ssh_service: SSHService) -> SimulationRun:
+async def get_simulation_status(db_service: DatabaseService, id: int) -> SimulationRun:
     sim_record = await db_service.get_ecoli_simulation(database_id=id)
     slurmjob_id = sim_record.job_id
-    # slurmjob_id = get_jobid_by_experiment(experiment_id)
-    # ssh_service = get_ssh_service()
     slurm_user = get_settings().slurm_submit_user
-    statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
+
+    async with get_ssh_session_service().session() as ssh:
+        statuses = await ssh.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
+
     status: str = statuses[1].split("\n")[0].split()[-2]
     return SimulationRun(id=int(id), status=JobStatus[status])
 
@@ -72,7 +73,6 @@ async def list_simulations(db_service: DatabaseService) -> list[EcoliSimulationD
 
 
 async def get_simulation_data(
-    ssh: SSHService,
     db_service: DatabaseService,
     id: int,
     lineage_seed: int,
@@ -84,29 +84,38 @@ async def get_simulation_data(
 ) -> StreamingResponse:
     simulation = await db_service.get_ecoli_simulation(database_id=id)
     experiment_id = simulation.config.experiment_id
+    ssh_session_service = get_ssh_session_service()
+
     # first, slice parquet and write temp pq to remote disk
     remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-    ret, stdout, stderr = await ssh.run_command(
-        dedent(f"""\
-                    cd /home/FCAM/svc_vivarium/workspace \
-                    && {remote_uv_executable} run scripts/get_parquet_data.py \
-                        --experiment_id {experiment_id} \
-                        --lineage_seed {lineage_seed} \
-                        --generation {generation} \
-                        --variant {variant} \
-                        --agent_id {agent_id} \
-                        --observables {" ".join(observables)!s}
-                """)
-    )
+    async with ssh_session_service.session() as ssh:
+        ret, stdout, stderr = await ssh.run_command(
+            dedent(f"""\
+                        cd /home/FCAM/svc_vivarium/workspace \
+                        && {remote_uv_executable} run scripts/get_parquet_data.py \
+                            --experiment_id {experiment_id} \
+                            --lineage_seed {lineage_seed} \
+                            --generation {generation} \
+                            --variant {variant} \
+                            --agent_id {agent_id} \
+                            --observables {" ".join(observables)!s}
+                    """)
+        )
 
-    # then, download the temp pq
-    pq_filename = f"{experiment_id}.parquet"
-    tmpdir = tempfile.TemporaryDirectory()
-    local = Path(tmpdir.name, pq_filename)
-    bg_tasks.add_task(tmpdir.cleanup)
-    remote = get_settings().simulation_outdir.parent / "data" / pq_filename
-    await ssh.scp_download(local_file=local, remote_path=remote)
-    bg_tasks.add_task(ssh.run_command, f"rm {remote!s}")
+        # then, download the temp pq
+        pq_filename = f"{experiment_id}.parquet"
+        tmpdir = tempfile.TemporaryDirectory()
+        local = Path(tmpdir.name, pq_filename)
+        bg_tasks.add_task(tmpdir.cleanup)
+        remote = get_settings().simulation_outdir.parent / "data" / pq_filename
+        await ssh.scp_download(local_file=local, remote_path=remote)
+
+    # Schedule cleanup of remote file in background
+    async def cleanup_remote_file() -> None:
+        async with ssh_session_service.session() as ssh:
+            await ssh.run_command(f"rm {remote!s}")
+
+    bg_tasks.add_task(cleanup_remote_file)
 
     def generate(data: list[dict[str, Any]]) -> Generator[bytes, Any, None]:
         yield b"["
@@ -119,39 +128,25 @@ async def get_simulation_data(
             yield orjson.dumps(item)
         yield b"]"
 
-    # def generate(path: Path):
-    #     # Collect with streaming engine
-    #     df = pl.scan_parquet(path).collect(streaming=True)
-    #     yield b"["
-    #     first = True
-    #     for batch in df.iter_slices(n_rows=10_000):  # chunked iteration
-    #         for row in batch.iter_rows(named=True):
-    #             if not first:
-    #                 yield b","
-    #             else:
-    #                 first = False
-    #             yield orjson.dumps(row)
-    #     yield b"]"
-    # return fastapi.responses.StreamingResponse(
-    #     generate(local), media_type="application/json"
-    # )
-
     return StreamingResponse(generate(pl.read_parquet(local).to_dicts()), media_type="application/json")
 
 
-async def get_simulation_log(db_service: DatabaseService, ssh_service: SSHService, id: int) -> fastapi.Response:
-    stdout = await _get_slurm_log(db_service, ssh_service, id)
+async def get_simulation_log(db_service: DatabaseService, id: int) -> fastapi.Response:
+    stdout = await _get_slurm_log(db_service, id)
     _, _, after = stdout.partition("N E X T F L O W")
     result = "N E X T F L O W" + after
     return fastapi.Response(content=result, media_type="text/plain")
 
 
-async def get_simulation_log_detailed(db_service: DatabaseService, ssh_service: SSHService, id: int) -> str:
-    return await _get_slurm_log(db_service=db_service, ssh_service=ssh_service, db_id=id)
+async def get_simulation_log_detailed(db_service: DatabaseService, id: int) -> str:
+    return await _get_slurm_log(db_service=db_service, db_id=id)
 
 
-async def _get_slurm_log(db_service: DatabaseService, ssh_service: SSHService, db_id: int) -> str:
+async def _get_slurm_log(db_service: DatabaseService, db_id: int) -> str:
     experiment = await db_service.get_ecoli_simulation(database_id=db_id)
     remote_log_path = f"{get_settings().slurm_log_base_path!s}/{experiment.job_name}"
-    returncode, stdout, stderr = await ssh_service.run_command(f"cat {remote_log_path}.out")
+
+    async with get_ssh_session_service().session() as ssh:
+        returncode, stdout, stderr = await ssh.run_command(f"cat {remote_log_path}.out")
+
     return stdout

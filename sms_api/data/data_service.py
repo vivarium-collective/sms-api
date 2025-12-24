@@ -2,7 +2,6 @@ import itertools
 import pickle
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +18,7 @@ from ecoli.library.sim_data import LoadSimData
 from reconstruction.ecoli.simulation_data import SimulationDataEcoli
 from validation.ecoli.validation_data import ValidationDataEcoli
 
+from sms_api.common import StrEnumBase
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings
 
@@ -36,10 +36,12 @@ PARTITION_GROUPS = {
 }
 
 
-class AnalysisType(StrEnum):
+class AnalysisType(StrEnumBase):
+    MULTIEXPERIMENT = "multiexperiment"
     MULTIVARIANT = "multivariant"
     MULTISEED = "multiseed"
     MULTIGENERATION = "multigeneration"
+    MULTIDAUGHTER = "multidaughter"
     SINGLE = "single"
 
 
@@ -65,7 +67,7 @@ class SimulationDataService(ABC):
     labels: Labels
     output_loaded: pd.DataFrame
 
-    def __init__(self, env: Settings):
+    def __init__(self, env: Settings) -> None:
         """
         NOTE: ``wd_root`` is essentially ~/workspace
         """
@@ -75,7 +77,8 @@ class SimulationDataService(ABC):
         self.sim_data = LoadSimData(str(kb_dir / "simData.cPickle")).sim_data
         with open(str(kb_dir / "validationData.cPickle"), "rb") as f:
             self.validation_data = pickle.load(f)  # noqa: S301
-        assert isinstance(self.validation_data, ValidationDataEcoli)
+        if not isinstance(self.validation_data, ValidationDataEcoli):
+            raise TypeError("The validation data file is improperly formatted.")
         self.labels = self._get_labels()
         self.conn = create_duckdb_conn(str(env.simulation_outdir.remote_path), False, 1)
 
@@ -98,7 +101,7 @@ class SimulationDataService(ABC):
     ) -> np.ndarray[tuple[Any, ...], np.dtype[Any]]:
         history_sql_base, _, _ = self._get_sql_base(exp_select)
         db_filter = self._get_db_filter(analysis_type, partitions_all)
-        history_sql_subquery = f"SELECT * FROM ({history_sql_base}) WHERE {db_filter}"
+        history_sql_subquery = f"SELECT * FROM ({history_sql_base}) WHERE {db_filter}"  # noqa: S608 (safe)
         subquery = read_stacked_columns(history_sql_subquery, ["listeners__monomer_counts"], order_results=False)
         sql_monomer_validation = f"""
                 WITH unnested_counts AS (
@@ -118,7 +121,7 @@ class SimulationDataService(ABC):
                 SELECT list(avgCounts ORDER BY idx) AS avgCounts
                 FROM avg_counts
                 GROUP BY experiment_id, variant, lineage_seed, generation, agent_id
-                """
+                """  # noqa: S608 (safe)
         monomer_counts = self.conn.sql(sql_monomer_validation).pl()
         return ndlist_to_ndarray(monomer_counts["avgCounts"])
 
@@ -327,7 +330,7 @@ class SimulationDataServiceFS(SimulationDataService):
 
         history_sql_base, _, _ = self._get_sql_base(exp_select)
         history_sql_filtered = (
-            f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"
+            f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"  # noqa: S608 (safe)
         )
         outputs_df: pd.DataFrame = duckdb.sql(history_sql_filtered).df()
         return outputs_df.groupby("time", as_index=False).sum()

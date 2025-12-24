@@ -11,11 +11,13 @@ import pytest
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
+from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
 from sms_api.common.storage.file_service_s3 import FileServiceS3
 from sms_api.config import get_settings
+from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.job_scheduler import JobScheduler
@@ -61,7 +63,7 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
         job_state="RUNNING",
     )
 
-    random_string = "".join(random.choices(string.hexdigits, k=7))  # noqa: S311 doesn't need to be secure
+    random_string = "".join(random.choices(string.hexdigits, k=7))
     correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string)
     hpcrun = await database_service.insert_hpcrun(
         slurmjobid=slurm_job.job_id,
@@ -211,6 +213,7 @@ async def test_job_scheduler_with_storage(
     database_service: DatabaseServiceSQL,
     slurm_service: SlurmService,
     slurm_template_with_storage: str,
+    ssh_session_service: SSHSessionService,
     storage_type: str,
 ) -> None:
     """
@@ -266,7 +269,8 @@ async def test_job_scheduler_with_storage(
 
             # Copy helpers script to temp dir and upload to remote
             remote_helpers = remote_path / "s3_helpers.sh"
-            await slurm_service.ssh_service.scp_upload(local_file=helpers_script_path, remote_path=remote_helpers)
+            async with get_ssh_session_service().session() as ssh:
+                await ssh.scp_upload(local_file=helpers_script_path, remote_path=remote_helpers)
             print(f"✅ Uploaded helper script to {remote_helpers}")
 
             # Prepare the sbatch script with substitutions

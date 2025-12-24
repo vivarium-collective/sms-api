@@ -1,6 +1,8 @@
 from enum import StrEnum
 from typing import cast
 
+from pydantic import BaseModel
+
 
 class StrEnumBase(StrEnum):
     @classmethod
@@ -25,5 +27,15 @@ class StrEnumBase(StrEnum):
         return dict(zip(cls.keys(), cls.values()))
 
     @classmethod
-    def to_list(cls) -> list[str]:
-        return cls.values()
+    def to_list(cls, sort: bool = False) -> list[str]:
+        vals = cls.values()
+        return sorted(vals) if sort else vals
+
+
+class DataId(BaseModel):
+    scope: str
+    label: str
+    timestamp: str
+
+    def str(self) -> str:
+        return f"{self.scope}-{self.label}-{self.timestamp}"

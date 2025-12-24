@@ -6,30 +6,33 @@ import pytest
 import pytest_asyncio
 
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.ssh.ssh_service import SSHService
+from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 
 
 @pytest_asyncio.fixture(scope="session")
-async def ssh_service() -> AsyncGenerator[SSHService]:
+async def ssh_session_service() -> AsyncGenerator[SSHSessionService]:
+    from sms_api.dependencies import set_ssh_session_service
+
     settings = get_settings()
-    ssh_service = SSHService(
+    ssh_session_service = SSHSessionService(
         hostname=settings.slurm_submit_host,
         username=settings.slurm_submit_user,
         key_path=Path(settings.slurm_submit_key_path),
         known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
     )
-    yield ssh_service
-    await ssh_service.close()
+    # Set the singleton so it's available throughout the test session
+    set_ssh_session_service(ssh_session_service)
+    yield ssh_session_service
+    # Clean up the singleton at end of session
+    set_ssh_session_service(None)
 
 
 @pytest_asyncio.fixture(scope="session")
-async def slurm_service(ssh_service: SSHService) -> AsyncGenerator[SlurmService]:
-    # saved_ssh_service = get_ssh_service()
-    slurm_service = SlurmService(ssh_service=ssh_service)
+async def slurm_service(ssh_session_service: SSHSessionService) -> AsyncGenerator[SlurmService]:
+    # ssh_session_service fixture ensures the singleton is already set
+    slurm_service = SlurmService()
     yield slurm_service
-    # set_ssh_service(saved_ssh_service)
-    # slurm_service.close()  # nothing to close, ssh_session is closed in ssh_service.close()
 
 
 @pytest.fixture(scope="session")
