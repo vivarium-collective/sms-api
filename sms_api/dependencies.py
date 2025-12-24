@@ -1,15 +1,14 @@
 import logging
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
-from sms_api.common.ssh.ssh_service import SSHService, SSHSessionService
+from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_gcs import FileServiceGCS
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
@@ -17,15 +16,17 @@ from sms_api.common.storage.file_service_s3 import FileServiceS3
 from sms_api.config import REPO_ROOT, get_settings
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
-from sms_api.simulation.job_scheduler import JobScheduler
-from sms_api.simulation.simulation_service import SimulationService, SimulationServiceHpc
 from sms_api.simulation.tables_orm import create_db
+
+if TYPE_CHECKING:
+    from sms_api.simulation.job_scheduler import JobScheduler
+    from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)
 setup_logging(logger)
 
 
-def verify_service(service: DatabaseService | SimulationService | None) -> None:
+def verify_service(service: "DatabaseService | SimulationService | None") -> None:
     if service is None:
         logger.error(f"{service.__module__} is not initialized")
         raise HTTPException(status_code=500, detail=f"{service.__module__} is not initialized")
@@ -78,30 +79,30 @@ def get_database_service() -> DatabaseService | None:
 
 # ------- simulation service (standalone or pytest) ------
 
-global_simulation_service: SimulationService | None = None
+global_simulation_service: "SimulationService | None" = None
 
 
-def set_simulation_service(simulation_service: SimulationService | None) -> None:
+def set_simulation_service(simulation_service: "SimulationService | None") -> None:
     global global_simulation_service
     global_simulation_service = simulation_service
 
 
-def get_simulation_service() -> SimulationService | None:
+def get_simulation_service() -> "SimulationService | None":
     global global_simulation_service
     return global_simulation_service
 
 
 # ------ job scheduler (standalone) -----------------------------
 
-global_job_scheduler: JobScheduler | None = None
+global_job_scheduler: "JobScheduler | None" = None
 
 
-def set_job_scheduler(job_scheduler: JobScheduler | None) -> None:
+def set_job_scheduler(job_scheduler: "JobScheduler | None") -> None:
     global global_job_scheduler
     global_job_scheduler = job_scheduler
 
 
-def get_job_scheduler() -> JobScheduler | None:
+def get_job_scheduler() -> "JobScheduler | None":
     global global_job_scheduler
     return global_job_scheduler
 
@@ -131,8 +132,17 @@ def set_ssh_session_service(service: SSHSessionService | None) -> None:
     global_ssh_session_service = service
 
 
-def get_ssh_session_service() -> SSHSessionService | None:
+def get_ssh_session_service_or_none() -> SSHSessionService | None:
+    """Get the SSHSessionService singleton, or None if not initialized."""
     global global_ssh_session_service
+    return global_ssh_session_service
+
+
+def get_ssh_session_service() -> SSHSessionService:
+    """Get the SSHSessionService singleton. Raises RuntimeError if not initialized."""
+    global global_ssh_session_service
+    if global_ssh_session_service is None:
+        raise RuntimeError("SSHSessionService singleton not initialized")
     return global_ssh_session_service
 
 
@@ -146,6 +156,11 @@ def get_async_engine(url: str, enable_ssl: bool = True, **engine_params: Any) ->
 
 
 async def init_standalone(enable_ssl: bool = True) -> None:
+    # Lazy imports to avoid circular dependencies
+    from sms_api.common.hpc.slurm_service import SlurmService
+    from sms_api.simulation.job_scheduler import JobScheduler
+    from sms_api.simulation.simulation_service import SimulationServiceHpc
+
     _settings = get_settings()
 
     try:
@@ -198,8 +213,8 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         database = DatabaseServiceSQL(engine)
         set_database_service(database)
 
-        # Initialize SSH and Slurm services
-        logger.info("Initializing SSH and Slurm services...")
+        # Initialize SSHSessionService singleton
+        logger.info("Initializing SSH session service...")
         settings = get_settings()
         ssh_key_path = Path(settings.slurm_submit_key_path)
         if not ssh_key_path.exists():
@@ -207,16 +222,6 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         else:
             logger.info(f"SSH key found at: {ssh_key_path}")
 
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=ssh_key_path,
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        slurm_service = SlurmService(ssh_service=ssh_service)
-        logger.info(f"✓ SSH/Slurm services initialized for {settings.slurm_submit_user}@{settings.slurm_submit_host}")
-
-        # Initialize SSHSessionService singleton
         ssh_session_service = SSHSessionService(
             hostname=settings.slurm_submit_host,
             username=settings.slurm_submit_user,
@@ -224,7 +229,11 @@ async def init_standalone(enable_ssl: bool = True) -> None:
             known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
         )
         set_ssh_session_service(ssh_session_service)
-        logger.info("✓ SSHSessionService singleton initialized")
+        logger.info(f"✓ SSHSessionService initialized for {settings.slurm_submit_user}@{settings.slurm_submit_host}")
+
+        # Initialize Slurm service (uses SSHSessionService singleton)
+        slurm_service = SlurmService()
+        logger.info("✓ SlurmService initialized")
 
         # Initialize messaging service
         redis_host = _settings.redis_internal_host

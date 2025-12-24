@@ -56,5 +56,5 @@ from tests.fixtures.slurm_fixtures import (  # noqa: F401
     slurm_template_hello_10s,
     slurm_template_hello_TEMPLATE,
     slurm_template_with_storage,
-    ssh_service,
+    ssh_session_service,
 )

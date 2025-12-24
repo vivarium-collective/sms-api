@@ -22,10 +22,10 @@ from sms_api.analysis.models import (
     OutputFileMetadata,
     TsvOutputFile,
 )
-from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import get_data_id, timestamp
 from sms_api.config import get_settings
+from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import SimulatorVersion
 
@@ -127,10 +127,13 @@ async def handle_get_analysis_status(
     return await analysis_service.get_analysis_status(job_id=analysis_record.job_id, db_id=analysis_record.database_id)  # type: ignore[arg-type]
 
 
-async def handle_get_analysis_log(db_service: DatabaseService, id: int, ssh_service: SSHService) -> str:
+async def handle_get_analysis_log(db_service: DatabaseService, id: int) -> str:
     analysis_record = await db_service.get_analysis(database_id=id)
     slurm_logfile = get_settings().slurm_log_base_path / f"{analysis_record.job_name}.out"
-    ret, stdout, stdin = await ssh_service.run_command(f"cat {slurm_logfile!s}")
+
+    async with get_ssh_session_service().session() as ssh:
+        ret, stdout, stdin = await ssh.run_command(f"cat {slurm_logfile!s}")
+
     return stdout
 
 
@@ -142,23 +145,23 @@ async def handle_list_analyses(db_service: DatabaseService) -> list[ExperimentAn
     return await db_service.list_analyses()
 
 
-async def handle_get_analysis_plots(
-    db_service: DatabaseService, id: int, ssh_service: SSHServiceManaged
-) -> list[OutputFile]:
+async def handle_get_analysis_plots(db_service: DatabaseService, id: int) -> list[OutputFile]:
     analysis_data = await db_service.get_analysis(database_id=id)
     output_id = analysis_data.name
-    return await get_html_outputs_local(output_id=output_id, ssh_service=ssh_service)
+    return await get_html_outputs_local(output_id=output_id)
 
 
-async def get_html_outputs_local(output_id: str, ssh_service: SSHServiceManaged) -> list[OutputFile]:
+async def get_html_outputs_local(output_id: str) -> list[OutputFile]:
     """Run in DEV"""
     remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-    ret, stdin, stdout = await ssh_service.run_command(
-        dedent(f"""
-                cd /home/FCAM/svc_vivarium/workspace \
-                    && {remote_uv_executable} run scripts/html_outputs.py --output_id {output_id}
-            """)
-    )
+
+    async with get_ssh_session_service().session() as ssh:
+        ret, stdin, stdout = await ssh.run_command(
+            dedent(f"""
+                    cd /home/FCAM/svc_vivarium/workspace \
+                        && {remote_uv_executable} run scripts/html_outputs.py --output_id {output_id}
+                """)
+        )
 
     deserialized = json.loads(stdin.replace("'", '"'))
     outputs = []

@@ -1,10 +1,8 @@
 import datetime
-import functools
 import json
 import warnings
-from collections.abc import Awaitable
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any
 
 import numpy as np
 from fastapi import APIRouter
@@ -16,7 +14,6 @@ from sms_api.analysis.models import (
     PtoolsAnalysisType,
 )
 from sms_api.common.gateway.models import RouterConfig
-from sms_api.common.ssh.ssh_service import SSHServiceManaged
 from sms_api.common.utils import get_data_id
 from sms_api.config import get_settings
 from sms_api.simulation.models import SimulatorVersion
@@ -89,30 +86,6 @@ def get_simulator() -> SimulatorVersion:
 
 def slurmjob_name_prefix() -> str:
     return f"sms-{get_simulator().git_commit_hash}"
-
-
-F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
-
-
-def connect_ssh(func: F) -> Any:
-    @functools.wraps(func)
-    async def wrapper(*args: Any, **kwargs: Any) -> Any:
-        instance = args[0]
-        ssh_service: SSHServiceManaged = (
-            kwargs.get("ssh_service") if not getattr(instance, "ssh_service", None) else instance.ssh_service  # type: ignore[assignment]
-        )
-        # ssh_service = kwargs.get('ssh_service', get_ssh_service_managed())
-        try:
-            print(f"Connecting ssh for function: {func.__name__}!")
-            await ssh_service.connect()
-            print(f"Connected: {ssh_service.connected}")
-            return await func(*args, **kwargs)
-        finally:
-            print(f"Disconnecting ssh for function: {func.__name__}!")
-            await ssh_service.disconnect()
-            print(f"Connected: {ssh_service.connected}")
-
-    return wrapper
 
 
 def missing_experiment_error(exp_id: str) -> None:

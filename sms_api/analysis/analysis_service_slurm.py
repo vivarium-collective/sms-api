@@ -5,11 +5,9 @@ import hashlib
 import json
 import logging
 import tempfile
-from collections.abc import Awaitable
-from functools import wraps
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Callable
+from typing import Any
 
 import pandas as pd
 
@@ -22,10 +20,10 @@ from sms_api.analysis.models import (
     TsvOutputFile,
 )
 from sms_api.common.gateway.utils import get_simulator
-from sms_api.common.hpc.slurm_service import SlurmServiceManaged
-from sms_api.common.ssh.ssh_service import SSHServiceManaged, get_ssh_service_managed
+from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings
+from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
 
 logger = logging.getLogger(__name__)
@@ -46,20 +44,6 @@ class RequestPayload:
         return hashlib.sha256(b_rep).hexdigest()
 
 
-def connect_ssh(func: Callable[..., Any]) -> Callable[..., Awaitable[Any]]:
-    @wraps(func)
-    async def wrapper(self: "AnalysisServiceSlurm", **kwargs: Any) -> Any:
-        try:
-            if self.ssh.connected:
-                raise RuntimeError()
-            await self.ssh.connect()
-            return await func(self, **kwargs)
-        finally:
-            await self.ssh.disconnect()
-
-    return wrapper
-
-
 def normalize_json(obj: Any) -> Any:
     """Recursively sort dict keys in JSON-like object."""
     if isinstance(obj, dict):
@@ -72,15 +56,13 @@ def normalize_json(obj: Any) -> Any:
 
 class AnalysisServiceSlurm:
     env: Settings
-    ssh: SSHServiceManaged
 
     def __init__(self, env: Settings):
         self.env = env
-        self.ssh = get_ssh_service_managed(self.env)
 
     @property
-    def slurm_service(self) -> SlurmServiceManaged:
-        return SlurmServiceManaged(ssh_service=self.ssh)
+    def slurm_service(self) -> SlurmService:
+        return SlurmService()
 
     async def dispatch_analysis(
         self,
@@ -132,10 +114,9 @@ class AnalysisServiceSlurm:
 
     async def get_available_output_paths(self, remote_analysis_outdir: HPCFilePath) -> list[HPCFilePath]:
         cmd = f'find "{remote_analysis_outdir!s}" -type f'
-        if not self.ssh.connected:
-            await self.ssh.connect()
         try:
-            ret, out, err = await self.ssh.run_command(cmd)
+            async with get_ssh_session_service().session() as ssh:
+                ret, out, err = await ssh.run_command(cmd)
             return [HPCFilePath(remote_path=Path(fp)) for fp in out.splitlines()]
         except Exception:
             logger.exception("could not get the filepaths that are available")
@@ -148,11 +129,8 @@ class AnalysisServiceSlurm:
         local = local_dir / requested_filename
 
         if not local.exists():
-            await self.ssh.scp_download(local_file=local, remote_path=remote_path)
-
-        # verification = self._verify_result(local, 5)
-        # if not verification:
-        #     logger.info("WARNING: resulting num cols/tps do not match requested.")
+            async with get_ssh_session_service().session() as ssh:
+                await ssh.scp_download(local_file=local, remote_path=remote_path)
 
         file_content = local.read_text()
         output = TsvOutputFile(filename=requested_filename, content=file_content)
@@ -161,16 +139,14 @@ class AnalysisServiceSlurm:
     async def get_analysis_status(self, job_id: int, db_id: int) -> AnalysisRun:
         slurmjob_id = job_id
         slurm_user = self.env.slurm_submit_user
-        ssh_service = self.ssh
-        if not ssh_service.connected:
-            await ssh_service.connect()
 
-        try:
-            statuses = await ssh_service.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
-        except Exception:
-            statuses = await ssh_service.run_command(f"sacct -j {slurmjob_id}")
-        finally:
-            status: str = statuses[1].split("\n")[0].split()[-2]
+        async with get_ssh_session_service().session() as ssh:
+            try:
+                statuses = await ssh.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
+            except Exception:
+                statuses = await ssh.run_command(f"sacct -j {slurmjob_id}")
+
+        status: str = statuses[1].split("\n")[0].split()[-2]
         return AnalysisRun(id=db_id, status=JobStatus[status])
 
     @classmethod
@@ -196,7 +172,6 @@ class AnalysisServiceSlurm:
             analysis_name=analysis_name,
         )
 
-    @connect_ssh
     async def _submit_slurm_script(
         self, config: AnalysisConfig, experiment_id: str, script_content: str, slurm_job_name: str
     ) -> int:
@@ -206,11 +181,6 @@ class AnalysisServiceSlurm:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
                 f.write(script_content)
-
-            ssh_connected: bool = await self.slurm_service.ssh_service.verify_connection(retry=False)
-            if not ssh_connected:
-                logger.info(f"Warning: SSH is not connected in {__file__}.")
-                await self.slurm_service.ssh_service.connect()
 
             slurm_jobid = await self.slurm_service.submit_job(
                 local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
@@ -225,7 +195,6 @@ class AnalysisServiceSlurm:
             experiment_id=analysis_name, simulator_hash=simulator_hash or get_simulator().git_commit_hash
         )
         slurm_log_file = self.env.slurm_log_base_path / f"{slurmjob_name}.out"
-        # return experiment_id, analysis_name, analysis_config, slurmjob_name, slurm_log_file
 
         return slurmjob_name, slurm_log_file
 
@@ -299,44 +268,3 @@ def generate_slurm_script(
         ### optionally, remove uploaded fp
         rm -f \"$config_fp\"
     """)
-
-
-# class CacheService:
-#     @classmethod
-#     def normalize_request_json(cls, serialized_request: dict[str, Any]) -> Any:
-#         obj = serialized_request
-#         if isinstance(obj, dict):
-#             return {k: cls.normalize_request_json(obj[k]) for k in sorted(obj)}
-#         elif isinstance(obj, list):
-#             return [cls.normalize_request_json(x) for x in obj]
-#         else:
-#             return obj
-#
-#     def get_redis_client(self):
-#         return redis.from_url(
-#             "redis://redis:6379",
-#             decode_responses=True,
-#             max_connections=100,
-#         )
-#
-#     async def get_text_result(self, redis_client, job_id: str) -> str:
-#         cache_key = f"job:text:{job_id}"
-#
-#         # 1️⃣ Try Redis cache first
-#         cached = await redis_client.get(cache_key)
-#         if cached:
-#             return cached
-#
-#         # 2️⃣ If not cached (cold), read from object storage
-#         def download():
-#             pass
-#
-#         obj = download()  # e.g., S3/MinIO
-#         text = obj.read().decode()
-#
-#         # 3️⃣ Cache it for next time (hot cache)
-#         if len(text) < 256_000:
-#             await redis_client.setex(cache_key, 600, text)  # TTL 10 min
-#
-#         # 4️⃣ Return the text
-#         return text

@@ -13,11 +13,11 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import polars
 
-from sms_api.common.hpc.slurm_service import SlurmServiceManaged
-from sms_api.common.ssh.ssh_service import SSHService, SSHServiceManaged
+from sms_api.common.ssh.ssh_service import SSHSession
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 from sms_api.data.models import AnalysisConfig, OutputFile, TsvOutputFile
+from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class AnalysisService(abc.ABC):
         analysis_name: str,
         simulator_hash: str,
         logger: logging.Logger,
-        ssh: SSHServiceManaged,
+        ssh: SSHSession,
     ) -> tuple[str, int]:
         pass
 
@@ -46,7 +46,7 @@ class AnalysisServiceHpc(AnalysisService):
         analysis_name: str,
         simulator_hash: str,
         logger: logging.Logger,
-        ssh: SSHServiceManaged,
+        ssh: SSHSession,
     ) -> tuple[str, int]:
         slurmjob_name = get_slurmjob_name(experiment_id=analysis_name, simulator_hash=simulator_hash)
         base_path = get_settings().slurm_base_path
@@ -144,21 +144,24 @@ class AnalysisServiceHpc(AnalysisService):
         experiment_id: str,
         script_content: str,
         slurm_job_name: str,
-        ssh: SSHServiceManaged,
+        ssh: SSHSession,
     ) -> int:
-        ssh_service = ssh
-        slurm_service = SlurmServiceManaged(ssh_service=ssh_service)
-
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
                 f.write(script_content)
 
-            slurm_jobid = await slurm_service.submit_job(
-                local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
-            )
-            return slurm_jobid
+            # Upload and submit using the SSH session
+            await ssh.scp_upload(local_file=local_submit_file, remote_path=slurm_submit_file)
+            command = f"sbatch --parsable {slurm_submit_file}"
+            return_code, stdout, stderr = await ssh.run_command(command=command)
+
+            if return_code != 0:
+                raise Exception(
+                    f"failed to submit job with command {command} return code {return_code} stderr {stderr[:100]}"
+                )
+            return int(stdout)
 
 
 # -- utils -- #
@@ -214,15 +217,17 @@ def unzip_archive(zip_path: Path, dest_dir: Path) -> str:
     return str(dest_dir)
 
 
-async def get_tsv_outputs_local(output_id: str, ssh_service: SSHService) -> list[OutputFile]:
+async def get_tsv_outputs_local(output_id: str) -> list[OutputFile]:
     """Run in DEV"""
     remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-    ret, stdin, stdout = await ssh_service.run_command(
-        dedent(f"""
-                cd /home/FCAM/svc_vivarium/workspace \
-                    && {remote_uv_executable} run scripts/ptools_outputs.py --output_id {output_id}
-            """)
-    )
+
+    async with get_ssh_session_service().session() as ssh:
+        ret, stdin, stdout = await ssh.run_command(
+            dedent(f"""
+                    cd /home/FCAM/svc_vivarium/workspace \
+                        && {remote_uv_executable} run scripts/ptools_outputs.py --output_id {output_id}
+                """)
+        )
 
     deserialized = json.loads(stdin.replace("'", '"'))
     outputs = []
@@ -232,29 +237,33 @@ async def get_tsv_outputs_local(output_id: str, ssh_service: SSHService) -> list
     return outputs
 
 
-async def get_tsv_manifest_local(output_id: str, ssh_service: SSHService) -> list[TsvOutputFile]:
+async def get_tsv_manifest_local(output_id: str) -> list[TsvOutputFile]:
     """Run in DEV"""
     remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-    ret, stdin, stdout = await ssh_service.run_command(
-        dedent(f"""
-                cd /home/FCAM/svc_vivarium/workspace \
-                    && {remote_uv_executable} run scripts/ptools_outputs.py --output_id {output_id} --manifest
-            """)
-    )
+
+    async with get_ssh_session_service().session() as ssh:
+        ret, stdin, stdout = await ssh.run_command(
+            dedent(f"""
+                    cd /home/FCAM/svc_vivarium/workspace \
+                        && {remote_uv_executable} run scripts/ptools_outputs.py --output_id {output_id} --manifest
+                """)
+        )
 
     deserialized = json.loads(stdin.replace("'", '"'))
     return [TsvOutputFile(**item) for item in deserialized]
 
 
-async def get_html_outputs_local(output_id: str, ssh_service: SSHServiceManaged) -> list[OutputFile]:
+async def get_html_outputs_local(output_id: str) -> list[OutputFile]:
     """Run in DEV"""
     remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
-    ret, stdin, stdout = await ssh_service.run_command(
-        dedent(f"""
-                cd /home/FCAM/svc_vivarium/workspace \
-                    && {remote_uv_executable} run scripts/html_outputs.py --output_id {output_id}
-            """)
-    )
+
+    async with get_ssh_session_service().session() as ssh:
+        ret, stdin, stdout = await ssh.run_command(
+            dedent(f"""
+                    cd /home/FCAM/svc_vivarium/workspace \
+                        && {remote_uv_executable} run scripts/html_outputs.py --output_id {output_id}
+                """)
+        )
 
     deserialized = json.loads(stdin.replace("'", '"'))
     outputs = []

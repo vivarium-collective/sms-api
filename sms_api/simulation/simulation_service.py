@@ -12,9 +12,9 @@ from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.ssh.ssh_service import SSHService, get_ssh_service
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings, get_settings
+from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
     get_apptainer_image_file,
@@ -45,7 +45,6 @@ class SimulationService(ABC):
     @abstractmethod
     async def get_latest_commit_hash(
         self,
-        ssh_service: SSHService | None = None,
         git_repo_url: str = "https://github.com/CovertLab/vEcoli",
         git_branch: str = "master",
     ) -> str:
@@ -86,7 +85,6 @@ class SimulationServiceHpc(SimulationService):
     @override
     async def get_latest_commit_hash(
         self,
-        ssh_service: SSHService | None = None,
         git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
         git_branch: str = "messages",
     ) -> str:
@@ -94,8 +92,8 @@ class SimulationServiceHpc(SimulationService):
         :rtype: `str`
         :return: The last 7 characters of the latest commit hash.
         """
-        svc = ssh_service or get_ssh_service()
-        return_code, stdout, stderr = await svc.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
+        async with get_ssh_session_service().session() as ssh:
+            return_code, stdout, stderr = await ssh.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
         if return_code != 0:
             raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
         latest_commit_hash = stdout.strip("\n")[:7]
@@ -109,13 +107,7 @@ class SimulationServiceHpc(SimulationService):
     @override
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
         settings = get_settings()
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        slurm_service = SlurmService(ssh_service=ssh_service)
+        slurm_service = SlurmService()
 
         random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
         slurm_job_name = f"build-image-{simulator_version.git_commit_hash}-{random_suffix}"
@@ -294,13 +286,7 @@ class SimulationServiceHpc(SimulationService):
     @override
     async def submit_parca_job(self, parca_dataset: ParcaDataset) -> int:
         settings = get_settings()
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        slurm_service = SlurmService(ssh_service=ssh_service)
+        slurm_service = SlurmService()
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
 
         random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
@@ -373,12 +359,6 @@ class SimulationServiceHpc(SimulationService):
         self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
         settings = get_settings()
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
         if database_service is None:
             raise RuntimeError("DatabaseService is not available. Cannot submit EcoliSimulation job.")
 
@@ -391,7 +371,7 @@ class SimulationServiceHpc(SimulationService):
         if parca_dataset is None:
             raise ValueError(f"ParcaDataset with ID {ecoli_simulation.sim_request.parca_dataset_id} not found.")
 
-        slurm_service = SlurmService(ssh_service=ssh_service)
+        slurm_service = SlurmService()
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
 
         random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
@@ -603,19 +583,13 @@ class SimulationServiceHpc(SimulationService):
             script_content: str,
             slurm_job_name: str,
         ) -> int:
-            ssh_service = get_ssh_service()
-            slurm_service = SlurmService(ssh_service=ssh_service)
+            slurm_service = SlurmService()
 
             slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
             with tempfile.TemporaryDirectory() as tmpdir:
                 local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
                 with open(local_submit_file, "w") as f:
                     f.write(script_content)
-
-                # base_path = Path(env.slurm_base_path)
-                # remote_workspace_dir = base_path / "workspace"
-                # vecoli_dir = remote_workspace_dir / "vEcoli"
-                # config_dir = vecoli_dir / "configs"
 
                 slurm_jobid = await slurm_service.submit_job(
                     local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
@@ -626,14 +600,7 @@ class SimulationServiceHpc(SimulationService):
 
     @override
     async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
-        settings = get_settings()
-        ssh_service = SSHService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=Path(settings.slurm_submit_key_path),
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        slurm_service = SlurmService(ssh_service=ssh_service)
+        slurm_service = SlurmService()
         job_ids: list[SlurmJob] = await slurm_service.get_job_status_squeue(job_ids=[slurmjobid])
         if len(job_ids) == 0:
             job_ids = await slurm_service.get_job_status_sacct(job_ids=[slurmjobid])
@@ -765,16 +732,10 @@ def simulation_slurm_script(
 
 
 async def submit_slurm_script(
-    script_content: str, slurm_job_name: str, env: Settings | None = None, ssh: SSHService | None = None
+    script_content: str,
+    slurm_job_name: str,
 ) -> int:
-    settings = env or get_settings()
-    ssh_service = ssh or SSHService(
-        hostname=settings.slurm_submit_host,
-        username=settings.slurm_submit_user,
-        key_path=Path(settings.slurm_submit_key_path),
-        known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-    )
-    slurm_service = SlurmService(ssh_service=ssh_service)
+    slurm_service = SlurmService()
 
     slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -796,24 +757,19 @@ def log(msg: str, logger: logging.Logger | None = None) -> None:
 async def submit_vecoli_job(
     config_id: str,
     simulator_hash: str,
-    env: Settings,
     experiment_id: str,
-    ssh: SSHService | None = None,
     logger: logging.Logger | None = None,
     config: SimulationConfiguration | None = None,
 ) -> int:
-    # experiment_id = expid or create_experiment_id(config_id=config_id, simulator_hash=simulator_hash)
     experiment_dir = get_experiment_dir(experiment_id=experiment_id)
     experiment_path_parent = experiment_dir.parent
     experiment_id_dir = experiment_dir.name
     slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
-    # slurmjob_name = "dev"
 
     script = simulation_slurm_script(
         config_id=config_id,
         slurm_job_name=slurmjob_name,
         experiment_id=experiment_id,
-        settings=env,
         logger=logger,
         config=config,
     )
@@ -832,7 +788,7 @@ async def submit_vecoli_job(
     log(msg, logger)
     log("", logger)
 
-    slurmjob_id = await submit_slurm_script(script_content=script, slurm_job_name=slurmjob_name, env=env, ssh=ssh)
+    slurmjob_id = await submit_slurm_script(script_content=script, slurm_job_name=slurmjob_name)
     log(f"Submission Successful!!\nGenerated slurmjob ID: {slurmjob_id}", logger)
 
     return slurmjob_id

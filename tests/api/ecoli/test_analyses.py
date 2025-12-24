@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from sms_api.analysis.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisRequest
 from sms_api.api import request_examples
 from sms_api.api.main import app
+from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.utils import get_uuid, timestamp, unique_id
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
@@ -21,6 +22,7 @@ async def test_run_analysis(
     base_router: str,
     # analysis_request: ExperimentAnalysisRequest,
     database_service: DatabaseService,
+    ssh_session_service: SSHSessionService,  # Required to set up the SSH session service singleton
 ) -> None:
     transport = ASGITransport(app=app)
     data = None
