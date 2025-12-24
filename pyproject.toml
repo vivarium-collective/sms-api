@@ -48,8 +48,6 @@ dependencies = [
     "simhash>=2.1.2",
     "fastapi-swagger-dark>=0.0.9",
     "vecoli>=1.1.2.post1",
-    "wordfreq>=3.1.1",
-    "wordfilter>=0.2.7",
 ]
 
 [project.urls]
@@ -111,14 +109,10 @@ build-backend = "hatchling.build"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/_dev/*", "^sms_api/common/gateway/utils.py"]
+exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*"]
 
 [mypy-fastapi_swagger_dark]
 ignore_missing_imports = true
-
-# [[tool.mypy.overrides]]
-# module = "sms_api.data.data_service"
-# disable_error_code = ["call-overload", "assignment", "import-untyped", "import-not-found"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -241,7 +235,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "sms_api/common/gateway/utils.py", "notes/*"]
+exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "notes/*"]
 
 [tool.ruff.format]
 preview = true
@@ -255,4 +249,3 @@ source = ["sms_api", "client"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
-"sms_api/data/data_service.py" = ["S608", "S101"]

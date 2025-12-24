@@ -1,21 +1,21 @@
 {
-    "experiment_id": "sms_multigeneration",
-    "single": null,
-    "multidaughter": null,
-    "multigeneration": [
-        {
-            "name": "ptools_rxns",
-            "n_tp": 11,
-            "variant": 0
-        }
-    ],
-    "multiseed": [
-        {
-            "name": "ptools_rxns",
-            "n_tp": 16,
-            "variant": 0
-        }
-    ],
-    "multivariant": null,
-    "multiexperiment": null
+  "experiment_id": "sms_multigeneration",
+  "single": null,
+  "multidaughter": null,
+  "multigeneration": [
+    {
+      "name": "ptools_rxns",
+      "n_tp": 11,
+      "variant": 0
+    }
+  ],
+  "multiseed": [
+    {
+      "name": "ptools_rxns",
+      "n_tp": 16,
+      "variant": 0
+    }
+  ],
+  "multivariant": null,
+  "multiexperiment": null
 }

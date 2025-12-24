@@ -9,17 +9,16 @@ from typing import Any, Callable, TypeVar
 import numpy as np
 from fastapi import APIRouter
 
-from sms_api.common.gateway.models import RouterConfig
-from sms_api.common.ssh.ssh_service import SSHServiceManaged
-from sms_api.common.utils import get_data_id
-from sms_api.config import get_settings
 from sms_api.analysis.models import (
-    AnalysisConfig,
     AnalysisDomain,
     ExperimentAnalysisRequest,
     PtoolsAnalysisConfig,
     PtoolsAnalysisType,
 )
+from sms_api.common.gateway.models import RouterConfig
+from sms_api.common.ssh.ssh_service import SSHServiceManaged
+from sms_api.common.utils import get_data_id
+from sms_api.config import get_settings
 from sms_api.simulation.models import SimulatorVersion
 
 REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
@@ -92,10 +91,6 @@ def slurmjob_name_prefix() -> str:
     return f"sms-{get_simulator().git_commit_hash}"
 
 
-def get_analysis_request_config(request: ExperimentAnalysisRequest, analysis_name: str) -> AnalysisConfig:
-    return request.to_config(analysis_name=analysis_name)
-
-
 F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
 
 
@@ -149,11 +144,10 @@ def generate_analysis_request(
     requested["analysis_name"] = analysis_name or (get_data_id(scope="analysis"))
 
     if not truncated:
-        return ExperimentAnalysisRequest(**requested)
+        return ExperimentAnalysisRequest(**requested)  # type: ignore[arg-type]
 
     return ExperimentAnalysisRequest(
-        experiment_id=requested["experiment_id"],
-        analysis_name=requested["analysis_name"],
-        multiseed=requested["multiseed"],
-        multigeneration=requested["multigeneration"],
+        experiment_id=requested["experiment_id"],  # type: ignore[arg-type]
+        multiseed=requested["multiseed"],  # type: ignore[arg-type]
+        multigeneration=requested["multigeneration"],  # type: ignore[arg-type]
     )
