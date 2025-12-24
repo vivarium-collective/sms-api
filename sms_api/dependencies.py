@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
-from sms_api.common.ssh.ssh_service import SSHService
+from sms_api.common.ssh.ssh_service import SSHService, SSHSessionService
 from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_gcs import FileServiceGCS
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
@@ -121,6 +121,21 @@ def get_messaging_service() -> MessagingService | None:
     return global_messaging_service
 
 
+# ------ SSH session service (singleton) ------
+
+global_ssh_session_service: SSHSessionService | None = None
+
+
+def set_ssh_session_service(service: SSHSessionService | None) -> None:
+    global global_ssh_session_service
+    global_ssh_session_service = service
+
+
+def get_ssh_session_service() -> SSHSessionService | None:
+    global global_ssh_session_service
+    return global_ssh_session_service
+
+
 # ------ initialized standalone application (standalone) ------
 
 
@@ -201,6 +216,16 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         slurm_service = SlurmService(ssh_service=ssh_service)
         logger.info(f"✓ SSH/Slurm services initialized for {settings.slurm_submit_user}@{settings.slurm_submit_host}")
 
+        # Initialize SSHSessionService singleton
+        ssh_session_service = SSHSessionService(
+            hostname=settings.slurm_submit_host,
+            username=settings.slurm_submit_user,
+            key_path=ssh_key_path,
+            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
+        )
+        set_ssh_session_service(ssh_session_service)
+        logger.info("✓ SSHSessionService singleton initialized")
+
         # Initialize messaging service
         redis_host = _settings.redis_internal_host
         redis_port = _settings.redis_internal_port
@@ -240,6 +265,7 @@ async def shutdown_standalone() -> None:
     set_simulation_service(None)
     set_database_service(None)
     set_file_service(None)
+    set_ssh_session_service(None)
 
     job_scheduler = get_job_scheduler()
     if job_scheduler:
