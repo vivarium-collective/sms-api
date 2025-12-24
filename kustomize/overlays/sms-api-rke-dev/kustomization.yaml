@@ -25,7 +25,7 @@ resources:
   - ingress.yaml
   - redis-svc.yaml
   - haproxy-ssh-svc.yaml
-  - vivarium-home-pv.yaml
+  - vivarium-home-dev-pv.yaml
   - vivarium-home-pvc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml

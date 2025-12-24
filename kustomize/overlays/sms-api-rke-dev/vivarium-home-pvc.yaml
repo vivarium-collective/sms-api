@@ -10,4 +10,4 @@ spec:
   resources:
     requests:
       storage: 1000Gi
-  volumeName: vivarium-home-pv
+  volumeName: vivarium-home-dev-pv

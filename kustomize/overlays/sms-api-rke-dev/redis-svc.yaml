@@ -10,5 +10,5 @@ spec:
       protocol: TCP
       port: 6379
       targetPort: 6379
-      nodePort: 30051 # unique port for same cluster across different namespaces
+      nodePort: 30151 # unique port for same cluster across different namespaces
   type: NodePort
