@@ -2,7 +2,7 @@ import json
 import os
 import pathlib
 from dataclasses import asdict, dataclass
-from typing import Any, ParamSpec, TypeVar
+from typing import Any
 
 import numpy
 import numpy as np
@@ -18,11 +18,6 @@ MAX_ANALYSIS_CPUS = 3
 
 
 ### -- analyses -- ###
-
-
-P = ParamSpec("P")
-
-R = TypeVar("R")
 
 
 class TsvOutputFileRequest(BaseModel):

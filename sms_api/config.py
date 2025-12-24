@@ -119,15 +119,10 @@ class Settings(BaseSettings):
     biocyc_email: str = ""
     biocyc_password: str = ""
 
-    data_base_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
-    parca_registry_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
-    simulation_config_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     simulation_outdir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     analysis_outdir: HPCFilePath = HPCFilePath(remote_path=Path(""))
-    # results_cache_dir: str = f"{REPO_ROOT}/.results_cache"
     vecoli_config_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     cache_dir: str = f"{REPO_ROOT}/.results_cache"
-    remote_job_execution: bool = False
 
 
 @lru_cache
