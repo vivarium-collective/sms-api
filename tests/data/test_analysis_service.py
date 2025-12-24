@@ -43,7 +43,8 @@ async def test_connect_ssh() -> None:
 
 @pytest.mark.asyncio
 async def test_generate_slurm_script(
-    analysis_service: AnalysisServiceSlurm, ptools_analysis_config: AnalysisConfig
+    analysis_service: AnalysisServiceSlurm,
+    analysis_request_config: AnalysisConfig,
 ) -> None:
     request = request_examples.analysis_ptools
     simulator_hash = get_simulator().git_commit_hash

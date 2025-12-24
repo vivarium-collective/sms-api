@@ -133,7 +133,6 @@ async def ecoli_simulation() -> EcoliSimulationDTO:
 
 @pytest_asyncio.fixture(scope="session")
 async def base_router() -> str:
-    # return "/v1/ecoli"
     return "/v1/ecoli"
 
 
@@ -146,11 +145,6 @@ async def ptools_analysis_request() -> ExperimentAnalysisRequest:
 async def analysis_request_config(ptools_analysis_request: ExperimentAnalysisRequest) -> AnalysisConfig:
     uid: str = get_uuid(scope="test_analysis")
     return ptools_analysis_request.to_config(analysis_name=uid, env=ENV)
-
-
-@pytest_asyncio.fixture(scope="session")
-async def ptools_analysis_config() -> AnalysisConfig:
-    return AnalysisConfig.from_file(fp=Path(f"{REPO_ROOT}/assets/analysis-bf15-20251212.json"))
 
 
 @pytest_asyncio.fixture(scope="function")
