@@ -1,0 +1,49 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sms-api-stanford
+
+images:
+  - name: ghcr.io/vivarium-collective/sms-api
+    newTag: 0.2.56.dev1
+  - name: ghcr.io/vivarium-collective/sms-ptools
+    newTag: 0.2.48-dev
+
+replicas:
+  - count: 1
+    name: api
+  - count: 1
+    name: ptools
+  - count: 0
+    name: redis
+  - count: 0
+    name: haproxy-ssh
+
+resources:
+  - ingress.yaml
+  - storageclass-gp3-retain.yaml
+  - efs-pcs-root-pv.yaml
+  - vivarium-home-pvc.yaml
+  - secret-ghcr.yaml
+  - secret-shared.yaml
+  - secret-ssh.yaml
+  - ../../config/sms-api-stanford
+  - ../../base
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/1/mountPath
+        value: /mnt/fsx/home/svc_vivarium
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/1/subPath
+        value: home/svc_vivarium
+    target:
+      kind: Deployment
+      name: api
+  - patch: |-
+      - op: remove
+        path: /spec/template/spec/nodeSelector
+    target:
+      kind: Deployment
+      name: api
