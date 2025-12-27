@@ -22,7 +22,7 @@ replicas:
 resources:
   - ingress.yaml
   - storageclass-gp3-retain.yaml
-  - efs-pcs-root-pv.yaml
+  - fsx-pcs-root-pv.yaml
   - vivarium-home-pvc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml

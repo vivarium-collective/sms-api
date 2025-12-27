@@ -149,8 +149,8 @@ echo "✓ FSx IP address: ${FSX_IP}"
 echo "✓ FSx mount name: ${FSX_MOUNT}"
 
 # Generate the FSx PV YAML file from template
-FSX_PV_TEMPLATE="${SECRETS_DIR}/efs-pcs-root-pv.yaml.template"
-FSX_PV_FILE="${SECRETS_DIR}/efs-pcs-root-pv.yaml"
+FSX_PV_TEMPLATE="${SECRETS_DIR}/fsx-pcs-root-pv.yaml.template"
+FSX_PV_FILE="${SECRETS_DIR}/fsx-pcs-root-pv.yaml"
 echo "Generating FSx PersistentVolume YAML from template..."
 
 # Generate YAML from template by replacing placeholders
