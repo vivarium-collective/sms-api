@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = "==3.12.9"
 resolution-markers = [
     "sys_platform != 'emscripten'",
@@ -2965,7 +2965,7 @@ wheels = [
 
 [[package]]
 name = "sms-api"
-version = "0.2.74.dev0"
+version = "0.2.56.dev1"
 source = { editable = "." }
 dependencies = [
     { name = "aioboto3" },
