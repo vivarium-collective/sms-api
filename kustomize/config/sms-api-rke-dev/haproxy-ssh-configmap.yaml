@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haproxy-config
+data:
+  haproxy.cfg: |
+    global
+        maxconn 200
+
+    defaults
+        mode tcp
+        timeout connect 10s
+        timeout client  5m
+        timeout server  5m
+        retries 5
+        option redispatch
+
+    frontend ssh_proxy
+        bind *:22
+        default_backend slurm_submit_nodes
+
+    backend slurm_submit_nodes
+        balance roundrobin
+        option tcp-check
+        default-server inter 5s fall 3 rise 3 maxconn 200
+        server submit3 mantis-sub-3.cam.uchc.edu:22 check
+        server submit4 mantis-sub-4.cam.uchc.edu:22 check
+        server submit5 mantis-sub-5.cam.uchc.edu:22 check
+        server submit6 mantis-sub-6.cam.uchc.edu:22 check
+        server submit7 mantis-sub-7.cam.uchc.edu:22 check
+        server submit8 mantis-sub-8.cam.uchc.edu:22 check
+        server submit9 mantis-sub-9.cam.uchc.edu:22 check
+        server submit10 mantis-sub-10.cam.uchc.edu:22 check

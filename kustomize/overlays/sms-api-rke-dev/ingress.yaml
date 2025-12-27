@@ -5,26 +5,39 @@ metadata:
   labels:
     app: api-ingress
   annotations:
-    # AWS Load Balancer Controller annotations
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}, {"HTTP":80}]'
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:564519194679:certificate/59934c30-49ce-4848-af1c-bd268a1ee8df
-    alb.ingress.kubernetes.io/ssl-redirect: '443'
-
-    # ExternalDNS annotation - this triggers DNS record creation
-    external-dns.alpha.kubernetes.io/hostname: sms.jcschaff.org
-
-    # Optional: Set TTL for the DNS record (default: 300)
-    external-dns.alpha.kubernetes.io/ttl: "300"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/server-snippets: |
+      location /ws {
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_http_version 1.1;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "upgrade";
+        proxy_cache_bypass $http_upgrade;
+      }
 spec:
-  ingressClassName: alb
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - sms-dev.cam.uchc.edu
+      secretName: letsencrypt-prod-sms-api-tls
   rules:
-    - host: sms.jcschaff.org
+    - host: sms-dev.cam.uchc.edu
       http:
         paths:
           - path: /openapi.json
             pathType: Exact
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
+          - path: /documentation
+            pathType: Prefix
             backend:
               service:
                 name: api
