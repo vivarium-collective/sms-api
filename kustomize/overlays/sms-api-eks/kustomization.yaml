@@ -33,11 +33,11 @@ resources:
 patches:
   - patch: |-
       - op: replace
-        path: /spec/template/spec/containers/0/volumeMounts/1/mountPath
-        value: /mnt/fsx/home/svc_vivarium
-      - op: replace
-        path: /spec/template/spec/containers/0/volumeMounts/1/subPath
-        value: home/svc_vivarium
+        path: /spec/template/spec/containers/0/volumeMounts/0
+        value:
+          name: vivarium-home-pvc
+          mountPath: /mnt/fsx/home/svc_vivarium
+          subPath: home/svc_vivarium
     target:
       kind: Deployment
       name: api

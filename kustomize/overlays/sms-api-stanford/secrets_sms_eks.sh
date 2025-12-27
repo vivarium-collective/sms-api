@@ -117,35 +117,51 @@ echo "=== Updating FSx Persistent Volume Configuration ==="
 echo "Retrieving FSx file system details..."
 FSX_INFO=$(aws fsx describe-file-systems \
   --region $AWS_REGION \
-  --query 'FileSystems[?FileSystemType==`LUSTRE`] | [0].{Id:FileSystemId,DNS:DNSName,Mount:LustreConfiguration.MountName}' \
+  --query 'FileSystems[?FileSystemType==`LUSTRE`] | [0].{Id:FileSystemId,DNS:DNSName,Mount:LustreConfiguration.MountName,ENIs:NetworkInterfaceIds}' \
   --output json)
 
 FSX_ID=$(echo "$FSX_INFO" | jq -r '.Id')
 FSX_DNS=$(echo "$FSX_INFO" | jq -r '.DNS')
 FSX_MOUNT=$(echo "$FSX_INFO" | jq -r '.Mount')
+FSX_ENI=$(echo "$FSX_INFO" | jq -r '.ENIs[0]')
 
 if [ -z "$FSX_ID" ] || [ "$FSX_ID" == "null" ]; then
     echo "ERROR: Failed to retrieve FSx file system ID"
     exit 1
 fi
 
+# Get the IP address from the first network interface (Lustre requires IP, not DNS)
+echo "Retrieving FSx network interface IP..."
+FSX_IP=$(aws ec2 describe-network-interfaces \
+  --region $AWS_REGION \
+  --network-interface-ids "$FSX_ENI" \
+  --query 'NetworkInterfaces[0].PrivateIpAddress' \
+  --output text)
+
+if [ -z "$FSX_IP" ] || [ "$FSX_IP" == "None" ]; then
+    echo "ERROR: Failed to retrieve FSx network interface IP"
+    exit 1
+fi
+
 echo "✓ FSx file system ID: ${FSX_ID}"
 echo "✓ FSx DNS name: ${FSX_DNS}"
+echo "✓ FSx IP address: ${FSX_IP}"
 echo "✓ FSx mount name: ${FSX_MOUNT}"
 
-# Update the FSx PV YAML file with actual values
+# Generate the FSx PV YAML file from template
+FSX_PV_TEMPLATE="${SECRETS_DIR}/efs-pcs-root-pv.yaml.template"
 FSX_PV_FILE="${SECRETS_DIR}/efs-pcs-root-pv.yaml"
-echo "Updating FSx PersistentVolume YAML with actual file system details..."
+echo "Generating FSx PersistentVolume YAML from template..."
 
-# Replace placeholders with actual values (creates .bak file)
-sed -i.bak \
+# Generate YAML from template by replacing placeholders
+sed \
   -e "s/\${FSX_ID}/${FSX_ID}/g" \
-  -e "s/\${FSX_DNS}/${FSX_DNS}/g" \
+  -e "s/\${FSX_IP}/${FSX_IP}/g" \
   -e "s/\${FSX_MOUNT}/${FSX_MOUNT}/g" \
-  "${FSX_PV_FILE}"
+  "${FSX_PV_TEMPLATE}" > "${FSX_PV_FILE}"
 
-echo "✓ FSx PersistentVolume YAML updated: ${FSX_PV_FILE}"
-echo "  (Original backed up to: ${FSX_PV_FILE}.bak)"
+echo "✓ FSx PersistentVolume YAML generated: ${FSX_PV_FILE}"
+
 echo ""
 echo "=== Updating Redis Configuration in shared.env ==="
 
