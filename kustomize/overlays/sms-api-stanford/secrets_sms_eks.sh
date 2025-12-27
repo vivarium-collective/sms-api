@@ -146,6 +146,34 @@ sed -i.bak \
 
 echo "✓ FSx PersistentVolume YAML updated: ${FSX_PV_FILE}"
 echo "  (Original backed up to: ${FSX_PV_FILE}.bak)"
+echo ""
+echo "=== Updating Redis Configuration in shared.env ==="
+
+# Get ElastiCache Redis endpoint
+echo "Retrieving ElastiCache Redis endpoint..."
+REDIS_ENDPOINT=$(aws elasticache describe-cache-clusters \
+  --region $AWS_REGION \
+  --show-cache-node-info \
+  --query 'CacheClusters[0].CacheNodes[0].Endpoint.Address' \
+  --output text)
+
+if [ -z "$REDIS_ENDPOINT" ] || [ "$REDIS_ENDPOINT" == "None" ]; then
+    echo "ERROR: Failed to retrieve ElastiCache Redis endpoint"
+    exit 1
+fi
+
+echo "✓ Redis endpoint: ${REDIS_ENDPOINT}"
+
+# Update shared.env with the Redis endpoint
+SHARED_ENV_FILE="${CONFIG_DIR}/shared.env"
+echo "Updating Redis hosts in ${SHARED_ENV_FILE}..."
+
+sed -i.bak \
+  -e "s|^REDIS_INTERNAL_HOST=.*|REDIS_INTERNAL_HOST=${REDIS_ENDPOINT}|" \
+  -e "s|^REDIS_EXTERNAL_HOST=.*|REDIS_EXTERNAL_HOST=${REDIS_ENDPOINT}|" \
+  "${SHARED_ENV_FILE}" && rm -f "${SHARED_ENV_FILE}.bak"
+
+echo "✓ Redis configuration updated in shared.env"
 
 echo ""
 echo "=== All secrets, ConfigMaps, and FSx configuration files generated successfully! ==="

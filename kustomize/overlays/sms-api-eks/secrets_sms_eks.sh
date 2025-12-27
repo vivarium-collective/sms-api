@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../" && pwd)"
 
 # Set paths relative to the repository root
 NAMESPACE=sms-api-eks
+AWS_REGION=us-east-1
 SCRIPTS_DIR="${REPO_ROOT}/kustomize/scripts"
 SECRETS_DIR="${REPO_ROOT}/kustomize/overlays/${NAMESPACE}"
 MIGRATION_DIR="${REPO_ROOT}/kustomize/overlays/${NAMESPACE}-db-migration"
@@ -27,7 +28,7 @@ echo "Loading secrets from: $SECRETS_DATA_FILE"
 source "$SECRETS_DATA_FILE"
 
 # Retrieve database credentials from AWS Secrets Manager
-SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id $SECRET_ARN --region us-east-1 --query SecretString --output text)
+SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id $SECRET_ARN --region $AWS_REGION --query SecretString --output text)
 
 POSTGRES_USER=$(echo $SECRET_JSON | jq -r '.username')
 POSTGRES_PASSWORD=$(echo $SECRET_JSON | jq -r '.password')
@@ -44,7 +45,7 @@ function generate_ssh_known_hosts_configmap() {
 
     # Send SSM command to retrieve SSH host keys
     local command_id=$(aws ssm send-command \
-        --region us-east-1 \
+        --region $AWS_REGION \
         --instance-ids "${instance_id}" \
         --document-name "AWS-RunShellScript" \
         --parameters 'commands=["cd /etc/ssh && for f in ssh_host_*.pub; do echo -n \"login-node.pcs.internal \"; cat $f; done"]' \
@@ -57,7 +58,7 @@ function generate_ssh_known_hosts_configmap() {
 
     # Retrieve command output
     local host_keys=$(aws ssm get-command-invocation \
-        --region us-east-1 \
+        --region $AWS_REGION \
         --command-id "${command_id}" \
         --instance-id "${instance_id}" \
         --query "StandardOutputContent" \
@@ -115,7 +116,7 @@ echo "=== Updating FSx Persistent Volume Configuration ==="
 # Get FSx file system details
 echo "Retrieving FSx file system details..."
 FSX_INFO=$(aws fsx describe-file-systems \
-  --region us-east-1 \
+  --region $AWS_REGION \
   --query 'FileSystems[?FileSystemType==`LUSTRE`] | [0].{Id:FileSystemId,DNS:DNSName,Mount:LustreConfiguration.MountName}' \
   --output json)
 
@@ -145,6 +146,34 @@ sed -i.bak \
 
 echo "✓ FSx PersistentVolume YAML updated: ${FSX_PV_FILE}"
 echo "  (Original backed up to: ${FSX_PV_FILE}.bak)"
+echo ""
+echo "=== Updating Redis Configuration in shared.env ==="
+
+# Get ElastiCache Redis endpoint
+echo "Retrieving ElastiCache Redis endpoint..."
+REDIS_ENDPOINT=$(aws elasticache describe-cache-clusters \
+  --region $AWS_REGION \
+  --show-cache-node-info \
+  --query 'CacheClusters[0].CacheNodes[0].Endpoint.Address' \
+  --output text)
+
+if [ -z "$REDIS_ENDPOINT" ] || [ "$REDIS_ENDPOINT" == "None" ]; then
+    echo "ERROR: Failed to retrieve ElastiCache Redis endpoint"
+    exit 1
+fi
+
+echo "✓ Redis endpoint: ${REDIS_ENDPOINT}"
+
+# Update shared.env with the Redis endpoint
+SHARED_ENV_FILE="${CONFIG_DIR}/shared.env"
+echo "Updating Redis hosts in ${SHARED_ENV_FILE}..."
+
+sed -i.bak \
+  -e "s|^REDIS_INTERNAL_HOST=.*|REDIS_INTERNAL_HOST=${REDIS_ENDPOINT}|" \
+  -e "s|^REDIS_EXTERNAL_HOST=.*|REDIS_EXTERNAL_HOST=${REDIS_ENDPOINT}|" \
+  "${SHARED_ENV_FILE}" && rm -f "${SHARED_ENV_FILE}.bak"
+
+echo "✓ Redis configuration updated in shared.env"
 
 echo ""
 echo "=== All secrets, ConfigMaps, and FSx configuration files generated successfully! ==="
