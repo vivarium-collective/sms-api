@@ -1,12 +1,17 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: sms-api-local
+# STABLE SRI WORKING VERSION:
+# - name: ghcr.io/vivarium-collective/sms-api
+#   newTag: 0.2.55.dev1
+
+namespace: sms-api-rke-dev
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
+    newTag: 0.2.56.dev1
+  - name: ghcr.io/vivarium-collective/sms-ptools
     newTag: 0.2.48-dev
-    # STABLE: newTag: 0.2.8
 
 replicas:
   - count: 1
@@ -20,11 +25,10 @@ resources:
   - ingress.yaml
   - redis-svc.yaml
   - haproxy-ssh-svc.yaml
-  - vivarium-home-pv.yaml
+  - vivarium-home-dev-pv.yaml
   - vivarium-home-pvc.yaml
-  - mongodb-pvc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
   - secret-ssh.yaml
-  - ../../config/sms-api-rke
+  - ../../config/sms-api-rke-dev
   - ../../base
