@@ -246,80 +246,138 @@ def slurm_template_nextflow() -> str:
     partition = settings.slurm_partition
     qos_clause = f"#SBATCH --qos={settings.slurm_qos}" if settings.slurm_qos else ""
     nodelist_clause = f"#SBATCH --nodelist={settings.slurm_node_list}" if settings.slurm_node_list else ""
-    template = dedent(f"""\
-        #!/bin/bash
-        #SBATCH --job-name=nextflow_test      # Job name
-        #SBATCH --output=REMOTE_LOG_OUTPUT_FILE    # Standard output file
-        #SBATCH --error=REMOTE_LOG_ERROR_FILE      # Standard error file
-        #SBATCH --partition={partition}       # Partition or queue name
-        {qos_clause}
-        {nodelist_clause}
-        #SBATCH --nodes=1                     # Number of nodes
-        #SBATCH --ntasks-per-node=1           # Number of tasks per node
-        #SBATCH --cpus-per-task=2             # Number of CPU cores per task
-        #SBATCH --time=0-00:10:00             # Maximum runtime (D-HH:MM:SS)
 
-        set -e  # Exit on error
+    # Build the weblog receiver Python script separately (no indentation issues)
+    weblog_script = """import json
+import os
+import socket
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
-        echo "=== Nextflow Test Job Starting ==="
-        echo "Job ID: $SLURM_JOB_ID"
-        echo "Node: $SLURM_NODELIST"
-        echo "Working directory: $(pwd)"
+EVENTS_FILE = os.environ.get('EVENTS_FILE', 'events.ndjson')
 
-        # Initialize module system if available
-        if [ -f /etc/profile.d/modules.sh ]; then
-            source /etc/profile.d/modules.sh
-        elif [ -f /usr/share/Modules/init/bash ]; then
-            source /usr/share/Modules/init/bash
-        fi
+class WeblogHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get('Content-Length', 0))
+        data = self.rfile.read(length)
+        try:
+            event = json.loads(data.decode())
+            with open(EVENTS_FILE, 'a') as f:
+                f.write(json.dumps(event) + chr(10))
+        except Exception as ex:
+            print("Error processing event:", ex)
+        self.send_response(200)
+        self.end_headers()
 
-        # Check Java is available (required by Nextflow)
-        echo "=== Checking Java installation ==="
-        if ! command -v java &> /dev/null && [ -z "$JAVA_HOME" ]; then
-            echo "Java not found, attempting to load java module..."
-            if command -v module &> /dev/null; then
-                module load java || {{ echo "ERROR: Failed to load java module"; exit 1; }}
-            else
-                echo "ERROR: Neither java nor module system available"
-                exit 1
-            fi
-        fi
-        java -version
+    def log_message(self, *args):
+        pass
 
-        # Check Nextflow is available
-        echo "=== Checking Nextflow installation ==="
-        which nextflow || {{ echo "ERROR: nextflow not found in PATH"; exit 1; }}
-        nextflow -version
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.bind(('localhost', 0))
+port = sock.getsockname()[1]
+sock.close()
 
-        # Check Python is available
-        echo "=== Checking Python installation ==="
-        which python3 || {{ echo "ERROR: python3 not found in PATH"; exit 1; }}
-        python3 --version
+with open('/tmp/weblog_port_' + str(os.getppid()), 'w') as f:
+    f.write(str(port))
 
-        # The Nextflow script should be uploaded alongside this sbatch file
-        NF_SCRIPT="NEXTFLOW_SCRIPT_PATH"
+print("Weblog receiver starting on port", port, "writing to", EVENTS_FILE)
+HTTPServer(('localhost', port), WeblogHandler).serve_forever()
+"""
 
-        if [ ! -f "$NF_SCRIPT" ]; then
-            echo "ERROR: Nextflow script not found: $NF_SCRIPT"
-            exit 1
-        fi
+    template = f"""#!/bin/bash
+#SBATCH --job-name=nextflow_test
+#SBATCH --output=REMOTE_LOG_OUTPUT_FILE
+#SBATCH --error=REMOTE_LOG_ERROR_FILE
+#SBATCH --partition={partition}
+{qos_clause}
+{nodelist_clause}
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=2
+#SBATCH --time=0-00:10:00
 
-        echo "=== Running Nextflow workflow ==="
-        echo "Script: $NF_SCRIPT"
+set -e
 
-        # Run Nextflow with local executor
-        nextflow run "$NF_SCRIPT" -with-report REMOTE_REPORT_FILE -with-trace REMOTE_TRACE_FILE
+echo "=== Nextflow Test Job Starting ==="
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Working directory: $(pwd)"
 
-        NF_EXIT_CODE=$?
+# Initialize module system if available
+if [ -f /etc/profile.d/modules.sh ]; then
+    source /etc/profile.d/modules.sh
+elif [ -f /usr/share/Modules/init/bash ]; then
+    source /usr/share/Modules/init/bash
+fi
 
-        echo "=== Nextflow completed with exit code: $NF_EXIT_CODE ==="
+# Check Java is available (required by Nextflow)
+echo "=== Checking Java installation ==="
+if ! command -v java &> /dev/null && [ -z "$JAVA_HOME" ]; then
+    echo "Java not found, attempting to load java module..."
+    if command -v module &> /dev/null; then
+        module load java || {{ echo "ERROR: Failed to load java module"; exit 1; }}
+    else
+        echo "ERROR: Neither java nor module system available"
+        exit 1
+    fi
+fi
+java -version
 
-        # Check for success marker
-        if [ -f "work/*/*/result.txt" ]; then
-            echo "=== Verification result ==="
-            cat work/*/*/result.txt
-        fi
+# Check Nextflow is available
+echo "=== Checking Nextflow installation ==="
+which nextflow || {{ echo "ERROR: nextflow not found in PATH"; exit 1; }}
+nextflow -version
 
-        exit $NF_EXIT_CODE
-        """)
+# Check Python is available
+echo "=== Checking Python installation ==="
+which python3 || {{ echo "ERROR: python3 not found in PATH"; exit 1; }}
+python3 --version
+
+# The Nextflow script should be uploaded alongside this sbatch file
+NF_SCRIPT="NEXTFLOW_SCRIPT_PATH"
+
+if [ ! -f "$NF_SCRIPT" ]; then
+    echo "ERROR: Nextflow script not found: $NF_SCRIPT"
+    exit 1
+fi
+
+echo "=== Starting weblog receiver ==="
+export EVENTS_FILE="REMOTE_EVENTS_FILE"
+
+# Start weblog receiver in background on a dynamic port
+python3 << 'WEBLOG_SCRIPT' &
+{weblog_script}WEBLOG_SCRIPT
+
+WEBLOG_PID=$!
+sleep 1
+
+# Read the port from temp file
+WEBLOG_PORT=$(cat /tmp/weblog_port_$$ 2>/dev/null || echo "9999")
+rm -f /tmp/weblog_port_$$
+echo "Weblog receiver running on port $WEBLOG_PORT (PID: $WEBLOG_PID)"
+
+echo "=== Running Nextflow workflow ==="
+echo "Script: $NF_SCRIPT"
+
+# Run Nextflow with local executor and weblog
+nextflow run "$NF_SCRIPT" \\
+    -with-report REMOTE_REPORT_FILE \\
+    -with-trace REMOTE_TRACE_FILE \\
+    -with-weblog http://localhost:$WEBLOG_PORT
+
+NF_EXIT_CODE=$?
+
+# Cleanup weblog receiver (use || true to prevent set -e from failing)
+kill $WEBLOG_PID 2>/dev/null || true
+wait $WEBLOG_PID 2>/dev/null || true
+
+echo "=== Nextflow completed with exit code: $NF_EXIT_CODE ==="
+
+# Check for success marker
+if [ -f "work/*/*/result.txt" ]; then
+    echo "=== Verification result ==="
+    cat work/*/*/result.txt
+fi
+
+exit $NF_EXIT_CODE
+"""
     return template

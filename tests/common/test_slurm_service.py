@@ -100,6 +100,7 @@ async def test_nextflow_workflow_via_slurm(
         remote_error_file = remote_base_path / f"{file_prefix}.err"
         remote_report_file = remote_base_path / f"{file_prefix}.report.html"
         remote_trace_file = remote_base_path / f"{file_prefix}.trace.txt"
+        remote_events_file = remote_base_path / f"{file_prefix}.events.ndjson"
 
         # Update sbatch template with the remote paths
         sbatch_content = slurm_template_nextflow.replace(
@@ -112,6 +113,8 @@ async def test_nextflow_workflow_via_slurm(
             "REMOTE_REPORT_FILE", str(remote_report_file)
         ).replace(
             "REMOTE_TRACE_FILE", str(remote_trace_file)
+        ).replace(
+            "REMOTE_EVENTS_FILE", str(remote_events_file)
         )
 
         # Write sbatch script to local temp file
