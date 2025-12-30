@@ -168,3 +168,158 @@ def slurm_template_with_storage() -> str:
         echo "=== Storage Test Job Completed Successfully ==="
         """)
     return template
+
+
+@pytest.fixture(scope="session")
+def nextflow_script_hello() -> str:
+    """
+    Simple Nextflow workflow that runs a Python script to verify Nextflow
+    is properly configured on the remote Slurm cluster.
+
+    The workflow:
+    1. Runs a Python process that prints a greeting and writes to a file
+    2. Verifies the output in a second process
+    """
+    script = dedent("""\
+        #!/usr/bin/env nextflow
+
+        nextflow.enable.dsl=2
+
+        process sayHello {
+            output:
+            path 'hello.txt'
+
+            script:
+            '''
+            python3 -c "
+import datetime
+message = f'Hello from Nextflow at {datetime.datetime.now().isoformat()}'
+print(message)
+with open('hello.txt', 'w') as f:
+    f.write(message + chr(10))
+    f.write('Nextflow Python integration test passed' + chr(10))
+"
+            '''
+        }
+
+        process verifyOutput {
+            input:
+            path hello_file
+
+            output:
+            path 'result.txt'
+
+            script:
+            '''
+            python3 -c "
+with open('hello.txt', 'r') as f:
+    content = f.read()
+assert 'Hello from Nextflow' in content, 'Expected greeting not found'
+assert 'test passed' in content, 'Expected test message not found'
+with open('result.txt', 'w') as f:
+    f.write('VERIFICATION_SUCCESS' + chr(10))
+    f.write(content)
+print('Verification completed successfully')
+"
+            '''
+        }
+
+        workflow {
+            sayHello()
+            verifyOutput(sayHello.out)
+        }
+        """)
+    return script
+
+
+@pytest.fixture(scope="session")
+def slurm_template_nextflow() -> str:
+    """
+    Slurm sbatch template for running a Nextflow workflow.
+
+    This template:
+    1. Copies the Nextflow script to the work directory
+    2. Runs Nextflow with the local executor (processes run on same node)
+    3. Captures exit status
+    """
+    settings = get_settings()
+    partition = settings.slurm_partition
+    qos_clause = f"#SBATCH --qos={settings.slurm_qos}" if settings.slurm_qos else ""
+    nodelist_clause = f"#SBATCH --nodelist={settings.slurm_node_list}" if settings.slurm_node_list else ""
+    template = dedent(f"""\
+        #!/bin/bash
+        #SBATCH --job-name=nextflow_test      # Job name
+        #SBATCH --output=REMOTE_LOG_OUTPUT_FILE    # Standard output file
+        #SBATCH --error=REMOTE_LOG_ERROR_FILE      # Standard error file
+        #SBATCH --partition={partition}       # Partition or queue name
+        {qos_clause}
+        {nodelist_clause}
+        #SBATCH --nodes=1                     # Number of nodes
+        #SBATCH --ntasks-per-node=1           # Number of tasks per node
+        #SBATCH --cpus-per-task=2             # Number of CPU cores per task
+        #SBATCH --time=0-00:10:00             # Maximum runtime (D-HH:MM:SS)
+
+        set -e  # Exit on error
+
+        echo "=== Nextflow Test Job Starting ==="
+        echo "Job ID: $SLURM_JOB_ID"
+        echo "Node: $SLURM_NODELIST"
+        echo "Working directory: $(pwd)"
+
+        # Initialize module system if available
+        if [ -f /etc/profile.d/modules.sh ]; then
+            source /etc/profile.d/modules.sh
+        elif [ -f /usr/share/Modules/init/bash ]; then
+            source /usr/share/Modules/init/bash
+        fi
+
+        # Check Java is available (required by Nextflow)
+        echo "=== Checking Java installation ==="
+        if ! command -v java &> /dev/null && [ -z "$JAVA_HOME" ]; then
+            echo "Java not found, attempting to load java module..."
+            if command -v module &> /dev/null; then
+                module load java || {{ echo "ERROR: Failed to load java module"; exit 1; }}
+            else
+                echo "ERROR: Neither java nor module system available"
+                exit 1
+            fi
+        fi
+        java -version
+
+        # Check Nextflow is available
+        echo "=== Checking Nextflow installation ==="
+        which nextflow || {{ echo "ERROR: nextflow not found in PATH"; exit 1; }}
+        nextflow -version
+
+        # Check Python is available
+        echo "=== Checking Python installation ==="
+        which python3 || {{ echo "ERROR: python3 not found in PATH"; exit 1; }}
+        python3 --version
+
+        # The Nextflow script should be uploaded alongside this sbatch file
+        NF_SCRIPT="NEXTFLOW_SCRIPT_PATH"
+
+        if [ ! -f "$NF_SCRIPT" ]; then
+            echo "ERROR: Nextflow script not found: $NF_SCRIPT"
+            exit 1
+        fi
+
+        echo "=== Running Nextflow workflow ==="
+        echo "Script: $NF_SCRIPT"
+
+        # Run Nextflow with local executor
+        nextflow run "$NF_SCRIPT" -with-report REMOTE_REPORT_FILE -with-trace REMOTE_TRACE_FILE
+
+        NF_EXIT_CODE=$?
+
+        echo "=== Nextflow completed with exit code: $NF_EXIT_CODE ==="
+
+        # Check for success marker
+        if [ -f "work/*/*/result.txt" ]; then
+            echo "=== Verification result ==="
+            cat work/*/*/result.txt
+        fi
+
+        exit $NF_EXIT_CODE
+        """)
+    return template
