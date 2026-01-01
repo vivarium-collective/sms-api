@@ -43,7 +43,7 @@ def test_parse_nextflow_completed_event(nextflow_events_file: Path) -> None:
         lines = f.readlines()
 
     # Last non-empty line is the completed event
-    last_line = [l for l in lines if l.strip()][-1]
+    last_line = [line for line in lines if line.strip()][-1]
     data = json.loads(last_line)
     event = parse_nextflow_event(data)
 
@@ -152,9 +152,7 @@ def test_parse_all_events_from_file(nextflow_events_file: Path) -> None:
 
 def test_trace_is_completed() -> None:
     """Test the is_completed helper method on trace events."""
-    with open(
-        Path(__file__).parent.parent / "fixtures" / "nextflow_data" / "nextflow_test_.events.ndjson"
-    ) as f:
+    with open(Path(__file__).parent.parent / "fixtures" / "nextflow_data" / "nextflow_test_.events.ndjson") as f:
         lines = f.readlines()
 
     # Submitted - not completed

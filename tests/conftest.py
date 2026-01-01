@@ -51,12 +51,16 @@ from tests.fixtures.simulation_fixtures import (  # noqa: F401
     simulation_service_slurm,
 )
 from tests.fixtures.slurm_fixtures import (  # noqa: F401
+    nextflow_config_local_executor,
+    nextflow_config_slurm_executor,
     nextflow_script_hello,
+    nextflow_script_hello_slurm,
     slurm_service,
     slurm_template_hello_1s,
     slurm_template_hello_10s,
     slurm_template_hello_TEMPLATE,
     slurm_template_nextflow,
+    slurm_template_nextflow_slurm_executor,
     slurm_template_with_storage,
     ssh_session_service,
 )

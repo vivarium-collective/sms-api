@@ -10,6 +10,169 @@ from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 
 
+def _build_nextflow_sbatch_template(
+    *,
+    job_name: str,
+    cpus_per_task: int = 1,
+    time_limit: str = "0-00:10:00",
+) -> str:
+    """
+    Build a Slurm sbatch template for running Nextflow workflows.
+
+    Args:
+        job_name: Slurm job name
+        cpus_per_task: Number of CPU cores for the parent job
+        time_limit: Maximum runtime in D-HH:MM:SS format
+
+    Returns:
+        Sbatch template string with placeholders for paths
+    """
+    settings = get_settings()
+    partition = settings.slurm_partition
+    qos_clause = f"#SBATCH --qos={settings.slurm_qos}" if settings.slurm_qos else ""
+    nodelist_clause = f"#SBATCH --nodelist={settings.slurm_node_list}" if settings.slurm_node_list else ""
+
+    return f"""#!/bin/bash
+#SBATCH --job-name={job_name}
+#SBATCH --output=REMOTE_LOG_OUTPUT_FILE
+#SBATCH --error=REMOTE_LOG_ERROR_FILE
+#SBATCH --partition={partition}
+{qos_clause}
+{nodelist_clause}
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task={cpus_per_task}
+#SBATCH --time={time_limit}
+
+set -e
+
+echo "=== Nextflow Job Starting ==="
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Working directory: $(pwd)"
+
+# Initialize module system if available
+if [ -f /etc/profile.d/modules.sh ]; then
+    source /etc/profile.d/modules.sh
+elif [ -f /usr/share/Modules/init/bash ]; then
+    source /usr/share/Modules/init/bash
+fi
+
+# Check Java is available (required by Nextflow)
+echo "=== Checking Java installation ==="
+if ! command -v java &> /dev/null && [ -z "$JAVA_HOME" ]; then
+    echo "Java not found, attempting to load java module..."
+    if command -v module &> /dev/null; then
+        module load java || {{ echo "ERROR: Failed to load java module"; exit 1; }}
+    else
+        echo "ERROR: Neither java nor module system available"
+        exit 1
+    fi
+fi
+java -version
+
+# Check Nextflow is available
+echo "=== Checking Nextflow installation ==="
+which nextflow || {{ echo "ERROR: nextflow not found in PATH"; exit 1; }}
+nextflow -version
+
+# Check Python is available
+echo "=== Checking Python installation ==="
+which python3 || {{ echo "ERROR: python3 not found in PATH"; exit 1; }}
+python3 --version
+
+# The Nextflow script and config should be uploaded alongside this sbatch file
+NF_SCRIPT="NEXTFLOW_SCRIPT_PATH"
+NF_CONFIG="NEXTFLOW_CONFIG_PATH"
+
+if [ ! -f "$NF_SCRIPT" ]; then
+    echo "ERROR: Nextflow script not found: $NF_SCRIPT"
+    exit 1
+fi
+
+if [ ! -f "$NF_CONFIG" ]; then
+    echo "ERROR: Nextflow config not found: $NF_CONFIG"
+    exit 1
+fi
+
+echo "=== Nextflow Configuration ==="
+cat "$NF_CONFIG"
+
+echo "=== Starting weblog receiver ==="
+export EVENTS_FILE="REMOTE_EVENTS_FILE"
+
+# Start weblog receiver in background on a dynamic port
+python3 << 'WEBLOG_SCRIPT' &
+{WEBLOG_RECEIVER_SCRIPT}WEBLOG_SCRIPT
+
+WEBLOG_PID=$!
+sleep 1
+
+# Read the port from temp file
+WEBLOG_PORT=$(cat /tmp/weblog_port_$$ 2>/dev/null || echo "9999")
+rm -f /tmp/weblog_port_$$
+echo "Weblog receiver running on port $WEBLOG_PORT (PID: $WEBLOG_PID)"
+
+echo "=== Running Nextflow workflow ==="
+echo "Script: $NF_SCRIPT"
+echo "Config: $NF_CONFIG"
+
+# Run Nextflow with config and weblog
+nextflow run "$NF_SCRIPT" \\
+    -c "$NF_CONFIG" \\
+    -with-report REMOTE_REPORT_FILE \\
+    -with-trace REMOTE_TRACE_FILE \\
+    -with-weblog http://localhost:$WEBLOG_PORT
+
+NF_EXIT_CODE=$?
+
+# Cleanup weblog receiver (use || true to prevent set -e from failing)
+kill $WEBLOG_PID 2>/dev/null || true
+wait $WEBLOG_PID 2>/dev/null || true
+
+echo "=== Nextflow completed with exit code: $NF_EXIT_CODE ==="
+
+exit $NF_EXIT_CODE
+"""
+
+
+# Weblog receiver script - used by Nextflow sbatch templates to capture weblog events
+WEBLOG_RECEIVER_SCRIPT = """import json
+import os
+import socket
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+EVENTS_FILE = os.environ.get('EVENTS_FILE', 'events.ndjson')
+
+class WeblogHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get('Content-Length', 0))
+        data = self.rfile.read(length)
+        try:
+            event = json.loads(data.decode())
+            with open(EVENTS_FILE, 'a') as f:
+                f.write(json.dumps(event) + chr(10))
+        except Exception as ex:
+            print("Error processing event:", ex)
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.bind(('localhost', 0))
+port = sock.getsockname()[1]
+sock.close()
+
+with open('/tmp/weblog_port_' + str(os.getppid()), 'w') as f:
+    f.write(str(port))
+
+print("Weblog receiver starting on port", port, "writing to", EVENTS_FILE)
+HTTPServer(('localhost', port), WeblogHandler).serve_forever()
+"""
+
+
 @pytest_asyncio.fixture(scope="session")
 async def ssh_session_service() -> AsyncGenerator[SSHSessionService]:
     from sms_api.dependencies import set_ssh_session_service
@@ -234,150 +397,158 @@ print('Verification completed successfully')
 
 @pytest.fixture(scope="session")
 def slurm_template_nextflow() -> str:
-    """
-    Slurm sbatch template for running a Nextflow workflow.
+    """Slurm sbatch template for running Nextflow with local executor."""
+    return _build_nextflow_sbatch_template(
+        job_name="nextflow_test",
+        cpus_per_task=2,
+        time_limit="0-00:10:00",
+    )
 
-    This template:
-    1. Copies the Nextflow script to the work directory
-    2. Runs Nextflow with the local executor (processes run on same node)
-    3. Captures exit status
+
+@pytest.fixture(scope="session")
+def nextflow_config_slurm_executor() -> str:
+    """
+    Nextflow configuration file that uses Slurm as the executor.
+
+    This configures Nextflow to submit each process as a separate Slurm job
+    instead of running them locally on the same node.
     """
     settings = get_settings()
     partition = settings.slurm_partition
-    qos_clause = f"#SBATCH --qos={settings.slurm_qos}" if settings.slurm_qos else ""
-    nodelist_clause = f"#SBATCH --nodelist={settings.slurm_node_list}" if settings.slurm_node_list else ""
+    qos_line = f"    qos = '{settings.slurm_qos}'" if settings.slurm_qos else ""
+    clusterOptions_line = (
+        f"    clusterOptions = '--nodelist={settings.slurm_node_list}'" if settings.slurm_node_list else ""
+    )
 
-    # Build the weblog receiver Python script separately (no indentation issues)
-    weblog_script = """import json
+    config = f"""
+// Nextflow configuration for Slurm executor
+process {{
+    executor = 'slurm'
+    queue = '{partition}'
+{qos_line}
+{clusterOptions_line}
+    time = '5m'
+    cpus = 1
+    memory = '512 MB'
+}}
+
+// Disable container by default (processes run natively)
+docker.enabled = false
+singularity.enabled = false
+
+// Work directory configuration
+workDir = 'WORK_DIR_PLACEHOLDER'
+"""
+    return config
+
+
+@pytest.fixture(scope="session")
+def nextflow_config_local_executor() -> str:
+    """
+    Nextflow configuration file that uses the local executor.
+
+    This configures Nextflow to run processes locally on the same node,
+    with a unique work directory per run.
+    """
+    config = """
+// Nextflow configuration for local executor
+process {
+    executor = 'local'
+}
+
+// Disable container by default (processes run natively)
+docker.enabled = false
+singularity.enabled = false
+
+// Work directory configuration (unique per run)
+workDir = 'WORK_DIR_PLACEHOLDER'
+"""
+    return config
+
+
+@pytest.fixture(scope="session")
+def nextflow_script_hello_slurm() -> str:
+    """
+    Nextflow workflow for Slurm executor testing.
+
+    Similar to nextflow_script_hello but with explicit resource requirements
+    that work well with Slurm scheduling.
+    """
+    script = dedent("""\
+        #!/usr/bin/env nextflow
+
+        nextflow.enable.dsl=2
+
+        process sayHello {
+            // Resources for Slurm scheduling
+            cpus 1
+            memory '256 MB'
+            time '2m'
+
+            output:
+            path 'hello.txt'
+
+            script:
+            '''
+            python3 -c "
+import datetime
 import os
-import socket
-from http.server import HTTPServer, BaseHTTPRequestHandler
+message = f'Hello from Nextflow Slurm job'
+slurm_job_id = os.environ.get('SLURM_JOB_ID', 'unknown')
+print(f'{message} (SLURM_JOB_ID={slurm_job_id})')
+with open('hello.txt', 'w') as f:
+    f.write(message + chr(10))
+    f.write(f'SLURM_JOB_ID={slurm_job_id}' + chr(10))
+    f.write(f'Timestamp: {datetime.datetime.now().isoformat()}' + chr(10))
+    f.write('Nextflow Slurm executor test passed' + chr(10))
+"
+            '''
+        }
 
-EVENTS_FILE = os.environ.get('EVENTS_FILE', 'events.ndjson')
+        process verifyOutput {
+            // Resources for Slurm scheduling
+            cpus 1
+            memory '256 MB'
+            time '2m'
 
-class WeblogHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        length = int(self.headers.get('Content-Length', 0))
-        data = self.rfile.read(length)
-        try:
-            event = json.loads(data.decode())
-            with open(EVENTS_FILE, 'a') as f:
-                f.write(json.dumps(event) + chr(10))
-        except Exception as ex:
-            print("Error processing event:", ex)
-        self.send_response(200)
-        self.end_headers()
+            input:
+            path hello_file
 
-    def log_message(self, *args):
-        pass
+            output:
+            path 'result.txt'
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.bind(('localhost', 0))
-port = sock.getsockname()[1]
-sock.close()
+            script:
+            '''
+            python3 -c "
+import os
+slurm_job_id = os.environ.get('SLURM_JOB_ID', 'unknown')
+print(f'Verify process running as SLURM_JOB_ID={slurm_job_id}')
+with open('hello.txt', 'r') as f:
+    content = f.read()
+assert 'Hello from Nextflow' in content, 'Expected greeting not found'
+assert 'test passed' in content, 'Expected test message not found'
+with open('result.txt', 'w') as f:
+    f.write('VERIFICATION_SUCCESS' + chr(10))
+    f.write(f'Verified by SLURM_JOB_ID={slurm_job_id}' + chr(10))
+    f.write(content)
+print('Verification completed successfully')
+"
+            '''
+        }
 
-with open('/tmp/weblog_port_' + str(os.getppid()), 'w') as f:
-    f.write(str(port))
+        workflow {
+            sayHello()
+            verifyOutput(sayHello.out)
+        }
+        """)
+    return script
 
-print("Weblog receiver starting on port", port, "writing to", EVENTS_FILE)
-HTTPServer(('localhost', port), WeblogHandler).serve_forever()
-"""
 
-    template = f"""#!/bin/bash
-#SBATCH --job-name=nextflow_test
-#SBATCH --output=REMOTE_LOG_OUTPUT_FILE
-#SBATCH --error=REMOTE_LOG_ERROR_FILE
-#SBATCH --partition={partition}
-{qos_clause}
-{nodelist_clause}
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=2
-#SBATCH --time=0-00:10:00
-
-set -e
-
-echo "=== Nextflow Test Job Starting ==="
-echo "Job ID: $SLURM_JOB_ID"
-echo "Node: $SLURM_NODELIST"
-echo "Working directory: $(pwd)"
-
-# Initialize module system if available
-if [ -f /etc/profile.d/modules.sh ]; then
-    source /etc/profile.d/modules.sh
-elif [ -f /usr/share/Modules/init/bash ]; then
-    source /usr/share/Modules/init/bash
-fi
-
-# Check Java is available (required by Nextflow)
-echo "=== Checking Java installation ==="
-if ! command -v java &> /dev/null && [ -z "$JAVA_HOME" ]; then
-    echo "Java not found, attempting to load java module..."
-    if command -v module &> /dev/null; then
-        module load java || {{ echo "ERROR: Failed to load java module"; exit 1; }}
-    else
-        echo "ERROR: Neither java nor module system available"
-        exit 1
-    fi
-fi
-java -version
-
-# Check Nextflow is available
-echo "=== Checking Nextflow installation ==="
-which nextflow || {{ echo "ERROR: nextflow not found in PATH"; exit 1; }}
-nextflow -version
-
-# Check Python is available
-echo "=== Checking Python installation ==="
-which python3 || {{ echo "ERROR: python3 not found in PATH"; exit 1; }}
-python3 --version
-
-# The Nextflow script should be uploaded alongside this sbatch file
-NF_SCRIPT="NEXTFLOW_SCRIPT_PATH"
-
-if [ ! -f "$NF_SCRIPT" ]; then
-    echo "ERROR: Nextflow script not found: $NF_SCRIPT"
-    exit 1
-fi
-
-echo "=== Starting weblog receiver ==="
-export EVENTS_FILE="REMOTE_EVENTS_FILE"
-
-# Start weblog receiver in background on a dynamic port
-python3 << 'WEBLOG_SCRIPT' &
-{weblog_script}WEBLOG_SCRIPT
-
-WEBLOG_PID=$!
-sleep 1
-
-# Read the port from temp file
-WEBLOG_PORT=$(cat /tmp/weblog_port_$$ 2>/dev/null || echo "9999")
-rm -f /tmp/weblog_port_$$
-echo "Weblog receiver running on port $WEBLOG_PORT (PID: $WEBLOG_PID)"
-
-echo "=== Running Nextflow workflow ==="
-echo "Script: $NF_SCRIPT"
-
-# Run Nextflow with local executor and weblog
-nextflow run "$NF_SCRIPT" \\
-    -with-report REMOTE_REPORT_FILE \\
-    -with-trace REMOTE_TRACE_FILE \\
-    -with-weblog http://localhost:$WEBLOG_PORT
-
-NF_EXIT_CODE=$?
-
-# Cleanup weblog receiver (use || true to prevent set -e from failing)
-kill $WEBLOG_PID 2>/dev/null || true
-wait $WEBLOG_PID 2>/dev/null || true
-
-echo "=== Nextflow completed with exit code: $NF_EXIT_CODE ==="
-
-# Check for success marker
-if [ -f "work/*/*/result.txt" ]; then
-    echo "=== Verification result ==="
-    cat work/*/*/result.txt
-fi
-
-exit $NF_EXIT_CODE
-"""
-    return template
+@pytest.fixture(scope="session")
+def slurm_template_nextflow_slurm_executor() -> str:
+    """Slurm sbatch template for running Nextflow with Slurm executor."""
+    return _build_nextflow_sbatch_template(
+        job_name="nextflow_slurm_test",
+        cpus_per_task=1,
+        time_limit="0-00:15:00",
+    )
