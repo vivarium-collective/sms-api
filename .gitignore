@@ -242,5 +242,5 @@ scratchpads/
 *.tar.gz
 
 # Secret data files (kustomize overlays)
-kustomize/overlays/**/secrets_sms_eks.dat
+kustomize/overlays/**/secrets.dat
 *.bak

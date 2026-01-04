@@ -15,12 +15,12 @@ MIGRATION_DIR="${REPO_ROOT}/kustomize/overlays/${NAMESPACE}-db-migration"
 CONFIG_DIR="${REPO_ROOT}/kustomize/config/${NAMESPACE}"
 
 # Load secrets from data file (not committed to git)
-SECRETS_DATA_FILE="${SECRETS_DIR}/secrets_sms_eks.dat"
+SECRETS_DATA_FILE="${SECRETS_DIR}/secrets.dat"
 if [ ! -f "$SECRETS_DATA_FILE" ]; then
     echo "ERROR: Secrets data file not found: $SECRETS_DATA_FILE"
-    echo "Please create it from secrets_sms_eks.dat.template"
-    echo "  cp ${SECRETS_DIR}/secrets_sms_eks.dat.template ${SECRETS_DIR}/secrets_sms_eks.dat"
-    echo "  # Then edit secrets_sms_eks.dat with your actual values"
+    echo "Please create it from secrets.dat.template"
+    echo "  cp ${SECRETS_DIR}/secrets.dat.template ${SECRETS_DIR}/secrets.dat"
+    echo "  # Then edit secrets.dat with your actual values"
     exit 1
 fi
 
