@@ -9,7 +9,7 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}, {"HTTP":80}]'
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:564519194679:certificate/59934c30-49ce-4848-af1c-bd268a1ee8df
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:564519194679:certificate/6279c0f7-be10-424f-b84c-567f6e02ebb6
     alb.ingress.kubernetes.io/ssl-redirect: '443'
 
     # ExternalDNS annotation - this triggers DNS record creation
