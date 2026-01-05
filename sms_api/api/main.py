@@ -59,8 +59,8 @@ APP_ORIGINS = [
 APP_ROUTERS = [
     # "antibiotics",
     # "biofactory",
+    "api",
     "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
-    "ecoli",
     # "inference",
     # "variants",
 ]

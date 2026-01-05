@@ -40,7 +40,7 @@ from sms_api.simulation.models import (
 ENV = get_settings()
 
 logger = logging.getLogger(__name__)
-config = router_config(prefix="ecoli")
+config = router_config(prefix="api", version_major=False)
 
 
 ###### -- analyses -- ######
