@@ -113,6 +113,7 @@ class SimulationServiceHpc(SimulationService):
         slurm_job_name = f"build-image-{simulator_version.git_commit_hash}-{random_suffix}"
 
         slurm_log_file = get_slurm_log_file(slurm_job_name=slurm_job_name)
+        slurm_err_file = str(slurm_log_file).replace(".out", ".err")
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
         remote_vEcoli_path = get_vEcoli_repo_dir(simulator_version=simulator_version)
         apptainer_image_path = get_apptainer_image_file(simulator_version=simulator_version)
@@ -129,16 +130,14 @@ class SimulationServiceHpc(SimulationService):
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
                     #SBATCH --time=30:00
-                    #SBATCH --nodes=1
-                    #SBATCH --ntasks=1
-                    #SBATCH --cpus-per-task 2
-                    #SBATCH --mem=4GB
-
+                    #SBATCH --cpus-per-task 3
+                    #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
                     {qos_clause}
-                    #SBATCH --output={slurm_log_file}
-                    #SBATCH --error={slurm_log_file}
+                    #SBATCH --mail-type=ALL
                     {nodelist_clause}
+                    #SBATCH -o {slurm_log_file!s}
+                    #SBATCH -e {slurm_err_file}
 
                     set -eu
                     env
@@ -293,6 +292,7 @@ class SimulationServiceHpc(SimulationService):
         slurm_job_name = f"parca-{simulator_version.git_commit_hash}-{parca_dataset.database_id}-{random_suffix}"
 
         slurm_log_file = get_slurm_log_file(slurm_job_name=slurm_job_name)
+        slurm_err_file = str(slurm_log_file).replace(".out", ".err")
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
         parca_remote_path = get_parca_dataset_dir(parca_dataset=parca_dataset)
         remote_vEcoli_repo_path = get_vEcoli_repo_dir(simulator_version=simulator_version)
@@ -314,8 +314,10 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
                     {qos_clause}
-                    #SBATCH --output={slurm_log_file}
+                    #SBATCH --mail-type=ALL
                     {nodelist_clause}
+                    #SBATCH -o {slurm_log_file!s}
+                    #SBATCH -e {slurm_err_file}
 
                     set -e
                     # env
