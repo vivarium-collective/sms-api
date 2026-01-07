@@ -10,7 +10,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-csi
   nfs:
-    path: /home/FCAM
-    server: cfs09.cam.uchc.edu
+    path: /projects
+    server: cfs15.cam.uchc.edu
   mountOptions:
     - nfsvers=3

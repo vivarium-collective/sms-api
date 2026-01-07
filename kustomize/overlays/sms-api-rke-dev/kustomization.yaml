@@ -32,3 +32,26 @@ resources:
   - secret-ssh.yaml
   - ../../config/sms-api-rke-dev
   - ../../base
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/0
+        value:
+          name: vivarium-home-pvc
+          mountPath: /projects/SMS
+          subPath: SMS
+    target:
+      kind: Deployment
+      name: api
+  # supplementalGroups: 10274=smsgroup, 10281=sms_api, 10269=vivarium
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/securityContext/supplementalGroups
+        value:
+          - 10274
+          - 10281
+          - 10269
+    target:
+      kind: Deployment
+      name: api
