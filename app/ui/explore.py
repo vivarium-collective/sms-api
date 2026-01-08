@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.18.1"
+__generated_with = "0.18.4"
 app = marimo.App(width="medium")
 
 
@@ -33,7 +33,6 @@ def _():
     import polars as pl
     from scipy.stats import pearsonr
     from wholecell.utils.protein_counts import get_simulated_validation_counts
-
     return (
         Path,
         alt,
@@ -48,10 +47,10 @@ def _():
 
 
 @app.cell
-def _(env):
+def _():
     from sms_api.data.data_service import PARTITION_GROUPS, AnalysisType, SimulationDataServiceFS
 
-    data_service = SimulationDataServiceFS(env=env)
+    data_service = SimulationDataServiceFS()
     return (
         AnalysisType,
         PARTITION_GROUPS,
@@ -139,10 +138,18 @@ def _(PARTITION_GROUPS, analysis_select, partitions_display):
 
 
 @app.cell
-def _(env, mo, os):
+def _(env, mo):
+    def available_experiments():
+        exps = []
+        for path in env.simulation_outdir.remote_path.iterdir():
+            exp_name = path.parts[-1]
+            if path.is_dir() and "analysis" not in exp_name:
+                exps.append(exp_name)
+        return exps
+
     exp_select = mo.ui.dropdown(
-        options=os.listdir(str(env.simulation_outdir.remote_path)),
-        value="wcecoli_fig2_setD4_scaled-c6263425684df8c0_1763578699104-449b7de3d0de10a5_1763578788396",
+        options=available_experiments(),
+        value="sms_multigeneration",
     )
     return (exp_select,)
 
@@ -155,7 +162,7 @@ def _(exp_select, get_variants, mo):
 
 @app.cell
 def _(exp_select, get_seeds, mo, variant_select):
-    seed_select = mo.ui.dropdown(options=get_seeds(exp_id=exp_select.value, var_id=variant_select.value), value="22")
+    seed_select = mo.ui.dropdown(options=get_seeds(exp_id=exp_select.value, var_id=variant_select.value), value="5")
     return (seed_select,)
 
 
@@ -167,7 +174,7 @@ def _(exp_select, get_gens, mo, seed_select, variant_select):
             var_id=variant_select.value,
             seed_id=seed_select.value,
         ),
-        value="3",
+        value="1",
     )
     return (gen_select,)
 
@@ -181,7 +188,7 @@ def _(exp_select, gen_select, get_agents, mo, seed_select, variant_select):
             seed_id=seed_select.value,
             gen_id=gen_select.value,
         ),
-        value="000",
+        value="0",
     )
     return (agent_select,)
 
@@ -203,11 +210,11 @@ def _(agent_select, exp_select, gen_select, seed_select, variant_select):
 
 
 @app.cell
-def _(AnalysisType, analysis_select, data_service, exp_select, partitions):
+def _(AnalysisType, analysis_select, data_service, partitions):
     output_loaded = data_service.get_outputs(
         analysis_type=AnalysisType[analysis_select.value.upper()],
         partitions_all=partitions,
-        exp_select=exp_select.value,
+        exp_select="sms_multigeneration",
     )
     return (output_loaded,)
 
@@ -589,7 +596,6 @@ def _(data_service, sim_data, val_label_type):
         }
         val_ids_final = val_ids_mapping[val_label_type.value]
         return val_ids_final
-
     return (get_val_ids,)
 
 
@@ -668,7 +674,6 @@ def _(alt, mo, np, pearsonr, pl, val_id_select, val_options):
         chart_final = chart + parity
 
         return mo.ui.altair_chart(chart_final)
-
     return (val_chart,)
 
 
@@ -760,7 +765,6 @@ def _(data_service, exp_select, os):
             agents = ["N/A"]
 
         return agents
-
     return get_agents, get_gens, get_seeds, get_variants
 
 
@@ -905,7 +909,6 @@ def _(
         protein_ids_val = val_options[dataset_name]["id"]
         protein_val = list(np.array(protein_list)[np.isin(protein_list, protein_ids_val)])
         return protein_val
-
     return (
         bulk_override,
         mrna_override,
@@ -914,11 +917,6 @@ def _(
         protein_val_override,
         rxn_override,
     )
-
-
-@app.cell
-def _():
-    return
 
 
 @app.cell
