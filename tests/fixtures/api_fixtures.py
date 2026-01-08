@@ -83,7 +83,7 @@ async def analysis_request() -> ExperimentAnalysisRequest:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def experiment_request() -> ExperimentRequest:
+async def experiment_request() -> SimulationRequest:
     return examples.base_simulation
 
 
