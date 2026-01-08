@@ -78,7 +78,7 @@ async def get_simulation(id: int = FastAPIPath(description="Database ID of the s
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        # return await db_service.get_ecoli_simulation(database_id=id)
+        # return await db_service.get_simulation(database_id=id)
         return await handlers.simulations.get_simulation(db_service=db_service, id=id)
     except Exception as e:
         logger.exception("Error uploading simulation config")
@@ -141,7 +141,7 @@ async def list_simulations() -> list[Simulation]:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        # return await db_service.list_ecoli_simulations()
+        # return await db_service.list_simulations()
         return await handlers.simulations.list_simulations(db_service=db_service)
     except Exception as e:
         logger.exception("Error fetching the uploaded analyses")
@@ -188,40 +188,6 @@ async def get_simulation_data(
 @config.router.post(
     path="/analyses",
     operation_id="run-ecoli-simulation-analysis",
-    tags=["Analyses"],
-    summary="Run an analysis",
-    dependencies=[
-        Depends(get_database_service),
-    ],
-)
-async def run_analysis(
-    _request: Request,
-    request: ExperimentAnalysisRequest = request_examples.analysis_ptools,
-) -> Sequence[TsvOutputFile | OutputFileMetadata]:
-    db_service = get_database_service()
-    if db_service is None:
-        raise HTTPException(status_code=404, detail="Database not found")
-    # analysis_service = AnalysisServiceLocal(env=ENV, db_service=db_service)
-    analysis_service = AnalysisServiceSlurm(env=ENV)
-
-    try:
-        simulator = get_simulator()
-        return await handlers.analyses.handle_run_analysis(
-            request=request,
-            simulator=simulator,
-            analysis_service=analysis_service,
-            logger=logger,
-            _request=_request,
-            db_service=db_service,
-        )
-    except Exception as e:
-        logger.exception("Error fetching the simulation analysis file.")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.post(
-    path="/analyses",
-    operation_id="run-analysis",
     tags=["Analyses"],
     summary="Run an analysis",
     dependencies=[

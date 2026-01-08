@@ -191,9 +191,8 @@ class SimulationConfig(BaseModel):
     def model_post_init(self, *args: Any) -> None:
         for attrname in list(SimulationConfig.model_fields.keys()):
             attr = getattr(self, attrname)
-            if attr is None or attr == ["string"]:
-                if not attrname == "sim_data_path":
-                    delattr(self, attrname)
+            if attr is None or (attr == ["string"] and attrname != "sim_data_path"):
+                delattr(self, attrname)
             if isinstance(attr, (list, dict)) and not len(attr):
                 delattr(self, attrname)
 

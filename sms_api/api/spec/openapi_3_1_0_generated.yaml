@@ -33,8 +33,8 @@ paths:
                 simulator_id: 1
                 parca_dataset_id: 1
                 experiment:
-                  experiment_id: sms_experiment_3646_20260108
-                  simulation_name: sms_experiment_3646_20260108
+                  experiment_id: sms_experiment_3224_20260108
+                  simulation_name: sms_experiment_3224_20260108
                   metadata: {}
                   run_parca: true
                   generations: 4
@@ -222,7 +222,7 @@ paths:
       tags:
       - Analyses
       summary: Run an analysis
-      operationId: run-analysis
+      operationId: run-ecoli-simulation-analysis
       requestBody:
         content:
           application/json:
@@ -245,7 +245,7 @@ paths:
                   - $ref: '#/components/schemas/TsvOutputFile'
                   - $ref: '#/components/schemas/OutputFileMetadata'
                 type: array
-                title: Response Run-Analysis
+                title: Response Run-Ecoli-Simulation-Analysis
         '422':
           description: Validation Error
           content:
@@ -1356,7 +1356,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-01-08 15:13:35.625712'
+          default: '2026-01-08 16:01:46.120287'
         job_id:
           anyOf:
           - type: integer

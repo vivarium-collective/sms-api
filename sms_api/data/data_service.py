@@ -1,6 +1,7 @@
 import itertools
 import pickle
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -359,7 +360,7 @@ class SimulationDataServiceFS(SimulationDataService):
     def get_outputs(
         self,
         analysis_type: AnalysisType,
-        partitions_all: dict[str, str | int],
+        partitions_all: Mapping[str, str],
         exp_select: str,
         n_threads: int = 4,  # n_cpus available in slurm job
         mem_limit: str = "22GB",

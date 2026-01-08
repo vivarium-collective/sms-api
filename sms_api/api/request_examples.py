@@ -146,12 +146,14 @@ analysis_test_ptools = get_test_ptools()
 base_simulation = get_simulation_base()
 
 base_parca = ParcaDatasetRequest(
-    simulator_version=SimulatorVersion(**{
-        "git_commit_hash": "540e426",
-        "git_repo_url": "https://github.com/vivarium-collective/vEcoli",
-        "git_branch": "messages",
-        "database_id": 25,
-        "created_at": "2026-01-05T19:21:20.866705",
-    }),
+    simulator_version=SimulatorVersion(
+        **{
+            "git_commit_hash": "540e426",
+            "git_repo_url": "https://github.com/vivarium-collective/vEcoli",
+            "git_branch": "messages",
+            "database_id": 25,
+            "created_at": "2026-01-05T19:21:20.866705",
+        }
+    ),
     parca_config={},
 )

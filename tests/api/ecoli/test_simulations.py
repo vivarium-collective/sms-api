@@ -38,7 +38,7 @@ async def test_list_simulations(
         last_updated_i = str(datetime.datetime.now())
         job_name_i = get_slurmjob_name(experiment_id=name_i)
         job_id_i = randint(10000, 1000000)
-        sim_i = await database_service.insert_ecoli_simulation(
+        sim_i = await database_service.insert_simulation(
             name=name_i,
             config=config_i,
             last_updated=last_updated_i,
@@ -47,7 +47,7 @@ async def test_list_simulations(
             metadata={"requester": f"{name_i}:{i}", "context": "pytest"},
         )
         inserted_sims.append(sim_i.model_dump())
-    all_sims = await database_service.list_ecoli_simulations()
+    all_sims = await database_service.list_simulations()
     assert len(inserted_sims) == n
     assert len(inserted_sims) == len(all_sims)
 
@@ -91,7 +91,7 @@ async def test_get_simulation(database_service: DatabaseServiceSQL) -> None:
     last_updated_i = str(datetime.datetime.now())
     job_name_i = get_slurmjob_name(experiment_id=name_i)
     job_id_i = randint(10000, 1000000)
-    sim_i = await database_service.insert_ecoli_simulation(
+    sim_i = await database_service.insert_simulation(
         name=name_i,
         config=config_i,
         last_updated=last_updated_i,
@@ -100,7 +100,7 @@ async def test_get_simulation(database_service: DatabaseServiceSQL) -> None:
         metadata={"requester": f"{name_i}:{i}", "context": "pytest"},
     )
 
-    fetched_i = await database_service.get_ecoli_simulation(database_id=sim_i.database_id)
+    fetched_i = await database_service.get_simulation(simulation_id=sim_i.database_id)
     assert fetched_i.model_dump() == sim_i.model_dump()
 
 

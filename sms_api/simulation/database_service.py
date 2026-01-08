@@ -575,7 +575,7 @@ class DatabaseServiceSQL(DatabaseService):
                 database_id=orm_simulation.id,
                 simulator_id=orm_simulation.simulator_id,
                 parca_dataset_id=orm_simulation.parca_dataset_id,
-                config=SimulationConfig(**orm_simulation.config),
+                config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
             )
             return simulation
 

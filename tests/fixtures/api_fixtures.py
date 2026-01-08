@@ -29,6 +29,7 @@ from sms_api.simulation.models import (
     ExperimentRequest,
     Simulation,
     SimulationConfig,
+    SimulationRequest,
 )
 
 ENV = get_settings()

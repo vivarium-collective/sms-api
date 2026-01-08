@@ -153,7 +153,7 @@ async def get_simulation_data(
     observables: list[str],
     bg_tasks: fastapi.BackgroundTasks,
 ) -> fastapi.responses.StreamingResponse:
-    simulation = await db_service.get_ecoli_simulation(database_id=id)
+    simulation = await db_service.get_simulation(database_id=id)
     experiment_id = simulation.config.experiment_id
     ssh_session_service = get_ssh_session_service()
 
