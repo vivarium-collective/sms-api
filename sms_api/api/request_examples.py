@@ -16,7 +16,7 @@ import random
 from sms_api.analysis.models import AnalysisDomain, ExperimentAnalysisRequest, PtoolsAnalysisConfig, PtoolsAnalysisType
 from sms_api.common.gateway.utils import generate_analysis_request
 from sms_api.common.utils import unique_id
-from sms_api.simulation.models import ExperimentRequest
+from sms_api.simulation.models import ExperimentRequest, ParcaDatasetRequest, SimulationRequest, SimulatorVersion
 
 DEFAULT_NUM_SEEDS = 30
 DEFAULT_NUM_GENERATIONS = 4
@@ -45,8 +45,7 @@ def get_test_ptools() -> ExperimentAnalysisRequest:
 
 def get_analysis_multiseed_multigen() -> ExperimentAnalysisRequest:
     request = ExperimentAnalysisRequest(
-        experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
-        # experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
+        experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
         multiseed=[
             PtoolsAnalysisConfig(
                 name=PtoolsAnalysisType.REACTIONS,
@@ -126,9 +125,10 @@ def get_simulation_request(sim_id: str, gens: int, seeds: int) -> ExperimentRequ
     )
 
 
-def get_simulation_base() -> ExperimentRequest:
+def get_simulation_base() -> SimulationRequest:
     sim_id = unique_id("sms_experiment")
-    return get_simulation_request(sim_id=sim_id, gens=DEFAULT_NUM_GENERATIONS, seeds=DEFAULT_NUM_SEEDS)
+    experiment = get_simulation_request(sim_id=sim_id, gens=DEFAULT_NUM_GENERATIONS, seeds=DEFAULT_NUM_SEEDS)
+    return SimulationRequest(simulator_id=1, parca_dataset_id=1, experiment=experiment)
 
 
 # example analyses
@@ -143,6 +143,15 @@ analysis_request_base = generate_analysis_request(
 )
 analysis_test_ptools = get_test_ptools()
 
-# example simulations
-base_simulation = (lambda expid: ExperimentRequest(experiment_id=expid, simulation_name=expid))(unique_id("sms_single"))
-base_observables = ["bulk"]
+base_simulation = get_simulation_base()
+
+base_parca = ParcaDatasetRequest(
+    simulator_version=SimulatorVersion(**{
+        "git_commit_hash": "540e426",
+        "git_repo_url": "https://github.com/vivarium-collective/vEcoli",
+        "git_branch": "messages",
+        "database_id": 25,
+        "created_at": "2026-01-05T19:21:20.866705",
+    }),
+    parca_config={},
+)
