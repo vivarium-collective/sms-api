@@ -5,7 +5,6 @@ from random import randint
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.client_wrapper import fetch_simulation_data
 from sms_api.api.main import app
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings

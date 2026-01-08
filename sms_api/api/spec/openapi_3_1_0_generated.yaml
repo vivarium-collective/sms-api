@@ -33,10 +33,10 @@ paths:
                 simulator_id: 1
                 parca_dataset_id: 1
                 experiment:
-                  experiment_id: sms_experiment_3327_20260108
-                  simulation_name: sms_experiment_3327_20260108
+                  experiment_id: sms_experiment_3646_20260108
+                  simulation_name: sms_experiment_3646_20260108
                   metadata: {}
-                  run_parca: false
+                  run_parca: true
                   generations: 4
                   n_init_sims: 30
                   lineage_seed: 3
@@ -826,7 +826,7 @@ components:
         run_parca:
           type: boolean
           title: Run Parca
-          default: false
+          default: true
         generations:
           type: integer
           title: Generations
@@ -1356,12 +1356,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-01-08 09:03:31.013576'
-        job_name:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Job Name
+          default: '2026-01-08 15:13:35.625712'
         job_id:
           anyOf:
           - type: integer

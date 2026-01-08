@@ -36,6 +36,17 @@ An API router of endpoints is assigned for each API in this project's scope and 
 primary multigeneration, multiseed cell simulation endpoints are hosted at [https://sms.cam.uchc.edu/v1/ecoli](https://sms.cam.uchc.edu/v1/ecoli). Other APIs include
 the Antibiotic and Biomanufacturing and Core (single cell).
 
+The endpoints exposed by this project are designed as such:
+
+`"${BASE_URL}/${ROUTER}/...`
+
+where `${BASE_URL}` is currently `https://sms.cam.uchc.edu` and `${ROUTER}` is one of: `core`, `api`.
+
+**_Routers_**:
+- `core`: this router is mostly administrative, as it allows users to create new singularity images based on the on a given git branch and commit
+of the vEcoli repo, run parameter calculator, etc.
+- `api`: this is the user-facing api.
+
 #### Client:
 
 This project uses the Marimo web app functionality to act as a client to the aforementioned server. There is a client for each
