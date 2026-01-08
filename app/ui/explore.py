@@ -33,6 +33,7 @@ def _():
     import polars as pl
     from scipy.stats import pearsonr
     from wholecell.utils.protein_counts import get_simulated_validation_counts
+
     return (
         Path,
         alt,
@@ -596,6 +597,7 @@ def _(data_service, sim_data, val_label_type):
         }
         val_ids_final = val_ids_mapping[val_label_type.value]
         return val_ids_final
+
     return (get_val_ids,)
 
 
@@ -674,6 +676,7 @@ def _(alt, mo, np, pearsonr, pl, val_id_select, val_options):
         chart_final = chart + parity
 
         return mo.ui.altair_chart(chart_final)
+
     return (val_chart,)
 
 
@@ -765,6 +768,7 @@ def _(data_service, exp_select, os):
             agents = ["N/A"]
 
         return agents
+
     return get_agents, get_gens, get_seeds, get_variants
 
 
@@ -909,6 +913,7 @@ def _(
         protein_ids_val = val_options[dataset_name]["id"]
         protein_val = list(np.array(protein_list)[np.isin(protein_list, protein_ids_val)])
         return protein_val
+
     return (
         bulk_override,
         mrna_override,
@@ -925,7 +930,9 @@ def _(mo, rxns_dfds_long):
         data = rxns_dfds_long.to_json().encode("utf-8")
         return data
 
-    flux_download = mo.download(data=download_fluxomics, filename="fluxomics.json", mimetype="application/json", label="Export Fluxomics Data")
+    flux_download = mo.download(
+        data=download_fluxomics, filename="fluxomics.json", mimetype="application/json", label="Export Fluxomics Data"
+    )
     return (flux_download,)
 
 
@@ -935,7 +942,12 @@ def _(mo, mrna_dfds_long):
         data = mrna_dfds_long.to_json()
         return data
 
-    trans_download = mo.download(data=download_transcriptomics, filename="transcriptomics.json", mimetype="application/json", label="Export Transcriptomics Data")
+    trans_download = mo.download(
+        data=download_transcriptomics,
+        filename="transcriptomics.json",
+        mimetype="application/json",
+        label="Export Transcriptomics Data",
+    )
     return (trans_download,)
 
 
@@ -945,13 +957,17 @@ def _(dfds_dfds_long, mo):
         data = dfds_dfds_long.to_json()
         return data
 
-    prot_download = mo.download(data=download_proteomics, filename="proteomics.json", mimetype="application/json", label="Export Proteomics Data")
+    prot_download = mo.download(
+        data=download_proteomics,
+        filename="proteomics.json",
+        mimetype="application/json",
+        label="Export Proteomics Data",
+    )
     return (prot_download,)
 
 
 @app.cell
 def _(flux_download, mo, prot_download, trans_download):
-
     mo.hstack([prot_download, trans_download, flux_download], justify="space-around")
     return
 
