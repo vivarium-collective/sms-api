@@ -244,3 +244,4 @@ scratchpads/
 # Secret data files (kustomize overlays)
 kustomize/overlays/**/secrets.dat
 *.bak
+docker-compose.yml

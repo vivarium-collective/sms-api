@@ -213,7 +213,6 @@ def generate_slurm_script(
     config_dir = vecoli_dir / "configs"
     qos_clause = f"#SBATCH --qos={env.slurm_qos}" if env.slurm_qos else ""
     nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
-    slurm_err_file = str(slurm_log_file.remote_path).replace(".out", ".err")
     return dedent(f"""\
         #!/bin/bash
         #SBATCH --job-name={slurm_job_name}
@@ -225,7 +224,7 @@ def generate_slurm_script(
         #SBATCH --mail-type=ALL
         {nodelist_clause}
         #SBATCH -o {slurm_log_file!s}
-        #SBATCH -e {slurm_err_file}
+        #SBATCH -e {slurm_log_file!s}
 
         set -e
 
