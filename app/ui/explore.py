@@ -414,7 +414,7 @@ def _(
             color="Genes:N",
         )
     )
-    return
+    return (mrna_dfds_long,)
 
 
 @app.cell
@@ -511,7 +511,7 @@ def _(alt, data_service, mo, output_loaded, select_rxns, y_scale_rxns):
             color="reaction_id:N",
         )
     )
-    return
+    return (rxns_dfds_long,)
 
 
 @app.cell
@@ -920,12 +920,39 @@ def _(
 
 
 @app.cell
-def _():
-    return
+def _(mo, rxns_dfds_long):
+    def download_fluxomics():
+        data = rxns_dfds_long.to_json().encode("utf-8")
+        return data
+
+    flux_download = mo.download(data=download_fluxomics, filename="fluxomics.json", mimetype="application/json", label="Export Fluxomics Data")
+    return (flux_download,)
 
 
 @app.cell
-def _():
+def _(mo, mrna_dfds_long):
+    def download_transcriptomics() -> None:
+        data = mrna_dfds_long.to_json()
+        return data
+
+    trans_download = mo.download(data=download_transcriptomics, filename="transcriptomics.json", mimetype="application/json", label="Export Transcriptomics Data")
+    return (trans_download,)
+
+
+@app.cell
+def _(dfds_dfds_long, mo):
+    def download_proteomics() -> None:
+        data = dfds_dfds_long.to_json()
+        return data
+
+    prot_download = mo.download(data=download_proteomics, filename="proteomics.json", mimetype="application/json", label="Export Proteomics Data")
+    return (prot_download,)
+
+
+@app.cell
+def _(flux_download, mo, prot_download, trans_download):
+
+    mo.hstack([prot_download, trans_download, flux_download], justify="space-around")
     return
 
 
