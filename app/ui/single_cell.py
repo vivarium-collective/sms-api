@@ -53,7 +53,7 @@ def _():
     from sms_api.simulation.models import (
         BaseModel,
         EcoliExperiment,
-        EcoliSimulationRequest,
+        SimulationRequest,
         JobStatus,
         ParcaDataset,
         WorkerEvent,
@@ -71,7 +71,7 @@ def _():
     return (
         Client,
         EcoliExperiment,
-        EcoliSimulationRequest,
+        SimulationRequest,
         Enum,
         Generator,
         HTTPStatusError,
@@ -228,7 +228,7 @@ def _(WorkerEvent, alt, mo, pl):
 def _(
     ApiResource,
     EcoliExperiment,
-    EcoliSimulationRequest,
+    SimulationRequest,
     HTTPStatusError,
     ParcaDataset,
     WorkerEvent,
@@ -248,7 +248,7 @@ def _(
         except HTTPStatusError as e:
             raise HTTPStatusError(message=str(e))
 
-    def on_run_simulation(request: EcoliSimulationRequest) -> EcoliExperiment:
+    def on_run_simulation(request: SimulationRequest) -> EcoliExperiment:
         try:
             with api_client() as client:
                 url = format_endpoint_url(ApiResource.SIMULATION, "run")
@@ -293,23 +293,23 @@ def _(
 
 
 @app.cell
-def _(EcoliSimulationRequest, ParcaDataset, parca_datasets):
+def _(SimulationRequest, ParcaDataset, parca_datasets):
     # build the request
 
     def extract_simulation_request(
         parca_datasets: list[ParcaDataset],
         variant_config: dict[str, dict[str, float]] | None = None,  # TODO: formalize this
-    ) -> EcoliSimulationRequest:
+    ) -> SimulationRequest:
         if not len(parca_datasets):
             raise ValueError("There are no datasets uploaded")
         active_parca_dataset: ParcaDataset = parca_datasets[-1]
-        return EcoliSimulationRequest(
+        return SimulationRequest(
             parca_dataset_id=active_parca_dataset.database_id,
             simulator=active_parca_dataset.parca_dataset_request.simulator_version,
             variant_config=variant_config or {"named_parameters": {"param1": 0.5, "param2": 0.5}},
         )
 
-    request: EcoliSimulationRequest = extract_simulation_request(parca_datasets)
+    request: SimulationRequest = extract_simulation_request(parca_datasets)
     return (request,)
 
 
