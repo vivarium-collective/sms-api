@@ -383,12 +383,14 @@ class SimulationServiceHpc(SimulationService):
         parca_dataset_path = get_parca_dataset_dir(parca_dataset=parca_dataset)
         parca_parent_path = parca_dataset_path.parent
         parca_dataset_dirname = get_parca_dataset_dirname(parca_dataset)
-        experiment_path = get_experiment_path(ecoli_simulation=ecoli_simulation)
+        experiment_path = get_experiment_path(ecoli_simulation=ecoli_simulation, simulator=simulator_version)
         experiment_path_parent = experiment_path.parent
         experiment_id = experiment_path.name
         hpc_sim_config_file = settings.hpc_sim_config_file
         remote_vEcoli_repo_path = get_vEcoli_repo_dir(simulator_version=simulator_version)
         apptainer_image_path = get_apptainer_image_file(simulator_version=simulator_version)
+
+        simulator = await database_service.get_simulator(simulator_id=ecoli_simulation.simulator_id)
 
         # uv run --env-file .env ecoli/experiments/ecoli_master_sim.py \
         #             --generations 1 --emitter parquet --emitter_arg out_dir='out' \
@@ -468,14 +470,35 @@ class SimulationServiceHpc(SimulationService):
                     config_filename=$(basename "$config_file")
                     container_config_path="/out/configs/$config_filename"
 
-                    singularity run $binds $image uv run \\
-                         --env-file /vEcoli/.env /vEcoli/ecoli/experiments/ecoli_master_sim.py \\
-                         --config "$container_config_path" \\
-                         --generations 1 --emitter parquet --emitter_arg out_dir='/out' \\
-                         --experiment_id {experiment_id} \\
-                         --daughter_outdir "/out/{experiment_id}" \\
-                         --sim_data_path "/parca/{parca_dataset_dirname}/kb/simData.cPickle" \\
-                         --fail_at_max_duration
+                    # singularity run $binds $image uv run \\
+                    #      --env-file /vEcoli/.env /vEcoli/ecoli/experiments/ecoli_master_sim.py \\
+                    #      --config "$container_config_path" \\
+                    #      --generations 1 --emitter parquet --emitter_arg out_dir='/out' \\
+                    #      --experiment_id {experiment_id} \\
+                    #      --daughter_outdir "/out/{experiment_id}" \\
+                    #      --sim_data_path "/parca/{parca_dataset_dirname}/kb/simData.cPickle" \\
+                    #      --fail_at_max_duration
+                    ### set up java and nextflow
+                    local_bin=$HOME/.local/bin
+                    export JAVA_HOME=$local_bin/java-22
+                    export PATH=$JAVA_HOME/bin:$local_bin:$PATH
+                    ### configure working dir and binds
+                    vecoli_dir={get_settings().vecoli_config_dir.parent.parent!s}
+                    latest_hash={simulator.git_commit_hash}
+                    tmp_config=$(mktemp)
+                    echo '{json.dumps(ecoli_simulation.config.model_dump())}' > \"$tmp_config\"
+                    cd /home/FCAM/svc_vivarium/workspace/vEcoli
+                    ### binds
+                    binds="-B $HOME/workspace/vEcoli:/vEcoli"
+                    binds+=" -B $HOME/workspace/api_outputs:/out"
+                    binds+=" -B $JAVA_HOME:$JAVA_HOME"
+                    binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
+                    image=$HOME/workspace/images/vecoli-$latest_hash.sif
+                    vecoli_image_root=/vEcoli
+                    singularity run $binds $image bash -c "
+                        export JAVA_HOME=$HOME/.local/bin/java-22
+                        export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
+                        uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config \"$tmp_config\"
 
                     # if the experiment directory is empty after the run, fail the job
                     if [ ! "$(ls -A {experiment_path!s})" ]; then
@@ -485,6 +508,7 @@ class SimulationServiceHpc(SimulationService):
 
                     echo "Simulation run completed. data saved to {experiment_path!s}."
                     """)
+                capture_slurm_script(script_content, "assets/simulation.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -549,25 +573,19 @@ class SimulationServiceHpc(SimulationService):
                 local_bin=$HOME/.local/bin
                 export JAVA_HOME=$local_bin/java-22
                 export PATH=$JAVA_HOME/bin:$local_bin:$PATH
-
                 ### configure working dir and binds
                 vecoli_dir={vecoli_dir!s}
                 latest_hash={latest_hash}
-
                 tmp_config=$(mktemp)
                 echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
-
                 cd $vecoli_dir
-
                 ### binds
                 binds="-B $HOME/workspace/vEcoli:/vEcoli"
                 binds+=" -B $HOME/workspace/api_outputs:/out"
                 binds+=" -B $JAVA_HOME:$JAVA_HOME"
                 binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
-
                 image=$HOME/workspace/images/vecoli-$latest_hash.sif
                 vecoli_image_root=/vEcoli
-
                 singularity run $binds $image bash -c "
                     export JAVA_HOME=$HOME/.local/bin/java-22
                     export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH

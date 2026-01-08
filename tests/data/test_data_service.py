@@ -1,4 +1,4 @@
-from sms_api.data.data_service import SimulationDataServiceFS, AnalysisType
+from sms_api.data.data_service import AnalysisType, SimulationDataServiceFS
 
 
 def test_get_outputs():

@@ -110,13 +110,12 @@ async def upload_simulator(
             simulator = _simulator
             break
 
-    verify_simulator_payload(simulator)
-
     # insert the latest commit into the database and submit build job
     if simulator is None:
         simulator = await database_service.insert_simulator(
             git_commit_hash=commit_hash, git_repo_url=git_repo_url, git_branch=git_branch
         )
+        verify_simulator_payload(simulator)
 
         # Submit build job (which now includes cloning the repository)
         build_slurmjobid = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)

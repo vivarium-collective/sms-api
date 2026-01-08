@@ -2,29 +2,33 @@ import logging
 import random
 import string
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 from textwrap import dedent
-from typing import Generator, Any
+from typing import Any
 
 import fastapi
 import orjson
+import polars as pl
 from fastapi import HTTPException
 from starlette.responses import StreamingResponse
-import polars as pl
 
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service, get_ssh_session_service
+from sms_api.simulation.database_service import DatabaseService
+from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import (
+    JobStatus,
     JobType,
     ParcaDataset,
     ParcaDatasetRequest,
-    SimulatorVersion, SimulationRun, JobStatus,
+    Simulation,
+    SimulationRequest,
+    SimulationRun,
+    SimulatorVersion,
 )
-from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.simulation_service import SimulationService
-from sms_api.simulation.models import SimulationRequest, Simulation
 
 logger = logging.getLogger(__name__)
 
@@ -90,35 +94,30 @@ async def run_simulation(
     if simulator is None and parca_dataset is None:
         raise ValueError(f"Simulator {request.simulator_id} and Parca {request.parca_dataset_id} not found.")
     config = request.experiment.to_config(
-        simulator_hash=simulator.git_commit_hash,
-        parca_dataset_id=parca_dataset.database_id
+        simulator_hash=simulator.git_commit_hash, parca_dataset_id=parca_dataset.database_id
     )
     if config.experiment_id is None:
         raise HTTPException(status_code=400, detail="Experiment ID is required")
 
-    simulation = await database_service.insert_simulation(sim_request=request)
+    simulation = await database_service.insert_simulation(sim_request=request, config=config)
 
     # dispatch and insert hpc job
     random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))
     correlation_id = get_correlation_id(
-        ecoli_simulation=simulation,
-        random_string=random_string_7_hex,
-        simulator=simulator
+        ecoli_simulation=simulation, random_string=random_string_7_hex, simulator=simulator
     )
-    sim_slurmjob_name, sim_slurmjob_id = await sim_service.submit_experiment_job(
-        config=simulation.config,
-        simulator_hash=simulator.git_commit_hash,
-        logger=logger
+
+    slurmjob_id = await sim_service.submit_ecoli_simulation_job(
+        ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
     )
     _ = await database_service.insert_hpcrun(
-        slurmjobid=sim_slurmjob_id,
+        slurmjobid=slurmjob_id,
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id=correlation_id,
     )
-    simulation.job_id = sim_slurmjob_id
-    simulation.job_name = sim_slurmjob_name
 
+    simulation.job_id = slurmjob_id
     return simulation
 
 
@@ -127,8 +126,10 @@ async def get_simulation(db_service: DatabaseService, id: int) -> Simulation:
 
 
 async def get_simulation_status(db_service: DatabaseService, id: int) -> SimulationRun:
-    sim_record = await db_service.get_ecoli_simulation(database_id=id)
+    sim_record = await db_service.get_simulation(simulation_id=id)
     slurmjob_id = sim_record.job_id
+    if slurmjob_id is None:
+        raise RuntimeError(f"Not yet dispatched!: {sim_record}")
     slurm_user = get_settings().slurm_submit_user
 
     async with get_ssh_session_service().session() as ssh:

@@ -141,7 +141,7 @@ class SimulationConfig(BaseModel):
     time_step: float = 1.0
     single_daughters: bool = True
     emitter: str = "parquet"
-    emitter_arg: dict[str, str] = Field(default_factory=lambda: {"out_dir": str(get_settings().simulation_outdir)})
+    emitter_arg: dict[str, str] = Field(default_factory=lambda: {"out_dir": str(get_settings().hpc_sim_base_path)})
     variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
     analysis_options: dict[str, Any] = Field(default={})
     gcloud: str | None = None
@@ -192,7 +192,8 @@ class SimulationConfig(BaseModel):
         for attrname in list(SimulationConfig.model_fields.keys()):
             attr = getattr(self, attrname)
             if attr is None or attr == ["string"]:
-                delattr(self, attrname)
+                if not attrname == "sim_data_path":
+                    delattr(self, attrname)
             if isinstance(attr, (list, dict)) and not len(attr):
                 delattr(self, attrname)
 
@@ -203,7 +204,7 @@ class ExperimentRequest(BaseModel):
     experiment_id: str
     simulation_name: str | None = None
     metadata: dict[str, Any] = {}
-    run_parca: bool = False
+    run_parca: bool = True
     generations: int = 2
     n_init_sims: int = 1
     lineage_seed: int = 3
@@ -267,14 +268,6 @@ class ExperimentRequest(BaseModel):
 
         # config_kwargs = {attribute: getattr(self, attribute) for attribute in attributes if attribute not in excluded}
 
-        if not self.run_parca:
-            simdata_path = str(
-                get_settings().hpc_parca_base_path
-                / f"parca_{simulator_hash}_id_{parca_dataset_id}"
-                / "kb"
-                / "simData.cPickle"
-            )
-            config_kwargs["sim_data_path"] = simdata_path
         return SimulationConfig(**config_kwargs)
 
 
@@ -294,5 +287,4 @@ class Simulation(BaseModel):
     parca_dataset_id: int
     config: SimulationConfig
     last_updated: str = Field(default=str(datetime.datetime.now()))
-    job_name: str | None = None
     job_id: int | None = None

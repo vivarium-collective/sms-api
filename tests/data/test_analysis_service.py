@@ -1,6 +1,6 @@
 import pytest
 
-from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm, RequestPayload
+from sms_api.analysis.analysis_service import AnalysisServiceSlurm, RequestPayload
 from sms_api.analysis.models import (
     AnalysisConfig,
 )

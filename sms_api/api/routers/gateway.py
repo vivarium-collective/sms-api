@@ -2,35 +2,34 @@
 /analyses: this router is dedicated to the running and output retrieval of
     simulation analysis jobs/workflows
 """
+
 # TODO: do we require simulation/analysis configs that are supersets of the original configs:
 #   IE: where do we provide this special config: in vEcoli or API?
 # TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
 # TODO: labkey preprocessing
 import logging
-import random
-import string
 from collections.abc import Sequence
 
-from fastapi import Depends, HTTPException, Query, Path as FastAPIPath, BackgroundTasks
+from fastapi import BackgroundTasks, Depends, HTTPException, Query
+from fastapi import Path as FastAPIPath
 from fastapi.requests import Request
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import Response, StreamingResponse
 
-from sms_api.common import handlers
-from sms_api.common.handlers import analyses
-from sms_api.analysis.analysis_service_slurm import AnalysisServiceSlurm
+from sms_api.analysis.analysis_service import AnalysisServiceSlurm
 from sms_api.analysis.models import (
+    AnalysisRun,
+    ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
+    OutputFile,
     OutputFileMetadata,
-    TsvOutputFile, OutputFile, ExperimentAnalysisDTO, AnalysisRun,
+    TsvOutputFile,
 )
 from sms_api.api import request_examples
+from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
-from sms_api.simulation.models import JobType, SimulationRun
-from sms_api.simulation.models import SimulationRequest, Simulation
-from sms_api.simulation.hpc_utils import get_correlation_id
-
+from sms_api.simulation.models import Simulation, SimulationRequest, SimulationRun
 
 ENV = get_settings()
 
@@ -60,9 +59,7 @@ async def run_simulation(
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
         return await handlers.simulations.run_simulation(
-            database_service=database_service,
-            sim_service=sim_service,
-            request=request
+            database_service=database_service, sim_service=sim_service, request=request
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")

@@ -129,7 +129,7 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def insert_simulation(self, sim_request: SimulationRequest) -> Simulation:
+    async def insert_simulation(self, sim_request: SimulationRequest, config: SimulationConfig) -> Simulation:
         pass
 
     @abstractmethod
@@ -530,7 +530,7 @@ class DatabaseServiceSQL(DatabaseService):
             return worker_events
 
     @override
-    async def insert_simulation(self, sim_request: SimulationRequest) -> Simulation:
+    async def insert_simulation(self, sim_request: SimulationRequest, config: SimulationConfig) -> Simulation:
         async with self.async_sessionmaker() as session, session.begin():
             orm_simulator: ORMSimulator | None = await self._get_orm_simulator(
                 session, simulator_id=sim_request.simulator_id
@@ -551,9 +551,7 @@ class DatabaseServiceSQL(DatabaseService):
             orm_simulation = ORMSimulation(
                 simulator_id=orm_simulator.id,
                 parca_dataset_id=orm_parca_dataset.id,
-                config=sim_request.experiment.to_config(
-                    simulator_hash=orm_simulator.git_commit_hash, parca_dataset_id=orm_parca_dataset.id
-                ).model_dump(),
+                config=config.model_dump(),
             )
             session.add(orm_simulation)
             await session.flush()  # Ensure the ORM object is inserted and has an ID
@@ -562,9 +560,7 @@ class DatabaseServiceSQL(DatabaseService):
                 database_id=orm_simulation.id,
                 simulator_id=orm_simulator.id,
                 parca_dataset_id=orm_parca_dataset.id,
-                config=sim_request.experiment.to_config(
-                    simulator_hash=orm_simulator.git_commit_hash, parca_dataset_id=orm_parca_dataset.id
-                ),
+                config=config,
             )
             return simulation
 
