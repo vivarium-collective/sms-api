@@ -1,9 +1,10 @@
+import json
 from pathlib import Path
 
 import pytest
 
 from sms_api.analysis.models import AnalysisConfig
-from sms_api.config import get_settings
+from sms_api.config import REPO_ROOT, get_settings
 from sms_api.simulation.models import SimulationConfig
 
 
@@ -18,9 +19,9 @@ async def test_analysis_config() -> None:
 
 @pytest.mark.asyncio
 def test_load_simulation_config() -> None:
-    assets_dir = Path(get_settings().assets_dir)
-    config = SimulationConfig.from_file(fp=assets_dir / "sms_base_simulation_config.json")
-    sim_data_path = get_settings().slurm_base_path / "workspace" / "kb" / "simData.cPickle"
+    with open(f"{REPO_ROOT}/assets/sms_base_simulation_config.json") as f:
+        config = SimulationConfig(**json.load(f))
+    sim_data_path = get_settings().hpc_parca_base_path / "default" / "kb" / "simData.cPickle"
     expected_dump = {
         "experiment_id": "<PLACEHOLDER>",
         "sim_data_path": str(sim_data_path),

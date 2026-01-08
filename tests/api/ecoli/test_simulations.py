@@ -11,7 +11,7 @@ from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_slurmjob_name
-from sms_api.simulation.models import EcoliSimulationDTO, ExperimentRequest, SimulationConfig
+from sms_api.simulation.models import ExperimentRequest, Simulation, SimulationConfig
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 
@@ -58,7 +58,7 @@ async def test_list_simulations(
 async def test_run_simulation(
     base_router: str,
     experiment_request: ExperimentRequest,
-    ecoli_simulation: EcoliSimulationDTO,
+    ecoli_simulation: Simulation,
     database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
     ssh_session_service: SSHSessionService,
