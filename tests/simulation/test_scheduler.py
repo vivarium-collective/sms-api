@@ -22,12 +22,12 @@ from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.models import (
-    EcoliSimulation,
-    EcoliSimulationRequest,
     HpcRun,
     JobStatus,
     JobType,
     ParcaDatasetRequest,
+    Simulation,
+    SimulationRequest,
     WorkerEventMessagePayload,
 )
 
@@ -37,7 +37,7 @@ def is_ci_environment() -> bool:
     return os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
 
 
-async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> tuple[EcoliSimulation, SlurmJob, HpcRun]:
+async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> tuple[Simulation, SlurmJob, HpcRun]:
     latest_commit_hash = str(uuid.uuid4())
     repo_url = "https://github.com/some/repo"
     main_branch = "main"
@@ -49,7 +49,7 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config={"param1": 5})
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
-    simulation_request = EcoliSimulationRequest(
+    simulation_request = SimulationRequest(
         simulator=simulator,
         parca_dataset_id=parca_dataset.database_id,
         variant_config={"named_parameters": {"param1": 0.5, "param2": 0.5}},

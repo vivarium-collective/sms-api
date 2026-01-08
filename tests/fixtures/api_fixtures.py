@@ -26,9 +26,8 @@ from sms_api.config import REPO_ROOT, get_settings
 from sms_api.latest_commit import write_latest_commit
 from sms_api.simulation.hpc_utils import get_slurmjob_name
 from sms_api.simulation.models import (
-    EcoliSimulationDTO,
-    ExperimentMetadata,
     ExperimentRequest,
+    Simulation,
     SimulationConfig,
 )
 
@@ -105,12 +104,12 @@ async def simulation_config() -> SimulationConfig:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def ecoli_simulation() -> EcoliSimulationDTO:
+async def ecoli_simulation() -> Simulation:
     pytest_fixture = "pytest_fixture"
-    db_id = -1
-    return EcoliSimulationDTO(
+    return Simulation(
         database_id=-1,
-        name=pytest_fixture,
+        simulator_id=1,
+        parca_dataset_id=1,
         config=SimulationConfig(
             experiment_id=pytest_fixture,
             sim_data_path="/pytest/kb/simData.cPickle",
@@ -124,7 +123,6 @@ async def ecoli_simulation() -> EcoliSimulationDTO:
             emitter="parquet",
             emitter_arg={"outdir": "/pytest/api_outputs"},
         ),
-        metadata=ExperimentMetadata(root={"requester": f"{pytest_fixture}:{db_id}", "context": "pytest"}),
         last_updated=str(datetime.datetime.now()),
         job_name=get_slurmjob_name(experiment_id=pytest_fixture),
         job_id=randint(10000, 1000000),

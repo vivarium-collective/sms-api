@@ -10,12 +10,9 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from sms_api.analysis.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisDTO
 from sms_api.simulation.models import (
-    EcoliSimulationDTO,
-    ExperimentMetadata,
     HpcRun,
     JobStatus,
     JobType,
-    SimulationConfig,
     SimulatorVersion,
     WorkerEvent,
 )
@@ -127,8 +124,9 @@ class ORMSimulation(Base):
 
     simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
     parca_dataset_id: Mapped[int] = mapped_column(ForeignKey("parca_dataset.id"), nullable=False, index=True)
-    variant_config: Mapped[dict[str, dict[str, int | float | str]]] = mapped_column(JSONB, nullable=False)
-    variant_config_hash: Mapped[str] = mapped_column(nullable=False)
+    config: Mapped[dict[str, list[str] | bool | int | str | float | dict[str, int | float | str]]] = mapped_column(
+        JSONB, nullable=False
+    )
 
 
 class ORMWorkerEvent(Base):
@@ -208,33 +206,6 @@ class ORMAnalysis(Base):
             last_updated=self.last_updated,
             job_name=self.job_name,
             job_id=self.job_id,
-        )
-
-
-class ORMExperiment(Base):
-    """Used by the /ecoli router"""
-
-    __tablename__ = "ecoli_experiment"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(nullable=False)
-    config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    last_updated: Mapped[str] = mapped_column(nullable=False)
-    job_name: Mapped[str] = mapped_column(nullable=True)
-    job_id: Mapped[int] = mapped_column(nullable=True)
-    experiment_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=True)
-
-    def to_dto(self) -> EcoliSimulationDTO:
-        config_dto = SimulationConfig(**self.config)
-        metadata = ExperimentMetadata(root=self.experiment_metadata)
-        return EcoliSimulationDTO(
-            database_id=self.id,
-            name=self.name,
-            config=config_dto,
-            last_updated=self.last_updated,
-            job_name=self.job_name,
-            job_id=self.job_id,
-            metadata=metadata,
         )
 
 

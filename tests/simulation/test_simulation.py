@@ -8,7 +8,7 @@ import pytest
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
-from sms_api.simulation.models import EcoliSimulationRequest, JobType, ParcaDatasetRequest, SimulatorVersion
+from sms_api.simulation.models import JobType, ParcaDatasetRequest, SimulationRequest, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 main_branch = "messages"
@@ -72,7 +72,7 @@ async def test_simulate(
     assert slurm_job_parca.job_id == parca_slurmjobid
     assert slurm_job_parca.name.startswith(f"parca-{latest_commit_hash}-")
 
-    simulation_request = EcoliSimulationRequest(
+    simulation_request = SimulationRequest(
         simulator=simulator,
         parca_dataset_id=parca_dataset.database_id,
         variant_config={"named_parameters": {"param1": 0.5, "param2": 0.5}},

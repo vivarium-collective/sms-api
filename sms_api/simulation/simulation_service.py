@@ -28,10 +28,9 @@ from sms_api.simulation.hpc_utils import (
     get_vEcoli_repo_dir,
 )
 from sms_api.simulation.models import (
-    EcoliSimulation,
     ParcaDataset,
+    Simulation,
     SimulationConfig,
-    SimulationConfiguration,
     SimulatorVersion,
 )
 
@@ -60,7 +59,7 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
+        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
         pass
 
@@ -74,9 +73,14 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def submit_experiment_job(
-        self, config: SimulationConfig, simulation_name: str, simulator_hash: str, logger: logging.Logger
+        self, config: SimulationConfig, simulator_hash: str, logger: logging.Logger
     ) -> tuple[str, int]:
         pass
+
+
+def capture_slurm_script(script: str, fp: str) -> None:
+    with open(fp, "w") as f:
+        f.write(script)
 
 
 class SimulationServiceHpc(SimulationService):
@@ -113,7 +117,6 @@ class SimulationServiceHpc(SimulationService):
         slurm_job_name = f"build-image-{simulator_version.git_commit_hash}-{random_suffix}"
 
         slurm_log_file = get_slurm_log_file(slurm_job_name=slurm_job_name)
-        slurm_err_file = str(slurm_log_file).replace(".out", ".err")
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
         remote_vEcoli_path = get_vEcoli_repo_dir(simulator_version=simulator_version)
         apptainer_image_path = get_apptainer_image_file(simulator_version=simulator_version)
@@ -137,7 +140,7 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --mail-type=ALL
                     {nodelist_clause}
                     #SBATCH -o {slurm_log_file!s}
-                    #SBATCH -e {slurm_err_file}
+                    #SBATCH -e {slurm_log_file!s}
 
                     set -eu
                     env
@@ -274,6 +277,7 @@ class SimulationServiceHpc(SimulationService):
                         echo "Repository moved to $FINAL_REPO_PATH"
                     fi
                     """)
+                capture_slurm_script(script_content, "assets/build_image.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -292,7 +296,6 @@ class SimulationServiceHpc(SimulationService):
         slurm_job_name = f"parca-{simulator_version.git_commit_hash}-{parca_dataset.database_id}-{random_suffix}"
 
         slurm_log_file = get_slurm_log_file(slurm_job_name=slurm_job_name)
-        slurm_err_file = str(slurm_log_file).replace(".out", ".err")
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
         parca_remote_path = get_parca_dataset_dir(parca_dataset=parca_dataset)
         remote_vEcoli_repo_path = get_vEcoli_repo_dir(simulator_version=simulator_version)
@@ -317,7 +320,7 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --mail-type=ALL
                     {nodelist_clause}
                     #SBATCH -o {slurm_log_file!s}
-                    #SBATCH -e {slurm_err_file}
+                    #SBATCH -e {slurm_log_file!s}
 
                     set -e
                     # env
@@ -348,6 +351,7 @@ class SimulationServiceHpc(SimulationService):
 
                     echo "Parca run completed. data saved to {parca_remote_path!s}."
                     """)
+                capture_slurm_script(script_content, "assets/parca.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -358,20 +362,15 @@ class SimulationServiceHpc(SimulationService):
 
     @override
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: EcoliSimulation, database_service: DatabaseService, correlation_id: str
+        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
         settings = get_settings()
         if database_service is None:
-            raise RuntimeError("DatabaseService is not available. Cannot submit EcoliSimulation job.")
+            raise RuntimeError("DatabaseService is not available. Cannot submit Simulation job.")
 
-        if ecoli_simulation.sim_request is None:
-            raise ValueError("EcoliSimulation must have a sim_request set to submit a job.")
-
-        parca_dataset = await database_service.get_parca_dataset(
-            parca_dataset_id=ecoli_simulation.sim_request.parca_dataset_id
-        )
+        parca_dataset = await database_service.get_parca_dataset(parca_dataset_id=ecoli_simulation.parca_dataset_id)
         if parca_dataset is None:
-            raise ValueError(f"ParcaDataset with ID {ecoli_simulation.sim_request.parca_dataset_id} not found.")
+            raise ValueError(f"ParcaDataset with ID {ecoli_simulation.parca_dataset_id} not found.")
 
         slurm_service = SlurmService()
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
@@ -412,8 +411,10 @@ class SimulationServiceHpc(SimulationService):
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
                     {qos_clause}
-                    #SBATCH --output={slurm_log_file}
+                    #SBATCH -o {slurm_log_file!s}
+                    #SBATCH -e {slurm_log_file!s}
                     {nodelist_clause}
+
 
                     set -e
                     # env
@@ -494,24 +495,19 @@ class SimulationServiceHpc(SimulationService):
 
     @override
     async def submit_experiment_job(
-        self, config: SimulationConfig, simulation_name: str, simulator_hash: str, logger: logging.Logger
+        self, config: SimulationConfig, simulator_hash: str, logger: logging.Logger
     ) -> tuple[str, int]:
         """Used by the /ecoli router"""
 
-        async def _dispatch(
-            config: SimulationConfig, simulation_name: str, simulator_hash: str, logger: logging.Logger
-        ) -> tuple[str, int]:
+        async def _dispatch(config: SimulationConfig, simulator_hash: str, logger: logging.Logger) -> tuple[str, int]:
             experiment_id = config.experiment_id
             slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
             slurm_log_file = get_settings().slurm_base_path / "prod" / "htclogs" / f"{slurmjob_name}.out"
 
             slurm_script = _slurm_script(
-                slurm_log_file=slurm_log_file,
-                slurm_job_name=slurmjob_name,
-                latest_hash=simulator_hash,
-                config=config,
-                simulation_name=simulation_name,
+                slurm_log_file=slurm_log_file, slurm_job_name=slurmjob_name, latest_hash=simulator_hash, config=config
             )
+            capture_slurm_script(slurm_script, "assets/simulation.sbatch")
 
             slurmjob_id = await _submit_script(
                 config=config,
@@ -526,27 +522,26 @@ class SimulationServiceHpc(SimulationService):
             slurm_job_name: str,
             latest_hash: str,
             config: SimulationConfig,
-            simulation_name: str,
         ) -> str:
             remote_workspace_dir = get_settings().slurm_base_path / "workspace"
             vecoli_dir = remote_workspace_dir / "vEcoli"
-            # config_dir = vecoli_dir / "configs"
-            # conf = config.model_dump_json() or "{}"
-            qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
-            nodelist_clause = (
-                f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
-            )
+            env = get_settings()
+
+            qos_clause = f"#SBATCH --qos={env.slurm_qos}" if env.slurm_qos else ""
+            nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
 
             return dedent(f"""\
                 #!/bin/bash
                 #SBATCH --job-name={slurm_job_name}
-                #SBATCH --time=30:00
-                #SBATCH --cpus-per-task {MAX_SIMULATION_CPUS}
+                #SBATCH --time=1:00:00
+                #SBATCH --cpus-per-task 3
                 #SBATCH --mem=8GB
-                #SBATCH --partition={get_settings().slurm_partition}
+                #SBATCH --partition={env.slurm_partition}
                 {qos_clause}
-                #SBATCH --output={slurm_log_file!s}
+                #SBATCH --mail-type=ALL
                 {nodelist_clause}
+                #SBATCH -o {slurm_log_file!s}
+                #SBATCH -e {slurm_log_file!s}
 
                 set -e
 
@@ -598,7 +593,7 @@ class SimulationServiceHpc(SimulationService):
                 )
                 return slurm_jobid
 
-        return await _dispatch(config, simulation_name, simulator_hash, logger)
+        return await _dispatch(config, simulator_hash=simulator_hash, logger=logger)
 
     @override
     async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
@@ -625,7 +620,7 @@ def simulation_slurm_script(
     experiment_id: str,
     settings: Settings | None = None,
     logger: logging.Logger | None = None,
-    config: SimulationConfiguration | None = None,
+    config: SimulationConfig | None = None,
 ) -> str:
     env = settings or get_settings()
     base_path = env.slurm_base_path
@@ -650,7 +645,8 @@ def simulation_slurm_script(
         #SBATCH --mem=8GB
         #SBATCH --partition={env.slurm_partition}
         {qos_clause}
-        #SBATCH --output={slurm_log_file!s}
+        #SBATCH -o {slurm_log_file!s}
+        #SBATCH -e {slurm_log_file!s}
         {nodelist_clause}
 
         set -e
@@ -761,7 +757,7 @@ async def submit_vecoli_job(
     simulator_hash: str,
     experiment_id: str,
     logger: logging.Logger | None = None,
-    config: SimulationConfiguration | None = None,
+    config: SimulationConfig | None = None,
 ) -> int:
     experiment_dir = get_experiment_dir(experiment_id=experiment_id)
     experiment_path_parent = experiment_dir.parent

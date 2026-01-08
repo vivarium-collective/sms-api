@@ -7,10 +7,10 @@ import pytest
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
-    EcoliSimulation,
-    EcoliSimulationRequest,
     ParcaDatasetRequest,
+    Simulation,
     SimulationConfig,
+    SimulationRequest,
 )
 
 
@@ -33,7 +33,7 @@ async def test_save_request_to_mongo(database_service: DatabaseServiceSQL) -> No
     )
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
-    ecoli_sim_request = EcoliSimulationRequest(
+    ecoli_sim_request = SimulationRequest(
         simulator=simulator_version,
         parca_dataset_id=parca_dataset.database_id,
         variant_config={
@@ -45,7 +45,7 @@ async def test_save_request_to_mongo(database_service: DatabaseServiceSQL) -> No
     )
 
     # insert a document into the database
-    sim: EcoliSimulation = await database_service.insert_simulation(ecoli_sim_request)
+    sim: Simulation = await database_service.insert_simulation(ecoli_sim_request)
     assert sim.database_id is not None
 
     # reread the document from the database
