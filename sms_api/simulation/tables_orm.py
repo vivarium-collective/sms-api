@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from sms_api.analysis.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisDTO
+from sms_api.common.models import JobStatus
 from sms_api.simulation.models import (
     HpcRun,
-    JobStatus,
     JobType,
     SimulatorVersion,
     WorkerEvent,
@@ -111,7 +111,7 @@ class ORMParcaDataset(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
     simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
-    parca_config: Mapped[dict[str, int | float | str]] = mapped_column(JSONB, nullable=False)
+    parca_config: Mapped[dict[str, int | float | str | bool | None]] = mapped_column(JSONB, nullable=False)
     parca_config_hash: Mapped[str] = mapped_column(nullable=False)
     remote_archive_path: Mapped[Optional[str]] = mapped_column(nullable=True)
 

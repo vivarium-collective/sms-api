@@ -14,8 +14,10 @@ from tests.fixtures.api_fixtures import (  # noqa: F401
     in_memory_api_client,
     latest_commit_hash,
     local_base_url,
+    parca_options,
     ptools_analysis_request,
-    simulation_config,
+    workflow_config,
+    workflow_request_payload,
     workspace_image_hash,
 )
 from tests.fixtures.data_fixtures import analysis_service, data_fixture, simulation_data  # noqa: F401

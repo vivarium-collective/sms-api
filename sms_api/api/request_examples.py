@@ -11,15 +11,34 @@ For the endpoint: /core/simulator/versions: core_simulator_versions
 Then, add that func to the list within the examples dict comprehension below!
 """
 
+import datetime
 import random
+from typing import Literal, cast
 
-from sms_api.analysis.models import AnalysisDomain, ExperimentAnalysisRequest, PtoolsAnalysisConfig, PtoolsAnalysisType
+from sms_api.analysis.models import (
+    AnalysisConfigOptions,
+    AnalysisDomain,
+    ExperimentAnalysisRequest,
+    PtoolsAnalysisConfig,
+    PtoolsAnalysisType,
+)
 from sms_api.common.gateway.utils import generate_analysis_request
 from sms_api.common.utils import unique_id
-from sms_api.simulation.models import ExperimentRequest, ParcaDatasetRequest, SimulationRequest, SimulatorVersion
+from sms_api.simulation.models import (
+    ParcaDatasetRequest,
+    ParcaOptions,
+    SimulationConfig,
+    SimulationRequest,
+    Simulator,
+    SimulatorVersion,
+)
 
 DEFAULT_NUM_SEEDS = 30
 DEFAULT_NUM_GENERATIONS = 4
+
+DEFAULT_SIMULATOR = Simulator(
+    git_commit_hash="fe3fbcb", git_repo_url="https://github.com/CovertLab/vEcoli", git_branch="master"
+)
 
 
 def get_test_ptools() -> ExperimentAnalysisRequest:
@@ -115,20 +134,64 @@ def get_analysis_api_multiseed() -> ExperimentAnalysisRequest:
     )
 
 
-def get_simulation_request(sim_id: str, gens: int, seeds: int) -> ExperimentRequest:
+def get_simulation_base() -> SimulationRequest:
     sim_id = unique_id("sms_experiment")
-    return ExperimentRequest(
-        experiment_id=sim_id,
-        simulation_name=sim_id,
-        generations=gens,
-        n_init_sims=seeds,
+    return SimulationRequest(simulator=DEFAULT_SIMULATOR, config=SimulationConfig(experiment_id=sim_id))
+
+
+def get_parca_base() -> ParcaDatasetRequest:
+    return ParcaDatasetRequest(
+        simulator_version=SimulatorVersion(
+            git_commit_hash=DEFAULT_SIMULATOR.git_commit_hash,
+            git_repo_url=DEFAULT_SIMULATOR.git_repo_url,
+            git_branch=DEFAULT_SIMULATOR.git_branch,
+            database_id=25,
+            created_at=datetime.datetime.now(),
+        ),
+        parca_config=ParcaOptions(),
     )
 
 
-def get_simulation_base() -> SimulationRequest:
-    sim_id = unique_id("sms_experiment")
-    experiment = get_simulation_request(sim_id=sim_id, gens=DEFAULT_NUM_GENERATIONS, seeds=DEFAULT_NUM_SEEDS)
-    return SimulationRequest(simulator_id=1, parca_dataset_id=1, experiment=experiment)
+OMICS_ANALYSIS_MODULE_NAMES = cast(
+    list[Literal["ptools_rxns", "ptools_rna", "ptools_proteins"]], ["ptools_rxns", "ptools_rna", "ptools_proteins"]
+)
+
+
+class OmicsAnalysisModuleConfig(
+    dict[Literal["ptools_rxns", "ptools_rna", "ptools_proteins"], dict[Literal["n_tp"], int]]
+):
+    pass
+
+
+def omics_analysis_config(n_tp: int) -> OmicsAnalysisModuleConfig:
+    """
+    Expected output (for example n_tp = 8):
+        {
+          "ptools_rxns": {
+            "n_tp": 8
+          },
+          "ptools_rna": {
+            "n_tp": 8
+          },
+          "ptools_proteins": {
+            "n_tp": 8
+          }
+        }
+    :param n_tp:
+    :return:
+    """
+    time_window_spec = cast(dict[Literal["n_tp"], int], {"n_tp": n_tp})
+    return OmicsAnalysisModuleConfig(
+        zip(OMICS_ANALYSIS_MODULE_NAMES, [time_window_spec for _ in range(len(OMICS_ANALYSIS_MODULE_NAMES))])
+    )
+
+
+def analysis_options_omics(n_tp: int) -> AnalysisConfigOptions:
+    analysis_domains = ["single", "multigeneration", "multiseed"]
+    return AnalysisConfigOptions(
+        cpus=3,
+        **dict(zip(analysis_domains, [omics_analysis_config(n_tp) for _ in range(len(analysis_domains))])),  # type: ignore[arg-type]
+    )
 
 
 # example analyses
@@ -145,15 +208,4 @@ analysis_test_ptools = get_test_ptools()
 
 base_simulation = get_simulation_base()
 
-base_parca = ParcaDatasetRequest(
-    simulator_version=SimulatorVersion(
-        **{
-            "git_commit_hash": "540e426",
-            "git_repo_url": "https://github.com/vivarium-collective/vEcoli",
-            "git_branch": "messages",
-            "database_id": 25,
-            "created_at": "2026-01-05T19:21:20.866705",
-        }
-    ),
-    parca_config={},
-)
+base_parca = get_parca_base()

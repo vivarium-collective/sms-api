@@ -32,6 +32,17 @@ class StrEnumBase(StrEnum):
         return sorted(vals) if sort else vals
 
 
+class JobStatus(StrEnumBase):
+    """Shared job status enum for simulations, analyses, and other HPC jobs."""
+
+    WAITING = "waiting"
+    PENDING = "pending"
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class DataId(BaseModel):
     scope: str
     label: str

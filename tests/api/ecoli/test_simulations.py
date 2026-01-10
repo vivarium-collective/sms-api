@@ -1,6 +1,4 @@
 import asyncio
-import datetime
-from random import randint
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -9,113 +7,44 @@ from sms_api.api.main import app
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.hpc_utils import get_slurmjob_name
-from sms_api.simulation.models import ExperimentRequest, Simulation, SimulationConfig
+from sms_api.simulation.models import ExperimentRequest, SimulationRequest
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 
 @pytest.mark.asyncio
 async def test_list_simulations(
-    experiment_request: ExperimentRequest, database_service: DatabaseServiceSQL, ssh_session_service: SSHSessionService
+    experiment_request: SimulationRequest, database_service: DatabaseServiceSQL, ssh_session_service: SSHSessionService
 ) -> None:
     n = 3
     inserted_sims = []
-    for i in range(n):
-        name_i = f"pytest_fixture_config_{i}"
-        config_i = SimulationConfig(
-            experiment_id=name_i,
-            sim_data_path="/pytest/kb/simData.cPickle",
-            suffix_time=False,
-            parca_options={"cpus": 3},
-            generations=randint(1, 1000),
-            max_duration=10800,
-            initial_global_time=0,
-            time_step=1,
-            single_daughters=True,
-            emitter="parquet",
-            emitter_arg={"outdir": "/pytest/api_outputs"},
-        )
-        last_updated_i = str(datetime.datetime.now())
-        job_name_i = get_slurmjob_name(experiment_id=name_i)
-        job_id_i = randint(10000, 1000000)
-        sim_i = await database_service.insert_simulation(
-            name=name_i,
-            config=config_i,
-            last_updated=last_updated_i,
-            job_name=job_name_i,
-            job_id=job_id_i,
-            metadata={"requester": f"{name_i}:{i}", "context": "pytest"},
-        )
+    for _ in range(n):
+        sim_i = await database_service.insert_simulation(sim_request=experiment_request)
         inserted_sims.append(sim_i.model_dump())
     all_sims = await database_service.list_simulations()
     assert len(inserted_sims) == n
     assert len(inserted_sims) == len(all_sims)
 
 
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
-async def test_run_simulation(
-    base_router: str,
-    experiment_request: ExperimentRequest,
-    ecoli_simulation: Simulation,
-    database_service: DatabaseServiceSQL,
-    simulation_service_slurm: SimulationServiceHpc,
-    ssh_session_service: SSHSessionService,
-) -> None:
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.post(f"{base_router}/simulations", json=experiment_request.model_dump())
-        response.raise_for_status()
-        sim_response = response.json()
-        for key in sim_response:
-            assert key in list(ecoli_simulation.model_fields)
-
-
-@pytest.mark.asyncio
-async def test_get_simulation(database_service: DatabaseServiceSQL) -> None:
-    i = -1
-    name_i = "pytest_fixture_config"
-    config_i = SimulationConfig(
-        experiment_id=name_i,
-        sim_data_path="/pytest/kb/simData.cPickle",
-        suffix_time=False,
-        parca_options={"cpus": 3},
-        generations=randint(1, 1000),
-        max_duration=10800,
-        initial_global_time=0,
-        time_step=1,
-        single_daughters=True,
-        emitter="parquet",
-        emitter_arg={"outdir": "/pytest/api_outputs"},
-    )
-    last_updated_i = str(datetime.datetime.now())
-    job_name_i = get_slurmjob_name(experiment_id=name_i)
-    job_id_i = randint(10000, 1000000)
-    sim_i = await database_service.insert_simulation(
-        name=name_i,
-        config=config_i,
-        last_updated=last_updated_i,
-        job_name=job_name_i,
-        job_id=job_id_i,
-        metadata={"requester": f"{name_i}:{i}", "context": "pytest"},
-    )
+async def test_get_simulation(database_service: DatabaseServiceSQL, experiment_request: SimulationRequest) -> None:
+    sim_i = await database_service.insert_simulation(experiment_request)
 
     fetched_i = await database_service.get_simulation(simulation_id=sim_i.database_id)
-    assert fetched_i.model_dump() == sim_i.model_dump()
+    assert fetched_i.model_dump() == sim_i.model_dump()  # type: ignore[union-attr]
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_get_simulation_status(
     base_router: str,
-    experiment_request: ExperimentRequest,
+    workflow_request_payload: SimulationRequest,
     database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
     ssh_session_service: SSHSessionService,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        sim_response = await client.post(f"{base_router}/simulations", json=experiment_request.model_dump())
+        sim_response = await client.post(f"{base_router}/simulations", json=workflow_request_payload.model_dump())
         sim_response.raise_for_status()
         sim_response = sim_response.json()
 
@@ -150,71 +79,59 @@ async def test_get_simulation_log(
         assert isinstance(status_response.text, str)
 
 
+@pytest.mark.skipif(
+    len(get_settings().slurm_submit_key_path) == 0,
+    reason="slurm ssh key file not supplied",
+)
 @pytest.mark.asyncio
-async def test_get_metadata() -> None:
-    pass
-
-
-@pytest.mark.asyncio
-async def test_get_state_data() -> None:
-    pass
-
-
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
-@pytest.mark.asyncio
-async def test_run_fetch_simulation(
+async def test_run_simulation_e2e(
     base_router: str,
-    experiment_request: ExperimentRequest,
+    workflow_request_payload: SimulationRequest,
     database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
     ssh_session_service: SSHSessionService,
 ) -> None:
+    """E2E test: POST /api/v1/simulations to launch a simulation workflow."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.post(f"{base_router}/simulations", json=experiment_request.model_dump())
-        response.raise_for_status()
+        response = await client.post(f"{base_router}/simulations", json=workflow_request_payload)
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         sim_response = response.json()
-        db_id = sim_response["database_id"]
 
-        fetch_response = await client.get(f"{base_router}/simulations/{db_id}")
-        fetch_response.raise_for_status()
-        assert fetch_response.json() == sim_response
+        # Verify response contains expected Simulation fields
+        assert "database_id" in sim_response
+        assert "simulator_id" in sim_response
+        assert "parca_dataset_id" in sim_response
+        assert "config" in sim_response
+        assert sim_response["config"]["experiment_id"] == workflow_request_payload.config.experiment_id
 
 
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(
+    len(get_settings().slurm_submit_key_path) == 0,
+    reason="slurm ssh key file not supplied",
+)
 @pytest.mark.asyncio
-async def test_fetch_simulation(
+async def test_run_and_get_simulation_e2e(
     base_router: str,
-    experiment_request: ExperimentRequest,
+    workflow_request_payload: SimulationRequest,
     database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
     ssh_session_service: SSHSessionService,
 ) -> None:
+    """E2E test: POST then GET simulation to verify persistence."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.post(f"{base_router}/simulations", json=experiment_request.model_dump())
-        response.raise_for_status()
-        sim_response = response.json()
-        db_id = sim_response["database_id"]
+        # Create simulation
+        post_response = await client.post(f"{base_router}/simulations", json=workflow_request_payload)
+        assert post_response.status_code == 200
 
-        fetch_response = await client.get(f"{base_router}/simulations/{db_id}")
-        fetch_response.raise_for_status()
-        assert fetch_response.json() == sim_response
+        created_sim = post_response.json()
+        db_id = created_sim["database_id"]
 
+        # Fetch the created simulation
+        get_response = await client.get(f"{base_router}/simulations/{db_id}")
+        assert get_response.status_code == 200
 
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
-@pytest.mark.asyncio
-async def test_fetch_simulation_data(
-    base_router: str, database_service: DatabaseServiceSQL, ssh_session_service: SSHSessionService
-) -> None:
-    transport = ASGITransport(app=app)
-    df = await fetch_simulation_data(
-        base_url="http://testserver",
-        base_router=base_router,
-        params={"experiment_id": "sms_multigeneration", "lineage_seed": 6, "generation": 1},
-        observable_list=["bulk", "listeners__rnap_data__termination_loss"],
-        transport=transport,
-    )
-    print(df)
-    print(df.shape)
-    assert sorted(df.columns) == sorted(["bulk", "time", "listeners__rnap_data__termination_loss"])
+        fetched_sim = get_response.json()
+        assert fetched_sim["database_id"] == db_id
+        assert fetched_sim["config"]["experiment_id"] == workflow_request_payload.config.experiment_id

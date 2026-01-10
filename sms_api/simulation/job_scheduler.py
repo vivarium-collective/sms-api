@@ -5,9 +5,10 @@ from async_lru import alru_cache
 
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
+from sms_api.common.models import JobStatus
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import JobStatus, WorkerEvent, WorkerEventMessagePayload
+from sms_api.simulation.models import WorkerEvent, WorkerEventMessagePayload
 
 logger = logging.getLogger(__name__)
 

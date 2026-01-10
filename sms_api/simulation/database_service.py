@@ -14,6 +14,7 @@ from sms_api.simulation.models import (
     JobType,
     ParcaDataset,
     ParcaDatasetRequest,
+    ParcaOptions,
     Simulation,
     SimulationConfig,
     SimulationRequest,
@@ -129,7 +130,7 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def insert_simulation(self, sim_request: SimulationRequest, config: SimulationConfig) -> Simulation:
+    async def insert_simulation(self, sim_request: SimulationRequest) -> Simulation:
         pass
 
     @abstractmethod
@@ -203,11 +204,11 @@ class DatabaseServiceSQL(DatabaseService):
                 return ORMHpcRun.jobref_parca_dataset_id
             case JobType.SIMULATION:
                 return ORMHpcRun.jobref_simulation_id
-        return
+        return None
 
     async def _get_orm_hpcrun_by_ref(self, session: AsyncSession, ref_id: int, job_type: JobType) -> ORMHpcRun | None:
         reference = self._get_job_type_ref(job_type)
-        stmt1 = select(ORMHpcRun).where(reference == ref_id).limit(1)
+        stmt1 = select(ORMHpcRun).where(reference == ref_id).limit(1)  # type: ignore[arg-type]
         result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
 
@@ -410,7 +411,7 @@ class DatabaseServiceSQL(DatabaseService):
                 raise Exception(f"Simulator with id {simulator_id} not found in the database")
             orm_parca_dataset = ORMParcaDataset(
                 simulator_id=orm_simulator.id,
-                parca_config=parca_dataset_request.parca_config,
+                parca_config=parca_dataset_request.parca_config.model_dump(),
                 parca_config_hash=parca_dataset_request.config_hash,
             )
             session.add(orm_parca_dataset)
@@ -426,7 +427,7 @@ class DatabaseServiceSQL(DatabaseService):
             )
             parca_dataset_request = ParcaDatasetRequest(
                 simulator_version=simulator_version,
-                parca_config=orm_parca_dataset.parca_config,
+                parca_config=ParcaOptions(**orm_parca_dataset.parca_config),  # type: ignore[arg-type]
             )
             parca_dataset = ParcaDataset(
                 database_id=orm_parca_dataset_id,
@@ -452,7 +453,7 @@ class DatabaseServiceSQL(DatabaseService):
                 database_id=orm_parca_dataset.id,
                 parca_dataset_request=ParcaDatasetRequest(
                     simulator_version=simulator_version,
-                    parca_config=orm_parca_dataset.parca_config,
+                    parca_config=ParcaOptions(**orm_parca_dataset.parca_config),  # type: ignore[arg-type]
                 ),
                 remote_archive_path=orm_parca_dataset.remote_archive_path,
             )
@@ -484,7 +485,7 @@ class DatabaseServiceSQL(DatabaseService):
                         database_id=orm_parca_dataset.id,
                         parca_dataset_request=ParcaDatasetRequest(
                             simulator_version=simulator_version,
-                            parca_config=orm_parca_dataset.parca_config,
+                            parca_config=ParcaOptions(**orm_parca_dataset.parca_config),  # type: ignore[arg-type]
                         ),
                         remote_archive_path=orm_parca_dataset.remote_archive_path,
                     )
@@ -530,28 +531,51 @@ class DatabaseServiceSQL(DatabaseService):
             return worker_events
 
     @override
-    async def insert_simulation(self, sim_request: SimulationRequest, config: SimulationConfig) -> Simulation:
+    async def insert_simulation(self, sim_request: SimulationRequest) -> Simulation:
         async with self.async_sessionmaker() as session, session.begin():
-            orm_simulator: ORMSimulator | None = await self._get_orm_simulator(
-                session, simulator_id=sim_request.simulator_id
-            )
-            if orm_simulator is None:
-                raise Exception(f"Simulator with id {sim_request.simulator_id} not found in the database")
+            simulator_id = sim_request.simulator_id
+            orm_simulator = None
+            if simulator_id is not None:
+                orm_simulator = await self._get_orm_simulator(session, simulator_id)
+            if orm_simulator is None and sim_request.simulator is not None:
+                simulators = await self.list_simulators()
+                matching_sim: SimulatorVersion | None = next(
+                    (
+                        sim
+                        for sim in simulators
+                        if sim.git_branch == sim_request.simulator.git_branch
+                        and sim.git_repo_url == sim_request.simulator.git_repo_url
+                        and sim.git_commit_hash == sim_request.simulator.git_commit_hash
+                    ),
+                    None,
+                )
+                if matching_sim is not None:
+                    orm_simulator = await self._get_orm_simulator(session, matching_sim.database_id)
 
+            if orm_simulator is None:
+                raise Exception(f"Simulator specified in request: {sim_request} not found in the database")
+            simulator_id = orm_simulator.id
+
+            parca_id = sim_request.parca_dataset_id
+            if parca_id is None:
+                raise Exception(
+                    f"Parca Dataset with not found in the database with reference to simulator: {simulator_id}"
+                )
             orm_parca_dataset: ORMParcaDataset | None = await self._get_orm_parca_dataset(
-                session, parca_dataset_id=sim_request.parca_dataset_id
+                session, parca_dataset_id=parca_id
             )
             if orm_parca_dataset is None:
                 raise Exception(f"Parca Dataset with id {sim_request.parca_dataset_id} not found in the database")
-
             if orm_parca_dataset.simulator_id != orm_simulator.id:
                 raise Exception(
                     f"Parca Dataset simulator mismatch, id={orm_simulator.id} and {sim_request.simulator_id}"
                 )
+
+            sim_config = sim_request.config
             orm_simulation = ORMSimulation(
-                simulator_id=orm_simulator.id,
+                simulator_id=simulator_id,
                 parca_dataset_id=orm_parca_dataset.id,
-                config=config.model_dump(),
+                config=sim_config.model_dump(),
             )
             session.add(orm_simulation)
             await session.flush()  # Ensure the ORM object is inserted and has an ID
@@ -559,8 +583,8 @@ class DatabaseServiceSQL(DatabaseService):
             simulation = Simulation(
                 database_id=orm_simulation.id,
                 simulator_id=orm_simulator.id,
-                parca_dataset_id=orm_parca_dataset.id,
-                config=config,
+                parca_dataset_id=sim_request.parca_dataset_id,  # type: ignore[arg-type]
+                config=sim_config,
             )
             return simulation
 
@@ -600,7 +624,7 @@ class DatabaseServiceSQL(DatabaseService):
                     database_id=orm_simulation.id,
                     simulator_id=orm_simulation.simulator_id,
                     parca_dataset_id=orm_simulation.parca_dataset_id,
-                    config=SimulationConfig(**orm_simulation.config),
+                    config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
                 )
                 simulations.append(simulation)
 

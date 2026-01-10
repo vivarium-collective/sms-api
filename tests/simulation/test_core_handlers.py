@@ -1,8 +1,9 @@
 import pytest
 
 from sms_api.common.handlers.simulators import upload_simulator
+from sms_api.common.models import JobStatus
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.models import JobStatus, JobType
+from sms_api.simulation.models import JobType
 from tests.fixtures.simulation_service_mocks import SimulationServiceMockCloneAndBuild
 
 

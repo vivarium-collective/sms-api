@@ -30,36 +30,36 @@ paths:
             schema:
               $ref: '#/components/schemas/SimulationRequest'
               default:
-                simulator_id: 1
-                parca_dataset_id: 1
-                experiment:
-                  experiment_id: sms_experiment_3224_20260108
-                  simulation_name: sms_experiment_3224_20260108
-                  metadata: {}
-                  run_parca: true
-                  generations: 4
-                  n_init_sims: 30
-                  lineage_seed: 3
+                config:
+                  experiment_id: sms_experiment_7b18_20260109
+                  parca_options:
+                    cpus: 3
+                    outdir: /projects/SMS/alex/sims
+                    operons: true
+                    ribosome_fitting: true
+                    remove_rrna_operons: false
+                    remove_rrff: false
+                    stable_rrna: false
+                    new_genes: 'off'
+                    debug_parca: false
+                    save_intermediates: false
+                    intermediates_directory: ''
+                    variable_elongation_transcription: true
+                    variable_elongation_translation: false
+                  suffix_time: false
+                  generations: 1
+                  n_init_sims: 1
                   max_duration: 10800.0
                   initial_global_time: 0.0
                   time_step: 1.0
                   single_daughters: true
-                  variants: {}
-                  analysis_options: {}
-                  division_variable: []
-                  add_processes: []
-                  exclude_processes: []
-                  processes: []
-                  process_configs: {}
-                  topology: {}
-                  engine_process_reports: []
-                  emit_paths: []
-                  inherit_from: []
-                  spatial_environment_config: {}
-                  swap_processes: {}
-                  flow: {}
-                  initial_state_overrides: []
-                  initial_state: {}
+                  emitter: parquet
+                  emitter_arg:
+                    out_dir: /projects/SMS/alex/sims
+                simulator:
+                  git_commit_hash: fe3fbcb
+                  git_repo_url: https://github.com/CovertLab/vEcoli
+                  git_branch: master
       responses:
         '200':
           description: Successful Response
@@ -94,7 +94,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Simulation'
+                anyOf:
+                - $ref: '#/components/schemas/Simulation'
+                - type: 'null'
+                title: Response Get-Ecoli-Simulation
         '422':
           description: Validation Error
           content:
@@ -121,31 +124,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SimulationRun'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/simulations/{id}/log:
-    post:
-      tags:
-      - Simulations
-      summary: Get the simulation log record of a given experiment
-      operationId: get-ecoli-simulation-log
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          title: Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
         '422':
           description: Validation Error
           content:
@@ -478,12 +456,25 @@ paths:
               $ref: '#/components/schemas/ParcaDatasetRequest'
               default:
                 simulator_version:
-                  git_commit_hash: 540e426
-                  git_repo_url: https://github.com/vivarium-collective/vEcoli
-                  git_branch: messages
+                  git_commit_hash: fe3fbcb
+                  git_repo_url: https://github.com/CovertLab/vEcoli
+                  git_branch: master
                   database_id: 25
-                  created_at: '2026-01-05T19:21:20.866705'
-                parca_config: {}
+                  created_at: '2026-01-09T19:14:02.252504'
+                parca_config:
+                  cpus: 3
+                  outdir: /projects/SMS/alex/sims
+                  operons: true
+                  ribosome_fitting: true
+                  remove_rrna_operons: false
+                  remove_rrff: false
+                  stable_rrna: false
+                  new_genes: 'off'
+                  debug_parca: false
+                  save_intermediates: false
+                  intermediates_directory: ''
+                  variable_elongation_transcription: true
+                  variable_elongation_translation: false
       responses:
         '200':
           description: Successful Response
@@ -701,7 +692,7 @@ components:
           type: integer
           title: Id
         status:
-          $ref: '#/components/schemas/sms_api__analysis__models__JobStatus'
+          $ref: '#/components/schemas/JobStatus'
       type: object
       required:
       - id
@@ -808,275 +799,6 @@ components:
       required:
       - experiment_id
       title: ExperimentAnalysisRequest
-    ExperimentRequest:
-      properties:
-        experiment_id:
-          type: string
-          title: Experiment Id
-        simulation_name:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Simulation Name
-        metadata:
-          additionalProperties: true
-          type: object
-          title: Metadata
-          default: {}
-        run_parca:
-          type: boolean
-          title: Run Parca
-          default: true
-        generations:
-          type: integer
-          title: Generations
-          default: 2
-        n_init_sims:
-          type: integer
-          title: N Init Sims
-          default: 1
-        lineage_seed:
-          type: integer
-          title: Lineage Seed
-          default: 3
-        max_duration:
-          type: number
-          title: Max Duration
-          default: 10800.0
-        initial_global_time:
-          type: number
-          title: Initial Global Time
-          default: 0.0
-        time_step:
-          type: number
-          title: Time Step
-          default: 1.0
-        single_daughters:
-          type: boolean
-          title: Single Daughters
-          default: true
-        variants:
-          additionalProperties:
-            additionalProperties:
-              additionalProperties:
-                items:
-                  anyOf:
-                  - type: number
-                  - type: string
-                  - type: integer
-                type: array
-              type: object
-            type: object
-          type: object
-          title: Variants
-          default: {}
-        analysis_options:
-          additionalProperties: true
-          type: object
-          title: Analysis Options
-          default: {}
-        gcloud:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Gcloud
-        agent_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Agent Id
-        parallel:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Parallel
-        divide:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Divide
-        d_period:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: D Period
-        division_threshold:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Division Threshold
-        division_variable:
-          items:
-            type: string
-          type: array
-          title: Division Variable
-          default: []
-        chromosome_path:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
-          title: Chromosome Path
-        spatial_environment:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Spatial Environment
-        fixed_media:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Fixed Media
-        condition:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Condition
-        add_processes:
-          items:
-            type: string
-          type: array
-          title: Add Processes
-          default: []
-        exclude_processes:
-          items:
-            type: string
-          type: array
-          title: Exclude Processes
-          default: []
-        profile:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Profile
-        processes:
-          items:
-            type: string
-          type: array
-          title: Processes
-          default: []
-        process_configs:
-          additionalProperties: true
-          type: object
-          title: Process Configs
-          default: {}
-        topology:
-          additionalProperties: true
-          type: object
-          title: Topology
-          default: {}
-        engine_process_reports:
-          items:
-            items:
-              type: string
-            type: array
-          type: array
-          title: Engine Process Reports
-          default: []
-        emit_paths:
-          items:
-            type: string
-          type: array
-          title: Emit Paths
-          default: []
-        emit_topology:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Emit Topology
-        emit_processes:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Emit Processes
-        emit_config:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Emit Config
-        emit_unique:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Emit Unique
-        log_updates:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Log Updates
-        description:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Description
-        seed:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Seed
-        mar_regulon:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Mar Regulon
-        amp_lysis:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Amp Lysis
-        initial_state_file:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Initial State File
-        skip_baseline:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Skip Baseline
-        fail_at_max_duration:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Fail At Max Duration
-        inherit_from:
-          items:
-            type: string
-          type: array
-          title: Inherit From
-          default: []
-        spatial_environment_config:
-          additionalProperties: true
-          type: object
-          title: Spatial Environment Config
-          default: {}
-        swap_processes:
-          additionalProperties: true
-          type: object
-          title: Swap Processes
-          default: {}
-        flow:
-          additionalProperties: true
-          type: object
-          title: Flow
-          default: {}
-        initial_state_overrides:
-          items:
-            type: string
-          type: array
-          title: Initial State Overrides
-          default: []
-        initial_state:
-          additionalProperties: true
-          type: object
-          title: Initial State
-          default: {}
-      type: object
-      required:
-      - experiment_id
-      title: ExperimentRequest
-      description: Used by the /simulation endpoint.
     HTTPValidationError:
       properties:
         detail:
@@ -1104,7 +826,7 @@ components:
           title: Ref Id
         status:
           anyOf:
-          - $ref: '#/components/schemas/sms_api__simulation__models__JobStatus'
+          - $ref: '#/components/schemas/JobStatus'
           - type: 'null'
         start_time:
           anyOf:
@@ -1129,6 +851,18 @@ components:
       - job_type
       - ref_id
       title: HpcRun
+    JobStatus:
+      type: string
+      enum:
+      - waiting
+      - pending
+      - queued
+      - running
+      - completed
+      - failed
+      title: JobStatus
+      description: Shared job status enum for simulations, analyses, and other HPC
+        jobs.
     JobType:
       type: string
       enum:
@@ -1205,15 +939,21 @@ components:
         simulator_version:
           $ref: '#/components/schemas/SimulatorVersion'
         parca_config:
-          anyOf:
-          - additionalProperties:
-              anyOf:
-              - type: integer
-              - type: number
-              - type: string
-            type: object
-          - $ref: '#/components/schemas/ParcaOptions'
-          title: Parca Config
+          $ref: '#/components/schemas/ParcaOptions'
+          default:
+            cpus: 3
+            outdir: /projects/SMS/alex/sims
+            operons: true
+            ribosome_fitting: true
+            remove_rrna_operons: false
+            remove_rrff: false
+            stable_rrna: false
+            new_genes: 'off'
+            debug_parca: false
+            save_intermediates: false
+            intermediates_directory: ''
+            variable_elongation_transcription: true
+            variable_elongation_translation: false
       type: object
       required:
       - simulator_version
@@ -1223,9 +963,11 @@ components:
         cpus:
           type: integer
           title: Cpus
+          default: 3
         outdir:
           type: string
           title: Outdir
+          default: /projects/SMS/alex/sims
         operons:
           type: boolean
           title: Operons
@@ -1276,9 +1018,6 @@ components:
           title: Variable Elongation Translation
           default: false
       type: object
-      required:
-      - cpus
-      - outdir
       title: ParcaOptions
     PtoolsAnalysisConfig:
       properties:
@@ -1356,7 +1095,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-01-08 16:01:46.120287'
+          default: '2026-01-09 19:14:01.019197'
         job_id:
           anyOf:
           - type: integer
@@ -1375,6 +1114,27 @@ components:
         experiment_id:
           type: string
           title: Experiment Id
+        parca_options:
+          $ref: '#/components/schemas/ParcaOptions'
+          default:
+            cpus: 3
+            outdir: /projects/SMS/alex/sims
+            operons: true
+            ribosome_fitting: true
+            remove_rrna_operons: false
+            remove_rrff: false
+            stable_rrna: false
+            new_genes: 'off'
+            debug_parca: false
+            save_intermediates: false
+            intermediates_directory: ''
+            variable_elongation_transcription: true
+            variable_elongation_translation: false
+        analysis_options:
+          additionalProperties: true
+          type: object
+          title: Analysis Options
+          default: {}
         sim_data_path:
           anyOf:
           - type: string
@@ -1384,35 +1144,14 @@ components:
           type: boolean
           title: Suffix Time
           default: false
-        parca_options:
-          additionalProperties:
-            anyOf:
-            - items:
-                type: string
-              type: array
-            - type: boolean
-            - type: integer
-            - type: string
-            - type: number
-            - additionalProperties:
-                anyOf:
-                - type: integer
-                - type: number
-                - type: string
-              type: object
-          type: object
-          title: Parca Options
-          default:
-            cpus: 3
         generations:
           type: integer
           title: Generations
           default: 1
         n_init_sims:
-          anyOf:
-          - type: integer
-          - type: 'null'
+          type: integer
           title: N Init Sims
+          default: 1
         max_duration:
           type: number
           title: Max Duration
@@ -1452,11 +1191,6 @@ components:
             type: object
           type: object
           title: Variants
-          default: {}
-        analysis_options:
-          additionalProperties: true
-          type: object
-          title: Analysis Options
           default: {}
         gcloud:
           anyOf:
@@ -1692,19 +1426,25 @@ components:
       title: SimulationConfig
     SimulationRequest:
       properties:
+        config:
+          $ref: '#/components/schemas/SimulationConfig'
+        simulator:
+          anyOf:
+          - $ref: '#/components/schemas/Simulator'
+          - type: 'null'
         simulator_id:
-          type: integer
+          anyOf:
+          - type: integer
+          - type: 'null'
           title: Simulator Id
         parca_dataset_id:
-          type: integer
+          anyOf:
+          - type: integer
+          - type: 'null'
           title: Parca Dataset Id
-        experiment:
-          $ref: '#/components/schemas/ExperimentRequest'
       type: object
       required:
-      - simulator_id
-      - parca_dataset_id
-      - experiment
+      - config
       title: SimulationRequest
       description: Used by the /simulation endpoint.
     SimulationRun:
@@ -1713,7 +1453,7 @@ components:
           type: integer
           title: Id
         status:
-          $ref: '#/components/schemas/sms_api__simulation__models__JobStatus'
+          $ref: '#/components/schemas/JobStatus'
       type: object
       required:
       - id
@@ -1817,22 +1557,3 @@ components:
       - msg
       - type
       title: ValidationError
-    sms_api__analysis__models__JobStatus:
-      type: string
-      enum:
-      - waiting
-      - queued
-      - running
-      - completed
-      - failed
-      title: JobStatus
-    sms_api__simulation__models__JobStatus:
-      type: string
-      enum:
-      - waiting
-      - pending
-      - queued
-      - running
-      - completed
-      - failed
-      title: JobStatus

@@ -3,12 +3,12 @@ import enum
 import hashlib
 import json
 from dataclasses import field
-from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel as _BaseModel
 from pydantic import ConfigDict, Field
 
+from sms_api.common.models import JobStatus
 from sms_api.config import get_settings
 
 
@@ -17,15 +17,6 @@ class JobType(enum.Enum):
     SIMULATION = "simulation"
     PARCA = "parca"
     BUILD_IMAGE = "build_image"
-
-
-class JobStatus(StrEnum):
-    WAITING = "waiting"
-    PENDING = "pending"
-    QUEUED = "queued"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
 
 
 class BaseModel(_BaseModel):
@@ -66,8 +57,8 @@ class RegisteredSimulators(BaseModel):
 
 
 class ParcaOptions(BaseModel):
-    cpus: int
-    outdir: str
+    cpus: int = 3
+    outdir: str = str(get_settings().simulation_outdir)
     operons: bool = True
     ribosome_fitting: bool = True
     remove_rrna_operons: bool = False
@@ -84,7 +75,7 @@ class ParcaOptions(BaseModel):
 
 class ParcaDatasetRequest(BaseModel):
     simulator_version: SimulatorVersion  # Version of the software used to generate the dataset
-    parca_config: dict[str, int | float | str] | ParcaOptions = Field(default_factory=dict)
+    parca_config: ParcaOptions = ParcaOptions()
 
     @property
     def config_hash(self) -> str:
@@ -129,13 +120,24 @@ class WorkerEventMessagePayload(BaseModel):
     bulk_index: list[str] | None = None  # Labels for the bulk data, if applicable (ignored by the database)
 
 
+class AnalysisOptions(BaseModel):
+    cpus: int = 3
+    single: dict[str, Any] | None = None
+    multidaughter: dict[str, Any] | None = None
+    multigeneration: dict[str, dict[str, Any]] | None = None
+    multiseed: dict[str, dict[str, Any]] | None = None
+    multivariant: dict[str, dict[str, Any]] | None = None
+    multiexperiment: dict[str, Any] | None = None
+
+
 class SimulationConfig(BaseModel):
     experiment_id: str
+    parca_options: ParcaOptions = ParcaOptions()
+    analysis_options: dict[str, Any] = Field(default={})
     sim_data_path: str | None = None
     suffix_time: bool = False
-    parca_options: dict[str, list[str] | bool | int | str | float | dict[str, int | float | str]] = {"cpus": 3}
     generations: int = 1
-    n_init_sims: int | None = None
+    n_init_sims: int = 1
     max_duration: float = 10800.0
     initial_global_time: float = 0.0
     time_step: float = 1.0
@@ -143,7 +145,6 @@ class SimulationConfig(BaseModel):
     emitter: str = "parquet"
     emitter_arg: dict[str, str] = Field(default_factory=lambda: {"out_dir": str(get_settings().hpc_sim_base_path)})
     variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
-    analysis_options: dict[str, Any] = Field(default={})
     gcloud: str | None = None
     agent_id: str | None = None
     parallel: bool | None = None
@@ -191,7 +192,7 @@ class SimulationConfig(BaseModel):
     def model_post_init(self, *args: Any) -> None:
         for attrname in list(SimulationConfig.model_fields.keys()):
             attr = getattr(self, attrname)
-            if attr is None or (attr == ["string"] and attrname != "sim_data_path"):
+            if (attr is None and attrname != "sim_data_path") or (attr == ["string"]):
                 delattr(self, attrname)
             if isinstance(attr, (list, dict)) and not len(attr):
                 delattr(self, attrname)
@@ -255,7 +256,7 @@ class ExperimentRequest(BaseModel):
         if self.simulation_name is None:
             self.simulation_name = self.experiment_id
 
-    def to_config(self, simulator_hash: str, parca_dataset_id: int) -> SimulationConfig:
+    def to_config(self) -> SimulationConfig:
         attributes = self.model_json_schema()["properties"]
         excluded = ["simdata_id", "metadata"]
         config_kwargs = {}
@@ -273,9 +274,16 @@ class ExperimentRequest(BaseModel):
 class SimulationRequest(BaseModel):
     """Used by the /simulation endpoint."""
 
-    simulator_id: int
-    parca_dataset_id: int
-    experiment: ExperimentRequest
+    config: SimulationConfig
+    simulator: Simulator | None = None
+    simulator_id: int | None = None
+    parca_dataset_id: int | None = None
+
+    def model_post_init(self, context: Any, /) -> None:
+        if self.simulator is None and self.simulator_id is None:
+            raise ValueError(
+                "You must specify either a Simulator (hash, branch, url) OR the db id of an already-inserted simulation"
+            )
 
 
 class Simulation(BaseModel):
@@ -287,3 +295,14 @@ class Simulation(BaseModel):
     config: SimulationConfig
     last_updated: str = Field(default=str(datetime.datetime.now()))
     job_id: int | None = None
+
+
+def trim_attributes(cls: BaseModel, excluded: list[str] | None = None) -> None:
+    if excluded is None:
+        excluded = []
+    for attrname in list(cls.model_fields.keys()):
+        attr = getattr(cls, attrname)
+        if attr is None and attrname not in excluded:
+            delattr(cls, attrname)
+        if isinstance(attr, (list, dict)) and not len(attr):
+            delattr(cls, attrname)

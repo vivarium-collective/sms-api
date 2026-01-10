@@ -16,11 +16,11 @@ from sms_api.analysis.models import (
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
-    JobStatus,
     TsvOutputFile,
 )
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.models import JobStatus
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings
 from sms_api.dependencies import get_ssh_session_service

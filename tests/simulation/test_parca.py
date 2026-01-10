@@ -5,7 +5,7 @@ import pytest
 
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.models import ParcaDatasetRequest, SimulatorVersion
+from sms_api.simulation.models import ParcaDatasetRequest, ParcaOptions, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 main_branch = "messages"
@@ -50,7 +50,7 @@ async def test_parca(
     assert slurm_job_build.job_id == job_id
     assert slurm_job_build.name.startswith(f"build-image-{latest_commit_hash}-")
 
-    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config={"param1": 5})
+    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     # run parca

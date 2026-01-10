@@ -6,6 +6,7 @@ from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
     ParcaDataset,
     ParcaDatasetRequest,
+    ParcaOptions,
     Simulation,
     SimulationConfig,
     SimulatorVersion,
@@ -16,7 +17,7 @@ from sms_api.simulation.simulation_service import SimulationService
 class ConcreteSimulationService(SimulationService):
     @override
     async def submit_experiment_job(
-        self, config: SimulationConfig, simulation_name: str, simulator_hash: str, logger: logging.Logger
+        self, config: SimulationConfig, simulator_hash: str, logger: logging.Logger
     ) -> tuple[str, int]:
         raise NotImplementedError()
 
@@ -72,7 +73,7 @@ class SimulationServiceMockParca(ConcreteSimulationService):
             database_id=0,
             parca_dataset_request=ParcaDatasetRequest(
                 simulator_version=SimulatorVersion(database_id=0, git_branch="", git_repo_url="", git_commit_hash=""),
-                parca_config={},
+                parca_config=ParcaOptions(),
             ),
         ),
     )

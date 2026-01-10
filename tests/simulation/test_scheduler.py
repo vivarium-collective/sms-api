@@ -11,6 +11,7 @@ import pytest
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
+from sms_api.common.models import JobStatus
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService
@@ -23,10 +24,11 @@ from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.models import (
     HpcRun,
-    JobStatus,
     JobType,
     ParcaDatasetRequest,
+    ParcaOptions,
     Simulation,
+    SimulationConfig,
     SimulationRequest,
     WorkerEventMessagePayload,
 )
@@ -46,13 +48,13 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
         git_commit_hash=latest_commit_hash, git_repo_url=repo_url, git_branch=main_branch
     )
 
-    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config={"param1": 5})
+    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     simulation_request = SimulationRequest(
-        simulator=simulator,
         parca_dataset_id=parca_dataset.database_id,
-        variant_config={"named_parameters": {"param1": 0.5, "param2": 0.5}},
+        simulator_id=simulator.database_id,
+        config=SimulationConfig(experiment_id="test_scheduler_insert_job"),
     )
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
     slurm_job = SlurmJob(
@@ -64,7 +66,7 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
     )
 
     random_string = "".join(random.choices(string.hexdigits, k=7))
-    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string)
+    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string, simulator=simulator)
     hpcrun = await database_service.insert_hpcrun(
         slurmjobid=slurm_job.job_id,
         job_type=JobType.SIMULATION,

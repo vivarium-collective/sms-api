@@ -14,8 +14,9 @@ from sms_api.api.client.models.simulator import Simulator as SimulatorDto
 from sms_api.api.client.models.simulator_version import SimulatorVersion as SimulatorVersionDto
 from sms_api.api.client.types import UNSET
 from sms_api.common.handlers.simulators import RepoUrl, verify_simulator_payload
+from sms_api.common.models import JobStatus
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.models import JobStatus, JobType, Simulator, SimulatorVersion
+from sms_api.simulation.models import JobType, Simulator, SimulatorVersion
 from tests.fixtures.simulation_service_mocks import SimulationServiceMockCloneAndBuild
 
 

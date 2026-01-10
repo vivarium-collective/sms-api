@@ -17,7 +17,6 @@ from sms_api.dependencies import (
     get_postgres_engine,
     get_simulation_service,
 )
-from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
     HpcRun,
     JobType,
@@ -29,8 +28,6 @@ from sms_api.simulation.models import (
 )
 
 logger = logging.getLogger(__name__)
-
-LATEST_COMMIT = read_latest_commit()
 
 
 def get_server_url(dev: bool = True) -> ServerMode:
@@ -98,7 +95,7 @@ async def get_simulator_versions() -> RegisteredSimulators:
     tags=["EcoliSim"],
     summary="Get simulator container build status by its ID",
 )
-async def get_simulator_status(simulator_id: int) -> HpcRun | None:
+async def get_simulator_status(simulator_id: int) -> HpcRun:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Simulation database service is not initialized")
@@ -223,7 +220,7 @@ async def get_parcas() -> list[ParcaDataset]:
     tags=["EcoliSim"],
     summary="Get parca calculation status by its ID",
 )
-async def get_parca_status(parca_id: int) -> HpcRun | None:
+async def get_parca_status(parca_id: int) -> HpcRun:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Simulation database service is not initialized")

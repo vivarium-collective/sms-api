@@ -1,3 +1,4 @@
+package_name_override: client
 meta: uv
 file_encoding: utf-8
 overwrite: true

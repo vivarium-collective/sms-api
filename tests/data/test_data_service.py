@@ -1,7 +1,7 @@
 from sms_api.data.data_service import AnalysisType, SimulationDataServiceFS
 
 
-def test_get_outputs():
+def test_get_outputs() -> None:
     # TODO: make this a fixture mock
     service = SimulationDataServiceFS()
     expid = "sms_multigeneration"

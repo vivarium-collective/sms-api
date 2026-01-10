@@ -24,15 +24,19 @@ from sms_api.config import REPO_ROOT, get_settings
 
 # from sms_api.data.biocyc_service import BiocycService
 from sms_api.latest_commit import write_latest_commit
-from sms_api.simulation.hpc_utils import get_slurmjob_name
 from sms_api.simulation.models import (
-    ExperimentRequest,
+    ParcaOptions,
     Simulation,
     SimulationConfig,
     SimulationRequest,
+    Simulator,
 )
+from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 ENV = get_settings()
+
+SIMULATOR_URL = "https://github.com/vivarium-collective/vEcoli"
+SIMULATOR_BRANCH = "messages"
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -88,12 +92,17 @@ async def experiment_request() -> SimulationRequest:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def simulation_config() -> SimulationConfig:
+async def parca_options() -> ParcaOptions:
+    return ParcaOptions()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def simulation_config(parca_options: ParcaOptions) -> SimulationConfig:
     return SimulationConfig(
         experiment_id="pytest_fixture_config",
         sim_data_path="/pytest/kb/simData.cPickle",
         suffix_time=False,
-        parca_options={"cpus": 3},
+        parca_options=parca_options,
         generations=randint(1, 1000),
         max_duration=10800,
         initial_global_time=0,
@@ -105,7 +114,7 @@ async def simulation_config() -> SimulationConfig:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def ecoli_simulation() -> Simulation:
+async def ecoli_simulation(parca_options: ParcaOptions) -> Simulation:
     pytest_fixture = "pytest_fixture"
     return Simulation(
         database_id=-1,
@@ -115,7 +124,7 @@ async def ecoli_simulation() -> Simulation:
             experiment_id=pytest_fixture,
             sim_data_path="/pytest/kb/simData.cPickle",
             suffix_time=False,
-            parca_options={"cpus": 3},
+            parca_options=parca_options,
             generations=randint(1, 1000),
             max_duration=10800,
             initial_global_time=0,
@@ -125,7 +134,6 @@ async def ecoli_simulation() -> Simulation:
             emitter_arg={"outdir": "/pytest/api_outputs"},
         ),
         last_updated=str(datetime.datetime.now()),
-        job_name=get_slurmjob_name(experiment_id=pytest_fixture),
         job_id=randint(10000, 1000000),
     )
 
@@ -156,4 +164,23 @@ async def analysis_request_base() -> ExperimentAnalysisRequest:
     return generate_analysis_request(
         experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
         requested_configs=[AnalysisDomain.MULTIGENERATION, AnalysisDomain.MULTISEED],
+    )
+
+
+@pytest_asyncio.fixture(scope="function")
+async def workflow_config() -> SimulationConfig:
+    return SimulationConfig(experiment_id="pytest_fixture", generations=randint(1, 5), n_init_sims=randint(1, 5))
+
+
+@pytest_asyncio.fixture
+async def workflow_request_payload(
+    simulation_config: SimulationConfig, simulation_service_slurm: SimulationServiceHpc
+) -> SimulationRequest:
+    """Minimal simulation request payload for testing."""
+    latest_hash = await simulation_service_slurm.get_latest_commit_hash(
+        git_repo_url=SIMULATOR_URL, git_branch=SIMULATOR_BRANCH
+    )
+    return SimulationRequest(
+        simulator=Simulator(git_commit_hash=latest_hash, git_repo_url=SIMULATOR_URL, git_branch=SIMULATOR_BRANCH),
+        config=simulation_config,
     )

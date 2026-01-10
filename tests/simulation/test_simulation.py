@@ -8,7 +8,14 @@ import pytest
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
-from sms_api.simulation.models import JobType, ParcaDatasetRequest, SimulationRequest, SimulatorVersion
+from sms_api.simulation.models import (
+    JobType,
+    ParcaDatasetRequest,
+    ParcaOptions,
+    SimulationConfig,
+    SimulationRequest,
+    SimulatorVersion,
+)
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 main_branch = "messages"
@@ -53,7 +60,7 @@ async def test_simulate(
     assert slurm_job_build.job_id == build_job_id
     assert slurm_job_build.name.startswith(f"build-image-{latest_commit_hash}-")
 
-    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config={"param1": 5})
+    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     # run parca
@@ -73,14 +80,12 @@ async def test_simulate(
     assert slurm_job_parca.name.startswith(f"parca-{latest_commit_hash}-")
 
     simulation_request = SimulationRequest(
-        simulator=simulator,
-        parca_dataset_id=parca_dataset.database_id,
-        variant_config={"named_parameters": {"param1": 0.5, "param2": 0.5}},
+        simulator_id=simulator.database_id, config=SimulationConfig(experiment_id="test_simulate")
     )
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
     random_string = "".join(random.choices(string.hexdigits, k=7))
-    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string)
+    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string, simulator=simulator)
     sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
         ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
     )
