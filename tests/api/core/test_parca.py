@@ -11,10 +11,10 @@ from sms_api.api.client.models import (
     HpcRun,
     ParcaDataset,
     ParcaDatasetRequest,
+    ParcaOptions,
     RegisteredSimulators,
 )
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.models import ParcaOptions
 from tests.fixtures.simulation_service_mocks import SimulationServiceMockParca
 
 

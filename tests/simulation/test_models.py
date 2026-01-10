@@ -15,13 +15,15 @@ from sms_api.simulation.models import (
 @pytest.mark.asyncio
 async def test_serialize_sim_config() -> None:
     assets_dir = Path(get_settings().assets_dir)
-    with open(assets_dir / "sms_base_simulation_config.json") as f:
+    with open(assets_dir / "sms_single_cell.json") as f:
         simulation_config_raw = json.load(f)
     config = SimulationConfig(**simulation_config_raw)
     serialized = config.model_dump_json()
-    # assert json.loads(serialized) == simulation_config_raw
     assert isinstance(serialized, str)
     assert isinstance(json.loads(serialized), dict)
+    # Verify round-trip preserves key fields
+    deserialized = json.loads(serialized)
+    assert deserialized["experiment_id"] == simulation_config_raw["experiment_id"]
 
 
 @pytest.mark.asyncio

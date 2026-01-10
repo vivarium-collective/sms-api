@@ -16,15 +16,15 @@ class BaseModel(_BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-def trim_attributes(cls: BaseModel, excluded: list[str] | None = None) -> None:
+def trim_attributes(instance: BaseModel, excluded: list[str] | None = None) -> None:
     if excluded is None:
         excluded = []
-    for attrname in list(cls.model_fields.keys()):
-        attr = getattr(cls, attrname)
+    for attrname in list(type(instance).model_fields.keys()):
+        attr = getattr(instance, attrname)
         if attr is None and attrname not in excluded:
-            delattr(cls, attrname)
+            delattr(instance, attrname)
         if isinstance(attr, (list, dict)) and not len(attr):
-            delattr(cls, attrname)
+            delattr(instance, attrname)
 
 
 class JobType(enum.Enum):

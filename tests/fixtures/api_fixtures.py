@@ -24,7 +24,9 @@ from sms_api.config import REPO_ROOT, get_settings
 
 # from sms_api.data.biocyc_service import BiocycService
 from sms_api.latest_commit import write_latest_commit
+from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
+    ParcaDatasetRequest,
     ParcaOptions,
     Simulation,
     SimulationConfig,
@@ -86,9 +88,39 @@ async def analysis_request() -> ExperimentAnalysisRequest:
     return examples.analysis_multiseed_multigen
 
 
-@pytest_asyncio.fixture(scope="session")
-async def experiment_request() -> SimulationRequest:
-    return examples.base_simulation
+@pytest_asyncio.fixture(scope="function")
+async def experiment_request(database_service: DatabaseServiceSQL) -> SimulationRequest:
+    """Create a SimulationRequest with valid simulator_id and parca_dataset_id in the database."""
+    import uuid
+
+    # Use a unique commit hash for each test to avoid conflicts
+    unique_commit_hash = f"test_{uuid.uuid4().hex[:7]}"
+
+    # First insert the simulator
+    simulator = await database_service.insert_simulator(
+        git_commit_hash=unique_commit_hash,
+        git_repo_url=examples.DEFAULT_SIMULATOR.git_repo_url,
+        git_branch=examples.DEFAULT_SIMULATOR.git_branch,
+    )
+
+    # Then insert a parca dataset for this simulator
+    parca_request = ParcaDatasetRequest(
+        simulator_version=simulator,
+        parca_config=ParcaOptions(),
+    )
+    parca_dataset = await database_service.insert_parca_dataset(
+        parca_dataset_request=parca_request,
+    )
+
+    # Return a SimulationRequest with the valid IDs
+    return SimulationRequest(
+        simulator_id=simulator.database_id,
+        parca_dataset_id=parca_dataset.database_id,
+        config=SimulationConfig(
+            experiment_id="postman_TEST",
+            analysis_options=examples.analysis_options_omics(n_tp=7),
+        ),
+    )
 
 
 @pytest_asyncio.fixture(scope="session")
