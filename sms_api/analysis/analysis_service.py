@@ -137,17 +137,28 @@ class AnalysisServiceSlurm:
         return output
 
     async def get_analysis_status(self, job_id: int, db_id: int) -> AnalysisRun:
-        slurmjob_id = job_id
-        slurm_user = self.env.slurm_submit_user
+        slurm_service = SlurmService()
+        slurm_jobs = await slurm_service.get_job_status_sacct(job_ids=[job_id])
 
-        async with get_ssh_session_service().session() as ssh:
-            try:
-                statuses = await ssh.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
-            except Exception:
-                statuses = await ssh.run_command(f"sacct -j {slurmjob_id}")
+        if not slurm_jobs:
+            # Job not yet in sacct, assume pending
+            return AnalysisRun(id=db_id, status=JobStatus.PENDING)
 
-        status: str = statuses[1].split("\n")[0].split()[-2]
-        return AnalysisRun(id=db_id, status=JobStatus[status])
+        slurm_job = slurm_jobs[0]
+        job_state = slurm_job.job_state.upper()
+
+        # Map SLURM status to JobStatus enum
+        status_map = {
+            "PENDING": JobStatus.PENDING,
+            "RUNNING": JobStatus.RUNNING,
+            "COMPLETED": JobStatus.COMPLETED,
+            "FAILED": JobStatus.FAILED,
+            "CANCELLED": JobStatus.FAILED,
+            "TIMEOUT": JobStatus.FAILED,
+            "NODE_FAIL": JobStatus.FAILED,
+            "OUT_OF_MEMORY": JobStatus.FAILED,
+        }
+        return AnalysisRun(id=db_id, status=status_map.get(job_state, JobStatus.PENDING))
 
     @classmethod
     def _verify_result(cls, local_result_path: Path, expected_n_tp: int) -> bool:
@@ -242,16 +253,9 @@ def generate_slurm_script(
         tmp_config=$(mktemp)
         echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
 
-        ### binds
-        ## binds="-B $HOME/workspace/vEcoli:/vEcoli"
-        ## binds+=" -B $HOME/.local/share/uv:/root/.local/share/uv"
-        ## binds+=" -B $HOME/workspace/api_outputs:/out"
-        ## binds+=" -B $JAVA_HOME:$JAVA_HOME"
-        ## binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
-
-        ### binds
-        binds="-B {vecoli_repo_path!s}:/vEcoli"
-        binds+=" -B {simulation_outdir_base!s}:/out"
+        ### binds - use same paths inside and outside container for compatibility
+        binds="-B {vecoli_repo_path!s}:{vecoli_repo_path!s}"
+        binds+=" -B {simulation_outdir_base!s}:{simulation_outdir_base!s}"
         binds+=" -B $JAVA_HOME:$JAVA_HOME"
         binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
         binds+=" -B $HOME/.local/share/uv:/root/.local/share/uv"
@@ -267,7 +271,8 @@ def generate_slurm_script(
         singularity run $binds $image bash -c "
             export JAVA_HOME=$HOME/.local/bin/java-22
             export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-            uv run --no-cache --env-file /vEcoli/.env /vEcoli/runscripts/analysis.py --config \"$tmp_config\"
+            uv run --no-cache --env-file {vecoli_repo_path!s}/.env \\
+              {vecoli_repo_path!s}/runscripts/analysis.py --config \"$tmp_config\"
         "
 
         ### optionally, remove uploaded fp

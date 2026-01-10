@@ -67,8 +67,7 @@ def get_experiment_dirname(database_id: int, git_commit_hash: str) -> str:
 
 
 def format_experiment_path(experiment_dirname: str) -> HPCFilePath:
-    base_path = HPCFilePath(remote_path=Path(f"/home/FCAM/svc_vivarium/{get_settings().namespace}/sims"))
-    return base_path / experiment_dirname
+    return get_settings().hpc_sim_base_path / experiment_dirname
 
 
 def get_experiment_dirpath(simulation_database_id: int, git_commit_hash: str) -> HPCFilePath:

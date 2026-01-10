@@ -153,12 +153,15 @@ async def handle_get_analysis_plots(db_service: DatabaseService, id: int) -> lis
 
 async def get_html_outputs_local(output_id: str) -> list[OutputFile]:
     """Run in DEV"""
-    remote_uv_executable = "/home/FCAM/svc_vivarium/.local/bin/uv"
+    settings = get_settings()
+    slurm_base = settings.slurm_base_path
+    remote_uv_executable = slurm_base / ".local" / "bin" / "uv"
+    workspace_dir = slurm_base / "workspace"
 
     async with get_ssh_session_service().session() as ssh:
         ret, stdin, stdout = await ssh.run_command(
             dedent(f"""
-                    cd /home/FCAM/svc_vivarium/workspace \
+                    cd {workspace_dir} \
                         && {remote_uv_executable} run scripts/html_outputs.py --output_id {output_id}
                 """)
         )

@@ -17,21 +17,23 @@ from sms_api.simulation.models import (
     SimulatorVersion,
 )
 from sms_api.simulation.simulation_service import SimulationServiceHpc
-
-main_branch = "messages"
-repo_url = "https://github.com/vivarium-collective/vEcoli"
+from tests.fixtures.api_fixtures import SimulatorRepoInfo
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_simulate(
-    simulation_service_slurm: SimulationServiceHpc, database_service: DatabaseServiceSQL, latest_commit_hash: str
+    simulation_service_slurm: SimulationServiceHpc,
+    database_service: DatabaseServiceSQL,
+    simulator_repo_info: SimulatorRepoInfo,
 ) -> None:
+    repo_url, main_branch, commit_hash = simulator_repo_info
+
     # check if the latest commit is already installed
     simulator: SimulatorVersion | None = None
     for _simulator in await database_service.list_simulators():
         if (
-            _simulator.git_commit_hash == latest_commit_hash
+            _simulator.git_commit_hash == commit_hash
             and _simulator.git_repo_url == repo_url
             and _simulator.git_branch == main_branch
         ):
@@ -41,7 +43,7 @@ async def test_simulate(
     # insert the latest commit into the database
     if simulator is None:
         simulator = await database_service.insert_simulator(
-            git_commit_hash=latest_commit_hash, git_repo_url=repo_url, git_branch=main_branch
+            git_commit_hash=commit_hash, git_repo_url=repo_url, git_branch=main_branch
         )
 
     # Submit build job (which now includes cloning the repository)
@@ -58,7 +60,7 @@ async def test_simulate(
     assert slurm_job_build is not None
     assert slurm_job_build.is_done()
     assert slurm_job_build.job_id == build_job_id
-    assert slurm_job_build.name.startswith(f"build-image-{latest_commit_hash}-")
+    assert slurm_job_build.name.startswith(f"build-image-{commit_hash}-")
 
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
@@ -77,7 +79,7 @@ async def test_simulate(
     assert slurm_job_parca is not None
     assert slurm_job_parca.is_done()
     assert slurm_job_parca.job_id == parca_slurmjobid
-    assert slurm_job_parca.name.startswith(f"parca-{latest_commit_hash}-")
+    assert slurm_job_parca.name.startswith(f"parca-{commit_hash}-")
 
     simulation_request = SimulationRequest(
         simulator_id=simulator.database_id, config=SimulationConfig(experiment_id="test_simulate")
@@ -112,4 +114,4 @@ async def test_simulate(
     assert sim_slurmjob is not None
     assert sim_slurmjob.is_done()
     assert sim_slurmjob.job_id == sim_slurmjobid
-    assert sim_slurmjob.name.startswith(f"sim-{latest_commit_hash}-")
+    assert sim_slurmjob.name.startswith(f"sim-{commit_hash}-")

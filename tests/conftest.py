@@ -1,6 +1,7 @@
 import pytest_asyncio  # noqa: F401
 
 from tests.fixtures.api_fixtures import (  # noqa: F401
+    SimulatorRepoInfo,
     analysis_config_path,
     # biocyc_service,
     analysis_request,
@@ -16,6 +17,7 @@ from tests.fixtures.api_fixtures import (  # noqa: F401
     local_base_url,
     parca_options,
     ptools_analysis_request,
+    simulator_repo_info,
     workflow_config,
     workflow_request_payload,
     workspace_image_hash,

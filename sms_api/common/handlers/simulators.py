@@ -2,7 +2,7 @@ import logging
 
 from fastapi import HTTPException
 
-from sms_api.common import StrEnumBase
+from sms_api.common.simulator_defaults import ACCEPTED_REPOS, DEFAULT_BRANCH, DEFAULT_REPO, RepoUrl
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
@@ -15,20 +15,8 @@ from sms_api.simulation.simulation_service import SimulationService, SimulationS
 
 logger = logging.getLogger(__name__)
 
-
-class RepoUrl(StrEnumBase):
-    VECOLI_FORK_REPO_URL = "https://github.com/vivarium-collective/vEcoli"
-    VECOLI_PUBLIC_REPO_URL = "https://github.com/CovertLab/vEcoli"
-    VECOLI_PRIVATE_REPO_URL = ""
-
-
-ACCEPTED_REPOS = {
-    RepoUrl.VECOLI_FORK_REPO_URL: ["messages", "ccam-nextflow", "master"],
-    RepoUrl.VECOLI_PUBLIC_REPO_URL: ["master", "ptools_viz"],
-    RepoUrl.VECOLI_PRIVATE_REPO_URL: [],
-}
-DEFAULT_REPO = RepoUrl.VECOLI_PUBLIC_REPO_URL
-DEFAULT_BRANCH = "master"
+# Re-export for backwards compatibility
+__all__ = ["ACCEPTED_REPOS", "DEFAULT_BRANCH", "DEFAULT_REPO", "RepoUrl"]
 
 
 def verify_simulator_payload(simulator: Simulator) -> None:

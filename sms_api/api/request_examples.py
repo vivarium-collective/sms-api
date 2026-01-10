@@ -22,6 +22,7 @@ from sms_api.analysis.models import (
     PtoolsAnalysisType,
 )
 from sms_api.common.gateway.utils import generate_analysis_request
+from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.common.utils import unique_id
 from sms_api.simulation.models import (
     AnalysisOptions,
@@ -36,9 +37,7 @@ from sms_api.simulation.models import (
 DEFAULT_NUM_SEEDS = 30
 DEFAULT_NUM_GENERATIONS = 4
 
-DEFAULT_SIMULATOR = Simulator(
-    git_commit_hash="540e426", git_repo_url="https://github.com/vivarium-collective/vEcoli", git_branch="ccam-nextflow"
-)
+DEFAULT_SIMULATOR = Simulator(git_commit_hash="540e426", git_repo_url=DEFAULT_REPO, git_branch=DEFAULT_BRANCH)
 
 
 def get_test_ptools() -> ExperimentAnalysisRequest:

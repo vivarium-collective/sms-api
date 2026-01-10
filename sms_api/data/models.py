@@ -129,7 +129,8 @@ class AnalysisConfig(BaseModel):
 
     @classmethod
     def from_request(cls, request: "ExperimentAnalysisRequest", analysis_name: str) -> "AnalysisConfig":
-        output_dir = pathlib.Path(f"/home/FCAM/svc_vivarium/workspace/api_outputs/{request.experiment_id}")
+        simulation_outdir = get_settings().simulation_outdir
+        output_dir = simulation_outdir.remote_path / request.experiment_id
 
         options = AnalysisConfigOptions(
             experiment_id=[request.experiment_id],

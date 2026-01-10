@@ -36,7 +36,7 @@ async def test_insert_parca(
     assert len(simulation_versions.versions) == 1
     simulator_dto = simulation_versions.versions[0]
 
-    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator_dto, parca_config=ParcaOptions())  # type: ignore[arg-type]
+    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator_dto, parca_config=ParcaOptions())
     parca_dataset_response = await run_parca_async(client=in_memory_api_client, body=parca_dataset_request)
     assert type(parca_dataset_response) is ParcaDataset
     returned_parca_dataset_dto: ParcaDataset = parca_dataset_response

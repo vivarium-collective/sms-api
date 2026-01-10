@@ -33,7 +33,7 @@ def test_parse_nextflow_started_event(nextflow_events_file: Path) -> None:
     assert event.utc_time == "2025-12-30T17:03:21Z"
     assert event.metadata.workflow.success is False  # Not yet completed
     assert event.metadata.workflow.exit_status is None
-    assert event.metadata.workflow.user_name == "svc_vivarium"
+    assert event.metadata.workflow.user_name == "test_user"
     assert event.metadata.workflow.nextflow.version == "25.04.6"
 
 

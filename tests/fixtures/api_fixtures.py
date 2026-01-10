@@ -1,8 +1,8 @@
 import datetime
-import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from random import randint
+from typing import NamedTuple
 
 import httpx
 import pytest_asyncio
@@ -23,7 +23,6 @@ from sms_api.common.utils import get_uuid
 from sms_api.config import REPO_ROOT, get_settings
 
 # from sms_api.data.biocyc_service import BiocycService
-from sms_api.latest_commit import write_latest_commit
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
     ParcaDatasetRequest,
@@ -37,8 +36,31 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 ENV = get_settings()
 
+# Default simulator repository configuration for tests
 SIMULATOR_URL = "https://github.com/vivarium-collective/vEcoli"
-SIMULATOR_BRANCH = "messages"
+SIMULATOR_BRANCH = "ccam-nextflow"
+SIMULATOR_COMMIT = "8f119dd"
+
+
+class SimulatorRepoInfo(NamedTuple):
+    """Container for simulator repository information.
+
+    Can be unpacked as tuple: url, branch, hash = repo_info
+    """
+
+    url: str
+    branch: str
+    commit_hash: str
+
+
+@pytest_asyncio.fixture(scope="session")
+async def simulator_repo_info() -> SimulatorRepoInfo:
+    """Fixture providing the default simulator repository info for integration tests."""
+    return SimulatorRepoInfo(
+        url=SIMULATOR_URL,
+        branch=SIMULATOR_BRANCH,
+        commit_hash=SIMULATOR_COMMIT,
+    )
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -52,14 +74,9 @@ async def fastapi_app() -> FastAPI:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def latest_commit_hash() -> str:
-    assets_dir = Path(get_settings().assets_dir)
-    latest_commit_path = assets_dir / "simulation" / "model" / "latest_commit.txt"
-    if not os.path.exists(latest_commit_path):
-        await write_latest_commit()
-    with open(latest_commit_path) as fp:
-        latest_commit = fp.read()
-    return latest_commit.strip()
+async def latest_commit_hash(simulator_repo_info: SimulatorRepoInfo) -> str:
+    """Returns the commit hash from simulator_repo_info fixture."""
+    return simulator_repo_info.commit_hash
 
 
 @pytest_asyncio.fixture(scope="function")

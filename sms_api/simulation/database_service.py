@@ -9,6 +9,7 @@ from typing_extensions import override
 
 from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.config import get_settings
 from sms_api.simulation.models import (
     HpcRun,
     JobType,
@@ -227,7 +228,7 @@ class DatabaseServiceSQL(DatabaseService):
     ) -> ExperimentAnalysisDTO:
         """Used by the /ecoli router"""
         async with self.async_sessionmaker() as session, session.begin():
-            config.emitter_arg["out_dir"] = "/home/FCAM/svc_vivarium/workspace/api_outputs"
+            config.emitter_arg["out_dir"] = str(get_settings().simulation_outdir)
             orm_analysis = ORMAnalysis(
                 name=name, config=config.model_dump(), last_updated=last_updated, job_name=job_name, job_id=job_id
             )

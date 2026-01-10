@@ -11,6 +11,7 @@ from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
@@ -39,8 +40,8 @@ class SimulationService(ABC):
     @abstractmethod
     async def get_latest_commit_hash(
         self,
-        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-        git_branch: str = "master",
+        git_repo_url: str = DEFAULT_REPO,
+        git_branch: str = DEFAULT_BRANCH,
     ) -> str:
         pass
 
@@ -78,8 +79,8 @@ class SimulationServiceHpc(SimulationService):
     @override
     async def get_latest_commit_hash(
         self,
-        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
-        git_branch: str = "messages",
+        git_repo_url: str = DEFAULT_REPO,
+        git_branch: str = DEFAULT_BRANCH,
     ) -> str:
         """
         :rtype: `str`
@@ -450,16 +451,19 @@ def workflow_slurm_script(
         tmp_config=$(mktemp)
         echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
 
-        ### binds
-        binds="-B {vecoli_repo_path!s}:/vEcoli"
-        binds+=" -B {simulation_outdir_base!s}:/out"
+        ### binds - use same paths inside and outside container for nextflow compatibility
+        binds="-B {vecoli_repo_path!s}:{vecoli_repo_path!s}"
+        binds+=" -B {simulation_outdir_base!s}:{simulation_outdir_base!s}"
         binds+=" -B $JAVA_HOME:$JAVA_HOME"
         binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
+        binds+=" -B $HOME/.cache/uv:$HOME/.cache/uv"
         binds+=" -B /isg/shared/mantis/apps/nextflow/25.04.6/nextflow:/usr/local/bin/nextflow"
 
         image={image_path!s}
-        vecoli_image_root=/vEcoli
 
-        singularity run $binds $image uv run --with python-dotenv --env-file /vEcoli/.env \\
-            /vEcoli/runscripts/workflow.py --config \"$tmp_config\"
+        export UV_CACHE_DIR=$HOME/.cache/uv
+        mkdir -p $UV_CACHE_DIR
+        singularity run --env UV_CACHE_DIR=$UV_CACHE_DIR $binds $image uv run --with python-dotenv \\
+            --env-file {vecoli_repo_path!s}/.env \\
+            {vecoli_repo_path!s}/runscripts/workflow.py --config \"$tmp_config\"
     """)

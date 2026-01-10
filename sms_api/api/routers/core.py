@@ -8,10 +8,9 @@ from fastapi import Depends, HTTPException, Query
 
 from sms_api.api import request_examples
 from sms_api.common import handlers
-
-# from sms_api.api.request_examples import examples
 from sms_api.common.gateway.models import ServerMode
 from sms_api.common.gateway.utils import router_config
+from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.dependencies import (
     get_database_service,
     get_postgres_engine,
@@ -51,8 +50,8 @@ config = router_config(prefix="core", version_major=False)
     summary="Get the latest simulator version",
 )
 async def get_latest_simulator(
-    git_repo_url: str = Query(default="https://github.com/vivarium-collective/vEcoli"),
-    git_branch: str = Query(default="messages"),
+    git_repo_url: str = Query(default=DEFAULT_REPO),
+    git_branch: str = Query(default=DEFAULT_BRANCH),
 ) -> Simulator:
     hpc_service = get_simulation_service()
     if hpc_service is None:

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from sms_api.analysis.models import AnalysisConfig
-from sms_api.config import REPO_ROOT, get_settings
+from sms_api.config import get_settings
 from sms_api.simulation.models import SimulationConfig
 
 
