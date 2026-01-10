@@ -47,7 +47,8 @@ def format_marimo_appname(appname: str) -> str:
 
 
 def get_remote_outdir(experiment_id: str) -> Path:
-    return Path(f"/home/FCAM/svc_vivarium/{get_settings().namespace}/sims/{experiment_id}")
+    """Return remote path for experiment output directory (for SSH commands)."""
+    return get_settings().hpc_sim_base_path.remote_path / experiment_id
 
 
 def write_remote_config(
@@ -56,6 +57,7 @@ def write_remote_config(
     simulator_hash: str | None = None,
     **overrides: Any,
 ) -> tuple[int, Path | None]:
+    """Write config to local filesystem and return remote path for SSH commands."""
     if isinstance(config, str):
         config = json.loads(config)
     if simulator_hash is None:
@@ -66,12 +68,14 @@ def write_remote_config(
         except FileNotFoundError as e:
             warnings.warn(f"The hardcoded file doesnt exist in this repo: {e}", stacklevel=2)
             return (1, None)
-    fpath = Path(f"/home/FCAM/svc_vivarium/prod/repos/{simulator_hash}/vEcoli/configs/{fname}.json")
+    settings = get_settings()
+    remote_path = settings.hpc_repo_base_path / simulator_hash / "vEcoli" / "configs" / f"{fname}.json"
+    local_path = remote_path.local_path()
     if overrides:
         config.update(overrides)
-    with open(fpath, "w") as f:
+    with open(local_path, "w") as f:
         json.dump(config, f, indent=1)
-    return (0, fpath)
+    return (0, remote_path.remote_path)
 
 
 def get_simulator() -> SimulatorVersion:

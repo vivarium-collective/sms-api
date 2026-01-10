@@ -248,7 +248,7 @@ class SimulationDataService(ABC):
         return bulk_common_names
 
     def _get_sql_base(self, exp_select: str) -> tuple[str, str, str]:
-        history, conf, success = dataset_sql(str(self.outputs_dir.remote_path), experiment_ids=[exp_select])
+        history, conf, success = dataset_sql(str(self.outputs_dir.local_path()), experiment_ids=[exp_select])
         return history, conf, success
 
     def _get_db_filter(self, analysis_type: AnalysisType, partitions_all: Mapping[str, str]) -> str:
@@ -350,10 +350,10 @@ class SimulationDataServiceFS(SimulationDataService):
             else self.env.simulation_outdir.parent / "parca" / "default" / "kb"
         )
 
-        if not kb_dir.remote_path.exists():
+        if not kb_dir.local_path().exists():
             raise FileNotFoundError(f"The specification does not exist: {kb_dir!s}")
-        sim_data = LoadSimData(str(kb_dir / "simData.cPickle")).sim_data
-        with open(str(kb_dir / "validationData.cPickle"), "rb") as f:
+        sim_data = LoadSimData(str(kb_dir.local_path() / "simData.cPickle")).sim_data
+        with open(kb_dir.local_path() / "validationData.cPickle", "rb") as f:
             validation_data = pickle.load(f)  # noqa: S301
         if not isinstance(validation_data, ValidationDataEcoli):
             raise TypeError("The validation data file is improperly formatted.")
@@ -378,7 +378,7 @@ class SimulationDataServiceFS(SimulationDataService):
         ]
 
         history_sql, config_sql, success_sql = dataset_sql(
-            experiment_ids=[exp_select], out_dir=simulation_outdir or self.env.simulation_outdir.remote_path.__str__()
+            experiment_ids=[exp_select], out_dir=simulation_outdir or str(self.env.simulation_outdir.local_path())
         )
         history_sql_filtered = (
             f"SELECT {','.join(pq_columns)},time FROM ({history_sql}) WHERE {db_filter} ORDER BY time"  # noqa: S608 (safe)

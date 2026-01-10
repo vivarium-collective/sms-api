@@ -124,6 +124,11 @@ class Settings(BaseSettings):
     vecoli_config_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     cache_dir: str = f"{REPO_ROOT}/.results_cache"
 
+    # Path prefix mapping for local vs remote (HPC) filesystem access
+    # Example: path_local_prefix=/Volumes/SMS, path_remote_prefix=/projects/SMS
+    path_local_prefix: str = ""
+    path_remote_prefix: str = ""
+
 
 @lru_cache
 def get_settings(env_file: Path | None = None) -> Settings:
