@@ -13,7 +13,6 @@ from collections.abc import Sequence
 from fastapi import BackgroundTasks, Depends, HTTPException, Query
 from fastapi import Path as FastAPIPath
 from fastapi.requests import Request
-from fastapi.responses import Response, StreamingResponse
 
 from sms_api.analysis.analysis_service import AnalysisServiceSlurm
 from sms_api.analysis.models import (
@@ -72,14 +71,14 @@ async def run_simulation(
     tags=["Simulations"],
     dependencies=[Depends(get_database_service)],
 )
-async def get_simulation(id: int = FastAPIPath(description="Database ID of the simulation")) -> Simulation:
+async def get_simulation(id: int = FastAPIPath(description="Database ID of the simulation")) -> Simulation | None:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
         # return await db_service.get_simulation(database_id=id)
-        return await handlers.simulations.get_simulation(db_service=db_service, id=id)
+        return await db_service.get_simulation(simulation_id=id)
     except Exception as e:
         logger.exception("Error uploading simulation config")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -105,26 +104,6 @@ async def get_simulation_status(id: int = FastAPIPath(...)) -> SimulationRun:
                 Are you sure that you've passed the experiment_tag? (not the experiment id)
             """
         )
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.post(
-    path="/simulations/{id}/log",
-    operation_id="get-ecoli-simulation-log",
-    tags=["Simulations"],
-    summary="Get the simulation log record of a given experiment",
-)
-async def get_simulation_log(id: int = FastAPIPath(...)) -> Response:
-    db_service = get_database_service()
-    if db_service is None:
-        raise HTTPException(status_code=404, detail="Database not found")
-    try:
-        return await handlers.simulations.get_simulation_log(
-            db_service=db_service,
-            id=id,
-        )
-    except Exception as e:
-        logger.exception("""Error getting simulation log.""")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -164,22 +143,14 @@ async def get_simulation_data(
     variant: int = Query(default=0),
     agent_id: int = Query(default=0),
     observables: list[str] | None = None,
-) -> StreamingResponse:
+) -> None:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        return await handlers.simulations.get_simulation_data(
-            db_service=db_service,
-            id=id,
-            lineage_seed=lineage_seed,
-            generation=generation,
-            variant=variant,
-            agent_id=agent_id,
-            observables=observables,
-            bg_tasks=bg_tasks,
-        )
+        # Placeholder for this moment
+        pass
     except Exception as e:
         logger.exception("Error uploading simulation config")
         raise HTTPException(status_code=500, detail=str(e)) from e

@@ -233,11 +233,10 @@ poetry.lock
 /assets/dev/config/sms_known_hosts
 home/
 assets/deps/
-assets/simulation/configs/
 
 simulation_configs/
 notes/
-assets/simulation/model/parameters/
+assets/simulations/model/parameters/
 libsms/
 scratchpads/
 *.tar.gz
@@ -245,4 +244,7 @@ scratchpads/
 # Secret data files (kustomize overlays)
 kustomize/overlays/**/secrets.dat
 *.bak
-docker-compose.yml
+
+# TODO: remove this soon
+requirements.agent.txt
+tui/
