@@ -145,11 +145,9 @@ class ExperimentAnalysisRequest:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "experiment_id": experiment_id,
-            }
-        )
+        field_dict.update({
+            "experiment_id": experiment_id,
+        })
         if single is not UNSET:
             field_dict["single"] = single
         if multidaughter is not UNSET:

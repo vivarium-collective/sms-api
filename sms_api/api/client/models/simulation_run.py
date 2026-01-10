@@ -28,12 +28,10 @@ class SimulationRun:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "id": id,
-                "status": status,
-            }
-        )
+        field_dict.update({
+            "id": id,
+            "status": status,
+        })
 
         return field_dict
 

@@ -1,4 +1,3 @@
-import datetime
 import json
 import logging
 import random
@@ -13,18 +12,14 @@ from typing_extensions import override
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.config import Settings, get_settings
+from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import (
     get_apptainer_image_file,
-    get_experiment_dir,
-    get_experiment_path,
     get_parca_dataset_dir,
-    get_parca_dataset_dirname,
     get_slurm_log_file,
     get_slurm_submit_file,
-    get_slurmjob_name,
     get_vEcoli_repo_dir,
 )
 from sms_api.simulation.models import (
@@ -69,12 +64,6 @@ class SimulationService(ABC):
 
     @abstractmethod
     async def close(self) -> None:
-        pass
-
-    @abstractmethod
-    async def submit_experiment_job(
-        self, config: SimulationConfig, simulator_hash: str, logger: logging.Logger
-    ) -> tuple[str, int]:
         pass
 
 
@@ -277,7 +266,7 @@ class SimulationServiceHpc(SimulationService):
                         echo "Repository moved to $FINAL_REPO_PATH"
                     fi
                     """)
-                capture_slurm_script(script_content, "assets/build_image.sbatch")
+                # capture_slurm_script(script_content, "artifacts/build_image.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -351,7 +340,7 @@ class SimulationServiceHpc(SimulationService):
 
                     echo "Parca run completed. data saved to {parca_remote_path!s}."
                     """)
-                capture_slurm_script(script_content, "assets/parca.sbatch")
+                capture_slurm_script(script_content, "artifacts/parca.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -364,7 +353,7 @@ class SimulationServiceHpc(SimulationService):
     async def submit_ecoli_simulation_job(
         self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str
     ) -> int:
-        settings = get_settings()
+        # settings = get_settings()
         if database_service is None:
             raise RuntimeError("DatabaseService is not available. Cannot submit Simulation job.")
 
@@ -377,138 +366,22 @@ class SimulationServiceHpc(SimulationService):
 
         random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
         slurm_job_name = f"sim-{simulator_version.git_commit_hash}-{ecoli_simulation.database_id}-{random_suffix}"
-
         slurm_log_file = get_slurm_log_file(slurm_job_name=slurm_job_name)
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
-        parca_dataset_path = get_parca_dataset_dir(parca_dataset=parca_dataset)
-        parca_parent_path = parca_dataset_path.parent
-        parca_dataset_dirname = get_parca_dataset_dirname(parca_dataset)
-        experiment_path = get_experiment_path(ecoli_simulation=ecoli_simulation, simulator=simulator_version)
-        experiment_path_parent = experiment_path.parent
-        experiment_id = experiment_path.name
-        hpc_sim_config_file = settings.hpc_sim_config_file
-        remote_vEcoli_repo_path = get_vEcoli_repo_dir(simulator_version=simulator_version)
-        apptainer_image_path = get_apptainer_image_file(simulator_version=simulator_version)
 
         simulator = await database_service.get_simulator(simulator_id=ecoli_simulation.simulator_id)
-
-        # uv run --env-file .env ecoli/experiments/ecoli_master_sim.py \
-        #             --generations 1 --emitter parquet --emitter_arg out_dir='out' \
-        #             --experiment_id "parca_1" --daughter_outdir "out/parca_1" \
-        #             --sim_data_path "out/parca_1/kb/simData.cPickle" ----fail_at_max_duration
 
         # build the submit script
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
             with open(local_submit_file, "w") as f:
-                qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
-                nodelist_clause = (
-                    f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
+                script_content = workflow_slurm_script(
+                    slurm_log_file=slurm_log_file,
+                    slurm_job_name=slurm_job_name,
+                    simulator_hash=simulator.git_commit_hash,  # type: ignore[union-attr]
+                    config=ecoli_simulation.config,
                 )
-                script_content = dedent(f"""\
-                    #!/bin/bash
-                    #SBATCH --job-name={slurm_job_name}
-                    #SBATCH --time=30:00
-                    #SBATCH --cpus-per-task 2
-                    #SBATCH --mem=8GB
-                    #SBATCH --partition={settings.slurm_partition}
-                    {qos_clause}
-                    #SBATCH -o {slurm_log_file!s}
-                    #SBATCH -e {slurm_log_file!s}
-                    {nodelist_clause}
-
-
-                    set -e
-                    # env
-                    mkdir -p {experiment_path_parent!s}
-
-                    # check to see if the parca output directory is empty, if not, exit
-                    if [ "$(ls -A {experiment_path!s})" ]; then
-                        echo "Simulation output directory {experiment_path!s} is not empty. Skipping job."
-                        exit 0
-                    fi
-
-                    commit_hash="{simulator_version.git_commit_hash}"
-                    sim_id="{ecoli_simulation.database_id}"
-                    echo "running simulation: commit=$commit_hash, simulation id=$sim_id on $(hostname) ..."
-
-                    binds="-B {remote_vEcoli_repo_path!s}:/vEcoli"
-                    binds+=" -B {parca_parent_path!s}:/parca"
-                    binds+=" -B {experiment_path_parent!s}:/out"
-                    image="{apptainer_image_path!s}"
-                    cd {remote_vEcoli_repo_path!s}
-
-                    # create custom config file mapped to /out/configs/ directory
-                    mkdir -p {experiment_path_parent!s}/configs
-
-                    # Check if the config template file exists (newer repos with messaging)
-                    config_template_file={remote_vEcoli_repo_path!s}/configs/{hpc_sim_config_file}
-                    default_config_file={remote_vEcoli_repo_path!s}/configs/default.json
-
-                    if [ -f "$config_template_file" ]; then
-                        echo "Using config template: {hpc_sim_config_file} (with messaging support)"
-                        config_file={experiment_path_parent!s}/configs/{hpc_sim_config_file}_{experiment_id}.json
-                        cp "$config_template_file" "$config_file"
-                        # Replace template variables for messaging
-                        sed -i "s/CORRELATION_ID_REPLACE_ME/{correlation_id}/g" "$config_file"
-                        sed -i "s/REDIS_HOST_REPLACE_ME/{get_settings().redis_external_host}/g" "$config_file"
-                        sed -i "s/REDIS_PORT_REPLACE_ME/{get_settings().redis_external_port}/g" "$config_file"
-                        sed -i "s/REDIS_CHANNEL_REPLACE_ME/{get_settings().redis_channel}/g" "$config_file"
-                    elif [ -f "$default_config_file" ]; then
-                        echo "Using default config: default.json (older repo without messaging)"
-                        config_file={experiment_path_parent!s}/configs/default_{experiment_id}.json
-                        # Copy default config without template replacements
-                        cp "$default_config_file" "$config_file"
-                    else
-                        echo "ERROR: Neither {hpc_sim_config_file} nor default.json found in configs/"
-                        exit 1
-                    fi
-
-                    git -C ./configs diff HEAD >> ./source-info/git_diff.txt
-
-                    # Determine the config path inside the container (bind mount at /out/configs/)
-                    config_filename=$(basename "$config_file")
-                    container_config_path="/out/configs/$config_filename"
-
-                    # singularity run $binds $image uv run \\
-                    #      --env-file /vEcoli/.env /vEcoli/ecoli/experiments/ecoli_master_sim.py \\
-                    #      --config "$container_config_path" \\
-                    #      --generations 1 --emitter parquet --emitter_arg out_dir='/out' \\
-                    #      --experiment_id {experiment_id} \\
-                    #      --daughter_outdir "/out/{experiment_id}" \\
-                    #      --sim_data_path "/parca/{parca_dataset_dirname}/kb/simData.cPickle" \\
-                    #      --fail_at_max_duration
-                    ### set up java and nextflow
-                    local_bin=$HOME/.local/bin
-                    export JAVA_HOME=$local_bin/java-22
-                    export PATH=$JAVA_HOME/bin:$local_bin:$PATH
-                    ### configure working dir and binds
-                    vecoli_dir={get_settings().vecoli_config_dir.parent.parent!s}
-                    latest_hash={simulator.git_commit_hash}
-                    tmp_config=$(mktemp)
-                    echo '{json.dumps(ecoli_simulation.config.model_dump())}' > \"$tmp_config\"
-                    cd /home/FCAM/svc_vivarium/workspace/vEcoli
-                    ### binds
-                    binds="-B $HOME/workspace/vEcoli:/vEcoli"
-                    binds+=" -B $HOME/workspace/api_outputs:/out"
-                    binds+=" -B $JAVA_HOME:$JAVA_HOME"
-                    binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
-                    image=$HOME/workspace/images/vecoli-$latest_hash.sif
-                    vecoli_image_root=/vEcoli
-                    singularity run $binds $image bash -c "
-                        export JAVA_HOME=$HOME/.local/bin/java-22
-                        export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-                        uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config \"$tmp_config\"
-
-                    # if the experiment directory is empty after the run, fail the job
-                    if [ ! "$(ls -A {experiment_path!s})" ]; then
-                        echo "Simulation output directory {experiment_path!s} is empty. Job must have failed."
-                        exit 1
-                    fi
-
-                    echo "Simulation run completed. data saved to {experiment_path!s}."
-                    """)
-                capture_slurm_script(script_content, "assets/simulation.sbatch")
+                # capture_slurm_script(script_content, "artifacts/simulation.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -516,102 +389,6 @@ class SimulationServiceHpc(SimulationService):
                 local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid
-
-    @override
-    async def submit_experiment_job(
-        self, config: SimulationConfig, simulator_hash: str, logger: logging.Logger
-    ) -> tuple[str, int]:
-        """Used by the /ecoli router"""
-
-        async def _dispatch(config: SimulationConfig, simulator_hash: str, logger: logging.Logger) -> tuple[str, int]:
-            experiment_id = config.experiment_id
-            slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
-            slurm_log_file = get_settings().slurm_base_path / "prod" / "htclogs" / f"{slurmjob_name}.out"
-
-            slurm_script = _slurm_script(
-                slurm_log_file=slurm_log_file, slurm_job_name=slurmjob_name, latest_hash=simulator_hash, config=config
-            )
-            capture_slurm_script(slurm_script, "assets/simulation.sbatch")
-
-            slurmjob_id = await _submit_script(
-                config=config,
-                script_content=slurm_script,
-                slurm_job_name=slurmjob_name,
-            )
-
-            return slurmjob_name, slurmjob_id
-
-        def _slurm_script(
-            slurm_log_file: HPCFilePath,
-            slurm_job_name: str,
-            latest_hash: str,
-            config: SimulationConfig,
-        ) -> str:
-            remote_workspace_dir = get_settings().slurm_base_path / "workspace"
-            vecoli_dir = remote_workspace_dir / "vEcoli"
-            env = get_settings()
-
-            qos_clause = f"#SBATCH --qos={env.slurm_qos}" if env.slurm_qos else ""
-            nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
-
-            return dedent(f"""\
-                #!/bin/bash
-                #SBATCH --job-name={slurm_job_name}
-                #SBATCH --time=1:00:00
-                #SBATCH --cpus-per-task 3
-                #SBATCH --mem=8GB
-                #SBATCH --partition={env.slurm_partition}
-                {qos_clause}
-                #SBATCH --mail-type=ALL
-                {nodelist_clause}
-                #SBATCH -o {slurm_log_file!s}
-                #SBATCH -e {slurm_log_file!s}
-
-                set -e
-
-                ### set up java and nextflow
-                local_bin=$HOME/.local/bin
-                export JAVA_HOME=$local_bin/java-22
-                export PATH=$JAVA_HOME/bin:$local_bin:$PATH
-                ### configure working dir and binds
-                vecoli_dir={vecoli_dir!s}
-                latest_hash={latest_hash}
-                tmp_config=$(mktemp)
-                echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
-                cd $vecoli_dir
-                ### binds
-                binds="-B $HOME/workspace/vEcoli:/vEcoli"
-                binds+=" -B $HOME/workspace/api_outputs:/out"
-                binds+=" -B $JAVA_HOME:$JAVA_HOME"
-                binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
-                image=$HOME/workspace/images/vecoli-$latest_hash.sif
-                vecoli_image_root=/vEcoli
-                singularity run $binds $image bash -c "
-                    export JAVA_HOME=$HOME/.local/bin/java-22
-                    export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-                    uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config \"$tmp_config\"
-                "
-            """)
-
-        async def _submit_script(
-            config: SimulationConfig,
-            script_content: str,
-            slurm_job_name: str,
-        ) -> int:
-            slurm_service = SlurmService()
-
-            slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
-            with tempfile.TemporaryDirectory() as tmpdir:
-                local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
-                with open(local_submit_file, "w") as f:
-                    f.write(script_content)
-
-                slurm_jobid = await slurm_service.submit_job(
-                    local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
-                )
-                return slurm_jobid
-
-        return await _dispatch(config, simulator_hash=simulator_hash, logger=logger)
 
     @override
     async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
@@ -632,40 +409,33 @@ class SimulationServiceHpc(SimulationService):
         pass
 
 
-def simulation_slurm_script(
-    config_id: str,
+def workflow_slurm_script(
+    slurm_log_file: HPCFilePath,
     slurm_job_name: str,
-    experiment_id: str,
-    settings: Settings | None = None,
-    logger: logging.Logger | None = None,
-    config: SimulationConfig | None = None,
+    simulator_hash: str,
+    config: SimulationConfig,
 ) -> str:
-    env = settings or get_settings()
-    base_path = env.slurm_base_path
-    remote_workspace_dir = base_path / "workspace"
-    vecoli_dir = remote_workspace_dir / "vEcoli"
-    slurm_log_file = base_path / "prod" / "htclogs" / f"{experiment_id}.out"
-    experiment_outdir = HPCFilePath(remote_path=Path(f"/home/FCAM/svc_vivarium/workspace/api_outputs/{config_id}"))
+    env = get_settings()
 
-    config_dir = vecoli_dir / "configs"
-    latest_hash = "079c43c"
+    qos_clause = f"#SBATCH --qos={env.slurm_qos}" if env.slurm_qos else ""
+    nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
 
-    conf = config.model_dump_json() if config else ""
-    experiment_id = config.experiment_id if config is not None else experiment_id
-    qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
-    nodelist_clause = f"#SBATCH --nodelist={get_settings().slurm_node_list}" if get_settings().slurm_node_list else ""
+    image_path = env.hpc_image_base_path / f"vecoli-{simulator_hash}.sif"
+    vecoli_repo_path = env.hpc_repo_base_path / simulator_hash
+    simulation_outdir_base = env.simulation_outdir
 
     return dedent(f"""\
         #!/bin/bash
         #SBATCH --job-name={slurm_job_name}
-        #SBATCH --time=30:00
-        #SBATCH --cpus-per-task 8
+        #SBATCH --time=1:00:00
+        #SBATCH --cpus-per-task 3
         #SBATCH --mem=8GB
         #SBATCH --partition={env.slurm_partition}
         {qos_clause}
+        #SBATCH --mail-type=ALL
+        {nodelist_clause}
         #SBATCH -o {slurm_log_file!s}
         #SBATCH -e {slurm_log_file!s}
-        {nodelist_clause}
 
         set -e
 
@@ -673,138 +443,24 @@ def simulation_slurm_script(
         local_bin=$HOME/.local/bin
         export JAVA_HOME=$local_bin/java-22
         export PATH=$JAVA_HOME/bin:$local_bin:$PATH
-        # export NEXTFLOW=$local_bin/nextflow
-        # export PATH=$JAVA_HOME/bin:$PATH:$(dirname "$NEXTFLOW")
-
-        if [ '{conf}' != '' ]; then
-            uv run python $HOME/workspace/scripts/write_uploaded_config.py --config '{conf}'
-            cd $HOME/workspace/vEcoli
-        else
-            ### create request-specific config .json
-            cd $HOME/workspace/vEcoli
-            expid={experiment_id}
-            config_id={config_id}
-            config_dir={config_dir!s}
-            experiment_config=$config_dir/$expid.json
-            [ -f "$config_dir/$config_id.json" ] \
-            && jq --arg expid "$expid" '.experiment_id = $expid' \
-            "$config_dir/$config_id.json" > "$config_dir/$expid.json"
-        fi
-
-        ### logging to confirm installations/paths
-        echo "----> START({datetime.datetime.now()}) ---->"
-        echo "                                            "
-        echo "===== Environment Variables ====="
-        env | grep -E 'JAVA_HOME|PATH|NEXTFLOW'
-
-        echo "=== Checking Java and Nextflow ==="
-        jv=$(which java)
-        nf=$(which nextflow)
-        echo ">> Java path: $jv"
-        echo ">> Nextflow path: $nf"
-        echo ">> UV Installation: $(which uv)"
-        echo ">> UV Python: $(uv run which python)"
-        echo "$jv" > {remote_workspace_dir!s}/test-java.txt
-        echo "$nf" > {remote_workspace_dir!s}/test-nextflow.txt
-        echo "|<----------------- END <-------------------"
-        echo "                                            "
-
-        ### Check if the experiment dir exists, remove if so:
-        if [ -d {experiment_outdir} ]; then rm -rf {experiment_outdir}; fi
-
         ### configure working dir and binds
-        vecoli_dir={vecoli_dir!s}
-        latest_hash={latest_hash}
-        # cd $vecoli_dir
 
-        ### bind vecoli and outputs dest dir
-        binds="-B $HOME/workspace/vEcoli:/vEcoli"
-        binds+=" -B $HOME/workspace/outputs:/out"
+        latest_hash={simulator_hash}
+        tmp_config=$(mktemp)
+        echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
 
-        ### bind java and nextflow
+        ### binds
+        binds="-B {vecoli_repo_path!s}:/vEcoli"
+        binds+=" -B {simulation_outdir_base!s}:/out"
         binds+=" -B $JAVA_HOME:$JAVA_HOME"
         binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
 
-        # image="/home/FCAM/svc_vivarium/prod/images/vecoli-$latest_hash.sif"
-        image=$HOME/workspace/images/vecoli-$latest_hash.sif
+        image={image_path!s}
         vecoli_image_root=/vEcoli
 
-        # singularity run $binds $image bash -c '
-        #     export JAVA_HOME=$HOME/.local/bin/java-22
-        #     export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-        #     uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/{config_id}.json
-        # '
-
-        ### remove unique sim config on exit, regardless of job outcome
-        [ -f {config_dir!s}/{experiment_id}.json ] && trap 'rm -f {config_dir!s}/{experiment_id}.json' EXIT
-
-        ### run bound singularity
         singularity run $binds $image bash -c "
             export JAVA_HOME=$HOME/.local/bin/java-22
             export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-            uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config /vEcoli/configs/{experiment_id}.json
+            uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config \"$tmp_config\"
         "
     """)
-
-
-async def submit_slurm_script(
-    script_content: str,
-    slurm_job_name: str,
-) -> int:
-    slurm_service = SlurmService()
-
-    slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
-        with open(local_submit_file, "w") as f:
-            f.write(script_content)
-
-        slurm_jobid = await slurm_service.submit_job(
-            local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
-        )
-        return slurm_jobid
-
-
-def log(msg: str, logger: logging.Logger | None = None) -> None:
-    logfunc = logger.info if logger else print
-    return logfunc(msg)
-
-
-async def submit_vecoli_job(
-    config_id: str,
-    simulator_hash: str,
-    experiment_id: str,
-    logger: logging.Logger | None = None,
-    config: SimulationConfig | None = None,
-) -> int:
-    experiment_dir = get_experiment_dir(experiment_id=experiment_id)
-    experiment_path_parent = experiment_dir.parent
-    experiment_id_dir = experiment_dir.name
-    slurmjob_name = get_slurmjob_name(experiment_id=experiment_id, simulator_hash=simulator_hash)
-
-    script = simulation_slurm_script(
-        config_id=config_id,
-        slurm_job_name=slurmjob_name,
-        experiment_id=experiment_id,
-        logger=logger,
-        config=config,
-    )
-
-    msg = dedent(f"""\
-        Submitting with the following params:
-        ====================================
-        >> experimentid: {experiment_id}
-        >> experimentidDir: {experiment_id_dir}
-        >> experiment_dir: {experiment_dir}
-        >> experiment_path_parent: {experiment_path_parent}
-        >> slurmjobName: {slurmjob_name}
-        >> slurmscript:\n{script}
-        ====================================
-    """)
-    log(msg, logger)
-    log("", logger)
-
-    slurmjob_id = await submit_slurm_script(script_content=script, slurm_job_name=slurmjob_name)
-    log(f"Submission Successful!!\nGenerated slurmjob ID: {slurmjob_id}", logger)
-
-    return slurmjob_id

@@ -103,11 +103,9 @@ class AnalysisConfigOptions:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "experiment_id": experiment_id,
-            }
-        )
+        field_dict.update({
+            "experiment_id": experiment_id,
+        })
         if variant_data_dir is not UNSET:
             field_dict["variant_data_dir"] = variant_data_dir
         if validation_data_path is not UNSET:

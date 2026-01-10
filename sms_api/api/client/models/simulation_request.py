@@ -58,11 +58,9 @@ class SimulationRequest:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "config": config,
-            }
-        )
+        field_dict.update({
+            "config": config,
+        })
         if simulator is not UNSET:
             field_dict["simulator"] = simulator
         if simulator_id is not UNSET:

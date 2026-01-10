@@ -1,4 +1,3 @@
-import logging
 from typing import override
 
 from sms_api.common.hpc.models import SlurmJob
@@ -8,19 +7,12 @@ from sms_api.simulation.models import (
     ParcaDatasetRequest,
     ParcaOptions,
     Simulation,
-    SimulationConfig,
     SimulatorVersion,
 )
 from sms_api.simulation.simulation_service import SimulationService
 
 
 class ConcreteSimulationService(SimulationService):
-    @override
-    async def submit_experiment_job(
-        self, config: SimulationConfig, simulator_hash: str, logger: logging.Logger
-    ) -> tuple[str, int]:
-        raise NotImplementedError()
-
     @override
     async def get_latest_commit_hash(
         self,

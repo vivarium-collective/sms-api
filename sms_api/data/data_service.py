@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 import duckdb
 import numpy as np
@@ -68,16 +68,14 @@ class SimulationDataService(ABC):
     output_loaded: pd.DataFrame
 
     def __init__(
-        self, simulator_hash: str | None = None, parca_id: str | None = None, wd_root: Path | HPCFilePath | None = None
+        self, simulator_hash: str | None = None, parca_id: int | None = None, wd_root: HPCFilePath | None = None
     ) -> None:
         """
         NOTE: ``wd_root`` is essentially ~/workspace
         """
         self.env = get_settings()
         self.outputs_dir = self.env.simulation_outdir
-        self.wd_root = (
-            HPCFilePath(remote_path=Path(self.outputs_dir.remote_path.parent)) if wd_root is None else wd_root
-        )
+        self.wd_root = HPCFilePath(remote_path=self.outputs_dir.remote_path.parent) if wd_root is None else wd_root
         self.sim_data, self.validation_data = self.get_parca_data(simulator_hash, parca_id)
         self.labels = self._get_labels()
         self.conn = self.connect_duckdb()
@@ -94,20 +92,24 @@ class SimulationDataService(ABC):
 
     @abstractmethod
     def get_outputs(
-        self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str
+        self,
+        analysis_type: AnalysisType,
+        partitions_all: Mapping[str, str],
+        exp_select: str,
+        n_threads: int = 4,  # n_cpus available in slurm job
+        mem_limit: str = "22GB",
+        simulation_outdir: str | None = None,
     ) -> pd.DataFrame:
         pass
 
     @classmethod
-    def connect_duckdb(cls, db_filepath: Path | HPCFilePath | None = None):
+    def connect_duckdb(cls, db_filepath: Path | HPCFilePath | str | None = None) -> duckdb.DuckDBPyConnection:
         if db_filepath is not None:
             if isinstance(db_filepath, HPCFilePath):
                 db_filepath = db_filepath.remote_path
             if isinstance(db_filepath, Path):
                 db_filepath = db_filepath.__str__()
-        else:
-            db_filepath = ":memory:"
-        return duckdb.connect(db_filepath)
+        return duckdb.connect(db_filepath or ":memory:")
 
     @classmethod
     def downsample(cls, df_long: pd.DataFrame) -> pd.DataFrame:
@@ -118,7 +120,7 @@ class SimulationDataService(ABC):
         return df_ds
 
     def get_monomer_counts(
-        self, exp_select: str, analysis_type: AnalysisType, partitions_all: dict[str, str | int]
+        self, exp_select: str, analysis_type: AnalysisType, partitions_all: Mapping[str, str]
     ) -> np.ndarray[tuple[Any, ...], np.dtype[Any]]:
         history_sql_base, _, _ = self._get_sql_base(exp_select)
         db_filter = self._get_db_filter(analysis_type, partitions_all)
@@ -249,8 +251,8 @@ class SimulationDataService(ABC):
         history, conf, success = dataset_sql(str(self.outputs_dir.remote_path), experiment_ids=[exp_select])
         return history, conf, success
 
-    def _get_db_filter(self, analysis_type: AnalysisType, partitions_all: dict[str, str | int]) -> str:
-        def partitions_dict(analysis_type: AnalysisType, partitions_all: dict[str, str | int]) -> dict[str, Any]:
+    def _get_db_filter(self, analysis_type: AnalysisType, partitions_all: Mapping[str, str]) -> str:
+        def partitions_dict(analysis_type: AnalysisType, partitions_all: Mapping[str, str]) -> dict[str, Any]:
             partitions_req = PARTITION_GROUPS[analysis_type]
             partitions_dict = {}
             for partition in partitions_req:
@@ -357,6 +359,7 @@ class SimulationDataServiceFS(SimulationDataService):
             raise TypeError("The validation data file is improperly formatted.")
         return sim_data, validation_data
 
+    @override
     def get_outputs(
         self,
         analysis_type: AnalysisType,
