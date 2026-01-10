@@ -51,8 +51,8 @@ def verify_simulator_payload(simulator: Simulator) -> None:
 
 
 async def get_latest_simulator(
-    git_repo_url: str | None = None,
-    git_branch: str = "messages",
+    git_repo_url: str,
+    git_branch: str,
 ) -> Simulator:
     "https://github.com/vivarium-collective/vEcoli"
     hpc_service = get_simulation_service()

@@ -10,7 +10,7 @@ import orjson
 from pydantic import BaseModel, ConfigDict, Field
 
 from sms_api.common import StrEnumBase
-from sms_api.common.models import DataId
+from sms_api.common.models import DataId, JobStatus
 from sms_api.common.utils import get_data_id, get_uuid
 from sms_api.config import Settings, get_settings
 
@@ -226,14 +226,6 @@ class ExperimentAnalysisDTO(BaseModel):
     last_updated: str
     job_name: str | None = None
     job_id: int | None = None
-
-
-class JobStatus(StrEnumBase):
-    WAITING = "waiting"
-    QUEUED = "queued"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
 
 
 class AnalysisRun(BaseModel):
