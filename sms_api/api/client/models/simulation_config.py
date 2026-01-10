@@ -7,8 +7,8 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 if TYPE_CHECKING:
+    from ..models.analysis_options import AnalysisOptions
     from ..models.parca_options import ParcaOptions
-    from ..models.simulation_config_analysis_options import SimulationConfigAnalysisOptions
     from ..models.simulation_config_emitter_arg import SimulationConfigEmitterArg
     from ..models.simulation_config_flow import SimulationConfigFlow
     from ..models.simulation_config_initial_state import SimulationConfigInitialState
@@ -28,7 +28,7 @@ class SimulationConfig:
     Attributes:
         experiment_id (str):
         parca_options (Union[Unset, ParcaOptions]):
-        analysis_options (Union[Unset, SimulationConfigAnalysisOptions]):
+        analysis_options (Union[Unset, AnalysisOptions]):
         sim_data_path (Union[None, Unset, str]):
         suffix_time (Union[Unset, bool]):  Default: False.
         generations (Union[Unset, int]):  Default: 1.
@@ -87,7 +87,7 @@ class SimulationConfig:
 
     experiment_id: str
     parca_options: Union[Unset, "ParcaOptions"] = UNSET
-    analysis_options: Union[Unset, "SimulationConfigAnalysisOptions"] = UNSET
+    analysis_options: Union[Unset, "AnalysisOptions"] = UNSET
     sim_data_path: Union[None, Unset, str] = UNSET
     suffix_time: Union[Unset, bool] = False
     generations: Union[Unset, int] = 1
@@ -542,8 +542,8 @@ class SimulationConfig:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.analysis_options import AnalysisOptions
         from ..models.parca_options import ParcaOptions
-        from ..models.simulation_config_analysis_options import SimulationConfigAnalysisOptions
         from ..models.simulation_config_emitter_arg import SimulationConfigEmitterArg
         from ..models.simulation_config_flow import SimulationConfigFlow
         from ..models.simulation_config_initial_state import SimulationConfigInitialState
@@ -564,11 +564,11 @@ class SimulationConfig:
             parca_options = ParcaOptions.from_dict(_parca_options)
 
         _analysis_options = d.pop("analysis_options", UNSET)
-        analysis_options: Union[Unset, SimulationConfigAnalysisOptions]
+        analysis_options: Union[Unset, AnalysisOptions]
         if isinstance(_analysis_options, Unset):
             analysis_options = UNSET
         else:
-            analysis_options = SimulationConfigAnalysisOptions.from_dict(_analysis_options)
+            analysis_options = AnalysisOptions.from_dict(_analysis_options)
 
         def _parse_sim_data_path(data: object) -> Union[None, Unset, str]:
             if data is None:

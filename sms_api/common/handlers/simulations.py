@@ -26,6 +26,11 @@ from sms_api.simulation.simulation_service import SimulationService
 logger = logging.getLogger(__name__)
 
 
+def export_baseline_config(request: SimulationRequest) -> None:
+    with open("assets/simulations/configs/baseline.json", "w") as fp:
+        json.dump(request.config.model_dump(), fp, indent=3)
+
+
 async def run_workflow(
     request: SimulationRequest,
     simulation_service: SimulationService,
@@ -35,8 +40,8 @@ async def run_workflow(
     Parameterizes and executes a "full" e2e sms-api vEcoli workflow
     (simulator -> parca ref -> Simulation(parca -> variants -> simulation -> analyses)
     """
-    with open("assets/simulations/configs/baseline.json", "w") as fp:
-        json.dump(request.config.model_dump(), fp, indent=3)
+    export_baseline_config(request)
+
     # 1. upload simulator if needed
     if request.simulator_id is not None:
         simulator = await database_service.get_simulator(request.simulator_id)

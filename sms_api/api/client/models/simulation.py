@@ -22,7 +22,7 @@ class Simulation:
         simulator_id (int):
         parca_dataset_id (int):
         config (SimulationConfig):
-        last_updated (Union[Unset, str]):  Default: '2026-01-09 19:34:37.165963'.
+        last_updated (Union[Unset, str]):  Default: '2026-01-10 10:35:27.303444'.
         job_id (Union[None, Unset, int]):
     """
 
@@ -30,7 +30,7 @@ class Simulation:
     simulator_id: int
     parca_dataset_id: int
     config: "SimulationConfig"
-    last_updated: Union[Unset, str] = "2026-01-09 19:34:37.165963"
+    last_updated: Union[Unset, str] = "2026-01-10 10:35:27.303444"
     job_id: Union[None, Unset, int] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 

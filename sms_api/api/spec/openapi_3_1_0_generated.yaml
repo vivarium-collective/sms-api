@@ -31,10 +31,10 @@ paths:
               $ref: '#/components/schemas/SimulationRequest'
               default:
                 config:
-                  experiment_id: sms_experiment_5134_20260109
+                  experiment_id: postman_TEST
                   parca_options:
                     cpus: 3
-                    outdir: /projects/SMS/alex/sims
+                    outdir: /home/FCAM/svc_vivarium/dev/sims
                     operons: true
                     ribosome_fitting: true
                     remove_rrna_operons: false
@@ -46,6 +46,29 @@ paths:
                     intermediates_directory: ''
                     variable_elongation_transcription: true
                     variable_elongation_translation: false
+                  analysis_options:
+                    cpus: 3
+                    single:
+                      ptools_rxns:
+                        n_tp: 4
+                      ptools_rna:
+                        n_tp: 4
+                      ptools_proteins:
+                        n_tp: 4
+                    multigeneration:
+                      ptools_rxns:
+                        n_tp: 4
+                      ptools_rna:
+                        n_tp: 4
+                      ptools_proteins:
+                        n_tp: 4
+                    multiseed:
+                      ptools_rxns:
+                        n_tp: 4
+                      ptools_rna:
+                        n_tp: 4
+                      ptools_proteins:
+                        n_tp: 4
                   suffix_time: false
                   generations: 1
                   n_init_sims: 1
@@ -55,11 +78,11 @@ paths:
                   single_daughters: true
                   emitter: parquet
                   emitter_arg:
-                    out_dir: /projects/SMS/alex/sims
+                    out_dir: /home/FCAM/svc_vivarium/dev/sims
                 simulator:
-                  git_commit_hash: fe3fbcb
-                  git_repo_url: https://github.com/CovertLab/vEcoli
-                  git_branch: master
+                  git_commit_hash: 540e426
+                  git_repo_url: https://github.com/vivarium-collective/vEcoli
+                  git_branch: ccam-nextflow
       responses:
         '200':
           description: Successful Response
@@ -456,14 +479,14 @@ paths:
               $ref: '#/components/schemas/ParcaDatasetRequest'
               default:
                 simulator_version:
-                  git_commit_hash: fe3fbcb
-                  git_repo_url: https://github.com/CovertLab/vEcoli
-                  git_branch: master
+                  git_commit_hash: 540e426
+                  git_repo_url: https://github.com/vivarium-collective/vEcoli
+                  git_branch: ccam-nextflow
                   database_id: 25
-                  created_at: '2026-01-09T19:34:38.000501'
+                  created_at: '2026-01-10T10:35:28.265621'
                 parca_config:
                   cpus: 3
-                  outdir: /projects/SMS/alex/sims
+                  outdir: /home/FCAM/svc_vivarium/dev/sims
                   operons: true
                   ribosome_fitting: true
                   remove_rrna_operons: false
@@ -686,6 +709,56 @@ components:
       required:
       - name
       title: AnalysisModuleConfig
+    AnalysisOptions:
+      properties:
+        cpus:
+          type: integer
+          title: Cpus
+          default: 3
+        single:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Single
+        multidaughter:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Multidaughter
+        multigeneration:
+          anyOf:
+          - additionalProperties:
+              additionalProperties: true
+              type: object
+            type: object
+          - type: 'null'
+          title: Multigeneration
+        multiseed:
+          anyOf:
+          - additionalProperties:
+              additionalProperties: true
+              type: object
+            type: object
+          - type: 'null'
+          title: Multiseed
+        multivariant:
+          anyOf:
+          - additionalProperties:
+              additionalProperties: true
+              type: object
+            type: object
+          - type: 'null'
+          title: Multivariant
+        multiexperiment:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Multiexperiment
+      type: object
+      title: AnalysisOptions
     AnalysisRun:
       properties:
         id:
@@ -942,7 +1015,7 @@ components:
           $ref: '#/components/schemas/ParcaOptions'
           default:
             cpus: 3
-            outdir: /projects/SMS/alex/sims
+            outdir: /home/FCAM/svc_vivarium/dev/sims
             operons: true
             ribosome_fitting: true
             remove_rrna_operons: false
@@ -967,7 +1040,7 @@ components:
         outdir:
           type: string
           title: Outdir
-          default: /projects/SMS/alex/sims
+          default: /home/FCAM/svc_vivarium/dev/sims
         operons:
           type: boolean
           title: Operons
@@ -1095,7 +1168,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-01-09 19:34:37.165963'
+          default: '2026-01-10 10:35:27.303444'
         job_id:
           anyOf:
           - type: integer
@@ -1118,7 +1191,7 @@ components:
           $ref: '#/components/schemas/ParcaOptions'
           default:
             cpus: 3
-            outdir: /projects/SMS/alex/sims
+            outdir: /home/FCAM/svc_vivarium/dev/sims
             operons: true
             ribosome_fitting: true
             remove_rrna_operons: false
@@ -1131,10 +1204,9 @@ components:
             variable_elongation_transcription: true
             variable_elongation_translation: false
         analysis_options:
-          additionalProperties: true
-          type: object
-          title: Analysis Options
-          default: {}
+          $ref: '#/components/schemas/AnalysisOptions'
+          default:
+            cpus: 3
         sim_data_path:
           anyOf:
           - type: string

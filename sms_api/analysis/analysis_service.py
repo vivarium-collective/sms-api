@@ -83,7 +83,7 @@ class AnalysisServiceSlurm:
             env=self.env,
             slurm_log_file=slurm_log_file,
             slurm_job_name=slurmjob_name,
-            latest_hash=simulator_hash or get_simulator().git_commit_hash,
+            simulator_hash=simulator_hash or get_simulator().git_commit_hash,
             config=analysis_config,
             analysis_name=analysis_name,
         )
@@ -167,7 +167,7 @@ class AnalysisServiceSlurm:
             env=self.env,
             slurm_log_file=slurm_log_file,
             slurm_job_name=slurm_job_name,
-            latest_hash=latest_hash,
+            simulator_hash=latest_hash,
             config=config,
             analysis_name=analysis_name,
         )
@@ -203,16 +203,18 @@ def generate_slurm_script(
     env: Settings,
     slurm_log_file: HPCFilePath,
     slurm_job_name: str,
-    latest_hash: str,
+    simulator_hash: str,
     config: AnalysisConfig,
     analysis_name: str,
 ) -> str:
-    base_path = env.slurm_base_path.remote_path
-    remote_workspace_dir = base_path / "workspace"
-    vecoli_dir = remote_workspace_dir / "vEcoli"
-    config_dir = vecoli_dir / "configs"
     qos_clause = f"#SBATCH --qos={env.slurm_qos}" if env.slurm_qos else ""
     nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
+
+    image_path = env.hpc_image_base_path / f"vecoli-{simulator_hash}.sif"
+    vecoli_repo_path = env.hpc_repo_base_path / simulator_hash
+    simulation_outdir_base = env.simulation_outdir
+    analysis_outdir = env.analysis_outdir / analysis_name
+
     return dedent(f"""\
         #!/bin/bash
         #SBATCH --job-name={slurm_job_name}
@@ -235,33 +237,37 @@ def generate_slurm_script(
         ## export UV_PROJECT_ENVIRONMENT=disabled
 
         ### configure working dir and binds
-        vecoli_dir={vecoli_dir!s}
-        latest_hash={latest_hash}
-        image=$HOME/workspace/images/vecoli-$latest_hash.sif
+        image={image_path!s}
         vecoli_image_root=/vEcoli
-        config_fp={config_dir!s}/{analysis_name}.json
-        echo '{json.dumps(config.model_dump())}' > \"$config_fp\"
-        cd $vecoli_dir
+        tmp_config=$(mktemp)
+        echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
 
         ### binds
-        binds="-B $HOME/workspace/vEcoli:/vEcoli"
-        binds+=" -B $HOME/.local/share/uv:/root/.local/share/uv"
-        binds+=" -B $HOME/workspace/api_outputs:/out"
+        ## binds="-B $HOME/workspace/vEcoli:/vEcoli"
+        ## binds+=" -B $HOME/.local/share/uv:/root/.local/share/uv"
+        ## binds+=" -B $HOME/workspace/api_outputs:/out"
+        ## binds+=" -B $JAVA_HOME:$JAVA_HOME"
+        ## binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
+
+        ### binds
+        binds="-B {vecoli_repo_path!s}:/vEcoli"
+        binds+=" -B {simulation_outdir_base!s}:/out"
         binds+=" -B $JAVA_HOME:$JAVA_HOME"
         binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
+        binds+=" -B $HOME/.local/share/uv:/root/.local/share/uv"
 
         ### remove existing dir if needed and recreate
-        analysis_outdir={config.analysis_options.outdir!s}
+        analysis_outdir={analysis_outdir!s}
         if [ -d \"$analysis_outdir\" ]; then
             rm -rf \"$analysis_outdir\"
         fi
-        mkdir -p {config.analysis_options.outdir!s}
+        mkdir -p {analysis_outdir!s}
 
         ### execute analysis
         singularity run $binds $image bash -c "
             export JAVA_HOME=$HOME/.local/bin/java-22
             export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-            uv run --no-cache --env-file /vEcoli/.env /vEcoli/runscripts/analysis.py --config \"$config_fp\"
+            uv run --no-cache --env-file /vEcoli/.env /vEcoli/runscripts/analysis.py --config \"$tmp_config\"
         "
 
         ### optionally, remove uploaded fp

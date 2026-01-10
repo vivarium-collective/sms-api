@@ -4,11 +4,11 @@ from typing import Any, TypeVar
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-T = TypeVar("T", bound="SimulationConfigAnalysisOptions")
+T = TypeVar("T", bound="AnalysisOptionsSingleType0")
 
 
 @_attrs_define
-class SimulationConfigAnalysisOptions:
+class AnalysisOptionsSingleType0:
     """ """
 
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -22,10 +22,10 @@ class SimulationConfigAnalysisOptions:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        simulation_config_analysis_options = cls()
+        analysis_options_single_type_0 = cls()
 
-        simulation_config_analysis_options.additional_properties = d
-        return simulation_config_analysis_options
+        analysis_options_single_type_0.additional_properties = d
+        return analysis_options_single_type_0
 
     @property
     def additional_keys(self) -> list[str]:

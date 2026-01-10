@@ -14,7 +14,7 @@ class ParcaOptions:
     """
     Attributes:
         cpus (Union[Unset, int]):  Default: 3.
-        outdir (Union[Unset, str]):  Default: '/projects/SMS/alex/sims'.
+        outdir (Union[Unset, str]):  Default: '/home/FCAM/svc_vivarium/dev/sims'.
         operons (Union[Unset, bool]):  Default: True.
         ribosome_fitting (Union[Unset, bool]):  Default: True.
         remove_rrna_operons (Union[Unset, bool]):  Default: False.
@@ -30,7 +30,7 @@ class ParcaOptions:
     """
 
     cpus: Union[Unset, int] = 3
-    outdir: Union[Unset, str] = "/projects/SMS/alex/sims"
+    outdir: Union[Unset, str] = "/home/FCAM/svc_vivarium/dev/sims"
     operons: Union[Unset, bool] = True
     ribosome_fitting: Union[Unset, bool] = True
     remove_rrna_operons: Union[Unset, bool] = False

@@ -12,15 +12,26 @@ from sms_api.common.models import JobStatus
 from sms_api.config import get_settings
 
 
+class BaseModel(_BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+def trim_attributes(cls: BaseModel, excluded: list[str] | None = None) -> None:
+    if excluded is None:
+        excluded = []
+    for attrname in list(cls.model_fields.keys()):
+        attr = getattr(cls, attrname)
+        if attr is None and attrname not in excluded:
+            delattr(cls, attrname)
+        if isinstance(attr, (list, dict)) and not len(attr):
+            delattr(cls, attrname)
+
+
 class JobType(enum.Enum):
     ANALYSIS = "analysis"
     SIMULATION = "simulation"
     PARCA = "parca"
     BUILD_IMAGE = "build_image"
-
-
-class BaseModel(_BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class HpcRun(BaseModel):
@@ -72,6 +83,9 @@ class ParcaOptions(BaseModel):
     variable_elongation_transcription: bool = True
     variable_elongation_translation: bool = False
 
+    def model_post_init(self, context: Any, /) -> None:
+        trim_attributes(self)
+
 
 class ParcaDatasetRequest(BaseModel):
     simulator_version: SimulatorVersion  # Version of the software used to generate the dataset
@@ -80,7 +94,7 @@ class ParcaDatasetRequest(BaseModel):
     @property
     def config_hash(self) -> str:
         """Generate a deep hash of the parca request for caching purposes."""
-        json_str = json.dumps(self.parca_config)
+        json_str = json.dumps(self.parca_config.model_dump())
         return hashlib.md5(json_str.encode()).hexdigest()  # noqa: S324 insecure hash `md5` is okay for caching
 
 
@@ -129,11 +143,14 @@ class AnalysisOptions(BaseModel):
     multivariant: dict[str, dict[str, Any]] | None = None
     multiexperiment: dict[str, Any] | None = None
 
+    def model_post_init(self, context: Any, /) -> None:
+        trim_attributes(self)
+
 
 class SimulationConfig(BaseModel):
     experiment_id: str
     parca_options: ParcaOptions = ParcaOptions()
-    analysis_options: dict[str, Any] = Field(default={})
+    analysis_options: AnalysisOptions = AnalysisOptions()
     sim_data_path: str | None = None
     suffix_time: bool = False
     generations: int = 1
@@ -143,7 +160,9 @@ class SimulationConfig(BaseModel):
     time_step: float = 1.0
     single_daughters: bool = True
     emitter: str = "parquet"
-    emitter_arg: dict[str, str] = Field(default_factory=lambda: {"out_dir": str(get_settings().hpc_sim_base_path)})
+    emitter_arg: dict[str, str] = Field(
+        default_factory=lambda: {"out_dir": str(get_settings().simulation_outdir)}
+    )  # str(get_settings().hpc_sim_base_path)
     variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
     gcloud: str | None = None
     agent_id: str | None = None
@@ -295,14 +314,3 @@ class Simulation(BaseModel):
     config: SimulationConfig
     last_updated: str = Field(default=str(datetime.datetime.now()))
     job_id: int | None = None
-
-
-def trim_attributes(cls: BaseModel, excluded: list[str] | None = None) -> None:
-    if excluded is None:
-        excluded = []
-    for attrname in list(cls.model_fields.keys()):
-        attr = getattr(cls, attrname)
-        if attr is None and attrname not in excluded:
-            delattr(cls, attrname)
-        if isinstance(attr, (list, dict)) and not len(attr):
-            delattr(cls, attrname)

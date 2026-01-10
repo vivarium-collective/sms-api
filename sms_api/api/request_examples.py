@@ -16,7 +16,6 @@ import random
 from typing import Literal, cast
 
 from sms_api.analysis.models import (
-    AnalysisConfigOptions,
     AnalysisDomain,
     ExperimentAnalysisRequest,
     PtoolsAnalysisConfig,
@@ -25,6 +24,7 @@ from sms_api.analysis.models import (
 from sms_api.common.gateway.utils import generate_analysis_request
 from sms_api.common.utils import unique_id
 from sms_api.simulation.models import (
+    AnalysisOptions,
     ParcaDatasetRequest,
     ParcaOptions,
     SimulationConfig,
@@ -37,7 +37,7 @@ DEFAULT_NUM_SEEDS = 30
 DEFAULT_NUM_GENERATIONS = 4
 
 DEFAULT_SIMULATOR = Simulator(
-    git_commit_hash="fe3fbcb", git_repo_url="https://github.com/CovertLab/vEcoli", git_branch="master"
+    git_commit_hash="540e426", git_repo_url="https://github.com/vivarium-collective/vEcoli", git_branch="ccam-nextflow"
 )
 
 
@@ -136,7 +136,13 @@ def get_analysis_api_multiseed() -> ExperimentAnalysisRequest:
 
 def get_simulation_base() -> SimulationRequest:
     sim_id = unique_id("sms_experiment")
-    return SimulationRequest(simulator=DEFAULT_SIMULATOR, config=SimulationConfig(experiment_id=sim_id))
+    sim_id = "postman_TEST"
+    return SimulationRequest(
+        simulator=DEFAULT_SIMULATOR,
+        config=SimulationConfig(
+            experiment_id=sim_id, analysis_options=analysis_options_omics(n_tp=random.randint(1, 22))
+        ),
+    )
 
 
 def get_parca_base() -> ParcaDatasetRequest:
@@ -186,9 +192,9 @@ def omics_analysis_config(n_tp: int) -> OmicsAnalysisModuleConfig:
     )
 
 
-def analysis_options_omics(n_tp: int) -> AnalysisConfigOptions:
+def analysis_options_omics(n_tp: int) -> AnalysisOptions:
     analysis_domains = ["single", "multigeneration", "multiseed"]
-    return AnalysisConfigOptions(
+    return AnalysisOptions(
         cpus=3,
         **dict(zip(analysis_domains, [omics_analysis_config(n_tp) for _ in range(len(analysis_domains))])),  # type: ignore[arg-type]
     )

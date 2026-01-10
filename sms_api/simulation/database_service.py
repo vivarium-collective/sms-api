@@ -403,7 +403,8 @@ class DatabaseServiceSQL(DatabaseService):
             result1: Result[tuple[ORMParcaDataset]] = await session.execute(stmt1)
             existing_orm_parca_dataset: ORMParcaDataset | None = result1.scalars().one_or_none()
             if existing_orm_parca_dataset is not None:
-                raise RuntimeError("Parca Dataset with the same configuration already exists in the database")
+                logger.info("Parca Dataset with the same configuration already exists in the database")
+                return await self.get_parca_dataset(existing_orm_parca_dataset.id)  # type: ignore[return-value]
 
             # did not find the parca dataset, so insert it
             orm_simulator: ORMSimulator | None = await self._get_orm_simulator(session, simulator_id=simulator_id)

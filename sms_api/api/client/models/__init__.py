@@ -17,6 +17,18 @@ from .analysis_config_options_multivariant_additional_property import (
 )
 from .analysis_config_options_single import AnalysisConfigOptionsSingle
 from .analysis_module_config import AnalysisModuleConfig
+from .analysis_options import AnalysisOptions
+from .analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
+from .analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
+from .analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
+from .analysis_options_multigeneration_type_0_additional_property import (
+    AnalysisOptionsMultigenerationType0AdditionalProperty,
+)
+from .analysis_options_multiseed_type_0 import AnalysisOptionsMultiseedType0
+from .analysis_options_multiseed_type_0_additional_property import AnalysisOptionsMultiseedType0AdditionalProperty
+from .analysis_options_multivariant_type_0 import AnalysisOptionsMultivariantType0
+from .analysis_options_multivariant_type_0_additional_property import AnalysisOptionsMultivariantType0AdditionalProperty
+from .analysis_options_single_type_0 import AnalysisOptionsSingleType0
 from .analysis_run import AnalysisRun
 from .check_health_health_get_response_check_health_health_get import CheckHealthHealthGetResponseCheckHealthHealthGet
 from .experiment_analysis_dto import ExperimentAnalysisDTO
@@ -34,7 +46,6 @@ from .ptools_analysis_config import PtoolsAnalysisConfig
 from .registered_simulators import RegisteredSimulators
 from .simulation import Simulation
 from .simulation_config import SimulationConfig
-from .simulation_config_analysis_options import SimulationConfigAnalysisOptions
 from .simulation_config_emitter_arg import SimulationConfigEmitterArg
 from .simulation_config_flow import SimulationConfigFlow
 from .simulation_config_initial_state import SimulationConfigInitialState
@@ -68,6 +79,16 @@ __all__ = (
     "AnalysisConfigOptionsMultivariantAdditionalProperty",
     "AnalysisConfigOptionsSingle",
     "AnalysisModuleConfig",
+    "AnalysisOptions",
+    "AnalysisOptionsMultidaughterType0",
+    "AnalysisOptionsMultiexperimentType0",
+    "AnalysisOptionsMultigenerationType0",
+    "AnalysisOptionsMultigenerationType0AdditionalProperty",
+    "AnalysisOptionsMultiseedType0",
+    "AnalysisOptionsMultiseedType0AdditionalProperty",
+    "AnalysisOptionsMultivariantType0",
+    "AnalysisOptionsMultivariantType0AdditionalProperty",
+    "AnalysisOptionsSingleType0",
     "AnalysisRun",
     "CheckHealthHealthGetResponseCheckHealthHealthGet",
     "ExperimentAnalysisDTO",
@@ -85,7 +106,6 @@ __all__ = (
     "RegisteredSimulators",
     "Simulation",
     "SimulationConfig",
-    "SimulationConfigAnalysisOptions",
     "SimulationConfigEmitterArg",
     "SimulationConfigFlow",
     "SimulationConfigInitialState",
