@@ -58,8 +58,8 @@ async def run_simulation(
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        return await handlers.simulations.run_simulation(
-            database_service=database_service, sim_service=sim_service, request=request
+        return await handlers.simulations.run_workflow(
+            database_service=database_service, simulation_service=sim_service, request=request
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
