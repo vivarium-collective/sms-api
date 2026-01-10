@@ -91,7 +91,7 @@ class SimulationServiceHpc(SimulationService):
             raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
         latest_commit_hash = stdout.strip("\n")[:7]
         assets_dir = get_settings().assets_dir
-        with open(Path(assets_dir) / "simulation" / "model" / "latest_commit.txt", "w") as f:
+        with open(Path(assets_dir) / "simulations" / "model" / "latest_commit.txt", "w") as f:
             f.write(latest_commit_hash)
 
         self._latest_commit_hash = latest_commit_hash
@@ -266,7 +266,7 @@ class SimulationServiceHpc(SimulationService):
                         echo "Repository moved to $FINAL_REPO_PATH"
                     fi
                     """)
-                # capture_slurm_script(script_content, "artifacts/build_image.sbatch")
+                capture_slurm_script(script_content, "assets/artifacts/build_image.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -340,7 +340,7 @@ class SimulationServiceHpc(SimulationService):
 
                     echo "Parca run completed. data saved to {parca_remote_path!s}."
                     """)
-                capture_slurm_script(script_content, "artifacts/parca.sbatch")
+                capture_slurm_script(script_content, "assets/artifacts/parca.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -381,7 +381,7 @@ class SimulationServiceHpc(SimulationService):
                     simulator_hash=simulator.git_commit_hash,  # type: ignore[union-attr]
                     config=ecoli_simulation.config,
                 )
-                # capture_slurm_script(script_content, "artifacts/simulation.sbatch")
+                capture_slurm_script(script_content, "assets/artifacts/simulation.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -421,7 +421,7 @@ def workflow_slurm_script(
     nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
 
     image_path = env.hpc_image_base_path / f"vecoli-{simulator_hash}.sif"
-    vecoli_repo_path = env.hpc_repo_base_path / simulator_hash
+    vecoli_repo_path = env.hpc_repo_base_path / simulator_hash / "vEcoli"
     simulation_outdir_base = env.simulation_outdir
 
     return dedent(f"""\
@@ -443,6 +443,7 @@ def workflow_slurm_script(
         local_bin=$HOME/.local/bin
         export JAVA_HOME=$local_bin/java-22
         export PATH=$JAVA_HOME/bin:$local_bin:$PATH
+
         ### configure working dir and binds
 
         latest_hash={simulator_hash}
@@ -454,13 +455,11 @@ def workflow_slurm_script(
         binds+=" -B {simulation_outdir_base!s}:/out"
         binds+=" -B $JAVA_HOME:$JAVA_HOME"
         binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
+        binds+=" -B /isg/shared/mantis/apps/nextflow/25.04.6/nextflow:/usr/local/bin/nextflow"
 
         image={image_path!s}
         vecoli_image_root=/vEcoli
 
-        singularity run $binds $image bash -c "
-            export JAVA_HOME=$HOME/.local/bin/java-22
-            export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-            uv run --env-file /vEcoli/.env /vEcoli/runscripts/workflow.py --config \"$tmp_config\"
-        "
+        singularity run $binds $image uv run --with python-dotenv --env-file /vEcoli/.env \\
+            /vEcoli/runscripts/workflow.py --config \"$tmp_config\"
     """)
