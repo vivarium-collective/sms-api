@@ -35,6 +35,7 @@ class StrEnumBase(StrEnum):
 class JobStatus(StrEnumBase):
     """Shared job status enum for simulations, analyses, and other HPC jobs."""
 
+    UNKNOWN = "unknown"
     WAITING = "waiting"
     PENDING = "pending"
     QUEUED = "queued"

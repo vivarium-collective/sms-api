@@ -58,8 +58,8 @@ class SlurmJob(BaseModel):
         elif state_upper in ("FAILED", "F", "CANCELLED", "CA", "TIMEOUT", "TO", "NODE_FAIL", "NF"):
             return JobStatus.FAILED
         else:
-            logger.warning(f"Unknown SLURM state '{self.job_state}', defaulting to PENDING")
-            return JobStatus.PENDING
+            logger.warning(f"Unknown SLURM state '{self.job_state}', returning UNKNOWN")
+            return JobStatus.UNKNOWN
 
     @staticmethod
     def get_sacct_format_string() -> str:

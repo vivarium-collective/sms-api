@@ -175,7 +175,12 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
             slurm_jobs = await slurm_service.get_job_status_sacct(ssh, job_ids=[hpc_run.slurmjobid])
 
     if not slurm_jobs:
-        raise RuntimeError(f"No SLURM job found for job ID {hpc_run.slurmjobid}")
+        # Job was just submitted and may not have propagated to SLURM yet
+        # Return UNKNOWN since we can't confirm the actual state
+        from sms_api.common.models import JobStatus
+
+        logger.warning(f"SLURM job {hpc_run.slurmjobid} not yet visible in squeue/sacct, returning UNKNOWN")
+        return SimulationRun(id=int(id), status=JobStatus.UNKNOWN)
 
     slurm_job = slurm_jobs[0]
     return SimulationRun(id=int(id), status=slurm_job.get_job_status())

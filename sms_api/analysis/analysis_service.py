@@ -144,8 +144,8 @@ class AnalysisServiceSlurm:
         slurm_jobs = await slurm_service.get_job_status_sacct(ssh, job_ids=[job_id])
 
         if not slurm_jobs:
-            # Job not yet in sacct, assume pending
-            return AnalysisRun(id=db_id, status=JobStatus.PENDING)
+            # Job not yet in sacct, status unknown
+            return AnalysisRun(id=db_id, status=JobStatus.UNKNOWN)
 
         slurm_job = slurm_jobs[0]
         job_state = slurm_job.job_state.upper()
@@ -161,7 +161,7 @@ class AnalysisServiceSlurm:
             "NODE_FAIL": JobStatus.FAILED,
             "OUT_OF_MEMORY": JobStatus.FAILED,
         }
-        return AnalysisRun(id=db_id, status=status_map.get(job_state, JobStatus.PENDING))
+        return AnalysisRun(id=db_id, status=status_map.get(job_state, JobStatus.UNKNOWN))
 
     @classmethod
     def _verify_result(cls, local_result_path: Path, expected_n_tp: int) -> bool:
