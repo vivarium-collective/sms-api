@@ -7,13 +7,13 @@
   "initial_global_time": 0.0,
   "time_step": 1.0,
   "fail_at_max_duration": false,
-  "sim_data_path": "/home/FCAM/svc_vivarium/workspace/kb/simData.cPickle",
+  "sim_data_path": "/path/to/kb/simData.cPickle",
   "generations": 1,
   "n_init_sims": 1,
   "single_daughters": true,
   "emitter": "parquet",
   "emitter_arg": {
-    "out_dir": "/home/FCAM/svc_vivarium/workspace/outputs"
+    "out_dir": "/path/to/outputs"
   },
   "analysis_options": {
     "cpus": 3,

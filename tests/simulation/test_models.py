@@ -4,7 +4,6 @@ from typing import Any
 
 import pytest
 
-from sms_api.config import get_settings
 from sms_api.simulation.models import (
     BaseModel,
     SimulationConfig,
@@ -14,8 +13,8 @@ from sms_api.simulation.models import (
 
 @pytest.mark.asyncio
 async def test_serialize_sim_config() -> None:
-    assets_dir = Path(get_settings().assets_dir)
-    with open(assets_dir / "sms_single_cell.json") as f:
+    fixtures_dir = Path(__file__).parent.parent / "fixtures" / "configs"
+    with open(fixtures_dir / "sms_single_cell.json") as f:
         simulation_config_raw = json.load(f)
     config = SimulationConfig(**simulation_config_raw)
     serialized = config.model_dump_json()

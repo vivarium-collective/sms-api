@@ -1,18 +1,18 @@
 {
   "emitter_arg": {
-    "out_dir": "/home/FCAM/svc_vivarium/workspace/api_outputs"
+    "out_dir": "/path/to/api_outputs"
   },
   "analysis_options": {
     "experiment_id": [
       "sms_multigeneration"
     ],
     "variant_data_dir": [
-      "/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration/variant_sim_data"
+      "/path/to/api_outputs/sms_multigeneration/variant_sim_data"
     ],
     "validation_data_path": [
-      "/home/FCAM/svc_vivarium/workspace/api_outputs/sms_multigeneration/parca/kb/validationData.cPickle"
+      "/path/to/api_outputs/sms_multigeneration/parca/kb/validationData.cPickle"
     ],
-    "outdir": "/home/FCAM/svc_vivarium/workspace/api_outputs/analysis_multigen",
+    "outdir": "/path/to/api_outputs/analysis_multigen",
     "cpus": 4,
     "single": {},
     "multidaughter": {},

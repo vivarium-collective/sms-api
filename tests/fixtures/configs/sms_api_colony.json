@@ -4,7 +4,7 @@
   "sim_data_path": null,
   "emitter": "parquet",
   "emitter_arg": {
-    "out_dir": "/home/FCAM/svc_vivarium/workspace/api_outputs"
+    "out_dir": "/path/to/api_outputs"
   },
   "experiment_id": "sms_api_colony",
   "suffix_time": false,
@@ -23,7 +23,7 @@
   ],
   "parca_options": {
     "cpus": 7,
-    "outdir": "/home/FCAM/svc_vivarium/workspace/api_outputs",
+    "outdir": "/path/to/api_outputs",
     "operons": true,
     "ribosome_fitting": true,
     "rnapoly_fitting": true,

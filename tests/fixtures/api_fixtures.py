@@ -96,7 +96,7 @@ async def workspace_image_hash() -> str:
 
 @pytest_asyncio.fixture(scope="session")
 async def analysis_config_path() -> Path:
-    return Path(REPO_ROOT) / "assets" / "sms_multigen_analysis.json"
+    return Path(REPO_ROOT) / "tests" / "fixtures" / "configs" / "sms_multigen_analysis.json"
 
 
 @pytest_asyncio.fixture(scope="session")
