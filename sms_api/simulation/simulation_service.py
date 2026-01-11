@@ -255,8 +255,8 @@ class SimulationServiceHpc(SimulationService):
                     fi
                     echo "Container build successful!"
 
-                    # Cleanup temp files
-                    rm -f source-info/git_diff.txt repo.tar
+                    # Cleanup temp files (keep git_diff.txt as it's needed for simulation runs)
+                    rm -f repo.tar
 
                     echo "Build completed. Image saved to {apptainer_image_path!s}."
 
@@ -446,6 +446,9 @@ def workflow_slurm_script(
         export JAVA_HOME=$local_bin/java-22
         export PATH=$JAVA_HOME/bin:$local_bin:$PATH
 
+        ### create output directory if it doesn't exist
+        mkdir -p {simulation_outdir_base!s}
+
         ### configure working dir and binds
 
         latest_hash={simulator_hash}
@@ -464,6 +467,10 @@ def workflow_slurm_script(
 
         export UV_CACHE_DIR=$HOME/.cache/uv
         mkdir -p $UV_CACHE_DIR
+
+        # Change to vEcoli repo directory so Nextflow's launchDir resolves correctly
+        cd {vecoli_repo_path!s}
+
         singularity run --env UV_CACHE_DIR=$UV_CACHE_DIR $binds $image uv run --with python-dotenv \\
             --env-file {vecoli_repo_path!s}/.env \\
             {vecoli_repo_path!s}/runscripts/workflow.py --config \"$tmp_config\"

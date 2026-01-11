@@ -1,9 +1,15 @@
+import logging
 import pprint
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from sms_api.common.models import JobStatus
+
+logger = logging.getLogger(__name__)
 
 
 class SlurmJob(BaseModel):
@@ -37,6 +43,23 @@ class SlurmJob(BaseModel):
         if not self.job_state:
             return False
         return self.job_state.upper() in ["COMPLETED", "FAILED"]
+
+    def get_job_status(self) -> "JobStatus":
+        """Map SLURM job state to JobStatus enum."""
+        from sms_api.common.models import JobStatus
+
+        state_upper = self.job_state.upper()
+        if state_upper in ("PENDING", "PD"):
+            return JobStatus.PENDING
+        elif state_upper in ("RUNNING", "R"):
+            return JobStatus.RUNNING
+        elif state_upper in ("COMPLETED", "CD"):
+            return JobStatus.COMPLETED
+        elif state_upper in ("FAILED", "F", "CANCELLED", "CA", "TIMEOUT", "TO", "NODE_FAIL", "NF"):
+            return JobStatus.FAILED
+        else:
+            logger.warning(f"Unknown SLURM state '{self.job_state}', defaulting to PENDING")
+            return JobStatus.PENDING
 
     @staticmethod
     def get_sacct_format_string() -> str:

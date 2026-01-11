@@ -85,7 +85,9 @@ async def test_simulate(
         assert slurm_job_parca.name.startswith(f"parca-{commit_hash}-")
 
         simulation_request = SimulationRequest(
-            simulator_id=simulator.database_id, config=SimulationConfig(experiment_id="test_simulate")
+            simulator_id=simulator.database_id,
+            parca_dataset_id=parca_dataset.database_id,
+            config=SimulationConfig(experiment_id="test_simulate"),
         )
         simulation = await database_service.insert_simulation(sim_request=simulation_request)
 

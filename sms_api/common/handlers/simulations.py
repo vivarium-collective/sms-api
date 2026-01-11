@@ -145,16 +145,27 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
     sim_record = await db_service.get_simulation(simulation_id=id)
     if sim_record is None:
         raise ValueError(f"Simulation with id {id} not found.")
-    slurmjob_id = sim_record.job_id
-    if slurmjob_id is None:
-        raise RuntimeError(f"Not yet dispatched!: {sim_record}")
-    slurm_user = get_settings().slurm_submit_user
 
+    # Get the HpcRun record for this simulation to find the SLURM job ID
+    hpc_run = await db_service.get_hpcrun_by_ref(ref_id=id, job_type=JobType.SIMULATION)
+    if hpc_run is None:
+        raise RuntimeError(f"No HPC run found for simulation {id}")
+    if hpc_run.slurmjobid is None:
+        raise RuntimeError(f"Simulation {id} not yet dispatched to SLURM")
+
+    slurm_service = SlurmService()
     async with get_ssh_session_service().session() as ssh:
-        statuses = await ssh.run_command(f"sacct -u {slurm_user} | grep {slurmjob_id}")
+        # First try squeue (for running/pending jobs)
+        slurm_jobs = await slurm_service.get_job_status_squeue(ssh, job_ids=[hpc_run.slurmjobid])
+        if not slurm_jobs:
+            # Job not in queue, check sacct for completed jobs
+            slurm_jobs = await slurm_service.get_job_status_sacct(ssh, job_ids=[hpc_run.slurmjobid])
 
-    status: str = statuses[1].split("\n")[0].split()[-2]
-    return SimulationRun(id=int(id), status=JobStatus[status])
+    if not slurm_jobs:
+        raise RuntimeError(f"No SLURM job found for job ID {hpc_run.slurmjobid}")
+
+    slurm_job = slurm_jobs[0]
+    return SimulationRun(id=int(id), status=slurm_job.get_job_status())
 
 
 async def list_simulations(db_service: DatabaseService) -> list[Simulation]:
