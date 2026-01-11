@@ -91,14 +91,6 @@ def get_remote_chunks_dirpath(simulation_database_id: int, git_commit_hash: str)
     )
 
 
-def read_latest_commit() -> str:
-    settings = get_settings()
-    if not settings.assets_dir:
-        raise ValueError("Assets directory is not set in the settings.")
-    with open(Path(settings.assets_dir) / "simulation" / "model" / "latest_commit.txt") as f:
-        return f.read().strip()
-
-
 def add_variant_config(config: dict[str, Any]) -> dict[str, Any]:
     """
     For Example:

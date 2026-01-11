@@ -109,10 +109,6 @@ class SimulationServiceHpc(SimulationService):
         if return_code != 0:
             raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
         latest_commit_hash = stdout.strip("\n")[:7]
-        assets_dir = get_settings().assets_dir
-        with open(Path(assets_dir) / "simulations" / "model" / "latest_commit.txt", "w") as f:
-            f.write(latest_commit_hash)
-
         self._latest_commit_hash = latest_commit_hash
         return latest_commit_hash
 

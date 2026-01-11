@@ -1,6 +1,5 @@
 import datetime
 import json
-import warnings
 from pathlib import Path
 from typing import Any
 
@@ -49,33 +48,6 @@ def format_marimo_appname(appname: str) -> str:
 def get_remote_outdir(experiment_id: str) -> Path:
     """Return remote path for experiment output directory (for SSH commands)."""
     return get_settings().hpc_sim_base_path.remote_path / experiment_id
-
-
-def write_remote_config(
-    config: dict[str, Any] | str | Any,
-    fname: str,
-    simulator_hash: str | None = None,
-    **overrides: Any,
-) -> tuple[int, Path | None]:
-    """Write config to local filesystem and return remote path for SSH commands."""
-    if isinstance(config, str):
-        config = json.loads(config)
-    if simulator_hash is None:
-        saved_latest = Path("assets/simulation/model/latest_commit.txt")
-        try:
-            with open(str(saved_latest)) as f:
-                simulator_hash = f.readline().strip()
-        except FileNotFoundError as e:
-            warnings.warn(f"The hardcoded file doesnt exist in this repo: {e}", stacklevel=2)
-            return (1, None)
-    settings = get_settings()
-    remote_path = settings.hpc_repo_base_path / simulator_hash / "vEcoli" / "configs" / f"{fname}.json"
-    local_path = remote_path.local_path()
-    if overrides:
-        config.update(overrides)
-    with open(local_path, "w") as f:
-        json.dump(config, f, indent=1)
-    return (0, remote_path.remote_path)
 
 
 def get_simulator() -> SimulatorVersion:

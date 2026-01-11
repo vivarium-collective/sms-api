@@ -201,29 +201,6 @@ pingdb:
 	@uri=$$(make pguri); \
 	psql $$uri
 
-.PHONY: write-latest-commit
-write-latest-commit:
-	@uv run python sms_api/latest_commit.py
-
-.PHONY: get-latest-simulator
-get-latest-simulator:
-	@latest=$$( \
-		curl -s https://api.github.com/repos/CovertLab/vEcoli/commits/master \
-		| jq -r '"\(.sha[0:7]) \(.commit.author.date)"' \
-	); \
-	echo $${latest} | awk '{print $$1}'
-
-.PHONY: latest-simulator
-latest-simulator:
-	@latest_commit=$$(make get-latest-simulator | awk '{print $1}'); \
-	latest_known=$$(cat ${LATEST_COMMIT_PATH}); \
-	if [ $$latest_commit != $$latest_known ]; then \
-		echo $$latest_commit > ${LATEST_COMMIT_PATH}; \
-	else \
-		echo "You have the latest commit."; \
-	fi; \
-	cat ${LATEST_COMMIT_PATH}
-
 .PHONY: test-mod
 testmod:
 	@uv run python -m pytest -s $(m)
