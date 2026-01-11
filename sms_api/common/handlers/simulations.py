@@ -2,12 +2,18 @@ import json
 import logging
 import random
 import string
+from pathlib import Path
 
 from fastapi import HTTPException
 
+# Get repo root for absolute path references
+REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
+
+# Directory for debug artifacts (gitignored)
+DEBUG_ARTIFACTS_DIR = REPO_DIR / "artifacts"
+
 from sms_api.common.handlers.simulators import upload_simulator
-from sms_api.common.models import JobStatus
-from sms_api.config import get_settings
+from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.dependencies import get_database_service, get_simulation_service, get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id
@@ -27,7 +33,14 @@ logger = logging.getLogger(__name__)
 
 
 def export_baseline_config(request: SimulationRequest) -> None:
-    with open("assets/simulations/configs/baseline.json", "w") as fp:
+    """Capture simulation config to disk for debugging/inspection.
+
+    Writes the config to the artifacts/ directory at repo root.
+    This directory is gitignored and used for debugging purposes only.
+    """
+    DEBUG_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    config_path = DEBUG_ARTIFACTS_DIR / "baseline_config.json"
+    with open(config_path, "w") as fp:
         json.dump(request.config.model_dump(), fp, indent=3)
 
 

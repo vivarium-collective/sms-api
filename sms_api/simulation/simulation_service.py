@@ -69,8 +69,25 @@ class SimulationService(ABC):
         pass
 
 
-def capture_slurm_script(script: str, fp: str) -> None:
-    with open(fp, "w") as f:
+# Get repo root for absolute path references
+REPO_DIR = Path(__file__).parent.parent.parent.absolute()
+
+# Directory for captured sbatch scripts (gitignored)
+DEBUG_ARTIFACTS_DIR = REPO_DIR / "artifacts"
+
+
+def capture_slurm_script(script: str, filename: str) -> None:
+    """Capture generated sbatch script to disk for debugging/inspection.
+
+    Writes the script content to the artifacts/ directory at repo root.
+    This directory is gitignored and used for debugging purposes only.
+
+    Args:
+        script: The sbatch script content to write.
+        filename: The filename to write to (e.g., "simulation.sbatch").
+    """
+    DEBUG_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    with open(DEBUG_ARTIFACTS_DIR / filename, "w") as f:
         f.write(script)
 
 
@@ -268,7 +285,7 @@ class SimulationServiceHpc(SimulationService):
                         echo "Repository moved to $FINAL_REPO_PATH"
                     fi
                     """)
-                capture_slurm_script(script_content, "assets/artifacts/build_image.sbatch")
+                capture_slurm_script(script_content, "build_image.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -342,7 +359,7 @@ class SimulationServiceHpc(SimulationService):
 
                     echo "Parca run completed. data saved to {parca_remote_path!s}."
                     """)
-                capture_slurm_script(script_content, "assets/artifacts/parca.sbatch")
+                capture_slurm_script(script_content, "parca.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -383,7 +400,7 @@ class SimulationServiceHpc(SimulationService):
                     simulator_hash=simulator.git_commit_hash,  # type: ignore[union-attr]
                     config=ecoli_simulation.config,
                 )
-                capture_slurm_script(script_content, "assets/artifacts/simulation.sbatch")
+                capture_slurm_script(script_content, "simulation.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
