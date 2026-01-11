@@ -131,7 +131,6 @@ async def test_job_scheduler(
     await scheduler.start_polling(interval_seconds=1)
 
     # Submit a toy slurm job which takes 10 seconds to run
-    _all_jobs_before_submit: list[SlurmJob] = await slurm_service.get_job_status_squeue()
     settings = get_settings()
     remote_path = settings.slurm_log_base_path
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -142,9 +141,10 @@ async def test_job_scheduler(
             f.write(slurm_template_hello_10s)
 
         remote_sbatch_file = remote_path / local_sbatch_file.name
-        job_id: int = await slurm_service.submit_job(
-            local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
-        )
+        async with get_ssh_session_service().session() as ssh:
+            job_id: int = await slurm_service.submit_job(
+                ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
+            )
 
     # Simulate job submission
     simulation, slurm_job, hpc_run = await insert_job(database_service=database_service, slurmjobid=job_id)
@@ -321,9 +321,10 @@ export AWS_SECRET_ACCESS_KEY="{settings.storage_qumulo_secret_access_key}"
             # Submit job
             remote_sbatch_file = remote_path / local_sbatch_file.name
             print(f"✅ Submitting job with script: {remote_sbatch_file}")
-            job_id: int = await slurm_service.submit_job(
-                local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
-            )
+            async with get_ssh_session_service().session() as ssh:
+                job_id: int = await slurm_service.submit_job(
+                    ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
+                )
             print(f"✅ Job submitted with ID: {job_id}")
 
         # Step 3: Insert job into database for tracking

@@ -7,6 +7,7 @@ from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
 from sms_api.common.models import JobStatus
 from sms_api.config import get_settings
+from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import WorkerEvent, WorkerEventMessagePayload
 
@@ -93,8 +94,9 @@ class JobScheduler:
         if not job_ids:
             logger.debug("No valid slurm job IDs found in running jobs.")
             return
-        slurm_jobs_from_squeue = await self.slurm_service.get_job_status_squeue(job_ids)
-        slurm_jobs_from_sacct = await self.slurm_service.get_job_status_sacct(job_ids)
+        async with get_ssh_session_service().session() as ssh:
+            slurm_jobs_from_squeue = await self.slurm_service.get_job_status_squeue(ssh, job_ids)
+            slurm_jobs_from_sacct = await self.slurm_service.get_job_status_sacct(ssh, job_ids)
         slurm_job_map = {job.job_id: job for job in slurm_jobs_from_squeue}
         slurm_job_map.update({job.job_id: job for job in slurm_jobs_from_sacct})
         for hpc_run in running_jobs:

@@ -12,6 +12,7 @@ from typing_extensions import override
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
+from sms_api.common.ssh.ssh_service import SSHSession
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
@@ -46,21 +47,21 @@ class SimulationService(ABC):
         pass
 
     @abstractmethod
-    async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
+    async def submit_build_image_job(self, simulator_version: SimulatorVersion, ssh: SSHSession) -> int:
         pass
 
     @abstractmethod
-    async def submit_parca_job(self, parca_dataset: ParcaDataset) -> int:
+    async def submit_parca_job(self, parca_dataset: ParcaDataset, ssh: SSHSession) -> int:
         pass
 
     @abstractmethod
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str
+        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str, ssh: SSHSession
     ) -> int:
         pass
 
     @abstractmethod
-    async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
+    async def get_slurm_job_status(self, slurmjobid: int, ssh: SSHSession) -> SlurmJob | None:
         pass
 
     @abstractmethod
@@ -99,7 +100,7 @@ class SimulationServiceHpc(SimulationService):
         return latest_commit_hash
 
     @override
-    async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> int:
+    async def submit_build_image_job(self, simulator_version: SimulatorVersion, ssh: SSHSession) -> int:
         settings = get_settings()
         slurm_service = SlurmService()
 
@@ -272,12 +273,12 @@ class SimulationServiceHpc(SimulationService):
 
             # submit the build script to slurm
             slurm_jobid = await slurm_service.submit_job(
-                local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+                ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid
 
     @override
-    async def submit_parca_job(self, parca_dataset: ParcaDataset) -> int:
+    async def submit_parca_job(self, parca_dataset: ParcaDataset, ssh: SSHSession) -> int:
         settings = get_settings()
         slurm_service = SlurmService()
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
@@ -346,13 +347,13 @@ class SimulationServiceHpc(SimulationService):
 
             # submit the build script to slurm
             slurm_jobid = await slurm_service.submit_job(
-                local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+                ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid
 
     @override
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str
+        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str, ssh: SSHSession
     ) -> int:
         # settings = get_settings()
         if database_service is None:
@@ -387,16 +388,16 @@ class SimulationServiceHpc(SimulationService):
 
             # submit the build script to slurm
             slurm_jobid = await slurm_service.submit_job(
-                local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+                ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid
 
     @override
-    async def get_slurm_job_status(self, slurmjobid: int) -> SlurmJob | None:
+    async def get_slurm_job_status(self, slurmjobid: int, ssh: SSHSession) -> SlurmJob | None:
         slurm_service = SlurmService()
-        job_ids: list[SlurmJob] = await slurm_service.get_job_status_squeue(job_ids=[slurmjobid])
+        job_ids: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh, job_ids=[slurmjobid])
         if len(job_ids) == 0:
-            job_ids = await slurm_service.get_job_status_sacct(job_ids=[slurmjobid])
+            job_ids = await slurm_service.get_job_status_sacct(ssh, job_ids=[slurmjobid])
             if len(job_ids) == 0:
                 logger.warning(f"No job found with ID {slurmjobid} in both squeue and sacct.")
                 return None

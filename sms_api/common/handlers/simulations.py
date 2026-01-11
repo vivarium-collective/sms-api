@@ -68,9 +68,10 @@ async def run_workflow(
         random_string=random_string_7_hex,
         simulator=simulator,  # type: ignore[arg-type]
     )
-    slurmjob_id = await simulation_service.submit_ecoli_simulation_job(
-        ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
-    )
+    async with get_ssh_session_service().session() as ssh:
+        slurmjob_id = await simulation_service.submit_ecoli_simulation_job(
+            ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id, ssh=ssh
+        )
     _ = await database_service.insert_hpcrun(
         slurmjobid=slurmjob_id,
         job_type=JobType.SIMULATION,
@@ -105,7 +106,8 @@ async def run_parca(
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     # Submit parca job
-    parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
+    async with get_ssh_session_service().session() as ssh:
+        parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset, ssh=ssh)
     _hpc_run = await database_service.insert_hpcrun(
         slurmjobid=parca_slurmjobid,
         job_type=JobType.PARCA,

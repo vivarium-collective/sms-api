@@ -21,6 +21,7 @@ from sms_api.analysis.models import (
 from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.models import JobStatus
+from sms_api.common.ssh.ssh_service import SSHSession
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import Settings
 from sms_api.dependencies import get_ssh_session_service
@@ -69,6 +70,7 @@ class AnalysisServiceSlurm:
         request: ExperimentAnalysisRequest,
         logger: logging.Logger,
         analysis_name: str,
+        ssh: SSHSession,
         simulator_hash: str | None = None,
     ) -> tuple[str, int, AnalysisConfig]:
         # collect params
@@ -94,20 +96,21 @@ class AnalysisServiceSlurm:
             experiment_id=experiment_id,
             script_content=slurm_script,
             slurm_job_name=slurmjob_name,
+            ssh=ssh,
         )
         return slurmjob_name, slurmjob_id, analysis_config
 
-    async def poll_status(self, dto: ExperimentAnalysisDTO) -> AnalysisRun:
+    async def poll_status(self, dto: ExperimentAnalysisDTO, ssh: SSHSession) -> AnalysisRun:
         db_id = dto.database_id
         identifier = dto.job_id
         if identifier is None:
             raise ValueError("There is no job id yet associated with this record.")
 
         await asyncio.sleep(3)
-        run = await self.get_analysis_status(job_id=identifier, db_id=db_id)
+        run = await self.get_analysis_status(job_id=identifier, db_id=db_id, ssh=ssh)
         while run.status.lower() not in ["completed", "failed"]:
             await asyncio.sleep(3)
-            run = await self.get_analysis_status(job_id=identifier, db_id=db_id)
+            run = await self.get_analysis_status(job_id=identifier, db_id=db_id, ssh=ssh)
         if run.status.lower() == "failed":
             raise Exception(f"Analysis Run has failed:\n{run}")
         return run
@@ -136,9 +139,9 @@ class AnalysisServiceSlurm:
         output = TsvOutputFile(filename=requested_filename, content=file_content)
         return output
 
-    async def get_analysis_status(self, job_id: int, db_id: int) -> AnalysisRun:
+    async def get_analysis_status(self, job_id: int, db_id: int, ssh: SSHSession) -> AnalysisRun:
         slurm_service = SlurmService()
-        slurm_jobs = await slurm_service.get_job_status_sacct(job_ids=[job_id])
+        slurm_jobs = await slurm_service.get_job_status_sacct(ssh, job_ids=[job_id])
 
         if not slurm_jobs:
             # Job not yet in sacct, assume pending
@@ -184,7 +187,7 @@ class AnalysisServiceSlurm:
         )
 
     async def _submit_slurm_script(
-        self, config: AnalysisConfig, experiment_id: str, script_content: str, slurm_job_name: str
+        self, config: AnalysisConfig, experiment_id: str, script_content: str, slurm_job_name: str, ssh: SSHSession
     ) -> int:
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
 
@@ -194,7 +197,7 @@ class AnalysisServiceSlurm:
                 f.write(script_content)
 
             slurm_jobid = await self.slurm_service.submit_job(
-                local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+                ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
             )
             return slurm_jobid
 

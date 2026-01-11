@@ -69,20 +69,26 @@ async def handle_run_analysis_slurm(
     if not analysis_request_cache.exists():
         # 2a. mk local cache
         os.mkdir(analysis_request_cache)
-        # 2c. dispatch job
-        jobname, jobid, config = await analysis_service.dispatch_analysis(
-            request=request, logger=logger, analysis_name=analysis_name, simulator_hash=simulator.git_commit_hash
-        )
-        # 2d. insert analysis into db
-        dto: ExperimentAnalysisDTO = await db_service.insert_analysis(
-            name=analysis_name,
-            config=config,
-            last_updated=timestamp(),
-            job_name=jobname,
-            job_id=jobid,
-        )
-        # 2e. poll status
-        _run = await analysis_service.poll_status(dto=dto)
+        # Use a single SSH session for job submission and polling
+        async with get_ssh_session_service().session() as ssh:
+            # 2c. dispatch job
+            jobname, jobid, config = await analysis_service.dispatch_analysis(
+                request=request,
+                logger=logger,
+                analysis_name=analysis_name,
+                ssh=ssh,
+                simulator_hash=simulator.git_commit_hash,
+            )
+            # 2d. insert analysis into db
+            dto: ExperimentAnalysisDTO = await db_service.insert_analysis(
+                name=analysis_name,
+                config=config,
+                last_updated=timestamp(),
+                job_name=jobname,
+                job_id=jobid,
+            )
+            # 2e. poll status
+            _run = await analysis_service.poll_status(dto=dto, ssh=ssh)
         # check available in specified HPC dir for analysis_config.outdir
         available_paths: list[HPCFilePath] = await analysis_service.get_available_output_paths(
             remote_analysis_outdir=HPCFilePath(remote_path=Path(config.analysis_options.outdir))  # type: ignore[arg-type]
@@ -124,7 +130,12 @@ async def handle_get_analysis_status(
     analysis_record: ExperimentAnalysisDTO = (
         await db_service.get_analysis(database_id=ref) if isinstance(ref, int) else ref
     )
-    return await analysis_service.get_analysis_status(job_id=analysis_record.job_id, db_id=analysis_record.database_id)  # type: ignore[arg-type]
+    if analysis_record.job_id is None:
+        raise ValueError("Analysis record has no job_id")
+    async with get_ssh_session_service().session() as ssh:
+        return await analysis_service.get_analysis_status(
+            job_id=analysis_record.job_id, db_id=analysis_record.database_id, ssh=ssh
+        )
 
 
 async def handle_get_analysis_log(db_service: DatabaseService, id: int) -> str:

@@ -17,33 +17,34 @@ from sms_api.dependencies import get_ssh_session_service
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_query_squeue(slurm_service: SlurmService) -> None:
-    all_jobs: list[SlurmJob] = await slurm_service.get_job_status_squeue()
-    assert all_jobs is not None
-    if len(all_jobs) > 0:
-        assert isinstance(all_jobs[0], SlurmJob)
-        one_job: list[SlurmJob] = await slurm_service.get_job_status_squeue(job_ids=[all_jobs[0].job_id])
-        assert one_job is not None
-        assert len(one_job) == 1
-        assert one_job[0] == all_jobs[0]
+    async with get_ssh_session_service().session() as ssh:
+        all_jobs: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh)
+        assert all_jobs is not None
+        if len(all_jobs) > 0:
+            assert isinstance(all_jobs[0], SlurmJob)
+            one_job: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh, job_ids=[all_jobs[0].job_id])
+            assert one_job is not None
+            assert len(one_job) == 1
+            assert one_job[0] == all_jobs[0]
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_query_sacct(slurm_service: SlurmService) -> None:
-    all_jobs: list[SlurmJob] = await slurm_service.get_job_status_sacct()
-    assert all_jobs is not None
-    if len(all_jobs) > 0:
-        assert isinstance(all_jobs[0], SlurmJob)
-        one_job: list[SlurmJob] = await slurm_service.get_job_status_sacct(job_ids=[all_jobs[0].job_id])
-        assert one_job is not None
-        assert len(one_job) == 1
-        assert one_job[0] == all_jobs[0]
+    async with get_ssh_session_service().session() as ssh:
+        all_jobs: list[SlurmJob] = await slurm_service.get_job_status_sacct(ssh)
+        assert all_jobs is not None
+        if len(all_jobs) > 0:
+            assert isinstance(all_jobs[0], SlurmJob)
+            one_job: list[SlurmJob] = await slurm_service.get_job_status_sacct(ssh, job_ids=[all_jobs[0].job_id])
+            assert one_job is not None
+            assert len(one_job) == 1
+            assert one_job[0] == all_jobs[0]
 
 
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_submit(slurm_service: SlurmService, slurm_template_hello_1s: str) -> None:
-    _all_jobs_before_submit: list[SlurmJob] = await slurm_service.get_job_status_squeue()
     settings = get_settings()
     remote_path = settings.slurm_log_base_path
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -54,14 +55,15 @@ async def test_slurm_job_submit(slurm_service: SlurmService, slurm_template_hell
             f.write(slurm_template_hello_1s)
 
         remote_sbatch_file = remote_path / local_sbatch_file.name
-        job_id: int = await slurm_service.submit_job(
-            local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
-        )
+        async with get_ssh_session_service().session() as ssh:
+            job_id: int = await slurm_service.submit_job(
+                ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
+            )
 
-        submitted_job: list[SlurmJob] = await slurm_service.get_job_status_squeue(job_ids=[job_id])
-        assert submitted_job is not None and len(submitted_job) == 1
-        assert submitted_job[0].job_id == job_id
-        assert submitted_job[0].name == "my_test_job"
+            submitted_job: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh, job_ids=[job_id])
+            assert submitted_job is not None and len(submitted_job) == 1
+            assert submitted_job[0].job_id == job_id
+            assert submitted_job[0].name == "my_test_job"
 
 
 # =============================================================================
@@ -159,38 +161,39 @@ async def _run_nextflow_workflow_test(
 
         remote_sbatch_file = remote_base_path / local_sbatch_file.name
 
-        # Upload files to remote
+        # Use single SSH session for file upload, job submission, and polling
         async with get_ssh_session_service().session() as ssh:
+            # Upload files to remote
             await ssh.scp_upload(local_file=local_nf_script, remote_path=remote_nf_script)
             await ssh.scp_upload(local_file=local_nf_config, remote_path=remote_nf_config)
 
-        # Submit the Slurm job
-        job_id: int = await slurm_service.submit_job(
-            local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
-        )
-        assert job_id > 0, "Failed to get valid job ID"
+            # Submit the Slurm job
+            job_id: int = await slurm_service.submit_job(
+                ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
+            )
+            assert job_id > 0, "Failed to get valid job ID"
 
-        # Poll for job completion
-        elapsed_seconds = 0
-        final_job: SlurmJob | None = None
+            # Poll for job completion
+            elapsed_seconds = 0
+            final_job: SlurmJob | None = None
 
-        while elapsed_seconds < max_wait_seconds:
-            # Check squeue first (for running/pending jobs)
-            jobs: list[SlurmJob] = await slurm_service.get_job_status_squeue(job_ids=[job_id])
-            if len(jobs) > 0 and jobs[0].job_state.upper() in ["PENDING", "RUNNING", "CONFIGURING"]:
+            while elapsed_seconds < max_wait_seconds:
+                # Check squeue first (for running/pending jobs)
+                jobs: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh, job_ids=[job_id])
+                if len(jobs) > 0 and jobs[0].job_state.upper() in ["PENDING", "RUNNING", "CONFIGURING"]:
+                    await asyncio.sleep(poll_interval_seconds)
+                    elapsed_seconds += poll_interval_seconds
+                    continue
+
+                # Check sacct for completed jobs (may have delay before appearing)
+                jobs = await slurm_service.get_job_status_sacct(ssh, job_ids=[job_id])
+                if len(jobs) > 0:
+                    final_job = jobs[0]
+                    if final_job.is_done():
+                        break
+
                 await asyncio.sleep(poll_interval_seconds)
                 elapsed_seconds += poll_interval_seconds
-                continue
-
-            # Check sacct for completed jobs (may have delay before appearing)
-            jobs = await slurm_service.get_job_status_sacct(job_ids=[job_id])
-            if len(jobs) > 0:
-                final_job = jobs[0]
-                if final_job.is_done():
-                    break
-
-            await asyncio.sleep(poll_interval_seconds)
-            elapsed_seconds += poll_interval_seconds
 
         # Assertions
         assert final_job is not None, (

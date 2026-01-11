@@ -5,6 +5,7 @@ import pytest
 
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
+from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 from tests.fixtures.api_fixtures import SimulatorRepoInfo
@@ -37,18 +38,20 @@ async def test_build(
         git_commit_hash=commit_hash, git_repo_url=repo_url, git_branch=main_branch
     )
 
-    # Submit build job (which now includes cloning the repository)
-    job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
-    assert job_id is not None
+    # Use single SSH session for job submission and polling
+    async with get_ssh_session_service().session() as ssh:
+        # Submit build job (which now includes cloning the repository)
+        job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator, ssh=ssh)
+        assert job_id is not None
 
-    start_time = time.time()
-    while start_time + 60 > time.time():
-        slurm_job = await simulation_service_slurm.get_slurm_job_status(slurmjobid=job_id)
-        if slurm_job is not None and slurm_job.is_done():
-            break
-        await asyncio.sleep(5)
+        start_time = time.time()
+        while start_time + 60 > time.time():
+            slurm_job = await simulation_service_slurm.get_slurm_job_status(slurmjobid=job_id, ssh=ssh)
+            if slurm_job is not None and slurm_job.is_done():
+                break
+            await asyncio.sleep(5)
 
-    assert slurm_job is not None
-    assert slurm_job.is_done()
-    assert slurm_job.job_id == job_id
-    assert slurm_job.name.startswith(f"build-image-{commit_hash}-")
+        assert slurm_job is not None
+        assert slurm_job.is_done()
+        assert slurm_job.job_id == job_id
+        assert slurm_job.name.startswith(f"build-image-{commit_hash}-")
