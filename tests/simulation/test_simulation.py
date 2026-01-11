@@ -112,7 +112,7 @@ async def test_simulate(
         assert hpcrun.ref_id == simulation.database_id
 
         start_time = time.time()
-        while start_time + 60 > time.time():
+        while start_time + 300 > time.time():  # 5 minutes for simulation to complete
             sim_slurmjob = await simulation_service_slurm.get_slurm_job_status(slurmjobid=sim_slurmjobid, ssh=ssh)
             if sim_slurmjob is not None and sim_slurmjob.is_done():
                 break

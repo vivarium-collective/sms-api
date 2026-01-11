@@ -51,6 +51,12 @@ SLURM_QOS=
 SLURM_LOG_BASE_PATH=
 SLURM_BASE_PATH=
 
+# Path prefix mapping for local mount vs remote HPC filesystem
+# For dev on macOS: local=/Volumes/SMS (SMB mount), remote=/projects/SMS (HPC path)
+# For production where paths are same: set both to the same value
+PATH_LOCAL_PREFIX=
+PATH_REMOTE_PREFIX=
+
 HPC_IMAGE_BASE_PATH=
 HPC_PARCA_BASE_PATH=
 HPC_REPO_BASE_PATH=

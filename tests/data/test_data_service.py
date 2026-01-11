@@ -8,10 +8,14 @@ from sms_api.data.data_service import AnalysisType, SimulationDataServiceFS
 ENV = get_settings()
 
 
-# Check if local data path exists (path prefixes must be configured - will raise if not)
+# Check if local data path exists (returns False if path prefixes not configured)
 def _check_data_path_exists() -> bool:
-    local_path = ENV.hpc_parca_base_path.local_path() / "default" / "kb"
-    return os.path.exists(local_path)
+    try:
+        local_path = ENV.hpc_parca_base_path.local_path() / "default" / "kb"
+        return os.path.exists(local_path)
+    except ValueError:
+        # path_local_prefix/path_remote_prefix not configured
+        return False
 
 
 DATA_PATH_EXISTS = _check_data_path_exists()
