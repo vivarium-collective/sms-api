@@ -1,14 +1,18 @@
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, TypeVar, Union
+from typing import Any, TypeVar, Optional, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
+from typing import cast
+from typing import Union
+
 if TYPE_CHECKING:
-    from ..models.analysis_config_emitter_arg import AnalysisConfigEmitterArg
     from ..models.analysis_config_options import AnalysisConfigOptions
+    from ..models.analysis_config_emitter_arg import AnalysisConfigEmitterArg
 
 
 T = TypeVar("T", bound="AnalysisConfig")
@@ -27,6 +31,9 @@ class AnalysisConfig:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.analysis_config_options import AnalysisConfigOptions
+        from ..models.analysis_config_emitter_arg import AnalysisConfigEmitterArg
+
         analysis_options = self.analysis_options.to_dict()
 
         emitter_arg: Union[Unset, dict[str, Any]] = UNSET
@@ -45,8 +52,8 @@ class AnalysisConfig:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.analysis_config_emitter_arg import AnalysisConfigEmitterArg
         from ..models.analysis_config_options import AnalysisConfigOptions
+        from ..models.analysis_config_emitter_arg import AnalysisConfigEmitterArg
 
         d = dict(src_dict)
         analysis_options = AnalysisConfigOptions.from_dict(d.pop("analysis_options"))

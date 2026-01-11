@@ -1,18 +1,23 @@
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, TypeVar, Union, cast
+from typing import Any, TypeVar, Optional, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
+from typing import cast
+from typing import cast, Union
+from typing import Union
+
 if TYPE_CHECKING:
-    from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
-    from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
-    from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
-    from ..models.analysis_options_multiseed_type_0 import AnalysisOptionsMultiseedType0
-    from ..models.analysis_options_multivariant_type_0 import AnalysisOptionsMultivariantType0
     from ..models.analysis_options_single_type_0 import AnalysisOptionsSingleType0
+    from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
+    from ..models.analysis_options_multiseed_type_0 import AnalysisOptionsMultiseedType0
+    from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
+    from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
+    from ..models.analysis_options_multivariant_type_0 import AnalysisOptionsMultivariantType0
 
 
 T = TypeVar("T", bound="AnalysisOptions")
@@ -41,12 +46,12 @@ class AnalysisOptions:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
-        from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
-        from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
-        from ..models.analysis_options_multiseed_type_0 import AnalysisOptionsMultiseedType0
-        from ..models.analysis_options_multivariant_type_0 import AnalysisOptionsMultivariantType0
         from ..models.analysis_options_single_type_0 import AnalysisOptionsSingleType0
+        from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
+        from ..models.analysis_options_multiseed_type_0 import AnalysisOptionsMultiseedType0
+        from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
+        from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
+        from ..models.analysis_options_multivariant_type_0 import AnalysisOptionsMultivariantType0
 
         cpus = self.cpus
 
@@ -120,12 +125,12 @@ class AnalysisOptions:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
-        from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
-        from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
-        from ..models.analysis_options_multiseed_type_0 import AnalysisOptionsMultiseedType0
-        from ..models.analysis_options_multivariant_type_0 import AnalysisOptionsMultivariantType0
         from ..models.analysis_options_single_type_0 import AnalysisOptionsSingleType0
+        from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
+        from ..models.analysis_options_multiseed_type_0 import AnalysisOptionsMultiseedType0
+        from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
+        from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
+        from ..models.analysis_options_multivariant_type_0 import AnalysisOptionsMultivariantType0
 
         d = dict(src_dict)
         cpus = d.pop("cpus", UNSET)

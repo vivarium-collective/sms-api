@@ -1,10 +1,15 @@
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, TypeVar, Union, cast
+from typing import Any, TypeVar, Optional, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
+
+from ..types import UNSET, Unset
+from typing import cast
+from typing import cast, Union
+from typing import Union
 
 if TYPE_CHECKING:
     from ..models.simulation_config import SimulationConfig
@@ -22,7 +27,7 @@ class Simulation:
         simulator_id (int):
         parca_dataset_id (int):
         config (SimulationConfig):
-        last_updated (Union[Unset, str]):  Default: '2026-01-10 10:35:27.303444'.
+        last_updated (Union[Unset, str]):  Default: '2026-01-11 14:18:14.197085'.
         job_id (Union[None, Unset, int]):
     """
 
@@ -30,11 +35,13 @@ class Simulation:
     simulator_id: int
     parca_dataset_id: int
     config: "SimulationConfig"
-    last_updated: Union[Unset, str] = "2026-01-10 10:35:27.303444"
+    last_updated: Union[Unset, str] = "2026-01-11 14:18:14.197085"
     job_id: Union[None, Unset, int] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.simulation_config import SimulationConfig
+
         database_id = self.database_id
 
         simulator_id = self.simulator_id

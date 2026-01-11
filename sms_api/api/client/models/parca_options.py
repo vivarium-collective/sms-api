@@ -1,10 +1,15 @@
 from collections.abc import Mapping
-from typing import Any, TypeVar, Union, cast
+from typing import Any, TypeVar, Optional, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
+
+from ..types import UNSET, Unset
+from typing import cast, Union
+from typing import Union
+
 
 T = TypeVar("T", bound="ParcaOptions")
 
@@ -14,7 +19,7 @@ class ParcaOptions:
     """
     Attributes:
         cpus (Union[Unset, int]):  Default: 3.
-        outdir (Union[Unset, str]):  Default: '/home/FCAM/svc_vivarium/dev/sims'.
+        outdir (Union[Unset, str]):  Default: '/projects/SMS/sms_api/jim/workspace/api_outputs'.
         operons (Union[Unset, bool]):  Default: True.
         ribosome_fitting (Union[Unset, bool]):  Default: True.
         remove_rrna_operons (Union[Unset, bool]):  Default: False.
@@ -30,7 +35,7 @@ class ParcaOptions:
     """
 
     cpus: Union[Unset, int] = 3
-    outdir: Union[Unset, str] = "/home/FCAM/svc_vivarium/dev/sims"
+    outdir: Union[Unset, str] = "/projects/SMS/sms_api/jim/workspace/api_outputs"
     operons: Union[Unset, bool] = True
     ribosome_fitting: Union[Unset, bool] = True
     remove_rrna_operons: Union[Unset, bool] = False
