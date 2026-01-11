@@ -5,9 +5,9 @@ namespace: sms-api-eks
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.2.56.dev1
+    newTag: 0.3.1
   - name: ghcr.io/vivarium-collective/sms-ptools
-    newTag: 0.2.48-dev
+    newTag: 0.3.1
 
 replicas:
   - count: 1
