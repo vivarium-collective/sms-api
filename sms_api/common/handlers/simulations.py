@@ -6,12 +6,6 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-# Get repo root for absolute path references
-REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
-
-# Directory for debug artifacts (gitignored)
-DEBUG_ARTIFACTS_DIR = REPO_DIR / "artifacts"
-
 from sms_api.common.handlers.simulators import upload_simulator
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.dependencies import get_database_service, get_simulation_service, get_ssh_session_service
@@ -30,6 +24,12 @@ from sms_api.simulation.models import (
 from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)
+
+# Get repo root for absolute path references
+REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
+
+# Directory for debug artifacts (gitignored)
+DEBUG_ARTIFACTS_DIR = REPO_DIR / "artifacts"
 
 
 def export_baseline_config(request: SimulationRequest) -> None:
