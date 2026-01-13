@@ -182,7 +182,7 @@ ignore = [
 #    # C419 Unnecessary list comprehension
      "C419",
 #    # E501 Line too long (131 > 120)
-#    "E501",
+     # "E501",
 #    # E722 Do not use bare `except`
 #    "E722",
 #    # E731 Do not assign a `lambda` expression, use a `def`

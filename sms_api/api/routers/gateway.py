@@ -10,7 +10,7 @@
 import logging
 from collections.abc import Sequence
 
-from fastapi import BackgroundTasks, Depends, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, HTTPException
 from fastapi import Path as FastAPIPath
 from fastapi.requests import Request
 
@@ -148,25 +148,20 @@ async def list_simulations() -> list[Simulation]:
     operation_id="get-ecoli-simulation-data",
     tags=["Simulations"],
     dependencies=[Depends(get_database_service)],
-    summary="Get/Stream simulation data",
+    summary="Get simulation omics data in TSV format",
 )
 async def get_simulation_data(
     bg_tasks: BackgroundTasks,
     id: int = FastAPIPath(description="Database ID of the simulation."),
-    # experiment_id: str = Query(default="sms_multigeneration"),
-    lineage_seed: int = Query(default=6),
-    generation: int = Query(default=1),
-    variant: int = Query(default=0),
-    agent_id: int = Query(default=0),
-    observables: list[str] | None = None,
-) -> None:
+) -> list[TsvOutputFile]:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        # Placeholder for this moment
-        pass
+        return await handlers.simulations.get_simulation_outputs(
+            db_service=db_service, simulation_id=id, hpc_sim_base_path=ENV.hpc_sim_base_path
+        )
     except Exception as e:
         logger.exception("Error uploading simulation config")
         raise HTTPException(status_code=500, detail=str(e)) from e

@@ -265,7 +265,7 @@ def slurm_template_with_storage() -> str:
     """
     settings = get_settings()
     partition = settings.slurm_partition
-    qos_clause = f"#SBATCH --qos={get_settings().slurm_qos}" if get_settings().slurm_qos else ""
+    qos_clause = f"#SBATCH --qos={settings.slurm_qos}" if settings.slurm_qos else ""
     template = dedent(f"""\
         #!/bin/bash
         #SBATCH --job-name=storage_test_job   # Job name

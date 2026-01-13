@@ -14,16 +14,24 @@ Prerequisites for API tests:
 import asyncio
 import time
 import uuid
+import uuid
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from sms_api.api import request_examples
 from sms_api.api.main import app
 from sms_api.common.models import JobStatus
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.models import SimulationRequest
+from sms_api.simulation.models import (
+    ExperimentRequest,
+    ParcaDatasetRequest,
+    ParcaOptions,
+    SimulationConfig,
+    SimulationRequest,
+)
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 from tests.fixtures.api_fixtures import SimulatorRepoInfo
 
@@ -253,3 +261,61 @@ async def test_run_simulation_e2e(
     print(f"  Simulation DB ID: {db_id}")
 
 
+@pytest.mark.skipif(
+    len(get_settings().slurm_submit_key_path) == 0,
+    reason="slurm ssh key file not supplied",
+)
+@pytest.mark.asyncio
+async def test_get_simulation_data(
+    base_router: str,
+    database_service: DatabaseServiceSQL,
+    ssh_session_service: SSHSessionService,
+) -> None:
+    """Test GET simulation data endpoint with a pre-existing simulation output directory.
+
+    This test manually inserts a simulation into the database that references
+    the existing simulation output at /projects/SMS/sms_api/alex/sims/sms_multigeneration,
+    then calls the get_simulation_data endpoint to retrieve the outputs.
+    """
+    # Create a unique commit hash for the simulator
+    unique_commit_hash = f"test_{uuid.uuid4().hex[:7]}"
+
+    # Insert the simulator into the database
+    simulator = await database_service.insert_simulator(
+        git_commit_hash=unique_commit_hash,
+        git_repo_url=request_examples.DEFAULT_SIMULATOR.git_repo_url,
+        git_branch=request_examples.DEFAULT_SIMULATOR.git_branch,
+    )
+
+    # Insert a parca dataset for this simulator
+    parca_request = ParcaDatasetRequest(
+        simulator_version=simulator,
+        parca_config=ParcaOptions(),
+    )
+    parca_dataset = await database_service.insert_parca_dataset(
+        parca_dataset_request=parca_request,
+    )
+
+    # Create a SimulationConfig pointing to the existing sms_multigeneration output
+    sim_config = SimulationConfig(
+        experiment_id="sms_multigeneration",
+        emitter="parquet",
+        emitter_arg={"out_dir": "/projects/SMS/sms_api/alex/sims/sms_multigeneration"},
+    )
+
+    # Create the simulation request
+    sim_request = SimulationRequest(
+        simulator_id=simulator.database_id,
+        parca_dataset_id=parca_dataset.database_id,
+        config=sim_config,
+    )
+
+    # Insert the simulation into the database
+    inserted_sim = await database_service.insert_simulation(sim_request=sim_request)
+    db_id = inserted_sim.database_id
+
+    # Call the get_simulation_data endpoint
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(f"{base_router}/simulations/{db_id}/data")
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"

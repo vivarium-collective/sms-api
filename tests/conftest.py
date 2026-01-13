@@ -35,6 +35,7 @@ from tests.fixtures.file_service_fixtures import (  # noqa: F401
     gcs_token,
     temp_test_data_dir,
 )
+from tests.fixtures.handlers_fixtures import analysis_outdir  # noqa: F401
 from tests.fixtures.logging_fixtures import logger  # noqa: F401
 from tests.fixtures.mongodb_fixtures import (  # noqa: F401
     mongo_test_client,
