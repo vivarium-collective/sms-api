@@ -38,8 +38,8 @@ ENV = get_settings()
 
 # Default simulator repository configuration for tests
 SIMULATOR_URL = "https://github.com/vivarium-collective/vEcoli"
-SIMULATOR_BRANCH = "ccam-nextflow"
-SIMULATOR_COMMIT = "8f119dd"
+SIMULATOR_BRANCH = "api-support"
+SIMULATOR_COMMIT = "a417d6e"
 
 
 class SimulatorRepoInfo(NamedTuple):
