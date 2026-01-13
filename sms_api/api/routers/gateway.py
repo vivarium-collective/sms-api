@@ -28,7 +28,7 @@ from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_simulator, router_config
 from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
-from sms_api.simulation.models import Simulation, SimulationRequest, SimulationRun
+from sms_api.simulation.models import Simulation, SimulationRun
 
 ENV = get_settings()
 
@@ -42,39 +42,9 @@ config = router_config(prefix="api", version_major=False)
     response_model=Simulation,
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-    summary="Launches a nextflow-powered vEcoli simulation workflow",
+    summary="Launches a vEcoli simulation workflow with simple parameters",
 )
 async def run_simulation(
-    request: SimulationRequest = request_examples.base_simulation,
-) -> Simulation:
-    """Run a vEcoli simulation workflow with full configuration."""
-    # validate services
-    sim_service = get_simulation_service()
-    if sim_service is None:
-        logger.error("Simulation service is not initialized")
-        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
-    database_service = get_database_service()
-    if database_service is None:
-        logger.error("Database service is not initialized")
-        raise HTTPException(status_code=500, detail="Database service is not initialized")
-    try:
-        return await handlers.simulations.run_workflow_legacy(
-            database_service=database_service, simulation_service=sim_service, request=request
-        )
-    except Exception as e:
-        logger.exception("Error running vEcoli simulation")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.post(
-    path="/simulations-new",
-    operation_id="run-ecoli-simulation-new",
-    response_model=Simulation,
-    tags=["Simulations"],
-    dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-    summary="[New] Launches a vEcoli simulation workflow with simple parameters",
-)
-async def run_simulation_new(
     simulator_id: int = Query(..., description="Database ID of the simulator to use"),
     experiment_id: str = Query(..., description="Unique experiment identifier"),
     simulation_config_filename: str = Query(..., description="Config filename in vEcoli/configs/ on HPC"),
