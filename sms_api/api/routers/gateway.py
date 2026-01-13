@@ -10,7 +10,7 @@
 import logging
 from collections.abc import Sequence
 
-from fastapi import BackgroundTasks, Depends, HTTPException
+from fastapi import BackgroundTasks, Depends, HTTPException, Query
 from fastapi import Path as FastAPIPath
 from fastapi.requests import Request
 

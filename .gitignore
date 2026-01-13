@@ -248,3 +248,5 @@ kustomize/overlays/**/secrets.dat
 # TODO: remove this soon
 requirements.agent.txt
 tui/
+
+.results_cache/

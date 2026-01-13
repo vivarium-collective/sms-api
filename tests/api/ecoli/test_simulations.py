@@ -14,7 +14,6 @@ Prerequisites for API tests:
 import asyncio
 import time
 import uuid
-import uuid
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -261,6 +260,7 @@ async def test_run_simulation_e2e(
     print(f"  Simulation DB ID: {db_id}")
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(
     len(get_settings().slurm_submit_key_path) == 0,
     reason="slurm ssh key file not supplied",
