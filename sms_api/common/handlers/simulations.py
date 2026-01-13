@@ -6,7 +6,6 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from sms_api.analysis.analysis_service import AnalysisServiceSlurm
 from sms_api.analysis.models import TsvOutputFile
 from sms_api.common.handlers.simulators import upload_simulator
 from sms_api.common.hpc.slurm_service import SlurmService
@@ -195,9 +194,7 @@ async def list_simulations(db_service: DatabaseService) -> list[Simulation]:
     return await db_service.list_simulations()
 
 
-async def get_omics_outputs(
-    analysis_service: AnalysisServiceSlurm, hpc_sim_base_path: HPCFilePath, experiment_id: str
-) -> list[TsvOutputFile]:
+async def get_omics_outputs(hpc_sim_base_path: HPCFilePath, experiment_id: str) -> list[TsvOutputFile]:
     exp_analysis_outdir = hpc_sim_base_path / experiment_id / "analyses"
     return await fetch_omics_outputs(exp_analysis_outdir=exp_analysis_outdir)
 
@@ -206,7 +203,7 @@ async def fetch_omics_outputs(exp_analysis_outdir: HPCFilePath) -> list[TsvOutpu
     results = []
     analysis_request_cache = Path(get_settings().cache_dir)
     available_paths: list[HPCFilePath] = await get_available_omics_output_paths(
-        remote_analysis_outdir=exp_analysis_outdir  # type: ignore[arg-type]
+        remote_analysis_outdir=exp_analysis_outdir
     )
 
     # download available
@@ -240,6 +237,16 @@ async def download_analysis_output(local_dir: Path, remote_path: HPCFilePath) ->
     file_content = local.read_text()
     output = TsvOutputFile(filename=requested_filename, content=file_content)
     return output
+
+
+async def get_simulation_outputs(
+    db_service: DatabaseService, simulation_id: int, hpc_sim_base_path: HPCFilePath
+) -> list[TsvOutputFile]:
+    simulation = await db_service.get_simulation(simulation_id=simulation_id)
+    if simulation is None:
+        raise ValueError(f"Simulation with id {simulation_id} not found in database.")
+    experiment_id = simulation.config.experiment_id
+    return await get_omics_outputs(hpc_sim_base_path=hpc_sim_base_path, experiment_id=experiment_id)
 
 
 # async def get_simulation_log(db_service: DatabaseService, id: int) -> fastapi.Response:
