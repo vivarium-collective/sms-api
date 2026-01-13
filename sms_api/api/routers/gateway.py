@@ -10,7 +10,7 @@
 import logging
 from collections.abc import Sequence
 
-from fastapi import BackgroundTasks, Depends, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, HTTPException
 from fastapi import Path as FastAPIPath
 from fastapi.requests import Request
 
@@ -137,20 +137,18 @@ async def list_simulations() -> list[Simulation]:
 async def get_simulation_data(
     bg_tasks: BackgroundTasks,
     id: int = FastAPIPath(description="Database ID of the simulation."),
-    # experiment_id: str = Query(default="sms_multigeneration"),
-    lineage_seed: int = Query(default=6),
-    generation: int = Query(default=1),
-    variant: int = Query(default=0),
-    agent_id: int = Query(default=0),
-    observables: list[str] | None = None,
 ) -> None:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
+    analysis_service = AnalysisServiceSlurm(ENV)
     try:
-        # Placeholder for this moment
-        pass
+        simulation = await db_service.get_simulation(simulation_id=id)
+        experiment_id = simulation.config.experiment_id
+        return await handlers.simulations.get_simulation_outputs(
+            analysis_service=analysis_service, hpc_sim_base_path=ENV.hpc_sim_base_path, experiment_id=experiment_id
+        )
     except Exception as e:
         logger.exception("Error uploading simulation config")
         raise HTTPException(status_code=500, detail=str(e)) from e
