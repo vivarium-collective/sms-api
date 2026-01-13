@@ -119,7 +119,7 @@ def test_verify_simulator_payload_valid(repo_url: str, branch: str) -> None:
         (
             RepoUrl.VECOLI_FORK_REPO_URL,
             "dev",
-            ["messages", "ccam-nextflow", "master"],
+            ["messages", "ccam-nextflow", "master", "api-support"],
         ),
         (
             RepoUrl.VECOLI_PUBLIC_REPO_URL,

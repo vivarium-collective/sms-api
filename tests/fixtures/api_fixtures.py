@@ -39,7 +39,7 @@ ENV = get_settings()
 # Default simulator repository configuration for tests
 SIMULATOR_URL = "https://github.com/vivarium-collective/vEcoli"
 SIMULATOR_BRANCH = "api-support"
-SIMULATOR_COMMIT = "a417d6e"
+SIMULATOR_COMMIT = "bc0add1"
 
 
 class SimulatorRepoInfo(NamedTuple):

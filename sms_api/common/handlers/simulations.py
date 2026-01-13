@@ -20,6 +20,7 @@ from sms_api.simulation.models import (
     ParcaDatasetRequest,
     ParcaOptions,
     Simulation,
+    SimulationConfig,
     SimulationRequest,
     SimulationRun,
     SimulatorVersion,
@@ -47,14 +48,18 @@ def export_baseline_config(request: SimulationRequest) -> None:
         json.dump(request.config.model_dump(), fp, indent=3)
 
 
-async def run_workflow(
+async def run_workflow_legacy(
     request: SimulationRequest,
     simulation_service: SimulationService,
     database_service: DatabaseService,
 ) -> Simulation:
     """
+    Legacy workflow execution that supports uploading a new simulator.
+
     Parameterizes and executes a "full" e2e sms-api vEcoli workflow
     (simulator -> parca ref -> Simulation(parca -> variants -> simulation -> analyses)
+
+    For new code, prefer run_workflow() with an existing simulator_id.
     """
     export_baseline_config(request)
 
@@ -89,6 +94,112 @@ async def run_workflow(
         slurmjob_id = await simulation_service.submit_ecoli_simulation_job(
             ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id, ssh=ssh
         )
+    _ = await database_service.insert_hpcrun(
+        slurmjobid=slurmjob_id,
+        job_type=JobType.SIMULATION,
+        ref_id=simulation.database_id,
+        correlation_id=correlation_id,
+    )
+
+    simulation.job_id = slurmjob_id
+    return simulation
+
+
+async def run_workflow_simple(
+    database_service: DatabaseService,
+    simulation_service: SimulationService,
+    simulator_id: int,
+    experiment_id: str,
+    simulation_config_filename: str,
+    num_generations: int | None = None,
+    num_seeds: int | None = None,
+    description: str | None = None,
+) -> Simulation:
+    """
+    Simplified workflow execution with just the essential parameters.
+
+    This assumes the simulator already exists in the database. The workflow
+    configuration is read from the vEcoli repo on the HPC system, and parca
+    execution is handled as part of the workflow.
+
+    Args:
+        database_service: Database service instance
+        simulation_service: Simulation service instance
+        simulator_id: Database ID of the simulator to use (must exist)
+        experiment_id: Unique experiment identifier
+        simulation_config_filename: Name of the config file in vEcoli/configs/ on HPC
+        num_generations: Number of generations to simulate (optional, overrides config)
+        num_seeds: Number of initial seeds/lineages (optional, overrides config)
+        description: Description of the simulation (optional)
+    """
+    from sms_api.config import get_settings
+
+    settings = get_settings()
+
+    # 1. Get the simulator (must exist)
+    simulator = await database_service.get_simulator(simulator_id)
+    if simulator is None:
+        raise ValueError(f"Simulator with id {simulator_id} not found")
+
+    # 2. Read the config file from the remote HPC system
+    remote_config_path = (
+        settings.hpc_repo_base_path.remote_path
+        / simulator.git_commit_hash
+        / "vEcoli"
+        / "configs"
+        / simulation_config_filename
+    )
+    async with get_ssh_session_service().session() as ssh:
+        returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
+        if returncode != 0:
+            raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
+
+    # 3. Replace placeholders in the config template
+    config_str = stdout
+    config_str = config_str.replace("EXPERIMENT_ID_PLACEHOLDER", experiment_id)
+    config_str = config_str.replace("HPC_SIM_BASE_PATH_PLACEHOLDER", str(settings.simulation_outdir))
+    config_data = json.loads(config_str)
+
+    # 4. Override config values if provided
+    if num_generations is not None:
+        config_data["generations"] = num_generations
+    if num_seeds is not None:
+        config_data["n_init_sims"] = num_seeds
+    if description is not None:
+        config_data["description"] = description
+
+    config = SimulationConfig(**config_data)
+
+    # 5. Create placeholder parca dataset entry
+    # Even though parca runs as part of the Nextflow workflow, we need a database entry
+    # to satisfy the simulation's foreign key constraint and track the parca config.
+    parca_config = config.parca_options.model_dump()
+    parca_ds = await database_service.insert_parca_dataset(
+        parca_dataset_request=ParcaDatasetRequest(simulator_version=simulator, parca_config=parca_config)  # type: ignore[arg-type]
+    )
+
+    # 6. Create SimulationRequest and insert simulation
+    request = SimulationRequest(
+        config=config,
+        simulator_id=simulator_id,
+        parca_dataset_id=parca_ds.database_id,
+    )
+    export_baseline_config(request)
+    simulation = await database_service.insert_simulation(sim_request=request)
+
+    # 7. Generate correlation ID and submit job
+    random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))
+    correlation_id = get_correlation_id(
+        ecoli_simulation=simulation,
+        random_string=random_string_7_hex,
+        simulator=simulator,
+    )
+    async with get_ssh_session_service().session() as ssh:
+        slurmjob_id = await simulation_service.submit_ecoli_simulation_job(
+            ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id, ssh=ssh
+        )
+
+    # 8. Record HPC run
     _ = await database_service.insert_hpcrun(
         slurmjobid=slurmjob_id,
         job_type=JobType.SIMULATION,
