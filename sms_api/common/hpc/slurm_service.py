@@ -13,6 +13,17 @@ logger.setLevel(logging.INFO)
 class SlurmService:
     verified_htc_dir: bool = False
 
+    async def get_job_status(self, job_ids: list[int] | None = None) -> list[SlurmJob]:
+        """
+        Get job status using squeue first, if no jobs are found and job_ids is not None,
+        then use sacct to get the job status.
+        """
+        slurm_jobs_from_squeue = await self.get_job_status_squeue(job_ids)
+        slurm_jobs_from_sacct = await self.get_job_status_sacct(job_ids)
+        slurm_job_map = {job.job_id: job for job in slurm_jobs_from_squeue}
+        slurm_job_map.update({job.job_id: job for job in slurm_jobs_from_sacct})
+        return list(slurm_job_map.values())
+
     async def get_job_status_squeue(self, job_ids: list[int] | None = None) -> list[SlurmJob]:
         command = f'squeue -u $USER --noheader --format="{SlurmJob.get_squeue_format_string()}"'
         if job_ids is not None:
