@@ -7,6 +7,7 @@ class JobStatus(str, Enum):
     PENDING = "pending"
     QUEUED = "queued"
     RUNNING = "running"
+    UNKNOWN = "unknown"
     WAITING = "waiting"
 
     def __str__(self) -> str:

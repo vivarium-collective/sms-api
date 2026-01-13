@@ -23,6 +23,7 @@ paths:
       tags:
       - Simulations
       summary: Launches a nextflow-powered vEcoli simulation workflow
+      description: Run a vEcoli simulation workflow with full configuration.
       operationId: run-ecoli-simulation
       requestBody:
         content:
@@ -83,6 +84,91 @@ paths:
                   git_commit_hash: 540e426
                   git_repo_url: https://github.com/vivarium-collective/vEcoli
                   git_branch: ccam-nextflow
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Simulation'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/simulations-new:
+    post:
+      tags:
+      - Simulations
+      summary: '[New] Launches a vEcoli simulation workflow with simple parameters'
+      description: 'Run a vEcoli simulation workflow with simplified parameters.
+
+
+        This endpoint reads the workflow configuration from the vEcoli repo on the
+        HPC
+
+        system and allows overriding specific parameters via query params.'
+      operationId: run-ecoli-simulation-new
+      parameters:
+      - name: simulator_id
+        in: query
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the simulator to use
+          title: Simulator Id
+        description: Database ID of the simulator to use
+      - name: experiment_id
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Unique experiment identifier
+          title: Experiment Id
+        description: Unique experiment identifier
+      - name: simulation_config_filename
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Config filename in vEcoli/configs/ on HPC
+          title: Simulation Config Filename
+        description: Config filename in vEcoli/configs/ on HPC
+      - name: num_generations
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 10
+            minimum: 1
+          - type: 'null'
+          description: Number of generations to simulate
+          title: Num Generations
+        description: Number of generations to simulate
+      - name: num_seeds
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 100
+            minimum: 1
+          - type: 'null'
+          description: Number of initial seeds (lineages)
+          title: Num Seeds
+        description: Number of initial seeds (lineages)
+      - name: description
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Description of the simulation
+          title: Description
+        description: Description of the simulation
       responses:
         '200':
           description: Successful Response
@@ -927,6 +1013,7 @@ components:
     JobStatus:
       type: string
       enum:
+      - unknown
       - waiting
       - pending
       - queued
