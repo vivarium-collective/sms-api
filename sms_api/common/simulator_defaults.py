@@ -13,7 +13,7 @@ class RepoUrl(StrEnumBase):
 
 
 ACCEPTED_REPOS = {
-    RepoUrl.VECOLI_FORK_REPO_URL: ["messages", "ccam-nextflow", "master"],
+    RepoUrl.VECOLI_FORK_REPO_URL: ["messages", "ccam-nextflow", "master", "api-support"],
     RepoUrl.VECOLI_PUBLIC_REPO_URL: ["master", "ptools_viz"],
     RepoUrl.VECOLI_PRIVATE_REPO_URL: [],
 }

@@ -125,7 +125,7 @@ cd "$VECOLI_REPO_PATH"
 # Export SLURM environment variables for workflow.py (required for ccam profile)
 export SLURM_PARTITION="{partition}"
 export SLURM_QOS="{settings.slurm_qos if settings.slurm_qos else partition}"
-export SLURM_NODE_LIST="{settings.slurm_node_list if settings.slurm_node_list else ''}"
+export SLURM_NODE_LIST="{settings.slurm_node_list if settings.slurm_node_list else ""}"
 export SLURM_LOG_BASE_PATH="{settings.slurm_log_base_path.remote_path}"
 
 # Run workflow.py using uv from the repo's virtual environment
