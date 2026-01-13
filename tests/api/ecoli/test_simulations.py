@@ -154,6 +154,7 @@ async def _ensure_simulator_ready(
     return simulator_id
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(
     len(get_settings().slurm_submit_key_path) == 0,
     reason="slurm ssh key file not supplied",
