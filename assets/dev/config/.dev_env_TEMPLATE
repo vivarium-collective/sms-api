@@ -87,6 +87,7 @@ BIOCYC_PASSWORD="my-super-secret-password!"
 
 # -- important FS remote paths --
 SIMULATION_OUTDIR=  # (remote HPCFilePath)
+ANALYSIS_OUTDIR= #( remote HPCFilePath)
 VECOLI_CONFIG_DIR=  # remote, that is
 
 # -- Application/UI-level --
