@@ -71,3 +71,8 @@ from tests.fixtures.slurm_fixtures import (  # noqa: F401
     slurm_template_with_storage,
     ssh_session_service,
 )
+from tests.fixtures.workflow_fixtures import (  # noqa: F401
+    slurm_template_workflow,
+    workflow_inputs_dir,
+    workflow_test_config_content,
+)
