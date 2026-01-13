@@ -33,4 +33,3 @@ submit_simulation() {
 }
 
 submit_simulation "$SIMULATOR_HASH"
-

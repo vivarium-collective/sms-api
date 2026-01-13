@@ -147,6 +147,11 @@ class AnalysisOptions(BaseModel):
         trim_attributes(self)
 
 
+class HPCProfileConfig:
+    build_image: bool = False
+    container_image: str = ""
+
+
 class SimulationConfig(BaseModel):
     experiment_id: str
     parca_options: ParcaOptions = ParcaOptions()

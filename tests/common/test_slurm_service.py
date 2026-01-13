@@ -1,4 +1,5 @@
 import asyncio
+import json
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -495,7 +496,8 @@ async def test_nextflow_workflow_sms_ccam_slurm_executor(
     assert result.final_job.job_state.upper() == "COMPLETED"
 
 
-@pytest.mark.skip(reason="BLOCKED: vEcoli NegativeCountsError bug - infrastructure works, simulation has model issues")
+# @pytest.mark.skip(reason="BLOCKED: vEcoli NegativeCountsError bug - infrastructure works, simulation has model
+# issues")
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_nextflow_workflow_sms_ccam_real_simulation(
@@ -545,14 +547,21 @@ async def test_nextflow_workflow_sms_ccam_real_simulation(
             f.write(sms_ccam_main_real_nf)
 
         # Update workflow config with actual paths
-        workflow_config_content = (
-            sms_ccam_workflow_config_real.replace("PUBLISH_DIR_PLACEHOLDER", str(test_output_dir.remote_path))
+        workflow_config_content = sms_ccam_workflow_config_real.replace(
+            "PUBLISH_DIR_PLACEHOLDER", str(test_output_dir.remote_path)
         )
 
         # Write workflow_config.json to local temp file
         local_workflow_config = tmp_dir / "workflow_config.json"
         with open(local_workflow_config, "w") as f:
             f.write(workflow_config_content)
+
+        # TODO: remove this
+        artifact_path = Path("assets/artifacts/workflow_config_real.json")
+        if not artifact_path.parent.exists():
+            artifact_path.parent.mkdir()
+        with open(artifact_path, "w") as fp:
+            json.dump(json.loads(workflow_config_content), fp, indent=3)
 
         # Calculate remote paths (wrap in HPCFilePath for scp_upload)
         remote_nf_script = HPCFilePath(remote_path=remote_base_path.remote_path / local_nf_script.name)
@@ -645,9 +654,7 @@ async def test_nextflow_workflow_sms_ccam_real_simulation(
                 elapsed_seconds += poll_interval_seconds
 
             # Assertions
-            assert final_job is not None, (
-                f"Real simulation job {job_id} not found after {max_wait_seconds} seconds"
-            )
+            assert final_job is not None, f"Real simulation job {job_id} not found after {max_wait_seconds} seconds"
             assert final_job.name == "nextflow_sms_ccam_real", f"Unexpected job name: {final_job.name}"
             assert final_job.job_state.upper() == "COMPLETED", (
                 f"Real simulation failed with state: {final_job.job_state}, exit code: {final_job.exit_code}. "
@@ -655,9 +662,7 @@ async def test_nextflow_workflow_sms_ccam_real_simulation(
             )
 
             # Verify simulation output files were created (using timeseries emitter)
-            retcode, stdout, stderr = await ssh.run_command(
-                f"find {test_output_dir.remote_path} -type f | head -5"
-            )
+            retcode, stdout, stderr = await ssh.run_command(f"find {test_output_dir.remote_path} -type f | head -5")
             output_files = [f for f in stdout.strip().split("\n") if f]
             assert len(output_files) > 0, (
                 f"No output files found in output directory {test_output_dir.remote_path}. "

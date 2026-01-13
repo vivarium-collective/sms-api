@@ -31,16 +31,12 @@ async def fetch_logs(job_uuid: str, tail_lines: int = 100) -> None:
 
     async with ssh_service.session() as ssh:
         # Check output log
-        retcode, stdout, stderr = await ssh.run_command(
-            f"cat {base_path}.out 2>&1 | tail -{tail_lines}"
-        )
+        retcode, stdout, stderr = await ssh.run_command(f"cat {base_path}.out 2>&1 | tail -{tail_lines}")
         print("=== OUTPUT LOG ===")
         print(stdout)
 
         # Check error log
-        retcode, stdout, stderr = await ssh.run_command(
-            f"cat {base_path}.err 2>&1 | tail -{tail_lines}"
-        )
+        retcode, stdout, stderr = await ssh.run_command(f"cat {base_path}.err 2>&1 | tail -{tail_lines}")
         print("\n=== ERROR LOG ===")
         print(stdout)
 

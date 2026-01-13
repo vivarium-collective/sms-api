@@ -111,7 +111,7 @@ build-backend = "hatchling.build"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*"]
+exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*", "tests/fixtures/nextflow_inputs/workflow.py"]
 
 [mypy-fastapi_swagger_dark]
 ignore_missing_imports = true
@@ -121,7 +121,7 @@ testpaths = ["tests"]
 addopts = "--cov-report=html"
 
 [tool.deptry]
-exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py"]
+exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py", "tests/fixtures/nextflow_inputs/workflow.py"]
 ignore = ["DEP002", "DEP003", "DEP004", "DEP001"]
 
 [tool.ruff]
@@ -182,7 +182,7 @@ ignore = [
 #    # C419 Unnecessary list comprehension
      "C419",
 #    # E501 Line too long (131 > 120)
-#    "E501",
+    "E501",
 #    # E722 Do not use bare `except`
 #    "E722",
 #    # E731 Do not assign a `lambda` expression, use a `def`
@@ -237,7 +237,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "notes/*"]
+exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "notes/*", "tests/fixtures/nextflow_inputs/workflow.py"]
 
 [tool.ruff.format]
 preview = true

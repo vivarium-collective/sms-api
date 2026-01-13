@@ -1,9 +1,7 @@
-from dotenv.main import load_dotenv
 import argparse
 import json
 import os
 import pathlib
-from pprint import pp
 import random
 import shutil
 import subprocess
@@ -12,10 +10,10 @@ import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from urllib import parse
 from typing import Optional
+from urllib import parse
 
-import dotenv
+from dotenv.main import load_dotenv
 
 # Try to import fsspec, but make it optional
 try:
@@ -87,9 +85,7 @@ def parse_uri(uri: str) -> tuple[Optional["AbstractFileSystem"], str]:
     if not FSSPEC_AVAILABLE:
         if parse.urlparse(uri).scheme in ("local", "file", ""):
             return None, os.path.abspath(uri)
-        raise RuntimeError(
-            "fsspec is not available. Please install fsspec to use remote URIs."
-        )
+        raise RuntimeError("fsspec is not available. Please install fsspec to use remote URIs.")
     return url_to_fs(uri)
 
 
@@ -115,11 +111,11 @@ def generate_colony(seeds: int):
 
 
 def generate_lineage(
-        seed: int,
-        n_init_sims: int,
-        generations: int,
-        single_daughters: bool,
-        analysis_config: dict[str, dict[str, dict]],
+    seed: int,
+    n_init_sims: int,
+    generations: int,
+    single_daughters: bool,
+    analysis_config: dict[str, dict[str, dict]],
 ):
     """
     Create strings to import and compose Nextflow processes for lineage sims:
@@ -158,19 +154,11 @@ def generate_lineage(
         name = f"sim_gen_{gen + 1}"
         # Handle special case of 1st generation
         if gen == 0:
-            sim_imports.append(
-                f"include {{ simGen0 as {name} }} from '{NEXTFLOW_DIR}/sim'"
-            )
-            sim_workflow.append(
-                (
-                    f"\t{name}(params.config, variantCh.combine(seedCh).combine([1]), '0')"
-                )
-            )
+            sim_imports.append(f"include {{ simGen0 as {name} }} from '{NEXTFLOW_DIR}/sim'")
+            sim_workflow.append(f"\t{name}(params.config, variantCh.combine(seedCh).combine([1]), '0')")
             all_sim_tasks.append(f"{name}.out.metadata")
             if not single_daughters:
-                sim_workflow.append(
-                    f"\t{name}.out.nextGen0.mix({name}.out.nextGen1).set {{ {name}_nextGen }}"
-                )
+                sim_workflow.append(f"\t{name}.out.nextGen0.mix({name}.out.nextGen1).set {{ {name}_nextGen }}")
             else:
                 sim_workflow.append(f"\t{name}.out.nextGen0.set {{ {name}_nextGen }}")
             continue
@@ -178,9 +166,7 @@ def generate_lineage(
         parent = f"sim_gen_{gen}"
         sim_workflow.append(f"\t{name}({parent}_nextGen)")
         if not single_daughters:
-            sim_workflow.append(
-                f"\t{name}.out.nextGen0.mix({name}.out.nextGen1).set {{ {name}_nextGen }}"
-            )
+            sim_workflow.append(f"\t{name}.out.nextGen0.mix({name}.out.nextGen1).set {{ {name}_nextGen }}")
         else:
             sim_workflow.append(f"\t{name}.out.nextGen0.set {{ {name}_nextGen }}")
         all_sim_tasks.append(f"{name}.out.metadata")
@@ -193,64 +179,37 @@ def generate_lineage(
     else:
         sim_workflow.append(f"\t{all_sim_tasks[0]}.set {{ simCh }}")
 
-    sims_per_seed = generations if single_daughters else 2 ** generations - 1
+    sims_per_seed = generations if single_daughters else 2**generations - 1
 
     if analysis_config.get("multivariant", False):
         # Channel that groups all sim tasks
-        sim_workflow.append(
-            MULTIVARIANT_CHANNEL.format(size=sims_per_seed * n_init_sims)
-        )
-        sim_workflow.append(
-            "\tanalysisMultiVariant(params.config, kb, multiVariantCh, "
-            "variantMetadataCh)"
-        )
-        sim_imports.append(
-            f"include {{ analysisMultiVariant }} from '{NEXTFLOW_DIR}/analysis'"
-        )
+        sim_workflow.append(MULTIVARIANT_CHANNEL.format(size=sims_per_seed * n_init_sims))
+        sim_workflow.append("\tanalysisMultiVariant(params.config, kb, multiVariantCh, variantMetadataCh)")
+        sim_imports.append(f"include {{ analysisMultiVariant }} from '{NEXTFLOW_DIR}/analysis'")
 
     if analysis_config.get("multiseed", False):
         # Channel that groups sim tasks by variant sim_data
         sim_workflow.append(MULTISEED_CHANNEL.format(size=sims_per_seed * n_init_sims))
-        sim_workflow.append(
-            "\tanalysisMultiSeed(params.config, kb, multiSeedCh, variantMetadataCh)"
-        )
-        sim_imports.append(
-            f"include {{ analysisMultiSeed }} from '{NEXTFLOW_DIR}/analysis'"
-        )
+        sim_workflow.append("\tanalysisMultiSeed(params.config, kb, multiSeedCh, variantMetadataCh)")
+        sim_imports.append(f"include {{ analysisMultiSeed }} from '{NEXTFLOW_DIR}/analysis'")
 
     if analysis_config.get("multigeneration", False):
         # Channel that groups sim tasks by variant sim_data and initial seed
         sim_workflow.append(MULTIGENERATION_CHANNEL.format(size=sims_per_seed))
-        sim_workflow.append(
-            "\tanalysisMultiGeneration(params.config, kb, multiGenerationCh, "
-            "variantMetadataCh)"
-        )
-        sim_imports.append(
-            f"include {{ analysisMultiGeneration }} from '{NEXTFLOW_DIR}/analysis'"
-        )
+        sim_workflow.append("\tanalysisMultiGeneration(params.config, kb, multiGenerationCh, variantMetadataCh)")
+        sim_imports.append(f"include {{ analysisMultiGeneration }} from '{NEXTFLOW_DIR}/analysis'")
 
     if analysis_config.get("multidaughter", False) and not single_daughters:
         # Channel that groups sim tasks by variant sim_data, initial seed, and generation
         # When simulating both daughters, will have >1 cell for generation >1
-        gen_size = (
-                "[" + ", ".join([f"{g + 1}: {2 ** g}" for g in range(generations)]) + "]"
-        )
+        gen_size = "[" + ", ".join([f"{g + 1}: {2**g}" for g in range(generations)]) + "]"
         sim_workflow.append(MULTIDAUGHTER_CHANNEL.format(gen_size=gen_size))
-        sim_workflow.append(
-            "\tanalysisMultiDaughter(params.config, kb, multiDaughterCh, "
-            "variantMetadataCh)"
-        )
-        sim_imports.append(
-            f"include {{ analysisMultiDaughter }} from '{NEXTFLOW_DIR}/analysis'"
-        )
+        sim_workflow.append("\tanalysisMultiDaughter(params.config, kb, multiDaughterCh, variantMetadataCh)")
+        sim_imports.append(f"include {{ analysisMultiDaughter }} from '{NEXTFLOW_DIR}/analysis'")
 
     if analysis_config.get("single", False):
-        sim_workflow.append(
-            "\tanalysisSingle(params.config, kb, simCh, variantMetadataCh)"
-        )
-        sim_imports.append(
-            f"include {{ analysisSingle }} from '{NEXTFLOW_DIR}/analysis'"
-        )
+        sim_workflow.append("\tanalysisSingle(params.config, kb, simCh, variantMetadataCh)")
+        sim_imports.append(f"include {{ analysisSingle }} from '{NEXTFLOW_DIR}/analysis'")
 
     if analysis_config.get("parca", False):
         sim_workflow.append("\tanalysisParca(params.config, kb)")
@@ -273,9 +232,7 @@ def generate_code(config):
     if generations:
         lineage_seed = config.get("lineage_seed", 0)
         n_init_sims = config.get("n_init_sims")
-        print(
-            f"Specified generations: initial lineage seed {lineage_seed}, {n_init_sims} initial sims"
-        )
+        print(f"Specified generations: initial lineage seed {lineage_seed}, {n_init_sims} initial sims")
         single_daughters = config.get("single_daughters", True)
         sim_imports, sim_workflow = generate_lineage(
             lineage_seed,
@@ -290,18 +247,14 @@ def generate_code(config):
 
 
 def build_image_cmd(image_name, apptainer=False) -> list[str]:
-    build_script = os.path.join(
-        os.path.dirname(__file__), "container", "build-image.sh"
-    )
+    build_script = os.path.join(os.path.dirname(__file__), "container", "build-image.sh")
     cmd = [build_script, "-i", image_name]
     if apptainer:
         cmd.append("-a")
     return cmd
 
 
-def copy_to_filesystem(
-        source: str, dest: str, filesystem: Optional["AbstractFileSystem"] = None
-):
+def copy_to_filesystem(source: str, dest: str, filesystem: Optional["AbstractFileSystem"] = None):
     """
     Robustly copy the contents of a local source file to a destination path.
 
@@ -331,7 +284,7 @@ def stream_log(output_log: str, sleep_time: int = 1):
     while True:
         # Read any new content from the log file
         if log_path.exists():
-            with open(output_log, "r") as f:
+            with open(output_log) as f:
                 # Move to where we left off
                 f.seek(last_position)
                 # Read and print new content
@@ -363,22 +316,22 @@ def main():
         type=str,
         default=None,
         help="Resume workflow with given experiment ID. The experiment ID must "
-             "match the supplied configuration file and if suffix_time was used, must "
-             "contain the full time suffix (suffix_time will not be applied again).",
+        "match the supplied configuration file and if suffix_time was used, must "
+        "contain the full time suffix (suffix_time will not be applied again).",
     )
     parser.add_argument(
         "--build-only",
         action="store_true",
         default=False,
         help="Only build workflow files (main.nf, nextflow.config, workflow_config.json) "
-             "without executing the workflow. Temp files are preserved for inspection.",
+        "without executing the workflow. Temp files are preserved for inspection.",
     )
     args = parser.parse_args()
-    with open(config_file, "r") as f:
+    with open(config_file) as f:
         config = json.load(f)
     if args.config is not None:
         config_file = args.config
-        with open(args.config, "r") as f:
+        with open(args.config) as f:
             user_config = json.load(f)
             for key in LIST_KEYS_TO_MERGE:
                 user_config.setdefault(key, [])
@@ -415,8 +368,7 @@ def main():
         out_uri = os.path.abspath(config["emitter_arg"]["out_dir"])
         config["emitter_arg"]["out_dir"] = out_uri
         assert parse.urlparse(out_uri).scheme == "", (
-            "Output directory must be a local path, not a URI. "
-            "Specify URIs using 'out_uri' under 'emitter_arg'."
+            "Output directory must be a local path, not a URI. Specify URIs using 'out_uri' under 'emitter_arg'."
         )
     else:
         out_uri = config["emitter_arg"]["out_uri"]
@@ -431,9 +383,8 @@ def main():
     if config["sim_data_path"] is not None:
         config["sim_data_path"] = os.path.abspath(config["sim_data_path"])
     # Use random seed for Jenkins CI runs
-    if config.get("sherlock", {}).get("jenkins", False) \
-            or config.get("ccam", {}).get("wait", False):
-        config["lineage_seed"] = random.randint(0, 2 ** 31 - 1)
+    if config.get("sherlock", {}).get("jenkins", False) or config.get("ccam", {}).get("wait", False):
+        config["lineage_seed"] = random.randint(0, 2**31 - 1)
     filesystem, outdir = parse_uri(out_uri)
     outdir = os.path.join(outdir, experiment_id, "nextflow")
     exp_outdir = os.path.dirname(outdir)
@@ -466,15 +417,13 @@ def main():
         copy_to_filesystem(temp_config_path, final_config_path, filesystem)
 
     nf_config = os.path.join(os.path.dirname(__file__), "nextflow", "config.template")
-    with open(nf_config, "r") as f:
+    with open(nf_config) as f:
         nf_config = f.readlines()
     nf_config = "".join(nf_config)
     nf_config = nf_config.replace("EXPERIMENT_ID", experiment_id)
     nf_config = nf_config.replace("CONFIG_FILE", final_config_uri)
     nf_config = nf_config.replace("BUCKET", out_bucket)
-    nf_config = nf_config.replace(
-        "PUBLISH_DIR", os.path.dirname(os.path.dirname(out_uri))
-    )
+    nf_config = nf_config.replace("PUBLISH_DIR", os.path.dirname(os.path.dirname(out_uri)))
     nf_config = nf_config.replace("PARCA_CPUS", str(config["parca_options"]["cpus"]))
 
     # >> set nextflow profile ((config))
@@ -506,14 +455,10 @@ def main():
     sherlock_config = config.get("sherlock", None)
     if sherlock_config is not None:
         if nf_profile == "gcloud":
-            raise RuntimeError(
-                "Cannot set both Sherlock and Google Cloud options in the input JSON."
-            )
+            raise RuntimeError("Cannot set both Sherlock and Google Cloud options in the input JSON.")
         nf_profile = "sherlock"
         # Suggest that users turn off background thread for Parquet emitter
-        if config["emitter"] == "parquet" and config["emitter_arg"].get(
-                "threaded", True
-        ):
+        if config["emitter"] == "parquet" and config["emitter_arg"].get("threaded", True):
             warnings.warn(
                 "Using a background thread in the Parquet emitter may degrade "
                 "performance on Sherlock, where each simulation is allocated a "
@@ -527,9 +472,7 @@ def main():
             raise RuntimeError("Must supply name for container image.")
         image_dir = os.path.abspath(os.path.dirname(container_image))
         if not os.path.exists(image_dir):
-            warnings.warn(
-                f"Container image directory does not exist, creating: {image_dir}."
-            )
+            warnings.warn(f"Container image directory does not exist, creating: {image_dir}.")
             os.makedirs(image_dir, exist_ok=True)
         if sherlock_config.get("build_image", False):
             image_cmd = " ".join(build_image_cmd(container_image, True))
@@ -588,9 +531,7 @@ def main():
             raise RuntimeError("Must supply name for container image.")
         image_dir = os.path.abspath(os.path.dirname(container_image))
         if not os.path.exists(image_dir):
-            warnings.warn(
-                f"Container image directory does not exist, creating: {image_dir}."
-            )
+            warnings.warn(f"Container image directory does not exist, creating: {image_dir}.")
             os.makedirs(image_dir, exist_ok=True)
 
         # --- build image (if applicable) -- #
@@ -605,7 +546,8 @@ def main():
             # slurm_job_log_file = pathlib.Path(os.getenv('SLURM_LOG_BASE_PATH')) / log_filename
 
             with open(image_build_script, "w") as f:
-                f.write(textwrap.dedent(f""" \
+                f.write(
+                    textwrap.dedent(f""" \
                     #!/bin/bash
                     #SBATCH --job-name="build-image-{experiment_id}"
                     #SBATCH --time=30:00
@@ -615,7 +557,8 @@ def main():
                     #SBATCH --wait
                     #SBATCH --output={log_file}
                     {image_cmd}
-                """))
+                """)
+                )
             # Create empty log file for thread to stream from
             log_path = pathlib.Path(log_file)
             log_path.touch(exist_ok=True)
@@ -657,9 +600,7 @@ def main():
             raise RuntimeError("Must supply name for container image.")
         image_dir = os.path.abspath(os.path.dirname(container_image))
         if not os.path.exists(image_dir):
-            warnings.warn(
-                f"Container image directory does not exist, creating: {image_dir}."
-            )
+            warnings.warn(f"Container image directory does not exist, creating: {image_dir}.")
             os.makedirs(image_dir, exist_ok=True)
 
         # --- build image (if applicable) -- #
@@ -673,7 +614,8 @@ def main():
             # _ = dotenv.load_dotenv(ccam_env_path)
             # slurm_job_log_file = pathlib.Path(os.getenv('SLURM_LOG_BASE_PATH')) / log_filename
             with open(image_build_script, "w") as f:
-                f.write(textwrap.dedent(f""" \
+                f.write(
+                    textwrap.dedent(f""" \
                     #!/bin/bash
                     #SBATCH --job-name="build-image-{experiment_id}"
                     #SBATCH --time=30:00
@@ -683,7 +625,8 @@ def main():
                     #SBATCH --wait
                     #SBATCH --output={log_file}
                     {image_cmd}
-                """))
+                """)
+                )
             # Create empty log file for thread to stream from
             log_path = pathlib.Path(log_file)
             log_path.touch(exist_ok=True)
@@ -702,10 +645,8 @@ def main():
 
     run_parca, sim_imports, sim_workflow = generate_code(config)
 
-    nf_template_path = os.path.join(
-        os.path.dirname(__file__), "nextflow", "template.nf"
-    )
-    with open(nf_template_path, "r") as f:
+    nf_template_path = os.path.join(os.path.dirname(__file__), "nextflow", "template.nf")
+    with open(nf_template_path) as f:
         nf_template = f.readlines()
     nf_template = "".join(nf_template)
     nf_template = nf_template.replace("RUN_PARCA", run_parca)
@@ -720,16 +661,14 @@ def main():
     config_path = os.path.join(out_uri, "nextflow.config")
     if args.resume is None:
         copy_to_filesystem(local_workflow, os.path.join(outdir, "main.nf"), filesystem)
-        copy_to_filesystem(
-            local_config, os.path.join(outdir, "nextflow.config"), filesystem
-        )
+        copy_to_filesystem(local_config, os.path.join(outdir, "nextflow.config"), filesystem)
 
     # If build-only mode, skip execution and preserve temp files
     if args.build_only:
         print(f"Build-only mode: files generated in {local_outdir}")
-        print(f"  - main.nf")
-        print(f"  - nextflow.config")
-        print(f"  - workflow_config.json")
+        print("  - main.nf")
+        print("  - nextflow.config")
+        print("  - workflow_config.json")
         print(f"Output directory: {outdir}")
         return local_outdir
 
@@ -778,7 +717,7 @@ def main():
         if sherlock_config.get("hyperqueue", False):
             nf_profile = "sherlock_hq"
             hyperqueue_init = textwrap.dedent(""" \
-                # Set the directory which HyperQueue will use 
+                # Set the directory which HyperQueue will use
                 export HQ_SERVER_DIR={os.path.join(outdir, ".hq-server")}
                 mkdir -p ${{HQ_SERVER_DIR}}
 
@@ -789,7 +728,8 @@ def main():
             hyperqueue_exit = "hq job wait all; hq worker stop all; hq server stop"
         nf_slurm_output = os.path.join(outdir, f"{experiment_id}_slurm.out")
         with open(batch_script, "w") as f:
-            f.write(textwrap.dedent(f""" \
+            f.write(
+                textwrap.dedent(f""" \
                 #!/bin/bash
                 #SBATCH --job-name="nf-{experiment_id}"
                 #SBATCH --time=7-00:00:00
@@ -804,10 +744,9 @@ def main():
                 {hyperqueue_init}
                 nextflow -C {config_path} run {workflow_path} -profile {nf_profile} \
                     -with-report {report_path} -work-dir {workdir} {"-resume" if args.resume is not None else ""}
-            """))
-        copy_to_filesystem(
-            batch_script, os.path.join(outdir, "nextflow_job.sh"), filesystem
-        )
+            """)
+            )
+        copy_to_filesystem(batch_script, os.path.join(outdir, "nextflow_job.sh"), filesystem)
         # Make stdout of workflow viewable in Jenkins
         if sherlock_config.get("jenkins", False):
             # Create empty log file for thread to stream from
@@ -831,20 +770,21 @@ def main():
 
         if slurm_partition is None or slurm_qos is None or slurm_node_list is None:
             raise RuntimeError(
-                "You must set the following environment variables for the ccam profile: SLURM_PARTITION, SLURM_QOS, SLURM_NODE_LIST")
+                "You must set the following environment variables for the ccam profile: SLURM_PARTITION, SLURM_QOS, SLURM_NODE_LIST"
+            )
         else:
             qos_clause = f"#SBATCH --qos={slurm_qos}"
             nodelist_clause = f"#SBATCH --nodelist={slurm_node_list}"
 
         batch_script = os.path.join(local_outdir, "nextflow_job.sh")
         # NOTE: "outdir" here refers to whatever has been specified in the config JSON
-        slurm_log_base_path = os.getenv('SLURM_LOG_BASE_PATH')
+        slurm_log_base_path = os.getenv("SLURM_LOG_BASE_PATH")
         if not slurm_log_base_path:
             raise OSError(
-                '''For now, you must provide a SLURM_LOG_BASE_PATH environment variable if using the ccam profile'''
+                """For now, you must provide a SLURM_LOG_BASE_PATH environment variable if using the ccam profile"""
             )
         slurm_job_name = f"nf-{experiment_id}"
-        slurm_qos = os.getenv('SLURM_QOS', '')
+        slurm_qos = os.getenv("SLURM_QOS", "")
 
         slurm_job_outfile = pathlib.Path(slurm_log_base_path) / f"{slurm_job_name}.out"
 
@@ -872,9 +812,7 @@ def main():
                     -with-report {report_path} -work-dir {workdir} {"-resume" if args.resume is not None else ""}
             """)
             f.write(script)
-        copy_to_filesystem(
-            batch_script, os.path.join(outdir, "nextflow_job.sh"), filesystem
-        )
+        copy_to_filesystem(batch_script, os.path.join(outdir, "nextflow_job.sh"), filesystem)
         # if ccam_config.get("wait", False):
         #     # Create empty log file for thread to stream from
         #     log_path = pathlib.Path(nf_slurm_output)
@@ -897,13 +835,14 @@ def main():
         slurm_partition = os.getenv("SLURM_PARTITION")
         if slurm_partition is None:
             raise RuntimeError(
-                "You must set the following environment variables for the aws_cdk profile: SLURM_PARTITION")
+                "You must set the following environment variables for the aws_cdk profile: SLURM_PARTITION"
+            )
         batch_script = os.path.join(local_outdir, "nextflow_job.sh")
         # NOTE: "outdir" here refers to whatever has been specified in the config JSON
-        slurm_log_base_path = os.getenv('SLURM_LOG_BASE_PATH')
+        slurm_log_base_path = os.getenv("SLURM_LOG_BASE_PATH")
         if not slurm_log_base_path:
             raise OSError(
-                '''For now, you must provide a SLURM_LOG_BASE_PATH environment variable if using the aws_cdk profile'''
+                """For now, you must provide a SLURM_LOG_BASE_PATH environment variable if using the aws_cdk profile"""
             )
         slurm_job_name = f"nf-{experiment_id}"
         slurm_job_outfile = pathlib.Path(slurm_log_base_path) / f"{slurm_job_name}.out"
@@ -929,9 +868,7 @@ def main():
                     -with-report {report_path} -work-dir {workdir} {"-resume" if args.resume is not None else ""}
             """)
             f.write(script)
-        copy_to_filesystem(
-            batch_script, os.path.join(outdir, "nextflow_job.sh"), filesystem
-        )
+        copy_to_filesystem(batch_script, os.path.join(outdir, "nextflow_job.sh"), filesystem)
         subprocess.run(["sbatch", batch_script], check=True)
     # =============================================================================================================== #
 

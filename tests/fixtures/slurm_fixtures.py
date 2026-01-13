@@ -8,6 +8,7 @@ import pytest_asyncio
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
+from sms_api.simulation.nextflow_service import NextflowServiceSlurm
 
 
 def _build_nextflow_sbatch_template(
@@ -795,7 +796,7 @@ workDir = 'WORK_DIR_PLACEHOLDER'
 
 
 @pytest.fixture(scope="session")
-def nextflow_service_slurm():
+def nextflow_service_slurm() -> NextflowServiceSlurm:
     """Provide a NextflowServiceSlurm instance for integration tests.
 
     This service provides the production implementation for running

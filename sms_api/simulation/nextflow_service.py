@@ -3,14 +3,11 @@ import dataclasses
 import json
 import tempfile
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
-
-import pytest
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.ssh.ssh_service import SSHSessionService, SSHSession
+from sms_api.common.ssh.ssh_service import SSHSession
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
@@ -30,13 +27,13 @@ class NextflowJobSubmission:
 
 class NextflowServiceSlurm:
     async def submit_simulation_job(
-            self,
-            slurm_service: SlurmService,
-            ssh: SSHSession,
-            sms_ccam_main_real_nf: str,
-            sms_ccam_workflow_config_real: str,
-            nextflow_config_sms_ccam_real: str,
-            slurm_template_nextflow_sms_ccam_real: str,
+        self,
+        slurm_service: SlurmService,
+        ssh: SSHSession,
+        sms_ccam_main_real_nf: str,
+        sms_ccam_workflow_config_real: str,
+        nextflow_config_sms_ccam_real: str,
+        slurm_template_nextflow_sms_ccam_real: str,
     ) -> NextflowJobSubmission:
         """
         Integration test for real SMS CCAM simulation using SLURM executor.
@@ -77,8 +74,8 @@ class NextflowServiceSlurm:
                 f.write(sms_ccam_main_real_nf)
 
             # Update workflow config with actual paths
-            workflow_config_content = (
-                sms_ccam_workflow_config_real.replace("PUBLISH_DIR_PLACEHOLDER", str(test_output_dir.remote_path))
+            workflow_config_content = sms_ccam_workflow_config_real.replace(
+                "PUBLISH_DIR_PLACEHOLDER", str(test_output_dir.remote_path)
             )
 
             # Write workflow_config.json to local temp file
@@ -151,28 +148,28 @@ class NextflowServiceSlurm:
                 ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
             )
             if job_id <= 0:
-                raise RuntimeError(f"Failed to get valid job ID")
+                raise RuntimeError("Failed to get valid job ID")
 
             submission = NextflowJobSubmission(
                 job_id=job_id,
                 remote_output_file=HPCFilePath(remote_path=remote_output_file),
                 remote_error_file=HPCFilePath(remote_path=remote_error_file),
-                simulation_output_dir=test_output_dir
+                simulation_output_dir=test_output_dir,
             )
 
             # return job_id, HPCFilePath(remote_path=remote_output_file), HPCFilePath(remote_path=(remote_error_file))
             return submission
 
     async def poll_simulation_job(
-            self,
-            job_id: int,
-            slurm_service: SlurmService,
-            ssh: SSHSession,
-            remote_output_file: HPCFilePath,
-            remote_error_file: HPCFilePath,
-            max_wait_seconds: int = 7200,
-            poll_interval_seconds: int = 30,
-            elapsed_seconds: int = 0,
+        self,
+        job_id: int,
+        slurm_service: SlurmService,
+        ssh: SSHSession,
+        remote_output_file: HPCFilePath,
+        remote_error_file: HPCFilePath,
+        max_wait_seconds: int = 7200,
+        poll_interval_seconds: int = 30,
+        elapsed_seconds: int = 0,
     ) -> SlurmJob:
         # Poll for job completion (longer timeout for real simulation)
         final_job: SlurmJob | None = None
@@ -197,48 +194,46 @@ class NextflowServiceSlurm:
 
         # Assertions
         if final_job is None:
-            raise NextflowJobError(
-                f"Real simulation job {job_id} not found after {max_wait_seconds} seconds"
-            )
+            raise NextflowJobError(f"Real simulation job {job_id} not found after {max_wait_seconds} seconds")
 
-        if final_job.name != "nextflow_sms_ccam_real": raise NextflowJobError(f"Unexpected job name: {final_job.name}")
-        if final_job.job_state.upper() != "COMPLETED": raise NextflowJobError((
-            f"Real simulation failed with state: {final_job.job_state}, exit code: {final_job.exit_code}. "
-            f"Check logs at {remote_output_file} and {remote_error_file}"
-        ))
+        if final_job.name != "nextflow_sms_ccam_real":
+            raise NextflowJobError(f"Unexpected job name: {final_job.name}")
+        if final_job.job_state.upper() != "COMPLETED":
+            raise NextflowJobError(
+                f"Real simulation failed with state: {final_job.job_state}, exit code: {final_job.exit_code}. "
+                f"Check logs at {remote_output_file} and {remote_error_file}"
+            )
 
         return final_job
 
     async def list_simulation_outputs(
-            self,
-            job_id: str,
-            ssh: SSHSession,
-            simulation_output_dir: HPCFilePath,
-            remote_output_file: HPCFilePath,
-            final_job: SlurmJob | None,
-            max_wait_seconds: int = 7200,
-            poll_interval_seconds: int = 30,
-            elapsed_seconds: int = 0,
+        self,
+        job_id: str,
+        ssh: SSHSession,
+        simulation_output_dir: HPCFilePath,
+        remote_output_file: HPCFilePath,
+        final_job: SlurmJob | None,
+        max_wait_seconds: int = 7200,
+        poll_interval_seconds: int = 30,
+        elapsed_seconds: int = 0,
     ) -> list[str]:
-
         # Verify simulation output files were created (using timeseries emitter)
-        retcode, stdout, stderr = await ssh.run_command(
-            f"find {simulation_output_dir.remote_path} -type f | head -5"
-        )
+        retcode, stdout, stderr = await ssh.run_command(f"find {simulation_output_dir.remote_path} -type f | head -5")
         output_files = [f for f in stdout.strip().split("\n") if f]
-        if not len(output_files) > 0: raise NextflowJobError(
-            f"No output files found in output directory {simulation_output_dir.remote_path}. "
-            f"Check logs at {remote_output_file}"
-        )
+        if not len(output_files) > 0:
+            raise NextflowJobError(
+                f"No output files found in output directory {simulation_output_dir.remote_path}. "
+                f"Check logs at {remote_output_file}"
+            )
         return output_files
 
     async def run_simulation(
-            self,
-            slurm_service: SlurmService,
-            sms_ccam_main_real_nf: str,
-            sms_ccam_workflow_config_real: str,
-            nextflow_config_sms_ccam_real: str,
-            slurm_template_nextflow_sms_ccam_real: str,
+        self,
+        slurm_service: SlurmService,
+        sms_ccam_main_real_nf: str,
+        sms_ccam_workflow_config_real: str,
+        nextflow_config_sms_ccam_real: str,
+        slurm_template_nextflow_sms_ccam_real: str,
     ) -> list[str]:
         async with get_ssh_session_service().session() as ssh:
             submission = await self.submit_simulation_job(
@@ -247,7 +242,7 @@ class NextflowServiceSlurm:
                 sms_ccam_workflow_config_real=sms_ccam_workflow_config_real,
                 sms_ccam_main_real_nf=sms_ccam_main_real_nf,
                 nextflow_config_sms_ccam_real=nextflow_config_sms_ccam_real,
-                slurm_template_nextflow_sms_ccam_real=slurm_template_nextflow_sms_ccam_real
+                slurm_template_nextflow_sms_ccam_real=slurm_template_nextflow_sms_ccam_real,
             )
 
             job_id = submission.job_id
@@ -259,7 +254,7 @@ class NextflowServiceSlurm:
                 slurm_service=slurm_service,
                 ssh=ssh,
                 remote_output_file=remote_output_file,
-                remote_error_file=remote_error_file
+                remote_error_file=remote_error_file,
             )
 
             outputs = await self.list_simulation_outputs(
