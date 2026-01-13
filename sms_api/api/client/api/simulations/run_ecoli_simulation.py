@@ -67,6 +67,8 @@ def sync_detailed(
 ) -> Response[Union[HTTPValidationError, Simulation]]:
     """Launches a nextflow-powered vEcoli simulation workflow
 
+     Run a vEcoli simulation workflow with full configuration.
+
     Args:
         body (SimulationRequest): Used by the /simulation endpoint.
 
@@ -96,6 +98,8 @@ def sync(
 ) -> Optional[Union[HTTPValidationError, Simulation]]:
     """Launches a nextflow-powered vEcoli simulation workflow
 
+     Run a vEcoli simulation workflow with full configuration.
+
     Args:
         body (SimulationRequest): Used by the /simulation endpoint.
 
@@ -119,6 +123,8 @@ async def asyncio_detailed(
     body: SimulationRequest,
 ) -> Response[Union[HTTPValidationError, Simulation]]:
     """Launches a nextflow-powered vEcoli simulation workflow
+
+     Run a vEcoli simulation workflow with full configuration.
 
     Args:
         body (SimulationRequest): Used by the /simulation endpoint.
@@ -146,6 +152,8 @@ async def asyncio(
     body: SimulationRequest,
 ) -> Optional[Union[HTTPValidationError, Simulation]]:
     """Launches a nextflow-powered vEcoli simulation workflow
+
+     Run a vEcoli simulation workflow with full configuration.
 
     Args:
         body (SimulationRequest): Used by the /simulation endpoint.

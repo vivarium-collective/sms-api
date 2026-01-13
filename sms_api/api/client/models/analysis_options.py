@@ -12,12 +12,12 @@ from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..models.analysis_options_single_type_0 import AnalysisOptionsSingleType0
-    from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
     from ..models.analysis_options_multiseed_type_0 import AnalysisOptionsMultiseedType0
-    from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
-    from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
+    from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
+    from ..models.analysis_options_single_type_0 import AnalysisOptionsSingleType0
     from ..models.analysis_options_multivariant_type_0 import AnalysisOptionsMultivariantType0
+    from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
+    from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
 
 
 T = TypeVar("T", bound="AnalysisOptions")
@@ -46,12 +46,12 @@ class AnalysisOptions:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.analysis_options_single_type_0 import AnalysisOptionsSingleType0
-        from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
         from ..models.analysis_options_multiseed_type_0 import AnalysisOptionsMultiseedType0
-        from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
-        from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
+        from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
+        from ..models.analysis_options_single_type_0 import AnalysisOptionsSingleType0
         from ..models.analysis_options_multivariant_type_0 import AnalysisOptionsMultivariantType0
+        from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
+        from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
 
         cpus = self.cpus
 
@@ -125,12 +125,12 @@ class AnalysisOptions:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.analysis_options_single_type_0 import AnalysisOptionsSingleType0
-        from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
         from ..models.analysis_options_multiseed_type_0 import AnalysisOptionsMultiseedType0
-        from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
-        from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
+        from ..models.analysis_options_multiexperiment_type_0 import AnalysisOptionsMultiexperimentType0
+        from ..models.analysis_options_single_type_0 import AnalysisOptionsSingleType0
         from ..models.analysis_options_multivariant_type_0 import AnalysisOptionsMultivariantType0
+        from ..models.analysis_options_multidaughter_type_0 import AnalysisOptionsMultidaughterType0
+        from ..models.analysis_options_multigeneration_type_0 import AnalysisOptionsMultigenerationType0
 
         d = dict(src_dict)
         cpus = d.pop("cpus", UNSET)
