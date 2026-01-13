@@ -787,3 +787,20 @@ profiles {{
 workDir = 'WORK_DIR_PLACEHOLDER'
 """
     return config
+
+
+# =============================================================================
+# Nextflow Service Fixtures
+# =============================================================================
+
+
+@pytest.fixture(scope="session")
+def nextflow_service_slurm():
+    """Provide a NextflowServiceSlurm instance for integration tests.
+
+    This service provides the production implementation for running
+    Nextflow workflows via SLURM on HPC.
+    """
+    from sms_api.simulation.nextflow_service import NextflowServiceSlurm
+
+    return NextflowServiceSlurm()

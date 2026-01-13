@@ -64,6 +64,7 @@ from tests.fixtures.slurm_fixtures import (  # noqa: F401
     nextflow_inputs_dir,
     nextflow_script_hello,
     nextflow_script_hello_slurm,
+    nextflow_service_slurm,
     slurm_service,
     slurm_template_hello_1s,
     slurm_template_hello_10s,

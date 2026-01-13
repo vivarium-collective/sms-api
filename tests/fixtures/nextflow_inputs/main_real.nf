@@ -12,7 +12,8 @@ nextflow.enable.dsl=2
 include { simGen0 as sim_gen_1 } from '/projects/SMS/sms_api/dev/repos/53526a7/vEcoli/runscripts/nextflow/sim'
 
 // Import analysis processes from vEcoli
-include { analysisSingle } from '/projects/SMS/sms_api/dev/repos/53526a7/vEcoli/runscripts/nextflow/analysis'
+// NOTE: analysisSingle disabled due to vEcoli bug (make_sim_data_dict undefined)
+// include { analysisSingle } from '/projects/SMS/sms_api/dev/repos/53526a7/vEcoli/runscripts/nextflow/analysis'
 
 process runParca {
     // Run ParCa using parca_options from config JSON
@@ -97,5 +98,6 @@ workflow {
     sim_gen_1.out.metadata.set { simCh }
 
     // Run single cell analysis on simulation output
-    analysisSingle(params.config, kb, simCh, variantMetadataCh)
+    // NOTE: analysisSingle disabled due to vEcoli bug (make_sim_data_dict undefined)
+    // analysisSingle(params.config, kb, simCh, variantMetadataCh)
 }

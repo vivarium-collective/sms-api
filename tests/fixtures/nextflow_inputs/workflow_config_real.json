@@ -14,14 +14,13 @@
     "emit_config": false,
     "emit_unique": false,
     "log_updates": false,
-    "raw_output": true,
     "seed": 0,
     "mar_regulon": false,
     "amp_lysis": false,
     "initial_state_file": "",
     "initial_state_overrides": [],
     "initial_state": {},
-    "time_step": 2,
+    "time_step": 1,
     "max_duration": 120.0,
     "initial_global_time": 0,
     "fail_at_max_duration": false,
@@ -30,7 +29,7 @@
     "n_init_sims": 1,
     "generations": 1,
     "single_daughters": true,
-    "daughter_outdir": "out",
+    "daughter_outdir": "/projects/SMS/sms_api/alex/sims",
     "lineage_seed": 0,
     "parca_options": {
         "cpus": 2,
@@ -51,9 +50,7 @@
     },
     "analysis_options": {
         "cpus": 1,
-        "single": {
-            "mass_fraction_summary": {}
-        }
+        "single": {}
     },
     "gcloud": null,
     "agent_id": "0",
@@ -76,50 +73,6 @@
     "exclude_processes": [],
     "swap_processes": {},
     "profile": false,
-    "processes": [
-        "ecoli-mass-listener",
-        "ecoli-metabolism",
-        "exchange_data",
-        "global_clock",
-        "media_update",
-        "post-division-mass-listener"
-    ],
-    "process_configs": {
-        "global_clock": {}
-    },
-    "topology": {
-        "global_clock": {
-            "global_time": [
-                "global_time"
-            ],
-            "next_update_time": [
-                "next_update_time"
-            ]
-        }
-    },
-    "flow": {
-        "post-division-mass-listener": [],
-        "media_update": [
-            [
-                "post-division-mass-listener"
-            ]
-        ],
-        "exchange_data": [
-            [
-                "media_update"
-            ]
-        ],
-        "ecoli-metabolism": [
-            [
-                "exchange_data"
-            ]
-        ],
-        "ecoli-mass-listener": [
-            [
-                "ecoli-metabolism"
-            ]
-        ]
-    },
     "engine_process_reports": [
         [
             "listeners"

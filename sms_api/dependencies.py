@@ -20,6 +20,7 @@ from sms_api.simulation.tables_orm import create_db
 
 if TYPE_CHECKING:
     from sms_api.simulation.job_scheduler import JobScheduler
+    from sms_api.simulation.nextflow_service import NextflowServiceSlurm
     from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)
@@ -144,6 +145,21 @@ def get_ssh_session_service() -> SSHSessionService:
     if global_ssh_session_service is None:
         raise RuntimeError("SSHSessionService singleton not initialized")
     return global_ssh_session_service
+
+
+# ------ nextflow service (standalone or pytest) ------
+
+global_nextflow_service: "NextflowServiceSlurm | None" = None
+
+
+def set_nextflow_service(service: "NextflowServiceSlurm | None") -> None:
+    global global_nextflow_service
+    global_nextflow_service = service
+
+
+def get_nextflow_service() -> "NextflowServiceSlurm | None":
+    global global_nextflow_service
+    return global_nextflow_service
 
 
 # ------ initialized standalone application (standalone) ------
