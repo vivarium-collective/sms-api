@@ -85,10 +85,10 @@ class JobScheduler:
             await asyncio.sleep(interval_seconds)
 
     async def update_running_jobs(self) -> None:
-        # Fetch all running HpcRun jobs
-        running_jobs = await self.database_service.list_running_hpcruns()
+        # Fetch all active (PENDING or RUNNING) HpcRun jobs
+        running_jobs = await self.database_service.list_active_hpcruns()
         if not running_jobs:
-            logger.debug("No running jobs found for polling.")
+            logger.debug("No active jobs found for polling.")
             return
         job_ids = [job.slurmjobid for job in running_jobs if job.slurmjobid]
         if not job_ids:

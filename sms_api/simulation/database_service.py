@@ -153,8 +153,8 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def list_running_hpcruns(self) -> list[HpcRun]:
-        """Return all HpcRun jobs with status RUNNING."""
+    async def list_active_hpcruns(self) -> list[HpcRun]:
+        """Return all HpcRun jobs with status PENDING or RUNNING."""
         pass
 
     @abstractmethod
@@ -656,9 +656,9 @@ class DatabaseServiceSQL(DatabaseService):
             return simulations
 
     @override
-    async def list_running_hpcruns(self) -> list[HpcRun]:
+    async def list_active_hpcruns(self) -> list[HpcRun]:
         async with self.async_sessionmaker() as session:
-            stmt = select(ORMHpcRun).where(ORMHpcRun.status == JobStatusDB.RUNNING)
+            stmt = select(ORMHpcRun).where(ORMHpcRun.status.in_([JobStatusDB.PENDING, JobStatusDB.RUNNING]))
             result: Result[tuple[ORMHpcRun]] = await session.execute(stmt)
             orm_hpcruns = result.scalars().all()
             return [orm_hpcrun.to_hpc_run() for orm_hpcrun in orm_hpcruns]
