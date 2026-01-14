@@ -37,53 +37,53 @@ logger = logging.getLogger(__name__)
 config = get_router_config(prefix="api", version_major=False)
 
 
+# @config.router.post(
+#     path="/simulations",
+#     operation_id="run-ecoli-simulation",
+#     response_model=Simulation,
+#     tags=["Simulations"],
+#     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
+#     summary="Launches a vEcoli simulation workflow with simple parameters",
+# )
+# async def run_simulation(
+#     simulator_id: int = Query(..., description="Database ID of the simulator to use"),
+#     experiment_id: str = Query(..., description="Unique experiment identifier"),
+#     simulation_config_filename: str = Query(..., description="Config filename in vEcoli/configs/ on HPC"),
+#     num_generations: int | None = Query(default=None, ge=1, le=10, description="Number of generations to simulate"),
+#     num_seeds: int | None = Query(default=None, ge=1, le=100, description="Number of initial seeds (lineages)"),
+#     description: str | None = Query(default=None, description="Description of the simulation"),
+# ) -> Simulation:
+#     """Run a vEcoli simulation workflow with simplified parameters.
+#
+#     This endpoint reads the workflow configuration from the vEcoli repo on the HPC
+#     system and allows overriding specific parameters via query params.
+#     """
+#     sim_service = get_simulation_service()
+#     if sim_service is None:
+#         logger.error("Simulation service is not initialized")
+#         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
+#     database_service = get_database_service()
+#     if database_service is None:
+#         logger.error("Database service is not initialized")
+#         raise HTTPException(status_code=500, detail="Database service is not initialized")
+#     try:
+#         return await handlers.simulations.run_workflow_simple(
+#             database_service=database_service,
+#             simulation_service=sim_service,
+#             simulator_id=simulator_id,
+#             experiment_id=experiment_id,
+#             simulation_config_filename=simulation_config_filename,
+#             num_generations=num_generations,
+#             num_seeds=num_seeds,
+#             description=description,
+#         )
+#     except Exception as e:
+#         logger.exception("Error running vEcoli simulation")
+#         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @config.router.post(
     path="/simulations",
-    operation_id="run-ecoli-simulation",
-    response_model=Simulation,
-    tags=["Simulations"],
-    dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-    summary="Launches a vEcoli simulation workflow with simple parameters",
-)
-async def run_simulation(
-    simulator_id: int = Query(..., description="Database ID of the simulator to use"),
-    experiment_id: str = Query(..., description="Unique experiment identifier"),
-    simulation_config_filename: str = Query(..., description="Config filename in vEcoli/configs/ on HPC"),
-    num_generations: int | None = Query(default=None, ge=1, le=10, description="Number of generations to simulate"),
-    num_seeds: int | None = Query(default=None, ge=1, le=100, description="Number of initial seeds (lineages)"),
-    description: str | None = Query(default=None, description="Description of the simulation"),
-) -> Simulation:
-    """Run a vEcoli simulation workflow with simplified parameters.
-
-    This endpoint reads the workflow configuration from the vEcoli repo on the HPC
-    system and allows overriding specific parameters via query params.
-    """
-    sim_service = get_simulation_service()
-    if sim_service is None:
-        logger.error("Simulation service is not initialized")
-        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
-    database_service = get_database_service()
-    if database_service is None:
-        logger.error("Database service is not initialized")
-        raise HTTPException(status_code=500, detail="Database service is not initialized")
-    try:
-        return await handlers.simulations.run_workflow_simple(
-            database_service=database_service,
-            simulation_service=sim_service,
-            simulator_id=simulator_id,
-            experiment_id=experiment_id,
-            simulation_config_filename=simulation_config_filename,
-            num_generations=num_generations,
-            num_seeds=num_seeds,
-            description=description,
-        )
-    except Exception as e:
-        logger.exception("Error running vEcoli simulation")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.post(
-    path="/simulations-new",
     operation_id="run-ecoli-simulation-new",
     response_model=Simulation,
     tags=["Simulations"],
