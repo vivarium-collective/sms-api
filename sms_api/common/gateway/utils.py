@@ -18,7 +18,7 @@ PINNED_OUTDIR = REPO_DIR / "out" / "sms_single"
 CURRENT_API_VERSION = "v1"
 
 
-def router_config(prefix: str, api_version: str | None = None, version_major: bool = True) -> RouterConfig:
+def get_router_config(prefix: str, api_version: str | None = None, version_major: bool = True) -> RouterConfig:
     version = f"/{api_version or CURRENT_API_VERSION}"
     pref = f"/{prefix}"
     config = (

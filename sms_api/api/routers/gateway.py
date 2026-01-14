@@ -26,7 +26,7 @@ from sms_api.analysis.models import (
 )
 from sms_api.api import request_examples
 from sms_api.common import handlers
-from sms_api.common.gateway.utils import router_config
+from sms_api.common.gateway.utils import get_router_config
 from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.models import Simulation, SimulationRun
@@ -34,7 +34,7 @@ from sms_api.simulation.models import Simulation, SimulationRun
 ENV = get_settings()
 
 logger = logging.getLogger(__name__)
-config = router_config(prefix="api", version_major=False)
+config = get_router_config(prefix="api", version_major=False)
 
 
 @config.router.post(
