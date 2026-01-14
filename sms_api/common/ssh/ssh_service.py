@@ -250,6 +250,7 @@ class SSHSessionService:
         :yields: An SSHSession instance for running commands and transferring files
         :raises RuntimeError: If connection or verification fails
         """
+        conn: asyncssh.SSHClientConnection | None = None
         ssh_session: SSHSession | None = None
         try:
             logger.info(f"Opening SSH session to {self.hostname} as {self.username}")
@@ -284,3 +285,12 @@ class SSHSessionService:
                         logger.warning(f"Error while waiting for SSH connection to close: {exc}")
                 else:
                     logger.info(f"SSH session to {self.hostname} close initiated (not waiting)")
+            elif conn is not None:
+                # Connection was created but session setup failed (e.g., ping verification failed)
+                logger.info(f"Closing SSH connection to {self.hostname} (session setup failed)")
+                conn.close()
+                if wait_closed:
+                    try:
+                        await conn.wait_closed()
+                    except Exception as exc:
+                        logger.warning(f"Error while waiting for SSH connection to close: {exc}")
