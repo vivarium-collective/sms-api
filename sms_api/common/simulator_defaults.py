@@ -19,4 +19,4 @@ ACCEPTED_REPOS = {
 }
 
 DEFAULT_REPO = RepoUrl.VECOLI_FORK_REPO_URL
-DEFAULT_BRANCH = "ccam-nextflow"
+DEFAULT_BRANCH = "api-support"

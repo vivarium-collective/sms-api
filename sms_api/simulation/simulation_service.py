@@ -466,7 +466,7 @@ def workflow_slurm_script(
 
         latest_hash={simulator_hash}
         tmp_config=$(mktemp)
-        echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
+        echo '{json.dumps(config.model_dump()).replace("'", "'\\''")}' > \"$tmp_config\"
 
         ### binds - use same paths inside and outside container for nextflow compatibility
         binds="-B {vecoli_repo_path!s}:{vecoli_repo_path!s}"

@@ -9,7 +9,7 @@ from fastapi import Depends, HTTPException, Query
 from sms_api.api import request_examples
 from sms_api.common import handlers
 from sms_api.common.gateway.models import ServerMode
-from sms_api.common.gateway.utils import router_config
+from sms_api.common.gateway.utils import get_router_config
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.dependencies import (
     get_database_service,
@@ -38,7 +38,7 @@ def get_server_url(dev: bool = True) -> ServerMode:
 # TODO: mount nfs driver
 
 
-config = router_config(prefix="core", version_major=False)
+config = get_router_config(prefix="core", version_major=False)
 
 
 @config.router.get(

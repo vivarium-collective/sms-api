@@ -48,7 +48,7 @@ dependencies = [
     "simhash>=2.1.2",
     "fastapi-swagger-dark>=0.0.9",
     "vecoli==1.1.2.post1",
-    "numba>=0.63.1",
+    "numba>=0.63.1"
 ]
 
 [project.urls]
