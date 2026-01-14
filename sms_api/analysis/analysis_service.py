@@ -13,6 +13,7 @@ import pandas as pd
 
 from sms_api.analysis.models import (
     AnalysisConfig,
+    AnalysisJobFailedException,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
@@ -112,8 +113,25 @@ class AnalysisServiceSlurm:
             await asyncio.sleep(3)
             run = await self.get_analysis_status(job_id=identifier, db_id=db_id, ssh=ssh)
         if run.status.lower() == "failed":
-            raise Exception(f"Analysis Run has failed:\n{run}")
+            # Fetch the job log for error details
+            error_log = await self._fetch_job_log(job_name=dto.job_name, ssh=ssh)
+            run.error_log = error_log
+            raise AnalysisJobFailedException(run=run)
         return run
+
+    async def _fetch_job_log(self, job_name: str | None, ssh: SSHSession) -> str | None:
+        """Fetch the SLURM job log file content for debugging failed jobs."""
+        if not job_name:
+            return None
+        try:
+            log_file = self.env.slurm_log_base_path / f"{job_name}.out"
+            ret, stdout, stderr = await ssh.run_command(f"tail -200 {log_file!s}")
+            if ret == 0 and stdout:
+                return stdout
+            return f"Could not fetch log: exit={ret}, stderr={stderr}"
+        except Exception as e:
+            logger.warning(f"Failed to fetch job log for {job_name}: {e}")
+            return f"Error fetching log: {e}"
 
     async def get_available_output_paths(self, remote_analysis_outdir: HPCFilePath) -> list[HPCFilePath]:
         cmd = f'find "{remote_analysis_outdir!s}" -type f'
@@ -145,7 +163,7 @@ class AnalysisServiceSlurm:
 
         if not slurm_jobs:
             # Job not yet in sacct, status unknown
-            return AnalysisRun(id=db_id, status=JobStatus.UNKNOWN)
+            return AnalysisRun(id=db_id, status=JobStatus.UNKNOWN, job_id=job_id)
 
         slurm_job = slurm_jobs[0]
         job_state = slurm_job.job_state.upper()
@@ -161,7 +179,7 @@ class AnalysisServiceSlurm:
             "NODE_FAIL": JobStatus.FAILED,
             "OUT_OF_MEMORY": JobStatus.FAILED,
         }
-        return AnalysisRun(id=db_id, status=status_map.get(job_state, JobStatus.UNKNOWN))
+        return AnalysisRun(id=db_id, status=status_map.get(job_state, JobStatus.UNKNOWN), job_id=job_id)
 
     @classmethod
     def _verify_result(cls, local_result_path: Path, expected_n_tp: int) -> bool:

@@ -16,6 +16,7 @@ from fastapi.requests import Request
 
 from sms_api.analysis.analysis_service import AnalysisServiceSlurm
 from sms_api.analysis.models import (
+    AnalysisJobFailedException,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
@@ -196,8 +197,12 @@ async def run_analysis(
             _request=_request,
             db_service=db_service,
         )
+    except AnalysisJobFailedException as e:
+        # Return detailed error for failed analysis jobs
+        logger.warning(f"Analysis job failed: {e.message}")
+        raise HTTPException(status_code=422, detail=e.to_dict()) from e
     except Exception as e:
-        logger.exception("Error fetching the simulation analysis file.")
+        logger.exception("Error running analysis.")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

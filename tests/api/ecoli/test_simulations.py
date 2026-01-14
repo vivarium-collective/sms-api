@@ -25,7 +25,6 @@ from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
-    ExperimentRequest,
     ParcaDatasetRequest,
     ParcaOptions,
     SimulationConfig,

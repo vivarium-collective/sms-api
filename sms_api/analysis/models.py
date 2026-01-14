@@ -224,6 +224,27 @@ class ExperimentAnalysisDTO(BaseModel):
 class AnalysisRun(BaseModel):
     id: int
     status: JobStatus
+    job_id: int | None = None
+    error_log: str | None = None
+
+
+class AnalysisJobFailedException(Exception):
+    """Exception raised when an analysis SLURM job fails."""
+
+    def __init__(self, run: AnalysisRun, message: str | None = None):
+        self.run = run
+        self.message = message or f"Analysis job {run.job_id} failed with status: {run.status}"
+        super().__init__(self.message)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "error": "analysis_job_failed",
+            "message": self.message,
+            "job_id": self.run.job_id,
+            "database_id": self.run.id,
+            "status": str(self.run.status),
+            "error_log": self.run.error_log,
+        }
 
 
 class AnalysisStatus(BaseModel):
