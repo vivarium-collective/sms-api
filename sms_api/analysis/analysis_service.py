@@ -255,16 +255,13 @@ def generate_slurm_script(
 
         ### configure working dir and binds
         image={image_path!s}
-        vecoli_image_root=/vEcoli
         tmp_config=$(mktemp)
         echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
 
-        ### binds - use same paths inside and outside container for compatibility
+        ### binds - use same paths inside and outside container (like workflow script)
         binds="-B {vecoli_repo_path!s}:{vecoli_repo_path!s}"
         binds+=" -B {simulation_outdir_base!s}:{simulation_outdir_base!s}"
-        binds+=" -B $JAVA_HOME:$JAVA_HOME"
-        binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
-        binds+=" -B $HOME/.local/share/uv:/root/.local/share/uv"
+        binds+=" -B {analysis_outdir!s}:{analysis_outdir!s}"
 
         ### remove existing dir if needed and recreate
         analysis_outdir={analysis_outdir!s}
@@ -273,13 +270,11 @@ def generate_slurm_script(
         fi
         mkdir -p {analysis_outdir!s}
 
-        ### execute analysis
-        singularity run $binds $image bash -c "
-            export JAVA_HOME=$HOME/.local/bin/java-22
-            export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-            uv run --no-cache --env-file {vecoli_repo_path!s}/.env \\
-              {vecoli_repo_path!s}/runscripts/analysis.py --config \"$tmp_config\"
-        "
+        ### execute analysis (same pattern as workflow script)
+        cd {vecoli_repo_path!s}
+        singularity run $binds $image uv run --no-cache \\
+            --env-file {vecoli_repo_path!s}/.env \\
+            {vecoli_repo_path!s}/runscripts/analysis.py --config \"$tmp_config\"
 
         ### optionally, remove uploaded fp
         rm -f \"$config_fp\"
