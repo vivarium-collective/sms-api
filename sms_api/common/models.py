@@ -63,17 +63,29 @@ class JobStatus(StrEnumBase):
 
 
 # Map SLURM job states to JobStatus (defined after enum class)
+# See: https://slurm.schedmd.com/squeue.html#SECTION_JOB-STATE-CODES
 _SLURM_STATE_MAP: dict[str, JobStatus] = {
+    # Pre-run states
     "PENDING": JobStatus.PENDING,
+    "CONFIGURING": JobStatus.PENDING,  # Job allocated resources, waiting for them to become ready
+    "REQUEUED": JobStatus.PENDING,  # Job was requeued
+    "RESIZING": JobStatus.PENDING,  # Job is about to change size
+    "SUSPENDED": JobStatus.PENDING,  # Job suspended
+    # Running states
     "RUNNING": JobStatus.RUNNING,
-    "COMPLETED": JobStatus.COMPLETED,
     "COMPLETING": JobStatus.RUNNING,  # Job is finishing up
+    # Completed states
+    "COMPLETED": JobStatus.COMPLETED,
+    # Failed states
     "FAILED": JobStatus.FAILED,
     "CANCELLED": JobStatus.FAILED,
     "TIMEOUT": JobStatus.FAILED,
     "NODE_FAIL": JobStatus.FAILED,
     "OUT_OF_MEMORY": JobStatus.FAILED,
     "PREEMPTED": JobStatus.FAILED,
+    "BOOT_FAIL": JobStatus.FAILED,
+    "DEADLINE": JobStatus.FAILED,
+    "REVOKED": JobStatus.FAILED,
 }
 
 

@@ -31,6 +31,14 @@ class JobStatusDB(enum.Enum):
     def to_job_status(self) -> JobStatus:
         return JobStatus(self.value)
 
+    @classmethod
+    def from_job_status(cls, status: JobStatus) -> "JobStatusDB":
+        """Convert JobStatus to JobStatusDB, mapping UNKNOWN to PENDING."""
+        if status == JobStatus.UNKNOWN:
+            # UNKNOWN maps to PENDING as a safe default for unexpected states
+            return cls.PENDING
+        return cls(status.value)
+
 
 class JobTypeDB(enum.Enum):
     SIMULATION = "simulation"

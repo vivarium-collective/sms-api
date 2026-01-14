@@ -13,16 +13,17 @@ logger = logging.getLogger(__name__)
 
 
 class SlurmJob(BaseModel):
-    #                                 --squeue--   --sacct--
-    job_id: int  #                       %i          jobid
-    name: str  #                         %j          jobname
-    account: str  #                      %a          account
-    user_name: str  #                    %u          user
-    job_state: str  #                    %T          state
-    start_time: Optional[str] = None  #              start
-    end_time: Optional[str] = None  #                end
-    elapsed: Optional[str] = None  #                elapsed
-    exit_code: Optional[str] = None  #                exitcode
+    #                                 --squeue--   --sacct--   --scontrol--
+    job_id: int  #                       %i          jobid       JobId
+    name: str  #                         %j          jobname     JobName
+    account: str  #                      %a          account     Account
+    user_name: str  #                    %u          user        UserId
+    job_state: str  #                    %T          state       JobState
+    start_time: Optional[str] = None  #              start       StartTime
+    end_time: Optional[str] = None  #                end         EndTime
+    elapsed: Optional[str] = None  #                 elapsed     RunTime
+    exit_code: Optional[str] = None  #               exitcode    ExitCode
+    reason: Optional[str] = None  #                              Reason (scontrol only)
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -125,6 +126,11 @@ class SlurmJob(BaseModel):
         user_id = data.get("UserId", "")
         user_name = user_id.split("(")[0] if "(" in user_id else user_id
 
+        # Extract reason, treating "None" as no reason
+        reason = data.get("Reason")
+        if reason == "None":
+            reason = None
+
         return cls(
             job_id=int(data.get("JobId", "0")),
             name=data.get("JobName", ""),
@@ -135,6 +141,7 @@ class SlurmJob(BaseModel):
             end_time=data.get("EndTime") if data.get("EndTime") != "Unknown" else None,
             elapsed=data.get("RunTime"),
             exit_code=data.get("ExitCode"),
+            reason=reason,
         )
 
 

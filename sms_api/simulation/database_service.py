@@ -9,6 +9,7 @@ from typing_extensions import override
 
 from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.common.models import JobStatus
 from sms_api.config import get_settings
 from sms_api.simulation.models import (
     HpcRun,
@@ -668,11 +669,20 @@ class DatabaseServiceSQL(DatabaseService):
             orm_hpcrun: ORMHpcRun | None = await self._get_orm_hpcrun(session, hpcrun_id=hpcrun_id)
             if orm_hpcrun is None:
                 raise Exception(f"HpcRun with id {hpcrun_id} not found in the database")
-            orm_hpcrun.status = JobStatusDB(new_slurm_job.job_state.lower())
+            new_status = JobStatus.from_slurm_state(new_slurm_job.job_state)
+            orm_hpcrun.status = JobStatusDB.from_job_status(new_status)
             if new_slurm_job.start_time is not None and new_slurm_job.start_time != orm_hpcrun.start_time:
                 orm_hpcrun.start_time = datetime.datetime.fromisoformat(new_slurm_job.start_time)
             if new_slurm_job.end_time is not None and new_slurm_job.end_time != orm_hpcrun.end_time:
                 orm_hpcrun.end_time = datetime.datetime.fromisoformat(new_slurm_job.end_time)
+            # Capture error message for failed jobs
+            if new_status == JobStatus.FAILED:
+                error_parts = [f"SLURM state: {new_slurm_job.job_state}"]
+                if new_slurm_job.reason:
+                    error_parts.append(f"reason: {new_slurm_job.reason}")
+                if new_slurm_job.exit_code:
+                    error_parts.append(f"exit_code: {new_slurm_job.exit_code}")
+                orm_hpcrun.error_message = ", ".join(error_parts)
             await session.flush()
 
     @override

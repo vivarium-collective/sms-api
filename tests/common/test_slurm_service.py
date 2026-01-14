@@ -42,6 +42,7 @@ def test_slurm_job_from_scontrol_output() -> None:
     assert job.end_time == "2026-01-14T00:50:08"
     assert job.elapsed == "00:31:00"
     assert job.exit_code == "0:0"
+    assert job.reason is None  # "None" should become None
 
 
 def test_slurm_job_from_scontrol_output_running() -> None:
@@ -61,6 +62,43 @@ def test_slurm_job_from_scontrol_output_running() -> None:
     assert job.start_time == "2026-01-14T11:01:04"
     assert job.end_time is None  # "Unknown" should become None
     assert job.elapsed == "00:10:00"
+    assert job.reason is None
+
+
+def test_slurm_job_from_scontrol_output_failed_with_reason() -> None:
+    """Test parsing scontrol output for a failed job with reason."""
+    scontrol_output = """JobId=1286500 JobName=sim-failed-job
+   UserId=svc_vivarium(12345) GroupId=pi-agmon(67890)
+   Priority=1000 Nice=0 Account=pi-agmon QOS=normal
+   JobState=FAILED Reason=NonZeroExitCode Dependency=(null)
+   Requeue=0 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=1:0
+   RunTime=00:05:00 TimeLimit=01:00:00 TimeMin=N/A
+   StartTime=2026-01-14T12:00:00 EndTime=2026-01-14T12:05:00"""
+
+    job = SlurmJob.from_scontrol_output(scontrol_output)
+
+    assert job.job_id == 1286500
+    assert job.name == "sim-failed-job"
+    assert job.job_state == "FAILED"
+    assert job.reason == "NonZeroExitCode"
+    assert job.exit_code == "1:0"
+
+
+def test_slurm_job_from_scontrol_output_cancelled_with_reason() -> None:
+    """Test parsing scontrol output for a cancelled job."""
+    scontrol_output = """JobId=1286501 JobName=sim-cancelled-job
+   UserId=svc_vivarium(12345) GroupId=pi-agmon(67890)
+   Priority=1000 Nice=0 Account=pi-agmon QOS=normal
+   JobState=CANCELLED Reason=TimeLimit Dependency=(null)
+   ExitCode=0:15
+   StartTime=2026-01-14T12:00:00 EndTime=2026-01-14T13:00:00"""
+
+    job = SlurmJob.from_scontrol_output(scontrol_output)
+
+    assert job.job_id == 1286501
+    assert job.job_state == "CANCELLED"
+    assert job.reason == "TimeLimit"
+    assert job.exit_code == "0:15"
 
 
 # =============================================================================
