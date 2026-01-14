@@ -26,7 +26,7 @@ from sms_api.analysis.models import (
 )
 from sms_api.api import request_examples
 from sms_api.common import handlers
-from sms_api.common.gateway.utils import get_simulator, router_config
+from sms_api.common.gateway.utils import router_config
 from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.models import Simulation, SimulationRun
@@ -184,11 +184,18 @@ async def run_analysis(
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-    # analysis_service = AnalysisServiceLocal(env=ENV, db_service=db_service)
     analysis_service = AnalysisServiceSlurm(env=ENV)
 
+    # Look up the simulation by experiment_id to get the correct simulator
+    simulation = await db_service.get_simulation_by_experiment_id(request.experiment_id)
+    if simulation is None:
+        raise HTTPException(status_code=404, detail=f"No simulation found with experiment_id '{request.experiment_id}'")
+
+    simulator = await db_service.get_simulator(simulation.simulator_id)
+    if simulator is None:
+        raise HTTPException(status_code=404, detail=f"Simulator with id {simulation.simulator_id} not found")
+
     try:
-        simulator = get_simulator()
         return await handlers.analyses.handle_run_analysis(
             request=request,
             simulator=simulator,

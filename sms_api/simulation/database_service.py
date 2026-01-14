@@ -139,6 +139,11 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def get_simulation_by_experiment_id(self, experiment_id: str) -> Simulation | None:
+        """Look up a simulation by its experiment_id (stored in config JSON)."""
+        pass
+
+    @abstractmethod
     async def delete_simulation(self, simulation_id: int) -> None:
         pass
 
@@ -594,6 +599,23 @@ class DatabaseServiceSQL(DatabaseService):
     async def get_simulation(self, simulation_id: int) -> Simulation | None:
         async with self.async_sessionmaker() as session:
             orm_simulation: ORMSimulation | None = await self._get_orm_simulation(session, simulation_id)
+            if orm_simulation is None:
+                return None
+
+            simulation = Simulation(
+                database_id=orm_simulation.id,
+                simulator_id=orm_simulation.simulator_id,
+                parca_dataset_id=orm_simulation.parca_dataset_id,
+                config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
+            )
+            return simulation
+
+    @override
+    async def get_simulation_by_experiment_id(self, experiment_id: str) -> Simulation | None:
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMSimulation).where(ORMSimulation.config["experiment_id"].astext == experiment_id).limit(1)
+            result: Result[tuple[ORMSimulation]] = await session.execute(stmt)
+            orm_simulation = result.scalars().first()
             if orm_simulation is None:
                 return None
 
