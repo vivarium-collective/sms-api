@@ -195,23 +195,28 @@ async def init_standalone(enable_ssl: bool = True) -> None:
             logger.error("Postgres connection settings are not properly configured.")
         postgres_url = f"postgresql+asyncpg://{PG_USER}:{PG_PSWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
 
-        logger.info("Initializing postgres connection...")
-        engine = get_async_engine(
-            url=postgres_url,
-            enable_ssl=enable_ssl,
-            echo=False,  # Disable verbose SQL logging (set to True for debugging)
-            pool_size=PG_POOL_SIZE,
-            max_overflow=PG_MAX_OVERFLOW,
-            pool_timeout=PG_POOL_TIMEOUT,
-            pool_recycle=PG_POOL_RECYCLE,
-        )
-        logger.info("Initializing database tables...")
-        await create_db(engine)
-        set_postgres_engine(engine)
-        logger.info("✓ Postgres connection established and tables initialized")
+        # Check if database service is already set (e.g., by test fixtures)
+        db_service: DatabaseService | None = get_database_service()
+        if db_service is not None:
+            logger.info("✓ Using existing database service (test mode)")
+        else:
+            logger.info("Initializing postgres connection...")
+            engine = get_async_engine(
+                url=postgres_url,
+                enable_ssl=enable_ssl,
+                echo=False,  # Disable verbose SQL logging (set to True for debugging)
+                pool_size=PG_POOL_SIZE,
+                max_overflow=PG_MAX_OVERFLOW,
+                pool_timeout=PG_POOL_TIMEOUT,
+                pool_recycle=PG_POOL_RECYCLE,
+            )
+            logger.info("Initializing database tables...")
+            await create_db(engine)
+            set_postgres_engine(engine)
+            logger.info("✓ Postgres connection established and tables initialized")
 
-        database = DatabaseServiceSQL(engine)
-        set_database_service(database)
+            db_service = DatabaseServiceSQL(engine)
+            set_database_service(db_service)
 
         # Initialize SSHSessionService singleton
         logger.info("Initializing SSH session service...")
@@ -245,10 +250,13 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         logger.info("✓ Messaging service connected")
         set_messaging_service(messaging_service)
 
-        # Initialize JobScheduler
+        # Initialize JobScheduler (use db_service which was set above, either from test fixtures or newly created)
         logger.info("Initializing JobScheduler...")
+        # db_service is guaranteed to be set by this point (either existing or newly created)
         job_scheduler = JobScheduler(
-            messaging_service=messaging_service, database_service=database, slurm_service=slurm_service
+            messaging_service=messaging_service,
+            database_service=db_service,
+            slurm_service=slurm_service,
         )
         set_job_scheduler(job_scheduler)
         logger.info("✓ JobScheduler initialized")

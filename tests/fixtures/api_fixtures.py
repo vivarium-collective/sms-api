@@ -19,11 +19,15 @@ from sms_api.api import request_examples as examples
 from sms_api.api.client import Client
 from sms_api.api.main import app
 from sms_api.common.gateway.utils import generate_analysis_request
+from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
 from sms_api.common.utils import get_uuid
 from sms_api.config import REPO_ROOT, get_settings
+from sms_api.dependencies import get_job_scheduler, set_job_scheduler
 
 # from sms_api.data.biocyc_service import BiocycService
 from sms_api.simulation.database_service import DatabaseServiceSQL
+from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.models import (
     ParcaDatasetRequest,
     ParcaOptions,
@@ -233,3 +237,35 @@ async def workflow_request_payload(
         simulator=Simulator(git_commit_hash=latest_hash, git_repo_url=SIMULATOR_URL, git_branch=SIMULATOR_BRANCH),
         config=simulation_config,
     )
+
+
+@pytest_asyncio.fixture(scope="function")
+async def job_scheduler(database_service: DatabaseServiceSQL) -> AsyncGenerator[JobScheduler, None]:
+    """Fixture that starts the JobScheduler for integration tests.
+
+    The JobScheduler polls SLURM for job status updates and updates the database.
+    This fixture starts the polling loop and stops it when the test completes.
+    """
+    # Save existing job scheduler if any
+    saved_scheduler = get_job_scheduler()
+
+    # Create messaging service (mock - we don't need Redis for status polling)
+    messaging_service = MessagingServiceRedis()
+
+    # Create and configure the JobScheduler
+    slurm_service = SlurmService()
+    scheduler = JobScheduler(
+        messaging_service=messaging_service,
+        database_service=database_service,
+        slurm_service=slurm_service,
+    )
+    set_job_scheduler(scheduler)
+
+    # Start polling with a short interval for tests
+    await scheduler.start_polling(interval_seconds=5)
+
+    yield scheduler
+
+    # Cleanup
+    await scheduler.stop_polling()
+    set_job_scheduler(saved_scheduler)

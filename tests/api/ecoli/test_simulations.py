@@ -14,6 +14,7 @@ Prerequisites for API tests:
 import asyncio
 import time
 import uuid
+from typing import TYPE_CHECKING
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -32,6 +33,9 @@ from sms_api.simulation.models import (
 )
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 from tests.fixtures.api_fixtures import SimulatorRepoInfo
+
+if TYPE_CHECKING:
+    from sms_api.simulation.job_scheduler import JobScheduler
 
 # Config file name expected in vEcoli/configs/
 CONFIG_FILENAME = "api_simulation_default.json"
@@ -172,6 +176,7 @@ async def test_run_simulation_e2e(
     database_service: DatabaseServiceSQL,
     simulator_repo_info: SimulatorRepoInfo,
     ssh_session_service: SSHSessionService,
+    job_scheduler: "JobScheduler",
 ) -> None:
     """
     E2E integration test for POST /api/v1/simulations endpoint.
@@ -180,6 +185,8 @@ async def test_run_simulation_e2e(
     1. GET/POST /simulator/* to ensure simulator is ready
     2. POST /simulations with query parameters
     3. Poll GET /simulations/{id}/status until workflow completes
+
+    The job_scheduler fixture polls SLURM and updates the database with job statuses.
 
     Expected runtime: 30-60 minutes depending on cluster load.
     """

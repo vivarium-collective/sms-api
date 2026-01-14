@@ -13,6 +13,7 @@ from tests.fixtures.api_fixtures import (  # noqa: F401
     experiment_request,
     fastapi_app,
     in_memory_api_client,
+    job_scheduler,
     latest_commit_hash,
     local_base_url,
     parca_options,
