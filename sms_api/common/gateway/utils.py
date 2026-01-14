@@ -1,4 +1,3 @@
-import datetime
 from pathlib import Path
 
 import numpy as np
@@ -13,7 +12,6 @@ from sms_api.analysis.models import (
 from sms_api.common.gateway.models import RouterConfig
 from sms_api.common.utils import get_data_id
 from sms_api.config import get_settings
-from sms_api.simulation.models import SimulatorVersion
 
 REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
 PINNED_OUTDIR = REPO_DIR / "out" / "sms_single"
@@ -46,20 +44,6 @@ def format_marimo_appname(appname: str) -> str:
 def get_remote_outdir(experiment_id: str) -> Path:
     """Return remote path for experiment output directory (for SSH commands)."""
     return get_settings().hpc_sim_base_path.remote_path / experiment_id
-
-
-def get_simulator() -> SimulatorVersion:
-    return SimulatorVersion(
-        git_commit_hash="079c43c",
-        git_repo_url="https://github.com/CovertLab/vEcoli",
-        git_branch="master",
-        database_id=2,
-        created_at=datetime.datetime.fromisoformat("2025-08-26T00:49:30"),
-    )
-
-
-def slurmjob_name_prefix() -> str:
-    return f"sms-{get_simulator().git_commit_hash}"
 
 
 def missing_experiment_error(exp_id: str) -> None:

@@ -19,7 +19,6 @@ from sms_api.analysis.models import (
     ExperimentAnalysisRequest,
     TsvOutputFile,
 )
-from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.models import JobStatus
 from sms_api.common.ssh.ssh_service import SSHSession
@@ -72,7 +71,7 @@ class AnalysisServiceSlurm:
         logger: logging.Logger,
         analysis_name: str,
         ssh: SSHSession,
-        simulator_hash: str | None = None,
+        simulator_hash: str,
     ) -> tuple[str, int, AnalysisConfig]:
         # collect params
         slurmjob_name, slurm_log_file = self._collect_slurm_parameters(
@@ -86,7 +85,7 @@ class AnalysisServiceSlurm:
             env=self.env,
             slurm_log_file=slurm_log_file,
             slurm_job_name=slurmjob_name,
-            simulator_hash=simulator_hash or get_simulator().git_commit_hash,
+            simulator_hash=simulator_hash,
             config=analysis_config,
             analysis_name=analysis_name,
         )
@@ -220,12 +219,10 @@ class AnalysisServiceSlurm:
             return slurm_jobid
 
     def _collect_slurm_parameters(
-        self, request: ExperimentAnalysisRequest, analysis_name: str, simulator_hash: str | None = None
+        self, request: ExperimentAnalysisRequest, analysis_name: str, simulator_hash: str
     ) -> tuple[str, HPCFilePath]:
         # SLURM params
-        slurmjob_name = get_slurmjob_name(
-            experiment_id=analysis_name, simulator_hash=simulator_hash or get_simulator().git_commit_hash
-        )
+        slurmjob_name = get_slurmjob_name(experiment_id=analysis_name, simulator_hash=simulator_hash)
         slurm_log_file = self.env.slurm_log_base_path / f"{slurmjob_name}.out"
 
         return slurmjob_name, slurm_log_file
