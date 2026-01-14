@@ -21,6 +21,11 @@ class SlurmService:
         return_code, stdout, stderr = await ssh.run_command(command=command)
 
         if return_code != 0:
+            # Invalid job id causes squeue to fail entirely, even if some jobs are valid
+            # Fall back to querying each job individually to get partial results
+            if "Invalid job id" in stderr and job_ids is not None:
+                logger.debug("Batch squeue failed due to invalid job id(s), falling back to individual queries")
+                return await self._get_job_status_squeue_individual(ssh, job_ids)
             raise Exception(
                 f"failed to get job status with command {command} return code {return_code} stderr {stderr[:100]}"
             )
@@ -29,6 +34,35 @@ class SlurmService:
             if not line.strip():
                 continue
             slurm_jobs.append(SlurmJob.from_squeue_formatted_output(line.strip()))
+        return slurm_jobs
+
+    async def _get_job_status_squeue_individual(self, ssh: SSHSession, job_ids: list[int]) -> list[SlurmJob]:
+        """Query squeue for each job individually to handle invalid job IDs gracefully.
+
+        This is slower than batch querying but allows returning partial results
+        when some job IDs are invalid (e.g., jobs that have completed and left squeue).
+        """
+        slurm_jobs: list[SlurmJob] = []
+        for job_id in job_ids:
+            command = f'squeue --noheader --format="{SlurmJob.get_squeue_format_string()}" -j {job_id}'
+            return_code, stdout, stderr = await ssh.run_command(command=command)
+
+            if return_code != 0:
+                if "Invalid job id" in stderr:
+                    logger.debug(f"Job {job_id} not found in squeue (may have completed)")
+                    continue
+                # Log warning but continue to next job
+                logger.warning(f"squeue failed for job {job_id}: {stderr[:100]}")
+                continue
+
+            for line in stdout.splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    slurm_jobs.append(SlurmJob.from_squeue_formatted_output(line.strip()))
+                except Exception as e:
+                    logger.warning(f"Failed to parse squeue output for job {job_id}: {e}")
+
         return slurm_jobs
 
     # this is deprecated for use in this project since GovCloud PCS doesn't support Slurm accounting
