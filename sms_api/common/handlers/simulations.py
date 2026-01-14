@@ -287,7 +287,7 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
         slurm_jobs = await slurm_service.get_job_status_squeue(ssh, job_ids=[hpc_run.slurmjobid])
         if not slurm_jobs:
             # Job not in queue, check sacct for completed jobs
-            slurm_jobs = await slurm_service.get_job_status_sacct(ssh, job_ids=[hpc_run.slurmjobid])
+            slurm_jobs = await slurm_service.get_job_status_scontrol(ssh, job_ids=[hpc_run.slurmjobid])
 
     if not slurm_jobs:
         # Job was just submitted and may not have propagated to SLURM yet

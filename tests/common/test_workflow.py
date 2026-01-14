@@ -232,7 +232,7 @@ async def _run_workflow_test(
                     continue
 
                 # Check sacct for completed jobs
-                jobs = await slurm_service.get_job_status_sacct(ssh, job_ids=[job_id])
+                jobs = await slurm_service.get_job_status_scontrol(ssh, job_ids=[job_id])
                 if len(jobs) > 0:
                     final_job = jobs[0]
                     if final_job.is_done():

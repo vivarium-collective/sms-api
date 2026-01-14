@@ -31,7 +31,8 @@ class SlurmService:
             slurm_jobs.append(SlurmJob.from_squeue_formatted_output(line.strip()))
         return slurm_jobs
 
-    async def get_job_status_sacct(self, ssh: SSHSession, job_ids: list[int] | None = None) -> list[SlurmJob]:
+    # this is deprecated for use in this project since GovCloud PCS doesn't support Slurm accounting
+    async def _get_job_status_sacct(self, ssh: SSHSession, job_ids: list[int] | None = None) -> list[SlurmJob]:
         command = (
             f'sacct -u $USER --parsable --delimiter="|" --noheader --format="{SlurmJob.get_sacct_format_string()}"'
         )
@@ -55,6 +56,46 @@ class SlurmService:
             if line.split("|")[0].endswith(".extern"):
                 continue
             slurm_jobs.append(SlurmJob.from_sacct_formatted_output(line.strip()))
+        return slurm_jobs
+
+    async def get_job_status_scontrol(self, ssh: SSHSession, job_ids: list[int]) -> list[SlurmJob]:
+        """Get job status using scontrol show job (alternative to sacct when accounting is disabled).
+
+        Note: scontrol only shows jobs that are still in the scheduler's memory.
+        Completed jobs may not be available after some time (typically minutes to hours
+        depending on SLURM configuration). For historical job data, use sacct if available.
+
+        Args:
+            ssh: SSH session to use for the command
+            job_ids: List of job IDs to query (required, unlike sacct)
+
+        Returns:
+            List of SlurmJob objects for jobs that were found
+        """
+        if not job_ids:
+            return []
+
+        slurm_jobs: list[SlurmJob] = []
+        for job_id in job_ids:
+            command = f"scontrol show job {job_id}"
+            return_code, stdout, stderr = await ssh.run_command(command=command)
+
+            if return_code != 0:
+                # Job not found is not an error - it may have completed and left scheduler memory
+                if "Invalid job id" in stderr or "not found" in stderr.lower():
+                    logger.debug(f"Job {job_id} not found in scontrol (may have completed)")
+                    continue
+                raise Exception(
+                    f"failed to get job status with command {command} return code {return_code} stderr {stderr[:100]}"
+                )
+
+            if stdout.strip():
+                try:
+                    slurm_job = SlurmJob.from_scontrol_output(stdout)
+                    slurm_jobs.append(slurm_job)
+                except Exception as e:
+                    logger.warning(f"Failed to parse scontrol output for job {job_id}: {e}")
+
         return slurm_jobs
 
     async def submit_job(

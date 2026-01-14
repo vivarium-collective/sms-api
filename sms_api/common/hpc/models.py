@@ -99,6 +99,44 @@ class SlurmJob(BaseModel):
             job_state=fields[4],
         )
 
+    @classmethod
+    def from_scontrol_output(cls, output: str) -> "SlurmJob":
+        """Parse scontrol show job output into a SlurmJob.
+
+        scontrol output format is key=value pairs, some on same line, some on new lines:
+            JobId=12345 JobName=myjob
+               UserId=user(1000) GroupId=group(1000)
+               Account=myaccount QOS=normal
+               JobState=RUNNING Reason=None
+               StartTime=2024-01-15T10:30:00 EndTime=Unknown
+               ...
+        """
+        # Flatten multi-line output and split on whitespace
+        # Then parse key=value pairs
+        data: dict[str, str] = {}
+        # Replace newlines with spaces and split
+        tokens = output.replace("\n", " ").split()
+        for token in tokens:
+            if "=" in token:
+                key, _, value = token.partition("=")
+                data[key] = value
+
+        # Extract user name from UserId format "user(uid)"
+        user_id = data.get("UserId", "")
+        user_name = user_id.split("(")[0] if "(" in user_id else user_id
+
+        return cls(
+            job_id=int(data.get("JobId", "0")),
+            name=data.get("JobName", ""),
+            account=data.get("Account", ""),
+            user_name=user_name,
+            job_state=data.get("JobState", "UNKNOWN"),
+            start_time=data.get("StartTime"),
+            end_time=data.get("EndTime") if data.get("EndTime") != "Unknown" else None,
+            elapsed=data.get("RunTime"),
+            exit_code=data.get("ExitCode"),
+        )
+
 
 # =============================================================================
 # Nextflow Weblog Event Models

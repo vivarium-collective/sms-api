@@ -13,6 +13,60 @@ from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 
+# =============================================================================
+# Unit tests for SlurmJob parsing (no SSH required)
+# =============================================================================
+
+
+def test_slurm_job_from_scontrol_output() -> None:
+    """Test parsing scontrol show job output."""
+    scontrol_output = """JobId=1285550 JobName=sim-bc0add1-1-qmu1tf
+   UserId=svc_vivarium(12345) GroupId=pi-agmon(67890)
+   Priority=1000 Nice=0 Account=pi-agmon QOS=normal
+   JobState=COMPLETED Reason=None Dependency=(null)
+   Requeue=0 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:31:00 TimeLimit=01:00:00 TimeMin=N/A
+   SubmitTime=2026-01-14T00:18:50 EligibleTime=2026-01-14T00:18:50
+   AccrueTime=2026-01-14T00:18:50
+   StartTime=2026-01-14T00:19:08 EndTime=2026-01-14T00:50:08 Deadline=N/A
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-01-14T00:19:08"""
+
+    job = SlurmJob.from_scontrol_output(scontrol_output)
+
+    assert job.job_id == 1285550
+    assert job.name == "sim-bc0add1-1-qmu1tf"
+    assert job.account == "pi-agmon"
+    assert job.user_name == "svc_vivarium"
+    assert job.job_state == "COMPLETED"
+    assert job.start_time == "2026-01-14T00:19:08"
+    assert job.end_time == "2026-01-14T00:50:08"
+    assert job.elapsed == "00:31:00"
+    assert job.exit_code == "0:0"
+
+
+def test_slurm_job_from_scontrol_output_running() -> None:
+    """Test parsing scontrol output for a running job."""
+    scontrol_output = """JobId=1286339 JobName=sim-4c58f7e-1-17mw8v
+   UserId=svc_vivarium(12345) GroupId=pi-agmon(67890)
+   Priority=1000 Nice=0 Account=pi-agmon QOS=normal
+   JobState=RUNNING Reason=None Dependency=(null)
+   RunTime=00:10:00 TimeLimit=02:00:00 TimeMin=N/A
+   StartTime=2026-01-14T11:01:04 EndTime=Unknown"""
+
+    job = SlurmJob.from_scontrol_output(scontrol_output)
+
+    assert job.job_id == 1286339
+    assert job.name == "sim-4c58f7e-1-17mw8v"
+    assert job.job_state == "RUNNING"
+    assert job.start_time == "2026-01-14T11:01:04"
+    assert job.end_time is None  # "Unknown" should become None
+    assert job.elapsed == "00:10:00"
+
+
+# =============================================================================
+# Integration tests (SSH required)
+# =============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
@@ -34,14 +88,36 @@ async def test_slurm_job_query_squeue(slurm_service: SlurmService) -> None:
 @pytest.mark.asyncio
 async def test_slurm_job_query_sacct(slurm_service: SlurmService) -> None:
     async with get_ssh_session_service().session() as ssh:
-        all_jobs: list[SlurmJob] = await slurm_service.get_job_status_sacct(ssh)
+        all_jobs: list[SlurmJob] = await slurm_service._get_job_status_sacct(ssh)
         assert all_jobs is not None
         if len(all_jobs) > 0:
             assert isinstance(all_jobs[0], SlurmJob)
-            one_job: list[SlurmJob] = await slurm_service.get_job_status_sacct(ssh, job_ids=[all_jobs[0].job_id])
+            one_job: list[SlurmJob] = await slurm_service._get_job_status_sacct(ssh, job_ids=[all_jobs[0].job_id])
             assert one_job is not None
             assert len(one_job) == 1
             assert one_job[0] == all_jobs[0]
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.asyncio
+async def test_slurm_job_query_scontrol(slurm_service: SlurmService) -> None:
+    """Test scontrol-based job query (alternative to sacct when accounting is disabled)."""
+    async with get_ssh_session_service().session() as ssh:
+        # First get running jobs from squeue
+        running_jobs: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh)
+        if len(running_jobs) == 0:
+            pytest.skip("No running jobs to test scontrol query")
+
+        # Query the same job via scontrol
+        job_id = running_jobs[0].job_id
+        scontrol_jobs: list[SlurmJob] = await slurm_service.get_job_status_scontrol(ssh, job_ids=[job_id])
+
+        assert len(scontrol_jobs) == 1
+        assert scontrol_jobs[0].job_id == job_id
+        assert scontrol_jobs[0].name == running_jobs[0].name
+        # State should match (both should report RUNNING or PENDING)
+        assert scontrol_jobs[0].job_state.upper() == running_jobs[0].job_state.upper()
 
 
 @pytest.mark.integration
@@ -189,7 +265,7 @@ async def _run_nextflow_workflow_test(
                     continue
 
                 # Check sacct for completed jobs (may have delay before appearing)
-                jobs = await slurm_service.get_job_status_sacct(ssh, job_ids=[job_id])
+                jobs = await slurm_service.get_job_status_scontrol(ssh, job_ids=[job_id])
                 if len(jobs) > 0:
                     final_job = jobs[0]
                     if final_job.is_done():

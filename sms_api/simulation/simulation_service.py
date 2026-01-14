@@ -410,7 +410,7 @@ class SimulationServiceHpc(SimulationService):
         slurm_service = SlurmService()
         job_ids: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh, job_ids=[slurmjobid])
         if len(job_ids) == 0:
-            job_ids = await slurm_service.get_job_status_sacct(ssh, job_ids=[slurmjobid])
+            job_ids = await slurm_service.get_job_status_scontrol(ssh, job_ids=[slurmjobid])
             if len(job_ids) == 0:
                 logger.warning(f"No job found with ID {slurmjobid} in both squeue and sacct.")
                 return None

@@ -158,7 +158,7 @@ class AnalysisServiceSlurm:
 
     async def get_analysis_status(self, job_id: int, db_id: int, ssh: SSHSession) -> AnalysisRun:
         slurm_service = SlurmService()
-        slurm_jobs = await slurm_service.get_job_status_sacct(ssh, job_ids=[job_id])
+        slurm_jobs = await slurm_service.get_job_status_scontrol(ssh, job_ids=[job_id])
 
         if not slurm_jobs:
             # Job not yet in sacct, status unknown

@@ -96,7 +96,7 @@ class JobScheduler:
             return
         async with get_ssh_session_service().session() as ssh:
             slurm_jobs_from_squeue = await self.slurm_service.get_job_status_squeue(ssh, job_ids)
-            slurm_jobs_from_sacct = await self.slurm_service.get_job_status_sacct(ssh, job_ids)
+            slurm_jobs_from_sacct = await self.slurm_service.get_job_status_scontrol(ssh, job_ids)
         slurm_job_map = {job.job_id: job for job in slurm_jobs_from_squeue}
         slurm_job_map.update({job.job_id: job for job in slurm_jobs_from_sacct})
         for hpc_run in running_jobs:
