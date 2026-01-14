@@ -43,6 +43,39 @@ class JobStatus(StrEnumBase):
     COMPLETED = "completed"
     FAILED = "failed"
 
+    @classmethod
+    def from_slurm_state(cls, slurm_state: str) -> "JobStatus":
+        """Parse SLURM job state string to JobStatus enum.
+
+        SLURM states can include additional info after the base state,
+        e.g., "CANCELLED by 17163" or "FAILED" or "RUNNING".
+        This method extracts the base state and maps it to JobStatus.
+
+        Args:
+            slurm_state: Raw SLURM job state string (e.g., "RUNNING", "CANCELLED by 17163")
+
+        Returns:
+            Corresponding JobStatus enum value, or UNKNOWN if not recognized
+        """
+        # Extract base state (first word, uppercase)
+        base_state = slurm_state.split()[0].upper() if slurm_state else ""
+        return _SLURM_STATE_MAP.get(base_state, cls.UNKNOWN)
+
+
+# Map SLURM job states to JobStatus (defined after enum class)
+_SLURM_STATE_MAP: dict[str, JobStatus] = {
+    "PENDING": JobStatus.PENDING,
+    "RUNNING": JobStatus.RUNNING,
+    "COMPLETED": JobStatus.COMPLETED,
+    "COMPLETING": JobStatus.RUNNING,  # Job is finishing up
+    "FAILED": JobStatus.FAILED,
+    "CANCELLED": JobStatus.FAILED,
+    "TIMEOUT": JobStatus.FAILED,
+    "NODE_FAIL": JobStatus.FAILED,
+    "OUT_OF_MEMORY": JobStatus.FAILED,
+    "PREEMPTED": JobStatus.FAILED,
+}
+
 
 class DataId(BaseModel):
     scope: str

@@ -205,9 +205,7 @@ async def test_run_workflow_simple(
 
     async with get_ssh_session_service().session() as ssh:
         while time.time() - start_time < max_wait_seconds:
-            slurm_job = await simulation_service_slurm.get_slurm_job_status(
-                slurmjobid=simulation.job_id, ssh=ssh
-            )
+            slurm_job = await simulation_service_slurm.get_slurm_job_status(slurmjobid=simulation.job_id, ssh=ssh)
 
             if slurm_job is not None:
                 elapsed = int(time.time() - start_time)
@@ -226,8 +224,7 @@ async def test_run_workflow_simple(
     # Verify job completed successfully
     assert slurm_job is not None, "Should have final job status"
     assert slurm_job.job_state.upper() == "COMPLETED", (
-        f"Workflow should complete successfully. State: {slurm_job.job_state}, "
-        f"Exit code: {slurm_job.exit_code}"
+        f"Workflow should complete successfully. State: {slurm_job.job_state}, Exit code: {slurm_job.exit_code}"
     )
 
     # Verify simulation output exists
@@ -246,6 +243,6 @@ async def test_run_workflow_simple(
         else:
             print(f"\nWarning: Output directory not found at {output_path}")
 
-    print(f"\nTest completed successfully!")
+    print("\nTest completed successfully!")
     print(f"  Experiment ID: {experiment_id}")
     print(f"  Simulation DB ID: {simulation.database_id}")

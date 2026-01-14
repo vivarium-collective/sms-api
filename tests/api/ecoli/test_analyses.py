@@ -15,6 +15,7 @@ from sms_api.simulation.hpc_utils import get_slurmjob_name
 ENV = get_settings()
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_get_analysis(

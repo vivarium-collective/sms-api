@@ -10,12 +10,13 @@
 import logging
 from collections.abc import Sequence
 
-from fastapi import BackgroundTasks, Depends, HTTPException
+from fastapi import BackgroundTasks, Depends, HTTPException, Query
 from fastapi import Path as FastAPIPath
 from fastapi.requests import Request
 
 from sms_api.analysis.analysis_service import AnalysisServiceSlurm
 from sms_api.analysis.models import (
+    AnalysisJobFailedException,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
@@ -25,10 +26,10 @@ from sms_api.analysis.models import (
 )
 from sms_api.api import request_examples
 from sms_api.common import handlers
-from sms_api.common.gateway.utils import get_simulator, router_config
+from sms_api.common.gateway.utils import router_config
 from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
-from sms_api.simulation.models import Simulation, SimulationRequest, SimulationRun
+from sms_api.simulation.models import Simulation, SimulationRun
 
 ENV = get_settings()
 
@@ -42,13 +43,21 @@ config = router_config(prefix="api", version_major=False)
     response_model=Simulation,
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-    summary="Launches a nextflow-powered vEcoli simulation workflow",
+    summary="Launches a vEcoli simulation workflow with simple parameters",
 )
 async def run_simulation(
-    request: SimulationRequest = request_examples.base_simulation,
+    simulator_id: int = Query(..., description="Database ID of the simulator to use"),
+    experiment_id: str = Query(..., description="Unique experiment identifier"),
+    simulation_config_filename: str = Query(..., description="Config filename in vEcoli/configs/ on HPC"),
+    num_generations: int | None = Query(default=None, ge=1, le=10, description="Number of generations to simulate"),
+    num_seeds: int | None = Query(default=None, ge=1, le=100, description="Number of initial seeds (lineages)"),
+    description: str | None = Query(default=None, description="Description of the simulation"),
 ) -> Simulation:
-    """Run a vEcoli simulation workflow with full configuration."""
-    # validate services
+    """Run a vEcoli simulation workflow with simplified parameters.
+
+    This endpoint reads the workflow configuration from the vEcoli repo on the HPC
+    system and allows overriding specific parameters via query params.
+    """
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
@@ -58,8 +67,15 @@ async def run_simulation(
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        return await handlers.simulations.run_workflow_legacy(
-            database_service=database_service, simulation_service=sim_service, request=request
+        return await handlers.simulations.run_workflow_simple(
+            database_service=database_service,
+            simulation_service=sim_service,
+            simulator_id=simulator_id,
+            experiment_id=experiment_id,
+            simulation_config_filename=simulation_config_filename,
+            num_generations=num_generations,
+            num_seeds=num_seeds,
+            description=description,
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
@@ -213,11 +229,18 @@ async def run_analysis(
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
-    # analysis_service = AnalysisServiceLocal(env=ENV, db_service=db_service)
     analysis_service = AnalysisServiceSlurm(env=ENV)
 
+    # Look up the simulation by experiment_id to get the correct simulator
+    simulation = await db_service.get_simulation_by_experiment_id(request.experiment_id)
+    if simulation is None:
+        raise HTTPException(status_code=404, detail=f"No simulation found with experiment_id '{request.experiment_id}'")
+
+    simulator = await db_service.get_simulator(simulation.simulator_id)
+    if simulator is None:
+        raise HTTPException(status_code=404, detail=f"Simulator with id {simulation.simulator_id} not found")
+
     try:
-        simulator = get_simulator()
         return await handlers.analyses.handle_run_analysis(
             request=request,
             simulator=simulator,
@@ -226,8 +249,12 @@ async def run_analysis(
             _request=_request,
             db_service=db_service,
         )
+    except AnalysisJobFailedException as e:
+        # Return detailed error for failed analysis jobs
+        logger.warning(f"Analysis job failed: {e.message}")
+        raise HTTPException(status_code=422, detail=e.to_dict()) from e
     except Exception as e:
-        logger.exception("Error fetching the simulation analysis file.")
+        logger.exception("Error running analysis.")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

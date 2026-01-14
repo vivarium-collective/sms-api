@@ -5,11 +5,13 @@ from sms_api.analysis.models import (
     AnalysisConfig,
 )
 from sms_api.api import request_examples
-from sms_api.common.gateway.utils import get_simulator
 from sms_api.config import get_settings
 
 ENV = get_settings()
 GENERATE_ARTIFACTS = True
+
+# Test simulator hash - used for unit tests only
+TEST_SIMULATOR_HASH = "test123abc"
 
 
 @pytest.mark.asyncio
@@ -18,7 +20,7 @@ async def test_generate_slurm_script(
     analysis_request_config: AnalysisConfig,
 ) -> None:
     request = request_examples.analysis_ptools
-    simulator_hash = get_simulator().git_commit_hash
+    simulator_hash = TEST_SIMULATOR_HASH
     name = "test_generate_slurm_script"
     analysis_config = request.to_config(analysis_name=name, env=ENV)
 

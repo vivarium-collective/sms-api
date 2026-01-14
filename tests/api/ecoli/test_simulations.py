@@ -1,28 +1,60 @@
+"""Tests for simulation endpoints.
+
+This module contains:
+1. Database-level tests for simulation CRUD operations
+2. Integration tests for the /simulations endpoint via HTTP API
+
+Run with: uv run pytest tests/api/ecoli/test_simulations.py -v
+
+Prerequisites for API tests:
+- SSH access to HPC (SLURM_SUBMIT_KEY_PATH configured)
+- Config template exists at {HPC_REPO_BASE_PATH}/{hash}/vEcoli/configs/api_simulation_default.json
+"""
+
 import asyncio
+import time
 import uuid
+from typing import TYPE_CHECKING
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from sms_api.api import request_examples
 from sms_api.api.main import app
+from sms_api.common.models import JobStatus
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
-    ExperimentRequest,
     ParcaDatasetRequest,
     ParcaOptions,
     SimulationConfig,
     SimulationRequest,
 )
 from sms_api.simulation.simulation_service import SimulationServiceHpc
+from tests.fixtures.api_fixtures import SimulatorRepoInfo
+
+if TYPE_CHECKING:
+    from sms_api.simulation.job_scheduler import JobScheduler
+
+# Config file name expected in vEcoli/configs/
+CONFIG_FILENAME = "api_simulation_default.json"
+
+# Core router prefix (for simulator endpoints)
+CORE_ROUTER = "/core/v1"
+
+
+# =============================================================================
+# Database-level tests (no SSH required)
+# =============================================================================
 
 
 @pytest.mark.asyncio
 async def test_list_simulations(
-    experiment_request: SimulationRequest, database_service: DatabaseServiceSQL, ssh_session_service: SSHSessionService
+    experiment_request: SimulationRequest,
+    database_service: DatabaseServiceSQL,
 ) -> None:
+    """Test listing simulations from the database."""
     n = 3
     inserted_sims = []
     for _ in range(n):
@@ -35,59 +67,104 @@ async def test_list_simulations(
 
 @pytest.mark.asyncio
 async def test_get_simulation(database_service: DatabaseServiceSQL, experiment_request: SimulationRequest) -> None:
+    """Test getting a single simulation from the database."""
     sim_i = await database_service.insert_simulation(experiment_request)
 
     fetched_i = await database_service.get_simulation(simulation_id=sim_i.database_id)
     assert fetched_i.model_dump() == sim_i.model_dump()  # type: ignore[union-attr]
 
 
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
-@pytest.mark.asyncio
-async def test_get_simulation_status(
-    base_router: str,
-    workflow_request_payload: SimulationRequest,
-    database_service: DatabaseServiceSQL,
-    simulation_service_slurm: SimulationServiceHpc,
-    ssh_session_service: SSHSessionService,
-) -> None:
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        sim_response = await client.post(f"{base_router}/simulations", json=workflow_request_payload.model_dump())
-        sim_response.raise_for_status()
-        sim_response = sim_response.json()
-
-        await asyncio.sleep(3)
-
-        status_response = await client.get(f"{base_router}/simulations/{sim_response['database_id']}/status")
-        status_response.raise_for_status()
-        status_response = status_response.json()
-        assert list(status_response.keys()) == ["id", "status"]
+# =============================================================================
+# API integration tests (require SSH access)
+# =============================================================================
 
 
-@pytest.mark.skip(reason="Route /simulations/{id}/log not implemented")
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
-@pytest.mark.asyncio
-async def test_get_simulation_log(
-    base_router: str,
-    experiment_request: ExperimentRequest,
-    database_service: DatabaseServiceSQL,
-    simulation_service_slurm: SimulationServiceHpc,
-    ssh_session_service: SSHSessionService,
-) -> None:
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        sim_response = await client.post(f"{base_router}/simulations", json=experiment_request.model_dump())
-        sim_response.raise_for_status()
-        sim_response = sim_response.json()
+async def _ensure_simulator_ready(
+    client: AsyncClient,
+    repo_info: SimulatorRepoInfo,
+) -> int:
+    """
+    Ensure simulator is registered and built using REST endpoints.
 
-        await asyncio.sleep(3)
+    1. GET /simulator/versions to find existing simulator
+    2. POST /simulator/upload if not found (triggers build job)
+    3. Poll GET /simulator/status until build completes
 
-        status_response = await client.post(f"{base_router}/simulations/{sim_response['database_id']}/log")
-        status_response.raise_for_status()
+    Returns the simulator database ID.
+    """
+    # Check if simulator already exists
+    versions_response = await client.get(f"{CORE_ROUTER}/simulator/versions")
+    versions_response.raise_for_status()
+    versions_data = versions_response.json()
 
-        assert isinstance(status_response.text, str)
+    simulator_id: int | None = None
+    for sim in versions_data.get("versions", []):
+        if (
+            sim.get("git_commit_hash") == repo_info.commit_hash
+            and sim.get("git_repo_url") == repo_info.url
+            and sim.get("git_branch") == repo_info.branch
+        ):
+            simulator_id = int(sim["database_id"])
+            print(f"  Found existing simulator: ID={simulator_id}")
+            break
+
+    # If not found, upload/create it
+    if simulator_id is None:
+        print(f"  Creating new simulator for {repo_info.commit_hash}...")
+        upload_response = await client.post(
+            f"{CORE_ROUTER}/simulator/upload",
+            json={
+                "git_commit_hash": repo_info.commit_hash,
+                "git_repo_url": repo_info.url,
+                "git_branch": repo_info.branch,
+            },
+        )
+        assert upload_response.status_code == 200, f"Upload failed: {upload_response.text}"
+        simulator_data = upload_response.json()
+        simulator_id = int(simulator_data["database_id"])
+        print(f"  Created simulator: ID={simulator_id}")
+
+    # Poll build status until complete (build includes repo clone + image build)
+    start_time = time.time()
+    max_wait_seconds = 1800  # 30 minute timeout for build
+
+    while time.time() - start_time < max_wait_seconds:
+        try:
+            status_response = await client.get(
+                f"{CORE_ROUTER}/simulator/status",
+                params={"simulator_id": simulator_id},
+            )
+            if status_response.status_code == 404:
+                # No build job found - simulator was already built previously
+                print("  Simulator already built (no pending build job)")
+                break
+
+            status_response.raise_for_status()
+            status_data = status_response.json()
+            build_status = status_data.get("status")
+
+            elapsed = int(time.time() - start_time)
+            if build_status in ["COMPLETED", "completed"]:
+                print(f"  Build completed after {elapsed}s")
+                break
+            elif build_status in ["FAILED", "failed"]:
+                pytest.fail(f"Simulator build failed: {status_data}")
+            elif elapsed % 60 == 0 and elapsed > 0:
+                print(f"  Build status: {build_status} ({elapsed}s elapsed)")
+
+            await asyncio.sleep(10)
+        except Exception as e:
+            # If status check fails, assume simulator is ready (no active build)
+            print(f"  Build status check: {e}, assuming ready")
+            break
+    else:
+        pytest.fail(f"Simulator build did not complete within {max_wait_seconds}s")
+
+    assert simulator_id is not None, "Simulator ID should be set"
+    return simulator_id
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(
     len(get_settings().slurm_submit_key_path) == 0,
     reason="slurm ssh key file not supplied",
@@ -95,57 +172,101 @@ async def test_get_simulation_log(
 @pytest.mark.asyncio
 async def test_run_simulation_e2e(
     base_router: str,
-    workflow_request_payload: SimulationRequest,
-    database_service: DatabaseServiceSQL,
     simulation_service_slurm: SimulationServiceHpc,
+    database_service: DatabaseServiceSQL,
+    simulator_repo_info: SimulatorRepoInfo,
     ssh_session_service: SSHSessionService,
+    job_scheduler: "JobScheduler",
 ) -> None:
-    """E2E test: POST /api/v1/simulations to launch a simulation workflow."""
+    """
+    E2E integration test for POST /api/v1/simulations endpoint.
+
+    This test uses only REST endpoints:
+    1. GET/POST /simulator/* to ensure simulator is ready
+    2. POST /simulations with query parameters
+    3. Poll GET /simulations/{id}/status until workflow completes
+
+    The job_scheduler fixture polls SLURM and updates the database with job statuses.
+
+    Expected runtime: 30-60 minutes depending on cluster load.
+    """
+    job_uuid = uuid.uuid4().hex[:8]
+    experiment_id = f"test_api_{job_uuid}"
+
+    print("\n=== Test: run_simulation_e2e ===")
+    print(f"  Experiment ID: {experiment_id}")
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.post(f"{base_router}/simulations", json=workflow_request_payload.model_dump())
+        # Step 1: Ensure simulator is ready via REST endpoints
+        print("\nStep 1: Ensuring simulator is ready...")
+        simulator_id = await _ensure_simulator_ready(client, simulator_repo_info)
+        print(f"  Using simulator ID: {simulator_id}")
+
+        # Step 2: POST to /simulations
+        print("\nStep 2: POST /simulations")
+        print(f"  Config file: {CONFIG_FILENAME}")
+
+        response = await client.post(
+            f"{base_router}/simulations",
+            params={
+                "simulator_id": simulator_id,
+                "experiment_id": experiment_id,
+                "simulation_config_filename": CONFIG_FILENAME,
+                "num_generations": 2,  # Override for faster test
+                "num_seeds": 2,  # Override for faster test
+                "description": "Integration test via /simulations endpoint",
+            },
+        )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+
         sim_response = response.json()
+        assert "database_id" in sim_response, "Response should contain database_id"
+        assert "job_id" in sim_response, "Response should contain job_id"
+        assert sim_response["job_id"] is not None, "job_id should not be None"
 
-        # Verify response contains expected Simulation fields
-        assert "database_id" in sim_response
-        assert "simulator_id" in sim_response
-        assert "parca_dataset_id" in sim_response
-        assert "config" in sim_response
-        assert sim_response["config"]["experiment_id"] == workflow_request_payload.config.experiment_id
+        db_id = sim_response["database_id"]
+        job_id = sim_response["job_id"]
+
+        print(f"  Simulation DB ID: {db_id}")
+        print(f"  SLURM Job ID: {job_id}")
+
+        # Step 3: Poll for workflow completion
+        print("\nStep 3: Polling for completion...")
+        start_time = time.time()
+        max_wait_seconds = 7200  # 2 hour timeout
+        poll_interval = 30
+        final_status = None
+
+        while time.time() - start_time < max_wait_seconds:
+            status_response = await client.get(f"{base_router}/simulations/{db_id}/status")
+            assert status_response.status_code == 200, f"Status check failed: {status_response.text}"
+
+            status_data = status_response.json()
+            status = status_data.get("status")
+            elapsed = int(time.time() - start_time)
+
+            if status in [JobStatus.COMPLETED, JobStatus.FAILED]:
+                print(f"\n  Job {job_id} finished after {elapsed}s")
+                print(f"  Status: {status}")
+                final_status = status
+                break
+            elif elapsed % 60 == 0:
+                print(f"  Job {job_id} status: {status} ({elapsed}s elapsed)")
+
+            await asyncio.sleep(poll_interval)
+        else:
+            pytest.fail(f"Workflow job {job_id} did not complete within {max_wait_seconds}s")
+
+    # Verify job completed successfully
+    assert final_status == JobStatus.COMPLETED, f"Workflow should complete successfully. Status: {final_status}"
+
+    print("\n=== Test completed successfully! ===")
+    print(f"  Experiment ID: {experiment_id}")
+    print(f"  Simulation DB ID: {db_id}")
 
 
-@pytest.mark.skipif(
-    len(get_settings().slurm_submit_key_path) == 0,
-    reason="slurm ssh key file not supplied",
-)
-@pytest.mark.asyncio
-async def test_run_and_get_simulation_e2e(
-    base_router: str,
-    workflow_request_payload: SimulationRequest,
-    database_service: DatabaseServiceSQL,
-    simulation_service_slurm: SimulationServiceHpc,
-    ssh_session_service: SSHSessionService,
-) -> None:
-    """E2E test: POST then GET simulation to verify persistence."""
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        # Create simulation
-        post_response = await client.post(f"{base_router}/simulations", json=workflow_request_payload.model_dump())
-        assert post_response.status_code == 200
-
-        created_sim = post_response.json()
-        db_id = created_sim["database_id"]
-
-        # Fetch the created simulation
-        get_response = await client.get(f"{base_router}/simulations/{db_id}")
-        assert get_response.status_code == 200
-
-        fetched_sim = get_response.json()
-        assert fetched_sim["database_id"] == db_id
-        assert fetched_sim["config"]["experiment_id"] == workflow_request_payload.config.experiment_id
-
-
+@pytest.mark.integration
 @pytest.mark.skipif(
     len(get_settings().slurm_submit_key_path) == 0,
     reason="slurm ssh key file not supplied",

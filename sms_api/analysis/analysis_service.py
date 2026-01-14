@@ -13,12 +13,12 @@ import pandas as pd
 
 from sms_api.analysis.models import (
     AnalysisConfig,
+    AnalysisJobFailedException,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
     TsvOutputFile,
 )
-from sms_api.common.gateway.utils import get_simulator
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.models import JobStatus
 from sms_api.common.ssh.ssh_service import SSHSession
@@ -71,7 +71,7 @@ class AnalysisServiceSlurm:
         logger: logging.Logger,
         analysis_name: str,
         ssh: SSHSession,
-        simulator_hash: str | None = None,
+        simulator_hash: str,
     ) -> tuple[str, int, AnalysisConfig]:
         # collect params
         slurmjob_name, slurm_log_file = self._collect_slurm_parameters(
@@ -85,7 +85,7 @@ class AnalysisServiceSlurm:
             env=self.env,
             slurm_log_file=slurm_log_file,
             slurm_job_name=slurmjob_name,
-            simulator_hash=simulator_hash or get_simulator().git_commit_hash,
+            simulator_hash=simulator_hash,
             config=analysis_config,
             analysis_name=analysis_name,
         )
@@ -112,8 +112,25 @@ class AnalysisServiceSlurm:
             await asyncio.sleep(3)
             run = await self.get_analysis_status(job_id=identifier, db_id=db_id, ssh=ssh)
         if run.status.lower() == "failed":
-            raise Exception(f"Analysis Run has failed:\n{run}")
+            # Fetch the job log for error details
+            error_log = await self._fetch_job_log(job_name=dto.job_name, ssh=ssh)
+            run.error_log = error_log
+            raise AnalysisJobFailedException(run=run)
         return run
+
+    async def _fetch_job_log(self, job_name: str | None, ssh: SSHSession) -> str | None:
+        """Fetch the SLURM job log file content for debugging failed jobs."""
+        if not job_name:
+            return None
+        try:
+            log_file = self.env.slurm_log_base_path / f"{job_name}.out"
+            ret, stdout, stderr = await ssh.run_command(f"tail -200 {log_file!s}")
+            if ret == 0 and stdout:
+                return stdout
+            return f"Could not fetch log: exit={ret}, stderr={stderr}"
+        except Exception as e:
+            logger.warning(f"Failed to fetch job log for {job_name}: {e}")
+            return f"Error fetching log: {e}"
 
     async def get_available_output_paths(self, remote_analysis_outdir: HPCFilePath) -> list[HPCFilePath]:
         cmd = f'find "{remote_analysis_outdir!s}" -type f'
@@ -145,23 +162,11 @@ class AnalysisServiceSlurm:
 
         if not slurm_jobs:
             # Job not yet in sacct, status unknown
-            return AnalysisRun(id=db_id, status=JobStatus.UNKNOWN)
+            return AnalysisRun(id=db_id, status=JobStatus.UNKNOWN, job_id=job_id)
 
         slurm_job = slurm_jobs[0]
-        job_state = slurm_job.job_state.upper()
-
-        # Map SLURM status to JobStatus enum
-        status_map = {
-            "PENDING": JobStatus.PENDING,
-            "RUNNING": JobStatus.RUNNING,
-            "COMPLETED": JobStatus.COMPLETED,
-            "FAILED": JobStatus.FAILED,
-            "CANCELLED": JobStatus.FAILED,
-            "TIMEOUT": JobStatus.FAILED,
-            "NODE_FAIL": JobStatus.FAILED,
-            "OUT_OF_MEMORY": JobStatus.FAILED,
-        }
-        return AnalysisRun(id=db_id, status=status_map.get(job_state, JobStatus.UNKNOWN))
+        status = JobStatus.from_slurm_state(slurm_job.job_state)
+        return AnalysisRun(id=db_id, status=status, job_id=job_id)
 
     @classmethod
     def _verify_result(cls, local_result_path: Path, expected_n_tp: int) -> bool:
@@ -202,12 +207,10 @@ class AnalysisServiceSlurm:
             return slurm_jobid
 
     def _collect_slurm_parameters(
-        self, request: ExperimentAnalysisRequest, analysis_name: str, simulator_hash: str | None = None
+        self, request: ExperimentAnalysisRequest, analysis_name: str, simulator_hash: str
     ) -> tuple[str, HPCFilePath]:
         # SLURM params
-        slurmjob_name = get_slurmjob_name(
-            experiment_id=analysis_name, simulator_hash=simulator_hash or get_simulator().git_commit_hash
-        )
+        slurmjob_name = get_slurmjob_name(experiment_id=analysis_name, simulator_hash=simulator_hash)
         slurm_log_file = self.env.slurm_log_base_path / f"{slurmjob_name}.out"
 
         return slurmjob_name, slurm_log_file
@@ -225,7 +228,7 @@ def generate_slurm_script(
     nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
 
     image_path = env.hpc_image_base_path / f"vecoli-{simulator_hash}.sif"
-    vecoli_repo_path = env.hpc_repo_base_path / simulator_hash
+    vecoli_repo_path = env.hpc_repo_base_path / simulator_hash / "vEcoli"
     simulation_outdir_base = env.simulation_outdir
     analysis_outdir = env.analysis_outdir / analysis_name
 
@@ -252,16 +255,13 @@ def generate_slurm_script(
 
         ### configure working dir and binds
         image={image_path!s}
-        vecoli_image_root=/vEcoli
         tmp_config=$(mktemp)
         echo '{json.dumps(config.model_dump())}' > \"$tmp_config\"
 
-        ### binds - use same paths inside and outside container for compatibility
+        ### binds - use same paths inside and outside container (like workflow script)
         binds="-B {vecoli_repo_path!s}:{vecoli_repo_path!s}"
         binds+=" -B {simulation_outdir_base!s}:{simulation_outdir_base!s}"
-        binds+=" -B $JAVA_HOME:$JAVA_HOME"
-        binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
-        binds+=" -B $HOME/.local/share/uv:/root/.local/share/uv"
+        binds+=" -B {analysis_outdir!s}:{analysis_outdir!s}"
 
         ### remove existing dir if needed and recreate
         analysis_outdir={analysis_outdir!s}
@@ -270,13 +270,11 @@ def generate_slurm_script(
         fi
         mkdir -p {analysis_outdir!s}
 
-        ### execute analysis
-        singularity run $binds $image bash -c "
-            export JAVA_HOME=$HOME/.local/bin/java-22
-            export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-            uv run --no-cache --env-file {vecoli_repo_path!s}/.env \\
-              {vecoli_repo_path!s}/runscripts/analysis.py --config \"$tmp_config\"
-        "
+        ### execute analysis (same pattern as workflow script)
+        cd {vecoli_repo_path!s}
+        singularity run $binds $image uv run --no-cache \\
+            --env-file {vecoli_repo_path!s}/.env \\
+            {vecoli_repo_path!s}/runscripts/analysis.py --config \"$tmp_config\"
 
         ### optionally, remove uploaded fp
         rm -f \"$config_fp\"
