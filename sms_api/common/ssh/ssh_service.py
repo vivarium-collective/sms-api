@@ -69,19 +69,22 @@ class SSHSession:
         exc_str = str(exc).lower()
         return "connection closed" in exc_str or "connection lost" in exc_str
 
-    async def run_command(self, command: str) -> tuple[int, str, str]:
+    async def run_command(self, command: str, check: bool = True) -> tuple[int, str, str]:
         """Run a command on the remote host with automatic reconnection.
 
         :param command: The command to execute
+        :param check: If True (default), raise RuntimeError on non-zero exit code.
+                      If False, return the tuple and let the caller handle non-zero exit codes.
         :return: Tuple of (return_code, stdout, stderr)
-        :raises RuntimeError: If the command fails after all retries
+        :raises RuntimeError: If check=True and command returns non-zero exit code,
+                              or if connection fails after all retries
         """
         last_exc: Exception | None = None
 
         for attempt in range(self._max_retries + 1):
             try:
                 logger.info(f"Running SSH command: {command}")
-                result: SSHCompletedProcess = await self._conn.run(command, check=True)
+                result: SSHCompletedProcess = await self._conn.run(command, check=False)
 
                 if not isinstance(result.stdout, str):
                     raise TypeError(f"Expected result.stdout to be str, got {type(result.stdout)}")
@@ -90,16 +93,20 @@ class SSHSession:
                 if not isinstance(result.returncode, int):
                     raise TypeError(f"Expected result.returncode to be int, got {type(result.returncode)}")
 
-                logger.info(
+                log_level = logging.INFO if result.returncode == 0 else logging.WARNING
+                logger.log(
+                    log_level,
                     f"Command '{command}' retcode={result.returncode} "
-                    f"stdout={result.stdout[:100]} stderr={result.stderr[:100]!r}"
+                    f"stdout={result.stdout[:100]} stderr={result.stderr[:100]!r}",
                 )
-                return result.returncode, result.stdout, result.stderr
 
-            except asyncssh.ProcessError as exc:
-                # Command executed but returned non-zero - don't retry
-                logger.exception(f"Command '{command}' failed: {exc.stderr[:100]!r}")
-                raise RuntimeError(f"SSH command failed: {exc.stderr[:100]!r}") from exc
+                # Raise exception on non-zero exit if check=True (default, preserves original behavior)
+                if check and result.returncode != 0:
+                    raise RuntimeError(
+                        f"SSH command failed with exit code {result.returncode}: {result.stderr[:100]!r}"
+                    )
+
+                return result.returncode, result.stdout, result.stderr
 
             except (OSError, asyncssh.Error) as exc:
                 last_exc = exc

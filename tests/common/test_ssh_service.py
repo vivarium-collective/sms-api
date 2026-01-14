@@ -191,4 +191,30 @@ async def test_ssh_session_run_command() -> None:
     assert retcode == 0
     assert stdout == "output"
     assert stderr == ""
-    mock_conn.run.assert_called_once_with("test command", check=True)
+    mock_conn.run.assert_called_once_with("test command", check=False)
+
+
+@pytest.mark.asyncio
+async def test_ssh_session_run_command_check_false() -> None:
+    """Unit test: SSHSession.run_command with check=False returns non-zero exit codes."""
+    mock_conn = MagicMock()
+    mock_conn.run = AsyncMock(return_value=MagicMock(stdout="", stderr="error output", returncode=1))
+
+    session = SSHSession(mock_conn, "test-host")
+    retcode, stdout, stderr = await session.run_command("failing command", check=False)
+
+    assert retcode == 1
+    assert stderr == "error output"
+    mock_conn.run.assert_called_once_with("failing command", check=False)
+
+
+@pytest.mark.asyncio
+async def test_ssh_session_run_command_check_true_raises() -> None:
+    """Unit test: SSHSession.run_command with check=True (default) raises on non-zero exit."""
+    mock_conn = MagicMock()
+    mock_conn.run = AsyncMock(return_value=MagicMock(stdout="", stderr="error output", returncode=1))
+
+    session = SSHSession(mock_conn, "test-host")
+
+    with pytest.raises(RuntimeError, match="SSH command failed with exit code 1"):
+        await session.run_command("failing command")  # check=True is default
