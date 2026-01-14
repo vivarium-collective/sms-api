@@ -165,20 +165,8 @@ class AnalysisServiceSlurm:
             return AnalysisRun(id=db_id, status=JobStatus.UNKNOWN, job_id=job_id)
 
         slurm_job = slurm_jobs[0]
-        job_state = slurm_job.job_state.upper()
-
-        # Map SLURM status to JobStatus enum
-        status_map = {
-            "PENDING": JobStatus.PENDING,
-            "RUNNING": JobStatus.RUNNING,
-            "COMPLETED": JobStatus.COMPLETED,
-            "FAILED": JobStatus.FAILED,
-            "CANCELLED": JobStatus.FAILED,
-            "TIMEOUT": JobStatus.FAILED,
-            "NODE_FAIL": JobStatus.FAILED,
-            "OUT_OF_MEMORY": JobStatus.FAILED,
-        }
-        return AnalysisRun(id=db_id, status=status_map.get(job_state, JobStatus.UNKNOWN), job_id=job_id)
+        status = JobStatus.from_slurm_state(slurm_job.job_state)
+        return AnalysisRun(id=db_id, status=status, job_id=job_id)
 
     @classmethod
     def _verify_result(cls, local_result_path: Path, expected_n_tp: int) -> bool:

@@ -103,7 +103,7 @@ class JobScheduler:
             slurm_job = slurm_job_map.get(hpc_run.slurmjobid)
             if not slurm_job or not slurm_job.job_state:
                 continue
-            new_status = JobStatus(slurm_job.job_state.lower())
+            new_status = JobStatus.from_slurm_state(slurm_job.job_state)
             if new_status == hpc_run.status:
                 logger.debug(f"HpcRun {hpc_run.database_id} is still running with status {new_status}")
                 continue
