@@ -228,7 +228,7 @@ def generate_slurm_script(
     nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
 
     image_path = env.hpc_image_base_path / f"vecoli-{simulator_hash}.sif"
-    vecoli_repo_path = env.hpc_repo_base_path / simulator_hash
+    vecoli_repo_path = env.hpc_repo_base_path / simulator_hash / "vEcoli"
     simulation_outdir_base = env.simulation_outdir
     analysis_outdir = env.analysis_outdir / analysis_name
 
