@@ -18,7 +18,7 @@ class SlurmService:
             job_ids_str = ",".join(map(str, job_ids)) if len(job_ids) > 1 else str(job_ids[0])
             command = command + f" -j {job_ids_str}"
 
-        return_code, stdout, stderr = await ssh.run_command(command=command)
+        return_code, stdout, stderr = await ssh.run_command(command=command, check=False)
 
         if return_code != 0:
             # Invalid job id causes squeue to fail entirely, even if some jobs are valid
@@ -45,7 +45,7 @@ class SlurmService:
         slurm_jobs: list[SlurmJob] = []
         for job_id in job_ids:
             command = f'squeue --noheader --format="{SlurmJob.get_squeue_format_string()}" -j {job_id}'
-            return_code, stdout, stderr = await ssh.run_command(command=command)
+            return_code, stdout, stderr = await ssh.run_command(command=command, check=False)
 
             if return_code != 0:
                 if "Invalid job id" in stderr:
@@ -112,7 +112,7 @@ class SlurmService:
         slurm_jobs: list[SlurmJob] = []
         for job_id in job_ids:
             command = f"scontrol show job {job_id}"
-            return_code, stdout, stderr = await ssh.run_command(command=command)
+            return_code, stdout, stderr = await ssh.run_command(command=command, check=False)
 
             if return_code != 0:
                 # Job not found is not an error - it may have completed and left scheduler memory
