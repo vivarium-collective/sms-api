@@ -77,6 +77,7 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
     return simulation, slurm_job, hpcrun
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_messaging(
@@ -116,6 +117,7 @@ async def test_messaging(
     assert len(_updated_worker_events) == 1
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_job_scheduler(
@@ -184,6 +186,7 @@ async def test_job_scheduler(
     await scheduler.stop_polling()
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(
     is_ci_environment()
     or len(get_settings().slurm_submit_key_path) == 0

@@ -258,6 +258,7 @@ async def _run_workflow_test(
         )
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_workflow_py_execution(

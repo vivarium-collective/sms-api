@@ -11,6 +11,7 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 from tests.fixtures.api_fixtures import SimulatorRepoInfo
 
 
+@pytest.mark.integration
 @pytest.mark.skip(reason="doesn't matter if this is the latest commit")
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
@@ -24,6 +25,7 @@ async def test_latest_repo_installed(
     assert stdout.strip("\n").split()[0][:7] == commit_hash
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_build(

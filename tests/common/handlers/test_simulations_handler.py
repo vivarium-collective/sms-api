@@ -6,6 +6,7 @@ from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_get_available_omics_output_paths(
@@ -16,6 +17,7 @@ async def test_get_available_omics_output_paths(
     assert all([isinstance(fp, HPCFilePath) and fp.remote_path.__str__().endswith(".txt") for fp in results])
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_fetch_simulation_omics_outputs(

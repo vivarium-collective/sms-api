@@ -14,6 +14,7 @@ from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_query_squeue(slurm_service: SlurmService) -> None:
@@ -28,6 +29,7 @@ async def test_slurm_job_query_squeue(slurm_service: SlurmService) -> None:
             assert one_job[0] == all_jobs[0]
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_query_sacct(slurm_service: SlurmService) -> None:
@@ -42,6 +44,7 @@ async def test_slurm_job_query_sacct(slurm_service: SlurmService) -> None:
             assert one_job[0] == all_jobs[0]
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_submit(slurm_service: SlurmService, slurm_template_hello_1s: str) -> None:
@@ -215,6 +218,7 @@ async def _run_nextflow_workflow_test(
         )
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_nextflow_workflow_local_executor(
@@ -250,6 +254,7 @@ async def test_nextflow_workflow_local_executor(
     assert result.final_job.job_state.upper() == "COMPLETED"
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_nextflow_workflow_slurm_executor(

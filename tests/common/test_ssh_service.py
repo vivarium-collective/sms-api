@@ -9,6 +9,7 @@ from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_ssh_session_service_run_command() -> None:
@@ -27,6 +28,7 @@ async def test_ssh_session_service_run_command() -> None:
         assert ssh_settings.slurm_submit_user in stdout
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_ssh_session_service_scp_upload_download() -> None:
@@ -59,6 +61,7 @@ async def test_ssh_session_service_scp_upload_download() -> None:
         local_path_2.unlink(missing_ok=True)
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_ssh_session_service_wait_closed_false() -> None:
