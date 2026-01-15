@@ -161,9 +161,11 @@ class SimulationServiceHpc(SimulationService):
                         exit 1
                     fi
 
-                    # Set Apptainer/Singularity cache directories with defaults if not already set
+                    # Set Apptainer/Singularity directories
+                    # TMPDIR uses local disk (not network FS) for fast metadata operations during builds
+                    # CACHEDIR can use shared storage for layer caching across nodes
                     export APPTAINER_CACHEDIR=${{APPTAINER_CACHEDIR:-$HOME/.apptainer/cache}}
-                    export APPTAINER_TMPDIR=${{APPTAINER_TMPDIR:-$HOME/.apptainer/tmp}}
+                    export APPTAINER_TMPDIR="{settings.apptainer_tmpdir}"
                     mkdir -p $APPTAINER_CACHEDIR $APPTAINER_TMPDIR
 
                     # Step 1: Clone repository if needed
