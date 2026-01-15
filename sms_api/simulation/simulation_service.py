@@ -136,7 +136,7 @@ class SimulationServiceHpc(SimulationService):
                 script_content = dedent(f"""\
                     #!/bin/bash
                     #SBATCH --job-name={slurm_job_name}
-                    #SBATCH --time=30:00
+                    #SBATCH --time=1:00:00
                     #SBATCH --cpus-per-task 3
                     #SBATCH --mem=8GB
                     #SBATCH --partition={settings.slurm_partition}
