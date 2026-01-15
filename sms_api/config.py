@@ -95,7 +95,7 @@ class Settings(BaseSettings):
     # Apptainer/Singularity temp directory for container builds
     # Use local SSD/NVMe (/tmp) for builds with many small files (faster metadata ops)
     # FSx Lustre has high latency for small file operations and can cause build timeouts
-    apptainer_tmpdir: str = "/tmp/apptainer"
+    apptainer_tmpdir: str = "/tmp/apptainer"  # noqa: S108 Intentional use of /tmp for fast metadata ops
 
     hpc_image_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
     hpc_parca_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))

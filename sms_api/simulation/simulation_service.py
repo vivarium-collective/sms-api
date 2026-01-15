@@ -434,20 +434,38 @@ def workflow_slurm_script(
 ) -> str:
     """Generate SLURM script for workflow orchestration.
 
-    This script runs workflow.py directly from the venv (not in Singularity).
-    The workflow.py then generates and submits the Nextflow job, which uses
-    Singularity for the actual simulation tasks.
+    This script uses a three-step container-based approach:
+    1. Run workflow.py --build-only inside container to generate Nextflow files
+    2. Copy Nextflow module files from container and fix include paths
+    3. Run Nextflow directly on the host (only requires Java/Nextflow)
 
-    See: vEcoli/docs/aws-slurm-deployment.md for deployment details.
+    This avoids GLIBC compatibility issues and creates a self-contained output directory.
+
+    See: vEcoli/docs/aws-slurm-deployment.md "Container-Based Workflow Execution" section.
     """
     env = get_settings()
 
     qos_clause = f"#SBATCH --qos={env.slurm_qos}" if env.slurm_qos else ""
     nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
 
-    vecoli_repo_path = env.hpc_repo_base_path / simulator_hash / "vEcoli"
     simulation_outdir_base = env.simulation_outdir
     slurm_log_base_path = env.slurm_log_base_path
+    apptainer_image_path = env.hpc_image_base_path / f"vecoli-{simulator_hash}.sif"
+    experiment_id = config.experiment_id
+
+    # Build the config dict with required fields for container-based execution
+    # sim_data_path: null forces ParCa to run (no cached kb lookup)
+    # aws_cdk.container_image: path to Singularity image for Nextflow tasks
+    config_dict = config.model_dump()
+    config_dict["sim_data_path"] = None  # Force ParCa to run
+    if "parca_options" not in config_dict:
+        config_dict["parca_options"] = {}
+    config_dict["parca_options"]["load_intermediate"] = None  # Don't load cached intermediates
+    config_dict["aws_cdk"] = {
+        "container_image": str(apptainer_image_path),
+        "build_image": False,
+    }
+    config_json = json.dumps(config_dict).replace("'", "'\\''")
 
     return dedent(f"""\
         #!/bin/bash
@@ -464,27 +482,62 @@ def workflow_slurm_script(
 
         set -e
 
-        ### Set up environment for workflow.py
-        # These are required by workflow.py for SLURM job submission
-        export SLURM_PARTITION={env.slurm_partition}
-        export SLURM_LOG_BASE_PATH={slurm_log_base_path!s}
+        ### Configuration
+        CONTAINER_IMAGE="{apptainer_image_path!s}"
+        OUTPUT_DIR="{simulation_outdir_base!s}"
+        EXPERIMENT_ID="{experiment_id}"
+        SLURM_LOG_PATH="{slurm_log_base_path!s}"
 
-        ### Set up Java and Nextflow in PATH
-        export JAVA_HOME=$HOME/.local/bin/java-22
-        export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-
-        ### Create output directory if needed
-        mkdir -p {simulation_outdir_base!s}
+        ### Create directories
+        mkdir -p "$OUTPUT_DIR"
+        mkdir -p "$SLURM_LOG_PATH"
 
         ### Write workflow config to temp file
         tmp_config=$(mktemp)
-        echo '{json.dumps(config.model_dump()).replace("'", "'\\''")}' > "$tmp_config"
+        echo '{config_json}' > "$tmp_config"
+        chmod 644 "$tmp_config"
 
-        ### Change to vEcoli repo directory
-        cd {vecoli_repo_path!s}
+        ### Step 1: Generate Nextflow files using workflow.py --build-only
+        echo "Step 1: Generating Nextflow files..."
+        export SLURM_PARTITION={env.slurm_partition}
+        export SLURM_LOG_BASE_PATH="$SLURM_LOG_PATH"
 
-        ### Activate virtual environment and run workflow
-        # workflow.py generates Nextflow config and submits the orchestration job
-        source .venv/bin/activate
-        python runscripts/workflow.py --config "$tmp_config"
+        singularity exec \\
+            --writable-tmpfs \\
+            --pwd /vEcoli \\
+            -B "$OUTPUT_DIR":"$OUTPUT_DIR" \\
+            -B "$SLURM_LOG_PATH":"$SLURM_LOG_PATH" \\
+            "$CONTAINER_IMAGE" \\
+            python /vEcoli/runscripts/workflow.py \\
+                --config "$tmp_config" \\
+                --build-only
+
+        rm -f "$tmp_config"
+
+        ### Step 2: Copy module files and fix include paths
+        echo "Step 2: Copying Nextflow modules and fixing include paths..."
+        NEXTFLOW_DIR="$OUTPUT_DIR/$EXPERIMENT_ID/nextflow"
+
+        # Copy Nextflow module files from container
+        singularity exec -B "$OUTPUT_DIR":"$OUTPUT_DIR" "$CONTAINER_IMAGE" \\
+            cp /vEcoli/runscripts/nextflow/sim.nf "$NEXTFLOW_DIR/"
+        singularity exec -B "$OUTPUT_DIR":"$OUTPUT_DIR" "$CONTAINER_IMAGE" \\
+            cp /vEcoli/runscripts/nextflow/analysis.nf "$NEXTFLOW_DIR/"
+
+        # Update includes to use relative paths (same directory as main.nf)
+        sed -i "s|from '/vEcoli/runscripts/nextflow/sim'|from './sim'|g" "$NEXTFLOW_DIR/main.nf"
+        sed -i "s|from '/vEcoli/runscripts/nextflow/analysis'|from './analysis'|g" "$NEXTFLOW_DIR/main.nf"
+
+        ### Step 3: Run Nextflow directly on host
+        echo "Step 3: Running Nextflow..."
+        export JAVA_HOME=$HOME/.local/bin/java-22
+        export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
+
+        cd "$NEXTFLOW_DIR"
+        nextflow -C "$NEXTFLOW_DIR/nextflow.config" run "$NEXTFLOW_DIR/main.nf" \\
+            -profile aws_cdk \\
+            -with-report "$NEXTFLOW_DIR/${{EXPERIMENT_ID}}_report.html" \\
+            -work-dir "$NEXTFLOW_DIR/nextflow_workdirs"
+
+        echo "Workflow completed successfully."
     """)
