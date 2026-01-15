@@ -432,21 +432,29 @@ def workflow_slurm_script(
     simulator_hash: str,
     config: SimulationConfig,
 ) -> str:
+    """Generate SLURM script for workflow orchestration.
+
+    This script runs workflow.py directly from the venv (not in Singularity).
+    The workflow.py then generates and submits the Nextflow job, which uses
+    Singularity for the actual simulation tasks.
+
+    See: vEcoli/docs/aws-slurm-deployment.md for deployment details.
+    """
     env = get_settings()
 
     qos_clause = f"#SBATCH --qos={env.slurm_qos}" if env.slurm_qos else ""
     nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
 
-    image_path = env.hpc_image_base_path / f"vecoli-{simulator_hash}.sif"
     vecoli_repo_path = env.hpc_repo_base_path / simulator_hash / "vEcoli"
     simulation_outdir_base = env.simulation_outdir
+    slurm_log_base_path = env.slurm_log_base_path
 
     return dedent(f"""\
         #!/bin/bash
         #SBATCH --job-name={slurm_job_name}
-        #SBATCH --time=1:00:00
-        #SBATCH --cpus-per-task 3
-        #SBATCH --mem=8GB
+        #SBATCH --time=7-00:00:00
+        #SBATCH --cpus-per-task 1
+        #SBATCH --mem=4GB
         #SBATCH --partition={env.slurm_partition}
         {qos_clause}
         #SBATCH --mail-type=ALL
@@ -456,37 +464,27 @@ def workflow_slurm_script(
 
         set -e
 
-        ### set up java and nextflow
-        local_bin=$HOME/.local/bin
-        export JAVA_HOME=$local_bin/java-22
-        export PATH=$JAVA_HOME/bin:$local_bin:$PATH
+        ### Set up environment for workflow.py
+        # These are required by workflow.py for SLURM job submission
+        export SLURM_PARTITION={env.slurm_partition}
+        export SLURM_LOG_BASE_PATH={slurm_log_base_path!s}
 
-        ### create output directory if it doesn't exist
+        ### Set up Java and Nextflow in PATH
+        export JAVA_HOME=$HOME/.local/bin/java-22
+        export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
+
+        ### Create output directory if needed
         mkdir -p {simulation_outdir_base!s}
 
-        ### configure working dir and binds
-
-        latest_hash={simulator_hash}
+        ### Write workflow config to temp file
         tmp_config=$(mktemp)
-        echo '{json.dumps(config.model_dump()).replace("'", "'\\''")}' > \"$tmp_config\"
+        echo '{json.dumps(config.model_dump()).replace("'", "'\\''")}' > "$tmp_config"
 
-        ### binds - use same paths inside and outside container for nextflow compatibility
-        binds="-B {vecoli_repo_path!s}:{vecoli_repo_path!s}"
-        binds+=" -B {simulation_outdir_base!s}:{simulation_outdir_base!s}"
-        binds+=" -B $JAVA_HOME:$JAVA_HOME"
-        binds+=" -B $HOME/.local/bin:$HOME/.local/bin"
-        binds+=" -B $HOME/.cache/uv:$HOME/.cache/uv"
-        binds+=" -B /isg/shared/mantis/apps/nextflow/25.04.6/nextflow:/usr/local/bin/nextflow"
-
-        image={image_path!s}
-
-        export UV_CACHE_DIR=$HOME/.cache/uv
-        mkdir -p $UV_CACHE_DIR
-
-        # Change to vEcoli repo directory so Nextflow's launchDir resolves correctly
+        ### Change to vEcoli repo directory
         cd {vecoli_repo_path!s}
 
-        singularity run --env UV_CACHE_DIR=$UV_CACHE_DIR $binds $image uv run --with python-dotenv \\
-            --env-file {vecoli_repo_path!s}/.env \\
-            {vecoli_repo_path!s}/runscripts/workflow.py --config \"$tmp_config\"
+        ### Activate virtual environment and run workflow
+        # workflow.py generates Nextflow config and submits the orchestration job
+        source .venv/bin/activate
+        python runscripts/workflow.py --config "$tmp_config"
     """)
