@@ -6,7 +6,7 @@ from dataclasses import field
 from typing import Any
 
 from pydantic import BaseModel as _BaseModel
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, field_validator
 
 from sms_api.common.models import JobStatus
 from sms_api.config import get_settings
@@ -160,7 +160,7 @@ class SimulationConfig(BaseModel):
     time_step: float = 1.0
     single_daughters: bool = True
     emitter: str = "parquet"
-    emitter_arg: dict[str, str] = Field(
+    emitter_arg: dict[str, Any] = Field(
         default_factory=lambda: {"out_dir": str(get_settings().simulation_outdir)}
     )  # str(get_settings().hpc_sim_base_path)
     variants: dict[str, Any] = Field(default={})
@@ -176,7 +176,7 @@ class SimulationConfig(BaseModel):
     fixed_media: str | None = None
     condition: str | None = None
     save: bool | None = None
-    save_times: list[str] = Field(default=[])
+    save_times: list[str | float | int] = Field(default=[])
     add_processes: list[str] = Field(default=[])
     exclude_processes: list[str] = Field(default=[])
     profile: bool | None = None
@@ -207,6 +207,13 @@ class SimulationConfig(BaseModel):
     flow: dict[str, Any] = Field(default={})
     initial_state_overrides: list[str] = Field(default=[])
     initial_state: dict[str, Any] = Field(default={})
+
+    @field_validator("generations", mode="before")
+    @classmethod
+    def default_generations(cls, v: Any) -> int:
+        if v is None:
+            return 1
+        return int(v)
 
     def model_post_init(self, *args: Any) -> None:
         for attrname in list(SimulationConfig.model_fields.keys()):
