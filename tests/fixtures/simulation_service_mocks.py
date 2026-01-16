@@ -36,8 +36,8 @@ class ConcreteSimulationService(SimulationService):
     @override
     async def get_latest_commit_hash(
         self,
-        git_repo_url: str = "https://github.com/CovertLab/vEcoli",
-        git_branch: str = "master",
+        git_repo_url: str = "https://github.com/vivarium-collective/vEcoli",
+        git_branch: str = "api-support",
     ) -> str:
         raise NotImplementedError()
 

@@ -1,4 +1,5 @@
 import datetime
+import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from random import randint
@@ -43,7 +44,7 @@ ENV = get_settings()
 # Default simulator repository configuration for tests
 SIMULATOR_URL = "https://github.com/vivarium-collective/vEcoli"
 SIMULATOR_BRANCH = "api-support"
-SIMULATOR_COMMIT = "4c58f7e"
+SIMULATOR_COMMIT = "88c009d"
 
 
 class SimulatorRepoInfo(NamedTuple):
@@ -134,11 +135,14 @@ async def experiment_request(database_service: DatabaseServiceSQL) -> Simulation
     )
 
     # Return a SimulationRequest with the valid IDs
+    exp_id = f"test-{uuid.uuid4()!s}"
     return SimulationRequest(
+        simulation_config_filename="api_simulation_default_with_profile.json",
         simulator_id=simulator.database_id,
         parca_dataset_id=parca_dataset.database_id,
+        experiment_id=f"{exp_id}",
         config=SimulationConfig(
-            experiment_id="postman_TEST",
+            experiment_id=f"{exp_id}",
             analysis_options=examples.analysis_options_omics(n_tp=7),
         ),
     )
@@ -173,6 +177,8 @@ async def ecoli_simulation(parca_options: ParcaOptions) -> Simulation:
         database_id=-1,
         simulator_id=1,
         parca_dataset_id=1,
+        experiment_id=pytest_fixture,
+        simulation_config_filename="api_simulation_default_with_profile.json",
         config=SimulationConfig(
             experiment_id=pytest_fixture,
             sim_data_path="/pytest/kb/simData.cPickle",
@@ -236,6 +242,8 @@ async def workflow_request_payload(
     return SimulationRequest(
         simulator=Simulator(git_commit_hash=latest_hash, git_repo_url=SIMULATOR_URL, git_branch=SIMULATOR_BRANCH),
         config=simulation_config,
+        experiment_id=f"test-{uuid.uuid4()!s}",
+        simulation_config_filename="api_simulation_default_with_profile.json",
     )
 
 

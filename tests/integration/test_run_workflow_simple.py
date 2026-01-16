@@ -11,7 +11,7 @@ Run with: uv run pytest tests/integration/test_run_workflow_simple.py -v
 Prerequisites:
 - SSH access to HPC (SLURM_SUBMIT_KEY_PATH configured)
 - Simulator already exists (repo cloned, image built)
-- Config template exists at {HPC_REPO_BASE_PATH}/{hash}/vEcoli/configs/api_simulation_default.json
+- Config template exists at {HPC_REPO_BASE_PATH}/{hash}/vEcoli/configs/api_simulation_default_with_profile.json
 """
 
 import asyncio
@@ -30,7 +30,7 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 from tests.fixtures.api_fixtures import SimulatorRepoInfo
 
 # Config file name expected in vEcoli/configs/
-CONFIG_FILENAME = "api_simulation_default.json"
+CONFIG_FILENAME = "api_simulation_default_with_profile.json"
 
 # Skip all tests if SSH not configured
 pytestmark = pytest.mark.skipif(

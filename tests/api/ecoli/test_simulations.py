@@ -8,7 +8,7 @@ Run with: uv run pytest tests/api/ecoli/test_simulations.py -v
 
 Prerequisites for API tests:
 - SSH access to HPC (SLURM_SUBMIT_KEY_PATH configured)
-- Config template exists at {HPC_REPO_BASE_PATH}/{hash}/vEcoli/configs/api_simulation_default.json
+- Config template exists at {HPC_REPO_BASE_PATH}/{hash}/vEcoli/configs/api_simulation_default_with_profile.json
 """
 
 import asyncio
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from sms_api.simulation.job_scheduler import JobScheduler
 
 # Config file name expected in vEcoli/configs/
-CONFIG_FILENAME = "api_simulation_default.json"
+CONFIG_FILENAME = "api_simulation_default_with_profile.json"
 
 # Core router prefix (for simulator endpoints)
 CORE_ROUTER = "/core/v1"
@@ -57,7 +57,10 @@ async def test_list_simulations(
     """Test listing simulations from the database."""
     n = 3
     inserted_sims = []
-    for _ in range(n):
+    for i in range(n):
+        exp_request = experiment_request
+        exp_request.experiment_id = f"{i}"
+        exp_request.config.experiment_id = f"{i}"
         sim_i = await database_service.insert_simulation(sim_request=experiment_request)
         inserted_sims.append(sim_i.model_dump())
     all_sims = await database_service.list_simulations()
@@ -311,6 +314,8 @@ async def test_get_simulation_data(
 
     # Create the simulation request
     sim_request = SimulationRequest(
+        experiment_id="sms_multigeneration",
+        simulation_config_filename="api_simulation_default_with_profile.json",
         simulator_id=simulator.database_id,
         parca_dataset_id=parca_dataset.database_id,
         config=sim_config,

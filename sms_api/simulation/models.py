@@ -301,6 +301,8 @@ class SimulationRequest(BaseModel):
     """Used by the /simulation endpoint."""
 
     config: SimulationConfig
+    simulation_config_filename: str
+    experiment_id: str
     simulator: Simulator | None = None
     simulator_id: int | None = None
     parca_dataset_id: int | None = None
@@ -319,5 +321,7 @@ class Simulation(BaseModel):
     simulator_id: int
     parca_dataset_id: int
     config: SimulationConfig
+    simulation_config_filename: str
+    experiment_id: str
     last_updated: str = Field(default=str(datetime.datetime.now()))
     job_id: int | None = None

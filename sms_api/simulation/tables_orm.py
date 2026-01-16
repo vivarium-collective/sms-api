@@ -129,7 +129,8 @@ class ORMSimulation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
-
+    config_filename: Mapped[str] = mapped_column(nullable=False, index=True)
+    experiment_id: Mapped[str] = mapped_column(nullable=False, unique=True)
     simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
     parca_dataset_id: Mapped[int] = mapped_column(ForeignKey("parca_dataset.id"), nullable=False, index=True)
     config: Mapped[dict[str, list[str] | bool | int | str | float | dict[str, int | float | str]]] = mapped_column(

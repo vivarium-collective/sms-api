@@ -2,6 +2,7 @@ import json
 import logging
 import random
 import string
+import uuid
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -156,7 +157,9 @@ async def run_workflow_simple(
 
     # 3. Replace placeholders in the config template
     config_str = stdout
-    config_str = config_str.replace("EXPERIMENT_ID_PLACEHOLDER", experiment_id)
+
+    unique_experiment_id = f"{experiment_id}-{str(uuid.uuid4())[:4]}"
+    config_str = config_str.replace("EXPERIMENT_ID_PLACEHOLDER", unique_experiment_id)
     config_str = config_str.replace("HPC_SIM_BASE_PATH_PLACEHOLDER", str(settings.simulation_outdir))
     image_path = get_settings().hpc_image_base_path / f"vecoli-{simulator.git_commit_hash}.sif"
     config_str = config_str.replace("SIMULATOR_IMAGE_PATH_PLACEHOLDER", str(image_path))
@@ -185,6 +188,8 @@ async def run_workflow_simple(
         config=config,
         simulator_id=simulator_id,
         parca_dataset_id=parca_ds.database_id,
+        simulation_config_filename=simulation_config_filename,
+        experiment_id=unique_experiment_id,
     )
     export_baseline_config(request)
     simulation = await database_service.insert_simulation(sim_request=request)

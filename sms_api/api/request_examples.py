@@ -23,13 +23,10 @@ from sms_api.analysis.models import (
 )
 from sms_api.common.gateway.utils import generate_analysis_request
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
-from sms_api.common.utils import unique_id
 from sms_api.simulation.models import (
     AnalysisOptions,
     ParcaDatasetRequest,
     ParcaOptions,
-    SimulationConfig,
-    SimulationRequest,
     Simulator,
     SimulatorVersion,
 )
@@ -133,17 +130,6 @@ def get_analysis_api_multiseed() -> ExperimentAnalysisRequest:
     )
 
 
-def get_simulation_base() -> SimulationRequest:
-    sim_id = unique_id("sms_experiment")
-    sim_id = "postman_TEST"
-    return SimulationRequest(
-        simulator=DEFAULT_SIMULATOR,
-        config=SimulationConfig(
-            experiment_id=sim_id, analysis_options=analysis_options_omics(n_tp=random.randint(1, 22))
-        ),
-    )
-
-
 def get_parca_base() -> ParcaDatasetRequest:
     return ParcaDatasetRequest(
         simulator_version=SimulatorVersion(
@@ -210,7 +196,5 @@ analysis_request_base = generate_analysis_request(
     requested_configs=[AnalysisDomain.MULTIGENERATION, AnalysisDomain.MULTISEED],
 )
 analysis_test_ptools = get_test_ptools()
-
-base_simulation = get_simulation_base()
 
 base_parca = get_parca_base()
