@@ -163,7 +163,7 @@ class SimulationConfig(BaseModel):
     emitter_arg: dict[str, str] = Field(
         default_factory=lambda: {"out_dir": str(get_settings().simulation_outdir)}
     )  # str(get_settings().hpc_sim_base_path)
-    variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
+    variants: dict[str, Any] = Field(default={})
     gcloud: str | None = None
     agent_id: str | None = None
     parallel: bool | None = None
