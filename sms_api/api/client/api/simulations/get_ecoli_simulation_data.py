@@ -10,13 +10,14 @@ from ... import errors
 from ...models.http_validation_error import HTTPValidationError
 from ...types import UNSET, Unset
 from typing import cast
+from typing import cast, Union
 from typing import Union
 
 
 def _get_kwargs(
+    id: int,
     *,
-    body: list[str],
-    experiment_id: Union[Unset, str] = "sms_multigeneration",
+    body: Union[None, list[str]],
     lineage_seed: Union[Unset, int] = 6,
     generation: Union[Unset, int] = 1,
     variant: Union[Unset, int] = 0,
@@ -25,8 +26,6 @@ def _get_kwargs(
     headers: dict[str, Any] = {}
 
     params: dict[str, Any] = {}
-
-    params["experiment_id"] = experiment_id
 
     params["lineage_seed"] = lineage_seed
 
@@ -40,11 +39,18 @@ def _get_kwargs(
 
     _kwargs: dict[str, Any] = {
         "method": "post",
-        "url": "/v1/ecoli/simulations/data",
+        "url": "/api/v1/simulations/{id}/data".format(
+            id=id,
+        ),
         "params": params,
     }
 
-    _kwargs["json"] = body
+    _kwargs["json"]: Union[None, list[str]]
+    if isinstance(body, list):
+        _kwargs["json"] = body
+
+    else:
+        _kwargs["json"] = body
 
     headers["Content-Type"] = "application/json"
 
@@ -80,10 +86,10 @@ def _build_response(
 
 
 def sync_detailed(
+    id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: list[str],
-    experiment_id: Union[Unset, str] = "sms_multigeneration",
+    body: Union[None, list[str]],
     lineage_seed: Union[Unset, int] = 6,
     generation: Union[Unset, int] = 1,
     variant: Union[Unset, int] = 0,
@@ -92,12 +98,12 @@ def sync_detailed(
     """Get/Stream simulation data
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'sms_multigeneration'.
+        id (int): Database ID of the simulation.
         lineage_seed (Union[Unset, int]):  Default: 6.
         generation (Union[Unset, int]):  Default: 1.
         variant (Union[Unset, int]):  Default: 0.
         agent_id (Union[Unset, int]):  Default: 0.
-        body (list[str]):
+        body (Union[None, list[str]]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -108,8 +114,8 @@ def sync_detailed(
     """
 
     kwargs = _get_kwargs(
+        id=id,
         body=body,
-        experiment_id=experiment_id,
         lineage_seed=lineage_seed,
         generation=generation,
         variant=variant,
@@ -124,10 +130,10 @@ def sync_detailed(
 
 
 def sync(
+    id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: list[str],
-    experiment_id: Union[Unset, str] = "sms_multigeneration",
+    body: Union[None, list[str]],
     lineage_seed: Union[Unset, int] = 6,
     generation: Union[Unset, int] = 1,
     variant: Union[Unset, int] = 0,
@@ -136,12 +142,12 @@ def sync(
     """Get/Stream simulation data
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'sms_multigeneration'.
+        id (int): Database ID of the simulation.
         lineage_seed (Union[Unset, int]):  Default: 6.
         generation (Union[Unset, int]):  Default: 1.
         variant (Union[Unset, int]):  Default: 0.
         agent_id (Union[Unset, int]):  Default: 0.
-        body (list[str]):
+        body (Union[None, list[str]]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -152,9 +158,9 @@ def sync(
     """
 
     return sync_detailed(
+        id=id,
         client=client,
         body=body,
-        experiment_id=experiment_id,
         lineage_seed=lineage_seed,
         generation=generation,
         variant=variant,
@@ -163,10 +169,10 @@ def sync(
 
 
 async def asyncio_detailed(
+    id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: list[str],
-    experiment_id: Union[Unset, str] = "sms_multigeneration",
+    body: Union[None, list[str]],
     lineage_seed: Union[Unset, int] = 6,
     generation: Union[Unset, int] = 1,
     variant: Union[Unset, int] = 0,
@@ -175,12 +181,12 @@ async def asyncio_detailed(
     """Get/Stream simulation data
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'sms_multigeneration'.
+        id (int): Database ID of the simulation.
         lineage_seed (Union[Unset, int]):  Default: 6.
         generation (Union[Unset, int]):  Default: 1.
         variant (Union[Unset, int]):  Default: 0.
         agent_id (Union[Unset, int]):  Default: 0.
-        body (list[str]):
+        body (Union[None, list[str]]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -191,8 +197,8 @@ async def asyncio_detailed(
     """
 
     kwargs = _get_kwargs(
+        id=id,
         body=body,
-        experiment_id=experiment_id,
         lineage_seed=lineage_seed,
         generation=generation,
         variant=variant,
@@ -205,10 +211,10 @@ async def asyncio_detailed(
 
 
 async def asyncio(
+    id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: list[str],
-    experiment_id: Union[Unset, str] = "sms_multigeneration",
+    body: Union[None, list[str]],
     lineage_seed: Union[Unset, int] = 6,
     generation: Union[Unset, int] = 1,
     variant: Union[Unset, int] = 0,
@@ -217,12 +223,12 @@ async def asyncio(
     """Get/Stream simulation data
 
     Args:
-        experiment_id (Union[Unset, str]):  Default: 'sms_multigeneration'.
+        id (int): Database ID of the simulation.
         lineage_seed (Union[Unset, int]):  Default: 6.
         generation (Union[Unset, int]):  Default: 1.
         variant (Union[Unset, int]):  Default: 0.
         agent_id (Union[Unset, int]):  Default: 0.
-        body (list[str]):
+        body (Union[None, list[str]]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -234,9 +240,9 @@ async def asyncio(
 
     return (
         await asyncio_detailed(
+            id=id,
             client=client,
             body=body,
-            experiment_id=experiment_id,
             lineage_seed=lineage_seed,
             generation=generation,
             variant=variant,

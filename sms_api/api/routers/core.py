@@ -1,32 +1,22 @@
 """
-[x] base sim (cached)
-- antibiotic
-- biomanufacturing
-- batch variant endpoint
-- design specific endpoints.
-- downsampling ...
-- biocyc id
-- api to download the data
-- marimo instead of Jupyter notebooks....(auth). ... also on gov cloud.
-- endpoint to send sql like queries to parquet files back to client
+This router relates to image builds (simulators) and parca
 """
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import Depends, HTTPException, Query
 
-# from sms_api.api.request_examples import examples
-from sms_api.common.gateway.models import RouterConfig, ServerMode
+from sms_api.api import request_examples
+from sms_api.common import handlers
+from sms_api.common.gateway.models import ServerMode
+from sms_api.common.gateway.utils import get_router_config
+from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.dependencies import (
     get_database_service,
     get_postgres_engine,
     get_simulation_service,
 )
-from sms_api.simulation import core_handlers
-from sms_api.simulation.hpc_utils import read_latest_commit
 from sms_api.simulation.models import (
-    EcoliSimulation,
-    EcoliSimulationRequest,
     HpcRun,
     JobType,
     ParcaDataset,
@@ -34,12 +24,9 @@ from sms_api.simulation.models import (
     RegisteredSimulators,
     Simulator,
     SimulatorVersion,
-    WorkerEvent,
 )
 
 logger = logging.getLogger(__name__)
-
-LATEST_COMMIT = read_latest_commit()
 
 
 def get_server_url(dev: bool = True) -> ServerMode:
@@ -51,7 +38,7 @@ def get_server_url(dev: bool = True) -> ServerMode:
 # TODO: mount nfs driver
 
 
-config = RouterConfig(router=APIRouter(), prefix="/core", dependencies=[])
+config = get_router_config(prefix="core", version_major=False)
 
 
 @config.router.get(
@@ -63,8 +50,8 @@ config = RouterConfig(router=APIRouter(), prefix="/core", dependencies=[])
     summary="Get the latest simulator version",
 )
 async def get_latest_simulator(
-    git_repo_url: str = Query(default="https://github.com/vivarium-collective/vEcoli"),
-    git_branch: str = Query(default="messages"),
+    git_repo_url: str = Query(default=DEFAULT_REPO),
+    git_branch: str = Query(default=DEFAULT_BRANCH),
 ) -> Simulator:
     hpc_service = get_simulation_service()
     if hpc_service is None:
@@ -107,7 +94,7 @@ async def get_simulator_versions() -> RegisteredSimulators:
     tags=["EcoliSim"],
     summary="Get simulator container build status by its ID",
 )
-async def get_simulator_status(simulator_id: int) -> HpcRun | None:
+async def get_simulator_status(simulator_id: int) -> HpcRun:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Simulation database service is not initialized")
@@ -138,7 +125,7 @@ async def insert_simulator_version(
     simulator: Simulator,
 ) -> SimulatorVersion:
     # verify simulator request
-    core_handlers.verify_simulator_payload(simulator)
+    handlers.simulators.verify_simulator_payload(simulator)
 
     # check parameterized service availabilities
     db_service = get_database_service()
@@ -153,7 +140,7 @@ async def insert_simulator_version(
     existing_version = await db_service.get_simulator_by_commit(simulator.git_commit_hash)
     if existing_version is None:
         try:
-            return await core_handlers.upload_simulator(
+            return await handlers.simulators.upload_simulator(
                 commit_hash=simulator.git_commit_hash,
                 git_repo_url=simulator.git_repo_url,
                 git_branch=simulator.git_branch,
@@ -174,7 +161,7 @@ async def insert_simulator_version(
     tags=["EcoliSim"],
     summary="Run a parameter calculation",
 )
-async def run_parameter_calculator(parca_request: ParcaDatasetRequest) -> ParcaDataset:
+async def run_parameter_calculator(parca_request: ParcaDatasetRequest = request_examples.base_parca) -> ParcaDataset:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Simulation database service is not initialized")
@@ -186,7 +173,7 @@ async def run_parameter_calculator(parca_request: ParcaDatasetRequest) -> ParcaD
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
 
     try:
-        return await core_handlers.run_parca(
+        return await handlers.simulations.run_parca(
             simulator=parca_request.simulator_version,
             simulation_service_slurm=sim_service,
             database_service=db_service,
@@ -216,7 +203,7 @@ async def get_parcas() -> list[ParcaDataset]:
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
 
     try:
-        return await core_handlers.get_parca_datasets(
+        return await handlers.simulations.get_parca_datasets(
             simulation_service_slurm=sim_service,
             database_service=db_service,
         )
@@ -232,7 +219,7 @@ async def get_parcas() -> list[ParcaDataset]:
     tags=["EcoliSim"],
     summary="Get parca calculation status by its ID",
 )
-async def get_parca_status(parca_id: int) -> HpcRun | None:
+async def get_parca_status(parca_id: int) -> HpcRun:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Simulation database service is not initialized")
@@ -247,124 +234,3 @@ async def get_parca_status(parca_id: int) -> HpcRun | None:
     if simulation_hpcrun is None:
         raise HTTPException(status_code=404, detail=f"Parca with id {parca_id} not found.")
     return simulation_hpcrun
-
-
-@config.router.post(
-    path="/simulation/run",
-    operation_id="run-ecolisim",
-    response_model=EcoliSimulation,
-    tags=["EcoliSim"],
-    dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-    summary="Run a vEcoli EcoliSim simulation",
-)
-async def run_simulation(sim_request: EcoliSimulationRequest) -> EcoliSimulation:
-    sim_service = get_simulation_service()
-    if sim_service is None:
-        logger.error("Simulation service is not initialized")
-        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
-    db_service = get_database_service()
-    if db_service is None:
-        logger.error("Database service is not initialized")
-        raise HTTPException(status_code=500, detail="Database service is not initialized")
-
-    try:
-        return await core_handlers.run_simulation(
-            simulator=sim_request.simulator,
-            parca_dataset_id=sim_request.parca_dataset_id,
-            database_service=db_service,
-            simulation_service_slurm=sim_service,
-            variant_config=sim_request.variant_config,
-        )
-    except Exception as e:
-        logger.exception("Error running vEcoli simulation")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/simulation/run/versions",
-    response_model=list[EcoliSimulation],
-    operation_id="get-simulation-versions",
-    tags=["EcoliSim"],
-    summary="Get list of vEcoli simulations",
-)
-async def get_simulation_versions() -> list[EcoliSimulation]:
-    db_service = get_database_service()
-    if db_service is None:
-        logger.error("Simulation database service is not initialized")
-        raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
-
-    try:
-        simulations: list[EcoliSimulation] = await db_service.list_simulations()
-        return simulations
-    except Exception as e:
-        logger.exception("Error running PARCA")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@config.router.get(
-    path="/simulation/run/status",
-    response_model=HpcRun,
-    operation_id="get-simulation-status",
-    tags=["EcoliSim"],
-    dependencies=[Depends(get_database_service)],
-    summary="Get the simulation status record by its ID",
-)
-async def get_simulation_status(
-    simulation_id: int = Query(...), num_events: int | None = Query(default=None)
-) -> HpcRun:
-    db_service = get_database_service()
-    if db_service is None:
-        logger.error("SSH service is not initialized")
-        raise HTTPException(status_code=500, detail="SSH service is not initialized")
-    # experiment_dir = Path("/home/FCAM/svc_vivarium/test/sims/experiment_96bb7a2_id_1_20250620-181422")
-    try:
-        simulation_hpcrun: HpcRun | None = await db_service.get_hpcrun_by_ref(
-            ref_id=simulation_id, job_type=JobType.SIMULATION
-        )
-    except Exception as e:
-        logger.exception(f"Error fetching simulation results for simulation id: {simulation_id}.")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-    if simulation_hpcrun is None:
-        raise HTTPException(status_code=404, detail=f"Simulation with id {simulation_id} not found.")
-    return simulation_hpcrun
-
-
-@config.router.get(
-    path="/simulation/run/events",
-    response_model=list[WorkerEvent],
-    operation_id="get-simulation-worker-events",
-    tags=["EcoliSim"],
-    dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-    summary="Get the worker events for a simulation by its ID",
-)
-async def get_simulation_worker_events(
-    simulation_id: int = Query(...),
-    num_events: int | None = Query(default=None),
-    prev_sequence_number: int | None = Query(default=None),
-) -> list[WorkerEvent]:
-    sim_service = get_simulation_service()
-    if sim_service is None:
-        logger.error("Simulation service is not initialized")
-        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
-    db_service = get_database_service()
-    if db_service is None:
-        logger.error("SSH service is not initialized")
-        raise HTTPException(status_code=500, detail="SSH service is not initialized")
-    # experiment_dir = Path("/home/FCAM/svc_vivarium/test/sims/experiment_96bb7a2_id_1_20250620-181422")
-    try:
-        simulation_hpcrun: HpcRun | None = await db_service.get_hpcrun_by_ref(
-            ref_id=simulation_id, job_type=JobType.SIMULATION
-        )
-        logger.info(f"Simulation HPC RUN: {simulation_hpcrun}")
-        if simulation_hpcrun:
-            worker_events = await db_service.list_worker_events(
-                hpcrun_id=simulation_hpcrun.database_id,
-                prev_sequence_number=prev_sequence_number,
-            )
-            return worker_events[:num_events] if num_events else worker_events
-        else:
-            return []
-    except Exception as e:
-        logger.exception(f"Error fetching simulation results for simulation id: {simulation_id}.")
-        raise HTTPException(status_code=500, detail=str(e)) from e

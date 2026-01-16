@@ -59,8 +59,8 @@ APP_ORIGINS = [
 APP_ROUTERS = [
     # "antibiotics",
     # "biofactory",
-    "core",  # original EcoliSim modular router (TODO: revamp this: it can be nicely used!)
-    "ecoli",
+    "gateway",
+    "core",
     # "inference",
     # "variants",
 ]
@@ -112,6 +112,13 @@ app.add_middleware(
     allow_headers=["*"],  # TODO: change origins back to allowed
 )
 
+# rely on core router for:
+#   - images/simulators (build, status, list)
+#   - parca (run, status, list)
+
+# rely on api router for:
+#   - simulations
+#   - analyses
 for api_name in APP_ROUTERS:
     try:
         api = importlib.import_module(f"sms_api.api.routers.{api_name}")

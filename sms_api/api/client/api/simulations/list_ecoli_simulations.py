@@ -7,14 +7,14 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response, UNSET
 from ... import errors
 
-from ...models.ecoli_simulation_dto import EcoliSimulationDTO
+from ...models.simulation import Simulation
 from typing import cast
 
 
 def _get_kwargs() -> dict[str, Any]:
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/v1/ecoli/simulations",
+        "url": "/api/v1/simulations",
     }
 
     return _kwargs
@@ -22,12 +22,12 @@ def _get_kwargs() -> dict[str, Any]:
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[list["EcoliSimulationDTO"]]:
+) -> Optional[list["Simulation"]]:
     if response.status_code == 200:
         response_200 = []
         _response_200 = response.json()
         for response_200_item_data in _response_200:
-            response_200_item = EcoliSimulationDTO.from_dict(response_200_item_data)
+            response_200_item = Simulation.from_dict(response_200_item_data)
 
             response_200.append(response_200_item)
 
@@ -40,7 +40,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[list["EcoliSimulationDTO"]]:
+) -> Response[list["Simulation"]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -52,7 +52,7 @@ def _build_response(
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[list["EcoliSimulationDTO"]]:
+) -> Response[list["Simulation"]]:
     """List all simulation specs uploaded to the database
 
     Raises:
@@ -60,7 +60,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[list['EcoliSimulationDTO']]
+        Response[list['Simulation']]
     """
 
     kwargs = _get_kwargs()
@@ -75,7 +75,7 @@ def sync_detailed(
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[list["EcoliSimulationDTO"]]:
+) -> Optional[list["Simulation"]]:
     """List all simulation specs uploaded to the database
 
     Raises:
@@ -83,7 +83,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        list['EcoliSimulationDTO']
+        list['Simulation']
     """
 
     return sync_detailed(
@@ -94,7 +94,7 @@ def sync(
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[list["EcoliSimulationDTO"]]:
+) -> Response[list["Simulation"]]:
     """List all simulation specs uploaded to the database
 
     Raises:
@@ -102,7 +102,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[list['EcoliSimulationDTO']]
+        Response[list['Simulation']]
     """
 
     kwargs = _get_kwargs()
@@ -115,7 +115,7 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[list["EcoliSimulationDTO"]]:
+) -> Optional[list["Simulation"]]:
     """List all simulation specs uploaded to the database
 
     Raises:
@@ -123,7 +123,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        list['EcoliSimulationDTO']
+        list['Simulation']
     """
 
     return (

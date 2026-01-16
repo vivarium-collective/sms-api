@@ -7,6 +7,8 @@ LOCAL_GATEWAY_PORT=8888
 POSTGRES_PORT=5432
 
 CURRENT_VERSION := $(shell uv run python -c "from sms_api import version;print(f'{version.__version__}')")
+VENV := $(shell uv run which python)
+REPO_DIR := $(shell uv run python -c "from pathlib import Path; import os; print(Path(os.getcwd()).absolute())")
 
 # "postgresql://sms:$$pw@localhost:$(port)/sms?sslmode=disable""postgresql://sms:$$pw@localhost:$(port)/sms?sslmode=disable"
 
@@ -199,29 +201,6 @@ pingdb:
 	@uri=$$(make pguri); \
 	psql $$uri
 
-.PHONY: write-latest-commit
-write-latest-commit:
-	@uv run python sms_api/latest_commit.py
-
-.PHONY: get-latest-simulator
-get-latest-simulator:
-	@latest=$$( \
-		curl -s https://api.github.com/repos/CovertLab/vEcoli/commits/master \
-		| jq -r '"\(.sha[0:7]) \(.commit.author.date)"' \
-	); \
-	echo $${latest} | awk '{print $$1}'
-
-.PHONY: latest-simulator
-latest-simulator:
-	@latest_commit=$$(make get-latest-simulator | awk '{print $1}'); \
-	latest_known=$$(cat ${LATEST_COMMIT_PATH}); \
-	if [ $$latest_commit != $$latest_known ]; then \
-		echo $$latest_commit > ${LATEST_COMMIT_PATH}; \
-	else \
-		echo "You have the latest commit."; \
-	fi; \
-	cat ${LATEST_COMMIT_PATH}
-
 .PHONY: test-mod
 testmod:
 	@uv run python -m pytest -s $(m)
@@ -302,8 +281,17 @@ api_client:
 		--path ./sms_api/api/spec/openapi_3_1_0_generated.yaml \
 		--config ./client-generator-config.yml \
 		--overwrite \
-		--output-path $(dest)
+		--output-path ./sms_api/api
+	@rm ./sms_api/api/pyproject.toml && rm ./sms_api/api/.gitignore && git restore ./sms_api/api/README.md
 
 .PHONY: ui
 ui:
 	@uv run --no-cache marimo edit app/ui/$(id).py
+
+.PHONY: e2e
+e2e:
+	@uv run --no-cache pytest tests/api/ecoli/test_simulations.py::TestRunSimulationE2E -v -s
+
+.PHONY: tui
+tui:
+	@${VENV} app/tui/agent_app.py

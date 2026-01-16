@@ -5,9 +5,11 @@ from async_lru import alru_cache
 
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
+from sms_api.common.models import JobStatus
 from sms_api.config import get_settings
+from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import JobStatus, WorkerEvent, WorkerEventMessagePayload
+from sms_api.simulation.models import WorkerEvent, WorkerEventMessagePayload
 
 logger = logging.getLogger(__name__)
 
@@ -83,24 +85,25 @@ class JobScheduler:
             await asyncio.sleep(interval_seconds)
 
     async def update_running_jobs(self) -> None:
-        # Fetch all running HpcRun jobs
-        running_jobs = await self.database_service.list_running_hpcruns()
+        # Fetch all active (PENDING or RUNNING) HpcRun jobs
+        running_jobs = await self.database_service.list_active_hpcruns()
         if not running_jobs:
-            logger.debug("No running jobs found for polling.")
+            logger.debug("No active jobs found for polling.")
             return
         job_ids = [job.slurmjobid for job in running_jobs if job.slurmjobid]
         if not job_ids:
             logger.debug("No valid slurm job IDs found in running jobs.")
             return
-        slurm_jobs_from_squeue = await self.slurm_service.get_job_status_squeue(job_ids)
-        slurm_jobs_from_sacct = await self.slurm_service.get_job_status_sacct(job_ids)
+        async with get_ssh_session_service().session() as ssh:
+            slurm_jobs_from_squeue = await self.slurm_service.get_job_status_squeue(ssh, job_ids)
+            slurm_jobs_from_sacct = await self.slurm_service.get_job_status_scontrol(ssh, job_ids)
         slurm_job_map = {job.job_id: job for job in slurm_jobs_from_squeue}
         slurm_job_map.update({job.job_id: job for job in slurm_jobs_from_sacct})
         for hpc_run in running_jobs:
             slurm_job = slurm_job_map.get(hpc_run.slurmjobid)
             if not slurm_job or not slurm_job.job_state:
                 continue
-            new_status = JobStatus(slurm_job.job_state.lower())
+            new_status = JobStatus.from_slurm_state(slurm_job.job_state)
             if new_status == hpc_run.status:
                 logger.debug(f"HpcRun {hpc_run.database_id} is still running with status {new_status}")
                 continue

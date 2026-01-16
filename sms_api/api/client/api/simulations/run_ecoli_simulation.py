@@ -7,21 +7,21 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response, UNSET
 from ... import errors
 
-from ...models.body_run_ecoli_simulation import BodyRunEcoliSimulation
-from ...models.ecoli_simulation_dto import EcoliSimulationDTO
 from ...models.http_validation_error import HTTPValidationError
+from ...models.simulation import Simulation
+from ...models.simulation_request import SimulationRequest
 from typing import cast
 
 
 def _get_kwargs(
     *,
-    body: BodyRunEcoliSimulation,
+    body: SimulationRequest,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
 
     _kwargs: dict[str, Any] = {
         "method": "post",
-        "url": "/v1/ecoli/simulations",
+        "url": "/api/v1/simulations",
     }
 
     _kwargs["json"] = body.to_dict()
@@ -34,9 +34,9 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[EcoliSimulationDTO, HTTPValidationError]]:
+) -> Optional[Union[HTTPValidationError, Simulation]]:
     if response.status_code == 200:
-        response_200 = EcoliSimulationDTO.from_dict(response.json())
+        response_200 = Simulation.from_dict(response.json())
 
         return response_200
     if response.status_code == 422:
@@ -51,7 +51,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[EcoliSimulationDTO, HTTPValidationError]]:
+) -> Response[Union[HTTPValidationError, Simulation]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -63,19 +63,21 @@ def _build_response(
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: BodyRunEcoliSimulation,
-) -> Response[Union[EcoliSimulationDTO, HTTPValidationError]]:
+    body: SimulationRequest,
+) -> Response[Union[HTTPValidationError, Simulation]]:
     """Launches a nextflow-powered vEcoli simulation workflow
 
+     Run a vEcoli simulation workflow with full configuration.
+
     Args:
-        body (BodyRunEcoliSimulation):
+        body (SimulationRequest): Used by the /simulation endpoint.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[EcoliSimulationDTO, HTTPValidationError]]
+        Response[Union[HTTPValidationError, Simulation]]
     """
 
     kwargs = _get_kwargs(
@@ -92,19 +94,21 @@ def sync_detailed(
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: BodyRunEcoliSimulation,
-) -> Optional[Union[EcoliSimulationDTO, HTTPValidationError]]:
+    body: SimulationRequest,
+) -> Optional[Union[HTTPValidationError, Simulation]]:
     """Launches a nextflow-powered vEcoli simulation workflow
 
+     Run a vEcoli simulation workflow with full configuration.
+
     Args:
-        body (BodyRunEcoliSimulation):
+        body (SimulationRequest): Used by the /simulation endpoint.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[EcoliSimulationDTO, HTTPValidationError]
+        Union[HTTPValidationError, Simulation]
     """
 
     return sync_detailed(
@@ -116,19 +120,21 @@ def sync(
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: BodyRunEcoliSimulation,
-) -> Response[Union[EcoliSimulationDTO, HTTPValidationError]]:
+    body: SimulationRequest,
+) -> Response[Union[HTTPValidationError, Simulation]]:
     """Launches a nextflow-powered vEcoli simulation workflow
 
+     Run a vEcoli simulation workflow with full configuration.
+
     Args:
-        body (BodyRunEcoliSimulation):
+        body (SimulationRequest): Used by the /simulation endpoint.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[EcoliSimulationDTO, HTTPValidationError]]
+        Response[Union[HTTPValidationError, Simulation]]
     """
 
     kwargs = _get_kwargs(
@@ -143,19 +149,21 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
-    body: BodyRunEcoliSimulation,
-) -> Optional[Union[EcoliSimulationDTO, HTTPValidationError]]:
+    body: SimulationRequest,
+) -> Optional[Union[HTTPValidationError, Simulation]]:
     """Launches a nextflow-powered vEcoli simulation workflow
 
+     Run a vEcoli simulation workflow with full configuration.
+
     Args:
-        body (BodyRunEcoliSimulation):
+        body (SimulationRequest): Used by the /simulation endpoint.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[EcoliSimulationDTO, HTTPValidationError]
+        Union[HTTPValidationError, Simulation]
     """
 
     return (

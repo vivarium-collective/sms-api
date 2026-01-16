@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fsx-pcs-root-pv
+spec:
+  capacity:
+    storage: 100Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: fsx-sc-static
+  csi:
+    driver: fsx.csi.aws.com
+    volumeHandle: fs-0d28f7302daaaebfa
+    volumeAttributes:
+      # Use IP address instead of DNS name - Lustre client requires IP for NID
+      dnsname: 10.3.33.228
+      mountname: 2jlgzamv

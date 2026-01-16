@@ -8,15 +8,12 @@ from ..types import UNSET, Unset
 
 from ..types import UNSET, Unset
 from typing import cast
+from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..models.experiment_analysis_request_multigeneration import ExperimentAnalysisRequestMultigeneration
-    from ..models.experiment_analysis_request_multiseed import ExperimentAnalysisRequestMultiseed
-    from ..models.experiment_analysis_request_single import ExperimentAnalysisRequestSingle
-    from ..models.experiment_analysis_request_multivariant import ExperimentAnalysisRequestMultivariant
-    from ..models.experiment_analysis_request_multiexperiment import ExperimentAnalysisRequestMultiexperiment
-    from ..models.experiment_analysis_request_multidaughter import ExperimentAnalysisRequestMultidaughter
+    from ..models.ptools_analysis_config import PtoolsAnalysisConfig
+    from ..models.analysis_module_config import AnalysisModuleConfig
 
 
 T = TypeVar("T", bound="ExperimentAnalysisRequest")
@@ -27,68 +24,136 @@ class ExperimentAnalysisRequest:
     """
     Attributes:
         experiment_id (str):
-        analysis_name (Union[Unset, str]):  Default: 'analysis_smsapi-103ea058fd342807_1759239346589'.
-        single (Union[Unset, ExperimentAnalysisRequestSingle]):
-        multidaughter (Union[Unset, ExperimentAnalysisRequestMultidaughter]):
-        multigeneration (Union[Unset, ExperimentAnalysisRequestMultigeneration]):
-        multiseed (Union[Unset, ExperimentAnalysisRequestMultiseed]):
-        multivariant (Union[Unset, ExperimentAnalysisRequestMultivariant]):
-        multiexperiment (Union[Unset, ExperimentAnalysisRequestMultiexperiment]):
+        single (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
+        multidaughter (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
+        multigeneration (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
+        multiseed (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
+        multivariant (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
+        multiexperiment (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
     """
 
     experiment_id: str
-    analysis_name: Union[Unset, str] = "analysis_smsapi-103ea058fd342807_1759239346589"
-    single: Union[Unset, "ExperimentAnalysisRequestSingle"] = UNSET
-    multidaughter: Union[Unset, "ExperimentAnalysisRequestMultidaughter"] = UNSET
-    multigeneration: Union[Unset, "ExperimentAnalysisRequestMultigeneration"] = UNSET
-    multiseed: Union[Unset, "ExperimentAnalysisRequestMultiseed"] = UNSET
-    multivariant: Union[Unset, "ExperimentAnalysisRequestMultivariant"] = UNSET
-    multiexperiment: Union[Unset, "ExperimentAnalysisRequestMultiexperiment"] = UNSET
+    single: Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]] = UNSET
+    multidaughter: Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]] = UNSET
+    multigeneration: Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]] = UNSET
+    multiseed: Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]] = UNSET
+    multivariant: Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]] = UNSET
+    multiexperiment: Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.experiment_analysis_request_multigeneration import ExperimentAnalysisRequestMultigeneration
-        from ..models.experiment_analysis_request_multiseed import ExperimentAnalysisRequestMultiseed
-        from ..models.experiment_analysis_request_single import ExperimentAnalysisRequestSingle
-        from ..models.experiment_analysis_request_multivariant import ExperimentAnalysisRequestMultivariant
-        from ..models.experiment_analysis_request_multiexperiment import ExperimentAnalysisRequestMultiexperiment
-        from ..models.experiment_analysis_request_multidaughter import ExperimentAnalysisRequestMultidaughter
+        from ..models.ptools_analysis_config import PtoolsAnalysisConfig
+        from ..models.analysis_module_config import AnalysisModuleConfig
 
         experiment_id = self.experiment_id
 
-        analysis_name = self.analysis_name
+        single: Union[None, Unset, list[dict[str, Any]]]
+        if isinstance(self.single, Unset):
+            single = UNSET
+        elif isinstance(self.single, list):
+            single = []
+            for single_type_0_item_data in self.single:
+                single_type_0_item: dict[str, Any]
+                if isinstance(single_type_0_item_data, AnalysisModuleConfig):
+                    single_type_0_item = single_type_0_item_data.to_dict()
+                else:
+                    single_type_0_item = single_type_0_item_data.to_dict()
 
-        single: Union[Unset, dict[str, Any]] = UNSET
-        if not isinstance(self.single, Unset):
-            single = self.single.to_dict()
+                single.append(single_type_0_item)
 
-        multidaughter: Union[Unset, dict[str, Any]] = UNSET
-        if not isinstance(self.multidaughter, Unset):
-            multidaughter = self.multidaughter.to_dict()
+        else:
+            single = self.single
 
-        multigeneration: Union[Unset, dict[str, Any]] = UNSET
-        if not isinstance(self.multigeneration, Unset):
-            multigeneration = self.multigeneration.to_dict()
+        multidaughter: Union[None, Unset, list[dict[str, Any]]]
+        if isinstance(self.multidaughter, Unset):
+            multidaughter = UNSET
+        elif isinstance(self.multidaughter, list):
+            multidaughter = []
+            for multidaughter_type_0_item_data in self.multidaughter:
+                multidaughter_type_0_item: dict[str, Any]
+                if isinstance(multidaughter_type_0_item_data, AnalysisModuleConfig):
+                    multidaughter_type_0_item = multidaughter_type_0_item_data.to_dict()
+                else:
+                    multidaughter_type_0_item = multidaughter_type_0_item_data.to_dict()
 
-        multiseed: Union[Unset, dict[str, Any]] = UNSET
-        if not isinstance(self.multiseed, Unset):
-            multiseed = self.multiseed.to_dict()
+                multidaughter.append(multidaughter_type_0_item)
 
-        multivariant: Union[Unset, dict[str, Any]] = UNSET
-        if not isinstance(self.multivariant, Unset):
-            multivariant = self.multivariant.to_dict()
+        else:
+            multidaughter = self.multidaughter
 
-        multiexperiment: Union[Unset, dict[str, Any]] = UNSET
-        if not isinstance(self.multiexperiment, Unset):
-            multiexperiment = self.multiexperiment.to_dict()
+        multigeneration: Union[None, Unset, list[dict[str, Any]]]
+        if isinstance(self.multigeneration, Unset):
+            multigeneration = UNSET
+        elif isinstance(self.multigeneration, list):
+            multigeneration = []
+            for multigeneration_type_0_item_data in self.multigeneration:
+                multigeneration_type_0_item: dict[str, Any]
+                if isinstance(multigeneration_type_0_item_data, AnalysisModuleConfig):
+                    multigeneration_type_0_item = multigeneration_type_0_item_data.to_dict()
+                else:
+                    multigeneration_type_0_item = multigeneration_type_0_item_data.to_dict()
+
+                multigeneration.append(multigeneration_type_0_item)
+
+        else:
+            multigeneration = self.multigeneration
+
+        multiseed: Union[None, Unset, list[dict[str, Any]]]
+        if isinstance(self.multiseed, Unset):
+            multiseed = UNSET
+        elif isinstance(self.multiseed, list):
+            multiseed = []
+            for multiseed_type_0_item_data in self.multiseed:
+                multiseed_type_0_item: dict[str, Any]
+                if isinstance(multiseed_type_0_item_data, AnalysisModuleConfig):
+                    multiseed_type_0_item = multiseed_type_0_item_data.to_dict()
+                else:
+                    multiseed_type_0_item = multiseed_type_0_item_data.to_dict()
+
+                multiseed.append(multiseed_type_0_item)
+
+        else:
+            multiseed = self.multiseed
+
+        multivariant: Union[None, Unset, list[dict[str, Any]]]
+        if isinstance(self.multivariant, Unset):
+            multivariant = UNSET
+        elif isinstance(self.multivariant, list):
+            multivariant = []
+            for multivariant_type_0_item_data in self.multivariant:
+                multivariant_type_0_item: dict[str, Any]
+                if isinstance(multivariant_type_0_item_data, AnalysisModuleConfig):
+                    multivariant_type_0_item = multivariant_type_0_item_data.to_dict()
+                else:
+                    multivariant_type_0_item = multivariant_type_0_item_data.to_dict()
+
+                multivariant.append(multivariant_type_0_item)
+
+        else:
+            multivariant = self.multivariant
+
+        multiexperiment: Union[None, Unset, list[dict[str, Any]]]
+        if isinstance(self.multiexperiment, Unset):
+            multiexperiment = UNSET
+        elif isinstance(self.multiexperiment, list):
+            multiexperiment = []
+            for multiexperiment_type_0_item_data in self.multiexperiment:
+                multiexperiment_type_0_item: dict[str, Any]
+                if isinstance(multiexperiment_type_0_item_data, AnalysisModuleConfig):
+                    multiexperiment_type_0_item = multiexperiment_type_0_item_data.to_dict()
+                else:
+                    multiexperiment_type_0_item = multiexperiment_type_0_item_data.to_dict()
+
+                multiexperiment.append(multiexperiment_type_0_item)
+
+        else:
+            multiexperiment = self.multiexperiment
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
             "experiment_id": experiment_id,
         })
-        if analysis_name is not UNSET:
-            field_dict["analysis_name"] = analysis_name
         if single is not UNSET:
             field_dict["single"] = single
         if multidaughter is not UNSET:
@@ -106,63 +171,266 @@ class ExperimentAnalysisRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.experiment_analysis_request_multigeneration import ExperimentAnalysisRequestMultigeneration
-        from ..models.experiment_analysis_request_multiseed import ExperimentAnalysisRequestMultiseed
-        from ..models.experiment_analysis_request_single import ExperimentAnalysisRequestSingle
-        from ..models.experiment_analysis_request_multivariant import ExperimentAnalysisRequestMultivariant
-        from ..models.experiment_analysis_request_multiexperiment import ExperimentAnalysisRequestMultiexperiment
-        from ..models.experiment_analysis_request_multidaughter import ExperimentAnalysisRequestMultidaughter
+        from ..models.ptools_analysis_config import PtoolsAnalysisConfig
+        from ..models.analysis_module_config import AnalysisModuleConfig
 
         d = dict(src_dict)
         experiment_id = d.pop("experiment_id")
 
-        analysis_name = d.pop("analysis_name", UNSET)
+        def _parse_single(
+            data: object,
+        ) -> Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, list):
+                    raise TypeError()
+                single_type_0 = []
+                _single_type_0 = data
+                for single_type_0_item_data in _single_type_0:
 
-        _single = d.pop("single", UNSET)
-        single: Union[Unset, ExperimentAnalysisRequestSingle]
-        if isinstance(_single, Unset):
-            single = UNSET
-        else:
-            single = ExperimentAnalysisRequestSingle.from_dict(_single)
+                    def _parse_single_type_0_item(
+                        data: object,
+                    ) -> Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]:
+                        try:
+                            if not isinstance(data, dict):
+                                raise TypeError()
+                            single_type_0_item_type_0 = AnalysisModuleConfig.from_dict(data)
 
-        _multidaughter = d.pop("multidaughter", UNSET)
-        multidaughter: Union[Unset, ExperimentAnalysisRequestMultidaughter]
-        if isinstance(_multidaughter, Unset):
-            multidaughter = UNSET
-        else:
-            multidaughter = ExperimentAnalysisRequestMultidaughter.from_dict(_multidaughter)
+                            return single_type_0_item_type_0
+                        except:  # noqa: E722
+                            pass
+                        if not isinstance(data, dict):
+                            raise TypeError()
+                        single_type_0_item_type_1 = PtoolsAnalysisConfig.from_dict(data)
 
-        _multigeneration = d.pop("multigeneration", UNSET)
-        multigeneration: Union[Unset, ExperimentAnalysisRequestMultigeneration]
-        if isinstance(_multigeneration, Unset):
-            multigeneration = UNSET
-        else:
-            multigeneration = ExperimentAnalysisRequestMultigeneration.from_dict(_multigeneration)
+                        return single_type_0_item_type_1
 
-        _multiseed = d.pop("multiseed", UNSET)
-        multiseed: Union[Unset, ExperimentAnalysisRequestMultiseed]
-        if isinstance(_multiseed, Unset):
-            multiseed = UNSET
-        else:
-            multiseed = ExperimentAnalysisRequestMultiseed.from_dict(_multiseed)
+                    single_type_0_item = _parse_single_type_0_item(single_type_0_item_data)
 
-        _multivariant = d.pop("multivariant", UNSET)
-        multivariant: Union[Unset, ExperimentAnalysisRequestMultivariant]
-        if isinstance(_multivariant, Unset):
-            multivariant = UNSET
-        else:
-            multivariant = ExperimentAnalysisRequestMultivariant.from_dict(_multivariant)
+                    single_type_0.append(single_type_0_item)
 
-        _multiexperiment = d.pop("multiexperiment", UNSET)
-        multiexperiment: Union[Unset, ExperimentAnalysisRequestMultiexperiment]
-        if isinstance(_multiexperiment, Unset):
-            multiexperiment = UNSET
-        else:
-            multiexperiment = ExperimentAnalysisRequestMultiexperiment.from_dict(_multiexperiment)
+                return single_type_0
+            except:  # noqa: E722
+                pass
+            return cast(Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]], data)
+
+        single = _parse_single(d.pop("single", UNSET))
+
+        def _parse_multidaughter(
+            data: object,
+        ) -> Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, list):
+                    raise TypeError()
+                multidaughter_type_0 = []
+                _multidaughter_type_0 = data
+                for multidaughter_type_0_item_data in _multidaughter_type_0:
+
+                    def _parse_multidaughter_type_0_item(
+                        data: object,
+                    ) -> Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]:
+                        try:
+                            if not isinstance(data, dict):
+                                raise TypeError()
+                            multidaughter_type_0_item_type_0 = AnalysisModuleConfig.from_dict(data)
+
+                            return multidaughter_type_0_item_type_0
+                        except:  # noqa: E722
+                            pass
+                        if not isinstance(data, dict):
+                            raise TypeError()
+                        multidaughter_type_0_item_type_1 = PtoolsAnalysisConfig.from_dict(data)
+
+                        return multidaughter_type_0_item_type_1
+
+                    multidaughter_type_0_item = _parse_multidaughter_type_0_item(multidaughter_type_0_item_data)
+
+                    multidaughter_type_0.append(multidaughter_type_0_item)
+
+                return multidaughter_type_0
+            except:  # noqa: E722
+                pass
+            return cast(Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]], data)
+
+        multidaughter = _parse_multidaughter(d.pop("multidaughter", UNSET))
+
+        def _parse_multigeneration(
+            data: object,
+        ) -> Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, list):
+                    raise TypeError()
+                multigeneration_type_0 = []
+                _multigeneration_type_0 = data
+                for multigeneration_type_0_item_data in _multigeneration_type_0:
+
+                    def _parse_multigeneration_type_0_item(
+                        data: object,
+                    ) -> Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]:
+                        try:
+                            if not isinstance(data, dict):
+                                raise TypeError()
+                            multigeneration_type_0_item_type_0 = AnalysisModuleConfig.from_dict(data)
+
+                            return multigeneration_type_0_item_type_0
+                        except:  # noqa: E722
+                            pass
+                        if not isinstance(data, dict):
+                            raise TypeError()
+                        multigeneration_type_0_item_type_1 = PtoolsAnalysisConfig.from_dict(data)
+
+                        return multigeneration_type_0_item_type_1
+
+                    multigeneration_type_0_item = _parse_multigeneration_type_0_item(multigeneration_type_0_item_data)
+
+                    multigeneration_type_0.append(multigeneration_type_0_item)
+
+                return multigeneration_type_0
+            except:  # noqa: E722
+                pass
+            return cast(Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]], data)
+
+        multigeneration = _parse_multigeneration(d.pop("multigeneration", UNSET))
+
+        def _parse_multiseed(
+            data: object,
+        ) -> Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, list):
+                    raise TypeError()
+                multiseed_type_0 = []
+                _multiseed_type_0 = data
+                for multiseed_type_0_item_data in _multiseed_type_0:
+
+                    def _parse_multiseed_type_0_item(
+                        data: object,
+                    ) -> Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]:
+                        try:
+                            if not isinstance(data, dict):
+                                raise TypeError()
+                            multiseed_type_0_item_type_0 = AnalysisModuleConfig.from_dict(data)
+
+                            return multiseed_type_0_item_type_0
+                        except:  # noqa: E722
+                            pass
+                        if not isinstance(data, dict):
+                            raise TypeError()
+                        multiseed_type_0_item_type_1 = PtoolsAnalysisConfig.from_dict(data)
+
+                        return multiseed_type_0_item_type_1
+
+                    multiseed_type_0_item = _parse_multiseed_type_0_item(multiseed_type_0_item_data)
+
+                    multiseed_type_0.append(multiseed_type_0_item)
+
+                return multiseed_type_0
+            except:  # noqa: E722
+                pass
+            return cast(Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]], data)
+
+        multiseed = _parse_multiseed(d.pop("multiseed", UNSET))
+
+        def _parse_multivariant(
+            data: object,
+        ) -> Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, list):
+                    raise TypeError()
+                multivariant_type_0 = []
+                _multivariant_type_0 = data
+                for multivariant_type_0_item_data in _multivariant_type_0:
+
+                    def _parse_multivariant_type_0_item(
+                        data: object,
+                    ) -> Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]:
+                        try:
+                            if not isinstance(data, dict):
+                                raise TypeError()
+                            multivariant_type_0_item_type_0 = AnalysisModuleConfig.from_dict(data)
+
+                            return multivariant_type_0_item_type_0
+                        except:  # noqa: E722
+                            pass
+                        if not isinstance(data, dict):
+                            raise TypeError()
+                        multivariant_type_0_item_type_1 = PtoolsAnalysisConfig.from_dict(data)
+
+                        return multivariant_type_0_item_type_1
+
+                    multivariant_type_0_item = _parse_multivariant_type_0_item(multivariant_type_0_item_data)
+
+                    multivariant_type_0.append(multivariant_type_0_item)
+
+                return multivariant_type_0
+            except:  # noqa: E722
+                pass
+            return cast(Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]], data)
+
+        multivariant = _parse_multivariant(d.pop("multivariant", UNSET))
+
+        def _parse_multiexperiment(
+            data: object,
+        ) -> Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, list):
+                    raise TypeError()
+                multiexperiment_type_0 = []
+                _multiexperiment_type_0 = data
+                for multiexperiment_type_0_item_data in _multiexperiment_type_0:
+
+                    def _parse_multiexperiment_type_0_item(
+                        data: object,
+                    ) -> Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]:
+                        try:
+                            if not isinstance(data, dict):
+                                raise TypeError()
+                            multiexperiment_type_0_item_type_0 = AnalysisModuleConfig.from_dict(data)
+
+                            return multiexperiment_type_0_item_type_0
+                        except:  # noqa: E722
+                            pass
+                        if not isinstance(data, dict):
+                            raise TypeError()
+                        multiexperiment_type_0_item_type_1 = PtoolsAnalysisConfig.from_dict(data)
+
+                        return multiexperiment_type_0_item_type_1
+
+                    multiexperiment_type_0_item = _parse_multiexperiment_type_0_item(multiexperiment_type_0_item_data)
+
+                    multiexperiment_type_0.append(multiexperiment_type_0_item)
+
+                return multiexperiment_type_0
+            except:  # noqa: E722
+                pass
+            return cast(Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]], data)
+
+        multiexperiment = _parse_multiexperiment(d.pop("multiexperiment", UNSET))
 
         experiment_analysis_request = cls(
             experiment_id=experiment_id,
-            analysis_name=analysis_name,
             single=single,
             multidaughter=multidaughter,
             multigeneration=multigeneration,

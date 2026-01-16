@@ -24,7 +24,7 @@ def _get_kwargs(
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/core/simulator/status",
+        "url": "/core/v1/simulator/status",
         "params": params,
     }
 

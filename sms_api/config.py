@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     slurm_log_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
     slurm_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
 
+    # Apptainer/Singularity temp directory for container builds
+    # Use local SSD/NVMe (/tmp) for builds with many small files (faster metadata ops)
+    # FSx Lustre has high latency for small file operations and can cause build timeouts
+    apptainer_tmpdir: str = "/tmp/apptainer"  # noqa: S108 Intentional use of /tmp for fast metadata ops
+
     hpc_image_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
     hpc_parca_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
     hpc_repo_base_path: HPCFilePath = HPCFilePath(remote_path=Path(""))
@@ -123,6 +128,11 @@ class Settings(BaseSettings):
     analysis_outdir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     vecoli_config_dir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     cache_dir: str = f"{REPO_ROOT}/.results_cache"
+
+    # Path prefix mapping for local vs remote (HPC) filesystem access
+    # Example: path_local_prefix=/Volumes/SMS, path_remote_prefix=/projects/SMS
+    path_local_prefix: str = ""
+    path_remote_prefix: str = ""
 
 
 @lru_cache

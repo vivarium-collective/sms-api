@@ -17,7 +17,7 @@ class SimulationRun:
     """
     Attributes:
         id (int):
-        status (JobStatus):
+        status (JobStatus): Shared job status enum for simulations, analyses, and other HPC jobs.
     """
 
     id: int

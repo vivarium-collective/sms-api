@@ -13,8 +13,10 @@ from sms_api.api.client.models import HpcRun, HTTPValidationError, RegisteredSim
 from sms_api.api.client.models.simulator import Simulator as SimulatorDto
 from sms_api.api.client.models.simulator_version import SimulatorVersion as SimulatorVersionDto
 from sms_api.api.client.types import UNSET
+from sms_api.common.handlers.simulators import RepoUrl, verify_simulator_payload
+from sms_api.common.models import JobStatus
 from sms_api.simulation.database_service import DatabaseServiceSQL
-from sms_api.simulation.models import JobStatus, JobType, SimulatorVersion
+from sms_api.simulation.models import JobType, Simulator, SimulatorVersion
 from tests.fixtures.simulation_service_mocks import SimulationServiceMockCloneAndBuild
 
 
@@ -84,3 +86,69 @@ async def test_insert_simulator_version(
     # cleanup database entries
     await database_service.delete_hpcrun(hpcrun_id=image_build_hpcrun.database_id)
     await database_service.delete_simulator(simulator_id=returned_simulator_version.database_id)
+
+
+def make_simulator(repo_url: str, branch: str) -> Simulator:
+    return Simulator(
+        git_commit_hash="1111223",
+        git_repo_url=repo_url,
+        git_branch=branch,
+    )
+
+
+@pytest.mark.parametrize(
+    "repo_url,branch",
+    [
+        (RepoUrl.VECOLI_FORK_REPO_URL, "messages"),
+        (RepoUrl.VECOLI_FORK_REPO_URL, "ccam-nextflow"),
+        (RepoUrl.VECOLI_FORK_REPO_URL, "master"),
+        (RepoUrl.VECOLI_PUBLIC_REPO_URL, "master"),
+        (RepoUrl.VECOLI_PUBLIC_REPO_URL, "ptools_viz"),
+    ],
+)
+def test_verify_simulator_payload_valid(repo_url: str, branch: str) -> None:
+    simulator = make_simulator(repo_url, branch)
+
+    # Should not raise
+    verify_simulator_payload(simulator)
+
+
+@pytest.mark.parametrize(
+    "repo_url,branch,expected_branches",
+    [
+        (
+            RepoUrl.VECOLI_FORK_REPO_URL,
+            "dev",
+            ["messages", "ccam-nextflow", "master", "api-support"],
+        ),
+        (
+            RepoUrl.VECOLI_PUBLIC_REPO_URL,
+            "feature-x",
+            ["master", "ptools_viz"],
+        ),
+    ],
+)
+def test_verify_simulator_payload_invalid_branch(repo_url: str, branch: str, expected_branches: list[str]) -> None:
+    simulator = make_simulator(repo_url, branch)
+
+    with pytest.raises(ValueError) as excinfo:
+        verify_simulator_payload(simulator)
+
+    msg = str(excinfo.value)
+    assert branch in msg
+    assert str(repo_url) in msg
+    for b in expected_branches:
+        assert b in msg
+
+
+def test_verify_simulator_payload_unmatched_repo_url() -> None:
+    """
+    RepoUrl.VECOLI_PRIVATE_REPO_URL is not matched in the `match` statement,
+    so verification should silently pass.
+    """
+    simulator = make_simulator(
+        RepoUrl.VECOLI_PRIVATE_REPO_URL,
+        "any-branch",
+    )
+
+    verify_simulator_payload(simulator)

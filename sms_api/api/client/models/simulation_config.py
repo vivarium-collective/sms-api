@@ -12,16 +12,16 @@ from typing import cast, Union
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..models.simulation_config_topology import SimulationConfigTopology
-    from ..models.simulation_config_variants import SimulationConfigVariants
     from ..models.simulation_config_spatial_environment_config import SimulationConfigSpatialEnvironmentConfig
-    from ..models.simulation_config_initial_state import SimulationConfigInitialState
-    from ..models.simulation_config_analysis_options import SimulationConfigAnalysisOptions
-    from ..models.simulation_config_flow import SimulationConfigFlow
-    from ..models.simulation_config_parca_options import SimulationConfigParcaOptions
-    from ..models.simulation_config_process_configs import SimulationConfigProcessConfigs
+    from ..models.simulation_config_topology import SimulationConfigTopology
+    from ..models.analysis_options import AnalysisOptions
     from ..models.simulation_config_swap_processes import SimulationConfigSwapProcesses
+    from ..models.simulation_config_variants import SimulationConfigVariants
+    from ..models.simulation_config_process_configs import SimulationConfigProcessConfigs
+    from ..models.simulation_config_initial_state import SimulationConfigInitialState
     from ..models.simulation_config_emitter_arg import SimulationConfigEmitterArg
+    from ..models.simulation_config_flow import SimulationConfigFlow
+    from ..models.parca_options import ParcaOptions
 
 
 T = TypeVar("T", bound="SimulationConfig")
@@ -32,11 +32,12 @@ class SimulationConfig:
     """
     Attributes:
         experiment_id (str):
+        parca_options (Union[Unset, ParcaOptions]):
+        analysis_options (Union[Unset, AnalysisOptions]):
         sim_data_path (Union[None, Unset, str]):
         suffix_time (Union[Unset, bool]):  Default: False.
-        parca_options (Union[Unset, SimulationConfigParcaOptions]):
         generations (Union[Unset, int]):  Default: 1.
-        n_init_sims (Union[None, Unset, int]):
+        n_init_sims (Union[Unset, int]):  Default: 1.
         max_duration (Union[Unset, float]):  Default: 10800.0.
         initial_global_time (Union[Unset, float]):  Default: 0.0.
         time_step (Union[Unset, float]):  Default: 1.0.
@@ -44,7 +45,6 @@ class SimulationConfig:
         emitter (Union[Unset, str]):  Default: 'parquet'.
         emitter_arg (Union[Unset, SimulationConfigEmitterArg]):
         variants (Union[Unset, SimulationConfigVariants]):
-        analysis_options (Union[Unset, SimulationConfigAnalysisOptions]):
         gcloud (Union[None, Unset, str]):
         agent_id (Union[None, Unset, str]):
         parallel (Union[None, Unset, bool]):
@@ -91,11 +91,12 @@ class SimulationConfig:
     """
 
     experiment_id: str
+    parca_options: Union[Unset, "ParcaOptions"] = UNSET
+    analysis_options: Union[Unset, "AnalysisOptions"] = UNSET
     sim_data_path: Union[None, Unset, str] = UNSET
     suffix_time: Union[Unset, bool] = False
-    parca_options: Union[Unset, "SimulationConfigParcaOptions"] = UNSET
     generations: Union[Unset, int] = 1
-    n_init_sims: Union[None, Unset, int] = UNSET
+    n_init_sims: Union[Unset, int] = 1
     max_duration: Union[Unset, float] = 10800.0
     initial_global_time: Union[Unset, float] = 0.0
     time_step: Union[Unset, float] = 1.0
@@ -103,7 +104,6 @@ class SimulationConfig:
     emitter: Union[Unset, str] = "parquet"
     emitter_arg: Union[Unset, "SimulationConfigEmitterArg"] = UNSET
     variants: Union[Unset, "SimulationConfigVariants"] = UNSET
-    analysis_options: Union[Unset, "SimulationConfigAnalysisOptions"] = UNSET
     gcloud: Union[None, Unset, str] = UNSET
     agent_id: Union[None, Unset, str] = UNSET
     parallel: Union[None, Unset, bool] = UNSET
@@ -150,18 +150,26 @@ class SimulationConfig:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.simulation_config_topology import SimulationConfigTopology
-        from ..models.simulation_config_variants import SimulationConfigVariants
         from ..models.simulation_config_spatial_environment_config import SimulationConfigSpatialEnvironmentConfig
-        from ..models.simulation_config_initial_state import SimulationConfigInitialState
-        from ..models.simulation_config_analysis_options import SimulationConfigAnalysisOptions
-        from ..models.simulation_config_flow import SimulationConfigFlow
-        from ..models.simulation_config_parca_options import SimulationConfigParcaOptions
-        from ..models.simulation_config_process_configs import SimulationConfigProcessConfigs
+        from ..models.simulation_config_topology import SimulationConfigTopology
+        from ..models.analysis_options import AnalysisOptions
         from ..models.simulation_config_swap_processes import SimulationConfigSwapProcesses
+        from ..models.simulation_config_variants import SimulationConfigVariants
+        from ..models.simulation_config_process_configs import SimulationConfigProcessConfigs
+        from ..models.simulation_config_initial_state import SimulationConfigInitialState
         from ..models.simulation_config_emitter_arg import SimulationConfigEmitterArg
+        from ..models.simulation_config_flow import SimulationConfigFlow
+        from ..models.parca_options import ParcaOptions
 
         experiment_id = self.experiment_id
+
+        parca_options: Union[Unset, dict[str, Any]] = UNSET
+        if not isinstance(self.parca_options, Unset):
+            parca_options = self.parca_options.to_dict()
+
+        analysis_options: Union[Unset, dict[str, Any]] = UNSET
+        if not isinstance(self.analysis_options, Unset):
+            analysis_options = self.analysis_options.to_dict()
 
         sim_data_path: Union[None, Unset, str]
         if isinstance(self.sim_data_path, Unset):
@@ -171,17 +179,9 @@ class SimulationConfig:
 
         suffix_time = self.suffix_time
 
-        parca_options: Union[Unset, dict[str, Any]] = UNSET
-        if not isinstance(self.parca_options, Unset):
-            parca_options = self.parca_options.to_dict()
-
         generations = self.generations
 
-        n_init_sims: Union[None, Unset, int]
-        if isinstance(self.n_init_sims, Unset):
-            n_init_sims = UNSET
-        else:
-            n_init_sims = self.n_init_sims
+        n_init_sims = self.n_init_sims
 
         max_duration = self.max_duration
 
@@ -200,10 +200,6 @@ class SimulationConfig:
         variants: Union[Unset, dict[str, Any]] = UNSET
         if not isinstance(self.variants, Unset):
             variants = self.variants.to_dict()
-
-        analysis_options: Union[Unset, dict[str, Any]] = UNSET
-        if not isinstance(self.analysis_options, Unset):
-            analysis_options = self.analysis_options.to_dict()
 
         gcloud: Union[None, Unset, str]
         if isinstance(self.gcloud, Unset):
@@ -445,12 +441,14 @@ class SimulationConfig:
         field_dict.update({
             "experiment_id": experiment_id,
         })
+        if parca_options is not UNSET:
+            field_dict["parca_options"] = parca_options
+        if analysis_options is not UNSET:
+            field_dict["analysis_options"] = analysis_options
         if sim_data_path is not UNSET:
             field_dict["sim_data_path"] = sim_data_path
         if suffix_time is not UNSET:
             field_dict["suffix_time"] = suffix_time
-        if parca_options is not UNSET:
-            field_dict["parca_options"] = parca_options
         if generations is not UNSET:
             field_dict["generations"] = generations
         if n_init_sims is not UNSET:
@@ -469,8 +467,6 @@ class SimulationConfig:
             field_dict["emitter_arg"] = emitter_arg
         if variants is not UNSET:
             field_dict["variants"] = variants
-        if analysis_options is not UNSET:
-            field_dict["analysis_options"] = analysis_options
         if gcloud is not UNSET:
             field_dict["gcloud"] = gcloud
         if agent_id is not UNSET:
@@ -562,19 +558,33 @@ class SimulationConfig:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.simulation_config_topology import SimulationConfigTopology
-        from ..models.simulation_config_variants import SimulationConfigVariants
         from ..models.simulation_config_spatial_environment_config import SimulationConfigSpatialEnvironmentConfig
-        from ..models.simulation_config_initial_state import SimulationConfigInitialState
-        from ..models.simulation_config_analysis_options import SimulationConfigAnalysisOptions
-        from ..models.simulation_config_flow import SimulationConfigFlow
-        from ..models.simulation_config_parca_options import SimulationConfigParcaOptions
-        from ..models.simulation_config_process_configs import SimulationConfigProcessConfigs
+        from ..models.simulation_config_topology import SimulationConfigTopology
+        from ..models.analysis_options import AnalysisOptions
         from ..models.simulation_config_swap_processes import SimulationConfigSwapProcesses
+        from ..models.simulation_config_variants import SimulationConfigVariants
+        from ..models.simulation_config_process_configs import SimulationConfigProcessConfigs
+        from ..models.simulation_config_initial_state import SimulationConfigInitialState
         from ..models.simulation_config_emitter_arg import SimulationConfigEmitterArg
+        from ..models.simulation_config_flow import SimulationConfigFlow
+        from ..models.parca_options import ParcaOptions
 
         d = dict(src_dict)
         experiment_id = d.pop("experiment_id")
+
+        _parca_options = d.pop("parca_options", UNSET)
+        parca_options: Union[Unset, ParcaOptions]
+        if isinstance(_parca_options, Unset):
+            parca_options = UNSET
+        else:
+            parca_options = ParcaOptions.from_dict(_parca_options)
+
+        _analysis_options = d.pop("analysis_options", UNSET)
+        analysis_options: Union[Unset, AnalysisOptions]
+        if isinstance(_analysis_options, Unset):
+            analysis_options = UNSET
+        else:
+            analysis_options = AnalysisOptions.from_dict(_analysis_options)
 
         def _parse_sim_data_path(data: object) -> Union[None, Unset, str]:
             if data is None:
@@ -587,23 +597,9 @@ class SimulationConfig:
 
         suffix_time = d.pop("suffix_time", UNSET)
 
-        _parca_options = d.pop("parca_options", UNSET)
-        parca_options: Union[Unset, SimulationConfigParcaOptions]
-        if isinstance(_parca_options, Unset):
-            parca_options = UNSET
-        else:
-            parca_options = SimulationConfigParcaOptions.from_dict(_parca_options)
-
         generations = d.pop("generations", UNSET)
 
-        def _parse_n_init_sims(data: object) -> Union[None, Unset, int]:
-            if data is None:
-                return data
-            if isinstance(data, Unset):
-                return data
-            return cast(Union[None, Unset, int], data)
-
-        n_init_sims = _parse_n_init_sims(d.pop("n_init_sims", UNSET))
+        n_init_sims = d.pop("n_init_sims", UNSET)
 
         max_duration = d.pop("max_duration", UNSET)
 
@@ -628,13 +624,6 @@ class SimulationConfig:
             variants = UNSET
         else:
             variants = SimulationConfigVariants.from_dict(_variants)
-
-        _analysis_options = d.pop("analysis_options", UNSET)
-        analysis_options: Union[Unset, SimulationConfigAnalysisOptions]
-        if isinstance(_analysis_options, Unset):
-            analysis_options = UNSET
-        else:
-            analysis_options = SimulationConfigAnalysisOptions.from_dict(_analysis_options)
 
         def _parse_gcloud(data: object) -> Union[None, Unset, str]:
             if data is None:
@@ -963,9 +952,10 @@ class SimulationConfig:
 
         simulation_config = cls(
             experiment_id=experiment_id,
+            parca_options=parca_options,
+            analysis_options=analysis_options,
             sim_data_path=sim_data_path,
             suffix_time=suffix_time,
-            parca_options=parca_options,
             generations=generations,
             n_init_sims=n_init_sims,
             max_duration=max_duration,
@@ -975,7 +965,6 @@ class SimulationConfig:
             emitter=emitter,
             emitter_arg=emitter_arg,
             variants=variants,
-            analysis_options=analysis_options,
             gcloud=gcloud,
             agent_id=agent_id,
             parallel=parallel,

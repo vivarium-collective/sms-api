@@ -6,7 +6,7 @@ from typing import Any, ParamSpec, TypeVar
 from pydantic import BaseModel, ConfigDict, Field
 
 from sms_api.common import StrEnumBase
-from sms_api.common.models import DataId
+from sms_api.common.models import DataId, JobStatus
 from sms_api.config import Settings, get_settings
 
 MAX_ANALYSIS_CPUS = 3
@@ -129,7 +129,8 @@ class AnalysisConfig(BaseModel):
 
     @classmethod
     def from_request(cls, request: "ExperimentAnalysisRequest", analysis_name: str) -> "AnalysisConfig":
-        output_dir = pathlib.Path(f"/home/FCAM/svc_vivarium/workspace/api_outputs/{request.experiment_id}")
+        simulation_outdir = get_settings().simulation_outdir
+        output_dir = simulation_outdir.remote_path / request.experiment_id
 
         options = AnalysisConfigOptions(
             experiment_id=[request.experiment_id],
@@ -220,17 +221,30 @@ class ExperimentAnalysisDTO(BaseModel):
     job_id: int | None = None
 
 
-class JobStatus(StrEnumBase):
-    WAITING = "waiting"
-    QUEUED = "queued"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
 class AnalysisRun(BaseModel):
     id: int
     status: JobStatus
+    job_id: int | None = None
+    error_log: str | None = None
+
+
+class AnalysisJobFailedException(Exception):
+    """Exception raised when an analysis SLURM job fails."""
+
+    def __init__(self, run: AnalysisRun, message: str | None = None):
+        self.run = run
+        self.message = message or f"Analysis job {run.job_id} failed with status: {run.status}"
+        super().__init__(self.message)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "error": "analysis_job_failed",
+            "message": self.message,
+            "job_id": self.run.job_id,
+            "database_id": self.run.id,
+            "status": str(self.run.status),
+            "error_log": self.run.error_log,
+        }
 
 
 class AnalysisStatus(BaseModel):

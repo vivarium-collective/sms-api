@@ -1,8 +1,4 @@
-import datetime
-import json
-import warnings
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 from fastapi import APIRouter
@@ -16,14 +12,13 @@ from sms_api.analysis.models import (
 from sms_api.common.gateway.models import RouterConfig
 from sms_api.common.utils import get_data_id
 from sms_api.config import get_settings
-from sms_api.simulation.models import SimulatorVersion
 
 REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
 PINNED_OUTDIR = REPO_DIR / "out" / "sms_single"
 CURRENT_API_VERSION = "v1"
 
 
-def router_config(prefix: str, api_version: str | None = None, version_major: bool = True) -> RouterConfig:
+def get_router_config(prefix: str, api_version: str | None = None, version_major: bool = True) -> RouterConfig:
     version = f"/{api_version or CURRENT_API_VERSION}"
     pref = f"/{prefix}"
     config = (
@@ -47,45 +42,8 @@ def format_marimo_appname(appname: str) -> str:
 
 
 def get_remote_outdir(experiment_id: str) -> Path:
-    return Path(f"/home/FCAM/svc_vivarium/{get_settings().namespace}/sims/{experiment_id}")
-
-
-def write_remote_config(
-    config: dict[str, Any] | str | Any,
-    fname: str,
-    simulator_hash: str | None = None,
-    **overrides: Any,
-) -> tuple[int, Path | None]:
-    if isinstance(config, str):
-        config = json.loads(config)
-    if simulator_hash is None:
-        saved_latest = Path("assets/simulation/model/latest_commit.txt")
-        try:
-            with open(str(saved_latest)) as f:
-                simulator_hash = f.readline().strip()
-        except FileNotFoundError as e:
-            warnings.warn(f"The hardcoded file doesnt exist in this repo: {e}", stacklevel=2)
-            return (1, None)
-    fpath = Path(f"/home/FCAM/svc_vivarium/prod/repos/{simulator_hash}/vEcoli/configs/{fname}.json")
-    if overrides:
-        config.update(overrides)
-    with open(fpath, "w") as f:
-        json.dump(config, f, indent=1)
-    return (0, fpath)
-
-
-def get_simulator() -> SimulatorVersion:
-    return SimulatorVersion(
-        git_commit_hash="079c43c",
-        git_repo_url="https://github.com/CovertLab/vEcoli",
-        git_branch="master",
-        database_id=2,
-        created_at=datetime.datetime.fromisoformat("2025-08-26T00:49:30"),
-    )
-
-
-def slurmjob_name_prefix() -> str:
-    return f"sms-{get_simulator().git_commit_hash}"
+    """Return remote path for experiment output directory (for SSH commands)."""
+    return get_settings().hpc_sim_base_path.remote_path / experiment_id
 
 
 def missing_experiment_error(exp_id: str) -> None:

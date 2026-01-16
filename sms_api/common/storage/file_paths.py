@@ -7,13 +7,62 @@ class HPCFilePath(BaseModel):
     """Represents a file path on the HPC remote system.
 
     Configuration via JSON in .env files:
-        HPC_IMAGE_BASE_PATH={"remote_path": "/home/FCAM/svc_vivarium/test/images"}
+        HPC_IMAGE_BASE_PATH={"remote_path": "/projects/SMS/api/dev/images"}
+
+    Path translation is configured via settings:
+        path_local_prefix: Local mount prefix (e.g., /Volumes/SMS)
+        path_remote_prefix: Remote HPC prefix (e.g., /projects/SMS)
+
+    Usage:
+        # For SSH commands - use str() or remote_path
+        ssh.run_command(f"ls {path}")
+
+        # For local file access - use local_path()
+        with open(path.local_path() / "file.txt") as f: ...
     """
 
     remote_path: Path
 
     def __str__(self) -> str:
+        """Return remote path string (for SSH commands)."""
         return str(self.remote_path)
+
+    def local_path(self) -> Path:
+        """Return pathlib.Path for local filesystem access.
+
+        Translates remote_path using path_local_prefix and path_remote_prefix
+        from settings.
+
+        Raises:
+            ValueError: If path_local_prefix or path_remote_prefix are not configured.
+
+        Returns:
+            Path: The translated local path for filesystem access.
+        """
+        from sms_api.config import get_settings
+
+        settings = get_settings()
+        local_prefix = settings.path_local_prefix
+        remote_prefix = settings.path_remote_prefix
+
+        if not local_prefix or not remote_prefix:
+            raise ValueError(
+                "path_local_prefix and path_remote_prefix must be configured in settings "
+                "to use local_path(). Set these in your .env file."
+            )
+
+        # If prefixes are the same, no translation needed
+        if local_prefix == remote_prefix:
+            return self.remote_path
+
+        # Translate: swap remote_prefix for local_prefix
+        try:
+            rel = self.remote_path.relative_to(remote_prefix)
+            return Path(local_prefix) / rel
+        except ValueError:
+            # Path doesn't start with remote_prefix - return as-is
+            # This handles cases where the path is already local or uses a different base
+            return self.remote_path
 
     @property
     def parent(self) -> "HPCFilePath":

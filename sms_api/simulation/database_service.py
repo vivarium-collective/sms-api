@@ -1,7 +1,6 @@
 import datetime
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
 
 from sqlalchemy import Result, and_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -10,15 +9,17 @@ from typing_extensions import override
 
 from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.common.models import JobStatus
+from sms_api.config import get_settings
 from sms_api.simulation.models import (
-    EcoliSimulation,
-    EcoliSimulationDTO,
-    EcoliSimulationRequest,
     HpcRun,
     JobType,
     ParcaDataset,
     ParcaDatasetRequest,
+    ParcaOptions,
+    Simulation,
     SimulationConfig,
+    SimulationRequest,
     SimulatorVersion,
     WorkerEvent,
 )
@@ -26,7 +27,6 @@ from sms_api.simulation.tables_orm import (
     JobStatusDB,
     JobTypeDB,
     ORMAnalysis,
-    ORMExperiment,
     ORMHpcRun,
     ORMParcaDataset,
     ORMSimulation,
@@ -38,34 +38,6 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseService(ABC):
-    @abstractmethod
-    async def insert_ecoli_simulation(
-        self,
-        name: str,
-        config: SimulationConfig,
-        last_updated: str,
-        job_name: str,
-        job_id: int,
-        metadata: dict[str, Any],
-    ) -> EcoliSimulationDTO:
-        """Used by the /ecoli router"""
-        pass
-
-    @abstractmethod
-    async def get_ecoli_simulation(self, database_id: int) -> EcoliSimulationDTO:
-        """Used by the /ecoli router"""
-        pass
-
-    @abstractmethod
-    async def delete_ecoli_simulation(self, database_id: int) -> None:
-        """Used by the /ecoli router"""
-        pass
-
-    @abstractmethod
-    async def list_ecoli_simulations(self) -> list[EcoliSimulationDTO]:
-        """Used by the /ecoli router"""
-        pass
-
     @abstractmethod
     async def insert_analysis(
         self, name: str, config: AnalysisConfig, last_updated: str, job_name: str, job_id: int
@@ -160,11 +132,16 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def insert_simulation(self, sim_request: EcoliSimulationRequest) -> EcoliSimulation:
+    async def insert_simulation(self, sim_request: SimulationRequest) -> Simulation:
         pass
 
     @abstractmethod
-    async def get_simulation(self, simulation_id: int) -> EcoliSimulation | None:
+    async def get_simulation(self, simulation_id: int) -> Simulation | None:
+        pass
+
+    @abstractmethod
+    async def get_simulation_by_experiment_id(self, experiment_id: str) -> Simulation | None:
+        """Look up a simulation by its experiment_id (stored in config JSON)."""
         pass
 
     @abstractmethod
@@ -172,12 +149,12 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def list_simulations(self) -> list[EcoliSimulation]:
+    async def list_simulations(self) -> list[Simulation]:
         pass
 
     @abstractmethod
-    async def list_running_hpcruns(self) -> list[HpcRun]:
-        """Return all HpcRun jobs with status RUNNING."""
+    async def list_active_hpcruns(self) -> list[HpcRun]:
+        """Return all HpcRun jobs with status PENDING or RUNNING."""
         pass
 
     @abstractmethod
@@ -226,7 +203,7 @@ class DatabaseServiceSQL(DatabaseService):
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
         return orm_hpc_job
 
-    def _get_job_type_ref(self, job_type: JobType) -> InstrumentedAttribute[int | None]:
+    def _get_job_type_ref(self, job_type: JobType) -> InstrumentedAttribute[int | None] | None:
         match job_type:
             case JobType.BUILD_IMAGE:
                 return ORMHpcRun.jobref_simulator_id
@@ -234,10 +211,11 @@ class DatabaseServiceSQL(DatabaseService):
                 return ORMHpcRun.jobref_parca_dataset_id
             case JobType.SIMULATION:
                 return ORMHpcRun.jobref_simulation_id
+        return None
 
     async def _get_orm_hpcrun_by_ref(self, session: AsyncSession, ref_id: int, job_type: JobType) -> ORMHpcRun | None:
         reference = self._get_job_type_ref(job_type)
-        stmt1 = select(ORMHpcRun).where(reference == ref_id).limit(1)
+        stmt1 = select(ORMHpcRun).where(reference == ref_id).limit(1)  # type: ignore[arg-type]
         result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
 
@@ -250,78 +228,13 @@ class DatabaseServiceSQL(DatabaseService):
         orm_experiment: ORMAnalysis | None = result1.scalars().one_or_none()
         return orm_experiment
 
-    async def _get_orm_ecoli_experiment(self, session: AsyncSession, database_id: int) -> ORMExperiment | None:
-        """Used by the /ecoli router"""
-        stmt1 = select(ORMExperiment).where(ORMExperiment.id == database_id).limit(1)
-        result1: Result[tuple[ORMExperiment]] = await session.execute(stmt1)
-        orm_experiment: ORMExperiment | None = result1.scalars().one_or_none()
-        return orm_experiment
-
-    @override
-    async def insert_ecoli_simulation(
-        self,
-        name: str,
-        config: SimulationConfig,
-        last_updated: str,
-        job_name: str,
-        job_id: int,
-        metadata: dict[str, Any],
-    ) -> EcoliSimulationDTO:
-        """Used by the /ecoli router"""
-        async with self.async_sessionmaker() as session, session.begin():
-            config.emitter_arg["out_dir"] = "/home/FCAM/svc_vivarium/workspace/api_outputs"
-            orm_experiment = ORMExperiment(
-                name=name,
-                config=config.model_dump(),
-                last_updated=last_updated,
-                job_name=job_name,
-                job_id=job_id,
-                experiment_metadata=metadata,
-            )
-            session.add(orm_experiment)
-            await session.flush()
-            return orm_experiment.to_dto()
-
-    @override
-    async def get_ecoli_simulation(self, database_id: int) -> EcoliSimulationDTO:
-        """Used by the /ecoli router"""
-        async with self.async_sessionmaker() as session, session.begin():
-            orm_experiment = await self._get_orm_ecoli_experiment(session, database_id=database_id)
-            if orm_experiment is None:
-                raise RuntimeError(f"Experiment {database_id} not found")
-            return orm_experiment.to_dto()
-
-    @override
-    async def delete_ecoli_simulation(self, database_id: int) -> None:
-        """Used to remove simulations created by the /ecoli router"""
-        async with self.async_sessionmaker() as session, session.begin():
-            orm_experiment: ORMExperiment | None = await self._get_orm_ecoli_experiment(
-                session, database_id=database_id
-            )
-            if orm_experiment is None:
-                raise Exception(f"Experiment with id {database_id} not found in the database")
-            await session.delete(orm_experiment)
-
-    @override
-    async def list_ecoli_simulations(self) -> list[EcoliSimulationDTO]:
-        """Used by the /ecoli router"""
-        async with self.async_sessionmaker() as session:
-            stmt = select(ORMExperiment)
-            result: Result[tuple[ORMExperiment]] = await session.execute(stmt)
-            orm_analyses = result.scalars().all()
-
-            versions: list[EcoliSimulationDTO] = []
-            for experiment in orm_analyses:
-                versions.append(experiment.to_dto())
-            return versions
-
     @override
     async def insert_analysis(
         self, name: str, config: AnalysisConfig, last_updated: str, job_name: str, job_id: int
     ) -> ExperimentAnalysisDTO:
         """Used by the /ecoli router"""
         async with self.async_sessionmaker() as session, session.begin():
-            config.emitter_arg["out_dir"] = "/home/FCAM/svc_vivarium/workspace/api_outputs"
+            config.emitter_arg["out_dir"] = str(get_settings().simulation_outdir)
             orm_analysis = ORMAnalysis(
                 name=name, config=config.model_dump(), last_updated=last_updated, job_name=job_name, job_id=job_id
             )
@@ -497,7 +410,8 @@ class DatabaseServiceSQL(DatabaseService):
             result1: Result[tuple[ORMParcaDataset]] = await session.execute(stmt1)
             existing_orm_parca_dataset: ORMParcaDataset | None = result1.scalars().one_or_none()
             if existing_orm_parca_dataset is not None:
-                raise RuntimeError("Parca Dataset with the same configuration already exists in the database")
+                logger.info("Parca Dataset with the same configuration already exists in the database")
+                return await self.get_parca_dataset(existing_orm_parca_dataset.id)  # type: ignore[return-value]
 
             # did not find the parca dataset, so insert it
             orm_simulator: ORMSimulator | None = await self._get_orm_simulator(session, simulator_id=simulator_id)
@@ -505,7 +419,7 @@ class DatabaseServiceSQL(DatabaseService):
                 raise Exception(f"Simulator with id {simulator_id} not found in the database")
             orm_parca_dataset = ORMParcaDataset(
                 simulator_id=orm_simulator.id,
-                parca_config=parca_dataset_request.parca_config,
+                parca_config=parca_dataset_request.parca_config.model_dump(),
                 parca_config_hash=parca_dataset_request.config_hash,
             )
             session.add(orm_parca_dataset)
@@ -521,7 +435,7 @@ class DatabaseServiceSQL(DatabaseService):
             )
             parca_dataset_request = ParcaDatasetRequest(
                 simulator_version=simulator_version,
-                parca_config=orm_parca_dataset.parca_config,
+                parca_config=ParcaOptions(**orm_parca_dataset.parca_config),  # type: ignore[arg-type]
             )
             parca_dataset = ParcaDataset(
                 database_id=orm_parca_dataset_id,
@@ -547,7 +461,7 @@ class DatabaseServiceSQL(DatabaseService):
                 database_id=orm_parca_dataset.id,
                 parca_dataset_request=ParcaDatasetRequest(
                     simulator_version=simulator_version,
-                    parca_config=orm_parca_dataset.parca_config,
+                    parca_config=ParcaOptions(**orm_parca_dataset.parca_config),  # type: ignore[arg-type]
                 ),
                 remote_archive_path=orm_parca_dataset.remote_archive_path,
             )
@@ -579,7 +493,7 @@ class DatabaseServiceSQL(DatabaseService):
                         database_id=orm_parca_dataset.id,
                         parca_dataset_request=ParcaDatasetRequest(
                             simulator_version=simulator_version,
-                            parca_config=orm_parca_dataset.parca_config,
+                            parca_config=ParcaOptions(**orm_parca_dataset.parca_config),  # type: ignore[arg-type]
                         ),
                         remote_archive_path=orm_parca_dataset.remote_archive_path,
                     )
@@ -593,7 +507,7 @@ class DatabaseServiceSQL(DatabaseService):
             session.add(orm_worker_event)
             await session.flush()  # Ensure the ORM object is inserted and has an ID
 
-            # prepare the EcoliSimulation object to return
+            # prepare the Simulation object to return
             new_worker_event = orm_worker_event.to_worker_event()
             return new_worker_event
 
@@ -625,74 +539,93 @@ class DatabaseServiceSQL(DatabaseService):
             return worker_events
 
     @override
-    async def insert_simulation(self, sim_request: EcoliSimulationRequest) -> EcoliSimulation:
+    async def insert_simulation(self, sim_request: SimulationRequest) -> Simulation:
         async with self.async_sessionmaker() as session, session.begin():
-            orm_simulator: ORMSimulator | None = await self._get_orm_simulator(
-                session, simulator_id=sim_request.simulator.database_id
-            )
-            if orm_simulator is None:
-                raise Exception(f"Simulator with id {sim_request.simulator.database_id} not found in the database")
+            simulator_id = sim_request.simulator_id
+            orm_simulator = None
+            if simulator_id is not None:
+                orm_simulator = await self._get_orm_simulator(session, simulator_id)
+            if orm_simulator is None and sim_request.simulator is not None:
+                simulators = await self.list_simulators()
+                matching_sim: SimulatorVersion | None = next(
+                    (
+                        sim
+                        for sim in simulators
+                        if sim.git_branch == sim_request.simulator.git_branch
+                        and sim.git_repo_url == sim_request.simulator.git_repo_url
+                        and sim.git_commit_hash == sim_request.simulator.git_commit_hash
+                    ),
+                    None,
+                )
+                if matching_sim is not None:
+                    orm_simulator = await self._get_orm_simulator(session, matching_sim.database_id)
 
+            if orm_simulator is None:
+                raise Exception(f"Simulator specified in request: {sim_request} not found in the database")
+            simulator_id = orm_simulator.id
+
+            parca_id = sim_request.parca_dataset_id
+            if parca_id is None:
+                raise Exception(
+                    f"Parca Dataset with not found in the database with reference to simulator: {simulator_id}"
+                )
             orm_parca_dataset: ORMParcaDataset | None = await self._get_orm_parca_dataset(
-                session, parca_dataset_id=sim_request.parca_dataset_id
+                session, parca_dataset_id=parca_id
             )
             if orm_parca_dataset is None:
                 raise Exception(f"Parca Dataset with id {sim_request.parca_dataset_id} not found in the database")
-
             if orm_parca_dataset.simulator_id != orm_simulator.id:
                 raise Exception(
-                    f"Parca Dataset simulator mismatch, id={orm_simulator.id} and {sim_request.simulator.database_id}"
+                    f"Parca Dataset simulator mismatch, id={orm_simulator.id} and {sim_request.simulator_id}"
                 )
+
+            sim_config = sim_request.config
             orm_simulation = ORMSimulation(
-                simulator_id=orm_simulator.id,
+                simulator_id=simulator_id,
                 parca_dataset_id=orm_parca_dataset.id,
-                variant_config=sim_request.variant_config,
-                variant_config_hash=sim_request.variant_config_hash,
+                config=sim_config.model_dump(),
             )
             session.add(orm_simulation)
             await session.flush()  # Ensure the ORM object is inserted and has an ID
 
-            # prepare the EcoliSimulation object to return
-            simulator_version = SimulatorVersion(
-                database_id=orm_simulator.id,
-                git_commit_hash=orm_simulator.git_commit_hash,
-                git_repo_url=orm_simulator.git_repo_url,
-                git_branch=orm_simulator.git_branch,
+            simulation = Simulation(
+                database_id=orm_simulation.id,
+                simulator_id=orm_simulator.id,
+                parca_dataset_id=sim_request.parca_dataset_id,  # type: ignore[arg-type]
+                config=sim_config,
             )
-            sim_request = EcoliSimulationRequest(
-                simulator=simulator_version,
-                parca_dataset_id=orm_parca_dataset.id,
-                variant_config=orm_simulation.variant_config,
-            )
-            simulation = EcoliSimulation(database_id=orm_simulation.id, sim_request=sim_request)
             return simulation
 
     @override
-    async def get_simulation(self, simulation_id: int) -> EcoliSimulation | None:
+    async def get_simulation(self, simulation_id: int) -> Simulation | None:
         async with self.async_sessionmaker() as session:
             orm_simulation: ORMSimulation | None = await self._get_orm_simulation(session, simulation_id)
             if orm_simulation is None:
                 return None
 
-            orm_simulator: ORMSimulator | None = await self._get_orm_simulator(
-                session, simulator_id=orm_simulation.simulator_id
-            )
-            if orm_simulator is None:
-                raise Exception(f"Simulator with id {orm_simulation.simulator_id} not found in the database")
-
-            # Prepare the EcoliSimulation object to return
-            simulator_version = SimulatorVersion(
-                database_id=orm_simulation.simulator_id,
-                git_commit_hash=orm_simulator.git_commit_hash,
-                git_repo_url=orm_simulator.git_repo_url,
-                git_branch=orm_simulator.git_branch,
-            )
-            sim_request = EcoliSimulationRequest(
-                simulator=simulator_version,
+            simulation = Simulation(
+                database_id=orm_simulation.id,
+                simulator_id=orm_simulation.simulator_id,
                 parca_dataset_id=orm_simulation.parca_dataset_id,
-                variant_config=orm_simulation.variant_config,
+                config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
             )
-            simulation = EcoliSimulation(database_id=orm_simulation.id, sim_request=sim_request)
+            return simulation
+
+    @override
+    async def get_simulation_by_experiment_id(self, experiment_id: str) -> Simulation | None:
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMSimulation).where(ORMSimulation.config["experiment_id"].astext == experiment_id).limit(1)
+            result: Result[tuple[ORMSimulation]] = await session.execute(stmt)
+            orm_simulation = result.scalars().first()
+            if orm_simulation is None:
+                return None
+
+            simulation = Simulation(
+                database_id=orm_simulation.id,
+                simulator_id=orm_simulation.simulator_id,
+                parca_dataset_id=orm_simulation.parca_dataset_id,
+                config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
+            )
             return simulation
 
     @override
@@ -704,41 +637,28 @@ class DatabaseServiceSQL(DatabaseService):
             await session.delete(orm_simulation)
 
     @override
-    async def list_simulations(self) -> list[EcoliSimulation]:
+    async def list_simulations(self) -> list[Simulation]:
         async with self.async_sessionmaker() as session:
             stmt = select(ORMSimulation)
             result: Result[tuple[ORMSimulation]] = await session.execute(stmt)
             orm_simulations = result.scalars().all()
 
-            simulations: list[EcoliSimulation] = []
+            simulations: list[Simulation] = []
             for orm_simulation in orm_simulations:
-                orm_simulator: ORMSimulator | None = await self._get_orm_simulator(
-                    session, simulator_id=orm_simulation.simulator_id
-                )
-                if orm_simulator is None:
-                    raise Exception(f"Simulator with id {orm_simulation.simulator_id} not found in the database")
-
-                # Prepare the EcoliSimulation object to return
-                simulator_version = SimulatorVersion(
-                    database_id=orm_simulator.id,
-                    git_commit_hash=orm_simulator.git_commit_hash,
-                    git_repo_url=orm_simulator.git_repo_url,
-                    git_branch=orm_simulator.git_branch,
-                )
-                sim_request = EcoliSimulationRequest(
-                    simulator=simulator_version,
+                simulation = Simulation(
+                    database_id=orm_simulation.id,
+                    simulator_id=orm_simulation.simulator_id,
                     parca_dataset_id=orm_simulation.parca_dataset_id,
-                    variant_config=orm_simulation.variant_config,
+                    config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
                 )
-                simulation = EcoliSimulation(database_id=orm_simulation.id, sim_request=sim_request)
                 simulations.append(simulation)
 
             return simulations
 
     @override
-    async def list_running_hpcruns(self) -> list[HpcRun]:
+    async def list_active_hpcruns(self) -> list[HpcRun]:
         async with self.async_sessionmaker() as session:
-            stmt = select(ORMHpcRun).where(ORMHpcRun.status == JobStatusDB.RUNNING)
+            stmt = select(ORMHpcRun).where(ORMHpcRun.status.in_([JobStatusDB.PENDING, JobStatusDB.RUNNING]))
             result: Result[tuple[ORMHpcRun]] = await session.execute(stmt)
             orm_hpcruns = result.scalars().all()
             return [orm_hpcrun.to_hpc_run() for orm_hpcrun in orm_hpcruns]
@@ -749,11 +669,20 @@ class DatabaseServiceSQL(DatabaseService):
             orm_hpcrun: ORMHpcRun | None = await self._get_orm_hpcrun(session, hpcrun_id=hpcrun_id)
             if orm_hpcrun is None:
                 raise Exception(f"HpcRun with id {hpcrun_id} not found in the database")
-            orm_hpcrun.status = JobStatusDB(new_slurm_job.job_state.lower())
+            new_status = JobStatus.from_slurm_state(new_slurm_job.job_state)
+            orm_hpcrun.status = JobStatusDB.from_job_status(new_status)
             if new_slurm_job.start_time is not None and new_slurm_job.start_time != orm_hpcrun.start_time:
                 orm_hpcrun.start_time = datetime.datetime.fromisoformat(new_slurm_job.start_time)
             if new_slurm_job.end_time is not None and new_slurm_job.end_time != orm_hpcrun.end_time:
                 orm_hpcrun.end_time = datetime.datetime.fromisoformat(new_slurm_job.end_time)
+            # Capture error message for failed jobs
+            if new_status == JobStatus.FAILED:
+                error_parts = [f"SLURM state: {new_slurm_job.job_state}"]
+                if new_slurm_job.reason:
+                    error_parts.append(f"reason: {new_slurm_job.reason}")
+                if new_slurm_job.exit_code:
+                    error_parts.append(f"exit_code: {new_slurm_job.exit_code}")
+                orm_hpcrun.error_message = ", ".join(error_parts)
             await session.flush()
 
     @override

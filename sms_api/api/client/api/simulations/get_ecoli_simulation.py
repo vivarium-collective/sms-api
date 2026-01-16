@@ -7,9 +7,10 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response, UNSET
 from ... import errors
 
-from ...models.ecoli_simulation_dto import EcoliSimulationDTO
 from ...models.http_validation_error import HTTPValidationError
+from ...models.simulation import Simulation
 from typing import cast
+from typing import cast, Union
 
 
 def _get_kwargs(
@@ -17,7 +18,7 @@ def _get_kwargs(
 ) -> dict[str, Any]:
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/v1/ecoli/simulations/{id}".format(
+        "url": "/api/v1/simulations/{id}".format(
             id=id,
         ),
     }
@@ -27,9 +28,23 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[EcoliSimulationDTO, HTTPValidationError]]:
+) -> Optional[Union[HTTPValidationError, Union["Simulation", None]]]:
     if response.status_code == 200:
-        response_200 = EcoliSimulationDTO.from_dict(response.json())
+
+        def _parse_response_200(data: object) -> Union["Simulation", None]:
+            if data is None:
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                response_200_type_0 = Simulation.from_dict(data)
+
+                return response_200_type_0
+            except:  # noqa: E722
+                pass
+            return cast(Union["Simulation", None], data)
+
+        response_200 = _parse_response_200(response.json())
 
         return response_200
     if response.status_code == 422:
@@ -44,7 +59,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[EcoliSimulationDTO, HTTPValidationError]]:
+) -> Response[Union[HTTPValidationError, Union["Simulation", None]]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -57,7 +72,7 @@ def sync_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[EcoliSimulationDTO, HTTPValidationError]]:
+) -> Response[Union[HTTPValidationError, Union["Simulation", None]]]:
     """Get Simulation
 
     Args:
@@ -68,7 +83,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[EcoliSimulationDTO, HTTPValidationError]]
+        Response[Union[HTTPValidationError, Union['Simulation', None]]]
     """
 
     kwargs = _get_kwargs(
@@ -86,7 +101,7 @@ def sync(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[EcoliSimulationDTO, HTTPValidationError]]:
+) -> Optional[Union[HTTPValidationError, Union["Simulation", None]]]:
     """Get Simulation
 
     Args:
@@ -97,7 +112,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[EcoliSimulationDTO, HTTPValidationError]
+        Union[HTTPValidationError, Union['Simulation', None]]
     """
 
     return sync_detailed(
@@ -110,7 +125,7 @@ async def asyncio_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[EcoliSimulationDTO, HTTPValidationError]]:
+) -> Response[Union[HTTPValidationError, Union["Simulation", None]]]:
     """Get Simulation
 
     Args:
@@ -121,7 +136,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[EcoliSimulationDTO, HTTPValidationError]]
+        Response[Union[HTTPValidationError, Union['Simulation', None]]]
     """
 
     kwargs = _get_kwargs(
@@ -137,7 +152,7 @@ async def asyncio(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[EcoliSimulationDTO, HTTPValidationError]]:
+) -> Optional[Union[HTTPValidationError, Union["Simulation", None]]]:
     """Get Simulation
 
     Args:
@@ -148,7 +163,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[EcoliSimulationDTO, HTTPValidationError]
+        Union[HTTPValidationError, Union['Simulation', None]]
     """
 
     return (

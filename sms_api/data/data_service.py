@@ -1,15 +1,15 @@
 import itertools
 import pickle
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 import duckdb
 import numpy as np
 import pandas as pd
 from ecoli.library.parquet_emitter import (
-    create_duckdb_conn,
     dataset_sql,
     ndlist_to_ndarray,
     read_stacked_columns,
@@ -20,7 +20,7 @@ from validation.ecoli.validation_data import ValidationDataEcoli
 
 from sms_api.common import StrEnumBase
 from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.config import Settings
+from sms_api.config import get_settings
 
 PARTITION_GROUPS = {
     "multiseed": ["experiment_id", "variant"],
@@ -67,26 +67,49 @@ class SimulationDataService(ABC):
     labels: Labels
     output_loaded: pd.DataFrame
 
-    def __init__(self, env: Settings) -> None:
+    def __init__(
+        self, simulator_hash: str | None = None, parca_id: int | None = None, wd_root: HPCFilePath | None = None
+    ) -> None:
         """
         NOTE: ``wd_root`` is essentially ~/workspace
         """
-        self.wd_root = HPCFilePath(remote_path=Path(env.slurm_base_path.remote_path / "workspace"))
-        self.outputs_dir = env.simulation_outdir
-        kb_dir = self.wd_root / "parameters" / "registry" / "default"
-        self.sim_data = LoadSimData(str(kb_dir / "simData.cPickle")).sim_data
-        with open(str(kb_dir / "validationData.cPickle"), "rb") as f:
-            self.validation_data = pickle.load(f)  # noqa: S301
-        if not isinstance(self.validation_data, ValidationDataEcoli):
-            raise TypeError("The validation data file is improperly formatted.")
+        self.env = get_settings()
+        self.outputs_dir = self.env.simulation_outdir
+        self.wd_root = HPCFilePath(remote_path=self.outputs_dir.remote_path.parent) if wd_root is None else wd_root
+        self.sim_data, self.validation_data = self.get_parca_data(simulator_hash, parca_id)
         self.labels = self._get_labels()
-        self.conn = create_duckdb_conn(str(env.simulation_outdir.remote_path), False, 1)
+        self.conn = self.connect_duckdb()
+
+    @abstractmethod
+    def get_parca_data(
+        self, simulator_hash: str | None = None, parca_id: int | None = None
+    ) -> tuple[SimulationDataEcoli, ValidationDataEcoli]:
+        pass
+
+    @abstractmethod
+    def get_parca_dir(self, simulator_hash: str, parca_id: int) -> HPCFilePath:
+        pass
 
     @abstractmethod
     def get_outputs(
-        self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str
+        self,
+        analysis_type: AnalysisType,
+        partitions_all: Mapping[str, str],
+        exp_select: str,
+        n_threads: int = 4,  # n_cpus available in slurm job
+        mem_limit: str = "22GB",
+        simulation_outdir: str | None = None,
     ) -> pd.DataFrame:
         pass
+
+    @classmethod
+    def connect_duckdb(cls, db_filepath: Path | HPCFilePath | str | None = None) -> duckdb.DuckDBPyConnection:
+        if db_filepath is not None:
+            if isinstance(db_filepath, HPCFilePath):
+                db_filepath = db_filepath.remote_path
+            if isinstance(db_filepath, Path):
+                db_filepath = db_filepath.__str__()
+        return duckdb.connect(db_filepath or ":memory:")
 
     @classmethod
     def downsample(cls, df_long: pd.DataFrame) -> pd.DataFrame:
@@ -97,7 +120,7 @@ class SimulationDataService(ABC):
         return df_ds
 
     def get_monomer_counts(
-        self, exp_select: str, analysis_type: AnalysisType, partitions_all: dict[str, str | int]
+        self, exp_select: str, analysis_type: AnalysisType, partitions_all: Mapping[str, str]
     ) -> np.ndarray[tuple[Any, ...], np.dtype[Any]]:
         history_sql_base, _, _ = self._get_sql_base(exp_select)
         db_filter = self._get_db_filter(analysis_type, partitions_all)
@@ -225,11 +248,11 @@ class SimulationDataService(ABC):
         return bulk_common_names
 
     def _get_sql_base(self, exp_select: str) -> tuple[str, str, str]:
-        history, conf, success = dataset_sql(str(self.outputs_dir.remote_path), experiment_ids=[exp_select])
+        history, conf, success = dataset_sql(str(self.outputs_dir.local_path()), experiment_ids=[exp_select])
         return history, conf, success
 
-    def _get_db_filter(self, analysis_type: AnalysisType, partitions_all: dict[str, str | int]) -> str:
-        def partitions_dict(analysis_type: AnalysisType, partitions_all: dict[str, str | int]) -> dict[str, Any]:
+    def _get_db_filter(self, analysis_type: AnalysisType, partitions_all: Mapping[str, str]) -> str:
+        def partitions_dict(analysis_type: AnalysisType, partitions_all: Mapping[str, str]) -> dict[str, Any]:
             partitions_req = PARTITION_GROUPS[analysis_type]
             partitions_dict = {}
             for partition in partitions_req:
@@ -315,11 +338,37 @@ class SimulationDataService(ABC):
 
 
 class SimulationDataServiceFS(SimulationDataService):
+    def get_parca_dir(self, simulator_hash: str, parca_id: int) -> HPCFilePath:
+        return self.env.hpc_parca_base_path / f"parca_{simulator_hash}_id_{parca_id}" / "kb"
+
+    def get_parca_data(
+        self, simulator_hash: str | None = None, parca_id: int | None = None
+    ) -> tuple[SimulationDataEcoli, ValidationDataEcoli]:
+        kb_dir: HPCFilePath = (
+            self.get_parca_dir(simulator_hash, parca_id)
+            if simulator_hash is not None and parca_id is not None
+            else self.env.simulation_outdir.parent / "parca" / "default" / "kb"
+        )
+
+        if not kb_dir.local_path().exists():
+            raise FileNotFoundError(f"The specification does not exist: {kb_dir!s}")
+        sim_data = LoadSimData(str(kb_dir.local_path() / "simData.cPickle")).sim_data
+        with open(kb_dir.local_path() / "validationData.cPickle", "rb") as f:
+            validation_data = pickle.load(f)  # noqa: S301
+        if not isinstance(validation_data, ValidationDataEcoli):
+            raise TypeError("The validation data file is improperly formatted.")
+        return sim_data, validation_data
+
+    @override
     def get_outputs(
-        self, analysis_type: AnalysisType, partitions_all: dict[str, str | int], exp_select: str
+        self,
+        analysis_type: AnalysisType,
+        partitions_all: Mapping[str, str],
+        exp_select: str,
+        n_threads: int = 4,  # n_cpus available in slurm job
+        mem_limit: str = "22GB",
+        simulation_outdir: str | None = None,
     ) -> pd.DataFrame:
-        # dbf_dict = self.partitions_dict(analysis_type, partitions_all)
-        # db_filter = self.get_db_filter(dbf_dict)
         db_filter = self._get_db_filter(analysis_type, partitions_all)
         pq_columns = [
             "bulk",
@@ -328,9 +377,19 @@ class SimulationDataServiceFS(SimulationDataService):
             "listeners__monomer_counts",
         ]
 
-        history_sql_base, _, _ = self._get_sql_base(exp_select)
-        history_sql_filtered = (
-            f"SELECT {','.join(pq_columns)},time FROM ({history_sql_base}) WHERE {db_filter} ORDER BY time"  # noqa: S608 (safe)
+        history_sql, config_sql, success_sql = dataset_sql(
+            experiment_ids=[exp_select], out_dir=simulation_outdir or str(self.env.simulation_outdir.local_path())
         )
-        outputs_df: pd.DataFrame = duckdb.sql(history_sql_filtered).df()
-        return outputs_df.groupby("time", as_index=False).sum()
+        history_sql_filtered = (
+            f"SELECT {','.join(pq_columns)},time FROM ({history_sql}) WHERE {db_filter} ORDER BY time"  # noqa: S608 (safe)
+        )
+
+        # connect to duckdb and set constraints
+        self.conn.execute(f"SET threads={n_threads}")
+        self.conn.execute("SET preserve_insertion_order=false")
+        self.conn.execute(f"SET memory_limit='{mem_limit}'")
+
+        outputs_df: pd.DataFrame = self.conn.sql(history_sql_filtered).df()
+
+        df = outputs_df.groupby("time", as_index=False).sum()
+        return df

@@ -1,6 +1,7 @@
 import pytest_asyncio  # noqa: F401
 
 from tests.fixtures.api_fixtures import (  # noqa: F401
+    SimulatorRepoInfo,
     analysis_config_path,
     # biocyc_service,
     analysis_request,
@@ -12,10 +13,15 @@ from tests.fixtures.api_fixtures import (  # noqa: F401
     experiment_request,
     fastapi_app,
     in_memory_api_client,
+    job_scheduler,
     latest_commit_hash,
     local_base_url,
+    parca_options,
     ptools_analysis_request,
     simulation_config,
+    simulator_repo_info,
+    workflow_config,
+    workflow_request_payload,
     workspace_image_hash,
 )
 from tests.fixtures.data_fixtures import analysis_service, data_fixture, simulation_data  # noqa: F401
@@ -30,6 +36,7 @@ from tests.fixtures.file_service_fixtures import (  # noqa: F401
     gcs_token,
     temp_test_data_dir,
 )
+from tests.fixtures.handlers_fixtures import analysis_outdir  # noqa: F401
 from tests.fixtures.logging_fixtures import logger  # noqa: F401
 from tests.fixtures.mongodb_fixtures import (  # noqa: F401
     mongo_test_client,
@@ -46,15 +53,27 @@ from tests.fixtures.redis_fixtures import (  # noqa: F401
 from tests.fixtures.simulation_fixtures import (  # noqa: F401
     expected_build_slurm_job_id,
     expected_parca_database_id,
+    mock_ssh_session_service,
     simulation_service_mock_clone_and_build,
     simulation_service_mock_parca,
     simulation_service_slurm,
 )
 from tests.fixtures.slurm_fixtures import (  # noqa: F401
+    nextflow_config_local_executor,
+    nextflow_config_slurm_executor,
+    nextflow_script_hello,
+    nextflow_script_hello_slurm,
     slurm_service,
     slurm_template_hello_1s,
     slurm_template_hello_10s,
     slurm_template_hello_TEMPLATE,
+    slurm_template_nextflow,
+    slurm_template_nextflow_slurm_executor,
     slurm_template_with_storage,
     ssh_session_service,
+)
+from tests.fixtures.workflow_fixtures import (  # noqa: F401
+    slurm_template_workflow,
+    workflow_inputs_dir,
+    workflow_test_config_content,
 )

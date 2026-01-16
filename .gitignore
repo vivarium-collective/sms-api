@@ -1,5 +1,6 @@
 docs/source
-
+docker-compose.yml
+artifacts/
 # From https://raw.githubusercontent.com/github/gitignore/main/Python.gitignore
 
 
@@ -232,15 +233,20 @@ poetry.lock
 /assets/dev/config/sms_known_hosts
 home/
 assets/deps/
-assets/simulation/configs/
 
 simulation_configs/
 notes/
-assets/simulation/model/parameters/
+assets/simulations/model/parameters/
 libsms/
 scratchpads/
 *.tar.gz
 
 # Secret data files (kustomize overlays)
-kustomize/overlays/**/secrets_sms_eks.dat
+kustomize/overlays/**/secrets.dat
 *.bak
+
+# TODO: remove this soon
+requirements.agent.txt
+tui/
+
+.results_cache/

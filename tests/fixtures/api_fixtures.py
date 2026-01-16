@@ -1,8 +1,8 @@
 import datetime
-import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from random import randint
+from typing import NamedTuple
 
 import httpx
 import pytest_asyncio
@@ -19,20 +19,52 @@ from sms_api.api import request_examples as examples
 from sms_api.api.client import Client
 from sms_api.api.main import app
 from sms_api.common.gateway.utils import generate_analysis_request
+from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
 from sms_api.common.utils import get_uuid
 from sms_api.config import REPO_ROOT, get_settings
+from sms_api.dependencies import get_job_scheduler, set_job_scheduler
 
 # from sms_api.data.biocyc_service import BiocycService
-from sms_api.latest_commit import write_latest_commit
-from sms_api.simulation.hpc_utils import get_slurmjob_name
+from sms_api.simulation.database_service import DatabaseServiceSQL
+from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.models import (
-    EcoliSimulationDTO,
-    ExperimentMetadata,
-    ExperimentRequest,
+    ParcaDatasetRequest,
+    ParcaOptions,
+    Simulation,
     SimulationConfig,
+    SimulationRequest,
+    Simulator,
 )
+from sms_api.simulation.simulation_service import SimulationServiceHpc
 
 ENV = get_settings()
+
+# Default simulator repository configuration for tests
+SIMULATOR_URL = "https://github.com/vivarium-collective/vEcoli"
+SIMULATOR_BRANCH = "api-support"
+SIMULATOR_COMMIT = "4c58f7e"
+
+
+class SimulatorRepoInfo(NamedTuple):
+    """Container for simulator repository information.
+
+    Can be unpacked as tuple: url, branch, hash = repo_info
+    """
+
+    url: str
+    branch: str
+    commit_hash: str
+
+
+@pytest_asyncio.fixture(scope="session")
+async def simulator_repo_info() -> SimulatorRepoInfo:
+    """Fixture providing the default simulator repository info for integration tests."""
+    return SimulatorRepoInfo(
+        url=SIMULATOR_URL,
+        branch=SIMULATOR_BRANCH,
+        commit_hash=SIMULATOR_COMMIT,
+    )
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -46,14 +78,9 @@ async def fastapi_app() -> FastAPI:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def latest_commit_hash() -> str:
-    assets_dir = Path(get_settings().assets_dir)
-    latest_commit_path = assets_dir / "simulation" / "model" / "latest_commit.txt"
-    if not os.path.exists(latest_commit_path):
-        await write_latest_commit()
-    with open(latest_commit_path) as fp:
-        latest_commit = fp.read()
-    return latest_commit.strip()
+async def latest_commit_hash(simulator_repo_info: SimulatorRepoInfo) -> str:
+    """Returns the commit hash from simulator_repo_info fixture."""
+    return simulator_repo_info.commit_hash
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -73,7 +100,7 @@ async def workspace_image_hash() -> str:
 
 @pytest_asyncio.fixture(scope="session")
 async def analysis_config_path() -> Path:
-    return Path(REPO_ROOT) / "assets" / "sms_multigen_analysis.json"
+    return Path(REPO_ROOT) / "tests" / "fixtures" / "configs" / "sms_multigen_analysis.json"
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -82,18 +109,53 @@ async def analysis_request() -> ExperimentAnalysisRequest:
     return examples.analysis_multiseed_multigen
 
 
-@pytest_asyncio.fixture(scope="session")
-async def experiment_request() -> ExperimentRequest:
-    return examples.base_simulation
+@pytest_asyncio.fixture(scope="function")
+async def experiment_request(database_service: DatabaseServiceSQL) -> SimulationRequest:
+    """Create a SimulationRequest with valid simulator_id and parca_dataset_id in the database."""
+    import uuid
+
+    # Use a unique commit hash for each test to avoid conflicts
+    unique_commit_hash = f"test_{uuid.uuid4().hex[:7]}"
+
+    # First insert the simulator
+    simulator = await database_service.insert_simulator(
+        git_commit_hash=unique_commit_hash,
+        git_repo_url=examples.DEFAULT_SIMULATOR.git_repo_url,
+        git_branch=examples.DEFAULT_SIMULATOR.git_branch,
+    )
+
+    # Then insert a parca dataset for this simulator
+    parca_request = ParcaDatasetRequest(
+        simulator_version=simulator,
+        parca_config=ParcaOptions(),
+    )
+    parca_dataset = await database_service.insert_parca_dataset(
+        parca_dataset_request=parca_request,
+    )
+
+    # Return a SimulationRequest with the valid IDs
+    return SimulationRequest(
+        simulator_id=simulator.database_id,
+        parca_dataset_id=parca_dataset.database_id,
+        config=SimulationConfig(
+            experiment_id="postman_TEST",
+            analysis_options=examples.analysis_options_omics(n_tp=7),
+        ),
+    )
 
 
 @pytest_asyncio.fixture(scope="session")
-async def simulation_config() -> SimulationConfig:
+async def parca_options() -> ParcaOptions:
+    return ParcaOptions()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def simulation_config(parca_options: ParcaOptions) -> SimulationConfig:
     return SimulationConfig(
         experiment_id="pytest_fixture_config",
         sim_data_path="/pytest/kb/simData.cPickle",
         suffix_time=False,
-        parca_options={"cpus": 3},
+        parca_options=parca_options,
         generations=randint(1, 1000),
         max_duration=10800,
         initial_global_time=0,
@@ -105,17 +167,17 @@ async def simulation_config() -> SimulationConfig:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def ecoli_simulation() -> EcoliSimulationDTO:
+async def ecoli_simulation(parca_options: ParcaOptions) -> Simulation:
     pytest_fixture = "pytest_fixture"
-    db_id = -1
-    return EcoliSimulationDTO(
+    return Simulation(
         database_id=-1,
-        name=pytest_fixture,
+        simulator_id=1,
+        parca_dataset_id=1,
         config=SimulationConfig(
             experiment_id=pytest_fixture,
             sim_data_path="/pytest/kb/simData.cPickle",
             suffix_time=False,
-            parca_options={"cpus": 3},
+            parca_options=parca_options,
             generations=randint(1, 1000),
             max_duration=10800,
             initial_global_time=0,
@@ -124,16 +186,14 @@ async def ecoli_simulation() -> EcoliSimulationDTO:
             emitter="parquet",
             emitter_arg={"outdir": "/pytest/api_outputs"},
         ),
-        metadata=ExperimentMetadata(root={"requester": f"{pytest_fixture}:{db_id}", "context": "pytest"}),
         last_updated=str(datetime.datetime.now()),
-        job_name=get_slurmjob_name(experiment_id=pytest_fixture),
         job_id=randint(10000, 1000000),
     )
 
 
 @pytest_asyncio.fixture(scope="session")
 async def base_router() -> str:
-    return "/v1/ecoli"
+    return "/api/v1"
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -158,3 +218,54 @@ async def analysis_request_base() -> ExperimentAnalysisRequest:
         experiment_id="publication_multiseed_multigen-a7ae0b4e093e20e6_1762830572273",
         requested_configs=[AnalysisDomain.MULTIGENERATION, AnalysisDomain.MULTISEED],
     )
+
+
+@pytest_asyncio.fixture(scope="function")
+async def workflow_config() -> SimulationConfig:
+    return SimulationConfig(experiment_id="pytest_fixture", generations=randint(1, 5), n_init_sims=randint(1, 5))
+
+
+@pytest_asyncio.fixture
+async def workflow_request_payload(
+    simulation_config: SimulationConfig, simulation_service_slurm: SimulationServiceHpc
+) -> SimulationRequest:
+    """Minimal simulation request payload for testing."""
+    latest_hash = await simulation_service_slurm.get_latest_commit_hash(
+        git_repo_url=SIMULATOR_URL, git_branch=SIMULATOR_BRANCH
+    )
+    return SimulationRequest(
+        simulator=Simulator(git_commit_hash=latest_hash, git_repo_url=SIMULATOR_URL, git_branch=SIMULATOR_BRANCH),
+        config=simulation_config,
+    )
+
+
+@pytest_asyncio.fixture(scope="function")
+async def job_scheduler(database_service: DatabaseServiceSQL) -> AsyncGenerator[JobScheduler, None]:
+    """Fixture that starts the JobScheduler for integration tests.
+
+    The JobScheduler polls SLURM for job status updates and updates the database.
+    This fixture starts the polling loop and stops it when the test completes.
+    """
+    # Save existing job scheduler if any
+    saved_scheduler = get_job_scheduler()
+
+    # Create messaging service (mock - we don't need Redis for status polling)
+    messaging_service = MessagingServiceRedis()
+
+    # Create and configure the JobScheduler
+    slurm_service = SlurmService()
+    scheduler = JobScheduler(
+        messaging_service=messaging_service,
+        database_service=database_service,
+        slurm_service=slurm_service,
+    )
+    set_job_scheduler(scheduler)
+
+    # Start polling with a short interval for tests
+    await scheduler.start_polling(interval_seconds=5)
+
+    yield scheduler
+
+    # Cleanup
+    await scheduler.stop_polling()
+    set_job_scheduler(saved_scheduler)

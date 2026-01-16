@@ -17,7 +17,7 @@ from typing import Union
 def _get_kwargs(
     *,
     git_repo_url: Union[Unset, str] = "https://github.com/vivarium-collective/vEcoli",
-    git_branch: Union[Unset, str] = "messages",
+    git_branch: Union[Unset, str] = "ccam-nextflow",
 ) -> dict[str, Any]:
     params: dict[str, Any] = {}
 
@@ -29,7 +29,7 @@ def _get_kwargs(
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/core/simulator/latest",
+        "url": "/core/v1/simulator/latest",
         "params": params,
     }
 
@@ -68,14 +68,14 @@ def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     git_repo_url: Union[Unset, str] = "https://github.com/vivarium-collective/vEcoli",
-    git_branch: Union[Unset, str] = "messages",
+    git_branch: Union[Unset, str] = "ccam-nextflow",
 ) -> Response[Union[HTTPValidationError, Simulator]]:
     """Get the latest simulator version
 
     Args:
         git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-
             collective/vEcoli'.
-        git_branch (Union[Unset, str]):  Default: 'messages'.
+        git_branch (Union[Unset, str]):  Default: 'ccam-nextflow'.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -101,14 +101,14 @@ def sync(
     *,
     client: Union[AuthenticatedClient, Client],
     git_repo_url: Union[Unset, str] = "https://github.com/vivarium-collective/vEcoli",
-    git_branch: Union[Unset, str] = "messages",
+    git_branch: Union[Unset, str] = "ccam-nextflow",
 ) -> Optional[Union[HTTPValidationError, Simulator]]:
     """Get the latest simulator version
 
     Args:
         git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-
             collective/vEcoli'.
-        git_branch (Union[Unset, str]):  Default: 'messages'.
+        git_branch (Union[Unset, str]):  Default: 'ccam-nextflow'.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -129,14 +129,14 @@ async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     git_repo_url: Union[Unset, str] = "https://github.com/vivarium-collective/vEcoli",
-    git_branch: Union[Unset, str] = "messages",
+    git_branch: Union[Unset, str] = "ccam-nextflow",
 ) -> Response[Union[HTTPValidationError, Simulator]]:
     """Get the latest simulator version
 
     Args:
         git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-
             collective/vEcoli'.
-        git_branch (Union[Unset, str]):  Default: 'messages'.
+        git_branch (Union[Unset, str]):  Default: 'ccam-nextflow'.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -160,14 +160,14 @@ async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
     git_repo_url: Union[Unset, str] = "https://github.com/vivarium-collective/vEcoli",
-    git_branch: Union[Unset, str] = "messages",
+    git_branch: Union[Unset, str] = "ccam-nextflow",
 ) -> Optional[Union[HTTPValidationError, Simulator]]:
     """Get the latest simulator version
 
     Args:
         git_repo_url (Union[Unset, str]):  Default: 'https://github.com/vivarium-
             collective/vEcoli'.
-        git_branch (Union[Unset, str]):  Default: 'messages'.
+        git_branch (Union[Unset, str]):  Default: 'ccam-nextflow'.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

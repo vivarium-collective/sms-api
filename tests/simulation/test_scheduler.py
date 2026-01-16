@@ -11,6 +11,7 @@ import pytest
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
+from sms_api.common.models import JobStatus
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService
@@ -22,12 +23,13 @@ from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.job_scheduler import JobScheduler
 from sms_api.simulation.models import (
-    EcoliSimulation,
-    EcoliSimulationRequest,
     HpcRun,
-    JobStatus,
     JobType,
     ParcaDatasetRequest,
+    ParcaOptions,
+    Simulation,
+    SimulationConfig,
+    SimulationRequest,
     WorkerEventMessagePayload,
 )
 
@@ -37,7 +39,7 @@ def is_ci_environment() -> bool:
     return os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
 
 
-async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> tuple[EcoliSimulation, SlurmJob, HpcRun]:
+async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> tuple[Simulation, SlurmJob, HpcRun]:
     latest_commit_hash = str(uuid.uuid4())
     repo_url = "https://github.com/some/repo"
     main_branch = "main"
@@ -46,13 +48,13 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
         git_commit_hash=latest_commit_hash, git_repo_url=repo_url, git_branch=main_branch
     )
 
-    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config={"param1": 5})
+    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
-    simulation_request = EcoliSimulationRequest(
-        simulator=simulator,
+    simulation_request = SimulationRequest(
         parca_dataset_id=parca_dataset.database_id,
-        variant_config={"named_parameters": {"param1": 0.5, "param2": 0.5}},
+        simulator_id=simulator.database_id,
+        config=SimulationConfig(experiment_id="test_scheduler_insert_job"),
     )
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
     slurm_job = SlurmJob(
@@ -64,7 +66,7 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
     )
 
     random_string = "".join(random.choices(string.hexdigits, k=7))
-    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string)
+    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string, simulator=simulator)
     hpcrun = await database_service.insert_hpcrun(
         slurmjobid=slurm_job.job_id,
         job_type=JobType.SIMULATION,
@@ -75,6 +77,7 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
     return simulation, slurm_job, hpcrun
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_messaging(
@@ -114,6 +117,7 @@ async def test_messaging(
     assert len(_updated_worker_events) == 1
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_job_scheduler(
@@ -129,7 +133,6 @@ async def test_job_scheduler(
     await scheduler.start_polling(interval_seconds=1)
 
     # Submit a toy slurm job which takes 10 seconds to run
-    _all_jobs_before_submit: list[SlurmJob] = await slurm_service.get_job_status_squeue()
     settings = get_settings()
     remote_path = settings.slurm_log_base_path
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -140,9 +143,10 @@ async def test_job_scheduler(
             f.write(slurm_template_hello_10s)
 
         remote_sbatch_file = remote_path / local_sbatch_file.name
-        job_id: int = await slurm_service.submit_job(
-            local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
-        )
+        async with get_ssh_session_service().session() as ssh:
+            job_id: int = await slurm_service.submit_job(
+                ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
+            )
 
     # Simulate job submission
     simulation, slurm_job, hpc_run = await insert_job(database_service=database_service, slurmjobid=job_id)
@@ -182,6 +186,7 @@ async def test_job_scheduler(
     await scheduler.stop_polling()
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(
     is_ci_environment()
     or len(get_settings().slurm_submit_key_path) == 0
@@ -319,9 +324,10 @@ export AWS_SECRET_ACCESS_KEY="{settings.storage_qumulo_secret_access_key}"
             # Submit job
             remote_sbatch_file = remote_path / local_sbatch_file.name
             print(f"✅ Submitting job with script: {remote_sbatch_file}")
-            job_id: int = await slurm_service.submit_job(
-                local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
-            )
+            async with get_ssh_session_service().session() as ssh:
+                job_id: int = await slurm_service.submit_job(
+                    ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
+                )
             print(f"✅ Job submitted with ID: {job_id}")
 
         # Step 3: Insert job into database for tracking

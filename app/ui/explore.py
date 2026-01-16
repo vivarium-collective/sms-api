@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.18.1"
+__generated_with = "0.18.4"
 app = marimo.App(width="medium")
 
 
@@ -48,10 +48,10 @@ def _():
 
 
 @app.cell
-def _(env):
+def _():
     from sms_api.data.data_service import PARTITION_GROUPS, AnalysisType, SimulationDataServiceFS
 
-    data_service = SimulationDataServiceFS(env=env)
+    data_service = SimulationDataServiceFS()
     return (
         AnalysisType,
         PARTITION_GROUPS,
@@ -139,10 +139,18 @@ def _(PARTITION_GROUPS, analysis_select, partitions_display):
 
 
 @app.cell
-def _(env, mo, os):
+def _(env, mo):
+    def available_experiments():
+        exps = []
+        for path in env.simulation_outdir.remote_path.iterdir():
+            exp_name = path.parts[-1]
+            if path.is_dir() and "analysis" not in exp_name:
+                exps.append(exp_name)
+        return exps
+
     exp_select = mo.ui.dropdown(
-        options=os.listdir(str(env.simulation_outdir.remote_path)),
-        value="wcecoli_fig2_setD4_scaled-c6263425684df8c0_1763578699104-449b7de3d0de10a5_1763578788396",
+        options=available_experiments(),
+        value="sms_multigeneration",
     )
     return (exp_select,)
 
@@ -155,7 +163,7 @@ def _(exp_select, get_variants, mo):
 
 @app.cell
 def _(exp_select, get_seeds, mo, variant_select):
-    seed_select = mo.ui.dropdown(options=get_seeds(exp_id=exp_select.value, var_id=variant_select.value), value="22")
+    seed_select = mo.ui.dropdown(options=get_seeds(exp_id=exp_select.value, var_id=variant_select.value), value="5")
     return (seed_select,)
 
 
@@ -167,7 +175,7 @@ def _(exp_select, get_gens, mo, seed_select, variant_select):
             var_id=variant_select.value,
             seed_id=seed_select.value,
         ),
-        value="3",
+        value="1",
     )
     return (gen_select,)
 
@@ -181,7 +189,7 @@ def _(exp_select, gen_select, get_agents, mo, seed_select, variant_select):
             seed_id=seed_select.value,
             gen_id=gen_select.value,
         ),
-        value="000",
+        value="0",
     )
     return (agent_select,)
 
@@ -203,11 +211,11 @@ def _(agent_select, exp_select, gen_select, seed_select, variant_select):
 
 
 @app.cell
-def _(AnalysisType, analysis_select, data_service, exp_select, partitions):
+def _(AnalysisType, analysis_select, data_service, partitions):
     output_loaded = data_service.get_outputs(
         analysis_type=AnalysisType[analysis_select.value.upper()],
         partitions_all=partitions,
-        exp_select=exp_select.value,
+        exp_select="sms_multigeneration",
     )
     return (output_loaded,)
 
@@ -407,7 +415,7 @@ def _(
             color="Genes:N",
         )
     )
-    return
+    return (mrna_dfds_long,)
 
 
 @app.cell
@@ -504,7 +512,7 @@ def _(alt, data_service, mo, output_loaded, select_rxns, y_scale_rxns):
             color="reaction_id:N",
         )
     )
-    return
+    return (rxns_dfds_long,)
 
 
 @app.cell
@@ -917,17 +925,50 @@ def _(
 
 
 @app.cell
-def _():
-    return
+def _(mo, rxns_dfds_long):
+    def download_fluxomics():
+        data = rxns_dfds_long.to_json().encode("utf-8")
+        return data
+
+    flux_download = mo.download(
+        data=download_fluxomics, filename="fluxomics.json", mimetype="application/json", label="Export Fluxomics Data"
+    )
+    return (flux_download,)
 
 
 @app.cell
-def _():
-    return
+def _(mo, mrna_dfds_long):
+    def download_transcriptomics() -> None:
+        data = mrna_dfds_long.to_json()
+        return data
+
+    trans_download = mo.download(
+        data=download_transcriptomics,
+        filename="transcriptomics.json",
+        mimetype="application/json",
+        label="Export Transcriptomics Data",
+    )
+    return (trans_download,)
 
 
 @app.cell
-def _():
+def _(dfds_dfds_long, mo):
+    def download_proteomics() -> None:
+        data = dfds_dfds_long.to_json()
+        return data
+
+    prot_download = mo.download(
+        data=download_proteomics,
+        filename="proteomics.json",
+        mimetype="application/json",
+        label="Export Proteomics Data",
+    )
+    return (prot_download,)
+
+
+@app.cell
+def _(flux_download, mo, prot_download, trans_download):
+    mo.hstack([prot_download, trans_download, flux_download], justify="space-around")
     return
 
 

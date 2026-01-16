@@ -1,16 +1,13 @@
 import random
 import string
 import uuid
-from pathlib import Path
 from typing import Any
 
-from sms_api.common.gateway.models import RouterConfig
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 from sms_api.simulation.models import (
-    EcoliSimulation,
-    EcoliSimulationRequest,
     ParcaDataset,
+    Simulation,
     SimulatorVersion,
 )
 
@@ -40,18 +37,11 @@ def get_parca_dataset_dir(parca_dataset: ParcaDataset) -> HPCFilePath:
     return get_settings().hpc_parca_base_path / parca_dataset_dirname
 
 
-def get_experiment_path(ecoli_simulation: EcoliSimulation) -> HPCFilePath:
-    sim_id = ecoli_simulation.database_id
-    git_commit_hash = ecoli_simulation.sim_request.simulator.git_commit_hash
-    experiment_dirname = f"experiment_{git_commit_hash}_id_{sim_id}"
-    return get_settings().hpc_sim_base_path / experiment_dirname
-
-
-def get_correlation_id(ecoli_simulation: EcoliSimulation, random_string: str) -> str:
+def get_correlation_id(ecoli_simulation: Simulation, simulator: SimulatorVersion, random_string: str) -> str:
     """
     Generate a correlation ID for the EcoliSimulation based on its database ID and git commit hash.
     """
-    return f"{ecoli_simulation.database_id}_{ecoli_simulation.sim_request.simulator.git_commit_hash}_{random_string}"
+    return f"{ecoli_simulation.database_id}_{simulator.git_commit_hash}_{random_string}"
 
 
 def parse_correlation_id(correlation_id: str) -> tuple[int, str, str]:
@@ -76,8 +66,7 @@ def get_experiment_dirname(database_id: int, git_commit_hash: str) -> str:
 
 
 def format_experiment_path(experiment_dirname: str) -> HPCFilePath:
-    base_path = HPCFilePath(remote_path=Path(f"/home/FCAM/svc_vivarium/{get_settings().namespace}/sims"))
-    return base_path / experiment_dirname
+    return get_settings().hpc_sim_base_path / experiment_dirname
 
 
 def get_experiment_dirpath(simulation_database_id: int, git_commit_hash: str) -> HPCFilePath:
@@ -98,24 +87,6 @@ def get_remote_chunks_dirpath(simulation_database_id: int, git_commit_hash: str)
         / "lineage_seed=0"
         / "generation=1"
         / "agent_id=0"
-    )
-
-
-def read_latest_commit() -> str:
-    settings = get_settings()
-    if not settings.assets_dir:
-        raise ValueError("Assets directory is not set in the settings.")
-    with open(Path(settings.assets_dir) / "simulation" / "model" / "latest_commit.txt") as f:
-        return f.read().strip()
-
-
-def get_experiment_id(
-    router_config: RouterConfig, simulation: EcoliSimulation, sim_request: EcoliSimulationRequest
-) -> str:
-    return (
-        router_config.prefix.replace("/", "")
-        + "_"
-        + get_experiment_dirname(simulation.database_id, sim_request.simulator.git_commit_hash)
     )
 
 
@@ -140,3 +111,10 @@ def get_experiment_dir(experiment_id: str) -> HPCFilePath:
 
 def create_experiment_id(config_id: str, simulator_hash: str) -> str:
     return f"{config_id}-{simulator_hash}-{str(uuid.uuid4()).split('-')[-1]}"
+
+
+def get_experiment_path(ecoli_simulation: Simulation, simulator: SimulatorVersion) -> HPCFilePath:
+    sim_id = ecoli_simulation.database_id
+    git_commit_hash = simulator.git_commit_hash
+    experiment_dirname = f"experiment_{git_commit_hash}_id_{sim_id}"
+    return get_settings().hpc_sim_base_path / experiment_dirname

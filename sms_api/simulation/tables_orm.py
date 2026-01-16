@@ -9,13 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from sms_api.analysis.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisDTO
+from sms_api.common.models import JobStatus
 from sms_api.simulation.models import (
-    EcoliSimulationDTO,
-    ExperimentMetadata,
     HpcRun,
-    JobStatus,
     JobType,
-    SimulationConfig,
     SimulatorVersion,
     WorkerEvent,
 )
@@ -33,6 +30,14 @@ class JobStatusDB(enum.Enum):
 
     def to_job_status(self) -> JobStatus:
         return JobStatus(self.value)
+
+    @classmethod
+    def from_job_status(cls, status: JobStatus) -> "JobStatusDB":
+        """Convert JobStatus to JobStatusDB, mapping UNKNOWN to PENDING."""
+        if status == JobStatus.UNKNOWN:
+            # UNKNOWN maps to PENDING as a safe default for unexpected states
+            return cls.PENDING
+        return cls(status.value)
 
 
 class JobTypeDB(enum.Enum):
@@ -114,7 +119,7 @@ class ORMParcaDataset(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
     simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
-    parca_config: Mapped[dict[str, int | float | str]] = mapped_column(JSONB, nullable=False)
+    parca_config: Mapped[dict[str, int | float | str | bool | None]] = mapped_column(JSONB, nullable=False)
     parca_config_hash: Mapped[str] = mapped_column(nullable=False)
     remote_archive_path: Mapped[Optional[str]] = mapped_column(nullable=True)
 
@@ -127,8 +132,9 @@ class ORMSimulation(Base):
 
     simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
     parca_dataset_id: Mapped[int] = mapped_column(ForeignKey("parca_dataset.id"), nullable=False, index=True)
-    variant_config: Mapped[dict[str, dict[str, int | float | str]]] = mapped_column(JSONB, nullable=False)
-    variant_config_hash: Mapped[str] = mapped_column(nullable=False)
+    config: Mapped[dict[str, list[str] | bool | int | str | float | dict[str, int | float | str]]] = mapped_column(
+        JSONB, nullable=False
+    )
 
 
 class ORMWorkerEvent(Base):
@@ -208,33 +214,6 @@ class ORMAnalysis(Base):
             last_updated=self.last_updated,
             job_name=self.job_name,
             job_id=self.job_id,
-        )
-
-
-class ORMExperiment(Base):
-    """Used by the /ecoli router"""
-
-    __tablename__ = "ecoli_experiment"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(nullable=False)
-    config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    last_updated: Mapped[str] = mapped_column(nullable=False)
-    job_name: Mapped[str] = mapped_column(nullable=True)
-    job_id: Mapped[int] = mapped_column(nullable=True)
-    experiment_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=True)
-
-    def to_dto(self) -> EcoliSimulationDTO:
-        config_dto = SimulationConfig(**self.config)
-        metadata = ExperimentMetadata(root=self.experiment_metadata)
-        return EcoliSimulationDTO(
-            database_id=self.id,
-            name=self.name,
-            config=config_dto,
-            last_updated=self.last_updated,
-            job_name=self.job_name,
-            job_id=self.job_id,
-            metadata=metadata,
         )
 
 
