@@ -47,3 +47,20 @@ patches:
     target:
       kind: Deployment
       name: api
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: ghcr-secret
+          mountPath: /run/secrets/ghcr
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: ghcr-secret
+          secret:
+            secretName: ghcr-secret
+            defaultMode: 256
+    target:
+      kind: Deployment
+      name: api

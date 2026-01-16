@@ -1,6 +1,7 @@
 import json
 import logging
 import random
+import re
 import string
 import tempfile
 from abc import ABC, abstractmethod
@@ -35,6 +36,27 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 MAX_SIMULATION_CPUS = 5
+
+
+def _get_authenticated_git_url(repo_url: str, username: str | None, token: str | None) -> str:
+    """Convert a GitHub HTTPS URL to include authentication credentials.
+
+    Args:
+        repo_url: GitHub repository URL (https://github.com/org/repo or https://github.com/org/repo.git)
+        username: GitHub username
+        token: GitHub personal access token
+
+    Returns:
+        URL with credentials embedded: https://{username}:{token}@github.com/org/repo.git
+        Returns original URL if username or token is missing.
+    """
+    if not username or not token:
+        return repo_url
+    # Match https://github.com/... URLs
+    match = re.match(r"https://github\.com/(.+)", repo_url)
+    if match:
+        return f"https://{username}:{token}@github.com/{match.group(1)}"
+    return repo_url
 
 
 class SimulationService(ABC):
@@ -104,8 +126,10 @@ class SimulationServiceHpc(SimulationService):
         :rtype: `str`
         :return: The last 7 characters of the latest commit hash.
         """
+        settings = get_settings()
+        auth_url = _get_authenticated_git_url(git_repo_url, settings.github_username, settings.github_token)
         async with get_ssh_session_service().session() as ssh:
-            return_code, stdout, stderr = await ssh.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
+            return_code, stdout, stderr = await ssh.run_command(f"git ls-remote -h {auth_url} {git_branch}")
         if return_code != 0:
             raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
         latest_commit_hash = stdout.strip("\n")[:7]
@@ -124,6 +148,9 @@ class SimulationServiceHpc(SimulationService):
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
         remote_vEcoli_path = get_vEcoli_repo_dir(simulator_version=simulator_version)
         apptainer_image_path = get_apptainer_image_file(simulator_version=simulator_version)
+        auth_repo_url = _get_authenticated_git_url(
+            simulator_version.git_repo_url, settings.github_username, settings.github_token
+        )
 
         # build the submit script
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -188,7 +215,7 @@ class SimulationServiceHpc(SimulationService):
                         TMP_REPO_PATH="/tmp/slurm_job_${{SLURM_JOB_ID}}_vEcoli"
                         cd /tmp
                         git clone --branch {simulator_version.git_branch} \\
-                                  --single-branch {simulator_version.git_repo_url} "$TMP_REPO_PATH"
+                                  --single-branch {auth_repo_url} "$TMP_REPO_PATH"
                         cd "$TMP_REPO_PATH"
                         git checkout {simulator_version.git_commit_hash}
                         echo "Repository cloned successfully to $TMP_REPO_PATH"

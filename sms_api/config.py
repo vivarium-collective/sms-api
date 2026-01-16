@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 from enum import StrEnum
 from functools import lru_cache
@@ -8,6 +10,40 @@ from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from sms_api.common.storage.file_paths import HPCFilePath
+
+
+def _parse_docker_config_json(path: str) -> tuple[str, str]:
+    """Parse a Docker config.json file to extract GitHub credentials.
+
+    Args:
+        path: Path to the .dockerconfigjson file
+
+    Returns:
+        Tuple of (username, token) extracted from ghcr.io auth
+    """
+    if not path or not os.path.exists(path):
+        return "", ""
+
+    try:
+        with open(path) as f:
+            config = json.load(f)
+
+        # Look for ghcr.io or github.com auth
+        auths = config.get("auths", {})
+        for registry in ["ghcr.io", "https://ghcr.io", "github.com", "https://github.com"]:
+            if registry in auths:
+                auth_b64 = auths[registry].get("auth", "")
+                if auth_b64:
+                    # auth is base64(username:token)
+                    decoded = base64.b64decode(auth_b64).decode("utf-8")
+                    if ":" in decoded:
+                        username, token = decoded.split(":", 1)
+                        return username, token
+    except Exception:
+        return "", ""
+
+    return "", ""
+
 
 KV_DRIVER = Literal["file", "s3", "gcs"]
 TS_DRIVER = Literal["zarr", "n5", "zarr3"]
@@ -123,6 +159,20 @@ class Settings(BaseSettings):
     # external services
     biocyc_email: str = ""
     biocyc_password: str = ""
+
+    # GitHub credentials for cloning private repos (PAT with repo scope)
+    # Can be set directly or loaded from dockerconfigjson file (e.g., from K8s ghcr-secret)
+    github_dockerconfig_path: str = ""  # Path to .dockerconfigjson file
+    github_username: str = ""
+    github_token: str = ""
+
+    def model_post_init(self, __context: object) -> None:
+        """Load GitHub credentials from dockerconfigjson if not set directly."""
+        if (not self.github_username or not self.github_token) and self.github_dockerconfig_path:
+            username, token = _parse_docker_config_json(self.github_dockerconfig_path)
+            if username and token:
+                object.__setattr__(self, "github_username", username)
+                object.__setattr__(self, "github_token", token)
 
     simulation_outdir: HPCFilePath = HPCFilePath(remote_path=Path(""))
     analysis_outdir: HPCFilePath = HPCFilePath(remote_path=Path(""))
