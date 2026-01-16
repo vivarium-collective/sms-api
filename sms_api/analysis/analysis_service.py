@@ -80,6 +80,31 @@ class AnalysisServiceSlurm:
         experiment_id = request.experiment_id
         analysis_config = request.to_config(analysis_name=analysis_name, env=self.env)
 
+        # # 2. Read the config file from the remote HPC system
+        # remote_config_path = (
+        #         settings.hpc_repo_base_path.remote_path
+        #         / simulator_hash
+        #         / "vEcoli"
+        #         / "configs"
+        #         / "api_analysis_default.json"
+        # )
+        # async with get_ssh_session_service().session() as ssh:
+        #     returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
+        #     if returncode != 0:
+        #         raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
+        #
+        # # 3. Replace placeholders in the config template
+        # config_file_str = stdout
+        # config_file_str = config_file_str.replace("EXPERIMENT_ID_PLACEHOLDER", request.experiment_id)
+        # config_file_str = config_file_str.replace("HPC_SIM_BASE_PATH_PLACEHOLDER", str(settings.hpc_sim_base_path))
+        # config_file_str = config_file_str.replace(
+        #     "EXPERIMENT_OUTDIR_PLACEHOLDER", str(settings.hpc_sim_base_path / request.experiment_id)
+        # )
+        # config_file_str = config_file_str.replace("ANALYSIS_OUTDIR_PLACEHOLDER", str(settings.analysis_outdir))
+        # config_file_str = config_file_str.replace("ANALYSIS_NAME_PLACEHOLDER", analysis_name)
+        # # image_path = get_settings().hpc_image_base_path / f"vecoli-{simulator.git_commit_hash}.sif"
+        # # config_data: dict[str, Any] = json.loads(config_file_str)
+
         # gen script
         slurm_script = generate_slurm_script(
             env=self.env,
