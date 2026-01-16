@@ -158,6 +158,8 @@ async def run_workflow_simple(
     config_str = stdout
     config_str = config_str.replace("EXPERIMENT_ID_PLACEHOLDER", experiment_id)
     config_str = config_str.replace("HPC_SIM_BASE_PATH_PLACEHOLDER", str(settings.simulation_outdir))
+    image_path = get_settings().hpc_image_base_path / f"vecoli-{simulator.git_commit_hash}.sif"
+    config_str = config_str.replace("SIMULATOR_IMAGE_PATH_PLACEHOLDER", str(image_path))
     config_data = json.loads(config_str)
 
     # 4. Override config values if provided
