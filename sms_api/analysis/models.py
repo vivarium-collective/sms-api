@@ -171,7 +171,7 @@ class ExperimentAnalysisRequest(BaseModel):
         if isinstance(analysis_name, DataId):
             analysis_name = analysis_name.label
 
-        simulation_outdir = env.simulation_outdir.remote_path
+        simulation_outdir = env.hpc_sim_base_path
         experiment_outdir = str(simulation_outdir / self.experiment_id)
         options = AnalysisConfigOptions(
             experiment_id=[self.experiment_id],
