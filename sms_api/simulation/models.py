@@ -148,6 +148,7 @@ class AnalysisOptions(BaseModel):
 
 
 class SimulationConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
     experiment_id: str
     parca_options: ParcaOptions = ParcaOptions()
     analysis_options: AnalysisOptions = AnalysisOptions()
