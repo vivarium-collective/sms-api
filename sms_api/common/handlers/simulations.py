@@ -338,7 +338,13 @@ async def get_available_omics_output_paths(remote_analysis_outdir: HPCFilePath) 
     try:
         async with get_ssh_session_service().session() as ssh:
             ret, out, err = await ssh.run_command(cmd)
-        return [HPCFilePath(remote_path=Path(fp)) for fp in out.splitlines() if fp.endswith(".txt")]
+        paths = []
+        accepted_extensions = ["tsv", "html", "csv", "txt"]
+        for fp in out.splitlines():
+            extension = fp.split(".")[-1]
+            if extension in accepted_extensions:
+                paths.append(HPCFilePath(remote_path=Path(fp)))
+        return paths
     except Exception:
         logger.exception("could not get the filepaths that are available")
         return []
@@ -346,8 +352,6 @@ async def get_available_omics_output_paths(remote_analysis_outdir: HPCFilePath) 
 
 async def download_analysis_output(local_dir: Path, remote_path: HPCFilePath) -> TsvOutputFile:
     requested_filename = remote_path.remote_path.parts[-1]
-    if not requested_filename.endswith(".txt"):
-        logger.info(f"wrong filename: {requested_filename}")
     local = local_dir / requested_filename
     if not local.exists():
         async with get_ssh_session_service().session() as ssh:
