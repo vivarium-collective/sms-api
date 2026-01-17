@@ -180,7 +180,6 @@ def omics_analysis_config(n_tp: int) -> OmicsAnalysisModuleConfig:
 def analysis_options_omics(n_tp: int) -> AnalysisOptions:
     analysis_domains = ["single", "multigeneration", "multiseed"]
     return AnalysisOptions(
-        cpus=3,
         **dict(zip(analysis_domains, [omics_analysis_config(n_tp) for _ in range(len(analysis_domains))])),  # type: ignore[arg-type]
     )
 

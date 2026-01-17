@@ -68,7 +68,7 @@ class RegisteredSimulators(BaseModel):
 
 
 class ParcaOptions(BaseModel):
-    cpus: int = 3
+    cpus: int | None = None
     outdir: str = str(get_settings().simulation_outdir)
     operons: bool = True
     ribosome_fitting: bool = True
@@ -135,7 +135,8 @@ class WorkerEventMessagePayload(BaseModel):
 
 
 class AnalysisOptions(BaseModel):
-    cpus: int = 3
+    model_config = ConfigDict(extra="allow")
+    cpus: int | None = None
     single: dict[str, Any] | None = None
     multidaughter: dict[str, Any] | None = None
     multigeneration: dict[str, dict[str, Any]] | None = None
