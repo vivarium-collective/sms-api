@@ -206,8 +206,11 @@ class ORMAnalysis(Base):
 
     def to_dto(self) -> ExperimentAnalysisDTO:
         options = AnalysisConfigOptions(**self.config["analysis_options"])
-        emitter_arg = self.config["emitter_arg"]
-        config_dto = AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
+        # emitter_arg = self.config["emitter_arg"]
+        config_dto = AnalysisConfig(
+            analysis_options=options,
+            # emitter_arg=emitter_arg
+        )
         return ExperimentAnalysisDTO(
             database_id=self.id,
             name=self.name,

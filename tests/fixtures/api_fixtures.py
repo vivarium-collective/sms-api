@@ -157,16 +157,16 @@ async def parca_options() -> ParcaOptions:
 async def simulation_config(parca_options: ParcaOptions) -> SimulationConfig:
     return SimulationConfig(
         experiment_id="pytest_fixture_config",
-        sim_data_path="/pytest/kb/simData.cPickle",
-        suffix_time=False,
-        parca_options=parca_options,
-        generations=randint(1, 1000),
-        max_duration=10800,
-        initial_global_time=0,
-        time_step=1,
-        single_daughters=True,
-        emitter="parquet",
-        emitter_arg={"outdir": "/pytest/api_outputs"},
+        #     sim_data_path="/pytest/kb/simData.cPickle",
+        #     suffix_time=False,
+        #     parca_options=parca_options,
+        #     generations=randint(1, 1000),
+        #     max_duration=10800,
+        #     initial_global_time=0,
+        #     time_step=1,
+        #     single_daughters=True,
+        #     emitter="parquet",
+        #     emitter_arg={"outdir": "/pytest/api_outputs"},
     )
 
 
@@ -181,16 +181,16 @@ async def ecoli_simulation(parca_options: ParcaOptions) -> Simulation:
         simulation_config_filename="api_simulation_default_with_profile.json",
         config=SimulationConfig(
             experiment_id=pytest_fixture,
-            sim_data_path="/pytest/kb/simData.cPickle",
-            suffix_time=False,
-            parca_options=parca_options,
-            generations=randint(1, 1000),
-            max_duration=10800,
-            initial_global_time=0,
-            time_step=1,
-            single_daughters=True,
-            emitter="parquet",
-            emitter_arg={"outdir": "/pytest/api_outputs"},
+            # sim_data_path="/pytest/kb/simData.cPickle",
+            # suffix_time=False,
+            # parca_options=parca_options,
+            # generations=randint(1, 1000),
+            # max_duration=10800,
+            # initial_global_time=0,
+            # time_step=1,
+            # single_daughters=True,
+            # emitter="parquet",
+            # emitter_arg={"outdir": "/pytest/api_outputs"},
         ),
         last_updated=str(datetime.datetime.now()),
         job_id=randint(10000, 1000000),
@@ -228,7 +228,11 @@ async def analysis_request_base() -> ExperimentAnalysisRequest:
 
 @pytest_asyncio.fixture(scope="function")
 async def workflow_config() -> SimulationConfig:
-    return SimulationConfig(experiment_id="pytest_fixture", generations=randint(1, 5), n_init_sims=randint(1, 5))
+    return SimulationConfig(
+        experiment_id="pytest_fixture",
+        generations=randint(1, 5),
+        # n_init_sims=randint(1, 5)
+    )
 
 
 @pytest_asyncio.fixture

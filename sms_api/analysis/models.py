@@ -3,7 +3,7 @@ import pathlib
 import random
 from typing import Any, ParamSpec, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from sms_api.common import StrEnumBase
 from sms_api.common.models import DataId, JobStatus
@@ -102,22 +102,24 @@ class PtoolsAnalysisConfig(BaseModel):
 
 
 class AnalysisConfigOptions(BaseModel):
+    model_config = ConfigDict(extra="allow")
     experiment_id: list[str]
-    variant_data_dir: list[str] | None = None
-    validation_data_path: list[str] | None = None
-    outdir: str | None = None
-    cpus: int = 3
-    single: dict[str, Any] = {}
-    multidaughter: dict[str, Any] = {}
-    multigeneration: dict[str, dict[str, Any]] = {}
-    multiseed: dict[str, dict[str, Any]] = {}
-    multivariant: dict[str, dict[str, Any]] = {}
-    multiexperiment: dict[str, Any] = {}
+    # variant_data_dir: list[str] | None = None
+    # validation_data_path: list[str] | None = None
+    # outdir: str | None = None
+    # cpus: int = 3
+    # single: dict[str, Any] = {}
+    # multidaughter: dict[str, Any] = {}
+    # multigeneration: dict[str, dict[str, Any]] = {}
+    # multiseed: dict[str, dict[str, Any]] = {}
+    # multivariant: dict[str, dict[str, Any]] = {}
+    # multiexperiment: dict[str, Any] = {}
 
 
 class AnalysisConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
     analysis_options: AnalysisConfigOptions
-    emitter_arg: dict[str, str] = Field(default={"out_dir": ""})
+    # emitter_arg: dict[str, str] = Field(default={"out_dir": ""})
 
     @classmethod
     def from_file(cls, fp: pathlib.Path, config_id: str | None = None) -> "AnalysisConfig":
@@ -125,27 +127,33 @@ class AnalysisConfig(BaseModel):
         with open(filepath) as f:
             conf = json.load(f)
         options = AnalysisConfigOptions(**conf["analysis_options"])
-        return cls(analysis_options=options, emitter_arg=conf["emitter_arg"])
+        return cls(
+            analysis_options=options,
+            # emitter_arg=conf["emitter_arg"]
+        )
 
     @classmethod
     def from_request(cls, request: "ExperimentAnalysisRequest", analysis_name: str) -> "AnalysisConfig":
-        simulation_outdir = get_settings().simulation_outdir
-        output_dir = simulation_outdir.remote_path / request.experiment_id
+        # simulation_outdir = get_settings().simulation_outdir
+        # output_dir = simulation_outdir.remote_path / request.experiment_id
 
         options = AnalysisConfigOptions(
             experiment_id=[request.experiment_id],
-            variant_data_dir=[str(output_dir / "variant_sim_data")],
-            validation_data_path=[str(output_dir / "parca/kb/validationData.cPickle")],
-            outdir=str(output_dir.parent / analysis_name),
-            single=dict_options(request.single),
-            multidaughter=dict_options(request.multidaughter),
-            multigeneration=dict_options(request.multigeneration),
-            multiexperiment=dict_options(request.multiexperiment),
-            multivariant=dict_options(request.multivariant),
-            multiseed=dict_options(request.multiseed),
+            # variant_data_dir=[str(output_dir / "variant_sim_data")],
+            # validation_data_path=[str(output_dir / "parca/kb/validationData.cPickle")],
+            # outdir=str(output_dir.parent / analysis_name),
+            # single=dict_options(request.single),
+            # multidaughter=dict_options(request.multidaughter),
+            # multigeneration=dict_options(request.multigeneration),
+            # multiexperiment=dict_options(request.multiexperiment),
+            # multivariant=dict_options(request.multivariant),
+            # multiseed=dict_options(request.multiseed),
         )
-        emitter_arg = {"out_dir": str(output_dir.parent)}
-        return cls(analysis_options=options, emitter_arg=emitter_arg)
+        # emitter_arg = {"out_dir": str(output_dir.parent)}
+        return cls(
+            analysis_options=options,
+            # emitter_arg=emitter_arg
+        )
 
 
 class ExperimentAnalysisRequest(BaseModel):
@@ -171,23 +179,26 @@ class ExperimentAnalysisRequest(BaseModel):
         if isinstance(analysis_name, DataId):
             analysis_name = analysis_name.label
 
-        simulation_outdir = env.hpc_sim_base_path
-        experiment_outdir = str(simulation_outdir / self.experiment_id)
+        # simulation_outdir = env.hpc_sim_base_path
+        # experiment_outdir = str(simulation_outdir / self.experiment_id)
         options = AnalysisConfigOptions(
             experiment_id=[self.experiment_id],
-            variant_data_dir=[f"{experiment_outdir}/variant_sim_data"],
-            validation_data_path=[f"{experiment_outdir}/parca/kb/validationData.cPickle"],
-            outdir=f"{env.analysis_outdir.remote_path!s}/{analysis_name}",
-            cpus=MAX_ANALYSIS_CPUS,
-            single=dict_options(self.single),
-            multidaughter=dict_options(self.multidaughter),
-            multigeneration=dict_options(self.multigeneration),
-            multiexperiment=dict_options(self.multiexperiment),
-            multivariant=dict_options(self.multivariant),
-            multiseed=dict_options(self.multiseed),
+            # variant_data_dir=[f"{experiment_outdir}/variant_sim_data"],
+            # validation_data_path=[f"{experiment_outdir}/parca/kb/validationData.cPickle"],
+            # outdir=f"{env.analysis_outdir.remote_path!s}/{analysis_name}",
+            # cpus=MAX_ANALYSIS_CPUS,
+            # single=dict_options(self.single),
+            # multidaughter=dict_options(self.multidaughter),
+            # multigeneration=dict_options(self.multigeneration),
+            # multiexperiment=dict_options(self.multiexperiment),
+            # multivariant=dict_options(self.multivariant),
+            # multiseed=dict_options(self.multiseed),
         )
-        emitter_arg = {"out_dir": str(simulation_outdir)}
-        return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
+        # emitter_arg = {"out_dir": str(simulation_outdir)}
+        return AnalysisConfig(
+            analysis_options=options,
+            # emitter_arg=emitter_arg
+        )
 
     @property
     def requested(self) -> dict[str, list[PtoolsAnalysisConfig]]:

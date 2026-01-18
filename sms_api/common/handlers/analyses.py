@@ -90,9 +90,10 @@ async def handle_run_analysis_slurm(
             # 2e. poll status
             _run = await analysis_service.poll_status(dto=dto, ssh=ssh)
         # check available in specified HPC dir for analysis_config.outdir
-        available_paths: list[HPCFilePath] = await analysis_service.get_available_output_paths(
-            remote_analysis_outdir=HPCFilePath(remote_path=Path(config.analysis_options.outdir))  # type: ignore[arg-type]
-        )
+        available_paths: list[HPCFilePath] = []
+        # available_paths: list[HPCFilePath] = await analysis_service.get_available_output_paths(
+        #     remote_analysis_outdir=HPCFilePath(remote_path=Path(config.analysis_options.outdir))
+        # )
 
         # download available
         for remote_path in available_paths:

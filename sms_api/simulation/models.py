@@ -13,7 +13,7 @@ from sms_api.config import get_settings
 
 
 class BaseModel(_BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
 
 
 def trim_attributes(instance: BaseModel, excluded: list[str] | None = None) -> None:
@@ -68,20 +68,20 @@ class RegisteredSimulators(BaseModel):
 
 
 class ParcaOptions(BaseModel):
-    cpus: int | None = None
+    # cpus: int | None = None
     outdir: str = str(get_settings().simulation_outdir)
-    operons: bool = True
-    ribosome_fitting: bool = True
-    remove_rrna_operons: bool = False
-    remove_rrff: bool = False
-    stable_rrna: bool = False
-    new_genes: str = "off"
-    debug_parca: bool = False
-    load_intermediate: str | None = None
-    save_intermediates: bool = False
-    intermediates_directory: str = ""
-    variable_elongation_transcription: bool = True
-    variable_elongation_translation: bool = False
+    # operons: bool = True
+    # ribosome_fitting: bool = True
+    # remove_rrna_operons: bool = False
+    # remove_rrff: bool = False
+    # stable_rrna: bool = False
+    # new_genes: str = "off"
+    # debug_parca: bool = False
+    # load_intermediate: str | None = None
+    # save_intermediates: bool = False
+    # intermediates_directory: str = ""
+    # variable_elongation_transcription: bool = True
+    # variable_elongation_translation: bool = False
 
     def model_post_init(self, context: Any, /) -> None:
         trim_attributes(self)
@@ -137,12 +137,12 @@ class WorkerEventMessagePayload(BaseModel):
 class AnalysisOptions(BaseModel):
     model_config = ConfigDict(extra="allow")
     cpus: int | None = None
-    single: dict[str, Any] | None = None
-    multidaughter: dict[str, Any] | None = None
-    multigeneration: dict[str, dict[str, Any]] | None = None
-    multiseed: dict[str, dict[str, Any]] | None = None
-    multivariant: dict[str, dict[str, Any]] | None = None
-    multiexperiment: dict[str, Any] | None = None
+    # single: dict[str, Any] | None = None
+    # multidaughter: dict[str, Any] | None = None
+    # multigeneration: dict[str, dict[str, Any]] | None = None
+    # multiseed: dict[str, dict[str, Any]] | None = None
+    # multivariant: dict[str, dict[str, Any]] | None = None
+    # multiexperiment: dict[str, Any] | None = None
 
     def model_post_init(self, context: Any, /) -> None:
         trim_attributes(self)
@@ -153,62 +153,62 @@ class SimulationConfig(BaseModel):
     experiment_id: str
     parca_options: ParcaOptions = ParcaOptions()
     analysis_options: AnalysisOptions = AnalysisOptions()
-    sim_data_path: str | None = None
-    suffix_time: bool = False
+    # sim_data_path: str | None = None
+    # suffix_time: bool = False
     generations: int = 1
-    n_init_sims: int = 1
-    max_duration: float = 10800.0
-    initial_global_time: float = 0.0
-    time_step: float = 1.0
-    single_daughters: bool = True
-    emitter: str = "parquet"
-    emitter_arg: dict[str, Any] = Field(
-        default_factory=lambda: {"out_dir": str(get_settings().simulation_outdir)}
-    )  # str(get_settings().hpc_sim_base_path)
-    variants: dict[str, Any] = Field(default={})
-    gcloud: str | None = None
-    agent_id: str | None = None
-    parallel: bool | None = None
-    divide: bool | None = None
-    d_period: bool | None = None
-    division_threshold: bool | None = None
-    division_variable: list[str] = Field(default=[])
-    chromosome_path: list[str] | None = None
-    spatial_environment: bool | None = None
-    fixed_media: str | None = None
-    condition: str | None = None
-    save: bool | None = None
-    save_times: list[str | float | int] = Field(default=[])
-    add_processes: list[str] = Field(default=[])
-    exclude_processes: list[str] = Field(default=[])
-    profile: bool | None = None
-    processes: list[str] = Field(default=[])
-    process_configs: dict[str, Any] = Field(default={})
-    topology: dict[str, Any] = field(default={})
-    engine_process_reports: list[list[str]] = Field(default=[])
-    emit_paths: list[str] = Field(default=[])
-    progress_bar: bool | None = None
-    emit_topology: bool | None = None
-    emit_processes: bool | None = None
-    emit_config: bool | None = None
-    emit_unique: bool | None = None
-    log_updates: bool | None = None
-    raw_output: bool | None = None
-    description: str | None = None
-    seed: int | None = None
-    mar_regulon: bool | None = None
-    amp_lysis: bool | None = None
-    initial_state_file: str | None = None
-    skip_baseline: bool | None = None
-    daughter_outdir: str | None = None
-    lineage_seed: int | None = None
-    fail_at_max_duration: bool | None = None
-    inherit_from: list[str] = Field(default=[])
-    spatial_environment_config: dict[str, Any] = Field(default={})
-    swap_processes: dict[str, Any] = Field(default={})
-    flow: dict[str, Any] = Field(default={})
-    initial_state_overrides: list[str] = Field(default=[])
-    initial_state: dict[str, Any] = Field(default={})
+    # n_init_sims: int = 1
+    # max_duration: float = 10800.0
+    # initial_global_time: float = 0.0
+    # time_step: float = 1.0
+    # single_daughters: bool = True
+    # emitter: str = "parquet"
+    # emitter_arg: dict[str, Any] = Field(
+    #     default_factory=lambda: {"out_dir": str(get_settings().simulation_outdir)}
+    # )  # str(get_settings().hpc_sim_base_path)
+    # variants: dict[str, Any] = Field(default={})
+    # gcloud: str | None = None
+    # agent_id: str | None = None
+    # parallel: bool | None = None
+    # divide: bool | None = None
+    # d_period: bool | None = None
+    # division_threshold: bool | None = None
+    # division_variable: list[str] = Field(default=[])
+    # chromosome_path: list[str] | None = None
+    # spatial_environment: bool | None = None
+    # fixed_media: str | None = None
+    # condition: str | None = None
+    # save: bool | None = None
+    # save_times: list[str | float | int] = Field(default=[])
+    # add_processes: list[str] = Field(default=[])
+    # exclude_processes: list[str] = Field(default=[])
+    # profile: bool | None = None
+    # processes: list[str] = Field(default=[])
+    # process_configs: dict[str, Any] = Field(default={})
+    # topology: dict[str, Any] = field(default={})
+    # engine_process_reports: list[list[str]] = Field(default=[])
+    # emit_paths: list[str] = Field(default=[])
+    # progress_bar: bool | None = None
+    # emit_topology: bool | None = None
+    # emit_processes: bool | None = None
+    # emit_config: bool | None = None
+    # emit_unique: bool | None = None
+    # log_updates: bool | None = None
+    # raw_output: bool | None = None
+    # description: str | None = None
+    # seed: int | None = None
+    # mar_regulon: bool | None = None
+    # amp_lysis: bool | None = None
+    # initial_state_file: str | None = None
+    # skip_baseline: bool | None = None
+    # daughter_outdir: str | None = None
+    # lineage_seed: int | None = None
+    # fail_at_max_duration: bool | None = None
+    # inherit_from: list[str] = Field(default=[])
+    # spatial_environment_config: dict[str, Any] = Field(default={})
+    # swap_processes: dict[str, Any] = Field(default={})
+    # flow: dict[str, Any] = Field(default={})
+    # initial_state_overrides: list[str] = Field(default=[])
+    # initial_state: dict[str, Any] = Field(default={})
 
     @field_validator("generations", mode="before")
     @classmethod
@@ -217,13 +217,13 @@ class SimulationConfig(BaseModel):
             return 1
         return int(v)
 
-    def model_post_init(self, *args: Any) -> None:
-        for attrname in list(SimulationConfig.model_fields.keys()):
-            attr = getattr(self, attrname)
-            if (attr is None and attrname != "sim_data_path") or (attr == ["string"]):
-                delattr(self, attrname)
-            if isinstance(attr, (list, dict)) and not len(attr):
-                delattr(self, attrname)
+    # def model_post_init(self, *args: Any) -> None:
+    #     for attrname in list(SimulationConfig.model_fields.keys()):
+    #         attr = getattr(self, attrname)
+    #         if (attr is None and attrname != "sim_data_path") or (attr == ["string"]):
+    #             delattr(self, attrname)
+    #         if isinstance(attr, (list, dict)) and not len(attr):
+    #             delattr(self, attrname)
 
 
 class ExperimentRequest(BaseModel):

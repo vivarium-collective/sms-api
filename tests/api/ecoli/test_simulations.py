@@ -308,8 +308,8 @@ async def test_get_simulation_data(
     # Create a SimulationConfig pointing to the existing sms_multigeneration output
     sim_config = SimulationConfig(
         experiment_id="sms_multigeneration",
-        emitter="parquet",
-        emitter_arg={"out_dir": "/projects/SMS/sms_api/alex/sims/sms_multigeneration"},
+        # emitter="parquet",
+        # emitter_arg={"out_dir": "/projects/SMS/sms_api/alex/sims/sms_multigeneration"},
     )
 
     # Create the simulation request
