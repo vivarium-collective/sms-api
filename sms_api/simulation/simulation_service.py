@@ -11,6 +11,7 @@ from textwrap import dedent
 from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.common.hpc.nextflow_weblog import WEBLOG_RECEIVER_SCRIPT
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.common.ssh.ssh_service import SSHSession
@@ -494,7 +495,7 @@ def workflow_slurm_script(
     }
     config_json = json.dumps(config_dict).replace("'", "'\\''")
 
-    return dedent(f"""\
+    script = dedent(f"""\
         #!/bin/bash
         #SBATCH --job-name={slurm_job_name}
         #SBATCH --time=7-00:00:00
@@ -561,10 +562,36 @@ def workflow_slurm_script(
         export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
 
         cd "$NEXTFLOW_DIR"
+
+        ### Start weblog receiver for Nextflow event capture
+        export EVENTS_FILE="$NEXTFLOW_DIR/${{EXPERIMENT_ID}}_events.ndjson"
+
+        python3 << 'WEBLOG_SCRIPT' &
+        __WEBLOG_SCRIPT_PLACEHOLDER__
+        WEBLOG_SCRIPT
+
+        WEBLOG_PID=$!
+        sleep 1
+
+        # Read the port from temp file
+        WEBLOG_PORT=$(cat /tmp/weblog_port_$$ 2>/dev/null || echo "9999")
+        rm -f /tmp/weblog_port_$$
+        echo "Weblog receiver running on port $WEBLOG_PORT (PID: $WEBLOG_PID)"
+
         nextflow -C "$NEXTFLOW_DIR/nextflow.config" run "$NEXTFLOW_DIR/main.nf" \\
             -profile aws_cdk \\
             -with-report "$NEXTFLOW_DIR/${{EXPERIMENT_ID}}_report.html" \\
+            -with-weblog http://localhost:$WEBLOG_PORT \\
             -work-dir "$NEXTFLOW_DIR/nextflow_workdirs"
 
-        echo "Workflow completed successfully."
+        ### Cleanup weblog receiver
+        NF_EXIT_CODE=$?
+        kill $WEBLOG_PID 2>/dev/null || true
+        wait $WEBLOG_PID 2>/dev/null || true
+
+        echo "Workflow completed with exit code: $NF_EXIT_CODE"
+        exit $NF_EXIT_CODE
     """)
+
+    script = script.replace("__WEBLOG_SCRIPT_PLACEHOLDER__", WEBLOG_RECEIVER_SCRIPT.strip())
+    return script
