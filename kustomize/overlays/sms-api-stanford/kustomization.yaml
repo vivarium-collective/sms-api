@@ -20,7 +20,8 @@ replicas:
     name: haproxy-ssh
 
 resources:
-  - ingress.yaml
+#  - ingress.yaml
+  - target-group-binding.yaml
   - storageclass-gp3-retain.yaml
   - fsx-pcs-root-pv.yaml
   - vivarium-home-pvc.yaml

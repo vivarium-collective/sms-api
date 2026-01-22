@@ -192,4 +192,43 @@ sed -i.bak \
 echo "✓ Redis configuration updated in shared.env"
 
 echo ""
+echo "=== Updating Target Group Bindings for Verified Access ==="
+
+# Get Target Group ARNs from CDK stack outputs
+echo "Retrieving Target Group ARNs from smscdk-verified-access stack..."
+STACK_OUTPUTS=$(aws cloudformation describe-stacks \
+  --region $AWS_REGION \
+  --stack-name smscdk-verified-access \
+  --query "Stacks[0].Outputs" \
+  --output json)
+
+API_TARGET_GROUP_ARN=$(echo "$STACK_OUTPUTS" | jq -r '.[] | select(.OutputKey=="ApiTargetGroupArn") | .OutputValue')
+PTOOLS_TARGET_GROUP_ARN=$(echo "$STACK_OUTPUTS" | jq -r '.[] | select(.OutputKey=="PtoolsTargetGroupArn") | .OutputValue')
+
+if [ -z "$API_TARGET_GROUP_ARN" ] || [ "$API_TARGET_GROUP_ARN" == "null" ]; then
+    echo "ERROR: Failed to retrieve ApiTargetGroupArn from stack outputs"
+    exit 1
+fi
+
+if [ -z "$PTOOLS_TARGET_GROUP_ARN" ] || [ "$PTOOLS_TARGET_GROUP_ARN" == "null" ]; then
+    echo "ERROR: Failed to retrieve PtoolsTargetGroupArn from stack outputs"
+    exit 1
+fi
+
+echo "✓ API Target Group ARN: ${API_TARGET_GROUP_ARN}"
+echo "✓ Ptools Target Group ARN: ${PTOOLS_TARGET_GROUP_ARN}"
+
+# Generate the TargetGroupBinding YAML from template
+TGB_TEMPLATE="${SECRETS_DIR}/target-group-binding.yaml.template"
+TGB_FILE="${SECRETS_DIR}/target-group-binding.yaml"
+echo "Generating TargetGroupBinding YAML from template..."
+
+sed \
+  -e "s|\${API_TARGET_GROUP_ARN}|${API_TARGET_GROUP_ARN}|g" \
+  -e "s|\${PTOOLS_TARGET_GROUP_ARN}|${PTOOLS_TARGET_GROUP_ARN}|g" \
+  "${TGB_TEMPLATE}" > "${TGB_FILE}"
+
+echo "✓ TargetGroupBinding YAML generated: ${TGB_FILE}"
+
+echo ""
 echo "=== All secrets, ConfigMaps, and FSx configuration files generated successfully! ==="
