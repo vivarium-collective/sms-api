@@ -426,7 +426,7 @@ class SimulationServiceHpc(SimulationService):
                     simulator_hash=simulator.git_commit_hash,  # type: ignore[union-attr]
                     config=ecoli_simulation.config,
                 )
-                capture_slurm_script(script_content, "simulation.sbatch")
+                capture_slurm_script(script_content, "workflow.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -582,7 +582,7 @@ def workflow_slurm_script(
         echo "Weblog receiver running on port $WEBLOG_PORT (PID: $WEBLOG_PID)"
 
         nextflow -C "$NEXTFLOW_DIR/nextflow.config" run "$NEXTFLOW_DIR/main.nf" \\
-            -profile aws_cdk \\
+            -profile {nf_profile_name} \\
             -with-report "$NEXTFLOW_DIR/${{EXPERIMENT_ID}}_report.html" \\
             -with-weblog http://localhost:$WEBLOG_PORT \\
             -work-dir "$NEXTFLOW_DIR/nextflow_workdirs"
