@@ -1,106 +1,12 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.4.3
+  version: 0.4.4
 paths:
   /api/v1/simulations:
-    get:
-      tags:
-      - Simulations
-      summary: List all simulation specs uploaded to the database
-      operationId: list-ecoli-simulations
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/Simulation'
-                type: array
-                title: Response List-Ecoli-Simulations
     post:
       tags:
-      - Simulations
-      summary: Launches a nextflow-powered vEcoli simulation workflow
-      description: Run a vEcoli simulation workflow with full configuration.
-      operationId: run-ecoli-simulation
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SimulationRequest'
-              default:
-                config:
-                  experiment_id: postman_TEST
-                  parca_options:
-                    cpus: 3
-                    outdir: /projects/SMS/sms_api/jim/workspace/api_outputs
-                    operons: true
-                    ribosome_fitting: true
-                    remove_rrna_operons: false
-                    remove_rrff: false
-                    stable_rrna: false
-                    new_genes: 'off'
-                    debug_parca: false
-                    save_intermediates: false
-                    intermediates_directory: ''
-                    variable_elongation_transcription: true
-                    variable_elongation_translation: false
-                  analysis_options:
-                    cpus: 3
-                    single:
-                      ptools_rxns:
-                        n_tp: 9
-                      ptools_rna:
-                        n_tp: 9
-                      ptools_proteins:
-                        n_tp: 9
-                    multigeneration:
-                      ptools_rxns:
-                        n_tp: 9
-                      ptools_rna:
-                        n_tp: 9
-                      ptools_proteins:
-                        n_tp: 9
-                    multiseed:
-                      ptools_rxns:
-                        n_tp: 9
-                      ptools_rna:
-                        n_tp: 9
-                      ptools_proteins:
-                        n_tp: 9
-                  suffix_time: false
-                  generations: 1
-                  n_init_sims: 1
-                  max_duration: 10800.0
-                  initial_global_time: 0.0
-                  time_step: 1.0
-                  single_daughters: true
-                  emitter: parquet
-                  emitter_arg:
-                    out_dir: /projects/SMS/sms_api/jim/workspace/api_outputs
-                simulator:
-                  git_commit_hash: 540e426
-                  git_repo_url: https://github.com/vivarium-collective/vEcoli
-                  git_branch: ccam-nextflow
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Simulation'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/simulations-new:
-    post:
-      tags:
-      - Simulations
+      - Experiments
       summary: '[New] Launches a vEcoli simulation workflow with simple parameters'
       description: 'Run a vEcoli simulation workflow with simplified parameters.
 
@@ -182,10 +88,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Experiments
+      summary: List all simulation specs uploaded to the database
+      operationId: list-ecoli-simulations
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Simulation'
+                title: Response List-Ecoli-Simulations
   /api/v1/simulations/{id}:
     get:
       tags:
-      - Simulations
+      - Experiments
       summary: Get Simulation
       operationId: get-ecoli-simulation
       parameters:
@@ -216,7 +137,7 @@ paths:
   /api/v1/simulations/{id}/status:
     get:
       tags:
-      - Simulations
+      - Experiments
       summary: Get the simulation status record by its ID
       operationId: get-ecoli-simulation-status
       parameters:
@@ -242,8 +163,8 @@ paths:
   /api/v1/simulations/{id}/data:
     post:
       tags:
-      - Simulations
-      summary: Get/Stream simulation data
+      - Experiments
+      summary: Get simulation omics data in TSV format
       operationId: get-ecoli-simulation-data
       parameters:
       - name: id
@@ -254,50 +175,16 @@ paths:
           description: Database ID of the simulation.
           title: Id
         description: Database ID of the simulation.
-      - name: lineage_seed
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 6
-          title: Lineage Seed
-      - name: generation
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 1
-          title: Generation
-      - name: variant
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Variant
-      - name: agent_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-          title: Agent Id
-      requestBody:
-        content:
-          application/json:
-            schema:
-              anyOf:
-              - type: array
-                items:
-                  type: string
-              - type: 'null'
-              title: Observables
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TsvOutputFile'
+                title: Response Get-Ecoli-Simulation-Data
         '422':
           description: Validation Error
           content:
@@ -473,7 +360,7 @@ paths:
         required: false
         schema:
           type: string
-          default: ccam-nextflow
+          default: api-support
           title: Git Branch
       responses:
         '200':
@@ -567,23 +454,11 @@ paths:
                 simulator_version:
                   git_commit_hash: 540e426
                   git_repo_url: https://github.com/vivarium-collective/vEcoli
-                  git_branch: ccam-nextflow
+                  git_branch: api-support
                   database_id: 25
-                  created_at: '2026-01-11T14:18:14.362930'
+                  created_at: '2026-01-21T19:38:52.720478'
                 parca_config:
-                  cpus: 3
-                  outdir: /projects/SMS/sms_api/jim/workspace/api_outputs
-                  operons: true
-                  ribosome_fitting: true
-                  remove_rrna_operons: false
-                  remove_rrff: false
-                  stable_rrna: false
-                  new_genes: 'off'
-                  debug_parca: false
-                  save_intermediates: false
-                  intermediates_directory: ''
-                  variable_elongation_transcription: true
-                  variable_elongation_translation: false
+                  outdir: /projects/SMS/sms_api/alex/sims
       responses:
         '200':
           description: Successful Response
@@ -697,13 +572,7 @@ components:
       properties:
         analysis_options:
           $ref: '#/components/schemas/AnalysisConfigOptions'
-        emitter_arg:
-          additionalProperties:
-            type: string
-          type: object
-          title: Emitter Arg
-          default:
-            out_dir: ''
+      additionalProperties: true
       type: object
       required:
       - analysis_options
@@ -715,65 +584,7 @@ components:
             type: string
           type: array
           title: Experiment Id
-        variant_data_dir:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
-          title: Variant Data Dir
-        validation_data_path:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
-          title: Validation Data Path
-        outdir:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Outdir
-        cpus:
-          type: integer
-          title: Cpus
-          default: 3
-        single:
-          additionalProperties: true
-          type: object
-          title: Single
-          default: {}
-        multidaughter:
-          additionalProperties: true
-          type: object
-          title: Multidaughter
-          default: {}
-        multigeneration:
-          additionalProperties:
-            additionalProperties: true
-            type: object
-          type: object
-          title: Multigeneration
-          default: {}
-        multiseed:
-          additionalProperties:
-            additionalProperties: true
-            type: object
-          type: object
-          title: Multiseed
-          default: {}
-        multivariant:
-          additionalProperties:
-            additionalProperties: true
-            type: object
-          type: object
-          title: Multivariant
-          default: {}
-        multiexperiment:
-          additionalProperties: true
-          type: object
-          title: Multiexperiment
-          default: {}
+      additionalProperties: true
       type: object
       required:
       - experiment_id
@@ -798,51 +609,15 @@ components:
     AnalysisOptions:
       properties:
         cpus:
-          type: integer
+          anyOf:
+          - type: integer
+          - type: 'null'
           title: Cpus
-          default: 3
-        single:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
-          title: Single
-        multidaughter:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
-          title: Multidaughter
-        multigeneration:
-          anyOf:
-          - additionalProperties:
-              additionalProperties: true
-              type: object
-            type: object
-          - type: 'null'
-          title: Multigeneration
-        multiseed:
-          anyOf:
-          - additionalProperties:
-              additionalProperties: true
-              type: object
-            type: object
-          - type: 'null'
-          title: Multiseed
-        multivariant:
-          anyOf:
-          - additionalProperties:
-              additionalProperties: true
-              type: object
-            type: object
-          - type: 'null'
-          title: Multivariant
-        multiexperiment:
-          anyOf:
-          - additionalProperties: true
-            type: object
-          - type: 'null'
-          title: Multiexperiment
+        memory_gb:
+          type: integer
+          title: Memory Gb
+          default: 8
+      additionalProperties: true
       type: object
       title: AnalysisOptions
     AnalysisRun:
@@ -852,6 +627,16 @@ components:
           title: Id
         status:
           $ref: '#/components/schemas/JobStatus'
+        job_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Job Id
+        error_log:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Log
       type: object
       required:
       - id
@@ -1002,6 +787,7 @@ components:
           - type: string
           - type: 'null'
           title: Error Message
+      additionalProperties: true
       type: object
       required:
       - database_id
@@ -1089,6 +875,7 @@ components:
           - type: string
           - type: 'null'
           title: Remote Archive Path
+      additionalProperties: true
       type: object
       required:
       - database_id
@@ -1101,82 +888,19 @@ components:
         parca_config:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            cpus: 3
-            outdir: /projects/SMS/sms_api/jim/workspace/api_outputs
-            operons: true
-            ribosome_fitting: true
-            remove_rrna_operons: false
-            remove_rrff: false
-            stable_rrna: false
-            new_genes: 'off'
-            debug_parca: false
-            save_intermediates: false
-            intermediates_directory: ''
-            variable_elongation_transcription: true
-            variable_elongation_translation: false
+            outdir: /projects/SMS/sms_api/alex/sims
+      additionalProperties: true
       type: object
       required:
       - simulator_version
       title: ParcaDatasetRequest
     ParcaOptions:
       properties:
-        cpus:
-          type: integer
-          title: Cpus
-          default: 3
         outdir:
           type: string
           title: Outdir
-          default: /projects/SMS/sms_api/jim/workspace/api_outputs
-        operons:
-          type: boolean
-          title: Operons
-          default: true
-        ribosome_fitting:
-          type: boolean
-          title: Ribosome Fitting
-          default: true
-        remove_rrna_operons:
-          type: boolean
-          title: Remove Rrna Operons
-          default: false
-        remove_rrff:
-          type: boolean
-          title: Remove Rrff
-          default: false
-        stable_rrna:
-          type: boolean
-          title: Stable Rrna
-          default: false
-        new_genes:
-          type: string
-          title: New Genes
-          default: 'off'
-        debug_parca:
-          type: boolean
-          title: Debug Parca
-          default: false
-        load_intermediate:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Load Intermediate
-        save_intermediates:
-          type: boolean
-          title: Save Intermediates
-          default: false
-        intermediates_directory:
-          type: string
-          title: Intermediates Directory
-          default: ''
-        variable_elongation_transcription:
-          type: boolean
-          title: Variable Elongation Transcription
-          default: true
-        variable_elongation_translation:
-          type: boolean
-          title: Variable Elongation Translation
-          default: false
+          default: /projects/SMS/sms_api/alex/sims
+      additionalProperties: true
       type: object
       title: ParcaOptions
     PtoolsAnalysisConfig:
@@ -1235,6 +959,7 @@ components:
             format: date-time
           - type: 'null'
           title: Timestamp
+      additionalProperties: true
       type: object
       required:
       - versions
@@ -1252,21 +977,30 @@ components:
           title: Parca Dataset Id
         config:
           $ref: '#/components/schemas/SimulationConfig'
+        simulation_config_filename:
+          type: string
+          title: Simulation Config Filename
+        experiment_id:
+          type: string
+          title: Experiment Id
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-01-11 14:18:14.197085'
+          default: '2026-01-21 19:38:51.864376'
         job_id:
           anyOf:
           - type: integer
           - type: 'null'
           title: Job Id
+      additionalProperties: true
       type: object
       required:
       - database_id
       - simulator_id
       - parca_dataset_id
       - config
+      - simulation_config_filename
+      - experiment_id
       title: Simulation
       description: Used by the /simulation endpoint
     SimulationConfig:
@@ -1277,335 +1011,20 @@ components:
         parca_options:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            cpus: 3
-            outdir: /projects/SMS/sms_api/jim/workspace/api_outputs
-            operons: true
-            ribosome_fitting: true
-            remove_rrna_operons: false
-            remove_rrff: false
-            stable_rrna: false
-            new_genes: 'off'
-            debug_parca: false
-            save_intermediates: false
-            intermediates_directory: ''
-            variable_elongation_transcription: true
-            variable_elongation_translation: false
+            outdir: /projects/SMS/sms_api/alex/sims
         analysis_options:
           $ref: '#/components/schemas/AnalysisOptions'
           default:
-            cpus: 3
-        sim_data_path:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Sim Data Path
-        suffix_time:
-          type: boolean
-          title: Suffix Time
-          default: false
+            memory_gb: 8
         generations:
           type: integer
           title: Generations
           default: 1
-        n_init_sims:
-          type: integer
-          title: N Init Sims
-          default: 1
-        max_duration:
-          type: number
-          title: Max Duration
-          default: 10800.0
-        initial_global_time:
-          type: number
-          title: Initial Global Time
-          default: 0.0
-        time_step:
-          type: number
-          title: Time Step
-          default: 1.0
-        single_daughters:
-          type: boolean
-          title: Single Daughters
-          default: true
-        emitter:
-          type: string
-          title: Emitter
-          default: parquet
-        emitter_arg:
-          additionalProperties:
-            type: string
-          type: object
-          title: Emitter Arg
-        variants:
-          additionalProperties:
-            additionalProperties:
-              additionalProperties:
-                items:
-                  anyOf:
-                  - type: number
-                  - type: string
-                  - type: integer
-                type: array
-              type: object
-            type: object
-          type: object
-          title: Variants
-          default: {}
-        gcloud:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Gcloud
-        agent_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Agent Id
-        parallel:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Parallel
-        divide:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Divide
-        d_period:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: D Period
-        division_threshold:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Division Threshold
-        division_variable:
-          items:
-            type: string
-          type: array
-          title: Division Variable
-          default: []
-        chromosome_path:
-          anyOf:
-          - items:
-              type: string
-            type: array
-          - type: 'null'
-          title: Chromosome Path
-        spatial_environment:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Spatial Environment
-        fixed_media:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Fixed Media
-        condition:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Condition
-        save:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Save
-        save_times:
-          items:
-            type: string
-          type: array
-          title: Save Times
-          default: []
-        add_processes:
-          items:
-            type: string
-          type: array
-          title: Add Processes
-          default: []
-        exclude_processes:
-          items:
-            type: string
-          type: array
-          title: Exclude Processes
-          default: []
-        profile:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Profile
-        processes:
-          items:
-            type: string
-          type: array
-          title: Processes
-          default: []
-        process_configs:
-          additionalProperties: true
-          type: object
-          title: Process Configs
-          default: {}
-        topology:
-          additionalProperties: true
-          type: object
-          title: Topology
-          default: {}
-        engine_process_reports:
-          items:
-            items:
-              type: string
-            type: array
-          type: array
-          title: Engine Process Reports
-          default: []
-        emit_paths:
-          items:
-            type: string
-          type: array
-          title: Emit Paths
-          default: []
-        progress_bar:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Progress Bar
-        emit_topology:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Emit Topology
-        emit_processes:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Emit Processes
-        emit_config:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Emit Config
-        emit_unique:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Emit Unique
-        log_updates:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Log Updates
-        raw_output:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Raw Output
-        description:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Description
-        seed:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Seed
-        mar_regulon:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Mar Regulon
-        amp_lysis:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Amp Lysis
-        initial_state_file:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Initial State File
-        skip_baseline:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Skip Baseline
-        daughter_outdir:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Daughter Outdir
-        lineage_seed:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Lineage Seed
-        fail_at_max_duration:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Fail At Max Duration
-        inherit_from:
-          items:
-            type: string
-          type: array
-          title: Inherit From
-          default: []
-        spatial_environment_config:
-          additionalProperties: true
-          type: object
-          title: Spatial Environment Config
-          default: {}
-        swap_processes:
-          additionalProperties: true
-          type: object
-          title: Swap Processes
-          default: {}
-        flow:
-          additionalProperties: true
-          type: object
-          title: Flow
-          default: {}
-        initial_state_overrides:
-          items:
-            type: string
-          type: array
-          title: Initial State Overrides
-          default: []
-        initial_state:
-          additionalProperties: true
-          type: object
-          title: Initial State
-          default: {}
+      additionalProperties: true
       type: object
       required:
       - experiment_id
       title: SimulationConfig
-    SimulationRequest:
-      properties:
-        config:
-          $ref: '#/components/schemas/SimulationConfig'
-        simulator:
-          anyOf:
-          - $ref: '#/components/schemas/Simulator'
-          - type: 'null'
-        simulator_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Simulator Id
-        parca_dataset_id:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Parca Dataset Id
-      type: object
-      required:
-      - config
-      title: SimulationRequest
-      description: Used by the /simulation endpoint.
     SimulationRun:
       properties:
         id:
@@ -1613,6 +1032,7 @@ components:
           title: Id
         status:
           $ref: '#/components/schemas/JobStatus'
+      additionalProperties: true
       type: object
       required:
       - id
@@ -1629,6 +1049,7 @@ components:
         git_branch:
           type: string
           title: Git Branch
+      additionalProperties: true
       type: object
       required:
       - git_commit_hash
@@ -1655,6 +1076,7 @@ components:
             format: date-time
           - type: 'null'
           title: Created At
+      additionalProperties: true
       type: object
       required:
       - git_commit_hash
