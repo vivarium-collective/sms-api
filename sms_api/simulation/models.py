@@ -2,7 +2,6 @@ import datetime
 import enum
 import hashlib
 import json
-from dataclasses import field
 from typing import Any
 
 from pydantic import BaseModel as _BaseModel
@@ -68,8 +67,8 @@ class RegisteredSimulators(BaseModel):
 
 
 class ParcaOptions(BaseModel):
-    # cpus: int | None = None
     outdir: str = str(get_settings().simulation_outdir)
+    # cpus: int | None = None
     # operons: bool = True
     # ribosome_fitting: bool = True
     # remove_rrna_operons: bool = False
@@ -137,6 +136,7 @@ class WorkerEventMessagePayload(BaseModel):
 class AnalysisOptions(BaseModel):
     model_config = ConfigDict(extra="allow")
     cpus: int | None = None
+    memory_gb: int = 8  # Default memory for analysis tasks
     # single: dict[str, Any] | None = None
     # multidaughter: dict[str, Any] | None = None
     # multigeneration: dict[str, dict[str, Any]] | None = None
@@ -153,9 +153,9 @@ class SimulationConfig(BaseModel):
     experiment_id: str
     parca_options: ParcaOptions = ParcaOptions()
     analysis_options: AnalysisOptions = AnalysisOptions()
+    generations: int = 1
     # sim_data_path: str | None = None
     # suffix_time: bool = False
-    generations: int = 1
     # n_init_sims: int = 1
     # max_duration: float = 10800.0
     # initial_global_time: float = 0.0
@@ -216,87 +216,6 @@ class SimulationConfig(BaseModel):
         if v is None:
             return 1
         return int(v)
-
-    # def model_post_init(self, *args: Any) -> None:
-    #     for attrname in list(SimulationConfig.model_fields.keys()):
-    #         attr = getattr(self, attrname)
-    #         if (attr is None and attrname != "sim_data_path") or (attr == ["string"]):
-    #             delattr(self, attrname)
-    #         if isinstance(attr, (list, dict)) and not len(attr):
-    #             delattr(self, attrname)
-
-
-class ExperimentRequest(BaseModel):
-    """Used by the /simulation endpoint."""
-
-    experiment_id: str
-    simulation_name: str | None = None
-    metadata: dict[str, Any] = {}
-    run_parca: bool = True
-    generations: int = 2
-    n_init_sims: int = 1
-    lineage_seed: int = 3
-    max_duration: float = 10800.0
-    initial_global_time: float = 0.0
-    time_step: float = 1.0
-    single_daughters: bool = True
-    variants: dict[str, dict[str, dict[str, list[float | str | int]]]] = Field(default={})
-    analysis_options: dict[str, Any] = Field(default={})
-    gcloud: str | None = None
-    agent_id: str | None = None
-    parallel: bool | None = None
-    divide: bool | None = None
-    d_period: bool | None = None
-    division_threshold: bool | None = None
-    division_variable: list[str] = Field(default=[])
-    chromosome_path: list[str] | None = None
-    spatial_environment: bool | None = None
-    fixed_media: str | None = None
-    condition: str | None = None
-    add_processes: list[str] = Field(default=[])
-    exclude_processes: list[str] = Field(default=[])
-    profile: bool | None = None
-    processes: list[str] = Field(default=[])
-    process_configs: dict[str, Any] = Field(default={})
-    topology: dict[str, Any] = field(default={})
-    engine_process_reports: list[list[str]] = Field(default=[])
-    emit_paths: list[str] = Field(default=[])
-    emit_topology: bool | None = None
-    emit_processes: bool | None = None
-    emit_config: bool | None = None
-    emit_unique: bool | None = None
-    log_updates: bool | None = None
-    description: str | None = None
-    seed: int | None = None
-    mar_regulon: bool | None = None
-    amp_lysis: bool | None = None
-    initial_state_file: str | None = None
-    skip_baseline: bool | None = None
-    fail_at_max_duration: bool | None = None
-    inherit_from: list[str] = Field(default=[])
-    spatial_environment_config: dict[str, Any] = Field(default={})
-    swap_processes: dict[str, Any] = Field(default={})
-    flow: dict[str, Any] = Field(default={})
-    initial_state_overrides: list[str] = Field(default=[])
-    initial_state: dict[str, Any] = Field(default={})
-
-    def model_post_init(self, context: Any, /) -> None:
-        if self.simulation_name is None:
-            self.simulation_name = self.experiment_id
-
-    def to_config(self) -> SimulationConfig:
-        attributes = self.model_json_schema()["properties"]
-        excluded = ["simdata_id", "metadata"]
-        config_kwargs = {}
-        for attribute in attributes:
-            if attribute not in excluded:
-                attr_val = getattr(self, attribute)
-                if attr_val != "string":
-                    config_kwargs[attribute] = attr_val
-
-        # config_kwargs = {attribute: getattr(self, attribute) for attribute in attributes if attribute not in excluded}
-
-        return SimulationConfig(**config_kwargs)
 
 
 class SimulationRequest(BaseModel):

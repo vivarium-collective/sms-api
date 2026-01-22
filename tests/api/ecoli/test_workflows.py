@@ -17,11 +17,12 @@ import uuid
 from typing import TYPE_CHECKING
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, HTTPError
 
 from sms_api.api import request_examples
 from sms_api.api.main import app
 from sms_api.common.models import JobStatus
+from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
@@ -82,10 +83,7 @@ async def test_get_simulation(database_service: DatabaseServiceSQL, experiment_r
 # =============================================================================
 
 
-async def _ensure_simulator_ready(
-    client: AsyncClient,
-    repo_info: SimulatorRepoInfo,
-) -> int:
+async def _ensure_simulator_ready(client: AsyncClient) -> int:  # noqa: C901
     """
     Ensure simulator is registered and built using REST endpoints.
 
@@ -95,6 +93,18 @@ async def _ensure_simulator_ready(
 
     Returns the simulator database ID.
     """
+    # Reference the latest simulator
+    latest_sim_response = await client.get(
+        "/core/v1/simulator/latest", params={"git_repo_url": DEFAULT_REPO, "git_branch": DEFAULT_BRANCH}
+    )
+    if latest_sim_response.status_code != 200:
+        raise HTTPError(f"Could not fetch the latest simulator: {DEFAULT_BRANCH} in repo {DEFAULT_REPO}")
+    latest_simulator = latest_sim_response.json()
+    repo_info = SimulatorRepoInfo(
+        commit_hash=latest_simulator["git_commit_hash"],
+        url=latest_simulator["git_repo_url"],
+        branch=latest_simulator["git_branch"],
+    )
     # Check if simulator already exists
     versions_response = await client.get(f"{CORE_ROUTER}/simulator/versions")
     versions_response.raise_for_status()
@@ -177,7 +187,6 @@ async def test_run_simulation_e2e(
     base_router: str,
     simulation_service_slurm: SimulationServiceHpc,
     database_service: DatabaseServiceSQL,
-    simulator_repo_info: SimulatorRepoInfo,
     ssh_session_service: SSHSessionService,
     job_scheduler: "JobScheduler",
 ) -> None:
@@ -203,7 +212,7 @@ async def test_run_simulation_e2e(
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         # Step 1: Ensure simulator is ready via REST endpoints
         print("\nStep 1: Ensuring simulator is ready...")
-        simulator_id = await _ensure_simulator_ready(client, simulator_repo_info)
+        simulator_id = await _ensure_simulator_ready(client)
         print(f"  Using simulator ID: {simulator_id}")
 
         # Step 2: POST to /simulations

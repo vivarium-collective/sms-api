@@ -41,7 +41,7 @@ config = get_router_config(prefix="api", version_major=False)
 #     path="/simulations",
 #     operation_id="run-ecoli-simulation",
 #     response_model=Simulation,
-#     tags=["Simulations"],
+#     tags=["Experiments"],
 #     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
 #     summary="Launches a vEcoli simulation workflow with simple parameters",
 # )
@@ -86,7 +86,7 @@ config = get_router_config(prefix="api", version_major=False)
     path="/simulations",
     operation_id="run-ecoli-simulation-new",
     response_model=Simulation,
-    tags=["Simulations"],
+    tags=["Experiments"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
     summary="[New] Launches a vEcoli simulation workflow with simple parameters",
 )
@@ -130,7 +130,7 @@ async def run_simulation_new(
 @config.router.get(
     path="/simulations/{id}",
     operation_id="get-ecoli-simulation",
-    tags=["Simulations"],
+    tags=["Experiments"],
     dependencies=[Depends(get_database_service)],
 )
 async def get_simulation(id: int = FastAPIPath(description="Database ID of the simulation")) -> Simulation | None:
@@ -150,7 +150,7 @@ async def get_simulation(id: int = FastAPIPath(description="Database ID of the s
     path="/simulations/{id}/status",
     response_model=SimulationRun,
     operation_id="get-ecoli-simulation-status",
-    tags=["Simulations"],
+    tags=["Experiments"],
     dependencies=[Depends(get_database_service)],
     summary="Get the simulation status record by its ID",
 )
@@ -172,7 +172,7 @@ async def get_simulation_status(id: int = FastAPIPath(...)) -> SimulationRun:
 @config.router.get(
     path="/simulations",
     operation_id="list-ecoli-simulations",
-    tags=["Simulations"],
+    tags=["Experiments"],
     summary="List all simulation specs uploaded to the database",
     dependencies=[Depends(get_database_service)],
 )
@@ -192,7 +192,7 @@ async def list_simulations() -> list[Simulation]:
 @config.router.post(
     path="/simulations/{id}/data",
     operation_id="get-ecoli-simulation-data",
-    tags=["Simulations"],
+    tags=["Experiments"],
     dependencies=[Depends(get_database_service)],
     summary="Get simulation omics data in TSV format",
 )
