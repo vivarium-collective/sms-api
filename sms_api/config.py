@@ -166,6 +166,9 @@ class Settings(BaseSettings):
     github_username: str = ""
     github_token: str = ""
 
+    # nextflow/workflows
+    nextflow_profile: Literal["ccam", "aws_cdk", ""] = ""
+
     def model_post_init(self, __context: object) -> None:
         """Load GitHub credentials from dockerconfigjson if not set directly."""
         if (not self.github_username or not self.github_token) and self.github_dockerconfig_path:

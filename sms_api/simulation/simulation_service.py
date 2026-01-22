@@ -489,7 +489,10 @@ def workflow_slurm_script(
     if "parca_options" not in config_dict:
         config_dict["parca_options"] = {}
     config_dict["parca_options"]["load_intermediate"] = None  # Don't load cached intermediates
-    config_dict["aws_cdk"] = {
+
+    # specify vEcoli Nextflow profile as per env settings
+    nf_profile_name = env.nextflow_profile
+    config_dict[nf_profile_name] = {
         "container_image": str(apptainer_image_path),
         "build_image": False,
     }
