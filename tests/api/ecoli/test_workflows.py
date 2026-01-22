@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from sms_api.simulation.job_scheduler import JobScheduler
 
 # Config file name expected in vEcoli/configs/
-CONFIG_FILENAME = "api_simulation_default_with_profile.json"
+CONFIG_FILENAME = "api_simulation_default_ccam.json"
 
 # Core router prefix (for simulator endpoints)
 CORE_ROUTER = "/core/v1"
