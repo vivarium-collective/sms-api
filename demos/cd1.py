@@ -240,36 +240,67 @@ def _(get_simulation):
 
 @app.cell
 def _(e2e):
-    outputs = e2e.get_output_data(simulation_id=61)
+    simulation_id_default = 61  # noqa: F841
+    simulation_id_vio_with_metab = 59
+    outputs = e2e.get_output_data(simulation_id=simulation_id_vio_with_metab)
     return (outputs,)
 
 
 @app.cell
-def _(TsvOutputFile):
+def _(TsvOutputFile, mo):
     from io import StringIO
 
     import polars as pl
 
-    def read_output(output: TsvOutputFile):
-        return pl.read_csv(StringIO(output.content), separator="\t")
+    def read_output_tsv(output_content: str):
+        return pl.read_csv(StringIO(output_content), separator="\t")
+
+    def read_output_html(output_content: str):
+        return mo.Html(output_content)
 
     def plot_output(df: pl.DataFrame, x: str, y: str) -> None:
         return df.plot.line(x=x, y=y)
 
-    return plot_output, read_output
+    def find_tsv_outputs(outputs: list[TsvOutputFile]):
+        return [out for out in outputs if "tsv" in out.filename]
+
+    def find_html_outputs(outputs: list[TsvOutputFile]):
+        return [out for out in outputs if "html" in out.filename]
+
+    return (
+        find_html_outputs,
+        find_tsv_outputs,
+        plot_output,
+        read_output_html,
+        read_output_tsv,
+    )
 
 
 @app.cell
-def _(outputs, read_output):
-    output_i = outputs[0]
-    df_i = read_output(output_i)
-    df_i  # noqa: B018
-    return (df_i,)
+def _(find_html_outputs, find_tsv_outputs, outputs):
+    tsv_outputs = find_tsv_outputs(outputs)
+    html_outputs = find_html_outputs(outputs)
+    return html_outputs, tsv_outputs
 
 
 @app.cell
-def _(df_i, plot_output):
-    plot_output(df_i, x="std", y="mean")
+def _(html_outputs, read_output_html):
+    read_output_html(output_content=html_outputs[0].content)
+    return
+
+
+@app.cell
+def _(read_output_tsv, tsv_outputs):
+    proteomics_output = tsv_outputs[5]
+    print(f"Now displaying data from {proteomics_output.filename}!")
+    proteomics_df = read_output_tsv(output_content=tsv_outputs[5].content)
+    proteomics_df  # noqa: B018
+    return (proteomics_df,)
+
+
+@app.cell
+def _(plot_output, proteomics_df):
+    plot_output(proteomics_df, x="std", y="mean")
     return
 
 
