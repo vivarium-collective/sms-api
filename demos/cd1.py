@@ -5,12 +5,13 @@ app = marimo.App(width="full")
 
 
 @app.cell
-def _():
+def _():  # noqa: C901
     import time
     from enum import StrEnum
 
     import httpx
 
+    from sms_api.analysis.models import TsvOutputFile
     from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
     from sms_api.simulation.models import Simulation, Simulator, SimulatorVersion
 
@@ -18,9 +19,9 @@ def _():
         LOCAL = "http://localhost:8888"
         ACADEMIC_PROD = "https://sms.cam.uchc.edu"
         ACADEMIC_DEV = "https://sms-dev.cam.uchc.edu"
-        STANFORD = "http://?"
+        STANFORD = "http://localhost:8080"
 
-    BASE_URL = BaseUrl.LOCAL
+    BASE_URL = BaseUrl.STANFORD
 
     class E2EDataService:
         client: httpx.Client
@@ -51,7 +52,7 @@ def _():
                     url="/core/v1/simulator/status", params={"simulator_id": simulator.database_id}
                 )
                 if status_update_response.status_code != 200:
-                    raise httpx.HTTPError("Error!")
+                    raise httpx.HTTPError("Error!")  # noqa: TRY301
                 return status_update_response.json().get("status")
             except Exception as e:
                 raise httpx.HTTPError(e)
@@ -83,10 +84,19 @@ def _():
 
         def _submit_get_workflow_status(self, simulation_id: int) -> str:
             try:
-                status_update_response = self.client.get(url=f"/api/v1/simulation/{simulation_id}/status")
+                status_update_response = self.client.get(url=f"/api/v1/simulations/{simulation_id}/status")
                 if status_update_response.status_code != 200:
-                    raise httpx.HTTPError("Error!")
+                    raise httpx.HTTPError("Error!")  # noqa: TRY301
                 return status_update_response.json().get("status")
+            except Exception as e:
+                raise httpx.HTTPError(e)
+
+        def _submit_get_output_data(self, simulation_id: int) -> list[TsvOutputFile]:
+            try:
+                data_response = self.client.post(url=f"/api/v1/simulations/{simulation_id}/data")
+                if data_response.status_code != 200:
+                    raise httpx.HTTPError("Error!")  # noqa: TRY301
+                return [TsvOutputFile(**output) for output in data_response.json()]
             except Exception as e:
                 raise httpx.HTTPError(e)
 
@@ -123,8 +133,13 @@ def _():
 
         def get_workflow_status(self, simulation_id: int) -> str:
             status = self._submit_get_workflow_status(simulation_id=simulation_id)
+            return status
 
-    return BASE_URL, E2EDataService
+        def get_output_data(self, simulation_id: int) -> list[TsvOutputFile]:
+            outputs = self._submit_get_output_data(simulation_id=simulation_id)
+            return outputs
+
+    return BASE_URL, E2EDataService, TsvOutputFile
 
 
 @app.cell
@@ -135,7 +150,7 @@ def _(BASE_URL, E2EDataService):
 
 @app.cell
 def _():
-    config = "api_simulation_default_ccam.json"
+    config = "api_simulation_default.json"
     num_generations = 8
     num_seeds = 4
     experiment_id = "cd1_demo_notebook_test_0"
@@ -155,6 +170,7 @@ def _():
     simulation_button = mo.ui.run_button(kind="success", label="Run Simulation Workflow")
     simulation_status_button = mo.ui.run_button(kind="success", label="Get Simulation Status")
     return (
+        get_simulation,
         get_simulator,
         mo,
         set_simulation,
@@ -207,6 +223,53 @@ def _(
 @app.cell
 def _(mo, simulation_button, simulation_status_button, simulator_button):
     mo.vstack([simulator_button, mo.hstack([simulation_button, simulation_status_button], justify="start")])
+    return
+
+
+@app.cell
+def _(get_simulator):
+    get_simulator()
+    return
+
+
+@app.cell
+def _(get_simulation):
+    get_simulation()
+    return
+
+
+@app.cell
+def _(e2e):
+    outputs = e2e.get_output_data(simulation_id=61)
+    return (outputs,)
+
+
+@app.cell
+def _(TsvOutputFile):
+    from io import StringIO
+
+    import polars as pl
+
+    def read_output(output: TsvOutputFile):
+        return pl.read_csv(StringIO(output.content), separator="\t")
+
+    def plot_output(df: pl.DataFrame, x: str, y: str) -> None:
+        return df.plot.line(x=x, y=y)
+
+    return plot_output, read_output
+
+
+@app.cell
+def _(outputs, read_output):
+    output_i = outputs[0]
+    df_i = read_output(output_i)
+    df_i  # noqa: B018
+    return (df_i,)
+
+
+@app.cell
+def _(df_i, plot_output):
+    plot_output(df_i, x="std", y="mean")
     return
 
 
