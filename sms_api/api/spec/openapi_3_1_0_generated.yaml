@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.4.3
+  version: 0.4.5
 paths:
   /api/v1/simulations:
     get:
