@@ -9,7 +9,7 @@ set -u
 #   and an optional --cert <filename.pem> argument to specify the certificate file for kubeseal
 # Example: ./sealed_secret_shared.sh [--cert <filename.pem>] <namespace> <mongodb_uri> <storage_gcs_credentials_file> > output.yaml
 
-# note that for GKE, the cert file is needed and can be extracted by running:
+# note that for GKE and AWS GovCloud, the cert file is needed and can be extracted by running:
 # kubeseal --fetch-cert > filename.pem
 # or
 # kubectl get secret -n kube-system -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml \

@@ -92,21 +92,33 @@ generate_ssh_known_hosts_configmap "${LOGIN_NODE_INSTANCE_ID}" "${CONFIG_DIR}/ss
 echo ""
 echo "=== Generating Sealed Secrets ==="
 
+# Fetch sealed-secrets certificate from cluster (needed for AWS GovCloud)
+echo "Fetching sealed-secrets certificate from cluster..."
+CERT_FILE=$(mktemp)
+kubectl get secret -n kube-system -l sealedsecrets.bitnami.com/sealed-secrets-key -o jsonpath='{.items[0].data.tls\.crt}' | base64 -d > "${CERT_FILE}"
+echo "✓ Certificate saved to temporary file"
+
+# Cleanup function to remove temp cert file
+cleanup() {
+    rm -f "${CERT_FILE}"
+}
+trap cleanup EXIT
+
 # call sealed_secret_shared.sh <namespace> <db_password> <jms_password> <mongo_user> <mongo_pswd>
 echo "Generating shared secrets..."
-${SCRIPTS_DIR}/sealed_secret_shared.sh --controller-name sealed-secrets --controller-namespace kube-system ${NAMESPACE} ${POSTGRES_USER} ${POSTGRES_PASSWORD} ${POSTGRES_DATABASE} ${POSTGRES_HOST} ${POSTGRES_PORT} > ${SECRETS_DIR}/secret-shared.yaml
+${SCRIPTS_DIR}/sealed_secret_shared.sh --cert "${CERT_FILE}" --controller-name sealed-secrets --controller-namespace kube-system ${NAMESPACE} ${POSTGRES_USER} ${POSTGRES_PASSWORD} ${POSTGRES_DATABASE} ${POSTGRES_HOST} ${POSTGRES_PORT} > ${SECRETS_DIR}/secret-shared.yaml
 cp ${SECRETS_DIR}/secret-shared.yaml ${MIGRATION_DIR}/secret-shared.yaml
 echo "✓ secret-shared.yaml generated"
 
 # call sealed_secret_ghcr.sh <namespace> <github_user> <github_user_email> <github_token>
 echo "Generating GHCR secrets..."
-${SCRIPTS_DIR}/sealed_secret_ghcr.sh --controller-name sealed-secrets --controller-namespace kube-system ${NAMESPACE} ${GH_USER_NAME} ${GH_USER_EMAIL} ${GH_PAT} > ${SECRETS_DIR}/secret-ghcr.yaml
+${SCRIPTS_DIR}/sealed_secret_ghcr.sh --cert "${CERT_FILE}" --controller-name sealed-secrets --controller-namespace kube-system ${NAMESPACE} ${GH_USER_NAME} ${GH_USER_EMAIL} ${GH_PAT} > ${SECRETS_DIR}/secret-ghcr.yaml
 cp ${SECRETS_DIR}/secret-ghcr.yaml ${MIGRATION_DIR}/secret-ghcr.yaml
 echo "✓ secret-ghcr.yaml generated"
 
 # call sealed_secret_ssh.sh <namespace> <priv_key_file> <pub_key_file>
 echo "Generating SSH secrets..."
-${SCRIPTS_DIR}/sealed_secret_ssh.sh --controller-name sealed-secrets --controller-namespace kube-system ${NAMESPACE} ${SSH_PRIV_KEY_FILE} ${SSH_PUB_KEY_FILE} > ${SECRETS_DIR}/secret-ssh.yaml
+${SCRIPTS_DIR}/sealed_secret_ssh.sh --cert "${CERT_FILE}" --controller-name sealed-secrets --controller-namespace kube-system ${NAMESPACE} ${SSH_PRIV_KEY_FILE} ${SSH_PUB_KEY_FILE} > ${SECRETS_DIR}/secret-ssh.yaml
 # cp ${SECRETS_DIR}/secret-ssh.yaml ${MIGRATION_DIR}/secret-ssh.yaml
 echo "✓ secret-ssh.yaml generated"
 
