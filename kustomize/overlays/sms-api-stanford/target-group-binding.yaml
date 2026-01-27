@@ -6,7 +6,7 @@ spec:
   serviceRef:
     name: api
     port: 8000
-  targetGroupARN: arn:aws-us-gov:elasticloadbalancing:us-gov-west-1:476270107793:targetgroup/smscdkverifiedaccess-api/45200625456fdf7b
+  targetGroupARN: arn:aws-us-gov:elasticloadbalancing:us-gov-west-1:476270107793:targetgroup/smscdkinternalalb-api/5676e35615f08fca
 ---
 apiVersion: elbv2.k8s.aws/v1beta1
 kind: TargetGroupBinding
@@ -16,4 +16,4 @@ spec:
   serviceRef:
     name: ptools
     port: 1555
-  targetGroupARN: arn:aws-us-gov:elasticloadbalancing:us-gov-west-1:476270107793:targetgroup/smscdkverifiedaccess-ptools/c111a14e254f7b88
+  targetGroupARN: arn:aws-us-gov:elasticloadbalancing:us-gov-west-1:476270107793:targetgroup/smscdkinternalalb-ptools/4754ad58cbd61b54
