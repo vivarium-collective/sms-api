@@ -210,7 +210,7 @@ echo "=== Updating Target Group Bindings for Verified Access ==="
 echo "Retrieving Target Group ARNs from smscdk-verified-access stack..."
 STACK_OUTPUTS=$(aws cloudformation describe-stacks \
   --region $AWS_REGION \
-  --stack-name smscdk-verified-access \
+  --stack-name smscdk-internal-alb \
   --query "Stacks[0].Outputs" \
   --output json)
 
