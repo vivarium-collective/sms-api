@@ -102,6 +102,15 @@ async def run_simulation_new(
 
     This endpoint reads the workflow configuration from the vEcoli repo on the HPC
     system and allows overriding specific parameters via query params.
+
+    :param simulator_id: (int) `database_id` of the simulator object returned by /core/v1/simulator/upload
+    :param experiment_id: (str) unique experiment identifier.
+    :param simulation_config_filename: (str) Choose according to the given deployment's linked vEcoli repo.
+        For the academic api, choose one of:
+            `api_simulation_default_ccam.json, api_simulation_default_aws_cdk.json, or api_simulation_ptools.json`.
+    :param num_generations: (int) Number of generations to simulate.
+    :param num_seeds: (int) Number of initial seeds (lineages).
+    :param description: (str) Simulation description.
     """
     sim_service = get_simulation_service()
     if sim_service is None:
