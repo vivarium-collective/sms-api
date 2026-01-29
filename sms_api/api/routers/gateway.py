@@ -29,7 +29,7 @@ from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_router_config
 from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
-from sms_api.simulation.models import Simulation, SimulationRun
+from sms_api.simulation.models import Simulation, SimulationConfigFilename, SimulationRun
 
 ENV = get_settings()
 
@@ -37,49 +37,8 @@ logger = logging.getLogger(__name__)
 config = get_router_config(prefix="api", version_major=False)
 
 
-# @config.router.post(
-#     path="/simulations",
-#     operation_id="run-ecoli-simulation",
-#     response_model=Simulation,
-#     tags=["Simulations"],
-#     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-#     summary="Launches a vEcoli simulation workflow with simple parameters",
-# )
-# async def run_simulation(
-#     simulator_id: int = Query(..., description="Database ID of the simulator to use"),
-#     experiment_id: str = Query(..., description="Unique experiment identifier"),
-#     simulation_config_filename: str = Query(..., description="Config filename in vEcoli/configs/ on HPC"),
-#     num_generations: int | None = Query(default=None, ge=1, le=10, description="Number of generations to simulate"),
-#     num_seeds: int | None = Query(default=None, ge=1, le=100, description="Number of initial seeds (lineages)"),
-#     description: str | None = Query(default=None, description="Description of the simulation"),
-# ) -> Simulation:
-#     """Run a vEcoli simulation workflow with simplified parameters.
-#
-#     This endpoint reads the workflow configuration from the vEcoli repo on the HPC
-#     system and allows overriding specific parameters via query params.
-#     """
-#     sim_service = get_simulation_service()
-#     if sim_service is None:
-#         logger.error("Simulation service is not initialized")
-#         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
-#     database_service = get_database_service()
-#     if database_service is None:
-#         logger.error("Database service is not initialized")
-#         raise HTTPException(status_code=500, detail="Database service is not initialized")
-#     try:
-#         return await handlers.simulations.run_workflow_simple(
-#             database_service=database_service,
-#             simulation_service=sim_service,
-#             simulator_id=simulator_id,
-#             experiment_id=experiment_id,
-#             simulation_config_filename=simulation_config_filename,
-#             num_generations=num_generations,
-#             num_seeds=num_seeds,
-#             description=description,
-#         )
-#     except Exception as e:
-#         logger.exception("Error running vEcoli simulation")
-#         raise HTTPException(status_code=500, detail=str(e)) from e
+def get_experiment_id(simulator_id: int, config_filename: SimulationConfigFilename) -> str:
+    return f"sim{simulator_id}-{config_filename.replace('.json', '')}"
 
 
 @config.router.post(
@@ -90,10 +49,18 @@ config = get_router_config(prefix="api", version_major=False)
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
     summary="[New] Launches a vEcoli simulation workflow with simple parameters",
 )
-async def run_simulation_new(
-    simulator_id: int = Query(..., description="Database ID of the simulator to use"),
-    experiment_id: str = Query(..., description="Unique experiment identifier"),
-    simulation_config_filename: str = Query(..., description="Config filename in vEcoli/configs/ on HPC"),
+async def run_simulation_workflow(
+    simulator_id: int = Query(
+        ..., description="`database_id` of the simulator object returned by /core/v1/simulator/upload"
+    ),
+    experiment_id: str | None = Query(default=None, description="Unique experiment identifier"),
+    simulation_config_filename: SimulationConfigFilename = Query(  # noqa: B008
+        default=SimulationConfigFilename.CCAM,
+        description=""" Config filename in vEcoli/configs/ on HPC, chosen according to the given deployment's linked
+            vEcoli repo (api_simulation_default_ccam.json, api_simulation_default_aws_cdk.json,
+            or api_simulation_ptools.json))
+        """,
+    ),
     num_generations: int | None = Query(default=None, ge=1, le=10, description="Number of generations to simulate"),
     num_seeds: int | None = Query(default=None, ge=1, le=100, description="Number of initial seeds (lineages)"),
     description: str | None = Query(default=None, description="Description of the simulation"),
@@ -102,16 +69,9 @@ async def run_simulation_new(
 
     This endpoint reads the workflow configuration from the vEcoli repo on the HPC
     system and allows overriding specific parameters via query params.
-
-    :param simulator_id: (int) `database_id` of the simulator object returned by /core/v1/simulator/upload
-    :param experiment_id: (str) unique experiment identifier.
-    :param simulation_config_filename: (str) Choose according to the given deployment's linked vEcoli repo.
-        For the academic api, choose one of:
-            `api_simulation_default_ccam.json, api_simulation_default_aws_cdk.json, or api_simulation_ptools.json`.
-    :param num_generations: (int) Number of generations to simulate.
-    :param num_seeds: (int) Number of initial seeds (lineages).
-    :param description: (str) Simulation description.
     """
+    if experiment_id is None:
+        experiment_id = get_experiment_id(simulator_id, simulation_config_filename)
     sim_service = get_simulation_service()
     if sim_service is None:
         logger.error("Simulation service is not initialized")
@@ -121,7 +81,7 @@ async def run_simulation_new(
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        return await handlers.simulations.run_workflow_simple(
+        return await handlers.simulations.run_simulation_workflow(
             database_service=database_service,
             simulation_service=sim_service,
             simulator_id=simulator_id,

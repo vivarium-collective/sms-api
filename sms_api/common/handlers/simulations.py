@@ -106,7 +106,7 @@ async def run_workflow_legacy(
     return simulation
 
 
-async def run_workflow_simple(
+async def run_simulation_workflow(
     database_service: DatabaseService,
     simulation_service: SimulationService,
     simulator_id: int,

@@ -180,7 +180,7 @@ async def test_run_workflow_simple(
     print(f"  Config file: {CONFIG_FILENAME}")
 
     # Call run_workflow_simple
-    simulation = await simulations.run_workflow_simple(
+    simulation = await simulations.run_simulation_workflow(
         database_service=database_service,
         simulation_service=simulation_service_slurm,
         simulator_id=simulator.database_id,

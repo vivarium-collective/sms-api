@@ -299,6 +299,13 @@ class ExperimentRequest(BaseModel):
         return SimulationConfig(**config_kwargs)
 
 
+class SimulationConfigFilename(enum.StrEnum):
+    DEFAULT = "api_simulation_default.json"
+    CCAM = "api_simulation_default_ccam.json"
+    AWS_CDK = "api_simulation_default_aws_cdk.json"
+    PTOOLS_CCAM = "api_simulation_ptools.json"
+
+
 class SimulationRequest(BaseModel):
     """Used by the /simulation endpoint."""
 
