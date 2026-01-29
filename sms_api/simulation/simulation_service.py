@@ -287,7 +287,9 @@ class SimulationServiceHpc(SimulationService):
                     echo "=== Building Container Image: {apptainer_image_path!s} ==="
                     echo "=== git hash $GIT_HASH, git branch $GIT_BRANCH ==="
 
-                    if ! $CONTAINER_CMD build --fakeroot --force \\
+                    # Use --disable-cache to ensure correct architecture is pulled for multi-arch images
+                    # (avoids using potentially wrong-architecture cached base image layers)
+                    if ! $CONTAINER_CMD build --fakeroot --force --disable-cache \\
                         --build-arg git_hash="$GIT_HASH" \\
                         --build-arg git_branch="$GIT_BRANCH" \\
                         --build-arg timestamp="$TIMESTAMP" \\
@@ -426,7 +428,7 @@ class SimulationServiceHpc(SimulationService):
                     simulator_hash=simulator.git_commit_hash,  # type: ignore[union-attr]
                     config=ecoli_simulation.config,
                 )
-                capture_slurm_script(script_content, "simulation.sbatch")
+                capture_slurm_script(script_content, "simulation_workflow.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
