@@ -427,6 +427,7 @@ class SimulationServiceHpc(SimulationService):
                     slurm_job_name=slurm_job_name,
                     simulator_hash=simulator.git_commit_hash,  # type: ignore[union-attr]
                     config=ecoli_simulation.config,
+                    config_filename=ecoli_simulation.simulation_config_filename,
                 )
                 capture_slurm_script(script_content, "simulation_workflow.sbatch")
                 f.write(script_content)
@@ -461,6 +462,7 @@ def workflow_slurm_script(
     slurm_job_name: str,
     simulator_hash: str,
     config: SimulationConfig,
+    config_filename: str,
 ) -> str:
     """Generate SLURM script for workflow orchestration.
 
@@ -491,7 +493,9 @@ def workflow_slurm_script(
     if "parca_options" not in config_dict:
         config_dict["parca_options"] = {}
     config_dict["parca_options"]["load_intermediate"] = None  # Don't load cached intermediates
-    config_dict["aws_cdk"] = {
+
+    nf_profile_key = "ccam" if "ccam" in config_filename else "aws_cdk"
+    config_dict[nf_profile_key] = {
         "container_image": str(apptainer_image_path),
         "build_image": False,
     }
@@ -502,7 +506,7 @@ def workflow_slurm_script(
         #SBATCH --job-name={slurm_job_name}
         #SBATCH --time=7-00:00:00
         #SBATCH --cpus-per-task 1
-        #SBATCH --mem=4GB
+        #SBATCH --mem=8GB
         #SBATCH --partition={env.slurm_partition}
         {qos_clause}
         #SBATCH --mail-type=ALL
@@ -581,7 +585,7 @@ def workflow_slurm_script(
         echo "Weblog receiver running on port $WEBLOG_PORT (PID: $WEBLOG_PID)"
 
         nextflow -C "$NEXTFLOW_DIR/nextflow.config" run "$NEXTFLOW_DIR/main.nf" \\
-            -profile aws_cdk \\
+            -profile {nf_profile_key} \\
             -with-report "$NEXTFLOW_DIR/${{EXPERIMENT_ID}}_report.html" \\
             -with-weblog http://localhost:$WEBLOG_PORT \\
             -work-dir "$NEXTFLOW_DIR/nextflow_workdirs"
