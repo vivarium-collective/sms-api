@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.18.4"
+__generated_with = "0.19.1"
 app = marimo.App(width="medium")
 
 
@@ -33,7 +33,6 @@ def _():
     import polars as pl
     from scipy.stats import pearsonr
     from wholecell.utils.protein_counts import get_simulated_validation_counts
-
     return (
         Path,
         alt,
@@ -51,7 +50,7 @@ def _():
 def _():
     from sms_api.data.data_service import PARTITION_GROUPS, AnalysisType, SimulationDataServiceFS
 
-    data_service = SimulationDataServiceFS()
+    data_service = SimulationDataServiceFS(wd_root='/Volumes/SMS/arnab')
     return (
         AnalysisType,
         PARTITION_GROUPS,
@@ -150,9 +149,15 @@ def _(env, mo):
 
     exp_select = mo.ui.dropdown(
         options=available_experiments(),
-        value="sms_multigeneration",
+        value="test_installation",
     )
     return (exp_select,)
+
+
+@app.cell
+def _():
+    datapoints_cap = 2000
+    return (datapoints_cap,)
 
 
 @app.cell
@@ -163,7 +168,7 @@ def _(exp_select, get_variants, mo):
 
 @app.cell
 def _(exp_select, get_seeds, mo, variant_select):
-    seed_select = mo.ui.dropdown(options=get_seeds(exp_id=exp_select.value, var_id=variant_select.value), value="5")
+    seed_select = mo.ui.dropdown(options=get_seeds(exp_id=exp_select.value, var_id=variant_select.value), value="0")
     return (seed_select,)
 
 
@@ -208,16 +213,6 @@ def _(agent_select, exp_select, gen_select, seed_select, variant_select):
 
     partitions = read_partitions(exp_select, variant_select, seed_select, gen_select, agent_select)
     return (partitions,)
-
-
-@app.cell
-def _(AnalysisType, analysis_select, data_service, partitions):
-    output_loaded = data_service.get_outputs(
-        analysis_type=AnalysisType[analysis_select.value.upper()],
-        partitions_all=partitions,
-        exp_select="sms_multigeneration",
-    )
-    return (output_loaded,)
 
 
 @app.cell
@@ -287,24 +282,34 @@ def _(bulk_sp_plot, mo, molecule_id_type, y_scale):
 
 @app.cell
 def _(
-    alt,
+    AnalysisType,
+    analysis_select,
     bulk_sp_plot,
     data_service,
-    mo,
+    datapoints_cap,
     molecule_id_type,
-    output_loaded,
-    y_scale,
+    partitions,
 ):
-    dfds_long = data_service.get_bulk_df(output_loaded, molecule_id_type.value, bulk_sp_plot.value)
-    mo.ui.altair_chart(
-        alt.Chart(dfds_long)
-        .mark_line()
-        .encode(
-            x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4)),
-            y=alt.Y("counts:Q", scale=alt.Scale(type=y_scale.value)),
-            color="Compounds:N",
+    plot_df_bulk = None
+    if bulk_sp_plot.value:
+        plot_df_bulk = data_service.get_plot_df_bulk(AnalysisType[analysis_select.value.upper()],
+                                                    partitions,
+                                                    bulk_sp_plot.value,
+                                                    datapoints_cap,
+                                                    molecule_id_type)
+    return (plot_df_bulk,)
+
+
+@app.cell
+def _(alt, bulk_sp_plot, plot_df_bulk, y_scale):
+    chart_compounds = None
+    if bulk_sp_plot.value:
+        chart_compounds = alt.Chart(plot_df_bulk).mark_line().encode(
+            x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4), title="Time (s)"),
+            y=alt.Y("counts:Q", scale=alt.Scale(type=y_scale.value), title="Counts"),
+            color=alt.Color("compound:N",legend=alt.Legend(title="Compound"))
         )
-    )
+    chart_compounds
     return
 
 
@@ -397,25 +402,43 @@ def _(
 
 @app.cell
 def _(
-    alt,
+    AnalysisType,
+    analysis_select,
     data_service,
-    mo,
+    datapoints_cap,
+    mrna_cistron_names,
     mrna_select_plot,
-    output_loaded,
+    partitions,
     rna_label_type,
-    y_scale_mrna,
 ):
-    mrna_dfds_long = data_service.get_mrna_df(output_loaded, rna_label_type.value, mrna_select_plot.value)
-    mo.ui.altair_chart(
-        alt.Chart(mrna_dfds_long)
-        .mark_line()
-        .encode(
-            x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4)),
-            y=alt.Y("counts:Q", scale=alt.Scale(type=y_scale_mrna.value)),
-            color="Genes:N",
+    plot_df_mrna = None
+    if mrna_select_plot.value:
+        plot_df_mrna = data_service.get_plot_df(AnalysisType[analysis_select.value.upper()],
+                                   partitions,
+                                   "mrna_gene_ids",
+                                   mrna_select_plot.value,           
+                                   "listeners__rna_counts__full_mRNA_cistron_counts",
+                                   "mrna_counts",
+                                   "genes",
+                                   "counts",
+                                   datapoints_cap,
+                                   mrna_cistron_names,
+                                   rna_label_type)
+    return (plot_df_mrna,)
+
+
+@app.cell
+def _(alt, mrna_select_plot, plot_df_mrna, y_scale_mrna):
+    chart_mrna = None
+
+    if mrna_select_plot.value:
+        chart_mrna = alt.Chart(plot_df_mrna).mark_line().encode(
+            x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4), title="Time (s)"),
+            y=alt.Y("counts:Q", scale=alt.Scale(type=y_scale_mrna.value), title="Counts"),
+            color=alt.Color("genes:N",legend=alt.Legend(title="Genes"))
         )
-    )
-    return (mrna_dfds_long,)
+    chart_mrna
+    return
 
 
 @app.cell
@@ -449,25 +472,42 @@ def _(mo, monomer_label_type, monomer_select_plot, y_scale_monomers):
 
 @app.cell
 def _(
-    alt,
+    AnalysisType,
+    analysis_select,
     data_service,
-    mo,
+    datapoints_cap,
     monomer_label_type,
+    monomer_names,
     monomer_select_plot,
-    output_loaded,
-    y_scale_monomers,
+    partitions,
 ):
-    monomer_dfds_long = data_service.get_monomers_df(output_loaded, monomer_label_type.value, monomer_select_plot.value)
+    plot_df_monomers = None
+    if monomer_select_plot.value:
+        plot_df_monomers = data_service.get_plot_df(AnalysisType[analysis_select.value.upper()],
+                                   partitions,
+                                   "monomer_ids",
+                                   monomer_select_plot.value,           
+                                   "listeners__monomer_counts",
+                                   "monomer_counts",
+                                   "protein_names",
+                                   "counts",
+                                   datapoints_cap,
+                                   monomer_names,
+                                   monomer_label_type)
+    return (plot_df_monomers,)
 
-    mo.ui.altair_chart(
-        alt.Chart(monomer_dfds_long)
-        .mark_line()
-        .encode(
-            x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4)),
-            y=alt.Y("counts:Q", scale=alt.Scale(type=y_scale_monomers.value)),
-            color="protein names:N",
-        )
-    )
+
+@app.cell
+def _(alt, monomer_select_plot, plot_df_monomers, y_scale_monomers):
+    chart_monomers = None
+
+    if monomer_select_plot.value:
+        chart_monomers = alt.Chart(plot_df_monomers).mark_line().encode(
+            x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4), title="Time (s)"),
+            y=alt.Y("counts:Q", scale=alt.Scale(type=y_scale_monomers.value), title="Counts"),
+            color=alt.Color("protein_names:N", legend=alt.Legend(title="Proteins")))
+
+    chart_monomers
     return
 
 
@@ -501,18 +541,43 @@ def _(mo, rxn_ids, rxn_override, select_pathway):
 
 
 @app.cell
-def _(alt, data_service, mo, output_loaded, select_rxns, y_scale_rxns):
-    rxns_dfds_long = data_service.get_rxns_df(output_loaded, select_rxns.value)
-    mo.ui.altair_chart(
-        alt.Chart(rxns_dfds_long)
-        .mark_line()
-        .encode(
-            x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4)),
-            y=alt.Y("flux:Q", scale=alt.Scale(type=y_scale_rxns.value)),
-            color="reaction_id:N",
+def _(
+    AnalysisType,
+    analysis_select,
+    data_service,
+    datapoints_cap,
+    partitions,
+    select_rxns,
+):
+    plot_df_rxns = None
+
+    if select_rxns.value:
+        plot_df_rxns = data_service.get_plot_df(AnalysisType[analysis_select.value.upper()],
+                                   partitions,
+                                    "rxn_ids",
+                                    select_rxns.value,
+                                    "listeners__fba_results__base_reaction_fluxes",
+                                    "reaction_fluxes",
+                                    "reaction_id",
+                                    "flux",
+                                    datapoints_cap,
+                                    dtype="FLOAT")
+    return (plot_df_rxns,)
+
+
+@app.cell
+def _(alt, plot_df_rxns, select_rxns, y_scale_rxns):
+    chart_rxns = None
+
+    if select_rxns.value:
+        chart_rxns = alt.Chart(plot_df_rxns).mark_line().encode(
+            x=alt.X("time:Q", scale=alt.Scale(type="linear"), axis=alt.Axis(tickCount=4), title= "Time (s)"),
+            y=alt.Y("flux:Q", scale=alt.Scale(type=y_scale_rxns.value), title="Reaction Flux (mmol/s)"),
+            color=alt.Color("reaction_id:N",legend=alt.Legend(title="Reaction ID (BioCyc)"))
         )
-    )
-    return (rxns_dfds_long,)
+
+    chart_rxns
+    return
 
 
 @app.cell
@@ -597,7 +662,6 @@ def _(data_service, sim_data, val_label_type):
         }
         val_ids_final = val_ids_mapping[val_label_type.value]
         return val_ids_final
-
     return (get_val_ids,)
 
 
@@ -676,7 +740,6 @@ def _(alt, mo, np, pearsonr, pl, val_id_select, val_options):
         chart_final = chart + parity
 
         return mo.ui.altair_chart(chart_final)
-
     return (val_chart,)
 
 
@@ -768,7 +831,6 @@ def _(data_service, exp_select, os):
             agents = ["N/A"]
 
         return agents
-
     return get_agents, get_gens, get_seeds, get_variants
 
 
@@ -913,7 +975,6 @@ def _(
         protein_ids_val = val_options[dataset_name]["id"]
         protein_val = list(np.array(protein_list)[np.isin(protein_list, protein_ids_val)])
         return protein_val
-
     return (
         bulk_override,
         mrna_override,
@@ -924,43 +985,37 @@ def _(
     )
 
 
-@app.cell
-def _(mo, rxns_dfds_long):
-    def download_fluxomics():
-        data = rxns_dfds_long.to_json().encode("utf-8")
-        return data
+@app.function
+def plot_df_download(plot_df):
+    plot_df_dl = plot_df.write_csv(separator="\t").strip("\n").split("\n")
+    plot_df_dl = "\r\n".join(plot_df_dl)
+    return plot_df_dl
 
+
+@app.cell
+def _(mo, plot_df_rxns):
     flux_download = mo.download(
-        data=download_fluxomics, filename="fluxomics.json", mimetype="application/json", label="Export Fluxomics Data"
+        data=plot_df_download(plot_df_rxns), filename="fluxomics.txt", label="Export Fluxomics Data"
     )
     return (flux_download,)
 
 
 @app.cell
-def _(mo, mrna_dfds_long):
-    def download_transcriptomics() -> None:
-        data = mrna_dfds_long.to_json()
-        return data
-
+def _(mo, plot_df_mrna):
     trans_download = mo.download(
-        data=download_transcriptomics,
-        filename="transcriptomics.json",
-        mimetype="application/json",
+        data=plot_df_download(plot_df_mrna),
+        filename="transcriptomics.txt",
         label="Export Transcriptomics Data",
     )
     return (trans_download,)
 
 
 @app.cell
-def _(dfds_dfds_long, mo):
-    def download_proteomics() -> None:
-        data = dfds_dfds_long.to_json()
-        return data
+def _(mo, plot_df_monomers):
 
     prot_download = mo.download(
-        data=download_proteomics,
-        filename="proteomics.json",
-        mimetype="application/json",
+        data=plot_df_download(plot_df_monomers),
+        filename="proteomics.txt",
         label="Export Proteomics Data",
     )
     return (prot_download,)
@@ -969,11 +1024,6 @@ def _(dfds_dfds_long, mo):
 @app.cell
 def _(flux_download, mo, prot_download, trans_download):
     mo.hstack([prot_download, trans_download, flux_download], justify="space-around")
-    return
-
-
-@app.cell
-def _():
     return
 
 

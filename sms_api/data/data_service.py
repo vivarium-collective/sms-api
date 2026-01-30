@@ -9,6 +9,7 @@ from typing import Any, override
 import duckdb
 import numpy as np
 import pandas as pd
+import polars as pl
 from ecoli.library.parquet_emitter import (
     dataset_sql,
     ndlist_to_ndarray,
@@ -51,6 +52,7 @@ class Labels:
     bulk_ids_biocyc: list[str]
     bulk_names_unique: list[str]
     bulk_common_names: list[str]
+    bulk_names2biocyc: dict
     rxn_ids: list[str]
     mrna_cistron_ids: list[str]
     mrna_gene_ids: list[str]
@@ -90,17 +92,6 @@ class SimulationDataService(ABC):
     def get_parca_dir(self, simulator_hash: str, parca_id: int) -> HPCFilePath:
         pass
 
-    @abstractmethod
-    def get_outputs(
-        self,
-        analysis_type: AnalysisType,
-        partitions_all: Mapping[str, str],
-        exp_select: str,
-        n_threads: int = 4,  # n_cpus available in slurm job
-        mem_limit: str = "22GB",
-        simulation_outdir: str | None = None,
-    ) -> pd.DataFrame:
-        pass
 
     @classmethod
     def connect_duckdb(cls, db_filepath: Path | HPCFilePath | str | None = None) -> duckdb.DuckDBPyConnection:
@@ -231,6 +222,121 @@ class SimulationDataService(ABC):
         )
         return SimulationDataService.downsample(df_long)
 
+    def sql_downsample(self,sql_original, items_list, list_col_name, datapoints_cap=2000):
+        ds_sql = f"""
+        WITH 
+        indexed_data AS (
+          SELECT 
+            *, 
+            ROW_NUMBER() OVER (ORDER BY time) AS rn
+        FROM ({sql_original})
+        ),
+        data_shape AS (
+        SELECT
+            COUNT(*) AS time_points,
+            time_points*{len(items_list)} as data_points,
+            data_points/{datapoints_cap} as ds_ratio_frac,
+            CEILING(ds_ratio_frac) as ds_ratio
+
+        FROM ({sql_original}))
+
+        SELECT {list_col_name},time
+        FROM indexed_data
+        CROSS JOIN data_shape
+        WHERE rn % data_shape.ds_ratio = 0
+        ORDER BY time
+        """
+
+        return ds_sql
+
+    def get_plot_df_bulk(self,
+                         analysis_type: AnalysisType,
+                         partitions_all: Mapping[str, str],
+                         bulk_ids_selected,
+                         datapoints_cap,
+                         molecule_id_ui):
+
+        db_filter = self._get_db_filter(analysis_type, partitions_all)
+        sql_base,_,_ = self._get_sql_base(partitions_all["experiment_id"])
+
+        if molecule_id_ui.value == "Common name":
+            bulk_sp_ids = [self.labels.bulk_names2biocyc[name] for name in bulk_ids_selected]
+        else:
+            bulk_sp_ids = bulk_ids_selected
+
+        sp_idxs_selected = [[f"bulk[{index + 1}]" for index, item in enumerate(self.labels.bulk_ids_biocyc) if item == sp_i] for
+                            sp_i in bulk_sp_ids]
+
+        sp_idxs_alias = ["+".join(sp_idxs_i) + f" as compound_{count}" for count, sp_idxs_i in
+                         enumerate(sp_idxs_selected)]
+
+        bulk_sql_opt = f"SELECT {','.join(sp_idxs_alias)},time FROM ({sql_base}) WHERE {db_filter}"
+
+        bulk_sql_opt_sum = "SELECT" + ",".join(
+            [f" CAST (SUM(compound_{sp_idx}) AS BIGINT) AS compound_{sp_idx}" for sp_idx, _ in
+             enumerate(bulk_sp_ids)]) + f", time FROM ({bulk_sql_opt}) GROUP BY time"
+
+        bulk_sql_list = "SELECT (" + "+".join([f"[compound_{sp_idx}]" for sp_idx, _ in enumerate(
+            bulk_sp_ids)]) + f") AS bulk_counts, time FROM ({bulk_sql_opt_sum})"
+
+        bulk_sql_ds = self.sql_downsample(bulk_sql_list, bulk_sp_ids, "bulk_counts", datapoints_cap)
+
+        df_bulk_read = self.conn.sql(bulk_sql_ds).pl()
+
+        bulk_counts_mtx = np.stack(df_bulk_read["bulk_counts"])
+        bulk_counts_list = [bulk_counts_mtx[:, col] for col in range(np.shape(bulk_counts_mtx)[1])]
+        bulk_plot_dict = {key: val for (key, val) in zip(bulk_ids_selected, bulk_counts_list)}
+        bulk_plot_dict["time"] = df_bulk_read["time"].to_list()
+        bulk_plot_df = pl.DataFrame(bulk_plot_dict)
+        bulk_plot_df_melted = bulk_plot_df.unpivot(index="time", variable_name="compound", value_name="counts")
+
+        return bulk_plot_df_melted
+
+    def get_plot_df(self,
+                    analysis_type: AnalysisType,
+                    partitions_all: Mapping[str, str],
+                    default_id_list_name,
+                    ids_selected,
+                    listener_name,
+                    col_name,
+                    var_name,
+                    val_name,
+                    datapoints_cap,
+                    default_name_list=None,
+                    label_ui=None,
+                    dtype="BIGINT"):
+
+        db_filter = self._get_db_filter(analysis_type, partitions_all)
+        sql_base,_,_ = self._get_sql_base(partitions_all["experiment_id"])
+        default_id_list = getattr(self.labels, default_id_list_name)
+        if label_ui:
+            if label_ui.value == "BioCyc ID":
+                sp_ids_selected = ids_selected
+            else:
+                sp_ids_selected = [default_id_list[default_name_list.index(name)] for name in ids_selected]
+        else:
+            sp_ids_selected = ids_selected
+
+        idxs_selected = [f"{col_name}[{default_id_list.index(id) + 1}] AS {col_name}_{idx}" for idx, id in
+                         enumerate(sp_ids_selected)]
+        col_sql_base = f"SELECT {listener_name} as {col_name}, time FROM ({sql_base}) WHERE {db_filter}"
+        col_sql_sliced = f"SELECT {','.join(idxs_selected)}, time FROM ({col_sql_base})"
+        col_sql_sum = "SELECT" + ",".join([f" CAST (SUM({col_name}_{idx}) AS {dtype}) as {col_name}_{idx}" for idx, _ in
+                                           enumerate(sp_ids_selected)]) + f",time FROM ({col_sql_sliced}) GROUP BY time"
+        col_sql_list = "SELECT (" + "+".join([f"[{col_name}_{idx}]" for idx, _ in
+                                              enumerate(sp_ids_selected)]) + f") AS {col_name}, time FROM ({col_sql_sum})"
+        col_sql_ds = self.sql_downsample(col_sql_list, sp_ids_selected, col_name, datapoints_cap)
+
+        col_read_df = self.conn.sql(col_sql_ds).pl()
+        counts_mtx = np.stack(col_read_df[col_name])
+        counts_list = [counts_mtx[:, col] for col in range(np.shape(counts_mtx)[1])]
+        plot_dict = {key: val for (key, val) in zip(ids_selected, counts_list)}
+        plot_dict["time"] = col_read_df["time"].to_list()
+        plot_df = pl.DataFrame(plot_dict)
+        plot_df_melted = plot_df.unpivot(index="time", variable_name=var_name, value_name=val_name)
+
+        return plot_df_melted
+
     def get_common_names(self, names: list[str], sim_data: SimulationDataEcoli | None = None) -> list[str]:
         if sim_data is None:
             sim_data = self.sim_data
@@ -315,6 +421,7 @@ class SimulationDataService(ABC):
         bulk_ids_biocyc = [bulk_id[:-3] for bulk_id in bulk_ids]
         bulk_names_unique = list(np.unique(bulk_ids_biocyc))
         bulk_common_names = get_common_names(bulk_names_unique, sim_data)
+        bulk_names2biocyc = {key: val for key, val in zip(bulk_common_names, bulk_names_unique)}
         rxn_ids = get_rxn_ids()
         cistron_data = sim_data.process.transcription.cistron_data
         mrna_cistron_ids = cistron_data["id"][cistron_data["is_mRNA"]].tolist()
@@ -328,6 +435,7 @@ class SimulationDataService(ABC):
             bulk_common_names=bulk_common_names,
             bulk_ids_biocyc=bulk_ids_biocyc,
             bulk_names_unique=bulk_names_unique,
+            bulk_names2biocyc=bulk_names2biocyc,
             rxn_ids=rxn_ids,
             mrna_cistron_ids=mrna_cistron_ids,
             mrna_gene_ids=mrna_gene_ids,
@@ -337,6 +445,8 @@ class SimulationDataService(ABC):
         )
 
 
+
+
 class SimulationDataServiceFS(SimulationDataService):
     def get_parca_dir(self, simulator_hash: str, parca_id: int) -> HPCFilePath:
         return self.env.hpc_parca_base_path / f"parca_{simulator_hash}_id_{parca_id}" / "kb"
@@ -344,6 +454,8 @@ class SimulationDataServiceFS(SimulationDataService):
     def get_parca_data(
         self, simulator_hash: str | None = None, parca_id: int | None = None
     ) -> tuple[SimulationDataEcoli, ValidationDataEcoli]:
+
+        # kb_dir = HPCFilePath(remote_path=Path('/Users/arnabmutsuddy/projects/vEcoli_ptools/vEcoli/reconstruction/sim_data/kb'))
         kb_dir: HPCFilePath = (
             self.get_parca_dir(simulator_hash, parca_id)
             if simulator_hash is not None and parca_id is not None
@@ -352,6 +464,7 @@ class SimulationDataServiceFS(SimulationDataService):
 
         if not kb_dir.local_path().exists():
             raise FileNotFoundError(f"The specification does not exist: {kb_dir!s}")
+
         sim_data = LoadSimData(str(kb_dir.local_path() / "simData.cPickle")).sim_data
         with open(kb_dir.local_path() / "validationData.cPickle", "rb") as f:
             validation_data = pickle.load(f)  # noqa: S301
@@ -359,37 +472,3 @@ class SimulationDataServiceFS(SimulationDataService):
             raise TypeError("The validation data file is improperly formatted.")
         return sim_data, validation_data
 
-    @override
-    def get_outputs(
-        self,
-        analysis_type: AnalysisType,
-        partitions_all: Mapping[str, str],
-        exp_select: str,
-        n_threads: int = 4,  # n_cpus available in slurm job
-        mem_limit: str = "22GB",
-        simulation_outdir: str | None = None,
-    ) -> pd.DataFrame:
-        db_filter = self._get_db_filter(analysis_type, partitions_all)
-        pq_columns = [
-            "bulk",
-            "listeners__fba_results__base_reaction_fluxes",
-            "listeners__rna_counts__full_mRNA_cistron_counts",
-            "listeners__monomer_counts",
-        ]
-
-        history_sql, config_sql, success_sql = dataset_sql(
-            experiment_ids=[exp_select], out_dir=simulation_outdir or str(self.env.simulation_outdir.local_path())
-        )
-        history_sql_filtered = (
-            f"SELECT {','.join(pq_columns)},time FROM ({history_sql}) WHERE {db_filter} ORDER BY time"  # noqa: S608 (safe)
-        )
-
-        # connect to duckdb and set constraints
-        self.conn.execute(f"SET threads={n_threads}")
-        self.conn.execute("SET preserve_insertion_order=false")
-        self.conn.execute(f"SET memory_limit='{mem_limit}'")
-
-        outputs_df: pd.DataFrame = self.conn.sql(history_sql_filtered).df()
-
-        df = outputs_df.groupby("time", as_index=False).sum()
-        return df
