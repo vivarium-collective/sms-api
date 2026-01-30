@@ -200,6 +200,12 @@ def _(exp_select, gen_select, get_agents, mo, seed_select, variant_select):
 
 
 @app.cell
+def _(molecule_id_type):
+    type(molecule_id_type)
+    return
+
+
+@app.cell
 def _(agent_select, exp_select, gen_select, seed_select, variant_select):
     def read_partitions(exp_select, variant_select, seed_select, gen_select, agent_select):
         partitions_selected = {

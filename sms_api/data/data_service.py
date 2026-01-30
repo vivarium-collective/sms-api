@@ -10,6 +10,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 import polars as pl
+import marimo as mo
 from ecoli.library.parquet_emitter import (
     dataset_sql,
     ndlist_to_ndarray,
@@ -52,7 +53,7 @@ class Labels:
     bulk_ids_biocyc: list[str]
     bulk_names_unique: list[str]
     bulk_common_names: list[str]
-    bulk_names2biocyc: dict
+    bulk_names2biocyc: dict[str, str]
     rxn_ids: list[str]
     mrna_cistron_ids: list[str]
     mrna_gene_ids: list[str]
@@ -222,7 +223,11 @@ class SimulationDataService(ABC):
         )
         return SimulationDataService.downsample(df_long)
 
-    def sql_downsample(self,sql_original, items_list, list_col_name, datapoints_cap=2000):
+    def sql_downsample(self,
+                       sql_original: str,
+                       items_list: list[str],
+                       list_col_name: str,
+                       datapoints_cap: int = 2000) -> str:
         ds_sql = f"""
         WITH 
         indexed_data AS (
@@ -252,9 +257,9 @@ class SimulationDataService(ABC):
     def get_plot_df_bulk(self,
                          analysis_type: AnalysisType,
                          partitions_all: Mapping[str, str],
-                         bulk_ids_selected,
-                         datapoints_cap,
-                         molecule_id_ui):
+                         bulk_ids_selected: list[str],
+                         datapoints_cap: int,
+                         molecule_id_ui: mo.ui.radio) -> pl.DataFrame:
 
         db_filter = self._get_db_filter(analysis_type, partitions_all)
         sql_base,_,_ = self._get_sql_base(partitions_all["experiment_id"])
@@ -279,11 +284,14 @@ class SimulationDataService(ABC):
         bulk_sql_list = "SELECT (" + "+".join([f"[compound_{sp_idx}]" for sp_idx, _ in enumerate(
             bulk_sp_ids)]) + f") AS bulk_counts, time FROM ({bulk_sql_opt_sum})"
 
-        bulk_sql_ds = self.sql_downsample(bulk_sql_list, bulk_sp_ids, "bulk_counts", datapoints_cap)
+        bulk_sql_ds = self.sql_downsample(sql_original=bulk_sql_list,
+                                          items_list=bulk_sp_ids,
+                                          list_col_name="bulk_counts",
+                                          datapoints_cap=datapoints_cap)
 
         df_bulk_read = self.conn.sql(bulk_sql_ds).pl()
 
-        bulk_counts_mtx = np.stack(df_bulk_read["bulk_counts"])
+        bulk_counts_mtx = np.stack(df_bulk_read["bulk_counts"]) # type: ignore[call-overload]
         bulk_counts_list = [bulk_counts_mtx[:, col] for col in range(np.shape(bulk_counts_mtx)[1])]
         bulk_plot_dict = {key: val for (key, val) in zip(bulk_ids_selected, bulk_counts_list)}
         bulk_plot_dict["time"] = df_bulk_read["time"].to_list()
@@ -295,16 +303,16 @@ class SimulationDataService(ABC):
     def get_plot_df(self,
                     analysis_type: AnalysisType,
                     partitions_all: Mapping[str, str],
-                    default_id_list_name,
-                    ids_selected,
-                    listener_name,
-                    col_name,
-                    var_name,
-                    val_name,
-                    datapoints_cap,
-                    default_name_list=None,
-                    label_ui=None,
-                    dtype="BIGINT"):
+                    default_id_list_name: str,
+                    ids_selected: list[str],
+                    listener_name: str,
+                    col_name: str,
+                    var_name: str,
+                    val_name: str,
+                    datapoints_cap: int,
+                    default_name_list: list[str]|None=None,
+                    label_ui: mo.ui.radio|None=None,
+                    dtype: str ="BIGINT") -> pl.DataFrame:
 
         db_filter = self._get_db_filter(analysis_type, partitions_all)
         sql_base,_,_ = self._get_sql_base(partitions_all["experiment_id"])
@@ -313,7 +321,8 @@ class SimulationDataService(ABC):
             if label_ui.value == "BioCyc ID":
                 sp_ids_selected = ids_selected
             else:
-                sp_ids_selected = [default_id_list[default_name_list.index(name)] for name in ids_selected]
+                if default_name_list:
+                    sp_ids_selected = [default_id_list[default_name_list.index(name)] for name in ids_selected]
         else:
             sp_ids_selected = ids_selected
 
@@ -328,7 +337,7 @@ class SimulationDataService(ABC):
         col_sql_ds = self.sql_downsample(col_sql_list, sp_ids_selected, col_name, datapoints_cap)
 
         col_read_df = self.conn.sql(col_sql_ds).pl()
-        counts_mtx = np.stack(col_read_df[col_name])
+        counts_mtx = np.stack(col_read_df[col_name]) # type: ignore[call-overload]
         counts_list = [counts_mtx[:, col] for col in range(np.shape(counts_mtx)[1])]
         plot_dict = {key: val for (key, val) in zip(ids_selected, counts_list)}
         plot_dict["time"] = col_read_df["time"].to_list()
