@@ -16,6 +16,7 @@ from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.common.ssh.ssh_service import SSHSession
 from sms_api.common.storage.file_paths import HPCFilePath
+from sms_api.common.utils import capture_slurm_script
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
@@ -90,28 +91,6 @@ class SimulationService(ABC):
     @abstractmethod
     async def close(self) -> None:
         pass
-
-
-# Get repo root for absolute path references
-REPO_DIR = Path(__file__).parent.parent.parent.absolute()
-
-# Directory for captured sbatch scripts (gitignored)
-DEBUG_ARTIFACTS_DIR = REPO_DIR / "artifacts"
-
-
-def capture_slurm_script(script: str, filename: str) -> None:
-    """Capture generated sbatch script to disk for debugging/inspection.
-
-    Writes the script content to the artifacts/ directory at repo root.
-    This directory is gitignored and used for debugging purposes only.
-
-    Args:
-        script: The sbatch script content to write.
-        filename: The filename to write to (e.g., "simulation.sbatch").
-    """
-    DEBUG_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(DEBUG_ARTIFACTS_DIR / filename, "w") as f:
-        f.write(script)
 
 
 class SimulationServiceHpc(SimulationService):
@@ -519,6 +498,7 @@ def workflow_slurm_script(
         ### Configuration
         CONTAINER_IMAGE="{apptainer_image_path!s}"
         OUTPUT_DIR="{simulation_outdir_base!s}"
+        IMAGE_DIR="{env.hpc_image_base_path!s}"
         EXPERIMENT_ID="{experiment_id}"
         SLURM_LOG_PATH="{slurm_log_base_path!s}"
 
@@ -536,13 +516,18 @@ def workflow_slurm_script(
         export SLURM_PARTITION={env.slurm_partition}
         export SLURM_LOG_BASE_PATH="$SLURM_LOG_PATH"
 
+        mkdir -p "$OUTPUT_DIR/nextflow_temp_$EXPERIMENT_ID"
         singularity exec \\
+            --fakeroot \\
             --writable-tmpfs \\
             --pwd /vEcoli \\
+            --env UV_CACHE_DIR=/tmp/uv_cache \\
             -B "$OUTPUT_DIR":"$OUTPUT_DIR" \\
+            -B "$IMAGE_DIR":"$IMAGE_DIR" \\
             -B "$SLURM_LOG_PATH":"$SLURM_LOG_PATH" \\
+            -B "$OUTPUT_DIR/nextflow_temp_$EXPERIMENT_ID":"/vEcoli/nextflow_temp" \\
             "$CONTAINER_IMAGE" \\
-            python /vEcoli/runscripts/workflow.py \\
+            /vEcoli/.venv/bin/python /vEcoli/runscripts/workflow.py \\
                 --config "$tmp_config" \\
                 --build-only
 

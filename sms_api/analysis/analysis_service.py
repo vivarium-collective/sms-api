@@ -23,6 +23,7 @@ from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.models import JobStatus
 from sms_api.common.ssh.ssh_service import SSHSession
 from sms_api.common.storage.file_paths import HPCFilePath
+from sms_api.common.utils import capture_slurm_script
 from sms_api.config import Settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
@@ -65,21 +66,9 @@ class AnalysisServiceSlurm:
     def slurm_service(self) -> SlurmService:
         return SlurmService()
 
-    async def dispatch_analysis(
-        self,
-        request: ExperimentAnalysisRequest,
-        logger: logging.Logger,
-        analysis_name: str,
-        ssh: SSHSession,
-        simulator_hash: str,
-    ) -> tuple[str, int, AnalysisConfig]:
-        # collect params
-        slurmjob_name, slurm_log_file = self._collect_slurm_parameters(
-            request=request, simulator_hash=simulator_hash, analysis_name=analysis_name
-        )
-        experiment_id = request.experiment_id
-        # analysis_config = request.to_config(analysis_name=analysis_name, env=self.env)
-
+    async def complete_config_template(
+        self, simulator_hash: str, request: ExperimentAnalysisRequest, analysis_name: str
+    ) -> AnalysisConfig:
         # 2. Read the config file from the remote HPC system
         settings = self.env
         remote_config_path = (
@@ -102,6 +91,26 @@ class AnalysisServiceSlurm:
         config_data: dict[str, Any] = json.loads(config_file_str)
         analysis_config = AnalysisConfig(**config_data)
         # analysis_config.analysis_options.multiseed = {'ptools_rxns': {'n_tp': 10}, 'ptools_rna': {'n_tp': 10}, 'ptools_proteins': {'n_tp': 10}}  # noqa: E501
+        return analysis_config
+
+    async def dispatch_analysis(
+        self,
+        request: ExperimentAnalysisRequest,
+        logger: logging.Logger,
+        analysis_name: str,
+        ssh: SSHSession,
+        simulator_hash: str,
+    ) -> tuple[str, int, AnalysisConfig]:
+        # collect params
+        slurmjob_name, slurm_log_file = self._collect_slurm_parameters(
+            request=request, simulator_hash=simulator_hash, analysis_name=analysis_name
+        )
+        experiment_id = request.experiment_id
+        # analysis_config = request.to_config(analysis_name=analysis_name, env=self.env)
+
+        analysis_config = await self.complete_config_template(
+            simulator_hash=simulator_hash, request=request, analysis_name=analysis_name
+        )
 
         # gen script
         slurm_script = generate_slurm_script(
@@ -112,6 +121,7 @@ class AnalysisServiceSlurm:
             config=analysis_config,
             analysis_name=analysis_name,
         )
+        capture_slurm_script(slurm_script, "analysis.sbatch")
 
         # submit script
         slurmjob_id = await self._submit_slurm_script(

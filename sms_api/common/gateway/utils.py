@@ -10,12 +10,8 @@ from sms_api.analysis.models import (
     PtoolsAnalysisType,
 )
 from sms_api.common.gateway.models import RouterConfig
-from sms_api.common.utils import get_data_id
+from sms_api.common.utils import CURRENT_API_VERSION, get_data_id
 from sms_api.config import get_settings
-
-REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
-PINNED_OUTDIR = REPO_DIR / "out" / "sms_single"
-CURRENT_API_VERSION = "v1"
 
 
 def get_router_config(prefix: str, api_version: str | None = None, version_major: bool = True) -> RouterConfig:

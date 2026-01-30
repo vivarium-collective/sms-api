@@ -181,24 +181,22 @@ class ExperimentAnalysisRequest(BaseModel):
 
         # simulation_outdir = env.hpc_sim_base_path
         # experiment_outdir = str(simulation_outdir / self.experiment_id)
-        options = AnalysisConfigOptions(
+        experiment_outdir = env.hpc_sim_base_path / self.experiment_id
+        options = AnalysisConfigOptions(  # type: ignore[call-arg]
             experiment_id=[self.experiment_id],
-            # variant_data_dir=[f"{experiment_outdir}/variant_sim_data"],
-            # validation_data_path=[f"{experiment_outdir}/parca/kb/validationData.cPickle"],
-            # outdir=f"{env.analysis_outdir.remote_path!s}/{analysis_name}",
-            # cpus=MAX_ANALYSIS_CPUS,
-            # single=dict_options(self.single),
-            # multidaughter=dict_options(self.multidaughter),
-            # multigeneration=dict_options(self.multigeneration),
-            # multiexperiment=dict_options(self.multiexperiment),
-            # multivariant=dict_options(self.multivariant),
-            # multiseed=dict_options(self.multiseed),
+            variant_data_dir=[f"{experiment_outdir!s}/variant_sim_data"],
+            validation_data_path=[f"{experiment_outdir!s}/parca/kb/validationData.cPickle"],
+            outdir=f"{env.analysis_outdir.remote_path!s}/{analysis_name}",
+            cpus=MAX_ANALYSIS_CPUS,
+            single=dict_options(self.single),
+            multidaughter=dict_options(self.multidaughter),
+            multigeneration=dict_options(self.multigeneration),
+            multiexperiment=dict_options(self.multiexperiment),
+            multivariant=dict_options(self.multivariant),
+            multiseed=dict_options(self.multiseed),
         )
-        # emitter_arg = {"out_dir": str(simulation_outdir)}
-        return AnalysisConfig(
-            analysis_options=options,
-            # emitter_arg=emitter_arg
-        )
+        emitter_arg = {"out_dir": str(experiment_outdir)}
+        return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)  # type: ignore[call-arg]
 
     @property
     def requested(self) -> dict[str, list[PtoolsAnalysisConfig]]:

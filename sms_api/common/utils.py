@@ -1,14 +1,24 @@
 import datetime
+import json
 import secrets
 import typing
 import uuid
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 import numpy as np
 
 from sms_api.common.models import DataId
+from sms_api.config import get_settings
+from sms_api.dependencies import get_ssh_session_service
+from sms_api.simulation.models import SimulatorVersion
 
+REPO_DIR = Path(__file__).parent.parent.parent.absolute()
+PINNED_OUTDIR = REPO_DIR / "out" / "sms_single"
+CURRENT_API_VERSION = "v1"
 DEFAULT_DATA_ID_PREFIX = "sms"
+# Directory for captured sbatch scripts (gitignored)
+DEBUG_ARTIFACTS_DIR = REPO_DIR / "artifacts"
 
 
 class DataString(str):
@@ -73,3 +83,42 @@ def unique_id(data_id: str | None = None, scope: str | None = None) -> str:
 
 def timestamp() -> str:
     return datetime.datetime.now().strftime("%Y%m%d")
+
+
+def capture_slurm_script(script: str, filename: str) -> None:
+    """Capture generated sbatch script to disk for debugging/inspection.
+
+    Writes the script content to the artifacts/ directory at repo root.
+    This directory is gitignored and used for debugging purposes only.
+
+    Args:
+        script: The sbatch script content to write.
+        filename: The filename to write to (e.g., "simulation.sbatch").
+    """
+    DEBUG_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    with open(DEBUG_ARTIFACTS_DIR / filename, "w") as f:
+        f.write(script)
+
+
+async def complete_config_template(
+    simulator: SimulatorVersion, experiment_id: str, config_filename: str
+) -> dict[str, Any]:
+    settings = get_settings()
+    remote_config_path = (
+        settings.hpc_repo_base_path.remote_path / simulator.git_commit_hash / "vEcoli" / "configs" / config_filename
+    )
+    async with get_ssh_session_service().session() as ssh:
+        returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
+        if returncode != 0:
+            raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
+
+    # 3. Replace placeholders in the config template
+    config_str = stdout
+
+    config_str = config_str.replace("EXPERIMENT_ID_PLACEHOLDER", experiment_id)
+    config_str = config_str.replace("HPC_SIM_BASE_PATH_PLACEHOLDER", str(settings.simulation_outdir))
+    image_path = settings.hpc_image_base_path / f"vecoli-{simulator.git_commit_hash}.sif"
+    config_str = config_str.replace("SIMULATOR_IMAGE_PATH_PLACEHOLDER", str(image_path))
+    config_data = json.loads(config_str)
+
+    return config_data  # type: ignore[no-any-return]
