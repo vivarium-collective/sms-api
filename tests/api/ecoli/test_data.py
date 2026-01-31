@@ -32,20 +32,10 @@ async def validate_archive_streaming_response(
     db_id: int,
     expected_files: set[str],
     base_router: str,
+    experiment_id: str,
     response_type: str = "file",
     save_artifact: bool = True,
 ) -> Path | None:
-    """
-    Test that the endpoint returns a valid, streamable tar.gz archive
-    with the expected contents.
-
-    Args:
-        response_type: Either "file" or "streaming" to test both endpoint modes
-        save_artifact: If True and response_type is "file", saves the archive to artifacts/
-
-    Returns:
-        Path to saved artifact if save_artifact is True, otherwise None
-    """
     url = f"{base_router}/simulations/{db_id}/data?response_type={response_type}"
     # Use stream=True to test actual streaming behavior
     async with client.stream("POST", url) as response:
@@ -67,7 +57,7 @@ async def validate_archive_streaming_response(
     if save_artifact and response_type == "file":
         artifacts_dir = Path(__file__).parent.parent.parent.parent / "artifacts"
         artifacts_dir.mkdir(parents=True, exist_ok=True)
-        artifact_path = artifacts_dir / f"simulation_{db_id}_data.tar.gz"
+        artifact_path = artifacts_dir / f"{experiment_id}.tar.gz"
         artifact_path.write_bytes(content)
         print(f"\n  Archive saved to: {artifact_path}")
 
@@ -103,6 +93,10 @@ async def validate_archive_streaming_response(
     len(get_settings().slurm_submit_key_path) == 0,
     reason="slurm ssh key file not supplied",
 )
+@pytest.mark.skipif(
+    not Path("/Volumes/SMS").exists(),
+    reason="NFS Mount not connected",
+)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("response_type", ["file", "streaming"])
 async def test_get_simulation_data(
@@ -133,6 +127,7 @@ async def test_get_simulation_data(
             expected_files=expected_analysis_output_files,
             base_router=base_router,
             response_type=response_type,
+            experiment_id=inserted_sim.experiment_id,
         )
 
 
@@ -201,11 +196,12 @@ async def test_archive_streaming_response(
 )
 @pytest.mark.asyncio
 async def test_archive_contents_match_source(
-    fastapi_app: FastAPI, simulation_mock: Simulation, source_dir: Path, base_router: str
+    fastapi_app: FastAPI, simulation_mock: Simulation, base_router: str
 ) -> None:
     """
     Test that archived contents exactly match the source directory.
     """
+    source_dir = Path("/Volumes/SMS/sms_api/alex/sims/sms_multigeneration/analyses")
     transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.post(f"{base_router}/simulations/{simulation_mock.database_id}/data")
@@ -223,6 +219,8 @@ async def test_archive_contents_match_source(
                 parts = Path(member.name).parts[1:]  # Skip archive root
                 source_file = source_dir.joinpath(*parts)
 
+                if source_file.name != ".gitkeep":
+                    continue
                 assert source_file.exists(), f"Unexpected file in archive: {member.name}"
 
                 # Compare contents

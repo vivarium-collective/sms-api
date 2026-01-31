@@ -507,7 +507,7 @@ def cleanup_archive_file(file_path: Path) -> None:
         logger.warning(f"Failed to clean up archive file {file_path}: {e}")
 
 
-async def file_analysis_output_archive(dir_path: Path, bg_tasks: BackgroundTasks) -> FileResponse:
+async def file_analysis_output_archive(dir_path: Path, bg_tasks: BackgroundTasks, experiment_id: str) -> FileResponse:
     """Create a tar.gz archive and return it as a FileResponse for direct download.
 
     The archive is saved to disk temporarily and cleaned up after the response is sent.
@@ -515,7 +515,7 @@ async def file_analysis_output_archive(dir_path: Path, bg_tasks: BackgroundTasks
     validated_path = validate_path(dir_path, base_allowed=None)
 
     # Generate archive filename and path
-    archive_name = f"{validated_path.name}.tar.gz"
+    archive_name = f"{experiment_id}-{validated_path.name}.tar.gz"
     archive_path = Path(get_settings().cache_dir) / "downloads" / archive_name
 
     # Create the archive
@@ -598,7 +598,9 @@ async def get_simulation_outputs(
     if data_response_type == DataResponseType.FILE:
         if bg_tasks is None:
             raise ValueError("BackgroundTasks required for FILE response type")
-        return await file_analysis_output_archive(dir_path=analysis_request_cache, bg_tasks=bg_tasks)
+        return await file_analysis_output_archive(
+            dir_path=analysis_request_cache, bg_tasks=bg_tasks, experiment_id=experiment_id
+        )
     else:
         return await stream_analysis_output_archive(dir_path=analysis_request_cache)
 
