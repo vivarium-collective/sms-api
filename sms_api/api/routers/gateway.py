@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from fastapi import BackgroundTasks, Depends, HTTPException, Query
 from fastapi import Path as FastAPIPath
 from fastapi.requests import Request
+from fastapi.responses import FileResponse, StreamingResponse
 
 from sms_api.analysis.analysis_service import AnalysisServiceSlurm
 from sms_api.analysis.models import (
@@ -163,22 +164,46 @@ async def list_simulations() -> list[Simulation]:
     operation_id="get-ecoli-simulation-data",
     tags=["Simulations"],
     dependencies=[Depends(get_database_service)],
-    summary="Get simulation omics data in TSV format",
+    summary="Get simulation omics data as a downloadable tar.gz archive",
+    response_model=None,
+    responses={
+        200: {
+            "content": {"application/gzip": {}},
+            "description": "A tar.gz archive containing simulation output files",
+        }
+    },
 )
 async def get_simulation_data(
     bg_tasks: BackgroundTasks,
     id: int = FastAPIPath(description="Database ID of the simulation."),
-) -> list[TsvOutputFile]:
+    response_type: handlers.simulations.DataResponseType = Query(  # noqa: B008
+        default=handlers.simulations.DataResponseType.FILE,
+        description="Response type: 'file' for direct download (recommended for browsers/Swagger UI), "
+        "'streaming' for chunked streaming response (better for large files or programmatic access)",
+    ),
+) -> StreamingResponse | FileResponse:
+    """Get simulation outputs as a tar.gz archive.
+
+    Choose response_type based on your use case:
+    - **file**: Creates the archive and returns it as a downloadable file.
+      Best for browser downloads and Swagger UI - shows a "Download" button.
+    - **streaming**: Streams the archive in chunks as it's created.
+      Better for very large files or when you want to start processing before download completes.
+    """
     db_service = get_database_service()
     if db_service is None:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
         return await handlers.simulations.get_simulation_outputs(
-            db_service=db_service, simulation_id=id, hpc_sim_base_path=ENV.hpc_sim_base_path
+            db_service=db_service,
+            simulation_id=id,
+            hpc_sim_base_path=ENV.hpc_sim_base_path,
+            data_response_type=response_type,
+            bg_tasks=bg_tasks,
         )
     except Exception as e:
-        logger.exception("Error uploading simulation config")
+        logger.exception("Error retrieving simulation data")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

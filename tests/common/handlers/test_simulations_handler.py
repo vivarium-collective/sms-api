@@ -1,6 +1,11 @@
 import pytest
 
-from sms_api.common.handlers.simulations import fetch_omics_outputs, get_available_omics_output_paths
+from sms_api.analysis.models import TsvOutputFile
+from sms_api.common.handlers.simulations import (
+    AnalysisResponseType,
+    fetch_omics_outputs,
+    get_available_omics_output_paths,
+)
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
@@ -23,5 +28,7 @@ async def test_get_available_omics_output_paths(
 async def test_fetch_simulation_omics_outputs(
     ssh_session_service: SSHSessionService, analysis_outdir: HPCFilePath
 ) -> None:
-    results = await fetch_omics_outputs(exp_analysis_outdir=analysis_outdir)
+    results: list[TsvOutputFile] = await fetch_omics_outputs(  # type: ignore[assignment]
+        exp_analysis_outdir=analysis_outdir, output_type=AnalysisResponseType.DATA_CONTENT
+    )
     assert len(results)

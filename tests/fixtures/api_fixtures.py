@@ -44,7 +44,7 @@ ENV = get_settings()
 # Default simulator repository configuration for tests
 SIMULATOR_URL = "https://github.com/vivarium-collective/vEcoli"
 SIMULATOR_BRANCH = "api-support"
-SIMULATOR_COMMIT = "88c009d"
+SIMULATOR_COMMIT = "8623753"
 
 
 class SimulatorRepoInfo(NamedTuple):
@@ -281,3 +281,141 @@ async def job_scheduler(database_service: DatabaseServiceSQL) -> AsyncGenerator[
     # Cleanup
     await scheduler.stop_polling()
     set_job_scheduler(saved_scheduler)
+
+
+@pytest_asyncio.fixture(scope="function")
+async def expected_analysis_output_files_incorrect() -> set[str]:
+    """Define expected files in the test simulation."""
+    return {
+        "config.json",
+        "results/output.csv",
+        "results/summary.txt",
+    }
+
+
+@pytest_asyncio.fixture(scope="function")
+async def expected_analysis_output_files() -> set[str]:
+    """Define expected files in the test simulation.
+
+    NOTE: Only files with extensions in ["tsv", "html", "csv", "txt"] are included,
+    matching the handler's `get_available_omics_output_paths` filter.
+    """
+    return {
+        "ptools_rxns.txt",
+        "ptools_rna.txt",
+        "ptools_proteins.txt",
+        "protein_counts_validation.html",
+        "mass_fraction_summary.html",
+        "doubling_time_histogram.html",
+        "multivariant_cell_mass_report.html",
+        "doubling_time.html",
+        "wcm_monomers_MIX0-57.tsv",
+        "wcm_rnas_MIX0-57.tsv",
+        "wcm_metabolic_reactions_MIX0-57.tsv",
+        "wcm_complexes_MIX0-57.tsv",
+        "subgen.tsv",
+    }
+
+
+@pytest_asyncio.fixture
+async def empty_simulation_id() -> int:
+    return 1
+
+
+@pytest_asyncio.fixture
+async def simulation_mock(database_service: DatabaseServiceSQL) -> Simulation:
+    experiment_id = "sms_multigeneration"
+
+    # Check if a simulation with this experiment_id already exists
+    existing_sim = await database_service.get_simulation_by_experiment_id(experiment_id)
+    if existing_sim is not None:
+        return existing_sim
+
+    # Create a unique commit hash for the simulator
+    unique_commit_hash = f"test_{uuid.uuid4().hex[:7]}"
+
+    # Insert the simulator into the database
+    simulator = await database_service.insert_simulator(
+        git_commit_hash=unique_commit_hash,
+        git_repo_url=request_examples.DEFAULT_SIMULATOR.git_repo_url,
+        git_branch=request_examples.DEFAULT_SIMULATOR.git_branch,
+    )
+
+    # Insert a parca dataset for this simulator
+    parca_request = ParcaDatasetRequest(
+        simulator_version=simulator,
+        parca_config=ParcaOptions(),
+    )
+    parca_dataset = await database_service.insert_parca_dataset(
+        parca_dataset_request=parca_request,
+    )
+
+    # Create a SimulationConfig pointing to the existing sms_multigeneration output
+    sim_config = SimulationConfig(  # type: ignore[call-arg]
+        experiment_id=experiment_id,
+        emitter="parquet",
+        emitter_arg={"out_dir": "/projects/SMS/sms_api/alex/sims/sms_multigeneration"},
+    )
+
+    # Create the simulation request
+    sim_request = SimulationRequest(
+        experiment_id=experiment_id,
+        simulation_config_filename="api_simulation_default_ccam.json",
+        simulator_id=simulator.database_id,
+        parca_dataset_id=parca_dataset.database_id,
+        config=sim_config,
+    )
+
+    # Insert the simulation into the database
+    inserted_sim = await database_service.insert_simulation(sim_request=sim_request)
+    return inserted_sim
+
+
+@pytest_asyncio.fixture
+async def large_simulation_mock(database_service: DatabaseServiceSQL) -> Simulation:
+    # Use a different experiment_id for large simulation mock to avoid conflicts
+    experiment_id = "sms_multigeneration_large"
+
+    # Check if a simulation with this experiment_id already exists
+    existing_sim = await database_service.get_simulation_by_experiment_id(experiment_id)
+    if existing_sim is not None:
+        return existing_sim
+
+    # Create a unique commit hash for the simulator
+    unique_commit_hash = f"test_{uuid.uuid4().hex[:7]}"
+
+    # Insert the simulator into the database
+    simulator = await database_service.insert_simulator(
+        git_commit_hash=unique_commit_hash,
+        git_repo_url=request_examples.DEFAULT_SIMULATOR.git_repo_url,
+        git_branch=request_examples.DEFAULT_SIMULATOR.git_branch,
+    )
+
+    # Insert a parca dataset for this simulator
+    parca_request = ParcaDatasetRequest(
+        simulator_version=simulator,
+        parca_config=ParcaOptions(),
+    )
+    parca_dataset = await database_service.insert_parca_dataset(
+        parca_dataset_request=parca_request,
+    )
+
+    # Create a SimulationConfig pointing to the existing sms_multigeneration output
+    sim_config = SimulationConfig(  # type: ignore[call-arg]
+        experiment_id=experiment_id,
+        emitter="parquet",
+        emitter_arg={"out_dir": "/projects/SMS/sms_api/alex/sims/sms_multigeneration"},
+    )
+
+    # Create the simulation request
+    sim_request = SimulationRequest(
+        experiment_id=experiment_id,
+        simulation_config_filename="api_simulation_default_ccam.json",
+        simulator_id=simulator.database_id,
+        parca_dataset_id=parca_dataset.database_id,
+        config=sim_config,
+    )
+
+    # Insert the simulation into the database
+    inserted_sim = await database_service.insert_simulation(sim_request=sim_request)
+    return inserted_sim
