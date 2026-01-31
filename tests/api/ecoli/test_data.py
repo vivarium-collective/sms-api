@@ -19,7 +19,6 @@ from httpx import ASGITransport, AsyncClient
 
 from sms_api.api.main import app
 from sms_api.common.ssh.ssh_service import SSHSessionService
-from sms_api.common.utils import get_all_directory_filepaths
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
@@ -293,15 +292,3 @@ async def test_archive_large_file_streaming(
         # For large files, we should see multiple chunks
         assert chunk_count > 1, "Large archive should stream in multiple chunks"
         assert total_size > 0
-
-
-@pytest.mark.skipif(
-    not Path("/Volumes/SMS").exists(),
-    reason="NFS Mount not initialized",
-)
-@pytest.mark.asyncio
-async def test_get_all_directory_filepaths() -> None:
-    sim_mock_outdir = Path("/Volumes/SMS/sms_api/alex/sims/sms_multigeneration/analyses")
-    paths = get_all_directory_filepaths(sim_mock_outdir)
-    for outpath in paths:
-        assert outpath.exists()
