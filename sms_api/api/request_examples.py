@@ -60,7 +60,7 @@ def get_test_ptools() -> ExperimentAnalysisRequest:
 
 def get_analysis_multiseed_multigen() -> ExperimentAnalysisRequest:
     request = ExperimentAnalysisRequest(
-        experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
+        experiment_id="sms_multigeneration",
         multiseed=[
             PtoolsAnalysisConfig(
                 name=PtoolsAnalysisType.REACTIONS,

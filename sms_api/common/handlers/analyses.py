@@ -6,7 +6,6 @@ NOTE: this module is essentially "analysis_handlers_hpc". TODO: abstract this in
 
 import json
 import logging
-import os
 from collections.abc import Sequence
 from pathlib import Path
 from textwrap import dedent
@@ -65,10 +64,11 @@ async def handle_run_analysis_slurm(
     analysis_name: str = get_data_id(scope="analysis")
 
     results: list[TsvOutputFile] = []
-    # 2. if not, run an analysis
-    if not analysis_request_cache.exists():
-        # 2a. mk local cache
-        os.mkdir(analysis_request_cache)
+    # 2. if cache doesn't exist or is empty, run an analysis
+    cache_has_files = analysis_request_cache.exists() and any(analysis_request_cache.iterdir())
+    if not cache_has_files:
+        # 2a. mk local cache (use makedirs with exist_ok for empty directories)
+        analysis_request_cache.mkdir(parents=True, exist_ok=True)
         # Use a single SSH session for job submission and polling
         async with get_ssh_session_service().session() as ssh:
             # 2c. dispatch job
@@ -89,11 +89,16 @@ async def handle_run_analysis_slurm(
             )
             # 2e. poll status
             _run = await analysis_service.poll_status(dto=dto, ssh=ssh)
-        # check available in specified HPC dir for analysis_config.outdir
-        available_paths: list[HPCFilePath] = []
-        # available_paths: list[HPCFilePath] = await analysis_service.get_available_output_paths(
-        #     remote_analysis_outdir=HPCFilePath(remote_path=Path(config.analysis_options.outdir))
-        # )
+
+        # Fetch available output files from the analysis output directory
+        # Analysis outputs are stored at: hpc_sim_base_path / experiment_id / "analyses"
+        env = get_settings()
+        remote_analysis_outdir = HPCFilePath(
+            remote_path=env.hpc_sim_base_path.remote_path / request.experiment_id / "analyses"
+        )
+        available_paths: list[HPCFilePath] = await analysis_service.get_available_output_paths(
+            remote_analysis_outdir=remote_analysis_outdir
+        )
 
         # download available
         for remote_path in available_paths:
@@ -102,7 +107,7 @@ async def handle_run_analysis_slurm(
             )
             results.append(output_i)
     else:
-        # config = request.to_config(analysis_name=analysis_name, env=analysis_service.env)
+        # Load cached results
         for fp in analysis_request_cache.iterdir():
             filename = fp.parts[-1]
             if filename.endswith(".txt"):

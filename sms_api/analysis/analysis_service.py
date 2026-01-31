@@ -166,11 +166,22 @@ class AnalysisServiceSlurm:
             return f"Error fetching log: {e}"
 
     async def get_available_output_paths(self, remote_analysis_outdir: HPCFilePath) -> list[HPCFilePath]:
+        """Get available output file paths from the remote analysis directory.
+
+        Only returns files with text-based extensions that can be read and returned.
+        """
         cmd = f'find "{remote_analysis_outdir!s}" -type f'
         try:
             async with get_ssh_session_service().session() as ssh:
                 ret, out, err = await ssh.run_command(cmd)
-            return [HPCFilePath(remote_path=Path(fp)) for fp in out.splitlines()]
+            # Filter to only include text-based file types
+            accepted_extensions = ["txt", "tsv", "csv", "html"]
+            paths = []
+            for fp in out.splitlines():
+                extension = fp.split(".")[-1].lower()
+                if extension in accepted_extensions:
+                    paths.append(HPCFilePath(remote_path=Path(fp)))
+            return paths
         except Exception:
             logger.exception("could not get the filepaths that are available")
             return []
