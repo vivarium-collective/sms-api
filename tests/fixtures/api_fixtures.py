@@ -22,6 +22,7 @@ from sms_api.api.main import app
 from sms_api.common.gateway.utils import generate_analysis_request
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
+from sms_api.common.simulator_defaults import DEFAULT_SIMULATOR
 from sms_api.common.utils import get_uuid
 from sms_api.config import REPO_ROOT, get_settings
 from sms_api.dependencies import get_job_scheduler, set_job_scheduler
@@ -42,9 +43,9 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 ENV = get_settings()
 
 # Default simulator repository configuration for tests
-SIMULATOR_URL = "https://github.com/vivarium-collective/vEcoli"
-SIMULATOR_BRANCH = "api-support"
-SIMULATOR_COMMIT = "8623753"
+SIMULATOR_URL = DEFAULT_SIMULATOR.git_repo_url
+SIMULATOR_BRANCH = DEFAULT_SIMULATOR.git_branch
+SIMULATOR_COMMIT = DEFAULT_SIMULATOR.git_commit_hash
 
 
 class SimulatorRepoInfo(NamedTuple):
@@ -121,8 +122,8 @@ async def experiment_request(database_service: DatabaseServiceSQL) -> Simulation
     # First insert the simulator
     simulator = await database_service.insert_simulator(
         git_commit_hash=unique_commit_hash,
-        git_repo_url=examples.DEFAULT_SIMULATOR.git_repo_url,
-        git_branch=examples.DEFAULT_SIMULATOR.git_branch,
+        git_repo_url=DEFAULT_SIMULATOR.git_repo_url,
+        git_branch=DEFAULT_SIMULATOR.git_branch,
     )
 
     # Then insert a parca dataset for this simulator
@@ -337,8 +338,8 @@ async def simulation_mock(database_service: DatabaseServiceSQL) -> Simulation:
     # Insert the simulator into the database
     simulator = await database_service.insert_simulator(
         git_commit_hash=unique_commit_hash,
-        git_repo_url=request_examples.DEFAULT_SIMULATOR.git_repo_url,
-        git_branch=request_examples.DEFAULT_SIMULATOR.git_branch,
+        git_repo_url=DEFAULT_SIMULATOR.git_repo_url,
+        git_branch=DEFAULT_SIMULATOR.git_branch,
     )
 
     # Insert a parca dataset for this simulator
@@ -387,8 +388,8 @@ async def large_simulation_mock(database_service: DatabaseServiceSQL) -> Simulat
     # Insert the simulator into the database
     simulator = await database_service.insert_simulator(
         git_commit_hash=unique_commit_hash,
-        git_repo_url=request_examples.DEFAULT_SIMULATOR.git_repo_url,
-        git_branch=request_examples.DEFAULT_SIMULATOR.git_branch,
+        git_repo_url=DEFAULT_SIMULATOR.git_repo_url,
+        git_branch=DEFAULT_SIMULATOR.git_branch,
     )
 
     # Insert a parca dataset for this simulator

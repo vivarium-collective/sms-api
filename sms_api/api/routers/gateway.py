@@ -65,6 +65,12 @@ async def run_simulation_workflow(
     num_generations: int | None = Query(default=None, ge=1, le=10, description="Number of generations to simulate"),
     num_seeds: int | None = Query(default=None, ge=1, le=100, description="Number of initial seeds (lineages)"),
     description: str | None = Query(default=None, description="Description of the simulation"),
+    run_parca: bool | None = Query(
+        default=None,
+        description="If true, run the simulation parameter calculator prior "
+        "to running simulation (re-parameterizes simulation "
+        "workflow).",
+    ),
 ) -> Simulation:
     """Run a vEcoli simulation workflow with simplified parameters.
 
@@ -91,6 +97,7 @@ async def run_simulation_workflow(
             num_generations=num_generations,
             num_seeds=num_seeds,
             description=description,
+            run_parca=run_parca,
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
@@ -176,8 +183,8 @@ async def list_simulations() -> list[Simulation]:
 async def get_simulation_data(
     bg_tasks: BackgroundTasks,
     id: int = FastAPIPath(description="Database ID of the simulation."),
-    response_type: handlers.simulations.DataResponseType = Query(  # noqa: B008
-        default=handlers.simulations.DataResponseType.FILE,
+    response_type: handlers.simulations.SimulationAnalysisDataResponseType = Query(  # noqa: B008
+        default=handlers.simulations.SimulationAnalysisDataResponseType.FILE,
         description="Response type: 'file' for direct download (recommended for browsers/Swagger UI), "
         "'streaming' for chunked streaming response (better for large files or programmatic access)",
     ),

@@ -458,6 +458,7 @@ def workflow_slurm_script(
 
     qos_clause = f"#SBATCH --qos={env.slurm_qos}" if env.slurm_qos else ""
     nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
+    constraint_clause = f"#SBATCH --constraint={env.slurm_constraint}" if env.slurm_constraint else ""
 
     simulation_outdir_base = env.simulation_outdir
     slurm_log_base_path = env.slurm_log_base_path
@@ -468,7 +469,9 @@ def workflow_slurm_script(
     # sim_data_path: null forces ParCa to run (no cached kb lookup)
     # aws_cdk.container_image: path to Singularity image for Nextflow tasks
     config_dict = config.model_dump()
-    config_dict["sim_data_path"] = None  # Force ParCa to run
+    # Only force ParCa to run if sim_data_path is not already set (allows using cached simData)
+    if not config_dict.get("sim_data_path"):
+        config_dict["sim_data_path"] = None  # Force ParCa to run
     if "parca_options" not in config_dict:
         config_dict["parca_options"] = {}
     config_dict["parca_options"]["load_intermediate"] = None  # Don't load cached intermediates
@@ -492,6 +495,7 @@ def workflow_slurm_script(
         {nodelist_clause}
         #SBATCH -o {slurm_log_file!s}
         #SBATCH -e {slurm_log_file!s}
+        {constraint_clause}
 
         set -e
 

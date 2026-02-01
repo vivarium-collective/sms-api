@@ -184,6 +184,12 @@ class Settings(BaseSettings):
     path_local_prefix: str = ""
     path_remote_prefix: str = ""
 
+    # valid namespaces correspond 1:1 with namespaces in kustomize/ config
+    deployment_namespace: str = ""
+
+    # slurm constraint for arch mismatches
+    slurm_constraint: str = ""
+
 
 @lru_cache
 def get_settings(env_file: Path | None = None) -> Settings:

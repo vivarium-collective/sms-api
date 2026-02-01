@@ -4,7 +4,7 @@ This module is kept separate to avoid circular imports.
 """
 
 from sms_api.common import StrEnumBase
-from sms_api.simulation.models import SimulationConfigFilename
+from sms_api.simulation.models import SimulationConfigFilename, Simulator
 
 
 class RepoUrl(StrEnumBase):
@@ -27,3 +27,6 @@ AVAILABLE_CONFIG_FILENAMES = [
 ]
 DEFAULT_REPO = RepoUrl.VECOLI_FORK_REPO_URL
 DEFAULT_BRANCH = "api-support"
+DEFAULT_COMMIT = "203ab2a"  # should be "latest"
+
+DEFAULT_SIMULATOR = Simulator(git_commit_hash=DEFAULT_COMMIT, git_repo_url=DEFAULT_REPO, git_branch=DEFAULT_BRANCH)

@@ -38,14 +38,15 @@ from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)
 
-# Get repo root for absolute path references
+
 REPO_DIR = Path(__file__).parent.parent.parent.parent.absolute()
-
-# Directory for debug artifacts (gitignored)
 DEBUG_ARTIFACTS_DIR = REPO_DIR / "artifacts"
+DEFAULT_SIMDATA_PATH = get_settings().hpc_parca_base_path / "default" / "kb" / "simData.cPickle"
+# DEFAULT_SIMDATA_PATH = REPO_DIR / "assets" / "simData.cPickle"  # or, keep a remote copy (run parca along with
+# repo/image build)
 
 
-class AnalysisResponseType(StrEnumBase):
+class SimulationAnalysisResponseType(StrEnumBase):
     FILE = "application/octet-stream"
     DATA_CONTENT = "application/octet-stream"
     STREAMING_JSON = "application/json"
@@ -55,7 +56,7 @@ class AnalysisResponseType(StrEnumBase):
     TAR_GZIP_STREAM = "application/gzip"
 
 
-class DataResponseType(StrEnumBase):
+class SimulationAnalysisDataResponseType(StrEnumBase):
     """Response type for simulation data endpoint."""
 
     STREAMING = "streaming"
@@ -69,7 +70,7 @@ def export_baseline_config(request: SimulationRequest) -> None:
     This directory is gitignored and used for debugging purposes only.
     """
     DEBUG_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    config_path = DEBUG_ARTIFACTS_DIR / "baseline_config.json"
+    config_path = DEBUG_ARTIFACTS_DIR / f"workflow_config__{get_settings().deployment_namespace}.json"
     with open(config_path, "w") as fp:
         json.dump(request.config.model_dump(), fp, indent=3)
 
@@ -140,6 +141,7 @@ async def run_simulation_workflow(
     num_generations: int | None = None,
     num_seeds: int | None = None,
     description: str | None = None,
+    run_parca: bool | None = None,
 ) -> Simulation:
     """
     Simplified workflow execution with just the essential parameters.
@@ -157,8 +159,11 @@ async def run_simulation_workflow(
         num_generations: Number of generations to simulate (optional, overrides config)
         num_seeds: Number of initial seeds/lineages (optional, overrides config)
         description: Description of the simulation (optional)
+        run_parca: If `True`, the simulation parameter calculator is run prior to simulation execution, otherwise
+            a cached "default" simulation parameter dataset is used.
     """
-    from sms_api.config import get_settings
+    if run_parca is None:
+        run_parca = True
 
     settings = get_settings()
 
@@ -183,9 +188,9 @@ async def run_simulation_workflow(
     # 3. Replace placeholders in the config template
     config_str = stdout
 
-    unique_experiment_id = f"{experiment_id}-{str(uuid.uuid4())[:4]}"
+    unique_experiment_id = f"sim{simulator.database_id}-{experiment_id}-{str(uuid.uuid4())[:4]}"
     config_str = config_str.replace("EXPERIMENT_ID_PLACEHOLDER", unique_experiment_id)
-    config_str = config_str.replace("HPC_SIM_BASE_PATH_PLACEHOLDER", str(settings.simulation_outdir))
+    config_str = config_str.replace("HPC_SIM_BASE_PATH_PLACEHOLDER", str(settings.hpc_sim_base_path))
     image_path = get_settings().hpc_image_base_path / f"vecoli-{simulator.git_commit_hash}.sif"
     config_str = config_str.replace("SIMULATOR_IMAGE_PATH_PLACEHOLDER", str(image_path))
     config_data = json.loads(config_str)
@@ -197,6 +202,9 @@ async def run_simulation_workflow(
         config_data["n_init_sims"] = num_seeds
     if description is not None:
         config_data["description"] = description
+    if not run_parca:
+        # expedite completion time by using cached simData
+        config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
 
     config = SimulationConfig(**config_data)
 
@@ -338,17 +346,18 @@ async def list_simulations(db_service: DatabaseService) -> list[Simulation]:
 
 
 async def get_omics_outputs(
-    hpc_sim_base_path: HPCFilePath, experiment_id: str, output_type: AnalysisResponseType | None = None
+    hpc_sim_base_path: HPCFilePath, experiment_id: str, output_type: SimulationAnalysisResponseType | None = None
 ) -> list[TsvOutputFile] | StreamingResponse:
     exp_analysis_outdir = hpc_sim_base_path / experiment_id / "analyses"
     return await fetch_omics_outputs(exp_analysis_outdir=exp_analysis_outdir, output_type=output_type)
 
 
 async def fetch_omics_outputs(
-    exp_analysis_outdir: HPCFilePath, output_type: AnalysisResponseType | None = None
+    exp_analysis_outdir: HPCFilePath, output_type: SimulationAnalysisResponseType | None = None
 ) -> list[TsvOutputFile] | StreamingResponse:
     if output_type is None:
-        output_type = AnalysisResponseType.DATA_CONTENT  # original implementation's analysis response type, so default
+        # original implementation's analysis response type, so default
+        output_type = SimulationAnalysisResponseType.DATA_CONTENT
 
     analysis_request_cache = Path(get_settings().cache_dir)
     available_paths: list[HPCFilePath] = await get_available_omics_output_paths(
@@ -356,7 +365,7 @@ async def fetch_omics_outputs(
     )
 
     # download available
-    results_arr: None | list[TsvOutputFile] = None if output_type == AnalysisResponseType.GZIP_STREAM else []
+    results_arr: None | list[TsvOutputFile] = None if output_type == SimulationAnalysisResponseType.GZIP_STREAM else []
     for remote_path in available_paths:
         output_i: TsvOutputFile | Path = await download_analysis_output(
             local_dir=analysis_request_cache, remote_path=remote_path, response_type=output_type
@@ -536,9 +545,9 @@ async def file_analysis_output_archive(dir_path: Path, bg_tasks: BackgroundTasks
 
 
 async def download_analysis_output(
-    local_dir: Path, remote_path: HPCFilePath, response_type: AnalysisResponseType
+    local_dir: Path, remote_path: HPCFilePath, response_type: SimulationAnalysisResponseType
 ) -> TsvOutputFile | Path:
-    accepted_response_types = AnalysisResponseType.values()
+    accepted_response_types = SimulationAnalysisResponseType.values()
     if response_type not in accepted_response_types:
         raise ValueError(
             f"Unexpected response_type. Got: {response_type}; Expected one of: {accepted_response_types!s}"
@@ -548,9 +557,9 @@ async def download_analysis_output(
     if not local.exists():
         async with get_ssh_session_service().session() as ssh:
             await ssh.scp_download(local_file=local, remote_path=remote_path)
-    if response_type == AnalysisResponseType.DATA_CONTENT:
+    if response_type == SimulationAnalysisResponseType.DATA_CONTENT:
         return TsvOutputFile(filename=requested_filename, content=local.read_text())
-    elif response_type == AnalysisResponseType.TAR_GZIP_STREAM:
+    elif response_type == SimulationAnalysisResponseType.TAR_GZIP_STREAM:
         return local
     raise RuntimeError("Not sure how you got here, but here you are. Cheers!")
 
@@ -559,7 +568,7 @@ async def get_simulation_outputs(
     db_service: DatabaseService,
     simulation_id: int,
     hpc_sim_base_path: HPCFilePath,
-    data_response_type: DataResponseType = DataResponseType.STREAMING,
+    data_response_type: SimulationAnalysisDataResponseType = SimulationAnalysisDataResponseType.STREAMING,
     bg_tasks: BackgroundTasks | None = None,
 ) -> StreamingResponse | FileResponse:
     """Get simulation outputs as a tar.gz archive.
@@ -591,11 +600,11 @@ async def get_simulation_outputs(
         await download_analysis_output(
             local_dir=analysis_request_cache,
             remote_path=remote_path,
-            response_type=AnalysisResponseType.TAR_GZIP_STREAM,
+            response_type=SimulationAnalysisResponseType.TAR_GZIP_STREAM,
         )
 
     # Return appropriate response type
-    if data_response_type == DataResponseType.FILE:
+    if data_response_type == SimulationAnalysisDataResponseType.FILE:
         if bg_tasks is None:
             raise ValueError("BackgroundTasks required for FILE response type")
         return await file_analysis_output_archive(

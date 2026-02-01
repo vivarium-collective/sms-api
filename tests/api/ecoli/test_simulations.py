@@ -12,20 +12,27 @@ Prerequisites for API tests:
 """
 
 import asyncio
+import os
 import time
 import uuid
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from sms_api.api.main import app
+from sms_api.common import handlers
 from sms_api.common.models import JobStatus
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
     SimulationRequest,
+    SimulatorVersion,
 )
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 from tests.fixtures.api_fixtures import SimulatorRepoInfo
@@ -81,7 +88,7 @@ async def test_get_simulation(database_service: DatabaseServiceSQL, experiment_r
 async def _ensure_simulator_ready(
     client: AsyncClient,
     repo_info: SimulatorRepoInfo,
-) -> int:
+) -> SimulatorVersion:
     """
     Ensure simulator is registered and built using REST endpoints.
 
@@ -97,6 +104,7 @@ async def _ensure_simulator_ready(
     versions_data = versions_response.json()
 
     simulator_id: int | None = None
+    simulator_data: dict[str, str] | None = None
     for sim in versions_data.get("versions", []):
         if (
             sim.get("git_commit_hash") == repo_info.commit_hash
@@ -159,8 +167,35 @@ async def _ensure_simulator_ready(
     else:
         pytest.fail(f"Simulator build did not complete within {max_wait_seconds}s")
 
+    assert simulator_data is not None, "Simulator data not found or set."
     assert simulator_id is not None, "Simulator ID should be set"
-    return simulator_id
+    # return simulator_id
+    return SimulatorVersion(**simulator_data)  # type: ignore[arg-type]
+
+
+async def prepare_simulator(
+    simulator_repo_info: SimulatorRepoInfo,
+    simulation_service_slurm: SimulationServiceHpc,
+    database_service: DatabaseServiceSQL,
+) -> SimulatorVersion:
+    # Insert a simulator directly into the database (no HPC access needed)
+    return await handlers.simulators.upload_simulator(
+        commit_hash=simulator_repo_info.commit_hash,
+        git_repo_url=simulator_repo_info.url,
+        git_branch=simulator_repo_info.branch,
+        simulation_service_slurm=simulation_service_slurm,
+        database_service=database_service,
+    )
+
+
+@asynccontextmanager
+async def api_client() -> AsyncGenerator[httpx.AsyncClient]:
+    transport = ASGITransport(app=app)
+    client = AsyncClient(transport=transport, base_url="http://testserver")
+    try:
+        yield client
+    finally:
+        pass
 
 
 @pytest.mark.integration
@@ -169,7 +204,7 @@ async def _ensure_simulator_ready(
     reason="slurm ssh key file not supplied",
 )
 @pytest.mark.asyncio
-async def test_run_simulation_e2e(
+async def test_run_simulation_workflow_e2e(
     base_router: str,
     simulation_service_slurm: SimulationServiceHpc,
     database_service: DatabaseServiceSQL,
@@ -189,19 +224,28 @@ async def test_run_simulation_e2e(
 
     Expected runtime: 30-60 minutes depending on cluster load.
     """
+    artifacts_dir = Path("artifacts").absolute()
+    artifact_files = ["simulation_workflow.sbatch", "workflow_config__sms-api-rke-dev.json"]
+    for artifact in artifact_files:
+        path = artifacts_dir / artifact
+        if path.exists():
+            os.remove(path)
+
+    # Step 1: Ensure simulator is ready via REST endpoints
+    async with api_client() as client:
+        print("\nStep 1: Ensuring simulator is ready...")
+        simulator: SimulatorVersion = await _ensure_simulator_ready(client=client, repo_info=simulator_repo_info)
+
+    simulator_id = simulator.database_id
+    print(f"  Using simulator ID: {simulator_id}")
+
     job_uuid = uuid.uuid4().hex[:8]
-    experiment_id = f"test_api_{job_uuid}"
+    experiment_id = f"sim{simulator_id}-e2e_test_{job_uuid}"
 
     print("\n=== Test: run_simulation_e2e ===")
     print(f"  Experiment ID: {experiment_id}")
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        # Step 1: Ensure simulator is ready via REST endpoints
-        print("\nStep 1: Ensuring simulator is ready...")
-        simulator_id = await _ensure_simulator_ready(client, simulator_repo_info)
-        print(f"  Using simulator ID: {simulator_id}")
-
+    async with api_client() as client:
         # Step 2: POST to /simulations
         print("\nStep 2: POST /simulations")
         print(f"  Config file: {CONFIG_FILENAME}")
@@ -212,9 +256,10 @@ async def test_run_simulation_e2e(
                 "simulator_id": simulator_id,
                 "experiment_id": experiment_id,
                 "simulation_config_filename": CONFIG_FILENAME,
-                "num_generations": 2,  # Override for faster test
-                "num_seeds": 2,  # Override for faster test
+                "num_generations": 1,  # Override for faster test
+                "num_seeds": 1,  # Override for faster test
                 "description": "Integration test via /simulations endpoint",
+                "run_parca": False,  # Use cached simdata for faster test
             },
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
@@ -236,7 +281,6 @@ async def test_run_simulation_e2e(
         max_wait_seconds = 7200  # 2 hour timeout
         poll_interval = 30
         final_status = None
-
         while time.time() - start_time < max_wait_seconds:
             status_response = await client.get(f"{base_router}/simulations/{db_id}/status")
             assert status_response.status_code == 200, f"Status check failed: {status_response.text}"
