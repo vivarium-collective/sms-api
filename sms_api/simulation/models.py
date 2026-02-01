@@ -303,7 +303,7 @@ class SimulationConfigFilename(enum.StrEnum):
     DEFAULT = "api_simulation_default.json"
     CCAM = "api_simulation_default_ccam.json"
     AWS_CDK = "api_simulation_default_aws_cdk.json"
-    PTOOLS_CCAM = "api_simulation_ptools.json"
+    PTOOLS_CCAM = "api_simulation_ptools_ccam.json"
 
 
 class SimulationRequest(BaseModel):
