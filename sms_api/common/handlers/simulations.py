@@ -364,11 +364,14 @@ async def fetch_omics_outputs(
         remote_analysis_outdir=exp_analysis_outdir
     )
 
-    # download available
+    # download available, preserving directory structure
     results_arr: None | list[TsvOutputFile] = None if output_type == SimulationAnalysisResponseType.GZIP_STREAM else []
     for remote_path in available_paths:
         output_i: TsvOutputFile | Path = await download_analysis_output(
-            local_dir=analysis_request_cache, remote_path=remote_path, response_type=output_type
+            local_dir=analysis_request_cache,
+            remote_path=remote_path,
+            response_type=output_type,
+            remote_base_dir=exp_analysis_outdir,
         )
         if isinstance(output_i, TsvOutputFile) and results_arr is not None:
             results_arr.append(output_i)
@@ -524,7 +527,7 @@ async def file_analysis_output_archive(dir_path: Path, bg_tasks: BackgroundTasks
     validated_path = validate_path(dir_path, base_allowed=None)
 
     # Generate archive filename and path
-    archive_name = f"{experiment_id}-{validated_path.name}.tar.gz"
+    archive_name = f"{experiment_id}.tar.gz"
     archive_path = Path(get_settings().cache_dir) / "downloads" / archive_name
 
     # Create the archive
@@ -545,20 +548,45 @@ async def file_analysis_output_archive(dir_path: Path, bg_tasks: BackgroundTasks
 
 
 async def download_analysis_output(
-    local_dir: Path, remote_path: HPCFilePath, response_type: SimulationAnalysisResponseType
+    local_dir: Path,
+    remote_path: HPCFilePath,
+    response_type: SimulationAnalysisResponseType,
+    remote_base_dir: HPCFilePath | None = None,
 ) -> TsvOutputFile | Path:
+    """Download a remote analysis output file to local cache.
+
+    Args:
+        local_dir: Local directory to save files to
+        remote_path: Full remote path to the file
+        response_type: Type of response to return
+        remote_base_dir: Base remote directory for calculating relative paths.
+            If provided, the directory structure relative to this base will be
+            preserved locally. If None, only the filename is used (legacy behavior).
+    """
     accepted_response_types = SimulationAnalysisResponseType.values()
     if response_type not in accepted_response_types:
         raise ValueError(
             f"Unexpected response_type. Got: {response_type}; Expected one of: {accepted_response_types!s}"
         )
-    requested_filename = remote_path.remote_path.parts[-1]
-    local = local_dir / requested_filename
+
+    # Calculate relative path to preserve directory structure
+    if remote_base_dir is not None:
+        relative_path = remote_path.remote_path.relative_to(remote_base_dir.remote_path)
+        local = local_dir / relative_path
+    else:
+        # Legacy behavior: just use filename
+        relative_path = Path(remote_path.remote_path.parts[-1])
+        local = local_dir / relative_path
+
+    # Create parent directories if needed
+    local.parent.mkdir(parents=True, exist_ok=True)
+
     if not local.exists():
         async with get_ssh_session_service().session() as ssh:
             await ssh.scp_download(local_file=local, remote_path=remote_path)
+
     if response_type == SimulationAnalysisResponseType.DATA_CONTENT:
-        return TsvOutputFile(filename=requested_filename, content=local.read_text())
+        return TsvOutputFile(filename=str(relative_path), content=local.read_text())
     elif response_type == SimulationAnalysisResponseType.TAR_GZIP_STREAM:
         return local
     raise RuntimeError("Not sure how you got here, but here you are. Cheers!")
@@ -591,8 +619,10 @@ async def get_simulation_outputs(
     experiment_id = simulation.config.experiment_id
     exp_analysis_outdir = hpc_sim_base_path / experiment_id / "analyses"
 
-    # Download files to local cache
-    analysis_request_cache = Path(get_settings().cache_dir)
+    # Download files to local cache, preserving directory structure
+    analysis_request_cache = Path(get_settings().cache_dir) / experiment_id
+    if not analysis_request_cache.exists():
+        analysis_request_cache.mkdir(parents=True)
     available_paths: list[HPCFilePath] = await get_available_omics_output_paths(
         remote_analysis_outdir=exp_analysis_outdir
     )
@@ -601,6 +631,7 @@ async def get_simulation_outputs(
             local_dir=analysis_request_cache,
             remote_path=remote_path,
             response_type=SimulationAnalysisResponseType.TAR_GZIP_STREAM,
+            remote_base_dir=exp_analysis_outdir,
         )
 
     # Return appropriate response type
