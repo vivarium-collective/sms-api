@@ -39,6 +39,6 @@ def test_get_outputs() -> None:
         partitions_all=partitions,
         bulk_ids_selected=["WATER","ATP"],
         datapoints_cap=2000,
-        molecule_id_type=mo.ui.radio(options=["Common name", "BioCyc ID"], value="BioCyc ID")
+        molecule_id_ui=mo.ui.radio(options=["Common name", "BioCyc ID"], value="BioCyc ID")
     )
     assert "bulk_counts" in list(df.columns)
