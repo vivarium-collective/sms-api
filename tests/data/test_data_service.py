@@ -34,7 +34,7 @@ def test_get_outputs() -> None:
         "generation": "1",
         "agent_id": "0",
     }
-    df = service.get_get_plot_df_bulk(
+    df = service.get_plot_df_bulk(
         analysis_type=AnalysisType.MULTISEED,
         partitions_all=partitions,
         bulk_ids_selected=["WATER","ATP"],
