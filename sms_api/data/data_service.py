@@ -286,9 +286,9 @@ class SimulationDataService(ABC):
         )
 
         bulk_sql_list = (
-            "SELECT ("
+            "SELECT ("  # noqa: S608
             + "+".join([f"[compound_{sp_idx}]" for sp_idx, _ in enumerate(bulk_sp_ids)])
-            + f") AS bulk_counts, time FROM ({bulk_sql_opt_sum})" # noqa: S608
+            + f") AS bulk_counts, time FROM ({bulk_sql_opt_sum})"
         )
 
         bulk_sql_ds = self.sql_downsample(
@@ -349,9 +349,9 @@ class SimulationDataService(ABC):
             + f",time FROM ({col_sql_sliced}) GROUP BY time"
         )
         col_sql_list = (
-            "SELECT ("
+            "SELECT ("  # noqa: S608
             + "+".join([f"[{col_name}_{idx}]" for idx, _ in enumerate(sp_ids_selected)])
-            + f") AS {col_name}, time FROM ({col_sql_sum})" # noqa: S608
+            + f") AS {col_name}, time FROM ({col_sql_sum})"
         )
         col_sql_ds = self.sql_downsample(col_sql_list, sp_ids_selected, col_name, datapoints_cap)
 
