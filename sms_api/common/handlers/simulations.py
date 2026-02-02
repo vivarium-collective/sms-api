@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 from fastapi import BackgroundTasks, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from sms_api.analysis.models import TsvOutputFile
 from sms_api.common import StrEnumBase
@@ -24,6 +24,7 @@ from sms_api.dependencies import get_database_service, get_simulation_service, g
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import (
+    HpcRun,
     JobType,
     ParcaDataset,
     ParcaDatasetRequest,
@@ -645,18 +646,26 @@ async def get_simulation_outputs(
         return await stream_analysis_output_archive(dir_path=analysis_request_cache)
 
 
-## async def get_simulation_log(db_service: DatabaseService, id: int) -> Response:
-##     stdout = await _get_slurm_log(db_service, id)
-##     _, _, after = stdout.partition("N E X T F L O W")
-##     result = "N E X T F L O W" + after
-##     return Response(content=result, media_type="text/plain")
-##
-##
-## async def get_simulation_log_detailed(db_service: DatabaseService, id: int) -> str:
-##     return await _get_slurm_log(db_service=db_service, db_id=id)
-##
-##
-## async def _get_slurm_log(remote_log_path: HPCFilePath) -> str | None:
-##     async with get_ssh_session_service().session() as ssh:
-##         returncode, stdout, stderr = await ssh.run_command(f"cat {remote_log_path!s}.out")
-##     return stdout
+async def get_simulation_log(db_service: DatabaseService, simulation_id: int) -> Response:
+    stdout = await _get_slurm_log(db_service=db_service, simulation_id=simulation_id)
+    _, _, after = stdout.partition("N E X T F L O W")
+    result = "N E X T F L O W" + after
+    return Response(content=result, media_type="text/plain")
+
+
+async def _get_slurm_log(db_service: DatabaseService, simulation_id: int) -> str:
+    hpc_run: HpcRun | None = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
+    if hpc_run is None:
+        raise ValueError(f"No hpc run found for simulation with id: {simulation_id}")
+    job_id = hpc_run.slurmjobid
+    log_stdout = None
+    async with get_ssh_session_service().session() as ssh:
+        returncode, stdout, stderr = await ssh.run_command(f"scontrol show job {job_id}")
+        try:
+            k = "JobName="
+            job_name = next(filter(lambda v: k in v, stdout.replace("\n", "").split(" "))).replace(k, "")
+            log_path = get_settings().slurm_log_base_path / f"{job_name}.out"
+            _, log_stdout, _ = await ssh.run_command(f"cat {log_path!s}")
+        except StopIteration:
+            raise RuntimeError(f"No simulation job name available for simulation with id: {simulation_id}")
+    return log_stdout

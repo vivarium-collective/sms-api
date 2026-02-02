@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from fastapi import BackgroundTasks, Depends, HTTPException, Query
 from fastapi import Path as FastAPIPath
 from fastapi.requests import Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from sms_api.analysis.analysis_service import AnalysisServiceSlurm
 from sms_api.analysis.models import (
@@ -137,6 +137,28 @@ async def get_simulation_status(id: int = FastAPIPath(...)) -> SimulationRun:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
         return await handlers.simulations.get_simulation_status(db_service=db_service, id=id)
+    except Exception as e:
+        logger.exception(
+            """Error getting simulation status.\
+                Are you sure that you've passed the experiment_tag? (not the experiment id)
+            """
+        )
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/simulations/{id}/log",
+    operation_id="get-ecoli-simulation-log",
+    tags=["Simulations"],
+    dependencies=[Depends(get_database_service)],
+    summary="Get the structured output of a given simulation workflow log.",
+)
+async def get_simulation_log(id: int = FastAPIPath(...)) -> Response:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+    try:
+        return await handlers.simulations.get_simulation_log(db_service=db_service, simulation_id=id)
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
