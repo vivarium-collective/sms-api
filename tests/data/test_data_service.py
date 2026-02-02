@@ -25,8 +25,6 @@ DATA_PATH_EXISTS = _check_data_path_exists()
 def test_get_outputs() -> None:
     # TODO: make this a fixture mock
     service = SimulationDataServiceFS()
-    expid = "sms_multigeneration"
-    outdir = str(service.env.simulation_outdir.local_path())
     partitions = {
         "experiment_id": "sms_multigeneration",
         "variant": "0",
