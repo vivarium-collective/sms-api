@@ -16,6 +16,7 @@ import httpx
 import typer
 from httpx import AsyncClient
 from tqdm import tqdm
+from typer import Argument, Option
 
 from sms_api.analysis.models import TsvOutputFile
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
@@ -29,6 +30,15 @@ class BaseUrl(StrEnum):
     RKE_PROD_FORWARDED = "http://localhost:8000"
     RKE_DEV_FORWARDED = "http://localhost:1111"
     STANFORD_FORWARDED = "http://localhost:8080"
+
+
+class SimulationType(StrEnum):
+    BASELINE = "api_simulation_default"
+    BASELINE_CCAM = "api_simulation_default_ccam"
+    BASELINE_CCAM_PTOOLS = "api_simulation_ptools_ccam"
+    BASELINE_AWS_CDK = "api_simulation_default_aws_cdk"
+    PRIVATEv = "api_..."
+    PRIVATEm = "api_..."
 
 
 DEFAULT_BASE_URL = BaseUrl.RKE_DEV  # choose a stable deployment :)
@@ -90,8 +100,17 @@ class E2EDataService:
         )
         return simulation
 
-    def get_simulation(self, simulation_id: int) -> Simulation:
-        return self.submit_get_simulation(simulation_id=simulation_id)
+    def get_workflow(self, simulation_id: int) -> Simulation:
+        return self.submit_get_workflow(simulation_id=simulation_id)
+
+    def show_workflows(self) -> list[Simulation]:
+        return self.submit_list_workflows()
+
+    def show_simulators(self) -> list[SimulatorVersion]:
+        return self.submit_list_simulators()
+
+    def get_workflow_log(self, simulation_id: int) -> str:
+        return self.submit_get_workflow_log(simulation_id=simulation_id)
 
     def get_workflow_status(self, simulation_id: int) -> str:
         status = self.submit_get_workflow_status(simulation_id=simulation_id)
@@ -103,7 +122,7 @@ class E2EDataService:
         archive_path = await self.submit_stream_output_data(simulation_id=simulation_id, output_dirpath=dest)
         with tarfile.open(archive_path, "r:gz") as tar:  # type: ignore[call-overload]
             # Extract to parent dir - the tar already contains the experiment_id directory
-            tar.extractall(archive_path.parent)
+            tar.extractall(archive_path.parent)  # noqa: S202
         # Return the extracted directory (archive stem is the experiment_id)
         extracted_dir = archive_path.parent / archive_path.stem
         return extracted_dir
@@ -126,6 +145,15 @@ class E2EDataService:
             return SimulatorVersion(**uploaded_response.json())
         except Exception as e:
             raise httpx.HTTPError(f"Could not build the simulator: {simulator.model_dump()}") from e
+
+    def submit_list_simulators(self) -> list[SimulatorVersion]:
+        try:
+            simulators = self.client.get(url="/core/v1/simulator/versions")
+            if simulators.status_code != 200:
+                raise httpx.HTTPError("Error!")  # noqa: TRY301
+            return [SimulatorVersion(**sim) for sim in simulators.json()["versions"]]
+        except Exception as e:
+            raise httpx.HTTPError("Could not load simulators") from e
 
     def submit_get_simulator_build_status(self, simulator: SimulatorVersion) -> str:
         try:
@@ -163,9 +191,13 @@ class E2EDataService:
                 url="/api/v1/simulations",
                 params=query_params,
             )
+            if simulation_response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {simulation_response.status_code}: {simulation_response.text}")  # noqa: TRY301
             return Simulation(**simulation_response.json())
-        except Exception:
-            raise httpx.HTTPError(f"Could not submit a new simulation workflow with the parameters {query_params}")
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not submit a new simulation workflow with params {query_params}: {e}") from e
 
     def submit_get_workflow_status(self, simulation_id: int) -> str:
         try:
@@ -185,7 +217,7 @@ class E2EDataService:
         except Exception as e:
             raise httpx.HTTPError("Could not load simulation data") from e
 
-    def submit_get_simulation(self, simulation_id: int) -> Simulation:
+    def submit_get_workflow(self, simulation_id: int) -> Simulation:
         try:
             simulation = self.client.get(url=f"/api/v1/simulations/{simulation_id}")
             if simulation.status_code != 200:
@@ -194,7 +226,25 @@ class E2EDataService:
         except Exception as e:
             raise httpx.HTTPError("Could not load simulation data") from e
 
-    async def submit_stream_output_data(
+    def submit_list_workflows(self) -> list[Simulation]:
+        try:
+            simulations = self.client.get(url="/api/v1/simulations")
+            if simulations.status_code != 200:
+                raise httpx.HTTPError("Error!")  # noqa: TRY301
+            return [Simulation(**sim) for sim in simulations.json()]
+        except Exception as e:
+            raise httpx.HTTPError("Could not load simulation data") from e
+
+    def submit_get_workflow_log(self, simulation_id: int) -> str:
+        try:
+            structured_log = self.client.get(url=f"/api/v1/simulations/{simulation_id}/log")
+            if structured_log.status_code != 200:
+                raise httpx.HTTPError("Error!")  # noqa: TRY301
+            return structured_log.text
+        except Exception as e:
+            raise httpx.HTTPError("Could not load simulation log") from e
+
+    async def submit_stream_output_data(  # noqa: C901
         self,
         simulation_id: int,
         show_progress: bool = True,
@@ -228,7 +278,7 @@ class E2EDataService:
                     # Stop spinner once we get a response
                     if spinner_task:
                         spinner_task.cancel()
-                        try:
+                        try:  # noqa: SIM105
                             await spinner_task
                         except asyncio.CancelledError:
                             pass
@@ -236,11 +286,21 @@ class E2EDataService:
                         sys.stdout.write("\r" + " " * 80 + "\r")
                         sys.stdout.flush()
 
-                    assert response.status_code == 200
+                    if response.status_code != 200:
+                        raise httpx.HTTPError(message=f"{response.text}")  # noqa: TRY301
 
                     # Validate headers
-                    assert response.headers["content-type"] == "application/gzip"
-                    assert "attachment" in response.headers.get("content-disposition", "")
+                    if response.headers["content-type"] != "application/gzip":
+                        raise httpx.HTTPError(  # noqa: TRY301
+                            f"Unexpected MIME type for archive. Expected: {'application/gzip'}; "
+                            f"Got: {response.headers['content-type']}"
+                        )
+
+                    if "attachment" not in response.headers.get("content-disposition", ""):
+                        raise httpx.HTTPError(  # noqa: TRY301
+                            f"Unexpected content-disposition header. Expected: {'attachment'}; "
+                            f"Got: {response.headers.get('content-disposition', '')}"
+                        )
 
                     # Get total size if available for progress bar
                     total_size = response.headers.get("content-length")
@@ -248,7 +308,7 @@ class E2EDataService:
 
                     if output_dirpath is not None:
                         # Stream directly to disk (memory-efficient for large files)
-                        simulation = self.submit_get_simulation(simulation_id=simulation_id)
+                        simulation = self.submit_get_workflow(simulation_id=simulation_id)
                         experiment_id = simulation.experiment_id
                         output_path = output_dirpath / f"{experiment_id}.tar.gz"
                         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -289,7 +349,8 @@ class E2EDataService:
                                 chunks.append(chunk)
 
                         # Verify we actually got data
-                        assert len(chunks) >= 1
+                        if len(chunks) < 1:
+                            raise httpx.HTTPError("No data was streamed.")  # noqa: TRY301
                         content = b"".join(chunks)
 
             except Exception:
@@ -327,6 +388,12 @@ def get_data_service(base_url: BaseUrl | None = None, timeout: int | None = None
 
 
 cli = typer.Typer()
+show_cli = typer.Typer()
+run_cli = typer.Typer()
+simulation_cli = typer.Typer()
+cli.add_typer(show_cli, name="show")
+cli.add_typer(run_cli, name="run")
+cli.add_typer(simulation_cli, name="simulation")
 
 
 def display(content: Any) -> None:
@@ -335,52 +402,92 @@ def display(content: Any) -> None:
     print()
 
 
-@cli.command(rich_help_panel="vEcoli Versions")
-def simulator(simulation_id: int, dest: str | None = None) -> None:
+@show_cli.command("latest-simulator", rich_help_panel="vEcoli Versions")
+def simulator() -> None:
     data_service = get_data_service()
     simulator = data_service.get_simulator()
     display(simulator.model_dump())
 
 
-@cli.command(rich_help_panel="Simulations")
-def simulation(simulation_id: int) -> None:
+@show_cli.command("simulators", rich_help_panel="Simulators")
+def show_simulators() -> None:
+    data_service = get_data_service()
+    simulators = data_service.show_simulators()
+    for sim in simulators:
+        display(sim.model_dump())
+
+
+@show_cli.command("simulation", rich_help_panel="Simulations")
+def show_simulation(simulation_id: int = Argument(help="Simulation Database Id")) -> None:
     """
     Retrieve an uploaded simulation specification, along with the
      corresponding simulation workflow config JSON used to run the
      job.
     """
     data_service = get_data_service()
-    simulation = data_service.get_simulation(simulation_id=simulation_id)
+    simulation = data_service.get_workflow(simulation_id=simulation_id)
     display(simulation.model_dump())
 
 
-@cli.command(rich_help_panel="Simulations")
-def workflow(
-    experiment_id: str,
-    simulator_id: int,
-    simulation_type: str,  # TODO: generalize and enable deployment-specific vals
-    generations: int | None = None,
-    seeds: int | None = None,
-    description: str | None = None,
-    run_parameter_calculator: bool | None = None,
+@show_cli.command("simulations", rich_help_panel="Simulations")
+def show_simulations(simulation_id: int) -> None:
+    data_service = get_data_service()
+    simulations = data_service.show_workflows()
+    display([sim.model_dump() for sim in simulations])
+
+
+@run_cli.command("simulation", rich_help_panel="Simulations")
+def run_simulation(
+    experiment_id: str = Argument(help="Unique experiment identifier"),
+    simulator_id: int = Argument(help="Database Id of the Simulator linked to the version of vEcoli you wish to use."),
+    simulation_type: SimulationType = Argument(
+        help="Type of simulation to run corresponding to simulation config "
+        "JSON names. See user documentation for more details."
+    ),
+    # TODO: generalize and enable deployment-specific vals
+    generations: int = Option(default=1, help="Number of generations to run per lineage(seed). Defaults to 8."),
+    seeds: int = Option(default=3, help="Number of lineages (seeds). Defaults to 3."),
+    description: str | None = Option(default=None, help="Custom description/metadata for simulation workflow run."),
+    run_parameter_calculator: bool = Option(
+        default=False,
+        help="If True, run the parameter calculator prior to the "
+        "simulation step in the overall workflow. Warning: "
+        "setting this to True will cause the overall "
+        "workflow job runtime to increase substantially.",
+    ),
 ) -> None:
+    """
+    Run a simulation workflow whose steps include: parca -> simulation -> analysis.
+    """
     if simulation_type not in SUPPORTED_CONFIGS:
         raise ValueError(f"Invalid simulation type. Expected one of: {SUPPORTED_CONFIGS}; Got: {simulation_type}")
     params = httpx.QueryParams(
         experiment_id=experiment_id,
         simulator_id=simulator_id,
-        config_filename=f"{simulation_type}.json",
+        simulation_config_filename=f"{simulation_type}.json",
         num_generations=generations or 8,
         num_seeds=seeds or 4,
         description=description or f"sim{simulator_id}-{experiment_id}; {generations} Generations; {seeds} Seeds",
-        run_parameter_calculator=run_parameter_calculator or False,
+        run_parca=run_parameter_calculator or False,
     )
     data_service = get_data_service()
     simulation = data_service.run_workflow(params=params)
     display(simulation.model_dump())
 
 
-@cli.command(rich_help_panel="Simulations")
+@simulation_cli.command("status", rich_help_panel="Simulations")
+def simulation_status(simulation_id: int) -> None:
+    data_service = get_data_service()
+    log = data_service.get_workflow_log(simulation_id=simulation_id)
+    print(f"Workflow log for simulation_id: {simulation_id}:\n{log}")
+    try:
+        status_update = data_service.get_workflow_status(simulation_id=simulation_id)
+        print(f"Workflow Status: {status_update.upper()}")
+    except:
+        pass
+
+
+@simulation_cli.command("outputs", rich_help_panel="Simulations")
 def outputs(simulation_id: int, dest: str | None = None) -> None:
     data_service = get_data_service()
     outdir = Path(dest) if dest is not None else Path(f"simulation_id_{simulation_id}")
@@ -388,7 +495,7 @@ def outputs(simulation_id: int, dest: str | None = None) -> None:
     display(f"Saved simulation outputs to: {archive_dir!s}!")
 
 
-def main():
+def main() -> None:
     cli()
 
 

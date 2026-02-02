@@ -55,15 +55,15 @@ async def run_simulation_workflow(
         ..., description="`database_id` of the simulator object returned by /core/v1/simulator/upload"
     ),
     experiment_id: str | None = Query(default=None, description="Unique experiment identifier"),
-    simulation_config_filename: SimulationConfigFilename = Query(  # noqa: B008
+    simulation_config_filename: SimulationConfigFilename = Query(
         default=SimulationConfigFilename.CCAM,
         description=""" Config filename in vEcoli/configs/ on HPC, chosen according to the given deployment's linked
             vEcoli repo (api_simulation_default_ccam.json, api_simulation_default_aws_cdk.json,
             or api_simulation_ptools.json))
         """,
     ),
-    num_generations: int | None = Query(default=None, ge=1, le=10, description="Number of generations to simulate"),
-    num_seeds: int | None = Query(default=None, ge=1, le=100, description="Number of initial seeds (lineages)"),
+    num_generations: int | None = Query(default=None, description="Number of generations to simulate"),
+    num_seeds: int | None = Query(default=None, description="Number of initial seeds (lineages)"),
     description: str | None = Query(default=None, description="Description of the simulation"),
     run_parca: bool | None = Query(
         default=None,
@@ -205,7 +205,7 @@ async def list_simulations() -> list[Simulation]:
 async def get_simulation_data(
     bg_tasks: BackgroundTasks,
     id: int = FastAPIPath(description="Database ID of the simulation."),
-    response_type: handlers.simulations.SimulationAnalysisDataResponseType = Query(  # noqa: B008
+    response_type: handlers.simulations.SimulationAnalysisDataResponseType = Query(
         default=handlers.simulations.SimulationAnalysisDataResponseType.FILE,
         description="Response type: 'file' for direct download (recommended for browsers/Swagger UI), "
         "'streaming' for chunked streaming response (better for large files or programmatic access)",
