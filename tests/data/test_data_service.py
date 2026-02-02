@@ -1,5 +1,5 @@
 import os
-
+import marimo as mo
 import pytest
 
 from sms_api.config import get_settings
@@ -34,7 +34,11 @@ def test_get_outputs() -> None:
         "generation": "1",
         "agent_id": "0",
     }
-    df = service.get_outputs(
-        analysis_type=AnalysisType.MULTISEED, exp_select=expid, partitions_all=partitions, simulation_outdir=outdir
+    df = service.get_get_plot_df_bulk(
+        analysis_type=AnalysisType.MULTISEED,
+        partitions_all=partitions,
+        bulk_ids_selected=["WATER","ATP"],
+        datapoints_cap=2000,
+        molecule_id_type=mo.ui.radio(options=["Common name", "BioCyc ID"], value="BioCyc ID")
     )
-    assert "bulk" in list(df.columns)
+    assert "bulk_counts" in list(df.columns)
