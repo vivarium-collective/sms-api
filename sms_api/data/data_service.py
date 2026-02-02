@@ -4,13 +4,13 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, override
+from typing import Any
 
 import duckdb
+import marimo as mo
 import numpy as np
 import pandas as pd
 import polars as pl
-import marimo as mo
 from ecoli.library.parquet_emitter import (
     dataset_sql,
     ndlist_to_ndarray,
@@ -226,10 +226,10 @@ class SimulationDataService(ABC):
         self, sql_original: str, items_list: list[str], list_col_name: str, datapoints_cap: int = 2000
     ) -> str:
         ds_sql = f"""
-        WITH 
+        WITH
         indexed_data AS (
-          SELECT 
-            *, 
+          SELECT
+            *,
             ROW_NUMBER() OVER (ORDER BY time) AS rn
         FROM ({sql_original})
         ),
@@ -247,8 +247,7 @@ class SimulationDataService(ABC):
         CROSS JOIN data_shape
         WHERE rn % data_shape.ds_ratio = 0
         ORDER BY time
-        """
-
+        """  # noqa: S608
         return ds_sql
 
     def get_plot_df_bulk(
@@ -276,7 +275,7 @@ class SimulationDataService(ABC):
             "+".join(sp_idxs_i) + f" as compound_{count}" for count, sp_idxs_i in enumerate(sp_idxs_selected)
         ]
 
-        bulk_sql_opt = f"SELECT {','.join(sp_idxs_alias)},time FROM ({sql_base}) WHERE {db_filter}"
+        bulk_sql_opt = f"SELECT {','.join(sp_idxs_alias)},time FROM ({sql_base}) WHERE {db_filter}"  # noqa: S608
 
         bulk_sql_opt_sum = (
             "SELECT"
@@ -289,7 +288,7 @@ class SimulationDataService(ABC):
         bulk_sql_list = (
             "SELECT ("
             + "+".join([f"[compound_{sp_idx}]" for sp_idx, _ in enumerate(bulk_sp_ids)])
-            + f") AS bulk_counts, time FROM ({bulk_sql_opt_sum})"
+            + f") AS bulk_counts, time FROM ({bulk_sql_opt_sum})" # noqa: S608
         )
 
         bulk_sql_ds = self.sql_downsample(
@@ -340,8 +339,8 @@ class SimulationDataService(ABC):
         idxs_selected = [
             f"{col_name}[{default_id_list.index(id) + 1}] AS {col_name}_{idx}" for idx, id in enumerate(sp_ids_selected)
         ]
-        col_sql_base = f"SELECT {listener_name} as {col_name}, time FROM ({sql_base}) WHERE {db_filter}"
-        col_sql_sliced = f"SELECT {','.join(idxs_selected)}, time FROM ({col_sql_base})"
+        col_sql_base = f"SELECT {listener_name} as {col_name}, time FROM ({sql_base}) WHERE {db_filter}"  # noqa: S608
+        col_sql_sliced = f"SELECT {','.join(idxs_selected)}, time FROM ({col_sql_base})"  # noqa: S608
         col_sql_sum = (
             "SELECT"
             + ",".join([
@@ -352,7 +351,7 @@ class SimulationDataService(ABC):
         col_sql_list = (
             "SELECT ("
             + "+".join([f"[{col_name}_{idx}]" for idx, _ in enumerate(sp_ids_selected)])
-            + f") AS {col_name}, time FROM ({col_sql_sum})"
+            + f") AS {col_name}, time FROM ({col_sql_sum})" # noqa: S608
         )
         col_sql_ds = self.sql_downsample(col_sql_list, sp_ids_selected, col_name, datapoints_cap)
 
@@ -481,7 +480,7 @@ class SimulationDataServiceFS(SimulationDataService):
     def get_parca_data(
         self, simulator_hash: str | None = None, parca_id: int | None = None
     ) -> tuple[SimulationDataEcoli, ValidationDataEcoli]:
-        # kb_dir = HPCFilePath(remote_path=Path('/Users/arnabmutsuddy/projects/vEcoli_ptools/vEcoli/reconstruction/sim_data/kb'))
+        # kb_dir = HPCFilePath(remote_path=Path('/Users/arnabmutsuddy/projects/vEcoli_ptools/vEcoli/reconstruction/sim_data/kb')) # noqa: E501
         kb_dir: HPCFilePath = (
             self.get_parca_dir(simulator_hash, parca_id)
             if simulator_hash is not None and parca_id is not None

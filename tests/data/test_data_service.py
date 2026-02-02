@@ -1,4 +1,5 @@
 import os
+
 import marimo as mo
 import pytest
 
@@ -35,8 +36,8 @@ def test_get_outputs() -> None:
     df = service.get_plot_df_bulk(
         analysis_type=AnalysisType.MULTISEED,
         partitions_all=partitions,
-        bulk_ids_selected=["WATER","ATP"],
+        bulk_ids_selected=["WATER", "ATP"],
         datapoints_cap=2000,
-        molecule_id_ui=mo.ui.radio(options=["Common name", "BioCyc ID"], value="BioCyc ID")
+        molecule_id_ui=mo.ui.radio(options=["Common name", "BioCyc ID"], value="BioCyc ID"),
     )
     assert "bulk_counts" in list(df.columns)
