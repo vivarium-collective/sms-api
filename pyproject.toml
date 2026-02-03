@@ -53,7 +53,7 @@ dependencies = [
 ]
 
 [project.scripts]
-atlantis = "app.app_data_service:main"
+atlantis = "app.cli_app:main"
 
 [project.urls]
 Repository = "https://github.com/vivarium-collective/sms-api"
