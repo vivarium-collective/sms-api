@@ -27,6 +27,46 @@ fi
 echo "Loading secrets from: $SECRETS_DATA_FILE"
 source "$SECRETS_DATA_FILE"
 
+# Validate STACK_PREFIX is set
+if [ -z "$STACK_PREFIX" ]; then
+    echo "ERROR: STACK_PREFIX not set in $SECRETS_DATA_FILE"
+    echo "Please add: STACK_PREFIX=\"your-stack-prefix\" (e.g., smscdk, smsvpctest)"
+    exit 1
+fi
+
+echo "Stack prefix: $STACK_PREFIX"
+
+# Helper function to get CloudFormation stack output
+get_stack_output() {
+    local stack_name="$1"
+    local output_key="$2"
+    aws cloudformation describe-stacks \
+        --stack-name "$stack_name" \
+        --region "$AWS_REGION" \
+        --query "Stacks[0].Outputs[?OutputKey=='$output_key'].OutputValue" \
+        --output text 2>/dev/null
+}
+
+# Look up resources from CloudFormation stack outputs
+echo ""
+echo "=== Looking up resources from CloudFormation stacks ==="
+
+# Get login node instance ID from login stack
+LOGIN_NODE_INSTANCE_ID=$(get_stack_output "${STACK_PREFIX}-login" "LoginInstanceId")
+if [ -z "$LOGIN_NODE_INSTANCE_ID" ] || [ "$LOGIN_NODE_INSTANCE_ID" = "None" ]; then
+    echo "ERROR: Could not find LoginInstanceId from ${STACK_PREFIX}-login stack"
+    exit 1
+fi
+echo "✓ Login node instance ID: $LOGIN_NODE_INSTANCE_ID"
+
+# Get database secret ARN from shared stack
+SECRET_ARN=$(get_stack_output "${STACK_PREFIX}-shared" "DbSecretArn")
+if [ -z "$SECRET_ARN" ] || [ "$SECRET_ARN" = "None" ]; then
+    echo "ERROR: Could not find DbSecretArn from ${STACK_PREFIX}-shared stack"
+    exit 1
+fi
+echo "✓ Database secret ARN: $SECRET_ARN"
+
 # Retrieve database credentials from AWS Secrets Manager
 SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id $SECRET_ARN --region $AWS_REGION --query SecretString --output text)
 
@@ -125,32 +165,37 @@ echo "✓ secret-ssh.yaml generated"
 echo ""
 echo "=== Updating FSx Persistent Volume Configuration ==="
 
-# Get FSx file system details
-echo "Retrieving FSx file system details..."
-FSX_INFO=$(aws fsx describe-file-systems \
-  --region $AWS_REGION \
-  --query 'FileSystems[?FileSystemType==`LUSTRE`] | [0].{Id:FileSystemId,DNS:DNSName,Mount:LustreConfiguration.MountName,ENIs:NetworkInterfaceIds}' \
-  --output json)
+# Get FSx file system details from CloudFormation stack outputs
+echo "Retrieving FSx file system details from ${STACK_PREFIX}-shared stack..."
+FSX_ID=$(get_stack_output "${STACK_PREFIX}-shared" "FsxFileSystemId")
+FSX_DNS=$(get_stack_output "${STACK_PREFIX}-shared" "FsxDnsName")
+FSX_MOUNT=$(get_stack_output "${STACK_PREFIX}-shared" "FsxMountName")
 
-FSX_ID=$(echo "$FSX_INFO" | jq -r '.Id')
-FSX_DNS=$(echo "$FSX_INFO" | jq -r '.DNS')
-FSX_MOUNT=$(echo "$FSX_INFO" | jq -r '.Mount')
-FSX_ENI=$(echo "$FSX_INFO" | jq -r '.ENIs[0]')
-
-if [ -z "$FSX_ID" ] || [ "$FSX_ID" == "null" ]; then
-    echo "ERROR: Failed to retrieve FSx file system ID"
+if [ -z "$FSX_ID" ] || [ "$FSX_ID" = "None" ]; then
+    echo "ERROR: Could not find FsxFileSystemId from ${STACK_PREFIX}-shared stack"
     exit 1
 fi
 
-# Get the IP address from the first network interface (Lustre requires IP, not DNS)
+if [ -z "$FSX_MOUNT" ] || [ "$FSX_MOUNT" = "None" ]; then
+    echo "ERROR: Could not find FsxMountName from ${STACK_PREFIX}-shared stack"
+    exit 1
+fi
+
+# Get FSx IP address from the file system's network interface
 echo "Retrieving FSx network interface IP..."
+FSX_ENI=$(aws fsx describe-file-systems \
+  --region $AWS_REGION \
+  --file-system-ids "$FSX_ID" \
+  --query 'FileSystems[0].NetworkInterfaceIds[0]' \
+  --output text)
+
 FSX_IP=$(aws ec2 describe-network-interfaces \
   --region $AWS_REGION \
   --network-interface-ids "$FSX_ENI" \
   --query 'NetworkInterfaces[0].PrivateIpAddress' \
   --output text)
 
-if [ -z "$FSX_IP" ] || [ "$FSX_IP" == "None" ]; then
+if [ -z "$FSX_IP" ] || [ "$FSX_IP" = "None" ]; then
     echo "ERROR: Failed to retrieve FSx network interface IP"
     exit 1
 fi
@@ -177,16 +222,12 @@ echo "✓ FSx PersistentVolume YAML generated: ${FSX_PV_FILE}"
 echo ""
 echo "=== Updating Redis Configuration in shared.env ==="
 
-# Get ElastiCache Redis endpoint
-echo "Retrieving ElastiCache Redis endpoint..."
-REDIS_ENDPOINT=$(aws elasticache describe-cache-clusters \
-  --region $AWS_REGION \
-  --show-cache-node-info \
-  --query 'CacheClusters[0].CacheNodes[0].Endpoint.Address' \
-  --output text)
+# Get ElastiCache Redis endpoint from CloudFormation stack outputs
+echo "Retrieving ElastiCache Redis endpoint from ${STACK_PREFIX}-shared stack..."
+REDIS_ENDPOINT=$(get_stack_output "${STACK_PREFIX}-shared" "RedisEndpoint")
 
-if [ -z "$REDIS_ENDPOINT" ] || [ "$REDIS_ENDPOINT" == "None" ]; then
-    echo "ERROR: Failed to retrieve ElastiCache Redis endpoint"
+if [ -z "$REDIS_ENDPOINT" ] || [ "$REDIS_ENDPOINT" = "None" ]; then
+    echo "ERROR: Could not find RedisEndpoint from ${STACK_PREFIX}-shared stack"
     exit 1
 fi
 
@@ -207,23 +248,17 @@ echo ""
 echo "=== Updating Target Group Bindings for Verified Access ==="
 
 # Get Target Group ARNs from CDK stack outputs
-echo "Retrieving Target Group ARNs from smscdk-verified-access stack..."
-STACK_OUTPUTS=$(aws cloudformation describe-stacks \
-  --region $AWS_REGION \
-  --stack-name smscdk-internal-alb \
-  --query "Stacks[0].Outputs" \
-  --output json)
+echo "Retrieving Target Group ARNs from ${STACK_PREFIX}-internal-alb stack..."
+API_TARGET_GROUP_ARN=$(get_stack_output "${STACK_PREFIX}-internal-alb" "ApiTargetGroupArn")
+PTOOLS_TARGET_GROUP_ARN=$(get_stack_output "${STACK_PREFIX}-internal-alb" "PtoolsTargetGroupArn")
 
-API_TARGET_GROUP_ARN=$(echo "$STACK_OUTPUTS" | jq -r '.[] | select(.OutputKey=="ApiTargetGroupArn") | .OutputValue')
-PTOOLS_TARGET_GROUP_ARN=$(echo "$STACK_OUTPUTS" | jq -r '.[] | select(.OutputKey=="PtoolsTargetGroupArn") | .OutputValue')
-
-if [ -z "$API_TARGET_GROUP_ARN" ] || [ "$API_TARGET_GROUP_ARN" == "null" ]; then
-    echo "ERROR: Failed to retrieve ApiTargetGroupArn from stack outputs"
+if [ -z "$API_TARGET_GROUP_ARN" ] || [ "$API_TARGET_GROUP_ARN" = "None" ]; then
+    echo "ERROR: Could not find ApiTargetGroupArn from ${STACK_PREFIX}-internal-alb stack"
     exit 1
 fi
 
-if [ -z "$PTOOLS_TARGET_GROUP_ARN" ] || [ "$PTOOLS_TARGET_GROUP_ARN" == "null" ]; then
-    echo "ERROR: Failed to retrieve PtoolsTargetGroupArn from stack outputs"
+if [ -z "$PTOOLS_TARGET_GROUP_ARN" ] || [ "$PTOOLS_TARGET_GROUP_ARN" = "None" ]; then
+    echo "ERROR: Could not find PtoolsTargetGroupArn from ${STACK_PREFIX}-internal-alb stack"
     exit 1
 fi
 
