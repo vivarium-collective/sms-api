@@ -1,4 +1,6 @@
 import asyncio
+import dataclasses
+import os
 from pathlib import Path
 from pprint import pp
 from typing import Any
@@ -7,7 +9,65 @@ import httpx
 import typer
 from typer import Argument, Option
 
-from app.app_data_service import get_data_service, SimulationType, SUPPORTED_CONFIGS
+from app.app_data_service import SUPPORTED_CONFIGS, BaseUrl, get_data_service
+from sms_api.common import StrEnumBase
+from sms_api.common.simulator_defaults import (
+    SimulationConfigFilenameType,
+    SimulationConfigPrivate,
+    SimulationConfigPublic,
+)
+
+API_BASE_URL = os.getenv("API_BASE_URL", BaseUrl.RKE_DEV)
+PUBLIC_BASE_URL: bool = API_BASE_URL == BaseUrl.RKE_DEV or API_BASE_URL == BaseUrl.RKE_PROD
+
+
+def extract_simulation_type(filename: SimulationConfigFilenameType) -> str:
+    return filename.replace(".json", "")
+
+
+@dataclasses.dataclass(frozen=True)
+class SimulationType:
+    baseline: str = extract_simulation_type(
+        SimulationConfigPublic.BASELINE if PUBLIC_BASE_URL else SimulationConfigPrivate.BASELINE
+    )
+    violacein: str = extract_simulation_type(
+        SimulationConfigPrivate.VIO_WITH_MET if not PUBLIC_BASE_URL else SimulationConfigPublic.VIO_WITH_MET
+    )
+    mecillinam: str = extract_simulation_type(
+        SimulationConfigPrivate.MEC if not PUBLIC_BASE_URL else SimulationConfigPublic.MEC
+    )
+
+    def __post_init__(self) -> None:
+        if self.baseline != extract_simulation_type(
+            SimulationConfigPublic.BASELINE if PUBLIC_BASE_URL else SimulationConfigPrivate.BASELINE
+        ):
+            raise ValueError(
+                "You cannot parameterize this class. Just call SimulationType() to instantiate all instances."
+            )
+        if self.violacein != extract_simulation_type(
+            SimulationConfigPrivate.VIO_WITH_MET if not PUBLIC_BASE_URL else SimulationConfigPublic.VIO_WITH_MET
+        ):
+            raise ValueError(
+                "You cannot parameterize this class. Just call SimulationType() to instantiate all instances."
+            )
+        if self.mecillinam != extract_simulation_type(
+            SimulationConfigPrivate.MEC if not PUBLIC_BASE_URL else SimulationConfigPublic.MEC
+        ):
+            raise ValueError(
+                "You cannot parameterize this class. Just call SimulationType() to instantiate all instances."
+            )
+
+
+class SimulationTypeRequest(StrEnumBase):
+    BASELINE = "baseline"
+    VIOLACEIN = "violacein"
+    MECILLINAM = "mecillinam"
+
+
+def display(content: Any) -> None:
+    print()
+    pp(content)
+    print()
 
 
 cli = typer.Typer()
@@ -21,17 +81,18 @@ cli.add_typer(simulator_cli, name="simulator")
 cli.add_typer(show_cli, name="show")
 
 
-def display(content: Any) -> None:
-    print()
-    pp(content)
-    print()
-
-
 @show_cli.command("latest", rich_help_panel="vEcoli Versions")
-def simulator() -> None:
+def show_simulator() -> None:
     data_service = get_data_service()
     simulator = data_service.get_simulator()
     display(simulator.model_dump())
+
+
+@simulator_cli.command("status", rich_help_panel="vEcoli Versions")
+def get_simulator_build_status(simulator_id: int = Argument(help="Simulator Database Id")) -> None:
+    data_service = get_data_service()
+    status = data_service.get_simulator_status(simulator_id=simulator_id)
+    display(status)
 
 
 @show_cli.command(rich_help_panel="Simulators")
@@ -65,9 +126,10 @@ def show_simulations(simulation_id: int) -> None:
 def run_simulation(
     experiment_id: str = Argument(help="Unique experiment identifier"),
     simulator_id: int = Argument(help="Database Id of the Simulator linked to the version of vEcoli you wish to use."),
-    simulation_type: SimulationType = Argument(
+    simulation_type: SimulationTypeRequest = Argument(
         help="Type of simulation to run corresponding to simulation config "
-        "JSON names. See user documentation for more details."
+        f"JSON names. Choose one of:\n{[v.value for v in SimulationTypeRequest.to_list()]!s}"  # type: ignore[attr-defined]
+        f"\nSee user documentation for more details."
     ),
     # TODO: generalize and enable deployment-specific vals
     generations: int = Option(default=1, help="Number of generations to run per lineage(seed). Defaults to 8."),
@@ -84,7 +146,8 @@ def run_simulation(
     """
     Run a simulation workflow whose steps include: parca -> simulation -> analysis.
     """
-    if simulation_type not in SUPPORTED_CONFIGS:
+    sim_type = getattr(SimulationType, simulation_type.value)
+    if sim_type not in SUPPORTED_CONFIGS:
         raise ValueError(f"Invalid simulation type. Expected one of: {SUPPORTED_CONFIGS}; Got: {simulation_type}")
     params = httpx.QueryParams(
         experiment_id=experiment_id,
@@ -108,8 +171,8 @@ def simulation_status(simulation_id: int) -> None:
     try:
         status_update = data_service.get_workflow_status(simulation_id=simulation_id)
         print(f"Workflow Status: {status_update.upper()}")
-    except:
-        pass
+    except Exception as e:
+        print(e)
 
 
 @simulation_cli.command("outputs", rich_help_panel="Simulations")

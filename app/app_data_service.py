@@ -15,7 +15,7 @@ from httpx import AsyncClient
 from tqdm import tqdm
 
 from sms_api.analysis.models import TsvOutputFile
-from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
+from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO, SimulationConfigFilename
 from sms_api.simulation.models import Simulation, Simulator, SimulatorVersion
 
 
@@ -26,22 +26,14 @@ class BaseUrl(StrEnum):
     RKE_PROD_FORWARDED = "http://localhost:8000"
     RKE_DEV_FORWARDED = "http://localhost:1111"
     STANFORD_FORWARDED = "http://localhost:8080"
+    STANFORD_DEV_FORWARDED = "http://localhost:62505"
 
 
-class SimulationType(StrEnum):
-    BASELINE = "api_simulation_default"
-    BASELINE_CCAM = "api_simulation_default_ccam"
-    BASELINE_CCAM_PTOOLS = "api_simulation_ptools_ccam"
-    BASELINE_AWS_CDK = "api_simulation_default_aws_cdk"
-    PRIVATEv = "api_..."
-    PRIVATEm = "api_..."
-
-
-DEFAULT_BASE_URL = BaseUrl.RKE_DEV  # choose a stable deployment :)
+DEFAULT_BASE_URL = BaseUrl.RKE_DEV  # BaseUrl.STANFORD_DEV_FORWARDED  # choose a stable deployment :)
 DEFAULT_REQUEST_TIMEOUT = 1000
 
 # TODO: dynamically parse/set this based on BaseUrl: make helpers
-SUPPORTED_CONFIGS = ["api_simulation_default_ccam", "api_simulation_ptools_ccam"]
+SUPPORTED_CONFIGS = [name.replace(".json", "") for name in SimulationConfigFilename.values()]
 
 
 @asynccontextmanager
@@ -72,6 +64,9 @@ class E2EDataService:
         except Exception as e:
             raise httpx.HTTPError("Could not set up the simulator. Try again.") from e
         return uploaded
+
+    def get_simulator_status(self, simulator_id: int) -> str:
+        return self.submit_get_simulator_status(simulator_id=simulator_id)
 
     def run_workflow(
         self,
@@ -163,6 +158,17 @@ class E2EDataService:
             return status_update_response.json().get("status", "")  # type: ignore[no-any-return]
         except Exception as e:
             raise httpx.HTTPError(f"Could not fetch build status for simulator: {simulator.model_dump()}") from e
+
+    def submit_get_simulator_status(self, simulator_id: int) -> str:
+        try:
+            status_update_response = self.client.get(
+                url="/core/v1/simulator/status", params={"simulator_id": simulator_id}
+            )
+            if status_update_response.status_code != 200:
+                raise httpx.HTTPError("Error!")  # noqa: TRY301
+            return status_update_response.json().get("status", "")  # type: ignore[no-any-return]
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not fetch build status for simulator with id: {simulator_id}") from e
 
     def submit_run_workflow(
         self,

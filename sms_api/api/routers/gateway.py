@@ -28,9 +28,13 @@ from sms_api.analysis.models import (
 from sms_api.api import request_examples
 from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_router_config
+from sms_api.common.simulator_defaults import (
+    SimulationConfigFilename,
+    SimulationConfigFilenameType,
+)
 from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
-from sms_api.simulation.models import Simulation, SimulationConfigFilename, SimulationRun
+from sms_api.simulation.models import Simulation, SimulationRun
 
 ENV = get_settings()
 
@@ -38,7 +42,7 @@ logger = logging.getLogger(__name__)
 config = get_router_config(prefix="api", version_major=False)
 
 
-def get_experiment_id(simulator_id: int, config_filename: SimulationConfigFilename) -> str:
+def get_experiment_id(simulator_id: int, config_filename: SimulationConfigFilenameType) -> str:
     return f"sim{simulator_id}-{config_filename.replace('.json', '')}"
 
 
@@ -55,11 +59,11 @@ async def run_simulation_workflow(
         ..., description="`database_id` of the simulator object returned by /core/v1/simulator/upload"
     ),
     experiment_id: str | None = Query(default=None, description="Unique experiment identifier"),
-    simulation_config_filename: SimulationConfigFilename = Query(
-        default=SimulationConfigFilename.CCAM,
-        description=""" Config filename in vEcoli/configs/ on HPC, chosen according to the given deployment's linked
-            vEcoli repo (api_simulation_default_ccam.json, api_simulation_default_aws_cdk.json,
-            or api_simulation_ptools.json))
+    simulation_config_filename: SimulationConfigFilename = Query(  # type: ignore[valid-type]
+        default=SimulationConfigFilename.BASELINE,
+        description=""" Config filename in vEcoli/configs/ on HPC,
+            chosen according to the given deployment's linked
+            vEcoli repo. See user docs for more details
         """,
     ),
     num_generations: int | None = Query(default=None, description="Number of generations to simulate"),
