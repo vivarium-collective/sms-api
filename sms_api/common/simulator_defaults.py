@@ -38,7 +38,7 @@ ACCEPTED_REPOS = {
 }
 
 NAMESPACE = get_settings().deployment_namespace
-PUBLIC_MODE = "rke" in NAMESPACE
+PUBLIC_MODE = "test" in NAMESPACE or "dev" in NAMESPACE
 
 SimulationConfigFilename: type[SimulationConfigPublic] | type[SimulationConfigPrivate] = (
     SimulationConfigPublic if PUBLIC_MODE else SimulationConfigPrivate

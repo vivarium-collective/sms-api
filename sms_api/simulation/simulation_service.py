@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 MAX_SIMULATION_CPUS = 5
+N_NODES_UPSCALED = 15  # 20
+N_TASKS_PER_NODE_UPSCALED = 32
 
 
 def _get_authenticated_git_url(repo_url: str, username: str | None, token: str | None) -> str:
@@ -496,6 +498,8 @@ def workflow_slurm_script(
         #SBATCH -o {slurm_log_file!s}
         #SBATCH -e {slurm_log_file!s}
         {constraint_clause}
+        #SBATCH --nodes={N_NODES_UPSCALED}
+        #SBATCH --ntasks-per-node={N_TASKS_PER_NODE_UPSCALED}
 
         set -e
 
