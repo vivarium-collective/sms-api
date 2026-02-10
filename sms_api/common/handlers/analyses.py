@@ -65,7 +65,7 @@ async def handle_run_analysis_slurm(
 
     results: list[TsvOutputFile] = []
     # 2. if cache doesn't exist or is empty, run an analysis
-    cache_has_files = analysis_request_cache.exists() and any(analysis_request_cache.iterdir())
+    cache_has_files = analysis_request_cache.exists() and len([fp for fp in analysis_request_cache.iterdir()]) > 0
     if not cache_has_files:
         # 2a. mk local cache (use makedirs with exist_ok for empty directories)
         analysis_request_cache.mkdir(parents=True, exist_ok=True)
@@ -108,6 +108,7 @@ async def handle_run_analysis_slurm(
             results.append(output_i)
     else:
         # Load cached results
+        # files = [fp for fp in analysis_request_cache.iterdir()]
         for fp in analysis_request_cache.iterdir():
             filename = fp.parts[-1]
             if filename.endswith(".txt"):
