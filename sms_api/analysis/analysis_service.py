@@ -308,11 +308,11 @@ def generate_slurm_script(
         binds+=" -B {analysis_outdir!s}:{analysis_outdir!s}"
 
         ### remove existing dir if needed and recreate
-        ## analysis_outdir={analysis_outdir!s}
-        ## if [ -d \"$analysis_outdir\" ]; then
-        ##     rm -rf \"$analysis_outdir\"
-        ## fi
-        ## mkdir -p {analysis_outdir!s}
+        analysis_outdir={analysis_outdir!s}
+        if [ -d \"$analysis_outdir\" ]; then
+            rm -rf \"$analysis_outdir\"
+        fi
+        mkdir -p {analysis_outdir!s}
 
         ### execute analysis (same pattern as workflow script)
         cd {vecoli_repo_path!s}
