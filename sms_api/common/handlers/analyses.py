@@ -56,7 +56,7 @@ async def handle_run_analysis_slurm(
     analysis_service: AnalysisServiceSlurm,
     logger: logging.Logger,
     db_service: DatabaseService,
-    _request: Request,
+    _request: Request | None = None,
 ) -> Sequence[OutputFileMetadata | TsvOutputFile]:
     # 1. check if hashed/cached payload exists
     payload_hash = RequestPayload(data=request.model_dump()).hash()
@@ -111,7 +111,7 @@ async def handle_run_analysis_slurm(
         # files = [fp for fp in analysis_request_cache.iterdir()]
         for fp in analysis_request_cache.iterdir():
             filename = fp.parts[-1]
-            if filename.endswith(".txt"):
+            if filename.endswith(".tsv"):
                 file_content = fp.read_text()
                 output_i = TsvOutputFile(filename=filename, content=file_content)
                 results.append(output_i)

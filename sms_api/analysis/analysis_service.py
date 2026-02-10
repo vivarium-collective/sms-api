@@ -188,7 +188,7 @@ class AnalysisServiceSlurm:
 
     async def download_analysis_output(self, local_dir: Path, remote_path: HPCFilePath) -> TsvOutputFile:
         requested_filename = remote_path.remote_path.parts[-1]
-        if not requested_filename.endswith(".txt"):
+        if not requested_filename.endswith(".tsv"):
             logger.info(f"wrong filename: {requested_filename}")
         local = local_dir / requested_filename
 
