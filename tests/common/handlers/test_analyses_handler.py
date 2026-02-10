@@ -17,27 +17,22 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 async def analysis_request() -> ExperimentAnalysisRequest:
     return ExperimentAnalysisRequest(
         experiment_id="sim1-1seed_1generation-cc24",
-        multiseed=[
-            PtoolsAnalysisConfig(
-                name="ptools_rna",
-                n_tp=8,
-                variant=0
-            )
-        ]
+        multiseed=[PtoolsAnalysisConfig(name="ptools_rna", n_tp=8, variant=0)],
     )
 
 
 @pytest_asyncio.fixture
 async def simulator_version() -> SimulatorVersion:
     return SimulatorVersion(**{
-      "git_commit_hash": "203ab2a",
-      "git_repo_url": "https://github.com/vivarium-collective/vEcoli",
-      "git_branch": "api-support",
-      "database_id": 1,
-      "created_at": "2026-02-04T21:08:38.272533"
+        "git_commit_hash": "203ab2a",
+        "git_repo_url": "https://github.com/vivarium-collective/vEcoli",
+        "git_branch": "api-support",
+        "database_id": 1,
+        "created_at": "2026-02-04T21:08:38.272533",
     })
 
 
+@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_handle_run_analysis_slurm(
     analysis_request: ExperimentAnalysisRequest,
@@ -52,5 +47,5 @@ async def test_handle_run_analysis_slurm(
         analysis_service=AnalysisServiceSlurm(env=get_settings()),
         simulator=simulator_version,
         logger=logger,
-        db_service=database_service
+        db_service=database_service,
     )

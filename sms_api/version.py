@@ -3,4 +3,4 @@
 # PREVIOUS STABLE: "0.2.8"
 # LATEST STABLE (old): "0.2.74-dev"
 # LATEST STABLE (most recent before hackathon 1): "0.4.8"
-__version__ = "0.4.12"
+__version__ = "0.4.13"
