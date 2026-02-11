@@ -1,5 +1,7 @@
+import io
 import logging
 
+import pandas as pd
 import pytest
 import pytest_asyncio
 
@@ -16,8 +18,11 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 @pytest_asyncio.fixture
 async def analysis_request() -> ExperimentAnalysisRequest:
     return ExperimentAnalysisRequest(
-        experiment_id="sim1-1seed_1generation-cc24",
-        multiseed=[PtoolsAnalysisConfig(name="ptools_rna", n_tp=8, variant=0)],
+        experiment_id="sim3-baseline-ca00",
+        multiseed=[
+            PtoolsAnalysisConfig(name="ptools_rna", n_tp=22, variant=0),
+            PtoolsAnalysisConfig(name="ptools_rxns", n_tp=22, variant=0),
+        ],
     )
 
 
@@ -49,3 +54,7 @@ async def test_handle_run_analysis_slurm(
         logger=logger,
         db_service=database_service,
     )
+    assert len(result) == 2
+    for i in range(len(result)):
+        table = pd.read_csv(io.StringIO(result[i].content), sep="\t")
+        assert len(table.columns) - 1 == 22

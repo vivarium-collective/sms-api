@@ -38,7 +38,7 @@ ACCEPTED_REPOS = {
 }
 
 NAMESPACE = get_settings().deployment_namespace
-PUBLIC_MODE = "test" in NAMESPACE or "dev" in NAMESPACE
+PUBLIC_MODE = NAMESPACE == "sms-api-rke" or NAMESPACE == "sms-api-rke-dev"
 
 SimulationConfigFilename: type[SimulationConfigPublic] | type[SimulationConfigPrivate] = (
     SimulationConfigPublic if PUBLIC_MODE else SimulationConfigPrivate

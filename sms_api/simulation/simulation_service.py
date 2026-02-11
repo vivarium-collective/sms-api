@@ -553,6 +553,9 @@ def workflow_slurm_script(
         sed -i "s|from '/vEcoli/runscripts/nextflow/sim'|from './sim'|g" "$NEXTFLOW_DIR/main.nf"
         sed -i "s|from '/vEcoli/runscripts/nextflow/analysis'|from './analysis'|g" "$NEXTFLOW_DIR/main.nf"
 
+        # Fix ccam profile clusterOptions to include required QoS
+        sed -i "s|clusterOptions = '--constraint=cpu_amd'|clusterOptions = '--constraint=cpu_amd --qos=vivarium'|g" "$NEXTFLOW_DIR/nextflow.config"
+
         ### Step 3: Run Nextflow directly on host
         echo "Step 3: Running Nextflow..."
         export JAVA_HOME=$HOME/.local/bin/java-22

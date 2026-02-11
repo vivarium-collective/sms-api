@@ -665,7 +665,7 @@ async def _get_slurm_log(db_service: DatabaseService, simulation_id: int) -> str
             k = "JobName="
             job_name = next(filter(lambda v: k in v, stdout.replace("\n", "").split(" "))).replace(k, "")
             log_path = get_settings().slurm_log_base_path / f"{job_name}.out"
-            _, log_stdout, _ = await ssh.run_command(f"tail -30 {log_path!s}")
+            _, log_stdout, _ = await ssh.run_command(f"cat {log_path!s}")
         except StopIteration:
             raise RuntimeError(f"No simulation job name available for simulation with id: {simulation_id}")
     return log_stdout

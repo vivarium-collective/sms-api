@@ -88,9 +88,26 @@ class AnalysisServiceSlurm:
         )
         config_file_str = config_file_str.replace("ANALYSIS_OUTDIR_PLACEHOLDER", str(settings.analysis_outdir))
         config_file_str = config_file_str.replace("ANALYSIS_NAME_PLACEHOLDER", analysis_name)
+
         config_data: dict[str, Any] = json.loads(config_file_str)
-        analysis_config = AnalysisConfig(**config_data)
+        # analysis_config = AnalysisConfig(**config_data)
         # analysis_config.analysis_options.multiseed = {'ptools_rxns': {'n_tp': 10}, 'ptools_rna': {'n_tp': 10}, 'ptools_proteins': {'n_tp': 10}}  # noqa: E501
+
+        domains = ["single", "multidaughter", "multigeneration", "multiseed"]
+        requested_analyses = dict(zip(domains, [{} for _ in domains]))
+        for domain in requested_analyses:
+            requested = getattr(request, domain)
+            if requested is not None:
+                for config in requested:
+                    requested_analyses[domain][config.name] = {"n_tp": config.n_tp}
+                    # n_tp = config.n_tp
+        # analysis_config.analysis_options.multiseed = {
+        #     'ptools_rxns': {'n_tp': n_tp},
+        #     'ptools_proteins': {'n_tp': n_tp},
+        #     'ptools_rna': {'n_tp': n_tp},
+        # }
+        config_data["analysis_options"].update(requested_analyses)
+        analysis_config = AnalysisConfig(**config_data)
         return analysis_config
 
     async def dispatch_analysis(

@@ -79,7 +79,7 @@ def get_analysis_multiseed_multigen() -> ExperimentAnalysisRequest:
 
 def get_analysis_ptools() -> ExperimentAnalysisRequest:
     return ExperimentAnalysisRequest(
-        experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
+        experiment_id="sim3-baseline-ca00",
         multiseed=[
             PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8),
         ],

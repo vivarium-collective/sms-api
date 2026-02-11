@@ -92,9 +92,8 @@ async def handle_run_analysis_slurm(
 
         # Fetch available output files from the analysis output directory
         # Analysis outputs are stored at: hpc_sim_base_path / experiment_id / "analyses"
-        env = get_settings()
         remote_analysis_outdir = HPCFilePath(
-            remote_path=env.hpc_sim_base_path.remote_path / request.experiment_id / "analyses"
+            remote_path=Path(config.analysis_options.outdir)
         )
         available_paths: list[HPCFilePath] = await analysis_service.get_available_output_paths(
             remote_analysis_outdir=remote_analysis_outdir
@@ -108,7 +107,6 @@ async def handle_run_analysis_slurm(
             results.append(output_i)
     else:
         # Load cached results
-        # files = [fp for fp in analysis_request_cache.iterdir()]
         for fp in analysis_request_cache.iterdir():
             filename = fp.parts[-1]
             if filename.endswith(".tsv"):
