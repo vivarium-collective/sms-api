@@ -3,9 +3,13 @@ kind: Kustomization
 
 namespace: sms-api-stanford
 
+# cd1 release version of api (as given to PNNL):
+# - name: ghcr.io/vivarium-collective/sms-api
+#   newTag: 0.4.5
+
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.4.5
+    newTag: 0.4.11-dev
   - name: ghcr.io/vivarium-collective/sms-ptools
     newTag: 0.4.5
 
