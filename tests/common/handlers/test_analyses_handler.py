@@ -28,7 +28,7 @@ async def analysis_request() -> ExperimentAnalysisRequest:
 
 @pytest_asyncio.fixture
 async def simulator_version() -> SimulatorVersion:
-    return SimulatorVersion(**{
+    return SimulatorVersion(**{  # type: ignore[arg-type]
         "git_commit_hash": "203ab2a",
         "git_repo_url": "https://github.com/vivarium-collective/vEcoli",
         "git_branch": "api-support",

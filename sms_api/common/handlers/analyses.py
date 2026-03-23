@@ -92,9 +92,7 @@ async def handle_run_analysis_slurm(
 
         # Fetch available output files from the analysis output directory
         # Analysis outputs are stored at: hpc_sim_base_path / experiment_id / "analyses"
-        remote_analysis_outdir = HPCFilePath(
-            remote_path=Path(config.analysis_options.outdir)
-        )
+        remote_analysis_outdir = HPCFilePath(remote_path=Path(config.analysis_options.outdir))  # type: ignore[attr-defined]
         available_paths: list[HPCFilePath] = await analysis_service.get_available_output_paths(
             remote_analysis_outdir=remote_analysis_outdir
         )
