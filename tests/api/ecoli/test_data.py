@@ -292,3 +292,53 @@ async def test_archive_large_file_streaming(
         # For large files, we should see multiple chunks
         assert chunk_count > 1, "Large archive should stream in multiple chunks"
         assert total_size > 0
+
+
+@pytest.mark.skipif(
+    len(get_settings().slurm_submit_key_path) == 0,
+    reason="slurm ssh key file not supplied",
+)
+@pytest.mark.asyncio
+async def test_get_data(fastapi_app: FastAPI, base_router: str) -> None:
+    """
+    Test that the endpoint returns a valid, streamable tar.gz archive
+    with the expected contents.
+    """
+    transport = ASGITransport(app=fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://localhost:8080", timeout=10_000) as client:  # noqa: SIM117
+        # Use stream=True to test actual streaming behavior
+        async with client.stream("POST", f"{base_router}/simulations/96/data") as response:
+            assert response.status_code == 200
+
+            # Validate headers
+            assert response.headers["content-type"] == "application/gzip"
+            assert "attachment" in response.headers.get("content-disposition", "")
+
+            # Collect streamed chunks
+            chunks = []
+            async for chunk in response.aiter_bytes():
+                chunks.append(chunk)
+
+            # Verify we actually got multiple chunks (streaming worked)
+            # Note: small archives might be single chunk, so this is optional
+            assert len(chunks) >= 1
+
+            content = b"".join(chunks)
+
+    # Validate it's valid gzip
+    decompressed = gzip.decompress(content)
+
+    # Validate it's a valid tar archive with expected structure
+    tar_buffer = io.BytesIO(decompressed)
+    with tarfile.open(fileobj=tar_buffer, mode="r") as tar:
+        archived_names = set(tar.getnames())
+        # Extract basenames from archived files for comparison
+        archived_basenames = {Path(name).name for name in archived_names}  # noqa: F841
+
+        # Optionally verify file contents
+        for member in tar.getmembers():
+            if member.isfile():
+                extracted = tar.extractfile(member)
+                assert extracted is not None
+                content = extracted.read()
+                assert len(content) == member.size

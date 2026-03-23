@@ -27,6 +27,7 @@ class BaseUrl(StrEnum):
     RKE_DEV_FORWARDED = "http://localhost:1111"
     STANFORD_FORWARDED = "http://localhost:8080"
     STANFORD_DEV_FORWARDED = "http://localhost:62505"
+    LOCAL_8080 = "http://localhost:8080"
 
 
 DEFAULT_BASE_URL = BaseUrl.RKE_DEV  # BaseUrl.STANFORD_DEV_FORWARDED  # choose a stable deployment :)
@@ -107,10 +108,12 @@ class E2EDataService:
         status = self.submit_get_workflow_status(simulation_id=simulation_id)
         return status
 
-    async def get_output_data(self, simulation_id: int, dest: Path | None = None) -> Path:
+    async def get_output_data(self, simulation_id: int, dest: Path | None = None, timeout: int = 300) -> Path:
         if dest is None:
             dest = Path(os.getcwd()).absolute()
-        archive_path = await self.submit_stream_output_data(simulation_id=simulation_id, output_dirpath=dest)
+        archive_path = await self.submit_stream_output_data(
+            simulation_id=simulation_id, output_dirpath=dest, timeout=timeout
+        )
         if not isinstance(archive_path, Path):
             raise TypeError()
         with tarfile.open(archive_path, "r:gz") as tar:
@@ -249,10 +252,7 @@ class E2EDataService:
             raise httpx.HTTPError("Could not load simulation log") from e
 
     async def submit_stream_output_data(  # noqa: C901
-        self,
-        simulation_id: int,
-        show_progress: bool = True,
-        output_dirpath: Path | None = None,
+        self, simulation_id: int, show_progress: bool = True, output_dirpath: Path | None = None, timeout: int = 300
     ) -> set[str] | Path:
         """
         Download simulation output data as a streamable tar.gz archive.
@@ -268,7 +268,7 @@ class E2EDataService:
             If output_path is None: Set of archived file basenames.
             If output_path is provided: Path to the downloaded file.
         """
-        async with async_client(base_url=self.base_url) as client:
+        async with async_client(base_url=self.base_url, timeout=timeout) as client:
             spinner_task = None
             if show_progress:
                 # Start spinner while waiting for server to prepare data
