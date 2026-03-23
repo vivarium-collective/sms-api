@@ -4,6 +4,6 @@ metadata:
   name: ssh-known-hosts
 data:
   known_hosts: |
-    login-node.pcs.internal ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBKiGJHBw+lOmFdBDDF2nCRhobuXpdwKthJWjehGUxsddtTkCx+cNRWOdfNOqCf0Go4r5vG1+cDtC5MS469romHI= 
-    login-node.pcs.internal ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICEoFgglLp5nPZ73PiiXIjuIEAQI/Tu3itCY7hTUH3QH 
-    login-node.pcs.internal ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCXoEycLhOV6SsX/AsJOSeOXx0R8SChoK/9vMoe9oa+aP+hPaUPwVO8kDrBfN+Rq+TTWtVJIizKDpQAY5r+f4pmjMpvKXjcbMy8L9FeJ+UeoqwqLKhZBmzH5g0k5lVefgJJSgzPX9LVRQnLFINzD6zu2bw8/x0/sDkLna30qBV/cdNsVtnNImB+lcq6+DcyK4enOG9uTxDTSxA1HEfRTaS/i2vOg67PwlRpqYkJmQ8a0r6+ErQqJc76kt/G8mKD+/BQsD/U5YEpAtoWGbnUnsHB1IaFhmmeKt1kiQ613GpOqGLSpEfWFAJH9Dx1tn5BAD63DYHFEQ2pf4hEYexRLwUJ 
+    login-node.pcs.internal ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBKDkgv5WfwMXbmWECL39/UeJSgRtSpDBLxMw/+isCqRlvS2xfXYGeu4ozbaUuY+C76E7wj1PSkDJ9U4VYdskt2E=
+    login-node.pcs.internal ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA87qtcwoCuoPI9Q+KPhPCes9XVYEBbYFC/Gv/mRwwiJ
+    login-node.pcs.internal ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsPB9/ZogB8fUb+r4znuvodw1pnRUMnsRhV8VBJB//yi4MOzHbqqCGtSbyBBGYzzgwZkRBUB0HfmwANpdPrtz0KYXnZTTQTSsv5JJFFrUSpS82JjLJ1g7liikA4dnJE6Rfy2yIHs+7tnuirxFwOD5MwOVSSDk3BwxBfkPFTi9ayF2PasjgL4E9eD1gX+K0H1V2H/CGen5mfO48a2/McjQ63OfiJgK4M7MmUNy+3YJJ+Kr8kagYvdGC3pu/sE9exeHjb2Wl8vEvRMU+b5qqb7pat9ABTvC7SLip85VxVRyzSJ5vIFu0gGACjZ/8OKqdptmaiHP/Ok/iyEaHdsQAGtqV
