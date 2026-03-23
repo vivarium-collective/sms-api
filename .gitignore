@@ -252,3 +252,5 @@ tui/
 
 .results_cache/
 .DS_Store
+
+.claude/
