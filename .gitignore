@@ -254,3 +254,5 @@ tui/
 .DS_Store
 
 .claude/
+
+assets/info/
