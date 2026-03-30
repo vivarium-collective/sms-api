@@ -17,9 +17,8 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from sms_api.analysis.models import TsvOutputFile
 from sms_api.common import StrEnumBase
 from sms_api.common.handlers.simulators import upload_simulator
-from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.config import get_settings
+from sms_api.config import get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service, get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id
@@ -118,18 +117,18 @@ async def run_workflow_legacy(
         random_string=random_string_7_hex,
         simulator=simulator,  # type: ignore[arg-type]
     )
-    async with get_ssh_session_service().session() as ssh:
-        slurmjob_id = await simulation_service.submit_ecoli_simulation_job(
-            ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id, ssh=ssh
-        )
+    job_id = await simulation_service.submit_ecoli_simulation_job(
+        ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
+    )
     _ = await database_service.insert_hpcrun(
-        slurmjobid=slurmjob_id,
+        external_job_id=job_id,
+        job_backend=get_job_backend(),
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id=correlation_id,
     )
 
-    simulation.job_id = slurmjob_id
+    simulation.job_id = int(job_id) if job_id.isdigit() else None
     return simulation
 
 
@@ -235,20 +234,20 @@ async def run_simulation_workflow(
         random_string=random_string_7_hex,
         simulator=simulator,
     )
-    async with get_ssh_session_service().session() as ssh:
-        slurmjob_id = await simulation_service.submit_ecoli_simulation_job(
-            ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id, ssh=ssh
-        )
+    job_id = await simulation_service.submit_ecoli_simulation_job(
+        ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
+    )
 
     # 8. Record HPC run
     _ = await database_service.insert_hpcrun(
-        slurmjobid=slurmjob_id,
+        external_job_id=job_id,
+        job_backend=get_job_backend(),
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id=correlation_id,
     )
 
-    simulation.job_id = slurmjob_id
+    simulation.job_id = int(job_id) if job_id.isdigit() else None
     return simulation
 
 
@@ -275,10 +274,10 @@ async def run_parca(
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     # Submit parca job
-    async with get_ssh_session_service().session() as ssh:
-        parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset, ssh=ssh)
+    parca_job_id = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
     _hpc_run = await database_service.insert_hpcrun(
-        slurmjobid=parca_slurmjobid,
+        external_job_id=parca_job_id,
+        job_backend=get_job_backend(),
         job_type=JobType.PARCA,
         ref_id=parca_dataset.database_id,
         correlation_id="N/A",
@@ -315,31 +314,28 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
     if sim_record is None:
         raise ValueError(f"Simulation with id {id} not found.")
 
-    # Get the HpcRun record for this simulation to find the SLURM job ID
+    # Get the HpcRun record for this simulation to find the job ID
     hpc_run = await db_service.get_hpcrun_by_ref(ref_id=id, job_type=JobType.SIMULATION)
     if hpc_run is None:
         raise RuntimeError(f"No HPC run found for simulation {id}")
-    if hpc_run.slurmjobid is None:
-        raise RuntimeError(f"Simulation {id} not yet dispatched to SLURM")
 
-    slurm_service = SlurmService()
-    async with get_ssh_session_service().session() as ssh:
-        # First try squeue (for running/pending jobs)
-        slurm_jobs = await slurm_service.get_job_status_squeue(ssh, job_ids=[hpc_run.slurmjobid])
-        if not slurm_jobs:
-            # Job not in queue, check sacct for completed jobs
-            slurm_jobs = await slurm_service.get_job_status_scontrol(ssh, job_ids=[hpc_run.slurmjobid])
+    try:
+        external_job_id = hpc_run.external_job_id
+    except ValueError:
+        raise RuntimeError(f"Simulation {id} not yet dispatched to a job backend")
 
-    if not slurm_jobs:
-        # Job was just submitted and may not have propagated to SLURM yet
-        # Return UNKNOWN since we can't confirm the actual state
+    simulation_service = get_simulation_service()
+    if simulation_service is None:
+        raise RuntimeError("Simulation service is not initialized")
+
+    job_status_info = await simulation_service.get_job_status(external_job_id)
+    if job_status_info is None:
         from sms_api.common.models import JobStatus
 
-        logger.warning(f"SLURM job {hpc_run.slurmjobid} not yet visible in squeue/sacct, returning UNKNOWN")
+        logger.warning(f"Job {external_job_id} not yet visible in backend, returning UNKNOWN")
         return SimulationRun(id=int(id), status=JobStatus.UNKNOWN)
 
-    slurm_job = slurm_jobs[0]
-    return SimulationRun(id=int(id), status=slurm_job.get_job_status())
+    return SimulationRun(id=int(id), status=job_status_info.status)
 
 
 async def list_simulations(db_service: DatabaseService) -> list[Simulation]:

@@ -84,7 +84,9 @@ class ORMHpcRun(Base):
 
     job_type: Mapped[JobTypeDB] = mapped_column(nullable=False)
     correlation_id: Mapped[str] = mapped_column(nullable=False, index=True)
-    slurmjobid: Mapped[int] = mapped_column(nullable=True)
+    slurmjobid: Mapped[Optional[int]] = mapped_column(nullable=True)
+    batch_job_id: Mapped[Optional[str]] = mapped_column(nullable=True)
+    job_backend: Mapped[str] = mapped_column(nullable=False, server_default="slurm")
     start_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
     end_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
     status: Mapped[JobStatusDB] = mapped_column(nullable=False)
@@ -102,6 +104,8 @@ class ORMHpcRun(Base):
         return HpcRun(
             database_id=self.id,
             slurmjobid=self.slurmjobid,
+            batch_job_id=self.batch_job_id,
+            job_backend=self.job_backend,
             correlation_id=self.correlation_id,
             job_type=self.job_type.to_job_type(),
             ref_id=ref_id,

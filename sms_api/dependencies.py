@@ -12,7 +12,7 @@ from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_gcs import FileServiceGCS
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
 from sms_api.common.storage.file_service_s3 import FileServiceS3
-from sms_api.config import get_settings
+from sms_api.config import get_job_backend, get_settings
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.tables_orm import create_db
@@ -156,11 +156,13 @@ def get_async_engine(url: str, enable_ssl: bool = True, **engine_params: Any) ->
 
 async def init_standalone(enable_ssl: bool = True) -> None:
     # Lazy imports to avoid circular dependencies
-    from sms_api.common.hpc.slurm_service import SlurmService
+    from sms_api.common.hpc.job_service import JobStatusService
+    from sms_api.common.hpc.slurm_service import SlurmJobStatusService, SlurmService
     from sms_api.simulation.job_scheduler import JobScheduler
     from sms_api.simulation.simulation_service import SimulationServiceHpc
 
     _settings = get_settings()
+    job_backend = get_job_backend()
 
     try:
         # Initialize file service based on configured backend
@@ -174,10 +176,21 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         else:
             logger.error(f"Unsupported storage backend: {_settings.storage_backend}")
 
-        # set services that don't require params (currently using hpc)
-        logger.info("Initializing simulation service (HPC)...")
-        set_simulation_service(SimulationServiceHpc())
-        logger.info("✓ Simulation service initialized")
+        # Initialize simulation service and job status service based on backend
+        job_status_service: JobStatusService
+        if job_backend == "batch":
+            from sms_api.common.hpc.batch_service import AwsBatchService
+            from sms_api.simulation.simulation_service_batch import SimulationServiceBatch
+
+            logger.info("Initializing simulation service (AWS Batch)...")
+            batch_service = AwsBatchService(region=_settings.batch_region)
+            set_simulation_service(SimulationServiceBatch(batch_service=batch_service))
+            job_status_service = batch_service  # AwsBatchService implements JobStatusService
+            logger.info("✓ Simulation service initialized (AWS Batch)")
+        else:
+            logger.info("Initializing simulation service (HPC/SLURM)...")
+            set_simulation_service(SimulationServiceHpc())
+            logger.info("✓ Simulation service initialized (SLURM)")
 
         # Validate and initialize Postgres connection
         logger.info("Validating Postgres configuration...")
@@ -217,27 +230,32 @@ async def init_standalone(enable_ssl: bool = True) -> None:
             db_service = DatabaseServiceSQL(engine)
             set_database_service(db_service)
 
-        # Initialize SSHSessionService singleton
-        logger.info("Initializing SSH session service...")
-        settings = get_settings()
-        ssh_key_path = Path(settings.slurm_submit_key_path)
-        if not ssh_key_path.exists():
-            logger.warning(f"SSH key file not found: {ssh_key_path}")
+        # Initialize SSH and SLURM for SLURM backend (or skip for Batch)
+        if job_backend == "slurm":
+            logger.info("Initializing SSH session service...")
+            settings = get_settings()
+            ssh_key_path = Path(settings.slurm_submit_key_path)
+            if not ssh_key_path.exists():
+                logger.warning(f"SSH key file not found: {ssh_key_path}")
+            else:
+                logger.info(f"SSH key found at: {ssh_key_path}")
+
+            ssh_session_service = SSHSessionService(
+                hostname=settings.slurm_submit_host,
+                username=settings.slurm_submit_user,
+                key_path=ssh_key_path,
+                known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
+            )
+            set_ssh_session_service(ssh_session_service)
+            logger.info(
+                f"✓ SSHSessionService initialized for {settings.slurm_submit_user}@{settings.slurm_submit_host}"
+            )
+
+            slurm_service = SlurmService()
+            job_status_service = SlurmJobStatusService(slurm_service)
+            logger.info("✓ SlurmService initialized")
         else:
-            logger.info(f"SSH key found at: {ssh_key_path}")
-
-        ssh_session_service = SSHSessionService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=ssh_key_path,
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        set_ssh_session_service(ssh_session_service)
-        logger.info(f"✓ SSHSessionService initialized for {settings.slurm_submit_user}@{settings.slurm_submit_host}")
-
-        # Initialize Slurm service (uses SSHSessionService singleton)
-        slurm_service = SlurmService()
-        logger.info("✓ SlurmService initialized")
+            logger.info("Skipping SSH/SLURM initialization (using AWS Batch backend)")
 
         # Initialize messaging service
         redis_host = _settings.redis_internal_host
@@ -249,19 +267,18 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         logger.info("✓ Messaging service connected")
         set_messaging_service(messaging_service)
 
-        # Initialize JobScheduler (use db_service which was set above, either from test fixtures or newly created)
+        # Initialize JobScheduler
         logger.info("Initializing JobScheduler...")
-        # db_service is guaranteed to be set by this point (either existing or newly created)
         job_scheduler = JobScheduler(
             messaging_service=messaging_service,
             database_service=db_service,
-            slurm_service=slurm_service,
+            job_status_service=job_status_service,
         )
         set_job_scheduler(job_scheduler)
         logger.info("✓ JobScheduler initialized")
 
     except Exception as e:
-        logger.error(f"Failed to initialize JobScheduler: {e}", exc_info=True)
+        logger.error(f"Failed to initialize standalone services: {e}", exc_info=True)
         raise
 
 
