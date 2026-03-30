@@ -133,6 +133,28 @@ class SimulationServiceBatch(SimulationService):
         return job_id
 
     @override
+    async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
+        """Read a vEcoli config template from the GitHub repo via the Contents API.
+
+        Uses the GitHub API to fetch the file at:
+            {repo}/contents/configs/{config_filename}?ref={commit_hash}
+        """
+        settings = get_settings()
+        api_url = simulator_version.git_repo_url.replace("https://github.com/", "https://api.github.com/repos/")
+        if api_url.endswith(".git"):
+            api_url = api_url[:-4]
+        api_url = f"{api_url}/contents/configs/{config_filename}?ref={simulator_version.git_commit_hash}"
+
+        headers: dict[str, str] = {"Accept": "application/vnd.github.v3.raw"}
+        if settings.github_token:
+            headers["Authorization"] = f"token {settings.github_token}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(api_url, headers=headers)
+            response.raise_for_status()
+            return response.text
+
+    @override
     async def get_job_status(self, job_id: str) -> JobStatusInfo | None:
         statuses = await self._batch_service.get_job_statuses([job_id])
         return statuses[0] if statuses else None

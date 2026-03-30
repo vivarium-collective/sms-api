@@ -27,9 +27,7 @@ import string
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -62,15 +60,6 @@ CONFIG_TEMPLATE = json.dumps({
     "analysis_options": {},
     "sim_data_path": "HPC_SIM_BASE_PATH_PLACEHOLDER/default/kb/simData.cPickle",
 })
-
-# Fake output files that the mocked SSH "find" command returns.
-# These simulate what would exist on HPC after a completed simulation.
-FAKE_OUTPUT_FILES = [
-    "mass_fraction_summary.tsv",
-    "growth_rate.tsv",
-    "rnap_counts.csv",
-]
-
 
 # =============================================================================
 # Helpers
@@ -111,31 +100,6 @@ async def _api_client() -> AsyncGenerator[httpx.AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         yield client
-
-
-def _build_mock_ssh_service(
-    run_command_side_effect: Any | None = None,
-) -> tuple[AsyncMock, AsyncMock]:
-    """Create a mock SSH service with configurable run_command behavior.
-
-    Args:
-        run_command_side_effect: If provided, used as side_effect for run_command.
-            If None, returns (0, CONFIG_TEMPLATE, "") for all calls.
-    """
-    mock_ssh = AsyncMock()
-    if run_command_side_effect is not None:
-        mock_ssh.run_command.side_effect = run_command_side_effect
-    else:
-        mock_ssh.run_command.return_value = (0, CONFIG_TEMPLATE, "")
-    mock_ssh.scp_download = AsyncMock()
-
-    @asynccontextmanager
-    async def _mock_session() -> AsyncGenerator[AsyncMock, None]:
-        yield mock_ssh
-
-    mock_ssh_service = AsyncMock()
-    mock_ssh_service.session = _mock_session
-    return mock_ssh_service, mock_ssh
 
 
 # =============================================================================
@@ -263,7 +227,6 @@ async def test_4_full_e2e_workflow(
     simulation_service_batch_mock: SimulationServiceBatch,
     database_service: DatabaseServiceSQL,
     simulator_repo_info: SimulatorRepoInfo,
-    tmp_path: Path,
 ) -> None:
     """Full end-user e2e workflow exercising every gateway simulation endpoint.
 
@@ -279,11 +242,10 @@ async def test_4_full_e2e_workflow(
     job_uuid = uuid.uuid4().hex[:8]
     experiment_id = f"batch-mock-e2e-{job_uuid}"
 
-    mock_ssh_service, mock_ssh = _build_mock_ssh_service()
-
     # ---- Step 1: POST /simulations (submit) ----
+    # Mock read_config_template on the Batch service so no SSH or GitHub API call is made
     with (
-        patch("sms_api.common.handlers.simulations.get_ssh_session_service", return_value=mock_ssh_service),
+        patch.object(simulation_service_batch_mock, "read_config_template", return_value=CONFIG_TEMPLATE),
         patch("sms_api.common.handlers.simulations.get_job_backend", return_value="batch"),
     ):
         async with _api_client() as client:
@@ -355,60 +317,13 @@ async def test_4_full_e2e_workflow(
         assert our_sim["config"]["experiment_id"] == actual_experiment_id
 
     # ---- Step 5: POST /simulations/{id}/data (download outputs) ----
-    # The data endpoint uses SSH to:
-    #   a) `find` remote output files (get_available_omics_output_paths)
-    #   b) `scp_download` each file (download_analysis_output)
-    # We mock both: find returns fake paths, scp_download writes local files.
-
-    # Build the fake find output using the same base path the handler will use
-    from sms_api.config import get_settings as _get_settings
-
-    hpc_sim_base = str(_get_settings().hpc_sim_base_path)
-    analysis_dir = f"{hpc_sim_base}/{actual_experiment_id}/analyses"
-    find_output = "\n".join(f"{analysis_dir}/{fname}" for fname in FAKE_OUTPUT_FILES)
-
-    def _ssh_run_command_side_effect(command: str):  # type: ignore[no-untyped-def]
-        """Route SSH commands: find returns file listing, cat returns config."""
-        if command.startswith("find "):
-            return (0, find_output, "")
-        return (0, CONFIG_TEMPLATE, "")
-
-    async def _scp_download_side_effect(local_file, remote_path):  # type: ignore[no-untyped-def]
-        """Create fake local files when scp_download is called."""
-        local = Path(local_file) if not isinstance(local_file, Path) else local_file
-        local.parent.mkdir(parents=True, exist_ok=True)
-        fname = local.name
-        local.write_text(f"# Mock output data for {fname}\ncol1\tcol2\n1.0\t2.0\n")
-
-    mock_ssh_service_data, mock_ssh_data = _build_mock_ssh_service(
-        run_command_side_effect=_ssh_run_command_side_effect,
-    )
-    mock_ssh_data.scp_download.side_effect = _scp_download_side_effect
-
-    # Point the cache dir to tmp_path so we don't pollute the repo
-    with (
-        patch("sms_api.common.handlers.simulations.get_ssh_session_service", return_value=mock_ssh_service_data),
-        patch("sms_api.common.handlers.simulations.get_settings") as mock_get_settings,
-    ):
-        real_settings = __import__("sms_api.config", fromlist=["get_settings"]).get_settings()
-        mock_settings = AsyncMock(wraps=real_settings)
-        mock_settings.cache_dir = str(tmp_path / "cache")
-        mock_settings.hpc_sim_base_path = real_settings.hpc_sim_base_path
-        mock_get_settings.return_value = mock_settings
-
-        async with _api_client() as client:
-            data_resp = await client.post(
-                f"{API_ROUTER}/simulations/{db_id}/data",
-                params={"response_type": "streaming"},
-            )
-            assert data_resp.status_code == 200, f"POST /simulations/{db_id}/data failed: {data_resp.text}"
-            assert data_resp.headers["content-type"] == "application/gzip"
-
-            # Verify we got actual tar.gz content
-            content = data_resp.content
-            # gzip magic bytes
-            assert content[:2] == b"\x1f\x8b", "Response should be gzip-compressed"
-            assert len(content) > 0
-
-    # Verify scp_download was called for each output file
-    assert mock_ssh_data.scp_download.call_count == len(FAKE_OUTPUT_FILES)
+    # On the Batch backend, output download is not yet supported (requires S3).
+    # The handler should return HTTP 501.
+    async with _api_client() as client:
+        data_resp = await client.post(
+            f"{API_ROUTER}/simulations/{db_id}/data",
+            params={"response_type": "streaming"},
+        )
+        assert data_resp.status_code == 501, (
+            f"Expected 501 for Batch data download, got {data_resp.status_code}: {data_resp.text}"
+        )

@@ -57,6 +57,10 @@ class ConcreteSimulationService(SimulationService):
         raise NotImplementedError
 
     @override
+    async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
+        raise NotImplementedError
+
+    @override
     async def get_job_status(self, job_id: str) -> JobStatusInfo | None:
         raise NotImplementedError
 

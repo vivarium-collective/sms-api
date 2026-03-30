@@ -172,21 +172,12 @@ async def run_simulation_workflow(
     if simulator is None:
         raise ValueError(f"Simulator with id {simulator_id} not found")
 
-    # 2. Read the config file from the remote HPC system
-    remote_config_path = (
-        settings.hpc_repo_base_path.remote_path
-        / simulator.git_commit_hash
-        / "vEcoli"
-        / "configs"
-        / simulation_config_filename
+    # 2. Read the config template via the simulation service (SSH for SLURM, GitHub API for Batch)
+    config_str = await simulation_service.read_config_template(
+        simulator_version=simulator, config_filename=simulation_config_filename
     )
-    async with get_ssh_session_service().session() as ssh:
-        returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
-        if returncode != 0:
-            raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
 
     # 3. Replace placeholders in the config template
-    config_str = stdout
 
     unique_experiment_id = f"sim{simulator.database_id}-{experiment_id}-{str(uuid.uuid4())[:4]}"
     config_str = config_str.replace("EXPERIMENT_ID_PLACEHOLDER", unique_experiment_id)
@@ -613,6 +604,15 @@ async def get_simulation_outputs(
     if simulation is None:
         raise ValueError(f"Simulation with id {simulation_id} not found in database.")
 
+    # Check backend — data download currently requires SSH (SLURM only)
+    hpc_run = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
+    if hpc_run is not None and hpc_run.job_backend != "slurm":
+        raise HTTPException(
+            status_code=501,
+            detail=f"Output download is not yet supported for the '{hpc_run.job_backend}' backend. "
+            "Batch outputs should be retrieved directly from S3.",
+        )
+
     experiment_id = simulation.config.experiment_id
     exp_analysis_outdir = hpc_sim_base_path / experiment_id / "analyses"
 
@@ -643,16 +643,24 @@ async def get_simulation_outputs(
 
 
 async def get_simulation_log(db_service: DatabaseService, simulation_id: int) -> Response:
-    stdout = await _get_slurm_log(db_service=db_service, simulation_id=simulation_id)
+    hpc_run: HpcRun | None = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
+    if hpc_run is None:
+        raise ValueError(f"No hpc run found for simulation with id: {simulation_id}")
+
+    if hpc_run.job_backend != "slurm":
+        raise HTTPException(
+            status_code=501,
+            detail=f"Log retrieval is not yet supported for the '{hpc_run.job_backend}' backend. "
+            "Batch job logs are available in AWS CloudWatch.",
+        )
+
+    stdout = await _get_slurm_log(hpc_run)
     _, _, after = stdout.partition("N E X T F L O W")
     result = "N E X T F L O W" + after
     return Response(content=result, media_type="text/plain")
 
 
-async def _get_slurm_log(db_service: DatabaseService, simulation_id: int) -> str:
-    hpc_run: HpcRun | None = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
-    if hpc_run is None:
-        raise ValueError(f"No hpc run found for simulation with id: {simulation_id}")
+async def _get_slurm_log(hpc_run: HpcRun) -> str:
     job_id = hpc_run.slurmjobid
     log_stdout = None
     async with get_ssh_session_service().session() as ssh:
@@ -663,5 +671,5 @@ async def _get_slurm_log(db_service: DatabaseService, simulation_id: int) -> str
             log_path = get_settings().slurm_log_base_path / f"{job_name}.out"
             _, log_stdout, _ = await ssh.run_command(f"cat {log_path!s}")
         except StopIteration:
-            raise RuntimeError(f"No simulation job name available for simulation with id: {simulation_id}")
+            raise RuntimeError(f"No simulation job name available for HPC run {hpc_run.database_id}")
     return log_stdout

@@ -87,6 +87,19 @@ class SimulationService(ABC):
         pass
 
     @abstractmethod
+    async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
+        """Read a vEcoli config template file for the given simulator version.
+
+        Args:
+            simulator_version: The simulator whose repo contains the config.
+            config_filename: Filename under vEcoli/configs/ (e.g. "api_simulation_default.json").
+
+        Returns:
+            The raw JSON string contents of the config template.
+        """
+        pass
+
+    @abstractmethod
     async def get_job_status(self, job_id: str) -> JobStatusInfo | None:
         pass
 
@@ -421,6 +434,22 @@ class SimulationServiceHpc(SimulationService):
                     ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
                 )
             return str(slurm_jobid)
+
+    @override
+    async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
+        settings = get_settings()
+        remote_config_path = (
+            settings.hpc_repo_base_path.remote_path
+            / simulator_version.git_commit_hash
+            / "vEcoli"
+            / "configs"
+            / config_filename
+        )
+        async with get_ssh_session_service().session() as ssh:
+            returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
+            if returncode != 0:
+                raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
+        return stdout
 
     @override
     async def get_job_status(self, job_id: str) -> JobStatusInfo | None:
