@@ -19,7 +19,7 @@ async def test_upload_simulator_handler(
     """
     expected_commit_hash = "abc1234"
     expected_git_repo_url = "https://github.com/vivarium-collective/vEcoli"
-    expected_git_branch = "messages"
+    expected_git_branch = "api-support"
 
     returned_simulator_version = await upload_simulator(
         commit_hash=expected_commit_hash,

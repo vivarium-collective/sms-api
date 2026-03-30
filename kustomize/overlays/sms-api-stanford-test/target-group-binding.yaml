@@ -1,0 +1,19 @@
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: api-binding
+spec:
+  serviceRef:
+    name: api
+    port: 8000
+  targetGroupARN: arn:aws-us-gov:elasticloadbalancing:us-gov-west-1:476270107793:targetgroup/smsvpctestinternalalb-api/49d31e67f328970e
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: ptools-binding
+spec:
+  serviceRef:
+    name: ptools
+    port: 1555
+  targetGroupARN: arn:aws-us-gov:elasticloadbalancing:us-gov-west-1:476270107793:targetgroup/smsvpctestinternalalb-ptools/2eab35f077c4a08f

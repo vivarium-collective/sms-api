@@ -1,6 +1,7 @@
 import json
 import logging
 import random
+import re
 import string
 import tempfile
 from abc import ABC, abstractmethod
@@ -10,10 +11,12 @@ from textwrap import dedent
 from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.common.hpc.nextflow_weblog import WEBLOG_RECEIVER_SCRIPT
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.common.ssh.ssh_service import SSHSession
 from sms_api.common.storage.file_paths import HPCFilePath
+from sms_api.common.utils import capture_slurm_script
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
@@ -35,6 +38,29 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 MAX_SIMULATION_CPUS = 5
+# N_NODES_UPSCALED = 15  # 20
+# N_TASKS_PER_NODE_UPSCALED = 32
+
+
+def _get_authenticated_git_url(repo_url: str, username: str | None, token: str | None) -> str:
+    """Convert a GitHub HTTPS URL to include authentication credentials.
+
+    Args:
+        repo_url: GitHub repository URL (https://github.com/org/repo or https://github.com/org/repo.git)
+        username: GitHub username
+        token: GitHub personal access token
+
+    Returns:
+        URL with credentials embedded: https://{username}:{token}@github.com/org/repo.git
+        Returns original URL if username or token is missing.
+    """
+    if not username or not token:
+        return repo_url
+    # Match https://github.com/... URLs
+    match = re.match(r"https://github\.com/(.+)", repo_url)
+    if match:
+        return f"https://{username}:{token}@github.com/{match.group(1)}"
+    return repo_url
 
 
 class SimulationService(ABC):
@@ -69,28 +95,6 @@ class SimulationService(ABC):
         pass
 
 
-# Get repo root for absolute path references
-REPO_DIR = Path(__file__).parent.parent.parent.absolute()
-
-# Directory for captured sbatch scripts (gitignored)
-DEBUG_ARTIFACTS_DIR = REPO_DIR / "artifacts"
-
-
-def capture_slurm_script(script: str, filename: str) -> None:
-    """Capture generated sbatch script to disk for debugging/inspection.
-
-    Writes the script content to the artifacts/ directory at repo root.
-    This directory is gitignored and used for debugging purposes only.
-
-    Args:
-        script: The sbatch script content to write.
-        filename: The filename to write to (e.g., "simulation.sbatch").
-    """
-    DEBUG_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(DEBUG_ARTIFACTS_DIR / filename, "w") as f:
-        f.write(script)
-
-
 class SimulationServiceHpc(SimulationService):
     _latest_commit_hash: str | None = None
 
@@ -104,8 +108,10 @@ class SimulationServiceHpc(SimulationService):
         :rtype: `str`
         :return: The last 7 characters of the latest commit hash.
         """
+        settings = get_settings()
+        auth_url = _get_authenticated_git_url(git_repo_url, settings.github_username, settings.github_token)
         async with get_ssh_session_service().session() as ssh:
-            return_code, stdout, stderr = await ssh.run_command(f"git ls-remote -h {git_repo_url} {git_branch}")
+            return_code, stdout, stderr = await ssh.run_command(f"git ls-remote -h {auth_url} {git_branch}")
         if return_code != 0:
             raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
         latest_commit_hash = stdout.strip("\n")[:7]
@@ -124,6 +130,9 @@ class SimulationServiceHpc(SimulationService):
         slurm_submit_file = get_slurm_submit_file(slurm_job_name=slurm_job_name)
         remote_vEcoli_path = get_vEcoli_repo_dir(simulator_version=simulator_version)
         apptainer_image_path = get_apptainer_image_file(simulator_version=simulator_version)
+        auth_repo_url = _get_authenticated_git_url(
+            simulator_version.git_repo_url, settings.github_username, settings.github_token
+        )
 
         # build the submit script
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -188,7 +197,7 @@ class SimulationServiceHpc(SimulationService):
                         TMP_REPO_PATH="/tmp/slurm_job_${{SLURM_JOB_ID}}_vEcoli"
                         cd /tmp
                         git clone --branch {simulator_version.git_branch} \\
-                                  --single-branch {simulator_version.git_repo_url} "$TMP_REPO_PATH"
+                                  --single-branch {auth_repo_url} "$TMP_REPO_PATH"
                         cd "$TMP_REPO_PATH"
                         git checkout {simulator_version.git_commit_hash}
                         echo "Repository cloned successfully to $TMP_REPO_PATH"
@@ -259,7 +268,9 @@ class SimulationServiceHpc(SimulationService):
                     echo "=== Building Container Image: {apptainer_image_path!s} ==="
                     echo "=== git hash $GIT_HASH, git branch $GIT_BRANCH ==="
 
-                    if ! $CONTAINER_CMD build --fakeroot --force \\
+                    # Use --disable-cache to ensure correct architecture is pulled for multi-arch images
+                    # (avoids using potentially wrong-architecture cached base image layers)
+                    if ! $CONTAINER_CMD build --fakeroot --force --disable-cache \\
                         --build-arg git_hash="$GIT_HASH" \\
                         --build-arg git_branch="$GIT_BRANCH" \\
                         --build-arg timestamp="$TIMESTAMP" \\
@@ -397,8 +408,9 @@ class SimulationServiceHpc(SimulationService):
                     slurm_job_name=slurm_job_name,
                     simulator_hash=simulator.git_commit_hash,  # type: ignore[union-attr]
                     config=ecoli_simulation.config,
+                    config_filename=ecoli_simulation.simulation_config_filename,
                 )
-                capture_slurm_script(script_content, "simulation.sbatch")
+                capture_slurm_script(script_content, "simulation_workflow.sbatch")
                 f.write(script_content)
 
             # submit the build script to slurm
@@ -431,6 +443,7 @@ def workflow_slurm_script(
     slurm_job_name: str,
     simulator_hash: str,
     config: SimulationConfig,
+    config_filename: str,
 ) -> str:
     """Generate SLURM script for workflow orchestration.
 
@@ -447,6 +460,7 @@ def workflow_slurm_script(
 
     qos_clause = f"#SBATCH --qos={env.slurm_qos}" if env.slurm_qos else ""
     nodelist_clause = f"#SBATCH --nodelist={env.slurm_node_list}" if env.slurm_node_list else ""
+    constraint_clause = f"#SBATCH --constraint={env.slurm_constraint}" if env.slurm_constraint else ""
 
     simulation_outdir_base = env.simulation_outdir
     slurm_log_base_path = env.slurm_log_base_path
@@ -457,34 +471,40 @@ def workflow_slurm_script(
     # sim_data_path: null forces ParCa to run (no cached kb lookup)
     # aws_cdk.container_image: path to Singularity image for Nextflow tasks
     config_dict = config.model_dump()
-    config_dict["sim_data_path"] = None  # Force ParCa to run
+    # Only force ParCa to run if sim_data_path is not already set (allows using cached simData)
+    if not config_dict.get("sim_data_path"):
+        config_dict["sim_data_path"] = None  # Force ParCa to run
     if "parca_options" not in config_dict:
         config_dict["parca_options"] = {}
     config_dict["parca_options"]["load_intermediate"] = None  # Don't load cached intermediates
-    config_dict["aws_cdk"] = {
+
+    nf_profile_key = "ccam" if "ccam" in config_filename else "aws_cdk"
+    config_dict[nf_profile_key] = {
         "container_image": str(apptainer_image_path),
         "build_image": False,
     }
     config_json = json.dumps(config_dict).replace("'", "'\\''")
 
-    return dedent(f"""\
+    script = dedent(f"""\
         #!/bin/bash
         #SBATCH --job-name={slurm_job_name}
         #SBATCH --time=7-00:00:00
         #SBATCH --cpus-per-task 1
-        #SBATCH --mem=4GB
+        #SBATCH --mem=8GB
         #SBATCH --partition={env.slurm_partition}
         {qos_clause}
         #SBATCH --mail-type=ALL
         {nodelist_clause}
         #SBATCH -o {slurm_log_file!s}
         #SBATCH -e {slurm_log_file!s}
+        {constraint_clause}
 
         set -e
 
         ### Configuration
         CONTAINER_IMAGE="{apptainer_image_path!s}"
         OUTPUT_DIR="{simulation_outdir_base!s}"
+        IMAGE_DIR="{env.hpc_image_base_path!s}"
         EXPERIMENT_ID="{experiment_id}"
         SLURM_LOG_PATH="{slurm_log_base_path!s}"
 
@@ -502,13 +522,18 @@ def workflow_slurm_script(
         export SLURM_PARTITION={env.slurm_partition}
         export SLURM_LOG_BASE_PATH="$SLURM_LOG_PATH"
 
+        mkdir -p "$OUTPUT_DIR/nextflow_temp_$EXPERIMENT_ID"
         singularity exec \\
+            --fakeroot \\
             --writable-tmpfs \\
             --pwd /vEcoli \\
+            --env UV_CACHE_DIR=/tmp/uv_cache \\
             -B "$OUTPUT_DIR":"$OUTPUT_DIR" \\
+            -B "$IMAGE_DIR":"$IMAGE_DIR" \\
             -B "$SLURM_LOG_PATH":"$SLURM_LOG_PATH" \\
+            -B "$OUTPUT_DIR/nextflow_temp_$EXPERIMENT_ID":"/vEcoli/nextflow_temp" \\
             "$CONTAINER_IMAGE" \\
-            python /vEcoli/runscripts/workflow.py \\
+            /vEcoli/.venv/bin/python /vEcoli/runscripts/workflow.py \\
                 --config "$tmp_config" \\
                 --build-only
 
@@ -528,16 +553,45 @@ def workflow_slurm_script(
         sed -i "s|from '/vEcoli/runscripts/nextflow/sim'|from './sim'|g" "$NEXTFLOW_DIR/main.nf"
         sed -i "s|from '/vEcoli/runscripts/nextflow/analysis'|from './analysis'|g" "$NEXTFLOW_DIR/main.nf"
 
+        # Fix ccam profile clusterOptions to include required QoS
+        sed -i "s|clusterOptions = '--constraint=cpu_amd'|clusterOptions = '--constraint=cpu_amd --qos=vivarium'|g" "$NEXTFLOW_DIR/nextflow.config"
+
         ### Step 3: Run Nextflow directly on host
         echo "Step 3: Running Nextflow..."
         export JAVA_HOME=$HOME/.local/bin/java-22
         export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
 
         cd "$NEXTFLOW_DIR"
+
+        ### Start weblog receiver for Nextflow event capture
+        export EVENTS_FILE="$NEXTFLOW_DIR/${{EXPERIMENT_ID}}_events.ndjson"
+
+        python3 << 'WEBLOG_SCRIPT' &
+        __WEBLOG_SCRIPT_PLACEHOLDER__
+        WEBLOG_SCRIPT
+
+        WEBLOG_PID=$!
+        sleep 1
+
+        # Read the port from temp file
+        WEBLOG_PORT=$(cat /tmp/weblog_port_$$ 2>/dev/null || echo "9999")
+        rm -f /tmp/weblog_port_$$
+        echo "Weblog receiver running on port $WEBLOG_PORT (PID: $WEBLOG_PID)"
+
         nextflow -C "$NEXTFLOW_DIR/nextflow.config" run "$NEXTFLOW_DIR/main.nf" \\
-            -profile aws_cdk \\
+            -profile {nf_profile_key} \\
             -with-report "$NEXTFLOW_DIR/${{EXPERIMENT_ID}}_report.html" \\
+            -with-weblog http://localhost:$WEBLOG_PORT \\
             -work-dir "$NEXTFLOW_DIR/nextflow_workdirs"
 
-        echo "Workflow completed successfully."
+        ### Cleanup weblog receiver
+        NF_EXIT_CODE=$?
+        kill $WEBLOG_PID 2>/dev/null || true
+        wait $WEBLOG_PID 2>/dev/null || true
+
+        echo "Workflow completed with exit code: $NF_EXIT_CODE"
+        exit $NF_EXIT_CODE
     """)
+
+    script = script.replace("__WEBLOG_SCRIPT_PLACEHOLDER__", WEBLOG_RECEIVER_SCRIPT.strip())
+    return script

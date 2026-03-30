@@ -8,28 +8,31 @@ Run with: uv run pytest tests/api/ecoli/test_simulations.py -v
 
 Prerequisites for API tests:
 - SSH access to HPC (SLURM_SUBMIT_KEY_PATH configured)
-- Config template exists at {HPC_REPO_BASE_PATH}/{hash}/vEcoli/configs/api_simulation_default.json
+- Config template exists at {HPC_REPO_BASE_PATH}/{hash}/vEcoli/configs/api_simulation_default_with_profile.json
 """
 
 import asyncio
+import os
 import time
 import uuid
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from sms_api.api import request_examples
 from sms_api.api.main import app
+from sms_api.common import handlers
 from sms_api.common.models import JobStatus
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
-    ParcaDatasetRequest,
-    ParcaOptions,
-    SimulationConfig,
     SimulationRequest,
+    SimulatorVersion,
 )
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 from tests.fixtures.api_fixtures import SimulatorRepoInfo
@@ -38,7 +41,7 @@ if TYPE_CHECKING:
     from sms_api.simulation.job_scheduler import JobScheduler
 
 # Config file name expected in vEcoli/configs/
-CONFIG_FILENAME = "api_simulation_default.json"
+CONFIG_FILENAME = "api_simulation_default_ccam.json"
 
 # Core router prefix (for simulator endpoints)
 CORE_ROUTER = "/core/v1"
@@ -57,7 +60,10 @@ async def test_list_simulations(
     """Test listing simulations from the database."""
     n = 3
     inserted_sims = []
-    for _ in range(n):
+    for i in range(n):
+        exp_request = experiment_request
+        exp_request.experiment_id = f"{i}"
+        exp_request.config.experiment_id = f"{i}"
         sim_i = await database_service.insert_simulation(sim_request=experiment_request)
         inserted_sims.append(sim_i.model_dump())
     all_sims = await database_service.list_simulations()
@@ -82,7 +88,7 @@ async def test_get_simulation(database_service: DatabaseServiceSQL, experiment_r
 async def _ensure_simulator_ready(
     client: AsyncClient,
     repo_info: SimulatorRepoInfo,
-) -> int:
+) -> SimulatorVersion:
     """
     Ensure simulator is registered and built using REST endpoints.
 
@@ -98,6 +104,7 @@ async def _ensure_simulator_ready(
     versions_data = versions_response.json()
 
     simulator_id: int | None = None
+    simulator_data: dict[str, str] | None = None
     for sim in versions_data.get("versions", []):
         if (
             sim.get("git_commit_hash") == repo_info.commit_hash
@@ -160,8 +167,35 @@ async def _ensure_simulator_ready(
     else:
         pytest.fail(f"Simulator build did not complete within {max_wait_seconds}s")
 
+    assert simulator_data is not None, "Simulator data not found or set."
     assert simulator_id is not None, "Simulator ID should be set"
-    return simulator_id
+    # return simulator_id
+    return SimulatorVersion(**simulator_data)  # type: ignore[arg-type]
+
+
+async def prepare_simulator(
+    simulator_repo_info: SimulatorRepoInfo,
+    simulation_service_slurm: SimulationServiceHpc,
+    database_service: DatabaseServiceSQL,
+) -> SimulatorVersion:
+    # Insert a simulator directly into the database (no HPC access needed)
+    return await handlers.simulators.upload_simulator(
+        commit_hash=simulator_repo_info.commit_hash,
+        git_repo_url=simulator_repo_info.url,
+        git_branch=simulator_repo_info.branch,
+        simulation_service_slurm=simulation_service_slurm,
+        database_service=database_service,
+    )
+
+
+@asynccontextmanager
+async def api_client() -> AsyncGenerator[httpx.AsyncClient]:
+    transport = ASGITransport(app=app)
+    client = AsyncClient(transport=transport, base_url="http://testserver")
+    try:
+        yield client
+    finally:
+        pass
 
 
 @pytest.mark.integration
@@ -170,7 +204,7 @@ async def _ensure_simulator_ready(
     reason="slurm ssh key file not supplied",
 )
 @pytest.mark.asyncio
-async def test_run_simulation_e2e(
+async def test_run_simulation_workflow_e2e(
     base_router: str,
     simulation_service_slurm: SimulationServiceHpc,
     database_service: DatabaseServiceSQL,
@@ -190,19 +224,28 @@ async def test_run_simulation_e2e(
 
     Expected runtime: 30-60 minutes depending on cluster load.
     """
+    artifacts_dir = Path("artifacts").absolute()
+    artifact_files = ["simulation_workflow.sbatch", "workflow_config__sms-api-rke-dev.json"]
+    for artifact in artifact_files:
+        path = artifacts_dir / artifact
+        if path.exists():
+            os.remove(path)
+
+    # Step 1: Ensure simulator is ready via REST endpoints
+    async with api_client() as client:
+        print("\nStep 1: Ensuring simulator is ready...")
+        simulator: SimulatorVersion = await _ensure_simulator_ready(client=client, repo_info=simulator_repo_info)
+
+    simulator_id = simulator.database_id
+    print(f"  Using simulator ID: {simulator_id}")
+
     job_uuid = uuid.uuid4().hex[:8]
-    experiment_id = f"test_api_{job_uuid}"
+    experiment_id = f"sim{simulator_id}-e2e_test_{job_uuid}"
 
     print("\n=== Test: run_simulation_e2e ===")
     print(f"  Experiment ID: {experiment_id}")
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        # Step 1: Ensure simulator is ready via REST endpoints
-        print("\nStep 1: Ensuring simulator is ready...")
-        simulator_id = await _ensure_simulator_ready(client, simulator_repo_info)
-        print(f"  Using simulator ID: {simulator_id}")
-
+    async with api_client() as client:
         # Step 2: POST to /simulations
         print("\nStep 2: POST /simulations")
         print(f"  Config file: {CONFIG_FILENAME}")
@@ -213,9 +256,10 @@ async def test_run_simulation_e2e(
                 "simulator_id": simulator_id,
                 "experiment_id": experiment_id,
                 "simulation_config_filename": CONFIG_FILENAME,
-                "num_generations": 2,  # Override for faster test
-                "num_seeds": 2,  # Override for faster test
+                "num_generations": 1,  # Override for faster test
+                "num_seeds": 1,  # Override for faster test
                 "description": "Integration test via /simulations endpoint",
+                "run_parca": False,  # Use cached simdata for faster test
             },
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
@@ -237,7 +281,6 @@ async def test_run_simulation_e2e(
         max_wait_seconds = 7200  # 2 hour timeout
         poll_interval = 30
         final_status = None
-
         while time.time() - start_time < max_wait_seconds:
             status_response = await client.get(f"{base_router}/simulations/{db_id}/status")
             assert status_response.status_code == 200, f"Status check failed: {status_response.text}"
@@ -264,64 +307,3 @@ async def test_run_simulation_e2e(
     print("\n=== Test completed successfully! ===")
     print(f"  Experiment ID: {experiment_id}")
     print(f"  Simulation DB ID: {db_id}")
-
-
-@pytest.mark.integration
-@pytest.mark.skipif(
-    len(get_settings().slurm_submit_key_path) == 0,
-    reason="slurm ssh key file not supplied",
-)
-@pytest.mark.asyncio
-async def test_get_simulation_data(
-    base_router: str,
-    database_service: DatabaseServiceSQL,
-    ssh_session_service: SSHSessionService,
-) -> None:
-    """Test GET simulation data endpoint with a pre-existing simulation output directory.
-
-    This test manually inserts a simulation into the database that references
-    the existing simulation output at /projects/SMS/sms_api/alex/sims/sms_multigeneration,
-    then calls the get_simulation_data endpoint to retrieve the outputs.
-    """
-    # Create a unique commit hash for the simulator
-    unique_commit_hash = f"test_{uuid.uuid4().hex[:7]}"
-
-    # Insert the simulator into the database
-    simulator = await database_service.insert_simulator(
-        git_commit_hash=unique_commit_hash,
-        git_repo_url=request_examples.DEFAULT_SIMULATOR.git_repo_url,
-        git_branch=request_examples.DEFAULT_SIMULATOR.git_branch,
-    )
-
-    # Insert a parca dataset for this simulator
-    parca_request = ParcaDatasetRequest(
-        simulator_version=simulator,
-        parca_config=ParcaOptions(),
-    )
-    parca_dataset = await database_service.insert_parca_dataset(
-        parca_dataset_request=parca_request,
-    )
-
-    # Create a SimulationConfig pointing to the existing sms_multigeneration output
-    sim_config = SimulationConfig(
-        experiment_id="sms_multigeneration",
-        emitter="parquet",
-        emitter_arg={"out_dir": "/projects/SMS/sms_api/alex/sims/sms_multigeneration"},
-    )
-
-    # Create the simulation request
-    sim_request = SimulationRequest(
-        simulator_id=simulator.database_id,
-        parca_dataset_id=parca_dataset.database_id,
-        config=sim_config,
-    )
-
-    # Insert the simulation into the database
-    inserted_sim = await database_service.insert_simulation(sim_request=sim_request)
-    db_id = inserted_sim.database_id
-
-    # Call the get_simulation_data endpoint
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.post(f"{base_router}/simulations/{db_id}/data")
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"

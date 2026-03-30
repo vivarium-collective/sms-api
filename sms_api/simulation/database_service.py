@@ -10,7 +10,6 @@ from typing_extensions import override
 from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.models import JobStatus
-from sms_api.config import get_settings
 from sms_api.simulation.models import (
     HpcRun,
     JobType,
@@ -234,7 +233,7 @@ class DatabaseServiceSQL(DatabaseService):
     ) -> ExperimentAnalysisDTO:
         """Used by the /ecoli router"""
         async with self.async_sessionmaker() as session, session.begin():
-            config.emitter_arg["out_dir"] = str(get_settings().simulation_outdir)
+            # config.emitter_arg["out_dir"] = str(get_settings().simulation_outdir)
             orm_analysis = ORMAnalysis(
                 name=name, config=config.model_dump(), last_updated=last_updated, job_name=job_name, job_id=job_id
             )
@@ -580,9 +579,12 @@ class DatabaseServiceSQL(DatabaseService):
                 )
 
             sim_config = sim_request.config
+            config_filename = sim_request.simulation_config_filename
             orm_simulation = ORMSimulation(
                 simulator_id=simulator_id,
                 parca_dataset_id=orm_parca_dataset.id,
+                config_filename=config_filename,
+                experiment_id=sim_request.experiment_id,
                 config=sim_config.model_dump(),
             )
             session.add(orm_simulation)
@@ -593,6 +595,8 @@ class DatabaseServiceSQL(DatabaseService):
                 simulator_id=orm_simulator.id,
                 parca_dataset_id=sim_request.parca_dataset_id,  # type: ignore[arg-type]
                 config=sim_config,
+                simulation_config_filename=config_filename,
+                experiment_id=sim_request.experiment_id,
             )
             return simulation
 
@@ -604,6 +608,8 @@ class DatabaseServiceSQL(DatabaseService):
                 return None
 
             simulation = Simulation(
+                simulation_config_filename=orm_simulation.config_filename,
+                experiment_id=orm_simulation.experiment_id,
                 database_id=orm_simulation.id,
                 simulator_id=orm_simulation.simulator_id,
                 parca_dataset_id=orm_simulation.parca_dataset_id,
@@ -621,6 +627,8 @@ class DatabaseServiceSQL(DatabaseService):
                 return None
 
             simulation = Simulation(
+                simulation_config_filename=orm_simulation.config_filename,
+                experiment_id=orm_simulation.experiment_id,
                 database_id=orm_simulation.id,
                 simulator_id=orm_simulation.simulator_id,
                 parca_dataset_id=orm_simulation.parca_dataset_id,
@@ -646,6 +654,8 @@ class DatabaseServiceSQL(DatabaseService):
             simulations: list[Simulation] = []
             for orm_simulation in orm_simulations:
                 simulation = Simulation(
+                    simulation_config_filename=orm_simulation.config_filename,
+                    experiment_id=orm_simulation.experiment_id,
                     database_id=orm_simulation.id,
                     simulator_id=orm_simulation.simulator_id,
                     parca_dataset_id=orm_simulation.parca_dataset_id,

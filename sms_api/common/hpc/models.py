@@ -131,14 +131,20 @@ class SlurmJob(BaseModel):
         if reason == "None":
             reason = None
 
+        job_state = data.get("JobState", "UNKNOWN")
+        # Only accept EndTime for completed jobs - running jobs report scheduled end time
+        terminal_states = {"COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "NODE_FAIL", "PREEMPTED", "OUT_OF_MEMORY"}
+        end_time_raw = data.get("EndTime")
+        end_time = end_time_raw if end_time_raw and end_time_raw != "Unknown" and job_state in terminal_states else None
+
         return cls(
             job_id=int(data.get("JobId", "0")),
             name=data.get("JobName", ""),
             account=data.get("Account", ""),
             user_name=user_name,
-            job_state=data.get("JobState", "UNKNOWN"),
+            job_state=job_state,
             start_time=data.get("StartTime"),
-            end_time=data.get("EndTime") if data.get("EndTime") != "Unknown" else None,
+            end_time=end_time,
             elapsed=data.get("RunTime"),
             exit_code=data.get("ExitCode"),
             reason=reason,

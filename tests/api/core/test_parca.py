@@ -26,7 +26,7 @@ async def test_insert_parca(
 ) -> None:
     expected_commit_hash = "abc1234"
     expected_git_repo_url = "https://github.com/vivarium-collective/vEcoli"
-    expected_git_branch = "messages"
+    expected_git_branch = "api-support"
     _simulator = await database_service.insert_simulator(
         git_commit_hash=expected_commit_hash, git_repo_url=expected_git_repo_url, git_branch=expected_git_branch
     )

@@ -5,6 +5,7 @@ from textwrap import dedent
 import pytest
 import pytest_asyncio
 
+from sms_api.common.hpc.nextflow_weblog import WEBLOG_RECEIVER_SCRIPT
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
@@ -136,41 +137,7 @@ exit $NF_EXIT_CODE
 """
 
 
-# Weblog receiver script - used by Nextflow sbatch templates to capture weblog events
-WEBLOG_RECEIVER_SCRIPT = """import json
-import os
-import socket
-from http.server import HTTPServer, BaseHTTPRequestHandler
-
-EVENTS_FILE = os.environ.get('EVENTS_FILE', 'events.ndjson')
-
-class WeblogHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        length = int(self.headers.get('Content-Length', 0))
-        data = self.rfile.read(length)
-        try:
-            event = json.loads(data.decode())
-            with open(EVENTS_FILE, 'a') as f:
-                f.write(json.dumps(event) + chr(10))
-        except Exception as ex:
-            print("Error processing event:", ex)
-        self.send_response(200)
-        self.end_headers()
-
-    def log_message(self, *args):
-        pass
-
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.bind(('localhost', 0))
-port = sock.getsockname()[1]
-sock.close()
-
-with open('/tmp/weblog_port_' + str(os.getppid()), 'w') as f:
-    f.write(str(port))
-
-print("Weblog receiver starting on port", port, "writing to", EVENTS_FILE)
-HTTPServer(('localhost', port), WeblogHandler).serve_forever()
-"""
+# WEBLOG_RECEIVER_SCRIPT is now imported from sms_api.common.hpc.nextflow_weblog
 
 
 @pytest_asyncio.fixture(scope="session")

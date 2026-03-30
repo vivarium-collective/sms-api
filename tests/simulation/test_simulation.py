@@ -2,6 +2,7 @@ import asyncio
 import random
 import string
 import time
+import uuid
 
 import pytest
 
@@ -85,10 +86,13 @@ async def test_simulate(
         assert slurm_job_parca.job_id == parca_slurmjobid
         assert slurm_job_parca.name.startswith(f"parca-{commit_hash}-")
 
+        expid = f"test-{uuid.uuid4()!s}"
         simulation_request = SimulationRequest(
+            experiment_id=expid,
+            simulation_config_filename="api_simulation_default_with_profile.json",
             simulator_id=simulator.database_id,
             parca_dataset_id=parca_dataset.database_id,
-            config=SimulationConfig(experiment_id="test_simulate"),
+            config=SimulationConfig(experiment_id=expid),
         )
         simulation = await database_service.insert_simulation(sim_request=simulation_request)
 

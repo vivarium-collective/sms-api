@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: alembic-migrate
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: alembic
+          image: ghcr.io/vivarium-collective/sms-api:latest
+          imagePullPolicy: Always
+          command: ["uv", "run", "alembic", "upgrade", "head"]
+          env:
+            - name: SQLALCHEMY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: shared-secrets
+                  key: postgres-uri
+      imagePullSecrets:
+        - name: ghcr-secret

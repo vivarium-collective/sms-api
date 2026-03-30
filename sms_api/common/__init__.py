@@ -1,3 +1,5 @@
 from .models import StrEnumBase
 
-__all__ = ["StrEnumBase"]
+__all__ = [
+    "StrEnumBase",
+]

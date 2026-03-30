@@ -1,0 +1,19 @@
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: api-binding
+spec:
+  serviceRef:
+    name: api
+    port: 8000
+  targetGroupARN: ${API_TARGET_GROUP_ARN}
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: ptools-binding
+spec:
+  serviceRef:
+    name: ptools
+    port: 1555
+  targetGroupARN: ${PTOOLS_TARGET_GROUP_ARN}

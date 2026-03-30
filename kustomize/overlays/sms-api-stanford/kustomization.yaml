@@ -3,11 +3,15 @@ kind: Kustomization
 
 namespace: sms-api-stanford
 
+# cd1 release version of api (as given to PNNL):
+# - name: ghcr.io/vivarium-collective/sms-api
+#   newTag: 0.4.5
+
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.3.5
+    newTag: 0.4.11-dev
   - name: ghcr.io/vivarium-collective/sms-ptools
-    newTag: 0.3.5
+    newTag: 0.4.5
 
 replicas:
   - count: 1
@@ -20,7 +24,8 @@ replicas:
     name: haproxy-ssh
 
 resources:
-  - ingress.yaml
+#  - ingress.yaml
+  - target-group-binding.yaml
   - storageclass-gp3-retain.yaml
   - fsx-pcs-root-pv.yaml
   - vivarium-home-pvc.yaml
@@ -44,6 +49,23 @@ patches:
   - patch: |-
       - op: remove
         path: /spec/template/spec/nodeSelector
+    target:
+      kind: Deployment
+      name: api
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: ghcr-secret
+          mountPath: /run/secrets/ghcr
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: ghcr-secret
+          secret:
+            secretName: ghcr-secret
+            defaultMode: 256
     target:
       kind: Deployment
       name: api

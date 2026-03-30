@@ -22,22 +22,16 @@ from sms_api.analysis.models import (
     PtoolsAnalysisType,
 )
 from sms_api.common.gateway.utils import generate_analysis_request
-from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
-from sms_api.common.utils import unique_id
+from sms_api.common.simulator_defaults import DEFAULT_SIMULATOR
 from sms_api.simulation.models import (
     AnalysisOptions,
     ParcaDatasetRequest,
     ParcaOptions,
-    SimulationConfig,
-    SimulationRequest,
-    Simulator,
     SimulatorVersion,
 )
 
 DEFAULT_NUM_SEEDS = 30
 DEFAULT_NUM_GENERATIONS = 4
-
-DEFAULT_SIMULATOR = Simulator(git_commit_hash="540e426", git_repo_url=DEFAULT_REPO, git_branch=DEFAULT_BRANCH)
 
 
 def get_test_ptools() -> ExperimentAnalysisRequest:
@@ -63,7 +57,7 @@ def get_test_ptools() -> ExperimentAnalysisRequest:
 
 def get_analysis_multiseed_multigen() -> ExperimentAnalysisRequest:
     request = ExperimentAnalysisRequest(
-        experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
+        experiment_id="sms_multigeneration",
         multiseed=[
             PtoolsAnalysisConfig(
                 name=PtoolsAnalysisType.REACTIONS,
@@ -85,7 +79,7 @@ def get_analysis_multiseed_multigen() -> ExperimentAnalysisRequest:
 
 def get_analysis_ptools() -> ExperimentAnalysisRequest:
     return ExperimentAnalysisRequest(
-        experiment_id="sms_multiseed_0-2794dfa74b9cf37c_1759844363435",
+        experiment_id="sim3-baseline-ca00",
         multiseed=[
             PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8),
         ],
@@ -130,17 +124,6 @@ def get_analysis_api_multiseed() -> ExperimentAnalysisRequest:
             PtoolsAnalysisConfig(name=PtoolsAnalysisType.PROTEINS, n_tp=8),
             PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8),
         ],
-    )
-
-
-def get_simulation_base() -> SimulationRequest:
-    sim_id = unique_id("sms_experiment")
-    sim_id = "postman_TEST"
-    return SimulationRequest(
-        simulator=DEFAULT_SIMULATOR,
-        config=SimulationConfig(
-            experiment_id=sim_id, analysis_options=analysis_options_omics(n_tp=random.randint(1, 22))
-        ),
     )
 
 
@@ -194,7 +177,6 @@ def omics_analysis_config(n_tp: int) -> OmicsAnalysisModuleConfig:
 def analysis_options_omics(n_tp: int) -> AnalysisOptions:
     analysis_domains = ["single", "multigeneration", "multiseed"]
     return AnalysisOptions(
-        cpus=3,
         **dict(zip(analysis_domains, [omics_analysis_config(n_tp) for _ in range(len(analysis_domains))])),  # type: ignore[arg-type]
     )
 
@@ -210,7 +192,5 @@ analysis_request_base = generate_analysis_request(
     requested_configs=[AnalysisDomain.MULTIGENERATION, AnalysisDomain.MULTISEED],
 )
 analysis_test_ptools = get_test_ptools()
-
-base_simulation = get_simulation_base()
 
 base_parca = get_parca_base()

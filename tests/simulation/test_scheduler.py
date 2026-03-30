@@ -51,10 +51,13 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
+    experiment_id = f"test_scheduler_insert_job-{str(uuid.uuid4())[:4]!s}"
     simulation_request = SimulationRequest(
+        simulation_config_filename="config_filename",
+        experiment_id=experiment_id,
         parca_dataset_id=parca_dataset.database_id,
         simulator_id=simulator.database_id,
-        config=SimulationConfig(experiment_id="test_scheduler_insert_job"),
+        config=SimulationConfig(experiment_id=experiment_id),
     )
     simulation = await database_service.insert_simulation(sim_request=simulation_request)
     slurm_job = SlurmJob(

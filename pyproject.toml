@@ -1,6 +1,6 @@
 [project]
 name = "sms_api"
-version = "0.3.5"
+version = "0.4.14"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
 requires-python = "==3.12.9"
@@ -48,8 +48,12 @@ dependencies = [
     "simhash>=2.1.2",
     "fastapi-swagger-dark>=0.0.9",
     "vecoli==1.1.2.post1",
-    "numba>=0.63.1"
+    "numba>=0.63.1",
+    "typer>=0.16.1",
 ]
+
+[project.scripts]
+atlantis = "app.cli_app:main"
 
 [project.urls]
 Repository = "https://github.com/vivarium-collective/sms-api"
@@ -167,8 +171,8 @@ ignore = [
 #    # A001 Variable `sum` is shadowing a Python builtin
      "A001",
      "A002",
-#    # B008 Do not perform function call `Body` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
-#    "B008",
+#    # B008 # Do not perform function call `Body` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+     "B008",
 #    # B026 Star-arg unpacking after a keyword argument is strongly discouraged
 #    "B026",
      # B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
@@ -251,3 +255,4 @@ source = ["sms_api", "client"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
+"sms_api/simulation/simulation_service.py" = ["E501"]

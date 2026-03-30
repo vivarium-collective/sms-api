@@ -251,6 +251,8 @@ async def test_3_run_simulation(
     parca_dataset_id = await get_or_create_parca_dataset(database_service, simulator)
 
     simulation_request = SimulationRequest(
+        experiment_id=TEST_EXPERIMENT_ID,
+        simulation_config_filename="api_simulation_default_with_profile.json",
         simulator_id=simulator.database_id,
         parca_dataset_id=parca_dataset_id,
         config=SimulationConfig(experiment_id=TEST_EXPERIMENT_ID),

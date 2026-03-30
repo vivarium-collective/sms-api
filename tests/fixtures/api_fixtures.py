@@ -1,4 +1,5 @@
 import datetime
+import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from random import randint
@@ -21,6 +22,7 @@ from sms_api.api.main import app
 from sms_api.common.gateway.utils import generate_analysis_request
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
+from sms_api.common.simulator_defaults import DEFAULT_SIMULATOR
 from sms_api.common.utils import get_uuid
 from sms_api.config import REPO_ROOT, get_settings
 from sms_api.dependencies import get_job_scheduler, set_job_scheduler
@@ -41,9 +43,9 @@ from sms_api.simulation.simulation_service import SimulationServiceHpc
 ENV = get_settings()
 
 # Default simulator repository configuration for tests
-SIMULATOR_URL = "https://github.com/vivarium-collective/vEcoli"
-SIMULATOR_BRANCH = "api-support"
-SIMULATOR_COMMIT = "4c58f7e"
+SIMULATOR_URL = DEFAULT_SIMULATOR.git_repo_url
+SIMULATOR_BRANCH = DEFAULT_SIMULATOR.git_branch
+SIMULATOR_COMMIT = DEFAULT_SIMULATOR.git_commit_hash
 
 
 class SimulatorRepoInfo(NamedTuple):
@@ -120,8 +122,8 @@ async def experiment_request(database_service: DatabaseServiceSQL) -> Simulation
     # First insert the simulator
     simulator = await database_service.insert_simulator(
         git_commit_hash=unique_commit_hash,
-        git_repo_url=examples.DEFAULT_SIMULATOR.git_repo_url,
-        git_branch=examples.DEFAULT_SIMULATOR.git_branch,
+        git_repo_url=DEFAULT_SIMULATOR.git_repo_url,
+        git_branch=DEFAULT_SIMULATOR.git_branch,
     )
 
     # Then insert a parca dataset for this simulator
@@ -134,11 +136,14 @@ async def experiment_request(database_service: DatabaseServiceSQL) -> Simulation
     )
 
     # Return a SimulationRequest with the valid IDs
+    exp_id = f"test-{uuid.uuid4()!s}"
     return SimulationRequest(
+        simulation_config_filename="api_simulation_default_with_profile.json",
         simulator_id=simulator.database_id,
         parca_dataset_id=parca_dataset.database_id,
+        experiment_id=f"{exp_id}",
         config=SimulationConfig(
-            experiment_id="postman_TEST",
+            experiment_id=f"{exp_id}",
             analysis_options=examples.analysis_options_omics(n_tp=7),
         ),
     )
@@ -153,16 +158,16 @@ async def parca_options() -> ParcaOptions:
 async def simulation_config(parca_options: ParcaOptions) -> SimulationConfig:
     return SimulationConfig(
         experiment_id="pytest_fixture_config",
-        sim_data_path="/pytest/kb/simData.cPickle",
-        suffix_time=False,
-        parca_options=parca_options,
-        generations=randint(1, 1000),
-        max_duration=10800,
-        initial_global_time=0,
-        time_step=1,
-        single_daughters=True,
-        emitter="parquet",
-        emitter_arg={"outdir": "/pytest/api_outputs"},
+        #     sim_data_path="/pytest/kb/simData.cPickle",
+        #     suffix_time=False,
+        #     parca_options=parca_options,
+        #     generations=randint(1, 1000),
+        #     max_duration=10800,
+        #     initial_global_time=0,
+        #     time_step=1,
+        #     single_daughters=True,
+        #     emitter="parquet",
+        #     emitter_arg={"outdir": "/pytest/api_outputs"},
     )
 
 
@@ -173,18 +178,20 @@ async def ecoli_simulation(parca_options: ParcaOptions) -> Simulation:
         database_id=-1,
         simulator_id=1,
         parca_dataset_id=1,
+        experiment_id=pytest_fixture,
+        simulation_config_filename="api_simulation_default_with_profile.json",
         config=SimulationConfig(
             experiment_id=pytest_fixture,
-            sim_data_path="/pytest/kb/simData.cPickle",
-            suffix_time=False,
-            parca_options=parca_options,
-            generations=randint(1, 1000),
-            max_duration=10800,
-            initial_global_time=0,
-            time_step=1,
-            single_daughters=True,
-            emitter="parquet",
-            emitter_arg={"outdir": "/pytest/api_outputs"},
+            # sim_data_path="/pytest/kb/simData.cPickle",
+            # suffix_time=False,
+            # parca_options=parca_options,
+            # generations=randint(1, 1000),
+            # max_duration=10800,
+            # initial_global_time=0,
+            # time_step=1,
+            # single_daughters=True,
+            # emitter="parquet",
+            # emitter_arg={"outdir": "/pytest/api_outputs"},
         ),
         last_updated=str(datetime.datetime.now()),
         job_id=randint(10000, 1000000),
@@ -222,7 +229,11 @@ async def analysis_request_base() -> ExperimentAnalysisRequest:
 
 @pytest_asyncio.fixture(scope="function")
 async def workflow_config() -> SimulationConfig:
-    return SimulationConfig(experiment_id="pytest_fixture", generations=randint(1, 5), n_init_sims=randint(1, 5))
+    return SimulationConfig(
+        experiment_id="pytest_fixture",
+        generations=randint(1, 5),
+        # n_init_sims=randint(1, 5)
+    )
 
 
 @pytest_asyncio.fixture
@@ -236,6 +247,8 @@ async def workflow_request_payload(
     return SimulationRequest(
         simulator=Simulator(git_commit_hash=latest_hash, git_repo_url=SIMULATOR_URL, git_branch=SIMULATOR_BRANCH),
         config=simulation_config,
+        experiment_id=f"test-{uuid.uuid4()!s}",
+        simulation_config_filename="api_simulation_default_with_profile.json",
     )
 
 
@@ -269,3 +282,141 @@ async def job_scheduler(database_service: DatabaseServiceSQL) -> AsyncGenerator[
     # Cleanup
     await scheduler.stop_polling()
     set_job_scheduler(saved_scheduler)
+
+
+@pytest_asyncio.fixture(scope="function")
+async def expected_analysis_output_files_incorrect() -> set[str]:
+    """Define expected files in the test simulation."""
+    return {
+        "config.json",
+        "results/output.csv",
+        "results/summary.txt",
+    }
+
+
+@pytest_asyncio.fixture(scope="function")
+async def expected_analysis_output_files() -> set[str]:
+    """Define expected files in the test simulation.
+
+    NOTE: Only files with extensions in ["tsv", "html", "csv", "txt"] are included,
+    matching the handler's `get_available_omics_output_paths` filter.
+    """
+    return {
+        "ptools_rxns.txt",
+        "ptools_rna.txt",
+        "ptools_proteins.txt",
+        "protein_counts_validation.html",
+        "mass_fraction_summary.html",
+        "doubling_time_histogram.html",
+        "multivariant_cell_mass_report.html",
+        "doubling_time.html",
+        "wcm_monomers_MIX0-57.tsv",
+        "wcm_rnas_MIX0-57.tsv",
+        "wcm_metabolic_reactions_MIX0-57.tsv",
+        "wcm_complexes_MIX0-57.tsv",
+        "subgen.tsv",
+    }
+
+
+@pytest_asyncio.fixture
+async def empty_simulation_id() -> int:
+    return 1
+
+
+@pytest_asyncio.fixture
+async def simulation_mock(database_service: DatabaseServiceSQL) -> Simulation:
+    experiment_id = "sms_multigeneration"
+
+    # Check if a simulation with this experiment_id already exists
+    existing_sim = await database_service.get_simulation_by_experiment_id(experiment_id)
+    if existing_sim is not None:
+        return existing_sim
+
+    # Create a unique commit hash for the simulator
+    unique_commit_hash = f"test_{uuid.uuid4().hex[:7]}"
+
+    # Insert the simulator into the database
+    simulator = await database_service.insert_simulator(
+        git_commit_hash=unique_commit_hash,
+        git_repo_url=DEFAULT_SIMULATOR.git_repo_url,
+        git_branch=DEFAULT_SIMULATOR.git_branch,
+    )
+
+    # Insert a parca dataset for this simulator
+    parca_request = ParcaDatasetRequest(
+        simulator_version=simulator,
+        parca_config=ParcaOptions(),
+    )
+    parca_dataset = await database_service.insert_parca_dataset(
+        parca_dataset_request=parca_request,
+    )
+
+    # Create a SimulationConfig pointing to the existing sms_multigeneration output
+    sim_config = SimulationConfig(  # type: ignore[call-arg]
+        experiment_id=experiment_id,
+        emitter="parquet",
+        emitter_arg={"out_dir": "/projects/SMS/sms_api/alex/sims/sms_multigeneration"},
+    )
+
+    # Create the simulation request
+    sim_request = SimulationRequest(
+        experiment_id=experiment_id,
+        simulation_config_filename="api_simulation_default_ccam.json",
+        simulator_id=simulator.database_id,
+        parca_dataset_id=parca_dataset.database_id,
+        config=sim_config,
+    )
+
+    # Insert the simulation into the database
+    inserted_sim = await database_service.insert_simulation(sim_request=sim_request)
+    return inserted_sim
+
+
+@pytest_asyncio.fixture
+async def large_simulation_mock(database_service: DatabaseServiceSQL) -> Simulation:
+    # Use a different experiment_id for large simulation mock to avoid conflicts
+    experiment_id = "sms_multigeneration_large"
+
+    # Check if a simulation with this experiment_id already exists
+    existing_sim = await database_service.get_simulation_by_experiment_id(experiment_id)
+    if existing_sim is not None:
+        return existing_sim
+
+    # Create a unique commit hash for the simulator
+    unique_commit_hash = f"test_{uuid.uuid4().hex[:7]}"
+
+    # Insert the simulator into the database
+    simulator = await database_service.insert_simulator(
+        git_commit_hash=unique_commit_hash,
+        git_repo_url=DEFAULT_SIMULATOR.git_repo_url,
+        git_branch=DEFAULT_SIMULATOR.git_branch,
+    )
+
+    # Insert a parca dataset for this simulator
+    parca_request = ParcaDatasetRequest(
+        simulator_version=simulator,
+        parca_config=ParcaOptions(),
+    )
+    parca_dataset = await database_service.insert_parca_dataset(
+        parca_dataset_request=parca_request,
+    )
+
+    # Create a SimulationConfig pointing to the existing sms_multigeneration output
+    sim_config = SimulationConfig(  # type: ignore[call-arg]
+        experiment_id=experiment_id,
+        emitter="parquet",
+        emitter_arg={"out_dir": "/projects/SMS/sms_api/alex/sims/sms_multigeneration"},
+    )
+
+    # Create the simulation request
+    sim_request = SimulationRequest(
+        experiment_id=experiment_id,
+        simulation_config_filename="api_simulation_default_ccam.json",
+        simulator_id=simulator.database_id,
+        parca_dataset_id=parca_dataset.database_id,
+        config=sim_config,
+    )
+
+    # Insert the simulation into the database
+    inserted_sim = await database_service.insert_simulation(sim_request=sim_request)
+    return inserted_sim

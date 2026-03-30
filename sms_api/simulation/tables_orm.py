@@ -129,7 +129,8 @@ class ORMSimulation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
-
+    config_filename: Mapped[str] = mapped_column(nullable=False, index=True)
+    experiment_id: Mapped[str] = mapped_column(nullable=False, unique=True)
     simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
     parca_dataset_id: Mapped[int] = mapped_column(ForeignKey("parca_dataset.id"), nullable=False, index=True)
     config: Mapped[dict[str, list[str] | bool | int | str | float | dict[str, int | float | str]]] = mapped_column(
@@ -205,8 +206,11 @@ class ORMAnalysis(Base):
 
     def to_dto(self) -> ExperimentAnalysisDTO:
         options = AnalysisConfigOptions(**self.config["analysis_options"])
-        emitter_arg = self.config["emitter_arg"]
-        config_dto = AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)
+        # emitter_arg = self.config["emitter_arg"]
+        config_dto = AnalysisConfig(
+            analysis_options=options,
+            # emitter_arg=emitter_arg
+        )
         return ExperimentAnalysisDTO(
             database_id=self.id,
             name=self.name,

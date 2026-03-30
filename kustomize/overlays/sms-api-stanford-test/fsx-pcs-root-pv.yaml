@@ -12,8 +12,8 @@ spec:
   storageClassName: fsx-sc-static
   csi:
     driver: fsx.csi.aws.com
-    volumeHandle: fs-0a501c82928eef06b
+    volumeHandle: fs-0ddd1b73696c88165
     volumeAttributes:
       # Use IP address instead of DNS name - Lustre client requires IP for NID
-      dnsname: 10.4.43.192
-      mountname: xksnbbmv
+      dnsname: 10.99.41.24
+      mountname: xqrs5bev

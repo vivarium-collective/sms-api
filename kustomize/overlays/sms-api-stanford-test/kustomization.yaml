@@ -1,0 +1,67 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sms-api-stanford-test
+
+images:
+  - name: ghcr.io/vivarium-collective/sms-api
+    newTag: 0.4.5
+  - name: ghcr.io/vivarium-collective/sms-ptools
+    newTag: 0.4.5
+
+replicas:
+  - count: 1
+    name: api
+  - count: 1
+    name: ptools
+  - count: 0
+    name: redis
+  - count: 0
+    name: haproxy-ssh
+
+resources:
+#  - ingress.yaml
+  - target-group-binding.yaml # to accept traffic from predefined ALB rather than use an ingres
+  - storageclass-gp3-retain.yaml
+  - fsx-pcs-root-pv.yaml
+  - vivarium-home-pvc.yaml
+  - secret-ghcr.yaml
+  - secret-shared.yaml
+  - secret-ssh.yaml
+  - ../../config/sms-api-stanford-test
+  - ../../base
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/0
+        value:
+          name: vivarium-home-pvc
+          mountPath: /mnt/fsx/home/svc_vivarium
+          subPath: home/svc_vivarium
+    target:
+      kind: Deployment
+      name: api
+  - patch: |-
+      - op: remove
+        path: /spec/template/spec/nodeSelector
+    target:
+      kind: Deployment
+      name: api
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: ghcr-secret
+          mountPath: /run/secrets/ghcr
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: ghcr-secret
+          secret:
+            secretName: ghcr-secret
+            defaultMode: 256
+    target:
+      kind: Deployment
+      name: api
