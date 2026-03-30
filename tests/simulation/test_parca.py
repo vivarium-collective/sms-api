@@ -3,12 +3,14 @@ import time
 
 import pytest
 
+from sms_api.common.models import JobStatus
 from sms_api.config import get_settings
-from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import ParcaDatasetRequest, ParcaOptions, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 from tests.fixtures.api_fixtures import SimulatorRepoInfo
+
+_TERMINAL = {JobStatus.COMPLETED, JobStatus.FAILED}
 
 
 @pytest.mark.integration
@@ -38,39 +40,37 @@ async def test_parca(
             git_commit_hash=commit_hash, git_repo_url=repo_url, git_branch=main_branch
         )
 
-    # Use single SSH session for all HPC operations
-    async with get_ssh_session_service().session() as ssh:
-        # Submit build job (which now includes cloning the repository)
-        job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator, ssh=ssh)
-        assert job_id is not None
+    # Submit build job (which now includes cloning the repository)
+    job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
+    assert job_id is not None
 
-        start_time = time.time()
-        while start_time + 60 > time.time():
-            slurm_job_build = await simulation_service_slurm.get_slurm_job_status(slurmjobid=job_id, ssh=ssh)
-            if slurm_job_build is not None and slurm_job_build.is_done():
-                break
-            await asyncio.sleep(5)
+    start_time = time.time()
+    job_status_build = None
+    while start_time + 60 > time.time():
+        job_status_build = await simulation_service_slurm.get_job_status(job_id=job_id)
+        if job_status_build is not None and job_status_build.status in _TERMINAL:
+            break
+        await asyncio.sleep(5)
 
-        assert slurm_job_build is not None
-        assert slurm_job_build.is_done()
-        assert slurm_job_build.job_id == job_id
-        assert slurm_job_build.name.startswith(f"build-image-{commit_hash}-")
+    assert job_status_build is not None
+    assert job_status_build.status in _TERMINAL
+    assert job_status_build.job_id == job_id
 
-        parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
-        parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
+    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
+    parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
-        # run parca
-        job_id = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset, ssh=ssh)
-        assert job_id is not None
+    # run parca
+    parca_job_id = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
+    assert parca_job_id is not None
 
-        start_time = time.time()
-        while start_time + 60 > time.time():
-            slurm_job_parca = await simulation_service_slurm.get_slurm_job_status(slurmjobid=job_id, ssh=ssh)
-            if slurm_job_parca is not None and slurm_job_parca.is_done():
-                break
-            await asyncio.sleep(7)
+    start_time = time.time()
+    job_status_parca = None
+    while start_time + 60 > time.time():
+        job_status_parca = await simulation_service_slurm.get_job_status(job_id=parca_job_id)
+        if job_status_parca is not None and job_status_parca.status in _TERMINAL:
+            break
+        await asyncio.sleep(7)
 
-        assert slurm_job_parca is not None
-        assert slurm_job_parca.is_done()
-        assert slurm_job_parca.job_id == job_id
-        assert slurm_job_parca.name.startswith(f"parca-{commit_hash}-")
+    assert job_status_parca is not None
+    assert job_status_parca.status in _TERMINAL
+    assert job_status_parca.job_id == parca_job_id

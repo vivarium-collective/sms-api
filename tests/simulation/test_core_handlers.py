@@ -38,6 +38,7 @@ async def test_upload_simulator_handler(
     )
     assert image_build_hpcrun is not None
     assert image_build_hpcrun.slurmjobid == simulation_service_mock_clone_and_build.expected_build_slurm_job_id
+    assert image_build_hpcrun.job_backend == "slurm"
     assert image_build_hpcrun.ref_id == returned_simulator_version.database_id
     assert image_build_hpcrun.job_type == JobType.BUILD_IMAGE
     assert image_build_hpcrun.status == JobStatus.RUNNING

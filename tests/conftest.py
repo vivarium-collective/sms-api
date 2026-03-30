@@ -59,6 +59,8 @@ from tests.fixtures.simulation_fixtures import (  # noqa: F401
     expected_build_slurm_job_id,
     expected_parca_database_id,
     mock_ssh_session_service,
+    simulation_service_batch,
+    simulation_service_batch_mock,
     simulation_service_mock_clone_and_build,
     simulation_service_mock_parca,
     simulation_service_slurm,

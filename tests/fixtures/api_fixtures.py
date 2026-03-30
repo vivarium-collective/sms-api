@@ -266,11 +266,13 @@ async def job_scheduler(database_service: DatabaseServiceSQL) -> AsyncGenerator[
     messaging_service = MessagingServiceRedis()
 
     # Create and configure the JobScheduler
+    from sms_api.common.hpc.slurm_service import SlurmJobStatusService
+
     slurm_service = SlurmService()
     scheduler = JobScheduler(
         messaging_service=messaging_service,
         database_service=database_service,
-        slurm_service=slurm_service,
+        job_status_service=SlurmJobStatusService(slurm_service),
     )
     set_job_scheduler(scheduler)
 

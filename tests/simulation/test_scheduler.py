@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from sms_api.common.hpc.models import SlurmJob
-from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.hpc.slurm_service import SlurmJobStatusService, SlurmService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
 from sms_api.common.models import JobStatus
 from sms_api.common.ssh.ssh_service import SSHSessionService
@@ -71,7 +71,8 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
     random_string = "".join(random.choices(string.hexdigits, k=7))
     correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string, simulator=simulator)
     hpcrun = await database_service.insert_hpcrun(
-        slurmjobid=slurm_job.job_id,
+        external_job_id=str(slurm_job.job_id),
+        job_backend="slurm",
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id=correlation_id,
@@ -90,7 +91,9 @@ async def test_messaging(
     slurm_service: SlurmService,
 ) -> None:
     scheduler = JobScheduler(
-        messaging_service=redis_subscriber_service, database_service=database_service, slurm_service=slurm_service
+        messaging_service=redis_subscriber_service,
+        database_service=database_service,
+        job_status_service=SlurmJobStatusService(slurm_service),
     )
     await scheduler.subscribe()
 
@@ -130,7 +133,9 @@ async def test_job_scheduler(
     slurm_template_hello_10s: str,
 ) -> None:
     scheduler = JobScheduler(
-        messaging_service=redis_subscriber_service, database_service=database_service, slurm_service=slurm_service
+        messaging_service=redis_subscriber_service,
+        database_service=database_service,
+        job_status_service=SlurmJobStatusService(slurm_service),
     )
     await scheduler.subscribe()
     await scheduler.start_polling(interval_seconds=1)
@@ -262,8 +267,12 @@ async def test_job_scheduler_with_storage(
 
         # Step 2: Prepare Slurm job script
         print("\n=== Step 2: Preparing Slurm job ===")
+        from sms_api.common.hpc.slurm_service import SlurmJobStatusService
+
         scheduler = JobScheduler(
-            messaging_service=redis_subscriber_service, database_service=database_service, slurm_service=slurm_service
+            messaging_service=redis_subscriber_service,
+            database_service=database_service,
+            job_status_service=SlurmJobStatusService(slurm_service),
         )
         await scheduler.subscribe()
         await scheduler.start_polling(interval_seconds=2)
