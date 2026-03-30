@@ -32,6 +32,13 @@ class StrEnumBase(StrEnum):
         return sorted(vals) if sort else vals
 
 
+class JobBackend(StrEnumBase):
+    """Backend system used to execute HPC jobs."""
+
+    SLURM = "slurm"
+    BATCH = "batch"
+
+
 class JobStatus(StrEnumBase):
     """Shared job status enum for simulations, analyses, and other HPC jobs."""
 
@@ -61,6 +68,18 @@ class JobStatus(StrEnumBase):
         base_state = slurm_state.split()[0].upper() if slurm_state else ""
         return _SLURM_STATE_MAP.get(base_state, cls.UNKNOWN)
 
+    @classmethod
+    def from_batch_state(cls, batch_state: str) -> "JobStatus":
+        """Parse AWS Batch job state string to JobStatus enum.
+
+        Args:
+            batch_state: AWS Batch job status (e.g., "SUBMITTED", "RUNNING", "SUCCEEDED", "FAILED")
+
+        Returns:
+            Corresponding JobStatus enum value, or UNKNOWN if not recognized
+        """
+        return _BATCH_STATE_MAP.get(batch_state.upper(), cls.UNKNOWN)
+
 
 # Map SLURM job states to JobStatus (defined after enum class)
 # See: https://slurm.schedmd.com/squeue.html#SECTION_JOB-STATE-CODES
@@ -86,6 +105,19 @@ _SLURM_STATE_MAP: dict[str, JobStatus] = {
     "BOOT_FAIL": JobStatus.FAILED,
     "DEADLINE": JobStatus.FAILED,
     "REVOKED": JobStatus.FAILED,
+}
+
+
+# Map AWS Batch job states to JobStatus
+# See: https://docs.aws.amazon.com/batch/latest/userguide/job_states.html
+_BATCH_STATE_MAP: dict[str, JobStatus] = {
+    "SUBMITTED": JobStatus.PENDING,
+    "PENDING": JobStatus.PENDING,
+    "RUNNABLE": JobStatus.QUEUED,
+    "STARTING": JobStatus.RUNNING,
+    "RUNNING": JobStatus.RUNNING,
+    "SUCCEEDED": JobStatus.COMPLETED,
+    "FAILED": JobStatus.FAILED,
 }
 
 

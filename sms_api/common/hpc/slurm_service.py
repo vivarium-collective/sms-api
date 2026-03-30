@@ -1,7 +1,9 @@
 import logging
 from pathlib import Path
 
+from sms_api.common.hpc.job_service import JobStatusInfo, JobStatusService
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.common.models import JobStatus
 from sms_api.common.ssh.ssh_service import SSHSession
 from sms_api.common.storage.file_paths import HPCFilePath
 
@@ -154,3 +156,44 @@ class SlurmService:
                 f"failed to get job status with command {command} return code {return_code} stderr {stderr[:100]}"
             )
         return int(stdout)
+
+
+def _slurm_job_to_status_info(slurm_job: SlurmJob) -> JobStatusInfo:
+    """Convert a SlurmJob to a backend-agnostic JobStatusInfo."""
+    status = JobStatus.from_slurm_state(slurm_job.job_state)
+    error_message: str | None = None
+    if status == JobStatus.FAILED:
+        error_parts = [f"SLURM state: {slurm_job.job_state}"]
+        if slurm_job.reason:
+            error_parts.append(f"reason: {slurm_job.reason}")
+        if slurm_job.exit_code:
+            error_parts.append(f"exit_code: {slurm_job.exit_code}")
+        error_message = ", ".join(error_parts)
+    return JobStatusInfo(
+        job_id=str(slurm_job.job_id),
+        status=status,
+        start_time=slurm_job.start_time,
+        end_time=slurm_job.end_time,
+        exit_code=slurm_job.exit_code,
+        error_message=error_message,
+    )
+
+
+class SlurmJobStatusService(JobStatusService):
+    """JobStatusService implementation that queries SLURM via SSH."""
+
+    def __init__(self, slurm_service: SlurmService) -> None:
+        self._slurm_service = slurm_service
+
+    async def get_job_statuses(self, job_ids: list[str]) -> list[JobStatusInfo]:
+        from sms_api.dependencies import get_ssh_session_service
+
+        int_ids = [int(jid) for jid in job_ids]
+        async with get_ssh_session_service().session() as ssh:
+            jobs_from_squeue = await self._slurm_service.get_job_status_squeue(ssh, int_ids)
+            jobs_from_scontrol = await self._slurm_service.get_job_status_scontrol(ssh, int_ids)
+
+        slurm_job_map: dict[int, SlurmJob] = {job.job_id: job for job in jobs_from_squeue}
+        slurm_job_map.update({job.job_id: job for job in jobs_from_scontrol})
+
+        return [_slurm_job_to_status_info(job) for job in slurm_job_map.values()]

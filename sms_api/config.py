@@ -190,6 +190,27 @@ class Settings(BaseSettings):
     # slurm constraint for arch mismatches
     slurm_constraint: str = ""
 
+    # AWS Batch settings (used when deployment_namespace is stanford)
+    batch_job_queue: str = ""
+    batch_job_definition_build: str = ""
+    batch_job_definition_parca: str = ""
+    batch_job_definition_simulation: str = ""
+    batch_region: str = "us-east-1"
+    batch_container_image: str = ""
+    batch_s3_output_bucket: str = ""
+
+
+_STANFORD_NAMESPACES = {"sms-api-stanford", "sms-api-stanford-test"}
+
+
+def get_job_backend() -> str:
+    """Return the job backend for the current deployment namespace.
+
+    Returns "batch" for Stanford namespaces, "slurm" otherwise.
+    """
+    ns = get_settings().deployment_namespace
+    return "batch" if ns in _STANFORD_NAMESPACES else "slurm"
+
 
 @lru_cache
 def get_settings(env_file: Path | None = None) -> Settings:
