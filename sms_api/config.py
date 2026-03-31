@@ -190,6 +190,43 @@ class Settings(BaseSettings):
     # slurm constraint for arch mismatches
     slurm_constraint: str = ""
 
+    # --- Kubernetes / AWS Batch backend settings ---
+    # Used when job_backend is "k8s" (Stanford deployments)
+
+    # K8s Job settings
+    k8s_job_namespace: str = ""  # Namespace for Nextflow head Jobs (e.g. "sms-api-stanford")
+    nextflow_container_image: str = ""  # AMD64 image with Nextflow + vEcoli
+
+    # AWS Batch settings (Nextflow submits tasks here)
+    batch_job_queue: str = ""  # Batch job queue name (from CDK stack output)
+    batch_region: str = "us-gov-west-1"  # AWS region for Batch
+
+    # S3 settings for workflow data
+    s3_work_bucket: str = ""  # S3 bucket for Nextflow work dir and outputs
+    s3_work_prefix: str = "nextflow/work"  # Prefix for Nextflow work directory
+    s3_output_prefix: str = "vecoli-output"  # Prefix for workflow output data
+
+    # ECR settings
+    ecr_repository: str = "vecoli"  # ECR repository name for vEcoli task images
+
+    # EC2 submit node for ARM64 Docker image builds
+    submit_node_host: str = ""  # Hostname or IP of the ARM64 EC2 submit node
+    submit_node_user: str = ""  # SSH user for the submit node
+    submit_node_key_path: str = ""  # SSH key path for the submit node
+    submit_node_ssm_instance_id: str = ""  # Alternative: SSM instance ID (if using SSM instead of SSH)
+
+
+_K8S_NAMESPACES = {"sms-api-stanford", "sms-api-stanford-test"}
+
+
+def get_job_backend() -> str:
+    """Return the job backend for the current deployment namespace.
+
+    Returns "k8s" for Stanford namespaces, "slurm" otherwise.
+    """
+    ns = get_settings().deployment_namespace
+    return "k8s" if ns in _K8S_NAMESPACES else "slurm"
+
 
 @lru_cache
 def get_settings(env_file: Path | None = None) -> Settings:
