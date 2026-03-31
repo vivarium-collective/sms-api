@@ -476,7 +476,7 @@ class SimulationServiceHpc(SimulationService):
             slurm_job = slurm_jobs[0]
             status = JobStatus.from_slurm_state(slurm_job.job_state)
             return JobStatusInfo(
-                job_id=str(job_id),
+                job_id=job_id,
                 status=status,
                 start_time=slurm_job.start_time,
                 end_time=slurm_job.end_time,

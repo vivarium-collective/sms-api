@@ -55,7 +55,7 @@ async def test_parca(
 
     assert job_info_build is not None
     assert job_info_build.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
-    assert job_info_build.job_id == str(job_id)
+    assert job_info_build.job_id == job_id
 
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
@@ -77,4 +77,4 @@ async def test_parca(
 
     assert job_info_parca is not None
     assert job_info_parca.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
-    assert job_info_parca.job_id == str(job_id)
+    assert job_info_parca.job_id == job_id

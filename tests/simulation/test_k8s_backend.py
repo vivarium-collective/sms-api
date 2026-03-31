@@ -121,7 +121,7 @@ class TestK8sJobService:
             result = svc.get_job_status("my-job")
             assert result is not None
             assert result.status == JobStatus.RUNNING
-            assert result.job_id == "my-job"
+            assert result.job_id == JobId.k8s("my-job")
 
 
 class TestJobId:

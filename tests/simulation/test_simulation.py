@@ -66,7 +66,7 @@ async def test_simulate(
 
     assert job_info_build is not None
     assert job_info_build.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
-    assert job_info_build.job_id == str(build_job_id)
+    assert job_info_build.job_id == build_job_id
 
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
@@ -88,7 +88,7 @@ async def test_simulate(
 
     assert job_info_parca is not None
     assert job_info_parca.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
-    assert job_info_parca.job_id == str(parca_job_id)
+    assert job_info_parca.job_id == parca_job_id
 
     expid = f"test-{uuid.uuid4()!s}"
     simulation_request = SimulationRequest(
@@ -131,4 +131,4 @@ async def test_simulate(
 
     assert sim_job_info is not None
     assert sim_job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
-    assert sim_job_info.job_id == str(sim_job_id)
+    assert sim_job_info.job_id == sim_job_id

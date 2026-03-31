@@ -53,7 +53,7 @@ def _job_to_status_info(job: k8s_client.V1Job, job_id: JobId) -> JobStatusInfo:
                 break
 
     return JobStatusInfo(
-        job_id=str(job_id),
+        job_id=job_id,
         status=status,
         start_time=start_time,
         end_time=end_time,

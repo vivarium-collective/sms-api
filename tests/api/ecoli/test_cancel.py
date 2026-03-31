@@ -30,7 +30,7 @@ async def test_cancel_running_simulation(
     assert hpcrun.status == JobStatus.RUNNING
 
     # Cancel it
-    update = JobStatusUpdate(job_id="12345", status=JobStatus.CANCELLED)
+    update = JobStatusUpdate(job_id=JobId.slurm(12345), status=JobStatus.CANCELLED)
     await database_service.update_hpcrun_status(hpcrun_id=hpcrun.database_id, update=update)
 
     # Verify
@@ -54,7 +54,7 @@ async def test_cancel_with_error_message(
     )
 
     update = JobStatusUpdate(
-        job_id="12345",
+        job_id=JobId.slurm(12345),
         status=JobStatus.CANCELLED,
         error_message="Cancelled by user",
     )
@@ -84,7 +84,7 @@ async def test_cancel_already_completed_is_noop(
     )
 
     # Mark as completed
-    update = JobStatusUpdate(job_id="12345", status=JobStatus.COMPLETED)
+    update = JobStatusUpdate(job_id=JobId.slurm(12345), status=JobStatus.COMPLETED)
     hpcrun = await database_service.get_hpcrun_by_ref(ref_id=simulation.database_id, job_type=JobType.SIMULATION)
     assert hpcrun is not None
     await database_service.update_hpcrun_status(hpcrun_id=hpcrun.database_id, update=update)

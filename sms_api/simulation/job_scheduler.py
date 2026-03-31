@@ -128,7 +128,7 @@ class JobScheduler:
                 error_message = ", ".join(error_parts)
 
             update = JobStatusUpdate(
-                job_id=str(slurm_job.job_id),
+                job_id=hpc_run.job_id,
                 status=new_status,
                 start_time=slurm_job.start_time,
                 end_time=slurm_job.end_time,

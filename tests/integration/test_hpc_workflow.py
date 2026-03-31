@@ -188,7 +188,7 @@ async def test_1_build_image(
 
     assert job_info is not None, "Build job did not complete in time"
     assert job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
-    assert job_info.job_id == str(job_id)
+    assert job_info.job_id == job_id
 
 
 @pytest.mark.asyncio
@@ -224,7 +224,7 @@ async def test_2_run_parca(
 
     assert job_info is not None, "Parca job did not complete in time"
     assert job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
-    assert job_info.job_id == str(job_id)
+    assert job_info.job_id == job_id
 
 
 @pytest.mark.asyncio
@@ -280,7 +280,7 @@ async def test_3_run_simulation(
 
     assert job_info is not None, "Simulation job did not complete in time"
     assert job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
-    assert job_info.job_id == str(job_id)
+    assert job_info.job_id == job_id
 
 
 @pytest.mark.asyncio

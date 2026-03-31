@@ -94,7 +94,9 @@ class SimulationServiceK8s(SimulationService):
         if settings.github_username and settings.github_token:
             match = re.match(r"https://github\.com/(.+)", repo_url)
             if match:
-                auth_repo_url = f"https://{settings.github_username}:{settings.github_token}@github.com/{match.group(1)}"
+                auth_repo_url = (
+                    f"https://{settings.github_username}:{settings.github_token}@github.com/{match.group(1)}"
+                )
 
         build_script = f"""\
             set -e
@@ -150,8 +152,7 @@ class SimulationServiceK8s(SimulationService):
         ecr_account = settings.nextflow_container_image.split(".")[0] if settings.nextflow_container_image else ""
         ecr_region = settings.batch_region
         task_image = (
-            f"{ecr_account}.dkr.ecr.{ecr_region}.amazonaws.com"
-            f"/{settings.ecr_repository}:{simulator.git_commit_hash}"
+            f"{ecr_account}.dkr.ecr.{ecr_region}.amazonaws.com/{settings.ecr_repository}:{simulator.git_commit_hash}"
         )
 
         # Build the workflow config

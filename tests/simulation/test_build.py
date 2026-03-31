@@ -57,4 +57,4 @@ async def test_build(
 
     assert job_info is not None
     assert job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
-    assert job_info.job_id == str(job_id)
+    assert job_info.job_id == job_id

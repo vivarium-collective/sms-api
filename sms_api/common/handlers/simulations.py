@@ -349,7 +349,7 @@ async def cancel_simulation(
 
     # Update the database record
     update = JobStatusUpdate(
-        job_id=str(hpc_run.job_id),
+        job_id=hpc_run.job_id,
         status=JobStatus.CANCELLED,
     )
     await db_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, update=update)

@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobId, JobStatus
 
 
 @dataclass
 class JobStatusInfo:
     """Backend-agnostic job status information."""
 
-    job_id: str
+    job_id: JobId
     status: JobStatus
     start_time: str | None = None
     end_time: str | None = None
@@ -19,7 +19,7 @@ class JobStatusInfo:
 class JobStatusUpdate:
     """Backend-agnostic data for updating an HpcRun record's status."""
 
-    job_id: str
+    job_id: JobId
     status: JobStatus
     start_time: str | None = None
     end_time: str | None = None
