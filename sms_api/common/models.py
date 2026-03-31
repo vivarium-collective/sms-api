@@ -32,6 +32,13 @@ class StrEnumBase(StrEnum):
         return sorted(vals) if sort else vals
 
 
+class JobBackend(StrEnumBase):
+    """Backend system used to execute HPC jobs."""
+
+    SLURM = "slurm"
+    K8S = "k8s"
+
+
 class JobStatus(StrEnumBase):
     """Shared job status enum for simulations, analyses, and other HPC jobs."""
 

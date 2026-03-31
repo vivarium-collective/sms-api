@@ -11,7 +11,7 @@ import pytest
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobBackend, JobStatus
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService
@@ -72,7 +72,7 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
     correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string, simulator=simulator)
     hpcrun = await database_service.insert_hpcrun(
         external_job_id=str(slurm_job.job_id),
-        job_backend="slurm",
+        job_backend=JobBackend.SLURM,
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id=correlation_id,

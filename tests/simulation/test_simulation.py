@@ -6,6 +6,7 @@ import uuid
 
 import pytest
 
+from sms_api.common.models import JobBackend
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseServiceSQL
@@ -107,7 +108,7 @@ async def test_simulate(
 
         hpcrun = await database_service.insert_hpcrun(
             external_job_id=str(sim_slurmjobid),
-            job_backend="slurm",
+            job_backend=JobBackend.SLURM,
             job_type=JobType.SIMULATION,
             ref_id=simulation.database_id,
             correlation_id=correlation_id,

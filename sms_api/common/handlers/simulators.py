@@ -2,6 +2,7 @@ import logging
 
 from fastapi import HTTPException
 
+from sms_api.common.models import JobBackend
 from sms_api.common.simulator_defaults import ACCEPTED_REPOS, DEFAULT_BRANCH, DEFAULT_REPO, RepoUrl
 from sms_api.dependencies import get_database_service, get_simulation_service, get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
@@ -112,7 +113,7 @@ async def upload_simulator(
             )
         await database_service.insert_hpcrun(
             external_job_id=str(build_slurmjobid),
-            job_backend="slurm",
+            job_backend=JobBackend.SLURM,
             job_type=JobType.BUILD_IMAGE,
             ref_id=simulator.database_id,
             correlation_id="N/A",

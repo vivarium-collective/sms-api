@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel as _BaseModel
 from pydantic import ConfigDict, Field, field_validator
 
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobBackend, JobStatus
 from sms_api.config import get_settings
 
 
@@ -38,7 +38,7 @@ class HpcRun(BaseModel):
     database_id: int
     slurmjobid: int | None = None  # SLURM job ID (set for slurm backend)
     k8s_job_name: str | None = None  # Kubernetes Job name (set for k8s backend)
-    job_backend: str = "slurm"  # "slurm" or "k8s"
+    job_backend: str = JobBackend.SLURM
     correlation_id: str  # to correlate with the WorkerEvent, if applicable ("N/A" if not applicable)
     job_type: JobType
     ref_id: int  # primary key of the object this HPC run is associated with (sim, parca, etc.)

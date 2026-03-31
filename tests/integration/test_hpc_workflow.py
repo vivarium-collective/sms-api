@@ -29,6 +29,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from sms_api.api.main import app
+from sms_api.common.models import JobBackend
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
@@ -271,7 +272,7 @@ async def test_3_run_simulation(
 
         await database_service.insert_hpcrun(
             external_job_id=str(job_id),
-            job_backend="slurm",
+            job_backend=JobBackend.SLURM,
             job_type=JobType.SIMULATION,
             ref_id=simulation.database_id,
             correlation_id=correlation_id,

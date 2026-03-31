@@ -19,7 +19,7 @@ from sms_api.common import StrEnumBase
 from sms_api.common.handlers.simulators import upload_simulator
 from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobBackend, JobStatus
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service, get_ssh_session_service
@@ -126,7 +126,7 @@ async def run_workflow_legacy(
         )
     _ = await database_service.insert_hpcrun(
         external_job_id=str(slurmjob_id),
-        job_backend="slurm",
+        job_backend=JobBackend.SLURM,
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id=correlation_id,
@@ -246,7 +246,7 @@ async def run_simulation_workflow(
     # 8. Record HPC run
     _ = await database_service.insert_hpcrun(
         external_job_id=str(slurmjob_id),
-        job_backend="slurm",
+        job_backend=JobBackend.SLURM,
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id=correlation_id,
@@ -283,7 +283,7 @@ async def run_parca(
         parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset, ssh=ssh)
     _hpc_run = await database_service.insert_hpcrun(
         external_job_id=str(parca_slurmjobid),
-        job_backend="slurm",
+        job_backend=JobBackend.SLURM,
         job_type=JobType.PARCA,
         ref_id=parca_dataset.database_id,
         correlation_id="N/A",

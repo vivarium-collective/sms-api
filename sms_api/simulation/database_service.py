@@ -10,6 +10,7 @@ from typing_extensions import override
 
 from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.common.hpc.job_service import JobStatusUpdate
+from sms_api.common.models import JobBackend
 from sms_api.simulation.models import (
     HpcRun,
     JobType,
@@ -88,7 +89,7 @@ class DatabaseService(ABC):
     async def insert_hpcrun(
         self,
         external_job_id: str,
-        job_backend: str,
+        job_backend: JobBackend,
         job_type: JobType,
         ref_id: int,
         correlation_id: str,
@@ -350,7 +351,7 @@ class DatabaseServiceSQL(DatabaseService):
     async def insert_hpcrun(
         self,
         external_job_id: str,
-        job_backend: str,
+        job_backend: JobBackend,
         job_type: JobType,
         ref_id: int,
         correlation_id: str,
@@ -362,9 +363,9 @@ class DatabaseServiceSQL(DatabaseService):
         # Set the appropriate job ID field based on backend
         slurmjobid: int | None = None
         k8s_job_name: str | None = None
-        if job_backend == "slurm":
+        if job_backend == JobBackend.SLURM:
             slurmjobid = int(external_job_id)
-        elif job_backend == "k8s":
+        elif job_backend == JobBackend.K8S:
             k8s_job_name = external_job_id
 
         async with self.async_sessionmaker() as session, session.begin():

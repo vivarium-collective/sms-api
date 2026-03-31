@@ -6,7 +6,7 @@ Run with: uv run pytest tests/api/ecoli/test_cancel.py -v
 import pytest
 
 from sms_api.common.hpc.job_service import JobStatusUpdate
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobBackend, JobStatus
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
     JobType,
@@ -23,7 +23,7 @@ async def test_cancel_running_simulation(
     simulation = await database_service.insert_simulation(sim_request=experiment_request)
     hpcrun = await database_service.insert_hpcrun(
         external_job_id="12345",
-        job_backend="slurm",
+        job_backend=JobBackend.SLURM,
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id="test-correlation",
@@ -49,7 +49,7 @@ async def test_cancel_with_error_message(
     simulation = await database_service.insert_simulation(sim_request=experiment_request)
     hpcrun = await database_service.insert_hpcrun(
         external_job_id="12345",
-        job_backend="slurm",
+        job_backend=JobBackend.SLURM,
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id="test-correlation",
@@ -80,7 +80,7 @@ async def test_cancel_already_completed_is_noop(
     simulation = await database_service.insert_simulation(sim_request=experiment_request)
     hpcrun = await database_service.insert_hpcrun(
         external_job_id="12345",
-        job_backend="slurm",
+        job_backend=JobBackend.SLURM,
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id="test-correlation",
@@ -109,14 +109,14 @@ async def test_hpcrun_external_job_id_slurm(
     simulation = await database_service.insert_simulation(sim_request=experiment_request)
     hpcrun = await database_service.insert_hpcrun(
         external_job_id="99999",
-        job_backend="slurm",
+        job_backend=JobBackend.SLURM,
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id="test-correlation",
     )
     assert hpcrun.external_job_id == "99999"
     assert hpcrun.slurmjobid == 99999
-    assert hpcrun.job_backend == "slurm"
+    assert hpcrun.job_backend == JobBackend.SLURM
 
 
 @pytest.mark.asyncio
@@ -128,7 +128,7 @@ async def test_hpcrun_external_job_id_k8s(
     simulation = await database_service.insert_simulation(sim_request=experiment_request)
     hpcrun = await database_service.insert_hpcrun(
         external_job_id="nf-sim-abc1234",
-        job_backend="k8s",
+        job_backend=JobBackend.K8S,
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id="test-correlation",
@@ -136,4 +136,4 @@ async def test_hpcrun_external_job_id_k8s(
     assert hpcrun.external_job_id == "nf-sim-abc1234"
     assert hpcrun.k8s_job_name == "nf-sim-abc1234"
     assert hpcrun.slurmjobid is None
-    assert hpcrun.job_backend == "k8s"
+    assert hpcrun.job_backend == JobBackend.K8S
