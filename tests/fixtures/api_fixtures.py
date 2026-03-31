@@ -194,7 +194,7 @@ async def ecoli_simulation(parca_options: ParcaOptions) -> Simulation:
             # emitter_arg={"outdir": "/pytest/api_outputs"},
         ),
         last_updated=str(datetime.datetime.now()),
-        job_id=randint(10000, 1000000),
+        job_id=str(randint(10000, 1000000)),
     )
 
 

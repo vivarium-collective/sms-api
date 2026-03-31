@@ -6,9 +6,8 @@ import uuid
 
 import pytest
 
-from sms_api.common.models import JobBackend
+from sms_api.common.models import JobStatus
 from sms_api.config import get_settings
-from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import (
@@ -50,82 +49,86 @@ async def test_simulate(
             git_commit_hash=commit_hash, git_repo_url=repo_url, git_branch=main_branch
         )
 
-    # Use single SSH session for all HPC operations
-    async with get_ssh_session_service().session() as ssh:
-        # Submit build job (which now includes cloning the repository)
-        build_job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator, ssh=ssh)
-        assert build_job_id is not None
+    # Submit build job (which now includes cloning the repository)
+    build_job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
+    assert build_job_id is not None
 
-        start_time = time.time()
-        while start_time + 60 > time.time():
-            slurm_job_build = await simulation_service_slurm.get_slurm_job_status(slurmjobid=build_job_id, ssh=ssh)
-            if slurm_job_build is not None and slurm_job_build.is_done():
-                break
-            await asyncio.sleep(5)
+    start_time = time.time()
+    while start_time + 60 > time.time():
+        job_info_build = await simulation_service_slurm.get_job_status(job_id=build_job_id)
+        if job_info_build is not None and job_info_build.status in (
+            JobStatus.COMPLETED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+        ):
+            break
+        await asyncio.sleep(5)
 
-        assert slurm_job_build is not None
-        assert slurm_job_build.is_done()
-        assert slurm_job_build.job_id == build_job_id
-        assert slurm_job_build.name.startswith(f"build-image-{commit_hash}-")
+    assert job_info_build is not None
+    assert job_info_build.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+    assert job_info_build.job_id == str(build_job_id)
 
-        parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
-        parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
+    parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
+    parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
-        # run parca
-        parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset, ssh=ssh)
-        assert parca_slurmjobid is not None
+    # run parca
+    parca_job_id = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
+    assert parca_job_id is not None
 
-        start_time = time.time()
-        while start_time + 60 > time.time():
-            slurm_job_parca = await simulation_service_slurm.get_slurm_job_status(slurmjobid=parca_slurmjobid, ssh=ssh)
-            if slurm_job_parca is not None and slurm_job_parca.is_done():
-                break
-            await asyncio.sleep(5)
+    start_time = time.time()
+    while start_time + 60 > time.time():
+        job_info_parca = await simulation_service_slurm.get_job_status(job_id=parca_job_id)
+        if job_info_parca is not None and job_info_parca.status in (
+            JobStatus.COMPLETED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+        ):
+            break
+        await asyncio.sleep(5)
 
-        assert slurm_job_parca is not None
-        assert slurm_job_parca.is_done()
-        assert slurm_job_parca.job_id == parca_slurmjobid
-        assert slurm_job_parca.name.startswith(f"parca-{commit_hash}-")
+    assert job_info_parca is not None
+    assert job_info_parca.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+    assert job_info_parca.job_id == str(parca_job_id)
 
-        expid = f"test-{uuid.uuid4()!s}"
-        simulation_request = SimulationRequest(
-            experiment_id=expid,
-            simulation_config_filename="api_simulation_default_with_profile.json",
-            simulator_id=simulator.database_id,
-            parca_dataset_id=parca_dataset.database_id,
-            config=SimulationConfig(experiment_id=expid),
-        )
-        simulation = await database_service.insert_simulation(sim_request=simulation_request)
+    expid = f"test-{uuid.uuid4()!s}"
+    simulation_request = SimulationRequest(
+        experiment_id=expid,
+        simulation_config_filename="api_simulation_default_with_profile.json",
+        simulator_id=simulator.database_id,
+        parca_dataset_id=parca_dataset.database_id,
+        config=SimulationConfig(experiment_id=expid),
+    )
+    simulation = await database_service.insert_simulation(sim_request=simulation_request)
 
-        random_string = "".join(random.choices(string.hexdigits, k=7))
-        correlation_id = get_correlation_id(
-            ecoli_simulation=simulation, random_string=random_string, simulator=simulator
-        )
-        sim_slurmjobid = await simulation_service_slurm.submit_ecoli_simulation_job(
-            ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id, ssh=ssh
-        )
-        assert sim_slurmjobid is not None
+    random_string = "".join(random.choices(string.hexdigits, k=7))
+    correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string, simulator=simulator)
+    sim_job_id = await simulation_service_slurm.submit_ecoli_simulation_job(
+        ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
+    )
+    assert sim_job_id is not None
 
-        hpcrun = await database_service.insert_hpcrun(
-            external_job_id=str(sim_slurmjobid),
-            job_backend=JobBackend.SLURM,
-            job_type=JobType.SIMULATION,
-            ref_id=simulation.database_id,
-            correlation_id=correlation_id,
-        )
-        assert hpcrun is not None
-        assert hpcrun.slurmjobid == sim_slurmjobid
-        assert hpcrun.job_type == JobType.SIMULATION
-        assert hpcrun.ref_id == simulation.database_id
+    hpcrun = await database_service.insert_hpcrun(
+        job_id=sim_job_id,
+        job_type=JobType.SIMULATION,
+        ref_id=simulation.database_id,
+        correlation_id=correlation_id,
+    )
+    assert hpcrun is not None
+    assert hpcrun.job_id == sim_job_id
+    assert hpcrun.job_type == JobType.SIMULATION
+    assert hpcrun.ref_id == simulation.database_id
 
-        start_time = time.time()
-        while start_time + 300 > time.time():  # 5 minutes for simulation to complete
-            sim_slurmjob = await simulation_service_slurm.get_slurm_job_status(slurmjobid=sim_slurmjobid, ssh=ssh)
-            if sim_slurmjob is not None and sim_slurmjob.is_done():
-                break
-            await asyncio.sleep(5)
+    start_time = time.time()
+    while start_time + 300 > time.time():  # 5 minutes for simulation to complete
+        sim_job_info = await simulation_service_slurm.get_job_status(job_id=sim_job_id)
+        if sim_job_info is not None and sim_job_info.status in (
+            JobStatus.COMPLETED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+        ):
+            break
+        await asyncio.sleep(5)
 
-        assert sim_slurmjob is not None
-        assert sim_slurmjob.is_done()
-        assert sim_slurmjob.job_id == sim_slurmjobid
-        assert sim_slurmjob.name.startswith(f"sim-{commit_hash}-")
+    assert sim_job_info is not None
+    assert sim_job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+    assert sim_job_info.job_id == str(sim_job_id)

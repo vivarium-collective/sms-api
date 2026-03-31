@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import pytest
 import pytest_asyncio
 
+from sms_api.common.models import JobId
 from sms_api.dependencies import (
     get_simulation_service,
     get_ssh_session_service_or_none,
@@ -36,18 +37,14 @@ async def simulation_service_slurm(
 
 
 @pytest.fixture
-def expected_build_slurm_job_id() -> int:
-    """
-    Fixture to provide the expected Slurm job ID for build jobs.
-    """
-    return 999
+def expected_build_job_id() -> JobId:
+    """Fixture to provide the expected job ID for build jobs."""
+    return JobId.slurm(999)
 
 
 @pytest.fixture(scope="function")
 def mock_ssh_session_service() -> Generator[MockSSHSessionService, None, None]:
-    """
-    Fixture to provide a mock SSH session service for tests that don't need real SSH.
-    """
+    """Fixture to provide a mock SSH session service for tests that don't need real SSH."""
     saved_ssh_service = get_ssh_session_service_or_none()
     mock_service = MockSSHSessionService()
     set_ssh_session_service(mock_service)  # type: ignore[arg-type]
@@ -59,15 +56,13 @@ def mock_ssh_session_service() -> Generator[MockSSHSessionService, None, None]:
 
 @pytest.fixture(scope="function")
 def simulation_service_mock_clone_and_build(
-    expected_build_slurm_job_id: int,
+    expected_build_job_id: JobId,
     mock_ssh_session_service: MockSSHSessionService,
 ) -> Generator[SimulationServiceMockCloneAndBuild, None, None]:
-    """
-    Fixture to provide a mock simulation service that clones a repository and submits a build job.
-    """
+    """Fixture to provide a mock simulation service that clones a repository and submits a build job."""
     saved_simulation_service = get_simulation_service()
     simulation_service_mock_clone_and_build = SimulationServiceMockCloneAndBuild(
-        expected_build_slurm_job_id=expected_build_slurm_job_id
+        expected_build_job_id=expected_build_job_id
     )
     set_simulation_service(simulation_service_mock_clone_and_build)
 
@@ -78,22 +73,18 @@ def simulation_service_mock_clone_and_build(
 
 @pytest.fixture
 def expected_parca_database_id() -> int:
-    """
-    Fixture to provide the expected Slurm job ID for build jobs.
-    """
+    """Fixture to provide the expected database ID for parca datasets."""
     return 12345
 
 
 @pytest.fixture(scope="function")
 def simulation_service_mock_parca(
-    expected_build_slurm_job_id: int,
+    expected_build_job_id: JobId,
     mock_ssh_session_service: MockSSHSessionService,
 ) -> Generator[SimulationServiceMockParca, None, None]:
-    """
-    Fixture to provide a mock simulation service that submits a parca job.
-    """
+    """Fixture to provide a mock simulation service that submits a parca job."""
     saved_simulation_service = get_simulation_service()
-    simulation_service_mock_parca = SimulationServiceMockParca(expected_slurmjobid=expected_build_slurm_job_id)
+    simulation_service_mock_parca = SimulationServiceMockParca(expected_job_id=expected_build_job_id)
     set_simulation_service(simulation_service_mock_parca)
 
     yield simulation_service_mock_parca

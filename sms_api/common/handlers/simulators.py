@@ -2,9 +2,8 @@ import logging
 
 from fastapi import HTTPException
 
-from sms_api.common.models import JobBackend
 from sms_api.common.simulator_defaults import ACCEPTED_REPOS, DEFAULT_BRANCH, DEFAULT_REPO, RepoUrl
-from sms_api.dependencies import get_database_service, get_simulation_service, get_ssh_session_service
+from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
     JobType,
@@ -107,13 +106,9 @@ async def upload_simulator(
         verify_simulator_payload(simulator)
 
         # Submit build job (which now includes cloning the repository)
-        async with get_ssh_session_service().session() as ssh:
-            build_slurmjobid = await simulation_service_slurm.submit_build_image_job(
-                simulator_version=simulator, ssh=ssh
-            )
+        build_job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
         await database_service.insert_hpcrun(
-            external_job_id=str(build_slurmjobid),
-            job_backend=JobBackend.SLURM,
+            job_id=build_job_id,
             job_type=JobType.BUILD_IMAGE,
             ref_id=simulator.database_id,
             correlation_id="N/A",

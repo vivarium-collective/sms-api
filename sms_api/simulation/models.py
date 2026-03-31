@@ -6,9 +6,9 @@ from dataclasses import field
 from typing import Any
 
 from pydantic import BaseModel as _BaseModel
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import ConfigDict, Field, computed_field, field_validator
 
-from sms_api.common.models import JobBackend, JobStatus
+from sms_api.common.models import JobBackend, JobId, JobStatus
 from sms_api.config import get_settings
 
 
@@ -36,9 +36,7 @@ class JobType(enum.Enum):
 
 class HpcRun(BaseModel):
     database_id: int
-    slurmjobid: int | None = None  # SLURM job ID (set for slurm backend)
-    k8s_job_name: str | None = None  # Kubernetes Job name (set for k8s backend)
-    job_backend: str = JobBackend.SLURM
+    job_id: JobId = Field(exclude=True)  # Backend-tagged job identifier (not serialized; use computed fields)
     correlation_id: str  # to correlate with the WorkerEvent, if applicable ("N/A" if not applicable)
     job_type: JobType
     ref_id: int  # primary key of the object this HPC run is associated with (sim, parca, etc.)
@@ -47,14 +45,21 @@ class HpcRun(BaseModel):
     end_time: str | None = None  # ISO format datetime string or None if still running
     error_message: str | None = None  # Error message if the simulation failed
 
+    # Computed fields for API serialization compatibility
+    @computed_field  # type: ignore[prop-decorator]
     @property
-    def external_job_id(self) -> str:
-        """Return the backend-appropriate job ID as a string."""
-        if self.k8s_job_name is not None:
-            return self.k8s_job_name
-        if self.slurmjobid is not None:
-            return str(self.slurmjobid)
-        raise ValueError("HpcRun has neither slurmjobid nor k8s_job_name set")
+    def slurmjobid(self) -> int | None:
+        return self.job_id.as_slurm_int if self.job_id.backend == JobBackend.SLURM else None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def k8s_job_name(self) -> str | None:
+        return self.job_id.value if self.job_id.backend == JobBackend.K8S else None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def job_backend(self) -> str:
+        return self.job_id.backend.value
 
 
 class SimulationRun(BaseModel):
@@ -344,4 +349,4 @@ class Simulation(BaseModel):
     simulation_config_filename: str
     experiment_id: str
     last_updated: str = Field(default=str(datetime.datetime.now()))
-    job_id: int | None = None
+    job_id: str | None = None  # Backend-specific job ID (str(slurm_int) or k8s_job_name)

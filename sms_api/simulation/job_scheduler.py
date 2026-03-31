@@ -6,7 +6,7 @@ from async_lru import alru_cache
 from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobBackend, JobStatus
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
@@ -91,19 +91,19 @@ class JobScheduler:
         if not running_jobs:
             logger.debug("No active jobs found for polling.")
             return
-        job_ids = [job.slurmjobid for job in running_jobs if job.slurmjobid]
-        if not job_ids:
-            logger.debug("No valid slurm job IDs found in running jobs.")
+        # Filter to SLURM-backend jobs (K8s jobs will be polled by K8sJobStatusService)
+        slurm_runs = [job for job in running_jobs if job.job_id.backend == JobBackend.SLURM]
+        if not slurm_runs:
+            logger.debug("No active SLURM jobs found for polling.")
             return
+        slurm_job_ids = [job.job_id.as_slurm_int for job in slurm_runs]
         async with get_ssh_session_service().session() as ssh:
-            slurm_jobs_from_squeue = await self.slurm_service.get_job_status_squeue(ssh, job_ids)
-            slurm_jobs_from_sacct = await self.slurm_service.get_job_status_scontrol(ssh, job_ids)
+            slurm_jobs_from_squeue = await self.slurm_service.get_job_status_squeue(ssh, slurm_job_ids)
+            slurm_jobs_from_sacct = await self.slurm_service.get_job_status_scontrol(ssh, slurm_job_ids)
         slurm_job_map = {job.job_id: job for job in slurm_jobs_from_squeue}
         slurm_job_map.update({job.job_id: job for job in slurm_jobs_from_sacct})
-        for hpc_run in running_jobs:
-            if hpc_run.slurmjobid is None:
-                continue
-            slurm_job = slurm_job_map.get(hpc_run.slurmjobid)
+        for hpc_run in slurm_runs:
+            slurm_job = slurm_job_map.get(hpc_run.job_id.as_slurm_int)
             if not slurm_job or not slurm_job.job_state:
                 continue
             new_status = JobStatus.from_slurm_state(slurm_job.job_state)

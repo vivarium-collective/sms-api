@@ -2,8 +2,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any, override
 
-from sms_api.common.hpc.models import SlurmJob
-from sms_api.common.ssh.ssh_service import SSHSession
+from sms_api.common.hpc.job_service import JobStatusInfo
+from sms_api.common.models import JobId
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
     ParcaDataset,
@@ -42,25 +42,29 @@ class ConcreteSimulationService(SimulationService):
         raise NotImplementedError()
 
     @override
-    async def submit_build_image_job(self, simulator_version: SimulatorVersion, ssh: SSHSession) -> int:
+    async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> JobId:
         raise NotImplementedError()
 
     @override
-    async def submit_parca_job(self, parca_dataset: ParcaDataset, ssh: SSHSession) -> int:
+    async def submit_parca_job(self, parca_dataset: ParcaDataset) -> JobId:
         raise NotImplementedError()
 
     @override
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str, ssh: SSHSession
-    ) -> int:
+        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str
+    ) -> JobId:
         raise NotImplementedError
 
     @override
-    async def get_slurm_job_status(self, slurmjobid: int, ssh: SSHSession) -> SlurmJob | None:
+    async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
         raise NotImplementedError
 
     @override
-    async def cancel_job(self, job_id: str) -> None:
+    async def get_job_status(self, job_id: JobId) -> JobStatusInfo | None:
+        raise NotImplementedError
+
+    @override
+    async def cancel_job(self, job_id: JobId) -> None:
         raise NotImplementedError
 
     @override
@@ -70,15 +74,15 @@ class ConcreteSimulationService(SimulationService):
 
 class SimulationServiceMockCloneAndBuild(ConcreteSimulationService):
     submit_build_args: tuple[Any, ...] = ()
-    expected_build_slurm_job_id: int = -1
+    expected_build_job_id: JobId = JobId.slurm(-1)
 
-    def __init__(self, expected_build_slurm_job_id: int) -> None:
-        self.expected_build_slurm_job_id = expected_build_slurm_job_id
+    def __init__(self, expected_build_job_id: JobId = JobId.slurm(-1)) -> None:
+        self.expected_build_job_id = expected_build_job_id
 
     @override
-    async def submit_build_image_job(self, simulator_version: SimulatorVersion, ssh: SSHSession) -> int:
+    async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> JobId:
         self.submit_build_args = (simulator_version,)
-        return self.expected_build_slurm_job_id
+        return self.expected_build_job_id
 
 
 class SimulationServiceMockParca(ConcreteSimulationService):
@@ -91,11 +95,11 @@ class SimulationServiceMockParca(ConcreteSimulationService):
             ),
         ),
     )
-    expected_slurmjobid: int
+    expected_job_id: JobId
 
-    def __init__(self, expected_slurmjobid: int) -> None:
-        self.expected_slurmjobid = expected_slurmjobid
+    def __init__(self, expected_job_id: JobId = JobId.slurm(-1)) -> None:
+        self.expected_job_id = expected_job_id
 
     @override
-    async def submit_parca_job(self, parca_dataset: ParcaDataset, ssh: SSHSession) -> int:
-        return self.expected_slurmjobid
+    async def submit_parca_job(self, parca_dataset: ParcaDataset) -> JobId:
+        return self.expected_job_id

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from sms_api.analysis.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisDTO
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobBackend, JobId, JobStatus
 from sms_api.simulation.models import (
     HpcRun,
     JobType,
@@ -98,15 +98,22 @@ class ORMHpcRun(Base):
     )
     jobref_simulator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("simulator.id"), nullable=True, index=True)
 
+    def _build_job_id(self) -> JobId:
+        """Construct a JobId from the ORM primitive columns."""
+        backend = JobBackend(self.job_backend)
+        if backend == JobBackend.SLURM and self.slurmjobid is not None:
+            return JobId.slurm(self.slurmjobid)
+        elif backend == JobBackend.K8S and self.k8s_job_name is not None:
+            return JobId.k8s(self.k8s_job_name)
+        raise RuntimeError(f"ORMHpcRun {self.id} has job_backend={self.job_backend} but no matching job ID column set")
+
     def to_hpc_run(self) -> HpcRun:
         ref_id = self.jobref_simulation_id or self.jobref_parca_dataset_id or self.jobref_simulator_id
         if ref_id is None:
             raise RuntimeError("ORMHpcRun must have at least one job reference set.")
         return HpcRun(
             database_id=self.id,
-            slurmjobid=self.slurmjobid,
-            k8s_job_name=self.k8s_job_name,
-            job_backend=self.job_backend,
+            job_id=self._build_job_id(),
             correlation_id=self.correlation_id,
             job_type=self.job_type.to_job_type(),
             ref_id=ref_id,

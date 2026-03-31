@@ -6,7 +6,7 @@ Run with: uv run pytest tests/api/ecoli/test_cancel.py -v
 import pytest
 
 from sms_api.common.hpc.job_service import JobStatusUpdate
-from sms_api.common.models import JobBackend, JobStatus
+from sms_api.common.models import JobBackend, JobId, JobStatus
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
     JobType,
@@ -22,8 +22,7 @@ async def test_cancel_running_simulation(
     """Test cancelling a running simulation updates status to CANCELLED."""
     simulation = await database_service.insert_simulation(sim_request=experiment_request)
     hpcrun = await database_service.insert_hpcrun(
-        external_job_id="12345",
-        job_backend=JobBackend.SLURM,
+        job_id=JobId.slurm(12345),
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id="test-correlation",
@@ -48,8 +47,7 @@ async def test_cancel_with_error_message(
     """Test that cancel can record an error message."""
     simulation = await database_service.insert_simulation(sim_request=experiment_request)
     hpcrun = await database_service.insert_hpcrun(
-        external_job_id="12345",
-        job_backend=JobBackend.SLURM,
+        job_id=JobId.slurm(12345),
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id="test-correlation",
@@ -78,9 +76,8 @@ async def test_cancel_already_completed_is_noop(
     from tests.fixtures.simulation_service_mocks import ConcreteSimulationService
 
     simulation = await database_service.insert_simulation(sim_request=experiment_request)
-    hpcrun = await database_service.insert_hpcrun(
-        external_job_id="12345",
-        job_backend=JobBackend.SLURM,
+    await database_service.insert_hpcrun(
+        job_id=JobId.slurm(12345),
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id="test-correlation",
@@ -88,6 +85,8 @@ async def test_cancel_already_completed_is_noop(
 
     # Mark as completed
     update = JobStatusUpdate(job_id="12345", status=JobStatus.COMPLETED)
+    hpcrun = await database_service.get_hpcrun_by_ref(ref_id=simulation.database_id, job_type=JobType.SIMULATION)
+    assert hpcrun is not None
     await database_service.update_hpcrun_status(hpcrun_id=hpcrun.database_id, update=update)
 
     # Cancel should return COMPLETED without calling cancel_job
@@ -101,39 +100,37 @@ async def test_cancel_already_completed_is_noop(
 
 
 @pytest.mark.asyncio
-async def test_hpcrun_external_job_id_slurm(
+async def test_hpcrun_job_id_slurm(
     experiment_request: SimulationRequest,
     database_service: DatabaseServiceSQL,
 ) -> None:
-    """Test that external_job_id returns SLURM job ID as string."""
+    """Test that HpcRun.job_id round-trips correctly for SLURM backend."""
     simulation = await database_service.insert_simulation(sim_request=experiment_request)
     hpcrun = await database_service.insert_hpcrun(
-        external_job_id="99999",
-        job_backend=JobBackend.SLURM,
+        job_id=JobId.slurm(99999),
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id="test-correlation",
     )
-    assert hpcrun.external_job_id == "99999"
-    assert hpcrun.slurmjobid == 99999
-    assert hpcrun.job_backend == JobBackend.SLURM
+    assert hpcrun.job_id == JobId.slurm(99999)
+    assert hpcrun.job_id.backend == JobBackend.SLURM
+    assert hpcrun.job_id.as_slurm_int == 99999
+    assert str(hpcrun.job_id) == "99999"
 
 
 @pytest.mark.asyncio
-async def test_hpcrun_external_job_id_k8s(
+async def test_hpcrun_job_id_k8s(
     experiment_request: SimulationRequest,
     database_service: DatabaseServiceSQL,
 ) -> None:
-    """Test that external_job_id returns K8s job name."""
+    """Test that HpcRun.job_id round-trips correctly for K8s backend."""
     simulation = await database_service.insert_simulation(sim_request=experiment_request)
     hpcrun = await database_service.insert_hpcrun(
-        external_job_id="nf-sim-abc1234",
-        job_backend=JobBackend.K8S,
+        job_id=JobId.k8s("nf-sim-abc1234"),
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id="test-correlation",
     )
-    assert hpcrun.external_job_id == "nf-sim-abc1234"
-    assert hpcrun.k8s_job_name == "nf-sim-abc1234"
-    assert hpcrun.slurmjobid is None
-    assert hpcrun.job_backend == JobBackend.K8S
+    assert hpcrun.job_id == JobId.k8s("nf-sim-abc1234")
+    assert hpcrun.job_id.backend == JobBackend.K8S
+    assert str(hpcrun.job_id) == "nf-sim-abc1234"

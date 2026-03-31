@@ -10,7 +10,7 @@ from typing_extensions import override
 
 from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.common.hpc.job_service import JobStatusUpdate
-from sms_api.common.models import JobBackend
+from sms_api.common.models import JobBackend, JobId
 from sms_api.simulation.models import (
     HpcRun,
     JobType,
@@ -88,15 +88,13 @@ class DatabaseService(ABC):
     @abstractmethod
     async def insert_hpcrun(
         self,
-        external_job_id: str,
-        job_backend: JobBackend,
+        job_id: JobId,
         job_type: JobType,
         ref_id: int,
         correlation_id: str,
     ) -> HpcRun:
         """
-        :param external_job_id: Backend-specific job identifier (SLURM int-as-string or K8s job name).
-        :param job_backend: "slurm" or "k8s".
+        :param job_id: Backend-tagged job identifier.
         :param job_type: (`JobType`) job type to be run. Choose one of the following:
             `JobType.SIMULATION`(/vecoli/run), `JobType.PARCA`(/vecoli/parca), `JobType.BUILD_IMAGE`(/simulator/new)
         :param ref_id: primary key of the object this HPC run is associated with (sim, parca, etc.).
@@ -350,8 +348,7 @@ class DatabaseServiceSQL(DatabaseService):
     @override
     async def insert_hpcrun(
         self,
-        external_job_id: str,
-        job_backend: JobBackend,
+        job_id: JobId,
         job_type: JobType,
         ref_id: int,
         correlation_id: str,
@@ -360,19 +357,15 @@ class DatabaseServiceSQL(DatabaseService):
         jobref_parca_dataset_id = ref_id if job_type == JobType.PARCA else None
         jobref_simulator_id = ref_id if job_type == JobType.BUILD_IMAGE else None
 
-        # Set the appropriate job ID field based on backend
-        slurmjobid: int | None = None
-        k8s_job_name: str | None = None
-        if job_backend == JobBackend.SLURM:
-            slurmjobid = int(external_job_id)
-        elif job_backend == JobBackend.K8S:
-            k8s_job_name = external_job_id
+        # Decompose JobId into ORM primitive columns
+        slurmjobid = job_id.as_slurm_int if job_id.backend == JobBackend.SLURM else None
+        k8s_job_name = job_id.value if job_id.backend == JobBackend.K8S else None
 
         async with self.async_sessionmaker() as session, session.begin():
             orm_hpc_run = ORMHpcRun(
                 slurmjobid=slurmjobid,
                 k8s_job_name=k8s_job_name,
-                job_backend=job_backend,
+                job_backend=job_id.backend,
                 job_type=JobTypeDB.from_job_type(job_type),
                 status=JobStatusDB.RUNNING,
                 jobref_simulator_id=jobref_simulator_id,

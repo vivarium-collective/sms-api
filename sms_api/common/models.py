@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import cast
 
@@ -37,6 +38,36 @@ class JobBackend(StrEnumBase):
 
     SLURM = "slurm"
     K8S = "k8s"
+
+
+@dataclass(frozen=True)
+class JobId:
+    """Backend-tagged job identifier.
+
+    Wraps a backend-specific job identifier string with its backend type.
+    Use the factory methods to construct instances.
+    """
+
+    value: str
+    backend: JobBackend
+
+    @classmethod
+    def slurm(cls, slurm_id: int) -> "JobId":
+        return cls(value=str(slurm_id), backend=JobBackend.SLURM)
+
+    @classmethod
+    def k8s(cls, job_name: str) -> "JobId":
+        return cls(value=job_name, backend=JobBackend.K8S)
+
+    @property
+    def as_slurm_int(self) -> int:
+        """Get SLURM job ID as int. Raises TypeError if not a SLURM job."""
+        if self.backend != JobBackend.SLURM:
+            raise TypeError(f"Not a SLURM job ID: {self}")
+        return int(self.value)
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class JobStatus(StrEnumBase):
