@@ -91,6 +91,15 @@ class SimulationService(ABC):
         pass
 
     @abstractmethod
+    async def cancel_job(self, job_id: str) -> None:
+        """Cancel a running job.
+
+        Args:
+            job_id: Backend-specific job identifier (e.g. SLURM job ID as string).
+        """
+        pass
+
+    @abstractmethod
     async def close(self) -> None:
         pass
 
@@ -432,6 +441,15 @@ class SimulationServiceHpc(SimulationService):
             return job_ids[0]
         else:
             raise RuntimeError(f"Multiple jobs found with ID {slurmjobid}: {job_ids}")
+
+    @override
+    async def cancel_job(self, job_id: str) -> None:
+        """Cancel a SLURM job via scancel."""
+        async with get_ssh_session_service().session() as ssh:
+            return_code, _stdout, stderr = await ssh.run_command(f"scancel {job_id}")
+            if return_code != 0:
+                raise RuntimeError(f"Failed to cancel SLURM job {job_id}: {stderr.strip()}")
+            logger.info(f"Cancelled SLURM job {job_id}")
 
     @override
     async def close(self) -> None:

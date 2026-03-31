@@ -150,6 +150,35 @@ async def get_simulation_status(id: int = FastAPIPath(...)) -> SimulationRun:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@config.router.delete(
+    path="/simulations/{id}/cancel",
+    response_model=SimulationRun,
+    operation_id="cancel-ecoli-simulation",
+    tags=["Simulations"],
+    dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
+    summary="Cancel a running simulation",
+)
+async def cancel_simulation(id: int = FastAPIPath(description="Database ID of the simulation")) -> SimulationRun:
+    """Cancel a running simulation by killing its backend job."""
+    sim_service = get_simulation_service()
+    if sim_service is None:
+        raise HTTPException(status_code=500, detail="Simulation service is not initialized")
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    try:
+        return await handlers.simulations.cancel_simulation(
+            db_service=db_service,
+            simulation_service=sim_service,
+            simulation_id=id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("Error cancelling simulation")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @config.router.get(
     path="/simulations/{id}/log",
     operation_id="get-ecoli-simulation-log",
