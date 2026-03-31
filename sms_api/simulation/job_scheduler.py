@@ -3,6 +3,7 @@ import logging
 
 from async_lru import alru_cache
 
+from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
 from sms_api.common.models import JobStatus
@@ -100,6 +101,8 @@ class JobScheduler:
         slurm_job_map = {job.job_id: job for job in slurm_jobs_from_squeue}
         slurm_job_map.update({job.job_id: job for job in slurm_jobs_from_sacct})
         for hpc_run in running_jobs:
+            if hpc_run.slurmjobid is None:
+                continue
             slurm_job = slurm_job_map.get(hpc_run.slurmjobid)
             if not slurm_job or not slurm_job.job_state:
                 continue
@@ -107,9 +110,26 @@ class JobScheduler:
             if new_status == hpc_run.status:
                 logger.debug(f"HpcRun {hpc_run.database_id} is still running with status {new_status}")
                 continue
-            if hpc_run.status != new_status:
-                await self.database_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, new_slurm_job=slurm_job)
-                logger.info(f"Updated HpcRun {hpc_run.database_id} status to {new_status}")
+
+            # Build error message for failed/cancelled jobs
+            error_message = None
+            if new_status in (JobStatus.FAILED, JobStatus.CANCELLED):
+                error_parts = [f"SLURM state: {slurm_job.job_state}"]
+                if slurm_job.reason:
+                    error_parts.append(f"reason: {slurm_job.reason}")
+                if slurm_job.exit_code:
+                    error_parts.append(f"exit_code: {slurm_job.exit_code}")
+                error_message = ", ".join(error_parts)
+
+            update = JobStatusUpdate(
+                job_id=str(slurm_job.job_id),
+                status=new_status,
+                start_time=slurm_job.start_time,
+                end_time=slurm_job.end_time,
+                error_message=error_message,
+            )
+            await self.database_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, update=update)
+            logger.info(f"Updated HpcRun {hpc_run.database_id} status to {new_status}")
 
     async def close(self) -> None:
         await self.stop_polling()

@@ -106,7 +106,8 @@ async def test_simulate(
         assert sim_slurmjobid is not None
 
         hpcrun = await database_service.insert_hpcrun(
-            slurmjobid=sim_slurmjobid,
+            external_job_id=str(sim_slurmjobid),
+            job_backend="slurm",
             job_type=JobType.SIMULATION,
             ref_id=simulation.database_id,
             correlation_id=correlation_id,

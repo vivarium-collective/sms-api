@@ -71,7 +71,8 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
     random_string = "".join(random.choices(string.hexdigits, k=7))
     correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string, simulator=simulator)
     hpcrun = await database_service.insert_hpcrun(
-        slurmjobid=slurm_job.job_id,
+        external_job_id=str(slurm_job.job_id),
+        job_backend="slurm",
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id=correlation_id,

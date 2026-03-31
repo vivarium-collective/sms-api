@@ -60,6 +60,10 @@ class ConcreteSimulationService(SimulationService):
         raise NotImplementedError
 
     @override
+    async def cancel_job(self, job_id: str) -> None:
+        raise NotImplementedError
+
+    @override
     async def close(self) -> None:
         raise NotImplementedError
 

@@ -41,6 +41,7 @@ class JobStatus(StrEnumBase):
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
+    CANCELLED = "cancelled"
     FAILED = "failed"
 
     @classmethod
@@ -78,7 +79,7 @@ _SLURM_STATE_MAP: dict[str, JobStatus] = {
     "COMPLETED": JobStatus.COMPLETED,
     # Failed states
     "FAILED": JobStatus.FAILED,
-    "CANCELLED": JobStatus.FAILED,
+    "CANCELLED": JobStatus.CANCELLED,
     "TIMEOUT": JobStatus.FAILED,
     "NODE_FAIL": JobStatus.FAILED,
     "OUT_OF_MEMORY": JobStatus.FAILED,

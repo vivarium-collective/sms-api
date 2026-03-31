@@ -111,7 +111,8 @@ async def upload_simulator(
                 simulator_version=simulator, ssh=ssh
             )
         await database_service.insert_hpcrun(
-            slurmjobid=build_slurmjobid,
+            external_job_id=str(build_slurmjobid),
+            job_backend="slurm",
             job_type=JobType.BUILD_IMAGE,
             ref_id=simulator.database_id,
             correlation_id="N/A",

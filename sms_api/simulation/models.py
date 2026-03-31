@@ -36,7 +36,9 @@ class JobType(enum.Enum):
 
 class HpcRun(BaseModel):
     database_id: int
-    slurmjobid: int  # Slurm job ID if applicable
+    slurmjobid: int | None = None  # SLURM job ID (set for slurm backend)
+    k8s_job_name: str | None = None  # Kubernetes Job name (set for k8s backend)
+    job_backend: str = "slurm"  # "slurm" or "k8s"
     correlation_id: str  # to correlate with the WorkerEvent, if applicable ("N/A" if not applicable)
     job_type: JobType
     ref_id: int  # primary key of the object this HPC run is associated with (sim, parca, etc.)
@@ -44,6 +46,15 @@ class HpcRun(BaseModel):
     start_time: str | None = None  # ISO format datetime string
     end_time: str | None = None  # ISO format datetime string or None if still running
     error_message: str | None = None  # Error message if the simulation failed
+
+    @property
+    def external_job_id(self) -> str:
+        """Return the backend-appropriate job ID as a string."""
+        if self.k8s_job_name is not None:
+            return self.k8s_job_name
+        if self.slurmjobid is not None:
+            return str(self.slurmjobid)
+        raise ValueError("HpcRun has neither slurmjobid nor k8s_job_name set")
 
 
 class SimulationRun(BaseModel):
