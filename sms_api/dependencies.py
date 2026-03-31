@@ -12,7 +12,7 @@ from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_gcs import FileServiceGCS
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
 from sms_api.common.storage.file_service_s3 import FileServiceS3
-from sms_api.config import get_settings
+from sms_api.config import get_job_backend, get_settings
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.tables_orm import create_db
@@ -161,6 +161,7 @@ async def init_standalone(enable_ssl: bool = True) -> None:
     from sms_api.simulation.simulation_service import SimulationServiceHpc
 
     _settings = get_settings()
+    job_backend = get_job_backend()
 
     try:
         # Initialize file service based on configured backend
@@ -174,10 +175,19 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         else:
             logger.error(f"Unsupported storage backend: {_settings.storage_backend}")
 
-        # set services that don't require params (currently using hpc)
-        logger.info("Initializing simulation service (HPC)...")
-        set_simulation_service(SimulationServiceHpc())
-        logger.info("✓ Simulation service initialized")
+        # Initialize simulation service based on job backend
+        if job_backend == "k8s":
+            from sms_api.common.hpc.k8s_job_service import K8sJobService
+            from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
+
+            logger.info("Initializing simulation service (K8s + AWS Batch)...")
+            k8s_job_service = K8sJobService(namespace=_settings.k8s_job_namespace)
+            set_simulation_service(SimulationServiceK8s(k8s_job_service=k8s_job_service))
+            logger.info("✓ Simulation service initialized (K8s)")
+        else:
+            logger.info("Initializing simulation service (HPC/SLURM)...")
+            set_simulation_service(SimulationServiceHpc())
+            logger.info("✓ Simulation service initialized (SLURM)")
 
         # Validate and initialize Postgres connection
         logger.info("Validating Postgres configuration...")
@@ -217,27 +227,47 @@ async def init_standalone(enable_ssl: bool = True) -> None:
             db_service = DatabaseServiceSQL(engine)
             set_database_service(db_service)
 
-        # Initialize SSHSessionService singleton
-        logger.info("Initializing SSH session service...")
-        settings = get_settings()
-        ssh_key_path = Path(settings.slurm_submit_key_path)
-        if not ssh_key_path.exists():
-            logger.warning(f"SSH key file not found: {ssh_key_path}")
+        # Initialize SSH session service
+        # SLURM backend: SSH to HPC login node for all operations
+        # K8s backend: SSH to EC2 submit node for ARM64 Docker image builds only
+        if job_backend == "k8s" and _settings.submit_node_host:
+            logger.info("Initializing SSH session service (EC2 submit node for image builds)...")
+            ssh_key_path = Path(_settings.submit_node_key_path)
+            ssh_session_service = SSHSessionService(
+                hostname=_settings.submit_node_host,
+                username=_settings.submit_node_user,
+                key_path=ssh_key_path,
+            )
+            set_ssh_session_service(ssh_session_service)
+            submit_node = f"{_settings.submit_node_user}@{_settings.submit_node_host}"
+            logger.info(f"✓ SSHSessionService initialized for {submit_node}")
+        elif job_backend == "slurm":
+            logger.info("Initializing SSH session service (SLURM login node)...")
+            settings = get_settings()
+            ssh_key_path = Path(settings.slurm_submit_key_path)
+            if not ssh_key_path.exists():
+                logger.warning(f"SSH key file not found: {ssh_key_path}")
+            else:
+                logger.info(f"SSH key found at: {ssh_key_path}")
+
+            ssh_session_service = SSHSessionService(
+                hostname=settings.slurm_submit_host,
+                username=settings.slurm_submit_user,
+                key_path=ssh_key_path,
+                known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
+            )
+            set_ssh_session_service(ssh_session_service)
+            logger.info(
+                f"✓ SSHSessionService initialized for {settings.slurm_submit_user}@{settings.slurm_submit_host}"
+            )
+
+        # Initialize Slurm service (SLURM backend only)
+        slurm_service: SlurmService | None = None
+        if job_backend == "slurm":
+            slurm_service = SlurmService()
+            logger.info("✓ SlurmService initialized")
         else:
-            logger.info(f"SSH key found at: {ssh_key_path}")
-
-        ssh_session_service = SSHSessionService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=ssh_key_path,
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
-        )
-        set_ssh_session_service(ssh_session_service)
-        logger.info(f"✓ SSHSessionService initialized for {settings.slurm_submit_user}@{settings.slurm_submit_host}")
-
-        # Initialize Slurm service (uses SSHSessionService singleton)
-        slurm_service = SlurmService()
-        logger.info("✓ SlurmService initialized")
+            logger.info("Skipping SlurmService initialization (using K8s backend)")
 
         # Initialize messaging service
         redis_host = _settings.redis_internal_host

@@ -17,13 +17,16 @@ logger = logging.getLogger(__name__)
 
 class JobScheduler:
     database_service: DatabaseService
-    slurm_service: SlurmService
+    slurm_service: SlurmService | None
     messaging_service: MessagingService
     _polling_task: asyncio.Task[None] | None = None
     _stop_event: asyncio.Event
 
     def __init__(
-        self, messaging_service: MessagingService, database_service: DatabaseService, slurm_service: SlurmService
+        self,
+        messaging_service: MessagingService,
+        database_service: DatabaseService,
+        slurm_service: SlurmService | None = None,
     ):
         self.messaging_service = messaging_service
         self.database_service = database_service
@@ -86,12 +89,15 @@ class JobScheduler:
             await asyncio.sleep(interval_seconds)
 
     async def update_running_jobs(self) -> None:
+        if self.slurm_service is None:
+            return  # No SLURM polling when using K8s backend
+
         # Fetch all active (PENDING or RUNNING) HpcRun jobs
         running_jobs = await self.database_service.list_active_hpcruns()
         if not running_jobs:
             logger.debug("No active jobs found for polling.")
             return
-        # Filter to SLURM-backend jobs (K8s jobs will be polled by K8sJobStatusService)
+        # Filter to SLURM-backend jobs (K8s jobs will be polled separately)
         slurm_runs = [job for job in running_jobs if job.job_id.backend == JobBackend.SLURM]
         if not slurm_runs:
             logger.debug("No active SLURM jobs found for polling.")
