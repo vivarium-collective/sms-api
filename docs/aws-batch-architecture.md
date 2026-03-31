@@ -1,0 +1,712 @@
+# AWS Batch Workflow Architecture Analysis
+
+> Analysis date: 2026-03-31 (updated)
+> Branch: `aws-batch-full` (from `main`)
+> Goal: Run multiple concurrent Nextflow workflow runs with AWS Batch as the task execution substrate.
+
+## Table of Contents
+
+1. [Repository Findings](#1-repository-findings)
+2. [Current Architecture Summary](#2-current-architecture-summary)
+3. [Existing CDK Infrastructure](#3-existing-cdk-infrastructure)
+4. [Option A: Kubernetes Job per Workflow Run (Recommended)](#4-option-a-kubernetes-job-per-workflow-run-recommended)
+5. [Option B: Pet EC2 Launcher Service](#5-option-b-pet-ec2-launcher-service)
+6. [Testability Comparison](#6-testability-comparison)
+7. [Recommendation](#7-recommendation)
+8. [Detailed Implementation Plan](#8-detailed-implementation-plan)
+9. [Open Questions / Assumptions](#9-open-questions--assumptions)
+10. [Suggested First Slice](#10-suggested-first-implementation-slice)
+
+---
+
+## Constraints
+
+- Application runs on EKS (AMD64 nodes).
+- Workflows are implemented with Nextflow.
+- Nextflow submits its process/task execution to AWS Batch (ARM64/Graviton Spot instances).
+- AWS Batch must remain the task execution substrate.
+- Current prototype uses a dedicated EC2 instance (ARM64) for the Nextflow head/launcher and Docker image builds.
+- Workflows are containerized; S3 is the sole shared storage (no shared filesystem).
+- vEcoli uses `fsspec` with S3 URIs directly for simulation outputs.
+- Expected concurrency: 5-10 concurrent workflow runs.
+- All runs come from a single trusted source.
+- Main pain points: cost, throughput, operational simplicity.
+- Cancel is required.
+- Resume/retry do not need to be first-class features right now (but S3 work dirs make resume easy to add later).
+- The vEcoli task container image must be ARM64 to match Batch compute. This image is built on-the-fly from a specific git commit on an ARM64 EC2 instance, then pushed to ECR.
+
+---
+
+## 1. Repository Findings
+
+### Where workflow submission is initiated
+
+- **API entry point**: `sms_api/api/routers/gateway.py` -- `POST /simulations` calls `run_simulation_workflow()`
+- **Handler orchestration**: `sms_api/common/handlers/simulations.py` -- `run_simulation_workflow()` (line 135) coordinates DB inserts, config resolution, and job submission
+- **Job submission**: `sms_api/simulation/simulation_service.py` -- `SimulationServiceHpc.submit_ecoli_simulation_job()` generates an sbatch script and submits via SSH
+
+### Where workflow status is tracked
+
+- **Database**: `sms_api/simulation/tables_orm.py` -- `ORMHpcRun` table with `status`, `slurmjobid`, `start_time`, `end_time`, `error_message`
+- **Polling loop**: `sms_api/simulation/job_scheduler.py` -- `JobScheduler.update_running_jobs()` polls SLURM every 5s, updates DB
+- **Status query**: `sms_api/common/hpc/slurm_service.py` -- `SlurmService` wraps `squeue` and `scontrol` over SSH
+- **Event stream**: `sms_api/common/hpc/nextflow_weblog.py` -- embedded HTTP server captures Nextflow events as NDJSON during execution
+
+### Existing interfaces for job execution
+
+- **`SimulationService` ABC** (`simulation/simulation_service.py:66`): abstract methods for `submit_build_image_job`, `submit_parca_job`, `submit_ecoli_simulation_job`, `cancel_job`, `get_job_status`, `read_config_template`, `close`
+- **`JobStatusUpdate`** dataclass (`common/hpc/job_service.py`): backend-agnostic status update
+- **`JobStatus` enum** (`common/models.py`): unified status with `from_slurm_state()`, includes `CANCELLED`
+- **`HpcRun` model** (`simulation/models.py`): tracks a job with `slurmjobid`, `k8s_job_name`, `job_backend`, `external_job_id` property, `correlation_id`, `job_type`, `ref_id`, `status`
+
+### Existing workflow pipeline (SLURM path)
+
+The API manages a multi-step pipeline where each step is a separate job:
+
+1. **Build Image** (`submit_build_image_job`) -- clone vEcoli at a specific commit, build Singularity/Apptainer container image
+2. **Run Parca** (`submit_parca_job`) -- parameter calculator generates simulation dataset
+3. **Run Simulation** (`submit_ecoli_simulation_job`) -- Nextflow workflow executing the simulation
+4. **Run Analysis** -- post-simulation analysis
+
+Each step is tracked as a separate `HpcRun` record with its own job type (`BUILD_IMAGE`, `PARCA`, `SIMULATION`). The build step is already managed independently from the simulation step -- the database tracks simulator versions and their build status separately.
+
+### Nextflow integration
+
+- **Nextflow is executed inside a SLURM job** -- the sbatch script in `workflow_slurm_script()` runs a 3-step process: (1) generate Nextflow files via container (`workflow.py --build-only`), (2) fix includes, (3) run `nextflow` on the host
+- **Nextflow profile selection**: `ccam` or `aws_cdk` based on config filename
+- **Nextflow models**: `common/hpc/models.py` has comprehensive Pydantic models for `NextflowWorkflow`, `NextflowStats`, `NextflowTrace`, `NextflowWave`, `NextflowFusion`
+- **vEcoli `workflow.py`** supports `build_image: false` in the config, which skips container build and uses a pre-built image from a registry
+
+### Kubernetes integration
+
+- **No K8s Job creation code exists** -- the codebase has zero `kubernetes` Python client usage
+- **K8s is deployment-only**: `kustomize/base/api.yaml` defines a 3-replica Deployment + Service for the API
+- **Multiple overlays**: `sms-api-rke`, `sms-api-rke-dev`, `sms-api-stanford`, `sms-api-stanford-test`, `sms-api-eks`, `sms-api-local`
+
+### Testing structure
+
+- **Testcontainers**: PostgreSQL (`postgres_fixtures.py`), Redis (`redis_fixtures.py`), MongoDB (`mongodb_fixtures.py`)
+- **Async**: `pytest-asyncio` throughout
+- **Mocks**: `simulation_service_mocks.py` has `ConcreteSimulationService`, `MockSSHSession`, `MockSSHSessionService`
+- **Integration tests**: `tests/integration/test_hpc_workflow.py` (requires SSH), `test_run_workflow_simple.py`
+- **ASGI client**: `httpx.AsyncClient` with `ASGITransport` for in-process API testing
+
+### Configuration model
+
+- **`sms_api/config.py`**: Pydantic `Settings` with SLURM, Postgres, Redis, S3/GCS/Qumulo, GitHub creds
+- **Deployment namespace**: `deployment_namespace` field maps to kustomize overlays
+- **Backend selection**: `job_backend` field on `HpcRun` distinguishes "slurm" vs "k8s"
+
+### Confirmed absent
+
+- No K8s Job creation
+- No direct Nextflow-to-Batch executor integration
+- No Fusion/Wave enablement (models exist, `enabled=False`)
+
+---
+
+## 2. Current Architecture Summary
+
+```
++-------------------------------------+
+|         EKS (Kubernetes, AMD64)     |
+|  +-------------------------------+  |
+|  |   sms-api (FastAPI Deployment)|  |
+|  |   +-- POST /simulations       |  |
+|  |   +-- DELETE /simulations/cancel |
+|  |   +-- JobScheduler (poll 5s)  |  |
+|  |   +-- Redis subscriber        |  |
+|  +----------+--------------------+  |
+|             | SSH                    |
+|  +----------v--------------------+  |
+|  |   PostgreSQL  |  Redis        |  |
+|  +---------------+---------------+  |
++-------------+------|----------------+
+              | SSH (asyncssh)
+              v
++-------------------------------------+
+|     SLURM HPC Cluster               |
+|  +-------------------------------+  |
+|  | Login Node                    |  |
+|  |  +-- sbatch (submit)          |  |
+|  |  +-- squeue/scontrol (poll)   |  |
+|  |  +-- scancel (cancel)        |  |
+|  +----------+--------------------+  |
+|             | SLURM scheduler        |
+|  +----------v--------------------+  |
+|  | Compute Node (sbatch job)     |  |
+|  |  +-- Singularity: workflow.py |  |
+|  |  |   +-- generates NF files   |  |
+|  |  +-- Nextflow head process    |  |
+|  |  |   +-- submits tasks->SLURM |  |
+|  |  |   +-- weblog -> NDJSON     |  |
+|  |  +-- Output -> shared FS      |  |
+|  +-------------------------------+  |
++-------------------------------------+
+```
+
+**Key insight**: Nextflow currently runs as a subprocess inside a SLURM batch job, and Nextflow submits its tasks back to SLURM. The entire system is SSH-mediated.
+
+---
+
+## 3. Existing CDK Infrastructure
+
+The `sms-cdk` repository (`lib/batch-stack.ts`) deploys AWS Batch infrastructure for running vEcoli workflows. This is the target compute backend.
+
+### What already exists
+
+| Component | Details |
+|---|---|
+| **Batch Compute (Spot)** | ARM64/Graviton instances (m8g.2xlarge, c8g.2xlarge, m7g.2xlarge), SPOT_CAPACITY_OPTIMIZED, priority 1 |
+| **Batch Compute (On-Demand)** | Same instance types, BEST_FIT_PROGRESSIVE, priority 2 (fallback) |
+| **Job Queue** | Routes to Spot first, falls back to On-Demand |
+| **EC2 Submit Node** | t4g.medium (ARM64), AL2023, Docker/Java/Nextflow pre-installed, SSM access, 100 GiB GP3 |
+| **S3 Bucket** | Shared bucket for `nextflow/work/` (staging) and `vecoli-output/` (results) |
+| **ECR** | Stores vEcoli task images built on the submit node |
+| **Networking** | Private subnets, NAT gateway, no public IPs |
+| **IAM Roles** | `BatchSubmitNodeRole` (Batch job mgmt, ECR push/pull, S3 rw, PassRole, CW Logs), `BatchComputeRole` (S3 rw, ECR pull, ECS) |
+
+### Architecture constraint: CPU architecture
+
+- **Batch compute**: ARM64 (Graviton). All task containers must be ARM64 images.
+- **EC2 submit node**: ARM64. Builds Docker images natively for the Batch architecture.
+- **EKS nodes**: AMD64. The Nextflow head process (orchestration only) runs here.
+
+The Nextflow head does not execute simulation code. It submits Batch jobs referencing ARM64 images by ECR URI. **The head and task architectures do not need to match.**
+
+### vEcoli workflow config structure
+
+The `aws` section of the workflow config controls Batch execution:
+
+```json
+{
+  "emitter_arg": {
+    "out_uri": "s3://<shared-bucket>/vecoli-output/<experiment-id>"
+  },
+  "aws": {
+    "build_image": false,
+    "container_image": "<account>.dkr.ecr.<region>.amazonaws.com/vecoli:<tag>",
+    "region": "us-gov-west-1",
+    "batch_queue": "<job-queue-name>"
+  },
+  "progress_bar": false
+}
+```
+
+- `build_image: false` -- use a pre-built image from ECR (the API builds it in a separate step)
+- `container_image` -- ECR URI of the ARM64 vEcoli task image
+- `NXF_WORK` environment variable -- `s3://<shared-bucket>/nextflow/work`
+
+### S3 data flow
+
+S3 is the sole shared storage. No shared filesystem between the head and compute nodes.
+
+```
+s3://<shared-bucket>/
+  +-- nextflow/work/          Nextflow task staging (inputs, outputs, scripts)
+  +-- vecoli-output/          Workflow results (parquet, analysis)
+```
+
+vEcoli writes simulation outputs to S3 directly via `fsspec` with S3 URIs. Nextflow manages task-level data staging to/from S3 within containers.
+
+---
+
+## 4. Option A: Kubernetes Job per Workflow Run (Recommended)
+
+### Two-phase execution model
+
+The vEcoli workflow has a hard constraint: the task container image must be ARM64, and building it requires an ARM64 host with Docker. The API already manages image builds as a separate pipeline step (`submit_build_image_job`). This maps naturally to a two-phase model:
+
+| Phase | Where | Architecture | Duration | What |
+|---|---|---|---|---|
+| **1. Build image** | EC2 submit node via SSH/SSM | ARM64 | Minutes | Clone vEcoli at commit, `docker build`, push to ECR |
+| **2. Run workflow** | K8s Job on EKS | AMD64 | Hours | Nextflow head orchestrates Batch tasks via `workflow.py` |
+
+Phase 1 reuses the existing EC2 submit node and SSH/SSM access pattern. Phase 2 replaces the long-running SLURM job (or EC2 tmux session) with an ephemeral K8s Job.
+
+### Target architecture
+
+```
++------------------------------------------+
+|         EKS Cluster (AMD64)              |
+|                                          |
+|  sms-api Deployment                      |
+|  +------------------------------------+  |
+|  | POST /simulations                  |  |
+|  |   1. DB insert (simulator, sim)    |  |
+|  |   2. SSH to EC2: build + push ECR  |  |
+|  |   3. Create K8s Job (NF head)      |  |
+|  |                                    |  |
+|  | JobScheduler                       |  |
+|  |   polls K8s Job status             |  |
+|  |   updates HpcRun in DB            |  |
+|  |                                    |  |
+|  | DELETE /simulations/{id}/cancel    |  |
+|  |   delete K8s Job (Foreground)      |  |
+|  +------------------------------------+  |
+|                                          |
+|  K8s Job: nf-sim-{experiment-id}         |
+|  +------------------------------------+  |
+|  | Nextflow head (AMD64 container)    |  |
+|  | - workflow.py --config ...         |  |
+|  | - build_image: false               |  |
+|  | - NXF_WORK=s3://bucket/nf/work     |  |
+|  | - Submits tasks to Batch queue     |  |
+|  +---------------+--------------------+  |
+|                  |                        |
++------------------------------------------+
+                   | Batch API
+                   v
++------------------------------------------+
+|  AWS Batch (ARM64/Graviton)              |
+|  +------------------------------------+  |
+|  | Spot CE (priority 1)              |  |
+|  | On-Demand CE (priority 2)         |  |
+|  |                                    |  |
+|  | Task containers:                   |  |
+|  |   - Pull ARM64 image from ECR     |  |
+|  |   - Read inputs from S3           |  |
+|  |   - Execute simulation step       |  |
+|  |   - Write outputs to S3           |  |
+|  +------------------------------------+  |
++------------------------------------------+
+                   |
+                   v
++------------------------------------------+
+|  S3 Bucket                               |
+|  +-- nextflow/work/{experiment-id}/      |
+|  +-- vecoli-output/{experiment-id}/      |
++------------------------------------------+
+
++------------------------------------------+
+|  EC2 Submit Node (ARM64, t4g.medium)     |
+|  +------------------------------------+  |
+|  | Used by Phase 1 only:              |  |
+|  |   - Clone vEcoli repo at commit    |  |
+|  |   - docker build (ARM64 native)    |  |
+|  |   - docker push to ECR             |  |
+|  | Access: SSH or SSM from API pod    |  |
+|  +------------------------------------+  |
++------------------------------------------+
+```
+
+### How current code maps to Option A
+
+| Current Component | Option A Phase 1 (Build) | Option A Phase 2 (Workflow) |
+|---|---|---|
+| `SimulationServiceHpc.submit_build_image_job()` | Reuse pattern: SSH to EC2 submit node, build Docker image, push ECR | N/A |
+| `SimulationServiceHpc.submit_ecoli_simulation_job()` | N/A | New: `SimulationServiceK8s` creates K8s Job |
+| `SlurmService.submit_job()` | SSH command to EC2 | `BatchV1Api.create_namespaced_job()` |
+| `SlurmService.get_job_status_squeue()` | SSH poll or SSM | `BatchV1Api.read_namespaced_job_status()` |
+| sbatch script | Shell commands over SSH | K8s Job spec (Python object) |
+| `workflow_slurm_script()` | `docker build && docker push` script | Container `command` + `args` in Job spec |
+| `JobScheduler` polling SLURM | Poll build status via SSH | Poll K8s Job status (in-cluster API, no SSH) |
+| SSH session management | Retained for build phase | Not needed -- ServiceAccount + RBAC |
+
+### New components needed
+
+1. **`SimulationServiceK8s`** -- implements `SimulationService` ABC
+   - `submit_build_image_job()`: SSH/SSM to EC2 submit node, run Docker build + push
+   - `submit_ecoli_simulation_job()`: create K8s Job with Nextflow container
+   - `cancel_job()`: `delete_namespaced_job(propagation_policy="Foreground")`
+   - `get_job_status()`: `read_namespaced_job_status()`
+2. **`K8sJobStatusService`** -- implements `JobStatusService`, maps K8s Job conditions to `JobStatus`
+3. **Nextflow submit container image** (AMD64) -- Dockerfile with Java, Nextflow, vEcoli repo, `workflow.py` entrypoint
+4. **IRSA role** -- same permissions as `BatchSubmitNodeRole` (Batch job mgmt, ECR pull, S3 rw, PassRole, CW Logs)
+5. **K8s RBAC** -- ServiceAccount for API pod with `batch_v1` Job create/get/delete/list
+6. **Config additions** -- `k8s_job_namespace`, `nextflow_container_image`, `batch_job_queue`, `batch_region`, `s3_work_bucket`, `s3_output_prefix`, `ecr_repository`, `submit_node_instance_id` (for SSM) or SSH connection details
+
+### Reusable components (unchanged)
+
+- `SimulationService` ABC (already has `cancel_job`)
+- `JobStatusUpdate` dataclass
+- `JobScheduler` (swap `JobStatusService` implementation)
+- `DatabaseService` / `HpcRun` (already has `k8s_job_name`, `job_backend`, `external_job_id`)
+- `gateway.py` router (unchanged)
+- `handlers/simulations.py` (calls `SimulationService` interface)
+- All Nextflow models in `common/hpc/models.py`
+
+### Pros
+
+- **Eliminates SSH for the long-running phase** -- the hours-long Nextflow orchestration runs as a K8s Job; SSH is only needed for the short build step (minutes)
+- **Native scaling** -- K8s handles pod scheduling; 5-10 concurrent workflow Jobs are trivial
+- **Isolation** -- each workflow run gets its own pod; no shared state, no process management
+- **Cancel is simple** -- `delete_namespaced_job(propagation_policy="Foreground")` kills the Nextflow head; Nextflow's shutdown hook cancels Batch tasks
+- **Observability** -- `kubectl logs`, pod events, K8s-native monitoring
+- **Cost** -- Nextflow head is lightweight (~2 CPU, 4Gi RAM); runs on existing EKS nodes at near-zero marginal cost
+- **Existing EKS** -- already deployed; no new infrastructure except IRSA role
+- **Credentials** -- IRSA scoped to the specific pod, not an entire node
+- **Resume-ready** -- S3 work directory (`s3://bucket/nextflow/work/{experiment_id}`) persists beyond pod lifecycle; adding `-resume` later is one flag
+
+### Cons
+
+- **SSH retained for builds** -- EC2 submit node is still needed for ARM64 Docker image builds; not a fully SSH-free architecture
+- **New dependency** -- `kubernetes` Python client library
+- **RBAC complexity** -- must grant API pod permission to create/manage Jobs
+- **Nextflow container image** -- must build and maintain an AMD64 image with Nextflow + Java + vEcoli
+- **Log retrieval** -- pod logs are ephemeral after Job cleanup; configure `ttlSecondsAfterFinished` or write logs to S3
+- **Two execution substrates** -- build phase on EC2, workflow phase on K8s; slightly more complex than a single-substrate approach
+
+### Design: Cancel flow
+
+```
+API DELETE /simulations/{id}/cancel
+  -> lookup HpcRun -> get k8s_job_name
+  -> BatchV1Api.delete_namespaced_job(name, namespace, propagation_policy="Foreground")
+  -> update HpcRun status = CANCELLED
+  -> Nextflow receives SIGTERM, cancels in-flight Batch tasks
+```
+
+### Design: Status flow
+
+```
+JobScheduler polling loop (every 30s):
+  -> list_active_hpcruns() from DB (filter job_backend="k8s")
+  -> for each: BatchV1Api.read_namespaced_job_status(k8s_job_name, namespace)
+  -> map K8s Job .status.conditions -> JobStatus
+  -> update_hpcrun_status() via JobStatusUpdate
+```
+
+### Design: Nextflow submit container
+
+```dockerfile
+FROM amazoncorretto:21-al2023
+RUN dnf install -y git jq python3-pip && \
+    pip3 install s3fs boto3 && \
+    curl -fsSL https://github.com/nextflow-io/nextflow/releases/download/v25.10.2/nextflow \
+      -o /usr/local/bin/nextflow && chmod +x /usr/local/bin/nextflow
+COPY . /vEcoli
+WORKDIR /vEcoli
+ENTRYPOINT ["python", "runscripts/workflow.py"]
+```
+
+**Architecture**: AMD64 (runs on EKS nodes, not on Batch compute).
+
+### Design: K8s Job spec (generated by `SimulationServiceK8s`)
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nf-sim-{experiment_id}
+  namespace: {k8s_job_namespace}
+  labels:
+    app: sms-api
+    job-type: simulation
+    experiment-id: {experiment_id}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400  # 24h, for log access
+  template:
+    spec:
+      serviceAccountName: batch-submit
+      containers:
+      - name: nextflow
+        image: {ecr_account}.dkr.ecr.{region}.amazonaws.com/vecoli-submit:latest
+        args: ["--config", "/config/workflow.json"]
+        env:
+        - name: NXF_WORK
+          value: "s3://{s3_bucket}/nextflow/work/{experiment_id}"
+        - name: AWS_DEFAULT_REGION
+          value: "{batch_region}"
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+      volumes:
+      - name: config
+        configMap:
+          name: nf-sim-{experiment_id}-config
+      restartPolicy: Never
+```
+
+### Design: Workflow config (injected via ConfigMap)
+
+```json
+{
+  "experiment_id": "{experiment_id}",
+  "emitter_arg": {
+    "out_uri": "s3://{s3_bucket}/vecoli-output/{experiment_id}"
+  },
+  "aws": {
+    "build_image": false,
+    "container_image": "{ecr_account}.dkr.ecr.{region}.amazonaws.com/vecoli:{git_commit_hash}",
+    "region": "{batch_region}",
+    "batch_queue": "{batch_job_queue}"
+  },
+  "progress_bar": false,
+  "generations": 1,
+  "parca_options": { ... }
+}
+```
+
+---
+
+## 5. Option B: Pet EC2 Launcher Service
+
+### How current code maps to Option B
+
+| Current Component | Option B Equivalent |
+|---|---|
+| `SimulationServiceHpc` (SSH+SLURM) | New `SimulationServiceLauncher` that calls launcher HTTP API |
+| `SlurmService.submit_job()` | HTTP POST to launcher `/runs` endpoint |
+| `SlurmService.get_job_status_squeue()` | HTTP GET from launcher `/runs/{id}/status` |
+| sbatch script | Launcher creates `nextflow run` subprocess |
+| SSH session management | HTTP client (httpx) to launcher |
+| `JobScheduler` polling SLURM | `JobScheduler` polling launcher API |
+
+### New components needed
+
+1. **Launcher service** (separate application on EC2) -- significant new codebase:
+   - HTTP API (FastAPI or similar)
+   - Process manager (supervise Nextflow subprocesses)
+   - State tracking (in-memory + optional persistence)
+   - Log capture and streaming
+   - Cancel endpoint (send SIGTERM to Nextflow process)
+   - Health check / heartbeat
+2. **`SimulationServiceLauncher`** -- implements `SimulationService`, calls launcher HTTP API
+3. **`LauncherJobStatusService`** -- implements `JobStatusService`, polls launcher
+4. **EC2 infrastructure** -- the submit node already exists, but the launcher service is new software
+5. **Networking** -- EKS to EC2 communication requires stable addressing, security group rules
+
+### Pros
+
+- **Single execution substrate** -- both build and workflow run on the same ARM64 EC2 instance
+- **Full filesystem** -- Nextflow has local scratch disk; no Fusion/S3 overhead for work directory
+- **Nextflow resume** -- local work directory enables `-resume` trivially
+- **Proven path** -- prototype already works this way
+
+### Cons
+
+- **Significant new service to build** -- the launcher is a real application (~500-1000 LOC) with process management, state tracking, error handling, graceful shutdown
+- **Single point of failure** -- if the EC2 instance goes down, all running workflows are lost
+- **Cost** -- EC2 instance runs 24/7 (~$25/mo for t4g.medium, more for a larger instance to handle 5-10 concurrent heads)
+- **Operational burden** -- AMI updates, patching, monitoring, lifecycle management
+- **Cancel complexity** -- must reliably SIGTERM the correct process, handle orphaned Batch tasks
+- **Two deployment targets** -- must deploy and version both EKS API and EC2 launcher
+- **Testing** -- harder to simulate locally; can't use kind/k3d
+
+---
+
+## 6. Testability Comparison
+
+### Unit testing
+
+**Option A wins.** The K8s Python client has well-established mock patterns. `create_namespaced_job()` and `read_namespaced_job_status()` return typed objects that are straightforward to mock. The build phase (SSH to EC2) is tested the same way as the existing SLURM SSH path.
+
+Option B requires mocking an HTTP client to the launcher, and the launcher itself needs its own unit tests -- doubling the test surface.
+
+### Local integration testing
+
+| Aspect | Option A (K8s Job) | Option B (EC2 Launcher) |
+|---|---|---|
+| Testcontainers | Postgres, Redis (same as now) | Same + need to simulate launcher |
+| LocalStack | Useful for S3 work-dir validation | Same |
+| Local K8s (kind/k3d) | Natural fit -- create real K8s Jobs with stub containers | Not applicable |
+| Build phase | Mock SSH (same as existing SLURM mocks) | Same |
+| End-to-end local | `kind` + LocalStack + Testcontainers | Requires running a real launcher process |
+
+### Real AWS integration testing
+
+Both options are roughly equivalent:
+
+- **What needs real AWS**: Batch job submission, S3 read/write, IAM permissions, ECR image builds
+- **What stays local**: Database operations, API routing, status polling logic, config resolution
+
+**Recommended test layers:**
+
+| Layer | Scope | Infrastructure |
+|---|---|---|
+| Unit tests | All services, DB ops, config parsing, status mapping | Mocks only |
+| Local integration | Testcontainers (Postgres, Redis) + mock job backend | kind for K8s Jobs, mock SSH for builds |
+| Real AWS integration | Submit real Nextflow workflow to Batch, verify outputs, test cancel | Real AWS account with Batch + S3 + ECR |
+
+### Testability verdict
+
+**Option A is materially easier to test.** The K8s API is well-mocked, kind provides a real local cluster, and the testing surface is smaller.
+
+---
+
+## 7. Recommendation
+
+### Option A: Kubernetes Job per workflow run
+
+**Why Option A is better for this codebase:**
+
+1. **Eliminates SSH for the long-running phase.** The hours-long Nextflow orchestration runs as a K8s Job with in-cluster API access. SSH is only needed for the short build step (minutes), which the existing codebase already handles.
+
+2. **The existing `SimulationService` ABC is a perfect fit.** `SimulationServiceK8s` slots in as a new implementation. The handler code, `JobScheduler`, `DatabaseService` -- all unchanged.
+
+3. **Cancel is trivial.** `delete_namespaced_job()` with foreground propagation kills the pod, sends SIGTERM to Nextflow, which cancels Batch tasks.
+
+4. **Cost is lower.** Nextflow heads run on existing EKS nodes. No idle EC2 cost for the orchestration phase. The EC2 submit node is still needed for builds but can be stopped between builds.
+
+5. **Operational simplicity.** K8s handles scheduling, restarts, and resource limits for the long-running phase. One primary deployment target.
+
+6. **The CDK repo already sketches this approach.** The "Future Direction" section in `batch-architecture.md` describes K8s Job submission with IRSA, matching this design.
+
+### When Option B would be reasonable
+
+- If Nextflow resume with local work directories was a hard requirement
+- If running on bare metal or a non-Kubernetes environment
+- If image builds needed to be tightly coupled with workflow execution (single-step)
+
+---
+
+## 8. Detailed Implementation Plan
+
+### Stage 1: Core abstractions and cancel support [DONE]
+
+Added `cancel_job()` to `SimulationService` ABC, `JobStatus.CANCELLED`, `HpcRun.k8s_job_name`/`job_backend`/`external_job_id`, `JobStatusUpdate` dataclass, `DELETE /simulations/{id}/cancel` endpoint, Alembic migration. See `aws-batch-full` branch.
+
+### Stage 2: K8s Job service implementation
+
+**Goal**: Implement `SimulationServiceK8s` that SSHes to EC2 for builds and creates K8s Jobs for workflows.
+
+New files:
+- `sms_api/simulation/simulation_service_k8s.py` -- `SimulationServiceK8s(SimulationService)`
+  - `submit_build_image_job()`: SSH/SSM to EC2, clone repo, docker build + push ECR
+  - `submit_ecoli_simulation_job()`: create K8s Job + ConfigMap with workflow config
+  - `cancel_job()`: delete K8s Job with foreground propagation
+  - `get_job_status()`: read K8s Job status, map conditions to `JobStatus`
+  - `read_config_template()`: GitHub API (no SSH needed, same as prior `aws-batch` branch)
+- `sms_api/common/hpc/k8s_job_service.py` -- `K8sJobStatusService(JobStatusService)`, K8s Job template builder
+
+Files to modify:
+- `sms_api/config.py` -- add `k8s_job_namespace`, `nextflow_container_image`, `batch_job_queue`, `batch_region`, `s3_work_bucket`, `s3_output_prefix`, `ecr_repository`, `submit_node_*` settings
+- `sms_api/dependencies.py` -- add K8s backend branch in `init_standalone()`
+- `pyproject.toml` -- add `kubernetes>=29.0.0` dependency
+
+Tests:
+- `tests/simulation/test_k8s_backend.py` -- unit tests with mocked K8s client
+- `tests/fixtures/k8s_fixtures.py` -- mock K8s client fixtures
+
+### Stage 3: Nextflow submit container image
+
+**Goal**: Build AMD64 Docker image that runs Nextflow with `awsbatch` executor.
+
+New files:
+- `Dockerfile-nextflow` -- based on `amazoncorretto:21-al2023`, AMD64, with Nextflow + Java + s3fs + boto3
+- `nextflow/entrypoint.sh` -- resolves config from volume mount, runs `python runscripts/workflow.py`
+
+The vEcoli repo is cloned into the image at build time (or mounted). The `aws` section of the workflow config tells Nextflow to use the pre-built ARM64 task image from ECR (`build_image: false`).
+
+Tests:
+- `tests/integration/test_nextflow_container.py` -- Docker build + smoke test
+
+### Stage 4: Wiring, RBAC, and integration
+
+**Goal**: End-to-end flow with K8s Jobs + AWS Batch tasks.
+
+Files to modify:
+- `sms_api/common/handlers/simulations.py` -- ensure `get_simulation_outputs()` works with S3 (not SSH/SCP)
+- `sms_api/common/handlers/simulations.py` -- ensure `get_simulation_log()` works with K8s pod logs or S3
+- `kustomize/base/` -- add RBAC (ServiceAccount, Role, RoleBinding) for Job management
+- `kustomize/overlays/sms-api-stanford/` -- add K8s backend config
+
+New files:
+- `kustomize/base/rbac-jobs.yaml` -- ServiceAccount + Role + RoleBinding for K8s Job CRUD
+- `tests/integration/test_k8s_workflow.py` -- integration test with kind
+- `tests/integration/test_k8s_workflow_mock.py` -- mock integration
+
+CDK-side changes (in `sms-cdk` repo):
+- New IRSA role with `BatchSubmitNodeRole` permissions
+- ServiceAccount annotation: `eks.amazonaws.com/role-arn: arn:...:role/batch-submit-irsa`
+
+### Stage 5: Real AWS integration tests
+
+**Goal**: Validate against real AWS Batch + S3 + ECR.
+
+New files:
+- `tests/integration/test_aws_batch_e2e.py` -- real Batch submission, S3 output verification, cancel test
+
+Test markers:
+```python
+@pytest.mark.skipif(not os.getenv("AWS_BATCH_INTEGRATION"), reason="Requires AWS")
+```
+
+### Recommended rollout order
+
+1. **Stage 1** -- done (cancel support, backend-agnostic DB fields)
+2. **Stage 2 + 3** in parallel -- K8s service implementation and Nextflow container
+3. **Stage 4** -- wiring (requires 2 + 3)
+4. **Stage 5** -- real AWS validation (requires 4)
+
+### Migration from current state
+
+- Keep `SimulationServiceHpc` (SLURM) for RKE deployments
+- Deploy `SimulationServiceK8s` for Stanford/EKS deployments, selectable via `deployment_namespace`
+- Keep EC2 submit node for ARM64 image builds (can be stopped between builds to save cost)
+- Test on `sms-api-stanford-test` before production rollout
+- Retire EC2 submit node for workflow orchestration once K8s path is validated; retain only for image builds (or migrate builds to CI/CD with ARM runners later)
+
+---
+
+## 9. Open Questions / Assumptions
+
+### Resolved
+
+1. **Nextflow executor config**: The vEcoli workflow config has an `aws` section with `batch_queue`, `container_image`, `region`. `workflow.py` supports `build_image: false` for pre-built images.
+
+2. **Fusion**: Not required. vEcoli uses `fsspec` with S3 URIs directly for simulation outputs. Nextflow manages task-level data staging natively with S3 work directories.
+
+3. **Batch job definitions**: Nextflow registers its own Batch job definitions dynamically. The API does not need to pre-create them.
+
+4. **S3 output structure**: `s3://<bucket>/vecoli-output/{experiment_id}` via `emitter_arg.out_uri` in the workflow config.
+
+### Open
+
+5. **Worker events (Redis)**: The current worker event stream comes from the simulation container via Redis. In the Batch model, can Batch task containers reach the Redis endpoint? If not, switch to S3-based or CloudWatch-based event capture, or drop real-time worker events for the Batch path.
+
+6. **EKS node capacity**: Are the existing EKS nodes sized to handle 5-10 additional pods (~2 CPU, 4Gi each)? If using Karpenter/Cluster Autoscaler, this is automatic.
+
+7. **IAM/IRSA**: Does the EKS cluster already have IRSA configured? This is needed for the Nextflow pod to call Batch and S3.
+
+8. **ECR image lifecycle**: How should old vEcoli task images be cleaned up? ECR lifecycle policies can auto-expire untagged images.
+
+9. **Submit node access method**: Should the API use SSH (like the current SLURM path) or SSM RunCommand to trigger builds on the EC2 submit node? SSM avoids SSH key management but adds AWS API dependency.
+
+---
+
+## 10. Suggested First Implementation Slice
+
+Stage 1 is complete. The next slice is **Stage 2: `SimulationServiceK8s`** -- the core K8s Job service implementation with mocked tests. This establishes the interface without requiring real AWS infrastructure, and can be developed and tested locally with kind.
+
+---
+
+## Prior Art
+
+### `aws-batch` branch (not merged)
+
+A prior branch explored adding AWS Batch as an alternative backend. Good patterns to reuse:
+- Strategy pattern with `SimulationService` ABC
+- `from_batch_state()` mapping on `JobStatus`
+- Backend selection via `deployment_namespace`
+- GitHub API for `read_config_template()` (no SSH needed)
+
+Issues to avoid:
+- Placeholder Alembic migration IDs
+- Duplicate dataclasses (`JobStatusInfo` / `JobStatusUpdate`)
+- Initial `HpcRun` status set to RUNNING at insert time (should be PENDING for async backends)
+
+### CDK `batch-architecture.md`
+
+The CDK repo's architecture doc includes a "Future Direction" section proposing K8s Job submission. Key resources from that sketch:
+- Dockerfile for Nextflow submit container (`amazoncorretto:21-al2023`)
+- K8s Job manifest with IRSA ServiceAccount
+- ConfigMap pattern for workflow config injection
+- Migration path: keep EC2 for interactive use, add K8s for automated runs, retire EC2 later
+
+### CDK `manual_batch.md`
+
+Summary of the manually-configured Batch architecture from `vEcoli-private/doc/aws.rst`. Confirms:
+- S3-only data flow (no shared filesystem)
+- Graviton/ARM64 for CPU-bound vEcoli workloads
+- Spot instances for cost savings
+- `NXF_WORK` pointing to S3
