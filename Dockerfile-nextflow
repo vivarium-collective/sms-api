@@ -1,0 +1,34 @@
+# Nextflow submit container — runs the Nextflow head process in a K8s Job.
+#
+# This is a minimal image: Java + Nextflow + weblog receiver.
+# No vEcoli — the init container (vEcoli task image) generates the
+# Nextflow workflow files via workflow.py --build-only.
+#
+# Architecture-agnostic: amazoncorretto base is multi-arch.
+# Build for the EKS node architecture (currently AMD64).
+
+FROM amazoncorretto:21-al2023
+
+# procps: needed by Nextflow to track process lifecycle
+# jq: JSON parsing in entrypoint
+# python3: weblog receiver script
+# curl-minimal is already in the base image (sufficient for Nextflow download)
+RUN yum install -y jq procps python3 && yum clean all
+
+# Install Nextflow
+ARG NEXTFLOW_VERSION=25.10.2
+RUN curl -fsSL "https://github.com/nextflow-io/nextflow/releases/download/v${NEXTFLOW_VERSION}/nextflow" \
+    -o /usr/local/bin/nextflow && chmod +x /usr/local/bin/nextflow
+
+# Weblog receiver for capturing Nextflow events as NDJSON
+COPY scripts/nextflow-weblog-receiver.py /usr/local/bin/nextflow-weblog-receiver
+RUN chmod +x /usr/local/bin/nextflow-weblog-receiver
+
+# Entrypoint: verifies init container output, fixes paths, runs Nextflow
+COPY scripts/entrypoint-nextflow.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Nextflow files will be in /work/nextflow (shared emptyDir volume with init container)
+VOLUME ["/work/nextflow"]
+
+ENTRYPOINT ["/entrypoint.sh"]
