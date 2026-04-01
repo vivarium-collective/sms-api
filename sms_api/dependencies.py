@@ -228,8 +228,9 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         # Validate and initialize Postgres connection
         logger.info("Validating Postgres configuration...")
         pg = _settings
-        if not (pg.postgres_user and pg.postgres_password and pg.postgres_database
-                and pg.postgres_host and pg.postgres_port):
+        if not (
+            pg.postgres_user and pg.postgres_password and pg.postgres_database and pg.postgres_host and pg.postgres_port
+        ):
             logger.error("Postgres connection settings are not properly configured.")
         postgres_url = (
             f"postgresql+asyncpg://{pg.postgres_user}:{pg.postgres_password}"
