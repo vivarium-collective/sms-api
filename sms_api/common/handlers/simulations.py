@@ -18,10 +18,10 @@ from sms_api.analysis.models import TsvOutputFile
 from sms_api.common import StrEnumBase
 from sms_api.common.handlers.simulators import upload_simulator
 from sms_api.common.hpc.job_service import JobStatusUpdate
-from sms_api.common.models import JobStatus
-from sms_api.common.storage.file_paths import HPCFilePath
+from sms_api.common.models import JobBackend, JobStatus
+from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
 from sms_api.config import get_settings
-from sms_api.dependencies import get_database_service, get_simulation_service, get_ssh_session_service
+from sms_api.dependencies import get_database_service, get_file_service, get_simulation_service, get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import (
@@ -617,40 +617,37 @@ async def get_simulation_outputs(
 ) -> StreamingResponse | FileResponse:
     """Get simulation outputs as a tar.gz archive.
 
-    Args:
-        db_service: Database service instance
-        simulation_id: ID of the simulation to get outputs for
-        hpc_sim_base_path: Base path for simulation outputs on HPC
-        data_response_type: Type of response - STREAMING for chunked streaming,
-            FILE for direct file download
-        bg_tasks: Background tasks for cleanup (required for FILE response type)
-
-    Returns:
-        StreamingResponse or FileResponse containing the tar.gz archive
+    Dispatches to SSH/SCP (SLURM backend) or S3 (K8s/LOCAL backend) based on the HpcRun record.
     """
     simulation = await db_service.get_simulation(simulation_id=simulation_id)
     if simulation is None:
         raise ValueError(f"Simulation with id {simulation_id} not found in database.")
 
     experiment_id = simulation.config.experiment_id
-    exp_analysis_outdir = hpc_sim_base_path / experiment_id / "analyses"
 
     # Download files to local cache, preserving directory structure
     analysis_request_cache = Path(get_settings().cache_dir) / experiment_id
-    if not analysis_request_cache.exists():
-        analysis_request_cache.mkdir(parents=True)
-    available_paths: list[HPCFilePath] = await get_available_omics_output_paths(
-        remote_analysis_outdir=exp_analysis_outdir
-    )
-    for remote_path in available_paths:
-        await download_analysis_output(
-            local_dir=analysis_request_cache,
-            remote_path=remote_path,
-            response_type=SimulationAnalysisResponseType.TAR_GZIP_STREAM,
-            remote_base_dir=exp_analysis_outdir,
-        )
+    analysis_request_cache.mkdir(parents=True, exist_ok=True)
 
-    # Return appropriate response type
+    # Dispatch based on backend
+    hpc_run = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
+    if hpc_run and hpc_run.job_id.backend in (JobBackend.K8S, JobBackend.LOCAL):
+        await _download_outputs_from_s3(experiment_id, analysis_request_cache)
+    else:
+        # SLURM path: download via SSH/SCP
+        exp_analysis_outdir = hpc_sim_base_path / experiment_id / "analyses"
+        available_paths: list[HPCFilePath] = await get_available_omics_output_paths(
+            remote_analysis_outdir=exp_analysis_outdir
+        )
+        for remote_path in available_paths:
+            await download_analysis_output(
+                local_dir=analysis_request_cache,
+                remote_path=remote_path,
+                response_type=SimulationAnalysisResponseType.TAR_GZIP_STREAM,
+                remote_base_dir=exp_analysis_outdir,
+            )
+
+    # Return appropriate response type (same for both backends)
     if data_response_type == SimulationAnalysisDataResponseType.FILE:
         if bg_tasks is None:
             raise ValueError("BackgroundTasks required for FILE response type")
@@ -661,19 +658,54 @@ async def get_simulation_outputs(
         return await stream_analysis_output_archive(dir_path=analysis_request_cache)
 
 
+_ACCEPTED_OUTPUT_EXTENSIONS = (".tsv", ".html", ".csv", ".txt")
+
+
+async def _download_outputs_from_s3(experiment_id: str, local_cache: Path) -> None:
+    """Download simulation outputs from S3 to local cache."""
+    settings = get_settings()
+    file_service = get_file_service()
+    if file_service is None:
+        raise RuntimeError("File service is not initialized")
+
+    s3_prefix = S3FilePath(s3_path=Path(f"{settings.s3_output_prefix}/{experiment_id}"))
+    listing = await file_service.get_listing(s3_prefix)
+
+    for item in listing:
+        if not item.Key.endswith(_ACCEPTED_OUTPUT_EXTENSIONS):
+            continue
+        # Preserve directory structure relative to the experiment prefix
+        relative = Path(item.Key).relative_to(s3_prefix.s3_path)
+        local_file = local_cache / relative
+        if local_file.exists():
+            continue  # Skip already-cached files
+        local_file.parent.mkdir(parents=True, exist_ok=True)
+        await file_service.download_file(S3FilePath(s3_path=Path(item.Key)), local_file)
+
+
 async def get_simulation_log(db_service: DatabaseService, simulation_id: int) -> Response:
-    stdout = await _get_slurm_log(db_service=db_service, simulation_id=simulation_id)
-    _, _, after = stdout.partition("N E X T F L O W")
-    result = "N E X T F L O W" + after
-    return Response(content=result, media_type="text/plain")
-
-
-async def _get_slurm_log(db_service: DatabaseService, simulation_id: int) -> str:
-    hpc_run: HpcRun | None = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
+    """Get simulation workflow log. Dispatches to SLURM or K8s based on backend."""
+    hpc_run = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
     if hpc_run is None:
-        raise ValueError(f"No hpc run found for simulation with id: {simulation_id}")
+        raise ValueError(f"No HPC run found for simulation {simulation_id}")
+
+    if hpc_run.job_id.backend == JobBackend.K8S:
+        log_content = await _get_k8s_log(hpc_run)
+    elif hpc_run.job_id.backend == JobBackend.LOCAL:
+        log_content = f"Logs not available for local tasks (job {hpc_run.job_id})"
+    else:
+        log_content = await _get_slurm_log(hpc_run)
+        # Extract Nextflow section from SLURM log
+        _, _, after = log_content.partition("N E X T F L O W")
+        if after:
+            log_content = "N E X T F L O W" + after
+
+    return Response(content=log_content, media_type="text/plain")
+
+
+async def _get_slurm_log(hpc_run: HpcRun) -> str:
+    """Read SLURM job log via SSH."""
     job_id = str(hpc_run.job_id)
-    log_stdout = None
     async with get_ssh_session_service().session() as ssh:
         returncode, stdout, stderr = await ssh.run_command(f"scontrol show job {job_id}")
         try:
@@ -682,5 +714,19 @@ async def _get_slurm_log(db_service: DatabaseService, simulation_id: int) -> str
             log_path = get_settings().slurm_log_base_path / f"{job_name}.out"
             _, log_stdout, _ = await ssh.run_command(f"cat {log_path!s}")
         except StopIteration:
-            raise RuntimeError(f"No simulation job name available for simulation with id: {simulation_id}")
+            raise RuntimeError(f"No simulation job name available for HPC run {hpc_run.database_id}")
     return log_stdout
+
+
+async def _get_k8s_log(hpc_run: HpcRun) -> str:
+    """Read K8s Job pod logs via the K8s API."""
+    from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
+
+    simulation_service = get_simulation_service()
+    if not isinstance(simulation_service, SimulationServiceK8s):
+        raise TypeError("K8s logs requested but simulation service is not SimulationServiceK8s")
+
+    log_content = simulation_service._k8s.get_job_logs(hpc_run.job_id.value)
+    if log_content is None:
+        return f"No logs available for K8s Job {hpc_run.job_id.value} (pod may have been cleaned up)"
+    return log_content
