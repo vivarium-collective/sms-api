@@ -37,7 +37,7 @@ sock.bind(("localhost", 0))
 port = sock.getsockname()[1]
 sock.close()
 
-with open("/tmp/weblog_port_" + str(os.getppid()), "w") as f:
+with open("/tmp/weblog_port_" + str(os.getppid()), "w") as f:  # noqa: S108
     f.write(str(port))
 
 print("Weblog receiver starting on port", port, "writing to", EVENTS_FILE)

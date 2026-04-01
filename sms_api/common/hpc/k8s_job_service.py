@@ -73,9 +73,7 @@ class K8sJobService:
             from kubernetes import config as k8s_config
 
             k8s_config.load_incluster_config()
-        except k8s_client.rest.ApiException:
-            from kubernetes import config as k8s_config
-
+        except k8s_config.ConfigException:
             k8s_config.load_kube_config()
         self._batch_api = k8s_client.BatchV1Api()
         self._core_api = k8s_client.CoreV1Api()

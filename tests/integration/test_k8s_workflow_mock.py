@@ -17,7 +17,7 @@ import pytest
 
 from sms_api.common.handlers import simulations as sim_handlers
 from sms_api.common.hpc.job_service import JobStatusInfo
-from sms_api.common.models import JobBackend, JobId, JobStatus
+from sms_api.common.models import JobId, JobStatus
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
     ParcaDatasetRequest,
@@ -108,9 +108,7 @@ async def test_k8s_cancel(
     simulation_service_k8s_mock.read_config_template = AsyncMock(return_value=CONFIG_TEMPLATE)  # type: ignore[method-assign]
 
     # Make status return RUNNING so cancel is meaningful
-    mock_k8s_job_service.get_job_status.return_value = JobStatusInfo(
-        job_id=JobId.k8s("test"), status=JobStatus.RUNNING
-    )
+    mock_k8s_job_service.get_job_status.return_value = JobStatusInfo(job_id=JobId.k8s("test"), status=JobStatus.RUNNING)
 
     simulation = await sim_handlers.run_simulation_workflow(
         database_service=database_service,
@@ -155,9 +153,7 @@ async def test_k8s_log_retrieval(
     )
 
     # Get log
-    response = await sim_handlers.get_simulation_log(
-        db_service=database_service, simulation_id=simulation.database_id
-    )
+    response = await sim_handlers.get_simulation_log(db_service=database_service, simulation_id=simulation.database_id)
     body = response.body
     assert isinstance(body, bytes)
     assert "N E X T F L O W" in body.decode()
