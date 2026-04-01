@@ -607,28 +607,30 @@ Completed changes:
 - `pyproject.toml` -- added `kubernetes>=31.0.0`, `httpx>=0.28.0`
 - `tests/simulation/test_k8s_backend.py` -- 17 unit tests: K8s status mapping, backend selection, `JobId` type safety, `K8sJobService` with mocked K8s client
 
-### Stage 3: Nextflow submit container image
+### Stage 3: Nextflow submit container and multi-arch builds [DONE]
 
-**Goal**: Build AMD64 Docker image that runs the Nextflow head process with `awsbatch` executor.
+The K8s Job uses an **init container pattern** — two containers in one pod sharing an `emptyDir` volume:
 
-The entrypoint must implement the same 3-step pattern as the SLURM path in `workflow_slurm_script()`:
+1. **Init container** (vEcoli task image from ECR, multi-arch): runs `workflow.py --build-only` to generate Nextflow files, copies `sim.nf`/`analysis.nf` to the shared volume, then persists all generated files to S3 for debugging/audit/resume.
+2. **Main container** (`Dockerfile-nextflow`, minimal: Java 21 + Nextflow 25.10.2): reads generated files from the shared volume, fixes include paths, optionally starts weblog receiver, runs `nextflow`.
 
-1. Run `workflow.py --build-only` inside the vEcoli container to generate Nextflow files (main.nf, nextflow.config, sim.nf, analysis.nf)
-2. Copy/fix Nextflow module include paths (same sed replacements as the SLURM script)
-3. Run `nextflow` directly with the `aws` profile to submit tasks to Batch
+The Nextflow submit container does NOT contain vEcoli — it's a lightweight image (~400MB) with just the tools needed to orchestrate Nextflow.
 
-This is NOT a simple `python runscripts/workflow.py --config <file>` entrypoint. The `--build-only` flag separates workflow DAG generation (requires vEcoli Python environment) from workflow execution (requires Nextflow + Java).
+**Multi-arch vEcoli task image builds**: `SimulationServiceK8s._run_build()` uses `docker buildx` on the ARM64 EC2 submit node to build both ARM64 (native) and AMD64 (via QEMU) images under a single ECR tag. ARM64 is used by Batch compute, AMD64 is used by the K8s init container on EKS nodes. Uses `build-and-push-ecr.sh -u` for ECR URI lookup.
 
-New files:
-- `Dockerfile-nextflow` -- architecture-agnostic (like the vEcoli Dockerfile), with Nextflow + Java + vEcoli repo + Python/uv. Multi-arch base image, detect arch at build time for tool installs.
-- `nextflow/entrypoint.sh` -- implements the 3-step pattern above, reads config from `/config/workflow.json` (ConfigMap mount)
+**Async build tracking**: Build phase spawns as a background `asyncio.Task` via `LocalTaskService`, returning a `JobId.local(uuid)` immediately. `JobBackend.LOCAL` added for in-process async operations.
 
-The `aws` section of the workflow config tells Nextflow to use the pre-built task image from ECR (`build_image: false`).
+**DB simplification**: `slurmjobid` (int) and `k8s_job_name` (str) columns replaced by single `job_id_ext` (str) column. Migration converts existing SLURM integer IDs to strings. `HpcRun` model uses `JobId` internally with `computed_field` properties for API serialization.
 
-Also update `SimulationServiceK8s.submit_build_image_job()` to use vEcoli's `runscripts/container/build-and-push-ecr.sh` script (args: `-i` tag, `-r` repo, `-R` region) instead of inline build commands. The script handles ECR authentication, repo creation, build, and push. The `-u` flag returns the full image URI without building (useful for programmatic lookup).
-
-Tests:
-- `tests/integration/test_nextflow_container.py` -- Docker build + smoke test
+Completed files:
+- `Dockerfile-nextflow` -- `amazoncorretto:21-al2023` base, Nextflow 25.10.2, Python 3.9 (for weblog)
+- `scripts/entrypoint-nextflow.sh` -- verifies init container output, fixes include paths, optional weblog receiver, runs nextflow
+- `scripts/nextflow-weblog-receiver.py` -- standalone weblog receiver extracted from `nextflow_weblog.py`
+- `sms_api/common/hpc/local_task_service.py` -- in-process async task tracker for build phase
+- `sms_api/simulation/simulation_service_k8s.py` -- init container in Job spec, multi-arch `docker buildx` build
+- `sms_api/common/models.py` -- `JobBackend.LOCAL`, `JobId.local()` factory
+- `alembic/versions/0f991fad32ba_...` -- migration: `slurmjobid` (int) -> `job_id_ext` (str)
+- OpenAPI spec and client regenerated
 
 ### Stage 4: Wiring, RBAC, and integration
 
@@ -665,8 +667,8 @@ Test markers:
 
 1. **Stage 1** -- done
 2. **Stage 2** -- done
-3. **Stage 3** -- Nextflow container image (can proceed independently)
-4. **Stage 4** -- wiring and integration (requires 3)
+3. **Stage 3** -- done
+4. **Stage 4** -- wiring and integration
 5. **Stage 5** -- real AWS validation (requires 4)
 
 ### Migration from current state
@@ -701,23 +703,38 @@ Test markers:
 
 8. **ECR image lifecycle**: How should old vEcoli task images be cleaned up? ECR lifecycle policies can auto-expire untagged images.
 
-9. **Submit node access method**: Should the API use SSH (like the current SLURM path) or SSM RunCommand to trigger builds on the EC2 submit node? SSM avoids SSH key management but adds AWS API dependency.
+9. **Submit node access method**: Using SSH (consistent with existing SLURM path). SSM was considered but deferred — SSH is simpler and already implemented via `asyncssh`.
 
 ---
 
 ## 10. Current Status and Next Steps
 
-Stages 1 and 2 are complete. The core abstractions (`JobId`, backend-agnostic `SimulationService` ABC) and the K8s implementation (`SimulationServiceK8s`, `K8sJobService`) are implemented with 50+ unit tests passing.
+Stages 1, 2, and 3 are complete. The application code for the K8s/Batch backend is fully implemented:
+- Backend-agnostic `SimulationService` ABC with typed `JobId`
+- `SimulationServiceK8s` with init container pattern and multi-arch builds
+- `Dockerfile-nextflow` container image (builds successfully)
+- Cancel endpoint, `LocalTaskService` for async builds
+- OpenAPI spec and client regenerated
 
 **Next steps (in order):**
 
-1. **Stage 3: Nextflow submit container image** -- `Dockerfile-nextflow` (AMD64) with Java, Nextflow, vEcoli, `workflow.py` entrypoint. This is infrastructure work, not application code.
+1. **Stage 4: Wiring and integration**
+   - S3-based output retrieval — `get_simulation_outputs()` currently uses SSH/SCP; needs S3 alternative for K8s path
+   - K8s pod log retrieval — `get_simulation_log()` currently reads SLURM log files; needs K8s pod logs or S3
+   - `kustomize/base/rbac-jobs.yaml` — ServiceAccount + Role + RoleBinding for K8s Job CRUD
+   - Kustomize overlay config for Stanford deployments
+   - Build and push `Dockerfile-nextflow` image to ECR
+   - Ensure QEMU/buildx available on EC2 submit node (CDK user data)
 
-2. **Stage 4: Wiring and integration** -- S3-based output retrieval for K8s path (replacing SSH/SCP), K8s pod log retrieval (replacing SLURM log file reads), RBAC for K8s Job management, kustomize overlays. Also: regenerate OpenAPI spec since `Simulation.job_id` changed from `int` to `str`.
+2. **Stage 5: Real AWS integration tests**
+   - End-to-end: submit workflow via API, verify init container runs, Nextflow submits to Batch, outputs land in S3
+   - Cancel test: verify `delete_namespaced_job` propagates to Nextflow and Batch tasks
+   - Use `AWS_PROFILE=stanford-sso`, `KUBECONFIG=kubeconfig_stanford_test.yaml`
 
-3. **Stage 5: Real AWS integration tests** -- end-to-end validation with real Batch + S3 + ECR.
-
-4. **CDK-side** -- IRSA role with `BatchSubmitNodeRole` permissions, ServiceAccount annotation.
+3. **CDK-side (sms-cdk repo)**
+   - IRSA role with `BatchSubmitNodeRole` permissions
+   - ServiceAccount annotation: `eks.amazonaws.com/role-arn`
+   - Ensure `docker buildx` and QEMU user-static installed on submit/build node
 
 ---
 
