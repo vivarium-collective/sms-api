@@ -1,6 +1,6 @@
 # AWS Batch Workflow Architecture Analysis
 
-> Analysis date: 2026-03-31 (updated)
+> Analysis date: 2026-03-31 (updated after Stage 2 implementation)
 > Branch: `aws-batch-full` (from `main`)
 > Goal: Run multiple concurrent Nextflow workflow runs with AWS Batch as the task execution substrate.
 
@@ -54,10 +54,15 @@
 
 ### Existing interfaces for job execution
 
-- **`SimulationService` ABC** (`simulation/simulation_service.py:66`): abstract methods for `submit_build_image_job`, `submit_parca_job`, `submit_ecoli_simulation_job`, `cancel_job`, `get_job_status`, `read_config_template`, `close`
-- **`JobStatusUpdate`** dataclass (`common/hpc/job_service.py`): backend-agnostic status update
-- **`JobStatus` enum** (`common/models.py`): unified status with `from_slurm_state()`, includes `CANCELLED`
-- **`HpcRun` model** (`simulation/models.py`): tracks a job with `slurmjobid`, `k8s_job_name`, `job_backend`, `external_job_id` property, `correlation_id`, `job_type`, `ref_id`, `status`
+- **`SimulationService` ABC** (`simulation/simulation_service.py`): backend-agnostic abstract methods -- `submit_build_image_job() -> JobId`, `submit_parca_job() -> JobId`, `submit_ecoli_simulation_job() -> JobId`, `cancel_job(JobId)`, `get_job_status(JobId) -> JobStatusInfo`, `read_config_template()`, `close()`. No SSH parameters -- each implementation manages its own connections.
+- **`SimulationServiceHpc`** (`simulation/simulation_service.py`): SLURM implementation. Manages SSH sessions internally via `get_ssh_session_service()`.
+- **`SimulationServiceK8s`** (`simulation/simulation_service_k8s.py`): K8s + AWS Batch implementation. Two-phase: SSH to EC2 for ARM64 Docker builds, K8s Jobs for Nextflow workflow execution. Config templates read via GitHub API.
+- **`K8sJobService`** (`common/hpc/k8s_job_service.py`): K8s Job CRUD operations (create, status, cancel, logs) with Job condition to `JobStatus` mapping.
+- **`JobId`** frozen dataclass (`common/models.py`): backend-tagged job identifier with factory methods `JobId.slurm(int)` and `JobId.k8s(str)`. Used throughout the domain layer; ORM converts at the persistence boundary.
+- **`JobStatusInfo`** / **`JobStatusUpdate`** dataclasses (`common/hpc/job_service.py`): backend-agnostic status reporting and update objects, both using `JobId`.
+- **`JobStatus` enum** (`common/models.py`): unified status with `from_slurm_state()`, includes `CANCELLED`.
+- **`JobBackend` enum** (`common/models.py`): `SLURM` and `K8S` values.
+- **`HpcRun` model** (`simulation/models.py`): tracks a job via `job_id: JobId` (excluded from serialization). Computed fields `slurmjobid`, `k8s_job_name`, `job_backend` provide API serialization compatibility. The ORM stores these as separate columns and reconstructs `JobId` at the boundary.
 
 ### Existing workflow pipeline (SLURM path)
 
@@ -79,9 +84,10 @@ Each step is tracked as a separate `HpcRun` record with its own job type (`BUILD
 
 ### Kubernetes integration
 
-- **No K8s Job creation code exists** -- the codebase has zero `kubernetes` Python client usage
-- **K8s is deployment-only**: `kustomize/base/api.yaml` defines a 3-replica Deployment + Service for the API
+- **K8s Job creation implemented** via `kubernetes` Python client in `K8sJobService` and `SimulationServiceK8s`
+- **K8s is used for**: API Deployment (`kustomize/base/api.yaml`) and Nextflow head Jobs (created programmatically)
 - **Multiple overlays**: `sms-api-rke`, `sms-api-rke-dev`, `sms-api-stanford`, `sms-api-stanford-test`, `sms-api-eks`, `sms-api-local`
+- **Backend selection**: `get_job_backend()` in `config.py` returns `"k8s"` for Stanford namespaces, `"slurm"` otherwise
 
 ### Testing structure
 
@@ -95,13 +101,16 @@ Each step is tracked as a separate `HpcRun` record with its own job type (`BUILD
 
 - **`sms_api/config.py`**: Pydantic `Settings` with SLURM, Postgres, Redis, S3/GCS/Qumulo, GitHub creds
 - **Deployment namespace**: `deployment_namespace` field maps to kustomize overlays
-- **Backend selection**: `job_backend` field on `HpcRun` distinguishes "slurm" vs "k8s"
+- **Backend selection**: `get_job_backend()` returns `"k8s"` for Stanford namespaces, `"slurm"` otherwise
+- **K8s/Batch settings**: `k8s_job_namespace`, `nextflow_container_image`, `batch_job_queue`, `batch_region`, `s3_work_bucket`, `s3_work_prefix`, `s3_output_prefix`, `ecr_repository`, `submit_node_host`/`user`/`key_path`/`ssm_instance_id`
 
-### Confirmed absent
+### Not yet implemented
 
-- No K8s Job creation
-- No direct Nextflow-to-Batch executor integration
-- No Fusion/Wave enablement (models exist, `enabled=False`)
+- RBAC (ServiceAccount, Role, RoleBinding) for K8s Job management
+- S3-based output retrieval (currently SSH/SCP for SLURM path)
+- K8s pod log retrieval (currently SLURM log files via SSH)
+- Nextflow submit container image (`Dockerfile-nextflow`)
+- Real AWS integration tests
 
 ---
 
@@ -563,29 +572,38 @@ Both options are roughly equivalent:
 
 ### Stage 1: Core abstractions and cancel support [DONE]
 
-Added `cancel_job()` to `SimulationService` ABC, `JobStatus.CANCELLED`, `HpcRun.k8s_job_name`/`job_backend`/`external_job_id`, `JobStatusUpdate` dataclass, `DELETE /simulations/{id}/cancel` endpoint, Alembic migration. See `aws-batch-full` branch.
+Completed changes:
+- `cancel_job(JobId)` added to `SimulationService` ABC; implemented as `scancel` in `SimulationServiceHpc`
+- `DELETE /simulations/{id}/cancel` endpoint with no-op for terminal jobs
+- `JobStatus.CANCELLED` added (SLURM `CANCELLED` state maps to it instead of `FAILED`)
+- `JobId` frozen dataclass with `JobId.slurm(int)` / `JobId.k8s(str)` factories and `as_slurm_int` property
+- `HpcRun.job_id: JobId` replaces separate `slurmjobid`/`k8s_job_name` fields in domain model; computed fields provide API serialization
+- `JobBackend` enum replaces string literals
+- `JobStatusInfo` / `JobStatusUpdate` dataclasses using `JobId`
+- `DatabaseService.insert_hpcrun(job_id: JobId, ...)` -- ORM decomposes `JobId` at persistence boundary
+- Alembic migration: `k8s_job_name`, `job_backend` columns, nullable `slurmjobid`
+- `SimulationService` ABC refactored: no SSH params, `JobId` return types, `get_job_status(JobId)`, `read_config_template()`
+- `SimulationServiceHpc` manages SSH sessions internally
+- Handlers no longer manage SSH context for service calls
+- `get_simulation_status` delegates to `SimulationService.get_job_status()` instead of calling `SlurmService` directly
 
-### Stage 2: K8s Job service implementation
+### Stage 2: K8s Job service implementation [DONE]
 
-**Goal**: Implement `SimulationServiceK8s` that SSHes to EC2 for builds and creates K8s Jobs for workflows.
-
-New files:
-- `sms_api/simulation/simulation_service_k8s.py` -- `SimulationServiceK8s(SimulationService)`
-  - `submit_build_image_job()`: SSH/SSM to EC2, clone repo, docker build + push ECR
-  - `submit_ecoli_simulation_job()`: create K8s Job + ConfigMap with workflow config
-  - `cancel_job()`: delete K8s Job with foreground propagation
-  - `get_job_status()`: read K8s Job status, map conditions to `JobStatus`
-  - `read_config_template()`: GitHub API (no SSH needed, same as prior `aws-batch` branch)
-- `sms_api/common/hpc/k8s_job_service.py` -- `K8sJobStatusService(JobStatusService)`, K8s Job template builder
-
-Files to modify:
-- `sms_api/config.py` -- add `k8s_job_namespace`, `nextflow_container_image`, `batch_job_queue`, `batch_region`, `s3_work_bucket`, `s3_output_prefix`, `ecr_repository`, `submit_node_*` settings
-- `sms_api/dependencies.py` -- add K8s backend branch in `init_standalone()`
-- `pyproject.toml` -- add `kubernetes>=29.0.0` dependency
-
-Tests:
-- `tests/simulation/test_k8s_backend.py` -- unit tests with mocked K8s client
-- `tests/fixtures/k8s_fixtures.py` -- mock K8s client fixtures
+Completed changes:
+- `sms_api/simulation/simulation_service_k8s.py` -- `SimulationServiceK8s(SimulationService)`:
+  - `submit_build_image_job()`: SSH to ARM64 EC2 submit node, Docker build + ECR push
+  - `submit_ecoli_simulation_job()`: creates K8s Job + ConfigMap with workflow config (aws section, `build_image: false`, S3 paths)
+  - `submit_parca_job()`: placeholder (parca runs within Nextflow workflow)
+  - `cancel_job()`: `delete_namespaced_job(propagation_policy="Foreground")` + ConfigMap cleanup
+  - `get_job_status()`: delegates to `K8sJobService`
+  - `read_config_template()`: GitHub Contents API via httpx
+  - `get_latest_commit_hash()`: GitHub API via httpx
+- `sms_api/common/hpc/k8s_job_service.py` -- `K8sJobService`: K8s Job CRUD, ConfigMap management, pod log retrieval, Job condition to `JobStatus` mapping
+- `sms_api/config.py` -- K8s/Batch settings: `k8s_job_namespace`, `nextflow_container_image`, `batch_job_queue`, `batch_region`, `s3_work_bucket`, `s3_work_prefix`, `s3_output_prefix`, `ecr_repository`, `submit_node_*`. `get_job_backend()` function.
+- `sms_api/dependencies.py` -- `init_standalone()` branches on `get_job_backend()`: creates `SimulationServiceK8s` for K8s, `SimulationServiceHpc` for SLURM. SSH targets EC2 submit node (K8s) or SLURM login node. Extracted `_init_simulation_service()` and `_init_ssh_service()` helpers.
+- `sms_api/simulation/job_scheduler.py` -- `slurm_service` now optional; SLURM polling skipped for K8s backend
+- `pyproject.toml` -- added `kubernetes>=31.0.0`, `httpx>=0.28.0`
+- `tests/simulation/test_k8s_backend.py` -- 17 unit tests: K8s status mapping, backend selection, `JobId` type safety, `K8sJobService` with mocked K8s client
 
 ### Stage 3: Nextflow submit container image
 
@@ -633,10 +651,11 @@ Test markers:
 
 ### Recommended rollout order
 
-1. **Stage 1** -- done (cancel support, backend-agnostic DB fields)
-2. **Stage 2 + 3** in parallel -- K8s service implementation and Nextflow container
-3. **Stage 4** -- wiring (requires 2 + 3)
-4. **Stage 5** -- real AWS validation (requires 4)
+1. **Stage 1** -- done
+2. **Stage 2** -- done
+3. **Stage 3** -- Nextflow container image (can proceed independently)
+4. **Stage 4** -- wiring and integration (requires 3)
+5. **Stage 5** -- real AWS validation (requires 4)
 
 ### Migration from current state
 
@@ -674,9 +693,19 @@ Test markers:
 
 ---
 
-## 10. Suggested First Implementation Slice
+## 10. Current Status and Next Steps
 
-Stage 1 is complete. The next slice is **Stage 2: `SimulationServiceK8s`** -- the core K8s Job service implementation with mocked tests. This establishes the interface without requiring real AWS infrastructure, and can be developed and tested locally with kind.
+Stages 1 and 2 are complete. The core abstractions (`JobId`, backend-agnostic `SimulationService` ABC) and the K8s implementation (`SimulationServiceK8s`, `K8sJobService`) are implemented with 50+ unit tests passing.
+
+**Next steps (in order):**
+
+1. **Stage 3: Nextflow submit container image** -- `Dockerfile-nextflow` (AMD64) with Java, Nextflow, vEcoli, `workflow.py` entrypoint. This is infrastructure work, not application code.
+
+2. **Stage 4: Wiring and integration** -- S3-based output retrieval for K8s path (replacing SSH/SCP), K8s pod log retrieval (replacing SLURM log file reads), RBAC for K8s Job management, kustomize overlays. Also: regenerate OpenAPI spec since `Simulation.job_id` changed from `int` to `str`.
+
+3. **Stage 5: Real AWS integration tests** -- end-to-end validation with real Batch + S3 + ECR.
+
+4. **CDK-side** -- IRSA role with `BatchSubmitNodeRole` permissions, ServiceAccount annotation.
 
 ---
 
@@ -684,16 +713,15 @@ Stage 1 is complete. The next slice is **Stage 2: `SimulationServiceK8s`** -- th
 
 ### `aws-batch` branch (not merged)
 
-A prior branch explored adding AWS Batch as an alternative backend. Good patterns to reuse:
-- Strategy pattern with `SimulationService` ABC
-- `from_batch_state()` mapping on `JobStatus`
-- Backend selection via `deployment_namespace`
-- GitHub API for `read_config_template()` (no SSH needed)
+A prior branch explored adding AWS Batch as an alternative backend. Patterns reused in this implementation:
+- Strategy pattern with `SimulationService` ABC (adopted and extended with `JobId` type safety)
+- Backend selection via `deployment_namespace` (adopted as `get_job_backend()`)
+- GitHub API for `read_config_template()` (adopted in `SimulationServiceK8s`)
 
-Issues to avoid:
-- Placeholder Alembic migration IDs
-- Duplicate dataclasses (`JobStatusInfo` / `JobStatusUpdate`)
-- Initial `HpcRun` status set to RUNNING at insert time (should be PENDING for async backends)
+Issues from that branch that were addressed:
+- Placeholder Alembic migration IDs -- auto-generated proper ID
+- Duplicate dataclasses (`JobStatusInfo` / `JobStatusUpdate`) -- both retained but now use `JobId` consistently
+- String-based job IDs -- replaced with typed `JobId` frozen dataclass
 
 ### CDK `batch-architecture.md`
 
