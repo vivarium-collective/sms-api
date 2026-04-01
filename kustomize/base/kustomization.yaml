@@ -7,3 +7,4 @@ resources:
   - redis.yaml
   - ptools.yaml
   - haproxy-ssh.yaml
+  - rbac-jobs.yaml
