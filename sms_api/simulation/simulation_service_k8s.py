@@ -92,7 +92,12 @@ class SimulationServiceK8s(SimulationService):
         )
 
     async def _run_build(self, simulator_version: SimulatorVersion) -> None:
-        """Execute the Docker build + ECR push on the submit node via SSH."""
+        """Execute multi-arch Docker build + ECR push on the submit node via SSH.
+
+        Uses docker buildx to build both ARM64 (native on submit node) and
+        AMD64 (via QEMU) images under a single tag. ARM64 is used by Batch
+        compute, AMD64 is used by the K8s init container on EKS nodes.
+        """
         settings = get_settings()
         commit = simulator_version.git_commit_hash
         branch = simulator_version.git_branch
@@ -107,8 +112,8 @@ class SimulationServiceK8s(SimulationService):
                     f"https://{settings.github_username}:{settings.github_token}@github.com/{match.group(1)}"
                 )
 
-        # Clone repo, build image, push to ECR, clean up
-        # build-and-push-ecr.sh handles ECR auth, repo creation, build, push, and tagging
+        # Get ECR URI via build-and-push-ecr.sh -u (URI-only mode)
+        # Then use docker buildx for multi-arch build + push
         build_dir = f"vEcoli-build-{commit}"
         build_script = f"""\
 set -e
@@ -116,11 +121,38 @@ cd /tmp
 if [ -d "{build_dir}" ]; then rm -rf "{build_dir}"; fi
 git clone --branch {branch} --single-branch {auth_repo_url} {build_dir}
 cd {build_dir}
-bash runscripts/container/build-and-push-ecr.sh \
-    -i {commit} \
-    -r {settings.ecr_repository} \
-    -R {settings.batch_region}
+
+# Get ECR repository URI (handles repo creation if needed)
+ECR_URI=$(bash runscripts/container/build-and-push-ecr.sh \
+    -i {commit} -r {settings.ecr_repository} -R {settings.batch_region} -u)
+ECR_REGISTRY="${{ECR_URI%%/*}}"
+
+# ECR login
+aws ecr get-login-password --region {settings.batch_region} | \
+    docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+# Ensure buildx builder with QEMU support
+docker buildx create --name multiarch --use 2>/dev/null || docker buildx use multiarch
+docker buildx inspect --bootstrap
+
+# Get git metadata for build args
+GIT_HASH=$(git rev-parse HEAD)
+GIT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "detached")
+TIMESTAMP=$(date '+%Y%m%d.%H%M%S')
+
+# Multi-arch build + push (ARM64 native, AMD64 via QEMU)
+docker buildx build \
+    --platform linux/amd64,linux/arm64 \
+    -f runscripts/container/Dockerfile \
+    -t "$ECR_URI" \
+    --push \
+    --build-arg git_hash="$GIT_HASH" \
+    --build-arg git_branch="$GIT_BRANCH" \
+    --build-arg timestamp="$TIMESTAMP" \
+    .
+
 cd /tmp && rm -rf {build_dir}
+echo "Multi-arch image pushed: $ECR_URI"
 """
 
         async with get_ssh_session_service().session() as ssh:
@@ -128,7 +160,7 @@ cd /tmp && rm -rf {build_dir}
             if return_code != 0:
                 raise RuntimeError(f"Docker build failed on submit node: {stderr[:500]}")
 
-        logger.info(f"Built and pushed image {settings.ecr_repository}:{commit}")
+        logger.info(f"Built and pushed multi-arch image {settings.ecr_repository}:{commit}")
 
     @override
     async def submit_parca_job(self, parca_dataset: ParcaDataset) -> JobId:
@@ -190,7 +222,21 @@ cd /tmp && rm -rf {build_dir}
         )
         self._k8s.create_configmap(configmap)
 
-        # Create the K8s Job
+        # Build the init container command:
+        # 1. Run workflow.py --build-only to generate Nextflow files
+        # 2. Copy module files (sim.nf, analysis.nf) to shared volume
+        # 3. Persist generated files to S3 for debugging/audit/resume
+        s3_nf_path = f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/nextflow"
+        init_command = (
+            "python runscripts/workflow.py --config /config/workflow.json --build-only"
+            " && cp runscripts/nextflow/sim.nf /work/nextflow/"
+            " && cp runscripts/nextflow/analysis.nf /work/nextflow/"
+            f" && aws s3 cp /work/nextflow/ {s3_nf_path}/ --recursive"
+        )
+
+        nxf_work = f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}"
+
+        # Create the K8s Job with init container (vEcoli) + main container (Nextflow)
         job = k8s_client.V1Job(
             metadata=k8s_client.V1ObjectMeta(
                 name=job_name,
@@ -207,31 +253,47 @@ cd /tmp && rm -rf {build_dir}
                     spec=k8s_client.V1PodSpec(
                         service_account_name="batch-submit",
                         restart_policy="Never",
-                        containers=[
+                        init_containers=[
                             k8s_client.V1Container(
-                                name="nextflow",
-                                image=settings.nextflow_container_image,
-                                args=["--config", "/config/workflow.json"],
+                                name="generate-workflow",
+                                image=task_image,  # vEcoli image from ECR (multi-arch)
+                                command=["/bin/bash", "-c", init_command],
                                 env=[
-                                    k8s_client.V1EnvVar(
-                                        name="NXF_WORK",
-                                        value=f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}",
-                                    ),
+                                    k8s_client.V1EnvVar(name="EXPERIMENT_ID", value=experiment_id),
                                     k8s_client.V1EnvVar(name="AWS_DEFAULT_REGION", value=settings.batch_region),
                                 ],
                                 volume_mounts=[
                                     k8s_client.V1VolumeMount(name="config", mount_path="/config"),
+                                    k8s_client.V1VolumeMount(name="nextflow-files", mount_path="/work/nextflow"),
+                                ],
+                            ),
+                        ],
+                        containers=[
+                            k8s_client.V1Container(
+                                name="nextflow",
+                                image=settings.nextflow_container_image,
+                                env=[
+                                    k8s_client.V1EnvVar(name="EXPERIMENT_ID", value=experiment_id),
+                                    k8s_client.V1EnvVar(name="NXF_WORK", value=nxf_work),
+                                    k8s_client.V1EnvVar(name="AWS_DEFAULT_REGION", value=settings.batch_region),
+                                ],
+                                volume_mounts=[
+                                    k8s_client.V1VolumeMount(name="nextflow-files", mount_path="/work/nextflow"),
                                 ],
                                 resources=k8s_client.V1ResourceRequirements(
                                     requests={"cpu": "2", "memory": "4Gi"},
                                     limits={"cpu": "2", "memory": "4Gi"},
                                 ),
-                            )
+                            ),
                         ],
                         volumes=[
                             k8s_client.V1Volume(
                                 name="config",
                                 config_map=k8s_client.V1ConfigMapVolumeSource(name=configmap_name),
+                            ),
+                            k8s_client.V1Volume(
+                                name="nextflow-files",
+                                empty_dir=k8s_client.V1EmptyDirVolumeSource(),
                             ),
                         ],
                     ),
