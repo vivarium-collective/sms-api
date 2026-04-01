@@ -175,13 +175,15 @@ The `sms-cdk` repository (`lib/batch-stack.ts`) deploys AWS Batch infrastructure
 | **Networking** | Private subnets, NAT gateway, no public IPs |
 | **IAM Roles** | `BatchSubmitNodeRole` (Batch job mgmt, ECR push/pull, S3 rw, PassRole, CW Logs), `BatchComputeRole` (S3 rw, ECR pull, ECS) |
 
-### Architecture constraint: CPU architecture
+### Architecture: CPU architecture
 
-- **Batch compute**: ARM64 (Graviton). All task containers must be ARM64 images.
-- **EC2 submit node**: ARM64. Builds Docker images natively for the Batch architecture.
-- **EKS nodes**: AMD64. The Nextflow head process (orchestration only) runs here.
+- **Batch compute**: ARM64 (Graviton) recommended for vEcoli's CPU-bound workloads. Configurable via CDK `cpuArchitecture`.
+- **EC2 submit node**: Matches Batch architecture (ARM64). Builds Docker images natively -- no cross-compilation needed.
+- **EKS nodes**: Currently AMD64. The Nextflow head process (orchestration only) runs here.
 
-The Nextflow head does not execute simulation code. It submits Batch jobs referencing ARM64 images by ECR URI. **The head and task architectures do not need to match.**
+The vEcoli Dockerfile (`runscripts/container/Dockerfile`) and build script (`runscripts/container/build-and-push-ecr.sh`) are **architecture-agnostic**. The image architecture is determined by where `docker build` runs, not by any flag. Both Dockerfiles (task image and Nextflow submit image) should follow this pattern -- multi-arch base images, detect arch at build time for tool installs.
+
+The Nextflow head does not execute simulation code. It submits Batch jobs referencing task images by ECR URI. **The head and task architectures do not need to match.**
 
 ### vEcoli workflow config structure
 
@@ -607,13 +609,23 @@ Completed changes:
 
 ### Stage 3: Nextflow submit container image
 
-**Goal**: Build AMD64 Docker image that runs Nextflow with `awsbatch` executor.
+**Goal**: Build AMD64 Docker image that runs the Nextflow head process with `awsbatch` executor.
+
+The entrypoint must implement the same 3-step pattern as the SLURM path in `workflow_slurm_script()`:
+
+1. Run `workflow.py --build-only` inside the vEcoli container to generate Nextflow files (main.nf, nextflow.config, sim.nf, analysis.nf)
+2. Copy/fix Nextflow module include paths (same sed replacements as the SLURM script)
+3. Run `nextflow` directly with the `aws` profile to submit tasks to Batch
+
+This is NOT a simple `python runscripts/workflow.py --config <file>` entrypoint. The `--build-only` flag separates workflow DAG generation (requires vEcoli Python environment) from workflow execution (requires Nextflow + Java).
 
 New files:
-- `Dockerfile-nextflow` -- based on `amazoncorretto:21-al2023`, AMD64, with Nextflow + Java + s3fs + boto3
-- `nextflow/entrypoint.sh` -- resolves config from volume mount, runs `python runscripts/workflow.py`
+- `Dockerfile-nextflow` -- architecture-agnostic (like the vEcoli Dockerfile), with Nextflow + Java + vEcoli repo + Python/uv. Multi-arch base image, detect arch at build time for tool installs.
+- `nextflow/entrypoint.sh` -- implements the 3-step pattern above, reads config from `/config/workflow.json` (ConfigMap mount)
 
-The vEcoli repo is cloned into the image at build time (or mounted). The `aws` section of the workflow config tells Nextflow to use the pre-built ARM64 task image from ECR (`build_image: false`).
+The `aws` section of the workflow config tells Nextflow to use the pre-built task image from ECR (`build_image: false`).
+
+Also update `SimulationServiceK8s.submit_build_image_job()` to use vEcoli's `runscripts/container/build-and-push-ecr.sh` script (args: `-i` tag, `-r` repo, `-R` region) instead of inline build commands. The script handles ECR authentication, repo creation, build, and push. The `-u` flag returns the full image URI without building (useful for programmatic lookup).
 
 Tests:
 - `tests/integration/test_nextflow_container.py` -- Docker build + smoke test
