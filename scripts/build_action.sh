@@ -17,7 +17,7 @@ version=${1:-${declared_version}}
 
 echo "building and pushing images for version ${version}"
 
-for service in api; do
+for service in api nextflow; do
   tag="${version}"
   dockerfile="${ROOT_DIR}/Dockerfile-${service}"
   image_name="ghcr.io/vivarium-collective/sms-${service}:${tag}"
