@@ -42,6 +42,12 @@ from tests.fixtures.file_service_fixtures import (  # noqa: F401
     temp_test_data_dir,
 )
 from tests.fixtures.handlers_fixtures import analysis_outdir  # noqa: F401
+from tests.fixtures.k8s_fixtures import (  # noqa: F401
+    make_listing_item,
+    mock_file_service,
+    mock_k8s_job_service,
+    simulation_service_k8s_mock,
+)
 from tests.fixtures.logging_fixtures import logger  # noqa: F401
 from tests.fixtures.mongodb_fixtures import (  # noqa: F401
     mongo_test_client,

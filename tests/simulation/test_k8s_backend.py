@@ -1,13 +1,20 @@
 """Tests for K8s backend: K8sJobService, SimulationServiceK8s, LocalTaskService, config backend selection."""
 
 import asyncio
-from unittest.mock import MagicMock, patch
+import json
+from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from sms_api.common.hpc.k8s_job_service import K8sJobService, _job_to_status
 from sms_api.common.hpc.local_task_service import LocalTaskService
 from sms_api.common.models import JobBackend, JobId, JobStatus
+from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
+
+if TYPE_CHECKING:
+    from sms_api.simulation.database_service import DatabaseServiceSQL
+    from sms_api.simulation.models import SimulationRequest
 
 
 class TestJobToStatus:
@@ -229,3 +236,149 @@ class TestLocalTaskService:
         removed = service.cleanup_completed()
         assert removed == 1
         assert service.get_status("nonexistent") is None
+
+
+@pytest.mark.asyncio
+class TestSimulationServiceK8s:
+    """Tests for SimulationServiceK8s using injected mock fixtures."""
+
+    async def test_submit_simulation_creates_job_with_init_container(
+        self,
+        simulation_service_k8s_mock: SimulationServiceK8s,
+        mock_k8s_job_service: MagicMock,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Verify that submit creates a K8s Job with init container and shared volume."""
+
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+        job_id = await simulation_service_k8s_mock.submit_ecoli_simulation_job(
+            ecoli_simulation=simulation, database_service=database_service, correlation_id="test-corr"
+        )
+
+        assert job_id.backend == JobBackend.K8S
+        # Verify K8s Job was created
+        mock_k8s_job_service.create_job.assert_called_once()
+        mock_k8s_job_service.create_configmap.assert_called_once()
+
+        # Inspect the Job spec
+        job_arg = mock_k8s_job_service.create_job.call_args[0][0]
+        pod_spec = job_arg.spec.template.spec
+
+        # Should have an init container (generate-workflow)
+        assert len(pod_spec.init_containers) == 1
+        assert pod_spec.init_containers[0].name == "generate-workflow"
+
+        # Should have a main container (nextflow)
+        assert len(pod_spec.containers) == 1
+        assert pod_spec.containers[0].name == "nextflow"
+
+        # Should have shared emptyDir volume
+        volume_names = [v.name for v in pod_spec.volumes]
+        assert "nextflow-files" in volume_names
+        assert "config" in volume_names
+
+    async def test_submit_simulation_config_has_aws_section(
+        self,
+        simulation_service_k8s_mock: SimulationServiceK8s,
+        mock_k8s_job_service: MagicMock,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Verify workflow config in ConfigMap has aws section with build_image=false."""
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+        await simulation_service_k8s_mock.submit_ecoli_simulation_job(
+            ecoli_simulation=simulation, database_service=database_service, correlation_id="test-corr"
+        )
+
+        # Get the ConfigMap that was created
+        configmap_arg = mock_k8s_job_service.create_configmap.call_args[0][0]
+        config_json = json.loads(configmap_arg.data["workflow.json"])
+
+        assert config_json["aws"]["build_image"] is False
+        assert "batch_queue" in config_json["aws"]
+        assert "container_image" in config_json["aws"]
+        assert "region" in config_json["aws"]
+        assert config_json["progress_bar"] is False
+
+    async def test_cancel_k8s_job_deletes_job_and_configmap(
+        self,
+        simulation_service_k8s_mock: SimulationServiceK8s,
+        mock_k8s_job_service: MagicMock,
+    ) -> None:
+        """Verify cancel deletes the K8s Job and its ConfigMap."""
+        job_id = JobId.k8s("nf-test-experiment")
+        await simulation_service_k8s_mock.cancel_job(job_id)
+
+        mock_k8s_job_service.delete_job.assert_called_once_with("nf-test-experiment")
+        mock_k8s_job_service.delete_configmap.assert_called_once_with("nf-test-experiment-config")
+
+    async def test_cancel_local_task_does_not_call_k8s(
+        self,
+        simulation_service_k8s_mock: SimulationServiceK8s,
+        mock_k8s_job_service: MagicMock,
+    ) -> None:
+        """Verify LOCAL backend dispatches to LocalTaskService, not K8s."""
+        job_id = JobId.local("some-uuid")
+        await simulation_service_k8s_mock.cancel_job(job_id)
+
+        mock_k8s_job_service.delete_job.assert_not_called()
+
+    async def test_get_job_status_k8s_dispatches_to_k8s_service(
+        self,
+        simulation_service_k8s_mock: SimulationServiceK8s,
+        mock_k8s_job_service: MagicMock,
+    ) -> None:
+        """Verify K8S backend queries K8sJobService."""
+        job_id = JobId.k8s("nf-test-job")
+        result = await simulation_service_k8s_mock.get_job_status(job_id)
+
+        mock_k8s_job_service.get_job_status.assert_called_once_with("nf-test-job")
+        assert result is not None
+        assert result.status == JobStatus.COMPLETED
+
+    async def test_get_job_status_local_dispatches_to_local_service(
+        self,
+        simulation_service_k8s_mock: SimulationServiceK8s,
+        mock_k8s_job_service: MagicMock,
+    ) -> None:
+        """Verify LOCAL backend queries LocalTaskService, not K8s."""
+        job_id = JobId.local("nonexistent")
+        result = await simulation_service_k8s_mock.get_job_status(job_id)
+
+        mock_k8s_job_service.get_job_status.assert_not_called()
+        assert result is None  # No such task in LocalTaskService
+
+    async def test_read_config_template_uses_github_api(
+        self,
+        simulation_service_k8s_mock: SimulationServiceK8s,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify read_config_template calls GitHub Contents API."""
+        from sms_api.simulation.models import SimulatorVersion
+
+        simulator = SimulatorVersion(
+            database_id=1,
+            git_commit_hash="abc1234",
+            git_repo_url="https://github.com/test/repo",
+            git_branch="main",
+        )
+
+        mock_response = AsyncMock()
+        mock_response.text = '{"experiment_id": "test"}'
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get.return_value = mock_response
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        monkeypatch.setattr("sms_api.simulation.simulation_service_k8s.httpx.AsyncClient", lambda: mock_client)
+
+        result = await simulation_service_k8s_mock.read_config_template(simulator, "test.json")
+
+        assert result == '{"experiment_id": "test"}'
+        mock_client.get.assert_called_once()
+        call_url = mock_client.get.call_args[0][0]
+        assert "api.github.com/repos/test/repo" in call_url
+        assert "test.json" in call_url
