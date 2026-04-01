@@ -30,7 +30,7 @@ from httpx import ASGITransport, AsyncClient
 
 from sms_api.api.main import app
 from sms_api.common.hpc.job_service import JobStatusInfo
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobStatus, SSHTarget
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
@@ -76,7 +76,7 @@ async def get_or_create_simulator(
 async def check_image_exists(simulator: SimulatorVersion) -> bool:
     """Check if the singularity image already exists on HPC."""
     image_path = get_apptainer_image_file(simulator)
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         try:
             await ssh.run_command(f"test -f {image_path.remote_path}")
             return True
@@ -94,7 +94,7 @@ async def scan_hpc_for_parca_dir(commit_hash: str) -> str | None:
     parca_base = settings.hpc_parca_base_path.remote_path
     pattern = f"parca_{commit_hash}_*"
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         try:
             _retcode, stdout, _stderr = await ssh.run_command(f"ls -d {parca_base}/{pattern} 2>/dev/null | head -1")
             if stdout.strip():
@@ -115,7 +115,7 @@ async def scan_hpc_for_simulation_output(experiment_id: str) -> bool:
     sim_outdir = settings.simulation_outdir.remote_path
     variant_data_path = f"{sim_outdir}/{experiment_id}/variant_sim_data"
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         try:
             await ssh.run_command(f"test -d {variant_data_path}")
             return True

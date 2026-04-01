@@ -14,7 +14,7 @@ from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.nextflow_weblog import WEBLOG_RECEIVER_SCRIPT
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.models import JobId, JobStatus
+from sms_api.common.models import JobId, JobStatus, SSHTarget
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import capture_slurm_script
@@ -133,7 +133,7 @@ class SimulationServiceHpc(SimulationService):
         """
         settings = get_settings()
         auth_url = _get_authenticated_git_url(git_repo_url, settings.github_username, settings.github_token)
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             return_code, stdout, stderr = await ssh.run_command(f"git ls-remote -h {auth_url} {git_branch}")
         if return_code != 0:
             raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
@@ -321,7 +321,7 @@ class SimulationServiceHpc(SimulationService):
                 f.write(script_content)
 
             # submit the build script to slurm
-            async with get_ssh_session_service().session() as ssh:
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 slurm_jobid = await slurm_service.submit_job(
                     ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
                 )
@@ -396,7 +396,7 @@ class SimulationServiceHpc(SimulationService):
                 f.write(script_content)
 
             # submit the parca script to slurm
-            async with get_ssh_session_service().session() as ssh:
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 slurm_jobid = await slurm_service.submit_job(
                     ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
                 )
@@ -439,7 +439,7 @@ class SimulationServiceHpc(SimulationService):
                 f.write(script_content)
 
             # submit the simulation script to slurm
-            async with get_ssh_session_service().session() as ssh:
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 slurm_jobid = await slurm_service.submit_job(
                     ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
                 )
@@ -455,7 +455,7 @@ class SimulationServiceHpc(SimulationService):
             / "configs"
             / config_filename
         )
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
             if returncode != 0:
                 raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
@@ -465,7 +465,7 @@ class SimulationServiceHpc(SimulationService):
     async def get_job_status(self, job_id: JobId) -> JobStatusInfo | None:
         slurm_service = SlurmService()
         slurmjobid = job_id.as_slurm_int
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             slurm_jobs: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh, job_ids=[slurmjobid])
             if len(slurm_jobs) == 0:
                 slurm_jobs = await slurm_service.get_job_status_scontrol(ssh, job_ids=[slurmjobid])
@@ -489,7 +489,7 @@ class SimulationServiceHpc(SimulationService):
     async def cancel_job(self, job_id: JobId) -> None:
         """Cancel a SLURM job via scancel."""
         slurm_id = job_id.as_slurm_int
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             return_code, _stdout, stderr = await ssh.run_command(f"scancel {slurm_id}")
             if return_code != 0:
                 raise RuntimeError(f"Failed to cancel SLURM job {slurm_id}: {stderr.strip()}")

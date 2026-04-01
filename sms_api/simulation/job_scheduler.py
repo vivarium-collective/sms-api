@@ -6,7 +6,7 @@ from async_lru import alru_cache
 from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
-from sms_api.common.models import JobBackend, JobStatus
+from sms_api.common.models import JobBackend, JobStatus, SSHTarget
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
@@ -103,7 +103,7 @@ class JobScheduler:
             logger.debug("No active SLURM jobs found for polling.")
             return
         slurm_job_ids = [job.job_id.as_slurm_int for job in slurm_runs]
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             slurm_jobs_from_squeue = await self.slurm_service.get_job_status_squeue(ssh, slurm_job_ids)
             slurm_jobs_from_sacct = await self.slurm_service.get_job_status_scontrol(ssh, slurm_job_ids)
         slurm_job_map = {job.job_id: job for job in slurm_jobs_from_squeue}

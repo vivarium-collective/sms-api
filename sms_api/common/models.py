@@ -33,6 +33,13 @@ class StrEnumBase(StrEnum):
         return sorted(vals) if sort else vals
 
 
+class SSHTarget(StrEnumBase):
+    """Named SSH connection targets."""
+
+    SLURM = "slurm"  # SLURM login node (slurm_submit_*) — job submission, status, logs, data
+    BUILD = "build"  # ARM64 build machine (build_node_*) — Docker image builds + ECR push
+
+
 class JobBackend(StrEnumBase):
     """Backend system used to execute HPC jobs."""
 

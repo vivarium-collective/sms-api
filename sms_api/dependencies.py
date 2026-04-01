@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from sms_api.common.messaging.messaging_service import MessagingService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
+from sms_api.common.models import SSHTarget
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_gcs import FileServiceGCS
@@ -123,26 +124,27 @@ def get_messaging_service() -> MessagingService | None:
 
 # ------ SSH session service (singleton) ------
 
-global_ssh_session_service: SSHSessionService | None = None
+_ssh_services: dict[SSHTarget, SSHSessionService] = {}
 
 
-def set_ssh_session_service(service: SSHSessionService | None) -> None:
-    global global_ssh_session_service
-    global_ssh_session_service = service
+def set_ssh_session_service(service: SSHSessionService | None, *, name: SSHTarget) -> None:
+    if service is None:
+        _ssh_services.pop(name, None)
+    else:
+        _ssh_services[name] = service
 
 
-def get_ssh_session_service_or_none() -> SSHSessionService | None:
-    """Get the SSHSessionService singleton, or None if not initialized."""
-    global global_ssh_session_service
-    return global_ssh_session_service
+def get_ssh_session_service_or_none(name: SSHTarget) -> SSHSessionService | None:
+    """Get a named SSHSessionService, or None if not initialized."""
+    return _ssh_services.get(name)
 
 
-def get_ssh_session_service() -> SSHSessionService:
-    """Get the SSHSessionService singleton. Raises RuntimeError if not initialized."""
-    global global_ssh_session_service
-    if global_ssh_session_service is None:
-        raise RuntimeError("SSHSessionService singleton not initialized")
-    return global_ssh_session_service
+def get_ssh_session_service(name: SSHTarget) -> SSHSessionService:
+    """Get a named SSHSessionService. Raises RuntimeError if not initialized."""
+    service = _ssh_services.get(name)
+    if service is None:
+        raise RuntimeError(f"SSHSessionService '{name}' not initialized")
+    return service
 
 
 # ------ initialized standalone application (standalone) ------
@@ -173,35 +175,43 @@ def _init_simulation_service(job_backend: str, settings: Settings) -> None:
 
 
 def _init_ssh_service(job_backend: str, settings: Settings) -> None:
-    """Initialize SSH session service based on the job backend.
+    """Initialize SSH session services.
 
-    SLURM backend: SSH to HPC login node for all operations.
-    K8s backend: SSH to EC2 submit node for ARM64 Docker image builds only.
+    Default (SSHTarget.SLURM): SLURM login node — used by SimulationServiceHpc, JobScheduler, log/data retrieval.
+    Build (SSHTarget.BUILD): ARM64 build machine — used by SimulationServiceK8s for Docker image builds.
     """
-    if job_backend == "k8s" and settings.submit_node_host:
-        logger.info("Initializing SSH session service (EC2 submit node for image builds)...")
-        ssh_session_service = SSHSessionService(
-            hostname=settings.submit_node_host,
-            username=settings.submit_node_user,
-            key_path=Path(settings.submit_node_key_path),
-        )
-        set_ssh_session_service(ssh_session_service)
-        logger.info(f"✓ SSHSessionService initialized for {settings.submit_node_user}@{settings.submit_node_host}")
-    elif job_backend == "slurm":
+    # SLURM SSH (default) — always init if configured, needed for SLURM backend
+    if settings.slurm_submit_host and settings.slurm_submit_key_path:
         logger.info("Initializing SSH session service (SLURM login node)...")
         ssh_key_path = Path(settings.slurm_submit_key_path)
         if not ssh_key_path.exists():
             logger.warning(f"SSH key file not found: {ssh_key_path}")
         else:
             logger.info(f"SSH key found at: {ssh_key_path}")
-        ssh_session_service = SSHSessionService(
-            hostname=settings.slurm_submit_host,
-            username=settings.slurm_submit_user,
-            key_path=ssh_key_path,
-            known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
+        set_ssh_session_service(
+            SSHSessionService(
+                hostname=settings.slurm_submit_host,
+                username=settings.slurm_submit_user,
+                key_path=ssh_key_path,
+                known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
+            ),
+            name=SSHTarget.SLURM,
         )
-        set_ssh_session_service(ssh_session_service)
-        logger.info(f"✓ SSHSessionService initialized for {settings.slurm_submit_user}@{settings.slurm_submit_host}")
+        slurm_host = f"{settings.slurm_submit_user}@{settings.slurm_submit_host}"
+        logger.info(f"✓ SSH '{SSHTarget.SLURM}' initialized for {slurm_host}")
+
+    # Build machine SSH — for Docker image builds (ARM64 EC2 instance)
+    if settings.build_node_host and settings.build_node_key_path:
+        logger.info("Initializing SSH session service (build machine)...")
+        set_ssh_session_service(
+            SSHSessionService(
+                hostname=settings.build_node_host,
+                username=settings.build_node_user,
+                key_path=Path(settings.build_node_key_path),
+            ),
+            name=SSHTarget.BUILD,
+        )
+        logger.info(f"✓ SSH '{SSHTarget.BUILD}' initialized for {settings.build_node_user}@{settings.build_node_host}")
 
 
 async def init_standalone(enable_ssl: bool = True) -> None:
@@ -306,7 +316,8 @@ async def shutdown_standalone() -> None:
     set_simulation_service(None)
     set_database_service(None)
     set_file_service(None)
-    set_ssh_session_service(None)
+    set_ssh_session_service(None, name=SSHTarget.SLURM)
+    set_ssh_session_service(None, name=SSHTarget.BUILD)
 
     job_scheduler = get_job_scheduler()
     if job_scheduler:

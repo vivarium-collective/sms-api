@@ -16,7 +16,7 @@ from typing_extensions import override
 from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.hpc.k8s_job_service import K8sJobService
 from sms_api.common.hpc.local_task_service import LocalTaskService
-from sms_api.common.models import JobBackend, JobId
+from sms_api.common.models import JobBackend, JobId, SSHTarget
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
@@ -155,7 +155,7 @@ cd /tmp && rm -rf {build_dir}
 echo "Multi-arch image pushed: $ECR_URI"
 """
 
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.BUILD).session() as ssh:
             return_code, _stdout, stderr = await ssh.run_command(build_script)
             if return_code != 0:
                 raise RuntimeError(f"Docker build failed on submit node: {stderr[:500]}")

@@ -22,7 +22,7 @@ import pytest
 
 from sms_api.common.handlers import simulations
 from sms_api.common.hpc.job_service import JobStatusInfo
-from sms_api.common.models import JobId, JobStatus
+from sms_api.common.models import JobId, JobStatus, SSHTarget
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseServiceSQL
@@ -63,7 +63,7 @@ async def _check_repo_exists(commit_hash: str) -> bool:
     settings = get_settings()
     repo_path = settings.hpc_repo_base_path.remote_path / commit_hash / "vEcoli"
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -d {repo_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
         return "EXISTS" in result
@@ -72,7 +72,7 @@ async def _check_repo_exists(commit_hash: str) -> bool:
 async def _check_image_exists(simulator: SimulatorVersion) -> bool:
     """Check if the singularity image already exists on HPC."""
     image_path = get_apptainer_image_file(simulator)
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -f {image_path.remote_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
         return "EXISTS" in result
@@ -83,7 +83,7 @@ async def _check_config_exists(commit_hash: str, config_filename: str) -> bool:
     settings = get_settings()
     config_path = settings.hpc_repo_base_path.remote_path / commit_hash / "vEcoli" / "configs" / config_filename
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -f {config_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
         return "EXISTS" in result
@@ -236,7 +236,7 @@ async def test_run_workflow_simple(
     settings = get_settings()
     output_path = settings.simulation_outdir.remote_path / experiment_id
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -d {output_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
 

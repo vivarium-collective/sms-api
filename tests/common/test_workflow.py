@@ -18,7 +18,7 @@ import pytest
 from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobStatus, SSHTarget
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
@@ -48,7 +48,7 @@ async def _check_repo_exists(commit_hash: str) -> bool:
     settings = get_settings()
     repo_path = settings.hpc_repo_base_path / commit_hash / "vEcoli"
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -d {repo_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
         return "EXISTS" in result
@@ -57,7 +57,7 @@ async def _check_repo_exists(commit_hash: str) -> bool:
 async def _check_image_exists(simulator: SimulatorVersion) -> bool:
     """Check if the singularity image already exists on HPC."""
     image_path = get_apptainer_image_file(simulator)
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -f {image_path.remote_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
         return "EXISTS" in result
@@ -199,7 +199,7 @@ async def _run_workflow_test(
         remote_sbatch_file = remote_base_path / local_sbatch_file.name
 
         # Use single SSH session for all operations
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             # Create remote output directory
             await ssh.run_command(f"mkdir -p {remote_output_dir}")
 
@@ -322,7 +322,7 @@ async def test_workflow_py_execution(
     print(f"  Output dir: {result.remote_output_dir}")
 
     # Check job output for errors
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         # Read last 50 lines of output file
         tail_cmd = f"tail -50 {result.remote_output_file} 2>/dev/null || echo 'NO_OUTPUT'"
         _, output, _ = await ssh.run_command(tail_cmd)

@@ -18,7 +18,7 @@ from sms_api.analysis.models import TsvOutputFile
 from sms_api.common import StrEnumBase
 from sms_api.common.handlers.simulators import upload_simulator
 from sms_api.common.hpc.job_service import JobStatusUpdate
-from sms_api.common.models import JobBackend, JobStatus
+from sms_api.common.models import JobBackend, JobStatus, SSHTarget
 from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
 from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_file_service, get_simulation_service, get_ssh_session_service
@@ -392,7 +392,7 @@ async def fetch_omics_outputs(
 async def get_available_omics_output_paths(remote_analysis_outdir: HPCFilePath) -> list[HPCFilePath]:
     cmd = f'find "{remote_analysis_outdir!s}" -type f'
     try:
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             ret, out, err = await ssh.run_command(cmd)
         paths = []
         accepted_extensions = ["tsv", "html", "csv", "txt"]
@@ -589,7 +589,7 @@ async def download_analysis_output(
     local.parent.mkdir(parents=True, exist_ok=True)
 
     if not local.exists():
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             await ssh.scp_download(local_file=local, remote_path=remote_path)
 
     if response_type == SimulationAnalysisResponseType.DATA_CONTENT:
@@ -697,7 +697,7 @@ async def get_simulation_log(db_service: DatabaseService, simulation_id: int) ->
 async def _get_slurm_log(hpc_run: HpcRun) -> str:
     """Read SLURM job log via SSH."""
     job_id = str(hpc_run.job_id)
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         returncode, stdout, stderr = await ssh.run_command(f"scontrol show job {job_id}")
         try:
             k = "JobName="

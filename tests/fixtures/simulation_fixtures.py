@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 import pytest
 import pytest_asyncio
 
-from sms_api.common.models import JobId
+from sms_api.common.models import JobId, SSHTarget
 from sms_api.dependencies import (
     get_simulation_service,
     get_ssh_session_service_or_none,
@@ -45,13 +45,13 @@ def expected_build_job_id() -> JobId:
 @pytest.fixture(scope="function")
 def mock_ssh_session_service() -> Generator[MockSSHSessionService, None, None]:
     """Fixture to provide a mock SSH session service for tests that don't need real SSH."""
-    saved_ssh_service = get_ssh_session_service_or_none()
+    saved_ssh_service = get_ssh_session_service_or_none(SSHTarget.SLURM)
     mock_service = MockSSHSessionService()
-    set_ssh_session_service(mock_service)  # type: ignore[arg-type]
+    set_ssh_session_service(mock_service, name=SSHTarget.SLURM)  # type: ignore[arg-type]
 
     yield mock_service
 
-    set_ssh_session_service(saved_ssh_service)
+    set_ssh_session_service(saved_ssh_service, name=SSHTarget.SLURM)
 
 
 @pytest.fixture(scope="function")

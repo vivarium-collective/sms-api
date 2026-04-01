@@ -209,11 +209,11 @@ class Settings(BaseSettings):
     # ECR settings
     ecr_repository: str = "vecoli"  # ECR repository name for vEcoli task images
 
-    # EC2 submit node for ARM64 Docker image builds
-    submit_node_host: str = ""  # Hostname or IP of the ARM64 EC2 submit node
-    submit_node_user: str = ""  # SSH user for the submit node
-    submit_node_key_path: str = ""  # SSH key path for the submit node
-    submit_node_ssm_instance_id: str = ""  # Alternative: SSM instance ID (if using SSM instead of SSH)
+    # EC2 build machine for Docker image builds (ARM64 for Graviton Batch compute)
+    # Used with SSHTarget.BUILD
+    build_node_host: str = "docker.build.internal"  # Hostname of the ARM64 build machine
+    build_node_user: str = ""  # SSH user for the build machine
+    build_node_key_path: str = ""  # SSH key path for the build machine
 
 
 _K8S_NAMESPACES = {"sms-api-stanford", "sms-api-stanford-test"}

@@ -8,7 +8,7 @@ import pytest
 from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.hpc.k8s_job_service import K8sJobService
 from sms_api.common.hpc.local_task_service import LocalTaskService
-from sms_api.common.models import JobId, JobStatus
+from sms_api.common.models import JobId, JobStatus, SSHTarget
 from sms_api.common.storage.file_service import FileService, ListingItem
 from sms_api.dependencies import (
     get_file_service,
@@ -50,10 +50,10 @@ def simulation_service_k8s_mock(
 ) -> Generator[SimulationServiceK8s, None, None]:
     """SimulationServiceK8s with mocked K8sJobService and SSH, injected as global singleton."""
     saved_simulation_service = get_simulation_service()
-    saved_ssh_service = get_ssh_session_service_or_none()
+    saved_ssh_service = get_ssh_session_service_or_none(SSHTarget.BUILD)
 
-    # Mock SSH for build phase
-    set_ssh_session_service(MockSSHSessionService())  # type: ignore[arg-type]
+    # Mock SSH for build phase (build machine)
+    set_ssh_session_service(MockSSHSessionService(), name=SSHTarget.BUILD)  # type: ignore[arg-type]
 
     service = SimulationServiceK8s(
         k8s_job_service=mock_k8s_job_service,
@@ -64,7 +64,7 @@ def simulation_service_k8s_mock(
     yield service
 
     set_simulation_service(saved_simulation_service)
-    set_ssh_session_service(saved_ssh_service)
+    set_ssh_session_service(saved_ssh_service, name=SSHTarget.BUILD)
 
 
 @pytest.fixture(scope="function")

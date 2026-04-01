@@ -11,7 +11,7 @@ import pytest
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
-from sms_api.common.models import JobId, JobStatus
+from sms_api.common.models import JobId, JobStatus, SSHTarget
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService
@@ -146,7 +146,7 @@ async def test_job_scheduler(
             f.write(slurm_template_hello_10s)
 
         remote_sbatch_file = remote_path / local_sbatch_file.name
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             job_id: int = await slurm_service.submit_job(
                 ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
             )
@@ -277,7 +277,7 @@ async def test_job_scheduler_with_storage(
 
             # Copy helpers script to temp dir and upload to remote
             remote_helpers = remote_path / "s3_helpers.sh"
-            async with get_ssh_session_service().session() as ssh:
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 await ssh.scp_upload(local_file=helpers_script_path, remote_path=remote_helpers)
             print(f"✅ Uploaded helper script to {remote_helpers}")
 
@@ -327,7 +327,7 @@ export AWS_SECRET_ACCESS_KEY="{settings.storage_qumulo_secret_access_key}"
             # Submit job
             remote_sbatch_file = remote_path / local_sbatch_file.name
             print(f"✅ Submitting job with script: {remote_sbatch_file}")
-            async with get_ssh_session_service().session() as ssh:
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 job_id: int = await slurm_service.submit_job(
                     ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
                 )
