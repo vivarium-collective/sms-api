@@ -6,7 +6,7 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.http_validation_error import HTTPValidationError
-from ...models.output_file import OutputFile
+from ...models.simulation_run import SimulationRun
 from ...types import Response
 
 
@@ -14,8 +14,8 @@ def _get_kwargs(
     id: int,
 ) -> dict[str, Any]:
     _kwargs: dict[str, Any] = {
-        "method": "get",
-        "url": f"/api/v1/analyses/{id}/plots",
+        "method": "delete",
+        "url": f"/api/v1/simulations/{id}/cancel",
     }
 
     return _kwargs
@@ -23,14 +23,9 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[HTTPValidationError, list["OutputFile"]]]:
+) -> Optional[Union[HTTPValidationError, SimulationRun]]:
     if response.status_code == 200:
-        response_200 = []
-        _response_200 = response.json()
-        for response_200_item_data in _response_200:
-            response_200_item = OutputFile.from_dict(response_200_item_data)
-
-            response_200.append(response_200_item)
+        response_200 = SimulationRun.from_dict(response.json())
 
         return response_200
     if response.status_code == 422:
@@ -45,7 +40,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[HTTPValidationError, list["OutputFile"]]]:
+) -> Response[Union[HTTPValidationError, SimulationRun]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -58,18 +53,20 @@ def sync_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[HTTPValidationError, list["OutputFile"]]]:
-    """Get an array of HTML files representing all plot outputs of a given analysis.
+) -> Response[Union[HTTPValidationError, SimulationRun]]:
+    """Cancel a running simulation
+
+     Cancel a running simulation by killing its backend job.
 
     Args:
-        id (int): Database ID of the analysis
+        id (int): Database ID of the simulation
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, list['OutputFile']]]
+        Response[Union[HTTPValidationError, SimulationRun]]
     """
 
     kwargs = _get_kwargs(
@@ -87,18 +84,20 @@ def sync(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[HTTPValidationError, list["OutputFile"]]]:
-    """Get an array of HTML files representing all plot outputs of a given analysis.
+) -> Optional[Union[HTTPValidationError, SimulationRun]]:
+    """Cancel a running simulation
+
+     Cancel a running simulation by killing its backend job.
 
     Args:
-        id (int): Database ID of the analysis
+        id (int): Database ID of the simulation
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, list['OutputFile']]
+        Union[HTTPValidationError, SimulationRun]
     """
 
     return sync_detailed(
@@ -111,18 +110,20 @@ async def asyncio_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[HTTPValidationError, list["OutputFile"]]]:
-    """Get an array of HTML files representing all plot outputs of a given analysis.
+) -> Response[Union[HTTPValidationError, SimulationRun]]:
+    """Cancel a running simulation
+
+     Cancel a running simulation by killing its backend job.
 
     Args:
-        id (int): Database ID of the analysis
+        id (int): Database ID of the simulation
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[HTTPValidationError, list['OutputFile']]]
+        Response[Union[HTTPValidationError, SimulationRun]]
     """
 
     kwargs = _get_kwargs(
@@ -138,18 +139,20 @@ async def asyncio(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[HTTPValidationError, list["OutputFile"]]]:
-    """Get an array of HTML files representing all plot outputs of a given analysis.
+) -> Optional[Union[HTTPValidationError, SimulationRun]]:
+    """Cancel a running simulation
+
+     Cancel a running simulation by killing its backend job.
 
     Args:
-        id (int): Database ID of the analysis
+        id (int): Database ID of the simulation
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[HTTPValidationError, list['OutputFile']]
+        Union[HTTPValidationError, SimulationRun]
     """
 
     return (
