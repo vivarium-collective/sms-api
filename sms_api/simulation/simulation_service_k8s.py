@@ -15,7 +15,8 @@ from typing_extensions import override
 
 from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.hpc.k8s_job_service import K8sJobService
-from sms_api.common.models import JobId
+from sms_api.common.hpc.local_task_service import LocalTaskService
+from sms_api.common.models import JobBackend, JobId
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
@@ -53,8 +54,9 @@ class SimulationServiceK8s(SimulationService):
     - Status/cancel: K8s Job API
     """
 
-    def __init__(self, k8s_job_service: K8sJobService) -> None:
+    def __init__(self, k8s_job_service: K8sJobService, local_task_service: LocalTaskService | None = None) -> None:
         self._k8s = k8s_job_service
+        self._local = local_task_service or LocalTaskService()
 
     @override
     async def get_latest_commit_hash(
@@ -74,20 +76,27 @@ class SimulationServiceK8s(SimulationService):
 
     @override
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> JobId:
-        """Build a Docker image on the ARM64 EC2 submit node via SSH.
+        """Build a Docker image on the EC2 submit node via SSH (async).
 
-        The submit node clones the vEcoli repo, builds an ARM64 Docker image,
-        and pushes it to ECR. This runs as a remote shell command, not a K8s Job,
-        because the image must be ARM64 (matching Batch compute) and EKS nodes are AMD64.
+        Spawns the build as a background task and returns immediately with a
+        LOCAL JobId. The build clones the vEcoli repo at the specified commit,
+        then uses vEcoli's build-and-push-ecr.sh to build and push to ECR.
 
-        Returns a JobId.slurm for now (the SSH build is fire-and-forget with a PID).
-        TODO: This could be a Batch job itself, or tracked via SSM RunCommand.
+        The image architecture matches the submit node (ARM64 for Graviton
+        Batch compute, or AMD64 if configured differently). No cross-compilation.
         """
+        commit = simulator_version.git_commit_hash
+        return self._local.submit(
+            self._run_build(simulator_version),
+            name=f"build-{commit}",
+        )
+
+    async def _run_build(self, simulator_version: SimulatorVersion) -> None:
+        """Execute the Docker build + ECR push on the submit node via SSH."""
         settings = get_settings()
         commit = simulator_version.git_commit_hash
         branch = simulator_version.git_branch
         repo_url = simulator_version.git_repo_url
-        ecr_image = f"{settings.ecr_repository}:{commit}"
 
         # Inject GitHub PAT for private repo cloning
         auth_repo_url = repo_url
@@ -98,27 +107,28 @@ class SimulationServiceK8s(SimulationService):
                     f"https://{settings.github_username}:{settings.github_token}@github.com/{match.group(1)}"
                 )
 
+        # Clone repo, build image, push to ECR, clean up
+        # build-and-push-ecr.sh handles ECR auth, repo creation, build, push, and tagging
+        build_dir = f"vEcoli-build-{commit}"
         build_script = f"""\
-            set -e
-            cd /tmp
-            ecr-login
-            if [ -d "vEcoli-build-{commit}" ]; then rm -rf "vEcoli-build-{commit}"; fi
-            git clone --branch {branch} --single-branch --depth 1 {auth_repo_url} vEcoli-build-{commit}
-            cd vEcoli-build-{commit}
-            git checkout {commit}
-            bash runscripts/container/build-and-push-ecr.sh -i {ecr_image} -r {settings.ecr_repository}
-            cd /tmp && rm -rf vEcoli-build-{commit}
-        """
+set -e
+cd /tmp
+if [ -d "{build_dir}" ]; then rm -rf "{build_dir}"; fi
+git clone --branch {branch} --single-branch {auth_repo_url} {build_dir}
+cd {build_dir}
+bash runscripts/container/build-and-push-ecr.sh \
+    -i {commit} \
+    -r {settings.ecr_repository} \
+    -R {settings.batch_region}
+cd /tmp && rm -rf {build_dir}
+"""
 
         async with get_ssh_session_service().session() as ssh:
-            return_code, stdout, stderr = await ssh.run_command(build_script)
+            return_code, _stdout, stderr = await ssh.run_command(build_script)
             if return_code != 0:
                 raise RuntimeError(f"Docker build failed on submit node: {stderr[:500]}")
 
-        logger.info(f"Built and pushed Docker image {ecr_image} for commit {commit}")
-        # Return a synthetic job ID — the build is synchronous over SSH
-        # In production, this could be an SSM RunCommand ID or a Batch job
-        return JobId.k8s(f"build-{commit}")
+        logger.info(f"Built and pushed image {settings.ecr_repository}:{commit}")
 
     @override
     async def submit_parca_job(self, parca_dataset: ParcaDataset) -> JobId:
@@ -248,18 +258,20 @@ class SimulationServiceK8s(SimulationService):
 
     @override
     async def get_job_status(self, job_id: JobId) -> JobStatusInfo | None:
-        """Get K8s Job status."""
+        """Get job status — dispatches to K8s or local task tracker."""
+        if job_id.backend == JobBackend.LOCAL:
+            return self._local.get_status(job_id.value)
         return self._k8s.get_job_status(job_id.value)
 
     @override
     async def cancel_job(self, job_id: JobId) -> None:
-        """Cancel by deleting the K8s Job with foreground propagation.
-
-        This sends SIGTERM to the Nextflow head pod. Nextflow's shutdown
-        hook will cancel in-flight AWS Batch tasks.
-        """
+        """Cancel a job — dispatches to K8s or local task tracker."""
+        if job_id.backend == JobBackend.LOCAL:
+            self._local.cancel(job_id.value)
+            logger.info(f"Cancelled local task {job_id.value}")
+            return
+        # K8s Job: delete with foreground propagation, sends SIGTERM to Nextflow head
         self._k8s.delete_job(job_id.value)
-        # Also clean up the ConfigMap
         configmap_name = f"{job_id.value}-config"
         self._k8s.delete_configmap(configmap_name)
         logger.info(f"Cancelled K8s Job {job_id.value}")

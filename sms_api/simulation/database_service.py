@@ -10,7 +10,7 @@ from typing_extensions import override
 
 from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.common.hpc.job_service import JobStatusUpdate
-from sms_api.common.models import JobBackend, JobId
+from sms_api.common.models import JobId
 from sms_api.simulation.models import (
     HpcRun,
     JobType,
@@ -106,7 +106,7 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def get_hpcrun_by_slurmjobid(self, slurmjobid: int) -> HpcRun | None:
+    async def get_hpcrun_by_job_id(self, job_id: JobId) -> HpcRun | None:
         pass
 
     @abstractmethod
@@ -203,8 +203,12 @@ class DatabaseServiceSQL(DatabaseService):
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
         return orm_hpc_job
 
-    async def _get_orm_hpcrun_by_slurmjobid(self, session: AsyncSession, slurmjobid: int) -> ORMHpcRun | None:
-        stmt1 = select(ORMHpcRun).where(ORMHpcRun.slurmjobid == slurmjobid).limit(1)
+    async def _get_orm_hpcrun_by_job_id(self, session: AsyncSession, job_id: JobId) -> ORMHpcRun | None:
+        stmt1 = (
+            select(ORMHpcRun)
+            .where(ORMHpcRun.job_id_ext == str(job_id), ORMHpcRun.job_backend == job_id.backend.value)
+            .limit(1)
+        )
         result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
         return orm_hpc_job
@@ -357,14 +361,9 @@ class DatabaseServiceSQL(DatabaseService):
         jobref_parca_dataset_id = ref_id if job_type == JobType.PARCA else None
         jobref_simulator_id = ref_id if job_type == JobType.BUILD_IMAGE else None
 
-        # Decompose JobId into ORM primitive columns
-        slurmjobid = job_id.as_slurm_int if job_id.backend == JobBackend.SLURM else None
-        k8s_job_name = job_id.value if job_id.backend == JobBackend.K8S else None
-
         async with self.async_sessionmaker() as session, session.begin():
             orm_hpc_run = ORMHpcRun(
-                slurmjobid=slurmjobid,
-                k8s_job_name=k8s_job_name,
+                job_id_ext=str(job_id),
                 job_backend=job_id.backend,
                 job_type=JobTypeDB.from_job_type(job_type),
                 status=JobStatusDB.RUNNING,
@@ -379,9 +378,9 @@ class DatabaseServiceSQL(DatabaseService):
             return orm_hpc_run.to_hpc_run()
 
     @override
-    async def get_hpcrun_by_slurmjobid(self, slurmjobid: int) -> HpcRun | None:
+    async def get_hpcrun_by_job_id(self, job_id: JobId) -> HpcRun | None:
         async with self.async_sessionmaker() as session, session.begin():
-            orm_hpc_job: ORMHpcRun | None = await self._get_orm_hpcrun_by_slurmjobid(session, slurmjobid=slurmjobid)
+            orm_hpc_job: ORMHpcRun | None = await self._get_orm_hpcrun_by_job_id(session, job_id=job_id)
             if orm_hpc_job is None:
                 return None
             return orm_hpc_job.to_hpc_run()

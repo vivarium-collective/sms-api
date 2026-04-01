@@ -1,10 +1,12 @@
-"""Tests for K8s backend: K8sJobService, SimulationServiceK8s, config backend selection."""
+"""Tests for K8s backend: K8sJobService, SimulationServiceK8s, LocalTaskService, config backend selection."""
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from sms_api.common.hpc.k8s_job_service import K8sJobService, _job_to_status
+from sms_api.common.hpc.local_task_service import LocalTaskService
 from sms_api.common.models import JobBackend, JobId, JobStatus
 
 
@@ -149,7 +151,81 @@ class TestJobId:
         assert JobId.slurm(123) != JobId.k8s("123")
         assert JobId.k8s("abc") == JobId.k8s("abc")
 
+    def test_local_factory(self) -> None:
+        job_id = JobId.local("abc123")
+        assert job_id.value == "abc123"
+        assert job_id.backend == JobBackend.LOCAL
+        assert str(job_id) == "abc123"
+
     def test_frozen(self) -> None:
         job_id = JobId.slurm(123)
         with pytest.raises(AttributeError):
             job_id.value = "456"  # type: ignore[misc]
+
+
+@pytest.mark.asyncio
+class TestLocalTaskService:
+    async def test_submit_and_complete(self) -> None:
+        service = LocalTaskService()
+
+        async def quick_task() -> None:
+            await asyncio.sleep(0.01)
+
+        job_id = service.submit(quick_task(), name="test-task")
+        assert job_id.backend == JobBackend.LOCAL
+
+        # Should be RUNNING immediately
+        status = service.get_status(job_id.value)
+        assert status is not None
+        assert status.status in (JobStatus.RUNNING, JobStatus.COMPLETED)
+
+        # Wait for completion
+        await asyncio.sleep(0.05)
+        status = service.get_status(job_id.value)
+        assert status is not None
+        assert status.status == JobStatus.COMPLETED
+
+    async def test_submit_and_fail(self) -> None:
+        service = LocalTaskService()
+
+        async def failing_task() -> None:
+            raise RuntimeError("build exploded")
+
+        job_id = service.submit(failing_task(), name="fail-task")
+        await asyncio.sleep(0.05)
+
+        status = service.get_status(job_id.value)
+        assert status is not None
+        assert status.status == JobStatus.FAILED
+        assert "build exploded" in (status.error_message or "")
+
+    async def test_cancel(self) -> None:
+        service = LocalTaskService()
+
+        async def slow_task() -> None:
+            await asyncio.sleep(10)
+
+        job_id = service.submit(slow_task(), name="slow-task")
+        assert service.cancel(job_id.value) is True
+
+        await asyncio.sleep(0.05)
+        status = service.get_status(job_id.value)
+        assert status is not None
+        assert status.status == JobStatus.CANCELLED
+
+    async def test_status_unknown_task(self) -> None:
+        service = LocalTaskService()
+        assert service.get_status("nonexistent") is None
+
+    async def test_cleanup(self) -> None:
+        service = LocalTaskService()
+
+        async def quick() -> None:
+            pass
+
+        service.submit(quick(), name="cleanup-test")
+        await asyncio.sleep(0.05)
+
+        removed = service.cleanup_completed()
+        assert removed == 1
+        assert service.get_status("nonexistent") is None

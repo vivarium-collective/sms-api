@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel as _BaseModel
 from pydantic import ConfigDict, Field, computed_field, field_validator
 
-from sms_api.common.models import JobBackend, JobId, JobStatus
+from sms_api.common.models import JobId, JobStatus
 from sms_api.config import get_settings
 
 
@@ -36,7 +36,7 @@ class JobType(enum.Enum):
 
 class HpcRun(BaseModel):
     database_id: int
-    job_id: JobId = Field(exclude=True)  # Backend-tagged job identifier (not serialized; use computed fields)
+    job_id: JobId = Field(exclude=True)  # Backend-tagged job identifier (not serialized directly)
     correlation_id: str  # to correlate with the WorkerEvent, if applicable ("N/A" if not applicable)
     job_type: JobType
     ref_id: int  # primary key of the object this HPC run is associated with (sim, parca, etc.)
@@ -45,16 +45,11 @@ class HpcRun(BaseModel):
     end_time: str | None = None  # ISO format datetime string or None if still running
     error_message: str | None = None  # Error message if the simulation failed
 
-    # Computed fields for API serialization compatibility
+    # Computed fields for API serialization
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def slurmjobid(self) -> int | None:
-        return self.job_id.as_slurm_int if self.job_id.backend == JobBackend.SLURM else None
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def k8s_job_name(self) -> str | None:
-        return self.job_id.value if self.job_id.backend == JobBackend.K8S else None
+    def job_id_ext(self) -> str:
+        return str(self.job_id)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

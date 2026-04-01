@@ -38,6 +38,7 @@ class JobBackend(StrEnumBase):
 
     SLURM = "slurm"
     K8S = "k8s"
+    LOCAL = "local"  # In-process async task (e.g. SSH build on submit node)
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,10 @@ class JobId:
     @classmethod
     def k8s(cls, job_name: str) -> "JobId":
         return cls(value=job_name, backend=JobBackend.K8S)
+
+    @classmethod
+    def local(cls, task_id: str) -> "JobId":
+        return cls(value=task_id, backend=JobBackend.LOCAL)
 
     @property
     def as_slurm_int(self) -> int:

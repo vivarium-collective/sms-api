@@ -85,8 +85,7 @@ class ORMHpcRun(Base):
 
     job_type: Mapped[JobTypeDB] = mapped_column(nullable=False)
     correlation_id: Mapped[str] = mapped_column(nullable=False, index=True)
-    slurmjobid: Mapped[Optional[int]] = mapped_column(nullable=True)
-    k8s_job_name: Mapped[Optional[str]] = mapped_column(nullable=True)
+    job_id_ext: Mapped[Optional[str]] = mapped_column(nullable=True)  # Backend-specific job ID as string
     job_backend: Mapped[str] = mapped_column(nullable=False, server_default="slurm")
     start_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
     end_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
@@ -99,13 +98,10 @@ class ORMHpcRun(Base):
     jobref_simulator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("simulator.id"), nullable=True, index=True)
 
     def _build_job_id(self) -> JobId:
-        """Construct a JobId from the ORM primitive columns."""
-        backend = JobBackend(self.job_backend)
-        if backend == JobBackend.SLURM and self.slurmjobid is not None:
-            return JobId.slurm(self.slurmjobid)
-        elif backend == JobBackend.K8S and self.k8s_job_name is not None:
-            return JobId.k8s(self.k8s_job_name)
-        raise RuntimeError(f"ORMHpcRun {self.id} has job_backend={self.job_backend} but no matching job ID column set")
+        """Construct a JobId from the ORM columns."""
+        if self.job_id_ext is None:
+            raise RuntimeError(f"ORMHpcRun {self.id} has no job_id_ext set")
+        return JobId(value=self.job_id_ext, backend=JobBackend(self.job_backend))
 
     def to_hpc_run(self) -> HpcRun:
         ref_id = self.jobref_simulation_id or self.jobref_parca_dataset_id or self.jobref_simulator_id

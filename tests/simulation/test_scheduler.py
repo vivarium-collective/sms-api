@@ -162,7 +162,7 @@ async def test_job_scheduler(
 
     while asyncio.get_event_loop().time() - start_time < max_wait:
         await asyncio.sleep(2)
-        running_hpcrun = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+        running_hpcrun = await database_service.get_hpcrun_by_job_id(job_id=JobId.slurm(job_id))
         if running_hpcrun and running_hpcrun.status == JobStatus.RUNNING:
             break
 
@@ -177,7 +177,7 @@ async def test_job_scheduler(
 
     while asyncio.get_event_loop().time() - start_time_complete < max_wait_complete:
         await asyncio.sleep(2)
-        completed_hpcrun = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+        completed_hpcrun = await database_service.get_hpcrun_by_job_id(job_id=JobId.slurm(job_id))
         if completed_hpcrun and completed_hpcrun.status == JobStatus.COMPLETED:
             break
 
@@ -348,14 +348,14 @@ export AWS_SECRET_ACCESS_KEY="{settings.storage_qumulo_secret_access_key}"
             await asyncio.sleep(check_interval)
             elapsed += check_interval
 
-            completed_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+            completed_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_job_id(job_id=JobId.slurm(job_id))
             if completed_hpcrun and completed_hpcrun.status == JobStatus.COMPLETED:
                 print(f"✅ Job completed after {elapsed}s")
                 break
             print(f"   Waiting... ({elapsed}s / {max_wait}s)")
 
         # Verify job completed
-        final_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+        final_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_job_id(job_id=JobId.slurm(job_id))
         assert final_hpcrun is not None, "Job not found in database"
         assert final_hpcrun.status == JobStatus.COMPLETED, f"Job failed with status: {final_hpcrun.status}"
 

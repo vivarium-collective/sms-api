@@ -34,7 +34,7 @@ async def test_upload_simulator_handler(
 
     # ensure the returned simulator version matches the expected values
     expected_job_id = simulation_service_mock_clone_and_build.expected_build_job_id
-    image_build_hpcrun = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=expected_job_id.as_slurm_int)
+    image_build_hpcrun = await database_service.get_hpcrun_by_job_id(job_id=expected_job_id)
     assert image_build_hpcrun is not None
     assert image_build_hpcrun.job_id == expected_job_id
     assert image_build_hpcrun.ref_id == returned_simulator_version.database_id
