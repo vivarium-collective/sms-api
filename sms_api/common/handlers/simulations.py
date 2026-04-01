@@ -173,21 +173,12 @@ async def run_simulation_workflow(
     if simulator is None:
         raise ValueError(f"Simulator with id {simulator_id} not found")
 
-    # 2. Read the config file from the remote HPC system
-    remote_config_path = (
-        settings.hpc_repo_base_path.remote_path
-        / simulator.git_commit_hash
-        / "vEcoli"
-        / "configs"
-        / simulation_config_filename
+    # 2. Read the config template via the simulation service (SSH for SLURM, GitHub API for K8s)
+    config_str = await simulation_service.read_config_template(
+        simulator_version=simulator, config_filename=simulation_config_filename
     )
-    async with get_ssh_session_service().session() as ssh:
-        returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
-        if returncode != 0:
-            raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
 
     # 3. Replace placeholders in the config template
-    config_str = stdout
 
     unique_experiment_id = f"sim{simulator.database_id}-{experiment_id}-{str(uuid.uuid4())[:4]}"
     config_str = config_str.replace("EXPERIMENT_ID_PLACEHOLDER", unique_experiment_id)
