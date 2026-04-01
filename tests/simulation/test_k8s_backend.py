@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,6 +11,7 @@ import pytest
 from sms_api.common.hpc.k8s_job_service import K8sJobService, _job_to_status
 from sms_api.common.hpc.local_task_service import LocalTaskService
 from sms_api.common.models import JobBackend, JobId, JobStatus
+from sms_api.config import REPO_ROOT
 from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
 
 if TYPE_CHECKING:
@@ -382,3 +384,23 @@ class TestSimulationServiceK8s:
         call_url = mock_client.get.call_args[0][0]
         assert "api.github.com/repos/test/repo" in call_url
         assert "test.json" in call_url
+
+    async def test_build_script_writes_to_artifacts(
+        self,
+        simulation_service_k8s_mock: SimulationServiceK8s,
+    ) -> None:
+        """Generate the build script and write it to artifacts/ for manual SSM execution."""
+        from sms_api.common.simulator_defaults import DEFAULT_SIMULATOR
+
+        script = simulation_service_k8s_mock._build_script(DEFAULT_SIMULATOR)
+
+        artifacts_dir = Path(REPO_ROOT) / "artifacts"
+        artifacts_dir.mkdir(exist_ok=True)
+        script_path = artifacts_dir / f"build_{DEFAULT_SIMULATOR.git_commit_hash}.sh"
+        script_path.write_text(script)
+
+        assert script_path.exists()
+        content = script_path.read_text()
+        assert "set -e" in content
+        assert "docker buildx build" in content
+        assert DEFAULT_SIMULATOR.git_commit_hash in content

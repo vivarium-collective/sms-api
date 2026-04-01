@@ -91,12 +91,11 @@ class SimulationServiceK8s(SimulationService):
             name=f"build-{commit}",
         )
 
-    async def _run_build(self, simulator_version: SimulatorVersion) -> None:
-        """Execute multi-arch Docker build + ECR push on the submit node via SSH.
+    def _build_script(self, simulator_version: SimulatorVersion) -> str:
+        """Generate the bash script for multi-arch Docker build + ECR push.
 
-        Uses docker buildx to build both ARM64 (native on submit node) and
-        AMD64 (via QEMU) images under a single tag. ARM64 is used by Batch
-        compute, AMD64 is used by the K8s init container on EKS nodes.
+        Returns the script as a string. The script clones the vEcoli repo,
+        builds ARM64 + AMD64 images via docker buildx, and pushes to ECR.
         """
         settings = get_settings()
         commit = simulator_version.git_commit_hash
@@ -112,20 +111,27 @@ class SimulationServiceK8s(SimulationService):
                     f"https://{settings.github_username}:{settings.github_token}@github.com/{match.group(1)}"
                 )
 
-        # Get ECR URI via build-and-push-ecr.sh -u (URI-only mode)
-        # Then use docker buildx for multi-arch build + push
         build_dir = f"vEcoli-build-{commit}"
-        build_script = f"""\
+        return f"""\
 set -e
+export GIT_TERMINAL_PROMPT=0
 cd /tmp
 if [ -d "{build_dir}" ]; then rm -rf "{build_dir}"; fi
 git clone --branch {branch} --single-branch {auth_repo_url} {build_dir}
 cd {build_dir}
 
-# Get ECR repository URI (handles repo creation if needed)
-ECR_URI=$(bash runscripts/container/build-and-push-ecr.sh \
-    -i {commit} -r {settings.ecr_repository} -R {settings.batch_region} -u)
-ECR_REGISTRY="${{ECR_URI%%/*}}"
+# Ensure ECR repository exists (create if needed)
+aws ecr describe-repositories \
+    --repository-names {settings.ecr_repository} \
+    --region {settings.batch_region} 2>/dev/null || \
+aws ecr create-repository \
+    --repository-name {settings.ecr_repository} \
+    --region {settings.batch_region}
+
+# Build ECR image URI
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ECR_REGISTRY="${{ACCOUNT_ID}}.dkr.ecr.{settings.batch_region}.amazonaws.com"
+ECR_URI="${{ECR_REGISTRY}}/{settings.ecr_repository}:{commit}"
 
 # ECR login
 aws ecr get-login-password --region {settings.batch_region} | \
@@ -155,12 +161,24 @@ cd /tmp && rm -rf {build_dir}
 echo "Multi-arch image pushed: $ECR_URI"
 """
 
+    async def _submit_build_ssh(self, build_script: str, commit: str) -> None:
+        """Submit the build script to the EC2 build node via SSH."""
+        settings = get_settings()
         async with get_ssh_session_service(SSHTarget.BUILD).session() as ssh:
             return_code, _stdout, stderr = await ssh.run_command(build_script)
             if return_code != 0:
                 raise RuntimeError(f"Docker build failed on submit node: {stderr[:500]}")
-
         logger.info(f"Built and pushed multi-arch image {settings.ecr_repository}:{commit}")
+
+    async def _run_build(self, simulator_version: SimulatorVersion) -> None:
+        """Execute multi-arch Docker build + ECR push on the submit node via SSH.
+
+        Uses docker buildx to build both ARM64 (native on submit node) and
+        AMD64 (via QEMU) images under a single tag. ARM64 is used by Batch
+        compute, AMD64 is used by the K8s init container on EKS nodes.
+        """
+        build_script = self._build_script(simulator_version)
+        await self._submit_build_ssh(build_script, simulator_version.git_commit_hash)
 
     @override
     async def submit_parca_job(self, parca_dataset: ParcaDataset) -> JobId:
