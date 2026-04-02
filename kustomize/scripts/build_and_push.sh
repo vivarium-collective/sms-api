@@ -16,7 +16,7 @@ container_org=${2:-${default_org}}
 
 echo "building and pushing images to ${container_org} for version ${version}"
 
-for service in api ptools nextflow; do
+for service in api ptools; do
 
   tag="${version}"
   dockerfile="${ROOT_DIR}/Dockerfile-${service}"

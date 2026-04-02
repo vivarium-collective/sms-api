@@ -195,7 +195,6 @@ class Settings(BaseSettings):
 
     # K8s Job settings
     k8s_job_namespace: str = ""  # Namespace for Nextflow head Jobs (e.g. "sms-api-stanford")
-    nextflow_container_image: str = ""  # AMD64 image with Nextflow + vEcoli
 
     # AWS Batch settings (Nextflow submits tasks here)
     batch_job_queue: str = ""  # Batch job queue name (from CDK stack output)
@@ -209,6 +208,7 @@ class Settings(BaseSettings):
     # ECR settings
     ecr_account_id: str = ""  # AWS account ID for ECR registry (e.g. "476270107793")
     ecr_repository: str = "vecoli"  # ECR repository name for vEcoli task images
+    ecr_submit_repository: str = "vecoli-submit"  # ECR repository for submit image (vecoli + Java + Nextflow)
 
     # EC2 build machine for Docker image builds (ARM64 for Graviton Batch compute)
     # Used with SSHTarget.BUILD

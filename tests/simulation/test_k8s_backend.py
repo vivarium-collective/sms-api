@@ -244,14 +244,14 @@ class TestLocalTaskService:
 class TestSimulationServiceK8s:
     """Tests for SimulationServiceK8s using injected mock fixtures."""
 
-    async def test_submit_simulation_creates_job_with_init_container(
+    async def test_submit_simulation_creates_single_container_job(
         self,
         simulation_service_k8s_mock: SimulationServiceK8s,
         mock_k8s_job_service: MagicMock,
         experiment_request: "SimulationRequest",
         database_service: "DatabaseServiceSQL",
     ) -> None:
-        """Verify that submit creates a K8s Job with init container and shared volume."""
+        """Verify that submit creates a K8s Job with a single workflow container."""
 
         simulation = await database_service.insert_simulation(sim_request=experiment_request)
         job_id = await simulation_service_k8s_mock.submit_ecoli_simulation_job(
@@ -259,7 +259,7 @@ class TestSimulationServiceK8s:
         )
 
         assert job_id.backend == JobBackend.K8S
-        # Verify K8s Job was created
+        # Verify K8s Job and ConfigMap were created
         mock_k8s_job_service.create_job.assert_called_once()
         mock_k8s_job_service.create_configmap.assert_called_once()
 
@@ -267,18 +267,17 @@ class TestSimulationServiceK8s:
         job_arg = mock_k8s_job_service.create_job.call_args[0][0]
         pod_spec = job_arg.spec.template.spec
 
-        # Should have an init container (generate-workflow)
-        assert len(pod_spec.init_containers) == 1
-        assert pod_spec.init_containers[0].name == "generate-workflow"
+        # Should have no init containers
+        assert pod_spec.init_containers is None
 
-        # Should have a main container (nextflow)
+        # Should have a single workflow container
         assert len(pod_spec.containers) == 1
-        assert pod_spec.containers[0].name == "nextflow"
+        assert pod_spec.containers[0].name == "workflow"
 
-        # Should have shared emptyDir volume
+        # Should have config volume only (no emptyDir)
         volume_names = [v.name for v in pod_spec.volumes]
-        assert "nextflow-files" in volume_names
         assert "config" in volume_names
+        assert len(pod_spec.volumes) == 1
 
     async def test_submit_simulation_config_has_aws_section(
         self,
