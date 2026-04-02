@@ -49,7 +49,7 @@ COPY --chown=appuser:appgroup uv.lock /app/uv.lock
 COPY --chown=appuser:appgroup pyproject.toml /app/pyproject.toml
 
 # Install dependencies
-RUN uv sync --frozen --no-install-project
+RUN uv sync --frozen --no-install-project --no-dev
 
 # Copy the rest of the application code
 COPY --chown=appuser:appgroup sms_api /app/sms_api
