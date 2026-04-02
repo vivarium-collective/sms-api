@@ -667,29 +667,47 @@ async def get_simulation_outputs(
         return await stream_analysis_output_archive(dir_path=analysis_request_cache)
 
 
-_ACCEPTED_OUTPUT_EXTENSIONS = (".tsv", ".html", ".csv", ".txt")
+_ACCEPTED_ANALYSES_EXTENSIONS = (".tsv", ".json")
+_WORKFLOW_CONFIG_KEY = "nextflow/workflow_config.json"
 
 
 async def _download_outputs_from_s3(experiment_id: str, local_cache: Path) -> None:
-    """Download simulation outputs from S3 to local cache."""
+    """Download simulation outputs from S3 to local cache.
+
+    Downloads only:
+    - All files under ``analyses/`` matching accepted extensions (.tsv, .json)
+    - ``nextflow/workflow_config.json``
+    """
     settings = get_settings()
     file_service = get_file_service()
     if file_service is None:
         raise RuntimeError("File service is not initialized")
 
-    s3_prefix = S3FilePath(s3_path=Path(f"{settings.s3_output_prefix}/{experiment_id}"))
-    listing = await file_service.get_listing(s3_prefix)
+    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}"
 
-    for item in listing:
-        if not item.Key.endswith(_ACCEPTED_OUTPUT_EXTENSIONS):
+    # 1. Download analyses/ contents
+    analyses_prefix = S3FilePath(s3_path=Path(f"{experiment_prefix}/analyses"))
+    analyses_listing = await file_service.get_listing(analyses_prefix)
+    for item in analyses_listing:
+        if not item.Key.endswith(_ACCEPTED_ANALYSES_EXTENSIONS):
             continue
-        # Preserve directory structure relative to the experiment prefix
-        relative = Path(item.Key).relative_to(s3_prefix.s3_path)
+        relative = Path(item.Key).relative_to(experiment_prefix)
         local_file = local_cache / relative
         if local_file.exists():
-            continue  # Skip already-cached files
+            continue
         local_file.parent.mkdir(parents=True, exist_ok=True)
         await file_service.download_file(S3FilePath(s3_path=Path(item.Key)), local_file)
+
+    # 2. Download nextflow/workflow_config.json
+    workflow_config_key = f"{experiment_prefix}/{_WORKFLOW_CONFIG_KEY}"
+    workflow_config_s3 = S3FilePath(s3_path=Path(workflow_config_key))
+    local_workflow_config = local_cache / _WORKFLOW_CONFIG_KEY
+    if not local_workflow_config.exists():
+        local_workflow_config.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            await file_service.download_file(workflow_config_s3, local_workflow_config)
+        except Exception:
+            logger.warning(f"workflow_config.json not found at {workflow_config_key}, skipping")
 
 
 async def get_simulation_log(db_service: DatabaseService, simulation_id: int) -> Response:
