@@ -250,8 +250,8 @@ cd /tmp && rm -rf {build_dir}
                                     k8s_client.V1VolumeMount(name="nextflow-files", mount_path="/work/nextflow"),
                                 ],
                                 resources=k8s_client.V1ResourceRequirements(
-                                    requests={"cpu": "2", "memory": "4Gi"},
-                                    limits={"cpu": "2", "memory": "4Gi"},
+                                    requests={"cpu": "500m", "memory": "1Gi"},
+                                    limits={"cpu": "1", "memory": "2Gi"},
                                 ),
                             ),
                         ],
