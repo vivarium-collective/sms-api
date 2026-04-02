@@ -1,4 +1,4 @@
-"""Atlantis TUI — Rich-based interactive terminal interface for SMS API.
+"""Atlantis TUI — Textual-based interactive terminal interface for SMS API.
 
 Launch via:
     atlantis tui [--base-url URL]
@@ -10,500 +10,668 @@ Or directly:
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
-from rich.align import Align
-from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Confirm, IntPrompt, Prompt
-from rich.style import Style
 from rich.syntax import Syntax
-from rich.table import Table
 from rich.text import Text
-from rich.tree import Tree
+from textual import work
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.screen import ModalScreen
+from textual.widgets import (
+    Button,
+    DataTable,
+    Footer,
+    Header,
+    Input,
+    Label,
+    RichLog,
+    Select,
+    TabbedContent,
+    TabPane,
+)
 
 from app.app_data_service import BaseUrl, E2EDataService, get_data_service
 
-# ─── Theme ────────────────────────────────────────────────────────────────────
+# ─── Constants ────────────────────────────────────────────────────────────────
 
-ACCENT = "bright_cyan"
-ACCENT2 = "bright_magenta"
-SUCCESS = "bright_green"
-WARN = "bright_yellow"
-ERR = "bright_red"
-DIM = "dim"
-HEADER_STYLE = Style(color="bright_cyan", bold=True)
-MENU_NUM_STYLE = Style(color="bright_magenta", bold=True)
-MENU_LABEL_STYLE = Style(color="white")
+BANNER = (
+    "[bold cyan]"
+    "  █████╗ ████████╗██╗      █████╗ ███╗   ██╗████████╗██╗███████╗\n"
+    " ██╔══██╗╚══██╔══╝██║     ██╔══██╗████╗  ██║╚══██╔══╝██║██╔════╝\n"
+    " ███████║   ██║   ██║     ███████║██╔██╗ ██║   ██║   ██║███████╗\n"
+    " ██╔══██║   ██║   ██║     ██╔══██║██║╚██╗██║   ██║   ██║╚════██║\n"
+    " ██║  ██║   ██║   ███████╗██║  ██║██║ ╚████║   ██║   ██║███████║\n"
+    " ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝╚══════╝"
+    "[/bold cyan]"
+)
 
-BANNER = r"""[bright_cyan]
-     █████╗ ████████╗██╗      █████╗ ███╗   ██╗████████╗██╗███████╗
-    ██╔══██╗╚══██╔══╝██║     ██╔══██╗████╗  ██║╚══██╔══╝██║██╔════╝
-    ███████║   ██║   ██║     ███████║██╔██╗ ██║   ██║   ██║███████╗
-    ██╔══██║   ██║   ██║     ██╔══██║██║╚██╗██║   ██║   ██║╚════██║
-    ██║  ██║   ██║   ███████╗██║  ██║██║ ╚████║   ██║   ██║███████║
-    ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝╚══════╝[/]
-"""
-
-SUB_BANNER = "[dim]Simulating Microbial Systems — Interactive Terminal[/dim]"
-
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
-
-def _json_panel(data: Any, title: str = "") -> Panel:
-    import json
-
-    formatted = json.dumps(data, indent=2, default=str)
-    syntax = Syntax(formatted, "json", theme="monokai", line_numbers=False, word_wrap=True)
-    return Panel(syntax, title=title, border_style=ACCENT, expand=False)
+SERVER_OPTIONS = [(f"{u.name}  ({u.value})", u.value) for u in BaseUrl]
 
 
 def _status_color(status: str) -> str:
     s = status.lower()
     if s in ("completed", "complete"):
-        return SUCCESS
+        return "ansi_green"
     if s in ("running", "active"):
-        return ACCENT
+        return "ansi_cyan"
     if s in ("failed", "error"):
-        return ERR
+        return "ansi_red"
     if s in ("cancelled", "canceled"):
-        return WARN
-    if s in ("pending", "queued", "waiting"):
-        return ACCENT2
-    return "white"
+        return "ansi_yellow"
+    return "ansi_magenta"
 
 
-def _make_menu(title: str, items: list[tuple[str, str]]) -> Panel:
-    """Build a numbered menu panel."""
-    table = Table(show_header=False, box=None, padding=(0, 2), expand=False)
-    table.add_column(style=MENU_NUM_STYLE, width=4, justify="right")
-    table.add_column(style=MENU_LABEL_STYLE)
-    for idx, (label, desc) in enumerate(items, 1):
-        table.add_row(f"[{ACCENT2}]{idx}[/]", f"[bold]{label}[/bold]  [dim]{desc}[/dim]")
-    table.add_row(f"[{ERR}]0[/]", f"[{ERR}]Back / Quit[/{ERR}]")
-    return Panel(table, title=f"[bold]{title}[/bold]", border_style=ACCENT, expand=False)
+def _json_markup(data: Any) -> Syntax:
+    return Syntax(json.dumps(data, indent=2, default=str), "json", theme="native", word_wrap=True)
 
 
-def _pick(console: Console, prompt_text: str, max_val: int) -> int:
-    while True:
-        raw = Prompt.ask(f"[{ACCENT2}]{prompt_text}[/]", console=console, default="0")
-        try:
-            val = int(raw)
-            if 0 <= val <= max_val:
-                return val
-        except ValueError:
-            pass
-        console.print(f"[{ERR}]Enter a number between 0 and {max_val}.[/{ERR}]")
+# ─── Modal Screens ────────────────────────────────────────────────────────────
 
 
-# ─── TUI Class ────────────────────────────────────────────────────────────────
+class IdInputScreen(ModalScreen[int | None]):
+    """Modal that prompts for a numeric ID."""
+
+    BINDINGS = [("escape", "cancel", "Cancel")]
+    CSS = """
+    IdInputScreen {
+        align: center middle;
+    }
+    #modal-container {
+        width: 50;
+        height: auto;
+        max-height: 12;
+        border: thick ansi_cyan;
+        padding: 1 2;
+    }
+    #modal-container Input {
+        margin-top: 1;
+    }
+    #modal-container .modal-buttons {
+        margin-top: 1;
+        height: 3;
+    }
+    """
+
+    def __init__(self, prompt: str = "Enter ID") -> None:
+        super().__init__()
+        self.prompt = prompt
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="modal-container"):
+            yield Label(self.prompt)
+            yield Input(placeholder="numeric ID...", id="modal-input", type="integer")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("OK", variant="primary", id="modal-ok")
+                yield Button("Cancel", id="modal-cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "modal-ok":
+            self._submit()
+        else:
+            self.dismiss(None)
+
+    def on_input_submitted(self, _event: Input.Submitted) -> None:
+        self._submit()
+
+    def _submit(self) -> None:
+        val = self.query_one("#modal-input", Input).value.strip()
+        if val.isdigit():
+            self.dismiss(int(val))
+        else:
+            self.notify("Please enter a valid number", severity="error")
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
-class AtlantisTUI:
-    def __init__(self, base_url: BaseUrl | str = BaseUrl.STANFORD_DEV_FORWARDED) -> None:
-        self.console = Console()
-        self.base_url = BaseUrl(base_url)
-        self.svc: E2EDataService = get_data_service(base_url=self.base_url)
+class RunSimulationScreen(ModalScreen[dict[str, Any] | None]):
+    """Modal form for submitting a new simulation."""
 
-    # ── Entrypoint ───────────────────────────────────────────────────────
+    BINDINGS = [("escape", "cancel", "Cancel")]
+    CSS = """
+    RunSimulationScreen {
+        align: center middle;
+    }
+    #run-container {
+        width: 70;
+        height: auto;
+        max-height: 30;
+        border: thick ansi_cyan;
+        padding: 1 2;
+    }
+    #run-container Input, #run-container Select {
+        margin-top: 1;
+    }
+    #run-container .run-buttons {
+        margin-top: 1;
+        height: 3;
+    }
+    """
 
-    def run(self) -> None:
-        self.console.clear()
-        self.console.print(Align.center(BANNER))
-        self.console.print(Align.center(Text.from_markup(SUB_BANNER)))
-        self.console.print(Align.center(Text.from_markup(f"[dim]Server:[/dim] [{ACCENT}]{self.base_url}[/{ACCENT}]")))
-        self.console.print()
-
-        while True:
-            menu = _make_menu(
-                "Main Menu",
-                [
-                    ("Simulations", "Run, inspect, cancel, download outputs"),
-                    ("Simulators", "List versions, check build status"),
-                    ("Parca", "Parameter calculator datasets & status"),
-                    ("Analyses", "Inspect analysis jobs, logs, plots"),
-                    ("Demo: Download Data", "Download simulation outputs to local disk"),
-                    ("Change Server", "Switch the API base URL"),
-                ],
-            )
-            self.console.print(menu)
-            choice = _pick(self.console, "Select", 6)
-
-            if choice == 0:
-                self.console.print(f"\n[{ACCENT}]Goodbye![/{ACCENT}]\n")
-                return
-            if choice == 1:
-                self._simulations_menu()
-            elif choice == 2:
-                self._simulators_menu()
-            elif choice == 3:
-                self._parca_menu()
-            elif choice == 4:
-                self._analyses_menu()
-            elif choice == 5:
-                self._demo_download()
-            elif choice == 6:
-                self._change_server()
-
-    # ── Server ───────────────────────────────────────────────────────────
-
-    def _change_server(self) -> None:
-        urls = list(BaseUrl)
-        table = Table(show_header=False, box=None, padding=(0, 2))
-        table.add_column(style=MENU_NUM_STYLE, width=4, justify="right")
-        table.add_column()
-        for i, u in enumerate(urls, 1):
-            marker = " [green]*[/green]" if u == self.base_url else ""
-            table.add_row(str(i), f"{u.name}  [dim]{u.value}[/dim]{marker}")
-        self.console.print(Panel(table, title="Select Server", border_style=ACCENT))
-        idx = _pick(self.console, "Server #", len(urls))
-        if idx == 0:
-            return
-        self.base_url = urls[idx - 1]
-        self.svc = get_data_service(base_url=self.base_url)
-        self.console.print(f"[{SUCCESS}]Switched to {self.base_url.name} ({self.base_url.value})[/{SUCCESS}]\n")
-
-    # ── Simulations ──────────────────────────────────────────────────────
-
-    def _simulations_menu(self) -> None:
-        while True:
-            menu = _make_menu(
-                "Simulations",
-                [
-                    ("List", "Show all simulations"),
-                    ("Get", "Fetch simulation by ID"),
-                    ("Status", "Check simulation status + log"),
-                    ("Run", "Submit a new simulation workflow"),
-                    ("Cancel", "Cancel a running simulation"),
-                    ("Download Outputs", "Download output archive"),
-                ],
-            )
-            self.console.print(menu)
-            choice = _pick(self.console, "Simulations", 6)
-            if choice == 0:
-                return
-            try:
-                if choice == 1:
-                    self._sim_list()
-                elif choice == 2:
-                    self._sim_get()
-                elif choice == 3:
-                    self._sim_status()
-                elif choice == 4:
-                    self._sim_run()
-                elif choice == 5:
-                    self._sim_cancel()
-                elif choice == 6:
-                    self._sim_outputs()
-            except Exception as e:
-                self.console.print(f"[{ERR}]Error: {e}[/{ERR}]\n")
-
-    def _sim_list(self) -> None:
-        with self.console.status("[bold cyan]Fetching simulations...", spinner="dots"):
-            sims = self.svc.show_workflows()
-        if not sims:
-            self.console.print(f"[{WARN}]No simulations found.[/{WARN}]\n")
-            return
-        table = Table(title="Simulations", border_style=ACCENT, show_lines=True)
-        table.add_column("ID", style="bold", justify="right")
-        table.add_column("Experiment", style=ACCENT2)
-        table.add_column("Simulator", justify="right")
-        table.add_column("Config", style=DIM)
-        table.add_column("Generations", justify="center")
-        table.add_column("Job ID", style=DIM)
-        for s in sims:
-            table.add_row(
-                str(s.database_id),
-                s.experiment_id,
-                str(s.simulator_id),
-                s.simulation_config_filename,
-                str(s.config.generations),
-                s.job_id or "-",
-            )
-        self.console.print(table)
-        self.console.print()
-
-    def _sim_get(self) -> None:
-        sid = IntPrompt.ask(f"[{ACCENT2}]Simulation ID[/]", console=self.console)
-        with self.console.status("[bold cyan]Fetching...", spinner="dots"):
-            sim = self.svc.get_workflow(simulation_id=sid)
-        self.console.print(_json_panel(sim.model_dump(), title=f"Simulation {sid}"))
-        self.console.print()
-
-    def _sim_status(self) -> None:
-        sid = IntPrompt.ask(f"[{ACCENT2}]Simulation ID[/]", console=self.console)
-        with self.console.status("[bold cyan]Checking status...", spinner="dots"):
-            status = self.svc.get_workflow_status(simulation_id=sid)
-        color = _status_color(status)
-        self.console.print(f"  Status: [{color}][bold]{status.upper()}[/bold][/{color}]")
-        if Confirm.ask(f"[{DIM}]Show full log?[/]", default=False, console=self.console):
-            with self.console.status("[bold cyan]Fetching log...", spinner="dots"):
-                log = self.svc.get_workflow_log(simulation_id=sid)
-            self.console.print(Panel(log, title=f"Log (sim {sid})", border_style="cyan"))
-        self.console.print()
-
-    def _sim_run(self) -> None:
+    def compose(self) -> ComposeResult:
         from sms_api.common.simulator_defaults import SimulationConfigFilename as SCF
 
-        experiment_id = Prompt.ask(f"[{ACCENT2}]Experiment ID[/]", console=self.console)
-        simulator_id = IntPrompt.ask(f"[{ACCENT2}]Simulator ID[/]", console=self.console)
+        config_options = [(f"{c.name} ({c.value})", c.value) for c in SCF]
 
-        configs = list(SCF)
-        for i, c in enumerate(configs, 1):
-            self.console.print(f"  [{ACCENT2}]{i}[/] {c.name}  [dim]{c.value}[/dim]")
-        cidx = _pick(self.console, "Config #", len(configs))
-        if cidx == 0:
+        with Vertical(id="run-container"):
+            yield Label("[bold]Submit Simulation[/bold]")
+            yield Input(placeholder="Experiment ID", id="run-exp-id")
+            yield Input(placeholder="Simulator ID (number)", id="run-sim-id", type="integer")
+            yield Label("Config:")
+            yield Select(config_options, id="run-config", allow_blank=False)
+            with Horizontal():
+                with Vertical():
+                    yield Label("Generations:")
+                    yield Input(value="1", id="run-gens", type="integer")
+                with Vertical():
+                    yield Label("Seeds:")
+                    yield Input(value="3", id="run-seeds", type="integer")
+            yield Input(placeholder="Description (optional)", id="run-desc")
+            with Horizontal(classes="run-buttons"):
+                yield Button("Submit", variant="primary", id="run-submit")
+                yield Button("Cancel", id="run-cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "run-submit":
+            self._submit()
+        else:
+            self.dismiss(None)
+
+    def _submit(self) -> None:
+        exp_id = self.query_one("#run-exp-id", Input).value.strip()
+        sim_id = self.query_one("#run-sim-id", Input).value.strip()
+        if not exp_id or not sim_id.isdigit():
+            self.notify("Experiment ID and numeric Simulator ID are required", severity="error")
             return
-        config = configs[cidx - 1]
+        config_select = self.query_one("#run-config", Select)
+        self.dismiss({
+            "experiment_id": exp_id,
+            "simulator_id": int(sim_id),
+            "config_filename": config_select.value,
+            "num_generations": int(self.query_one("#run-gens", Input).value or "1"),
+            "num_seeds": int(self.query_one("#run-seeds", Input).value or "3"),
+            "description": self.query_one("#run-desc", Input).value.strip() or None,
+        })
 
-        gens = IntPrompt.ask(f"[{ACCENT2}]Generations[/]", default=1, console=self.console)
-        seeds = IntPrompt.ask(f"[{ACCENT2}]Seeds[/]", default=3, console=self.console)
-        desc = Prompt.ask(f"[{ACCENT2}]Description[/]", default="", console=self.console) or None
-        run_parca = Confirm.ask(f"[{ACCENT2}]Run parca?[/]", default=False, console=self.console)
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
-        with self.console.status("[bold cyan]Submitting...", spinner="dots"):
-            sim = self.svc.run_workflow(
-                experiment_id=experiment_id,
-                simulator_id=simulator_id,
-                config_filename=config.value,
-                num_generations=gens,
-                num_seeds=seeds,
-                description=desc,
-                run_parameter_calculator=run_parca,
-            )
-        self.console.print(f"[{SUCCESS}]Simulation submitted![/{SUCCESS}]")
-        self.console.print(_json_panel(sim.model_dump(), title="New Simulation"))
-        self.console.print()
 
-    def _sim_cancel(self) -> None:
-        sid = IntPrompt.ask(f"[{ACCENT2}]Simulation ID to cancel[/]", console=self.console)
-        if not Confirm.ask(f"[{WARN}]Cancel simulation {sid}?[/]", default=False, console=self.console):
-            return
-        with self.console.status("[bold cyan]Cancelling...", spinner="dots"):
-            result = self.svc.cancel_workflow(simulation_id=sid)
-        color = _status_color(result.status.value)
-        self.console.print(f"  [{color}]Simulation {sid}: {result.status.value.upper()}[/{color}]\n")
+# ─── Main App ─────────────────────────────────────────────────────────────────
 
-    def _sim_outputs(self) -> None:
-        sid = IntPrompt.ask(f"[{ACCENT2}]Simulation ID[/]", console=self.console)
-        dest = Prompt.ask(
-            f"[{ACCENT2}]Destination directory[/]", default=f"./simulation_id_{sid}", console=self.console
+
+class AtlantisTUI(App[None]):
+    """Textual app for SMS API."""
+
+    TITLE = "Atlantis"
+    SUB_TITLE = "Simulating Microbial Systems"
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("d", "toggle_dark", "Toggle Dark"),
+    ]
+
+    # Use ANSI colors exclusively so every terminal renders cleanly.
+    # No truecolor backgrounds — the terminal's own bg always shows through.
+    CSS = """
+    #server-bar {
+        dock: bottom;
+        height: 3;
+        padding: 0 2;
+        border-top: solid ansi_bright_black;
+    }
+    #server-bar Label {
+        padding-top: 1;
+        color: ansi_cyan;
+        text-style: bold;
+    }
+    #server-bar Select {
+        width: 1fr;
+    }
+
+    /* ── Sidebar — scrollable with full button styling ── */
+    #sidebar {
+        width: 30;
+        border-right: solid ansi_bright_black;
+        padding: 1;
+    }
+    #sidebar Button {
+        width: 100%;
+    }
+    .nav-section-label {
+        text-style: bold;
+        color: ansi_cyan;
+        margin: 1 0 0 0;
+    }
+
+    /* ── Main content ── */
+    #main-content {
+        padding: 1 2;
+    }
+    #result-log {
+        height: 1fr;
+        border: round ansi_bright_black;
+    }
+
+    /* ── Data table ── */
+    DataTable {
+        height: 1fr;
+        border: round ansi_bright_black;
+    }
+    """
+
+    def __init__(self, base_url: BaseUrl | str = BaseUrl.STANFORD_DEV_FORWARDED) -> None:
+        super().__init__()
+        # textual-ansi uses ONLY the terminal's native 16 ANSI colors — no truecolor.
+        # This renders cleanly in every terminal (Terminal.app, iTerm2, PyCharm, etc.)
+        # because it inherits the terminal's own color scheme instead of fighting it.
+        self.theme = "textual-ansi"
+        self.base_url = BaseUrl(base_url) if isinstance(base_url, str) else base_url
+        self.svc: E2EDataService = get_data_service(base_url=self.base_url)
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+
+        with Horizontal():
+            # Sidebar navigation (scrollable for small terminals)
+            with VerticalScroll(id="sidebar"):
+                yield Label("SIMULATIONS", classes="nav-section-label")
+                yield Button("List All", id="sim-list", variant="primary")
+                yield Button("Get by ID", id="sim-get")
+                yield Button("Check Status", id="sim-status")
+                yield Button("Run New", id="sim-run", variant="success")
+                yield Button("Cancel", id="sim-cancel", variant="error")
+                yield Button("Download Outputs", id="sim-outputs")
+
+                yield Label("SIMULATORS", classes="nav-section-label")
+                yield Button("List Versions", id="ver-list", variant="primary")
+                yield Button("Build Status", id="ver-status")
+                yield Button("Build Latest", id="ver-latest", variant="success")
+
+                yield Label("PARCA", classes="nav-section-label")
+                yield Button("List Datasets", id="parca-list", variant="primary")
+                yield Button("Run Status", id="parca-status")
+
+                yield Label("ANALYSES", classes="nav-section-label")
+                yield Button("Get Spec", id="ana-get")
+                yield Button("Run Status", id="ana-status")
+                yield Button("View Log", id="ana-log")
+                yield Button("Get Plots", id="ana-plots")
+
+                yield Label("DEMO", classes="nav-section-label")
+                yield Button("Download S3 Data", id="demo-s3", variant="warning")
+
+            # Main content area
+            with Vertical(id="main-content"):
+                yield self._build_tabs()
+
+        # Server selector bar at bottom
+        with Horizontal(id="server-bar"):
+            yield Label("Server: ", id="server-label")
+            yield Select(SERVER_OPTIONS, value=self.base_url.value, id="server-select", allow_blank=False)
+
+        yield Footer()
+
+    @staticmethod
+    def _build_tabs() -> TabbedContent:
+        tabs = TabbedContent(id="tabs")
+        results_pane = TabPane("Results", id="tab-results")
+        results_pane.compose_add_child(RichLog(id="result-log", highlight=True, markup=True, wrap=True))
+        table_pane = TabPane("Table", id="tab-table")
+        table_pane.compose_add_child(DataTable(id="data-table"))
+        tabs.compose_add_child(results_pane)
+        tabs.compose_add_child(table_pane)
+        return tabs
+
+    def on_mount(self) -> None:
+        self.write_log(BANNER)
+        self.write_log("[dim]Simulating Microbial Systems — Interactive Terminal[/dim]")
+        self.write_log(f"[dim]Server: {self.base_url.name} ({self.base_url.value})[/dim]")
+        self.write_log("")
+        self.write_log(
+            "[bold]Click a button in the sidebar to get started.  [dim]q[/dim]=quit  [dim]d[/dim]=theme[/bold]\n"
         )
-        dest_path = Path(dest).resolve()
-        dest_path.mkdir(parents=True, exist_ok=True)
-        self.console.print(f"[{ACCENT}]Downloading to {dest_path}...[/{ACCENT}]")
-        result = asyncio.run(self.svc.get_output_data(simulation_id=sid, dest=dest_path))
-        self.console.print(f"[{SUCCESS}]Saved to: {result}[/{SUCCESS}]\n")
 
-    # ── Simulators ───────────────────────────────────────────────────────
+    # ── Helpers ───────────────────────────────────────────────────────────
 
-    def _simulators_menu(self) -> None:
-        while True:
-            menu = _make_menu(
-                "Simulators",
-                [
-                    ("List", "Show all registered simulator versions"),
-                    ("Status", "Check build status by ID"),
-                    ("Build Latest", "Fetch + upload + build latest vEcoli"),
-                ],
-            )
-            self.console.print(menu)
-            choice = _pick(self.console, "Simulators", 3)
-            if choice == 0:
-                return
-            try:
-                if choice == 1:
-                    self._sim_version_list()
-                elif choice == 2:
-                    self._sim_version_status()
-                elif choice == 3:
-                    self._sim_version_latest()
-            except Exception as e:
-                self.console.print(f"[{ERR}]Error: {e}[/{ERR}]\n")
+    def write_log(self, msg: str | Text | Syntax) -> None:
+        self.query_one("#result-log", RichLog).write(msg)
 
-    def _sim_version_list(self) -> None:
-        with self.console.status("[bold cyan]Fetching simulators...", spinner="dots"):
-            simulators = self.svc.show_simulators()
-        if not simulators:
-            self.console.print(f"[{WARN}]No simulators found.[/{WARN}]\n")
+    def _clear_log(self) -> None:
+        self.query_one("#result-log", RichLog).clear()
+
+    def _show_json(self, data: Any, title: str = "") -> None:
+        if title:
+            self.write_log(f"[bold cyan]{title}[/]")
+        self.write_log(_json_markup(data))
+        self.write_log("")
+
+    def _populate_table(self, columns: list[str], rows: list[list[str]]) -> None:
+        table = self.query_one("#data-table", DataTable)
+        table.clear(columns=True)
+        for col in columns:
+            table.add_column(col)
+        for row in rows:
+            table.add_row(*row)
+        # Switch to table tab
+        self.query_one("#tabs", TabbedContent).active = "tab-table"
+
+    def _switch_to_results(self) -> None:
+        self.query_one("#tabs", TabbedContent).active = "tab-results"
+
+    # ── Server change ─────────────────────────────────────────────────────
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id == "server-select" and event.value is not None and isinstance(event.value, str):
+            self.base_url = BaseUrl(event.value)
+            self.svc = get_data_service(base_url=self.base_url)
+            self.write_log(f"[green]Switched to {self.base_url.name} ({self.base_url.value})[/green]\n")
+
+    # ── Button dispatch ───────────────────────────────────────────────────
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:  # noqa: C901
+        bid = event.button.id
+        if bid == "sim-list":
+            self._do_sim_list()
+        elif bid == "sim-get":
+            self._ask_id_then("Simulation ID", self._do_sim_get)
+        elif bid == "sim-status":
+            self._ask_id_then("Simulation ID", self._do_sim_status)
+        elif bid == "sim-run":
+            self._do_sim_run()
+        elif bid == "sim-cancel":
+            self._ask_id_then("Simulation ID to cancel", self._do_sim_cancel)
+        elif bid == "sim-outputs":
+            self._ask_id_then("Simulation ID", self._do_sim_outputs)
+        elif bid == "ver-list":
+            self._do_ver_list()
+        elif bid == "ver-status":
+            self._ask_id_then("Simulator ID", self._do_ver_status)
+        elif bid == "ver-latest":
+            self._do_ver_latest()
+        elif bid == "parca-list":
+            self._do_parca_list()
+        elif bid == "parca-status":
+            self._ask_id_then("Parca ID", self._do_parca_status)
+        elif bid == "ana-get":
+            self._ask_id_then("Analysis ID", self._do_ana_get)
+        elif bid == "ana-status":
+            self._ask_id_then("Analysis ID", self._do_ana_status)
+        elif bid == "ana-log":
+            self._ask_id_then("Analysis ID", self._do_ana_log)
+        elif bid == "ana-plots":
+            self._ask_id_then("Analysis ID", self._do_ana_plots)
+        elif bid == "demo-s3":
+            self._do_demo_s3()
+
+    # ── ID prompt helper ──────────────────────────────────────────────────
+
+    def _ask_id_then(self, prompt: str, callback: Any) -> None:
+        def _on_dismiss(result: int | None) -> None:
+            if result is not None:
+                callback(result)
+
+        self.push_screen(IdInputScreen(prompt), _on_dismiss)
+
+    # ── Simulations ───────────────────────────────────────────────────────
+
+    @work(thread=True)
+    def _do_sim_list(self) -> None:
+        self._switch_to_results()
+        self.write_log("[bold cyan]Loading simulations...[/]")
+        try:
+            sims = self.svc.show_workflows()
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]")
             return
-        table = Table(title="Registered Simulators", border_style=ACCENT, show_lines=True)
-        table.add_column("DB ID", style="bold", justify="right")
-        table.add_column("Commit", style=ACCENT2)
-        table.add_column("Branch")
-        table.add_column("Repo", style=DIM, max_width=50)
-        table.add_column("Created", style=DIM)
-        for sv in simulators:
-            table.add_row(
-                str(sv.database_id),
-                sv.git_commit_hash[:12],
-                sv.git_branch,
-                sv.git_repo_url.rsplit("/", 1)[-1] if "/" in sv.git_repo_url else sv.git_repo_url,
-                str(sv.created_at)[:19] if sv.created_at else "-",
-            )
-        self.console.print(table)
-        self.console.print()
+        if not sims:
+            self.write_log("[yellow]No simulations found.[/yellow]\n")
+            return
+        self._populate_table(
+            ["ID", "Experiment", "Simulator", "Config", "Gens", "Job ID"],
+            [
+                [
+                    str(s.database_id),
+                    s.experiment_id,
+                    str(s.simulator_id),
+                    s.simulation_config_filename,
+                    str(s.config.generations),
+                    s.job_id or "-",
+                ]
+                for s in sims
+            ],
+        )
+        self.write_log(f"[green]Loaded {len(sims)} simulations (see Table tab)[/green]\n")
 
-    def _sim_version_status(self) -> None:
-        sid = IntPrompt.ask(f"[{ACCENT2}]Simulator ID[/]", console=self.console)
-        with self.console.status("[bold cyan]Checking build status...", spinner="dots"):
+    @work(thread=True)
+    def _do_sim_get(self, sid: int) -> None:
+        self._switch_to_results()
+        self.write_log(f"[cyan]Fetching simulation {sid}...[/]")
+        try:
+            sim = self.svc.get_workflow(simulation_id=sid)
+            self._show_json(sim.model_dump(), title=f"Simulation {sid}")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
+
+    @work(thread=True)
+    def _do_sim_status(self, sid: int) -> None:
+        self._switch_to_results()
+        self.write_log(f"[cyan]Checking status for simulation {sid}...[/]")
+        try:
+            status = self.svc.get_workflow_status(simulation_id=sid)
+            color = _status_color(status)
+            self.write_log(f"  Status: [{color}]{status.upper()}[/{color}]")
+            log = self.svc.get_workflow_log(simulation_id=sid)
+            self.write_log(f"\n[dim]─── Log ───[/dim]\n{log}\n")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
+
+    def _do_sim_run(self) -> None:
+        def _on_dismiss(result: dict[str, Any] | None) -> None:
+            if result is not None:
+                self._submit_sim_run(result)
+
+        self.push_screen(RunSimulationScreen(), _on_dismiss)
+
+    @work(thread=True)
+    def _submit_sim_run(self, params: dict[str, Any]) -> None:
+        self._switch_to_results()
+        self.write_log("[cyan]Submitting simulation...[/]")
+        try:
+            sim = self.svc.run_workflow(**params)
+            self.write_log("[green]Simulation submitted![/green]")
+            self._show_json(sim.model_dump(), title="New Simulation")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
+
+    @work(thread=True)
+    def _do_sim_cancel(self, sid: int) -> None:
+        self._switch_to_results()
+        self.write_log(f"[yellow]Cancelling simulation {sid}...[/]")
+        try:
+            result = self.svc.cancel_workflow(simulation_id=sid)
+            color = _status_color(result.status.value)
+            self.write_log(f"  [{color}]{result.status.value.upper()}[/{color}]\n")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
+
+    @work(thread=True)
+    def _do_sim_outputs(self, sid: int) -> None:
+        self._switch_to_results()
+        self.write_log(f"[cyan]Downloading outputs for simulation {sid}...[/]")
+        try:
+            dest_path = Path(f"./simulation_id_{sid}").resolve()
+            dest_path.mkdir(parents=True, exist_ok=True)
+            result = asyncio.run(self.svc.get_output_data(simulation_id=sid, dest=dest_path))
+            self.write_log(f"[green]Saved to: {result}[/green]\n")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
+
+    # ── Simulators ────────────────────────────────────────────────────────
+
+    @work(thread=True)
+    def _do_ver_list(self) -> None:
+        self._switch_to_results()
+        self.write_log("[cyan]Loading simulator versions...[/]")
+        try:
+            versions = self.svc.show_simulators()
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]")
+            return
+        if not versions:
+            self.write_log("[yellow]No simulators found.[/yellow]\n")
+            return
+        self._populate_table(
+            ["ID", "Commit", "Branch", "Repo", "Created"],
+            [
+                [
+                    str(sv.database_id),
+                    sv.git_commit_hash[:12],
+                    sv.git_branch,
+                    sv.git_repo_url.rsplit("/", 1)[-1] if "/" in sv.git_repo_url else sv.git_repo_url,
+                    str(sv.created_at)[:19] if sv.created_at else "-",
+                ]
+                for sv in versions
+            ],
+        )
+        self.write_log(f"[green]Loaded {len(versions)} simulators (see Table tab)[/green]\n")
+
+    @work(thread=True)
+    def _do_ver_status(self, sid: int) -> None:
+        self._switch_to_results()
+        self.write_log(f"[cyan]Checking build status for simulator {sid}...[/]")
+        try:
             status = self.svc.get_simulator_status(simulator_id=sid)
-        color = _status_color(status)
-        self.console.print(f"  Build status: [{color}][bold]{status.upper()}[/bold][/{color}]\n")
+            color = _status_color(status)
+            self.write_log(f"  Build status: [{color}]{status.upper()}[/{color}]\n")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
 
-    def _sim_version_latest(self) -> None:
-        self.console.print(f"[{ACCENT}]Fetching, uploading, and building latest simulator...[/{ACCENT}]")
-        self.console.print(f"[{DIM}](This may take a while — polling build status)[/{DIM}]")
-        with self.console.status("[bold cyan]Building...", spinner="dots"):
+    @work(thread=True)
+    def _do_ver_latest(self) -> None:
+        self._switch_to_results()
+        self.write_log("[cyan]Building latest simulator (this may take a while)...[/]")
+        try:
             sv = self.svc.get_simulator()
-        self.console.print(f"[{SUCCESS}]Simulator ready![/{SUCCESS}]")
-        self.console.print(_json_panel(sv.model_dump(), title="Built Simulator"))
-        self.console.print()
+            self.write_log("[green]Simulator ready![/green]")
+            self._show_json(sv.model_dump(), title="Built Simulator")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
 
-    # ── Parca ────────────────────────────────────────────────────────────
+    # ── Parca ─────────────────────────────────────────────────────────────
 
-    def _parca_menu(self) -> None:
-        while True:
-            menu = _make_menu(
-                "Parca",
-                [
-                    ("List Datasets", "Show all parca datasets"),
-                    ("Status", "Check parca run status by ID"),
-                ],
-            )
-            self.console.print(menu)
-            choice = _pick(self.console, "Parca", 2)
-            if choice == 0:
-                return
-            try:
-                if choice == 1:
-                    self._parca_list()
-                elif choice == 2:
-                    self._parca_status()
-            except Exception as e:
-                self.console.print(f"[{ERR}]Error: {e}[/{ERR}]\n")
-
-    def _parca_list(self) -> None:
-        with self.console.status("[bold cyan]Fetching parca datasets...", spinner="dots"):
+    @work(thread=True)
+    def _do_parca_list(self) -> None:
+        self._switch_to_results()
+        self.write_log("[cyan]Loading parca datasets...[/]")
+        try:
             datasets = self.svc.get_parca_datasets()
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]")
+            return
         if not datasets:
-            self.console.print(f"[{WARN}]No parca datasets found.[/{WARN}]\n")
+            self.write_log("[yellow]No parca datasets found.[/yellow]\n")
             return
-        table = Table(title="Parca Datasets", border_style=ACCENT, show_lines=True)
-        table.add_column("DB ID", style="bold", justify="right")
-        table.add_column("Simulator ID", justify="right")
-        table.add_column("Archive Path", style=DIM, max_width=60)
-        for ds in datasets:
-            table.add_row(
-                str(ds.database_id),
-                str(ds.parca_dataset_request.simulator_version.database_id),
-                ds.remote_archive_path or "-",
-            )
-        self.console.print(table)
-        self.console.print()
-
-    def _parca_status(self) -> None:
-        pid = IntPrompt.ask(f"[{ACCENT2}]Parca ID[/]", console=self.console)
-        with self.console.status("[bold cyan]Checking parca status...", spinner="dots"):
-            hpc_run = self.svc.get_parca_status(parca_id=pid)
-        self.console.print(_json_panel(hpc_run.model_dump(), title=f"Parca Run {pid}"))
-        self.console.print()
-
-    # ── Analyses ─────────────────────────────────────────────────────────
-
-    def _analyses_menu(self) -> None:
-        while True:
-            menu = _make_menu(
-                "Analyses",
+        self._populate_table(
+            ["ID", "Simulator ID", "Archive Path"],
+            [
                 [
-                    ("Get", "Fetch analysis spec by ID"),
-                    ("Status", "Check analysis run status"),
-                    ("Log", "View analysis run log"),
-                    ("Plots", "Get analysis plot outputs"),
-                ],
-            )
-            self.console.print(menu)
-            choice = _pick(self.console, "Analyses", 4)
-            if choice == 0:
-                return
-            try:
-                if choice == 1:
-                    self._analysis_get()
-                elif choice == 2:
-                    self._analysis_status()
-                elif choice == 3:
-                    self._analysis_log()
-                elif choice == 4:
-                    self._analysis_plots()
-            except Exception as e:
-                self.console.print(f"[{ERR}]Error: {e}[/{ERR}]\n")
+                    str(ds.database_id),
+                    str(ds.parca_dataset_request.simulator_version.database_id),
+                    ds.remote_archive_path or "-",
+                ]
+                for ds in datasets
+            ],
+        )
+        self.write_log(f"[green]Loaded {len(datasets)} datasets (see Table tab)[/green]\n")
 
-    def _analysis_get(self) -> None:
-        aid = IntPrompt.ask(f"[{ACCENT2}]Analysis ID[/]", console=self.console)
-        with self.console.status("[bold cyan]Fetching analysis...", spinner="dots"):
+    @work(thread=True)
+    def _do_parca_status(self, pid: int) -> None:
+        self._switch_to_results()
+        self.write_log(f"[cyan]Checking parca status for {pid}...[/]")
+        try:
+            hpc_run = self.svc.get_parca_status(parca_id=pid)
+            self._show_json(hpc_run.model_dump(), title=f"Parca Run {pid}")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
+
+    # ── Analyses ──────────────────────────────────────────────────────────
+
+    @work(thread=True)
+    def _do_ana_get(self, aid: int) -> None:
+        self._switch_to_results()
+        self.write_log(f"[cyan]Fetching analysis {aid}...[/]")
+        try:
             analysis = self.svc.get_analysis(analysis_id=aid)
-        self.console.print(_json_panel(analysis.model_dump(), title=f"Analysis {aid}"))
-        self.console.print()
+            self._show_json(analysis.model_dump(), title=f"Analysis {aid}")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
 
-    def _analysis_status(self) -> None:
-        aid = IntPrompt.ask(f"[{ACCENT2}]Analysis ID[/]", console=self.console)
-        with self.console.status("[bold cyan]Checking status...", spinner="dots"):
+    @work(thread=True)
+    def _do_ana_status(self, aid: int) -> None:
+        self._switch_to_results()
+        self.write_log(f"[cyan]Checking analysis status for {aid}...[/]")
+        try:
             status = self.svc.get_analysis_status(analysis_id=aid)
-        color = _status_color(status.status.value)
-        self.console.print(f"  Analysis {aid}: [{color}][bold]{status.status.value.upper()}[/bold][/{color}]")
-        if status.error_log:
-            self.console.print(Panel(status.error_log, title="Error Log", border_style=ERR))
-        self.console.print()
+            color = _status_color(status.status.value)
+            self.write_log(f"  Analysis {aid}: [{color}]{status.status.value.upper()}[/{color}]")
+            if status.error_log:
+                self.write_log(f"[red]Error log:[/red]\n{status.error_log}")
+            self.write_log("")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
 
-    def _analysis_log(self) -> None:
-        aid = IntPrompt.ask(f"[{ACCENT2}]Analysis ID[/]", console=self.console)
-        with self.console.status("[bold cyan]Fetching log...", spinner="dots"):
+    @work(thread=True)
+    def _do_ana_log(self, aid: int) -> None:
+        self._switch_to_results()
+        self.write_log(f"[cyan]Fetching analysis log for {aid}...[/]")
+        try:
             log = self.svc.get_analysis_log(analysis_id=aid)
-        self.console.print(Panel(log, title=f"Analysis Log ({aid})", border_style="cyan"))
-        self.console.print()
+            self.write_log(f"[dim]─── Analysis {aid} Log ───[/dim]\n{log}\n")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
 
-    def _analysis_plots(self) -> None:
-        aid = IntPrompt.ask(f"[{ACCENT2}]Analysis ID[/]", console=self.console)
-        with self.console.status("[bold cyan]Fetching plots...", spinner="dots"):
+    @work(thread=True)
+    def _do_ana_plots(self, aid: int) -> None:
+        self._switch_to_results()
+        self.write_log(f"[cyan]Fetching plots for analysis {aid}...[/]")
+        try:
             plots = self.svc.get_analysis_plots(analysis_id=aid)
-        if not plots:
-            self.console.print(f"[{WARN}]No plots found.[/{WARN}]\n")
-            return
-        tree = Tree(f"[bold]Analysis {aid} Plots[/bold]")
-        for p in plots:
-            node = tree.add(f"[{ACCENT2}]{p.name}[/{ACCENT2}]")
-            preview = p.content[:120].replace("\n", " ") + "..." if len(p.content) > 120 else p.content
-            node.add(f"[{DIM}]{preview}[/{DIM}]")
-        self.console.print(tree)
-        self.console.print()
+            if not plots:
+                self.write_log("[yellow]No plots found.[/yellow]\n")
+                return
+            for p in plots:
+                self.write_log(f"  [magenta]{p.name}[/magenta]")
+                preview = p.content[:200].replace("\n", " ")
+                if len(p.content) > 200:
+                    preview += "..."
+                self.write_log(f"  [dim]{preview}[/dim]")
+            self.write_log("")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
 
-    # ── Demo Download ────────────────────────────────────────────────────
+    # ── Demo S3 Download ──────────────────────────────────────────────────
 
-    def _demo_download(self) -> None:
-        """Download S3 simulation outputs directly — same flow as test_outputs.py."""
-        import os
-        import tarfile
-        from urllib.parse import urlparse
+    @work(thread=True)
+    def _do_demo_s3(self) -> None:
+        self._switch_to_results()
+        self.write_log("[bold cyan]Demo: Download S3 Data[/]")
 
         test_outdir = os.environ.get("TEST_BUCKET_EXPERIMENT_OUTDIR", "")
         if not test_outdir:
-            self.console.print(
-                f"[{ERR}]TEST_BUCKET_EXPERIMENT_OUTDIR is not set.[/{ERR}]\n"
-                f"[{DIM}]Set it in assets/dev/config/.dev_env or your environment.[/{DIM}]"
-            )
+            self.write_log("[red]TEST_BUCKET_EXPERIMENT_OUTDIR is not set.[/red]")
+            self.write_log("[dim]Set it in assets/dev/config/.dev_env or environment.[/dim]\n")
             return
 
-        experiment_id = urlparse(test_outdir).path.strip("/").rsplit("/", 1)[-1]
-        self.console.print(f"[{ACCENT}]Experiment ID:[/{ACCENT}] [bold]{experiment_id}[/bold]")
-        self.console.print(f"[{DIM}]Source: {test_outdir}[/{DIM}]\n")
+        from urllib.parse import urlparse
 
-        dest = Prompt.ask(f"[{ACCENT2}]Destination[/]", default="./demo_outputs", console=self.console)
-        dest_path = Path(dest).resolve()
-        local_cache = dest_path / experiment_id
-        local_cache.mkdir(parents=True, exist_ok=True)
+        experiment_id = urlparse(test_outdir).path.strip("/").rsplit("/", 1)[-1]
+        self.write_log(f"  Experiment: [bold]{experiment_id}[/bold]")
+        self.write_log(f"  [dim]Source: {test_outdir}[/dim]")
 
         from sms_api.common.storage.file_service_s3 import FileServiceS3
         from sms_api.config import get_settings
@@ -511,12 +679,11 @@ class AtlantisTUI:
 
         settings = get_settings()
         if not settings.storage_s3_bucket or not settings.storage_s3_region:
-            self.console.print(f"[{ERR}]S3 settings not configured (STORAGE_S3_BUCKET, STORAGE_S3_REGION).[/{ERR}]")
+            self.write_log("[red]S3 settings not configured.[/red]\n")
             return
 
-        self.console.print(
-            f"  [{DIM}]Bucket: {settings.storage_s3_bucket}  Region: {settings.storage_s3_region}[/{DIM}]"
-        )
+        self.write_log(f"  [dim]Bucket: {settings.storage_s3_bucket}  Region: {settings.storage_s3_region}[/dim]")
+        self.write_log("[cyan]Downloading...[/]")
 
         saved_fs = get_file_service()
         fs = FileServiceS3()
@@ -525,40 +692,49 @@ class AtlantisTUI:
         try:
             from sms_api.common.handlers.simulations import _download_outputs_from_s3
 
-            with self.console.status("[bold cyan]Downloading from S3...", spinner="dots"):
-                asyncio.run(_download_outputs_from_s3(experiment_id, local_cache))
+            dest_path = Path("./demo_outputs").resolve()
+            local_cache = dest_path / experiment_id
+            local_cache.mkdir(parents=True, exist_ok=True)
+
+            asyncio.run(_download_outputs_from_s3(experiment_id, local_cache))
 
             real_files = [f for f in local_cache.rglob("*") if f.is_file()]
             if not real_files:
-                self.console.print(f"[{ERR}]No files downloaded.[/{ERR}]")
+                self.write_log("[red]No files downloaded.[/red]\n")
                 return
+
+            import tarfile
 
             tsv_count = sum(1 for f in real_files if f.suffix == ".tsv")
             json_count = sum(1 for f in real_files if f.suffix == ".json")
-
             archive_path = dest_path / f"{experiment_id}.tar.gz"
-            with self.console.status("[bold cyan]Creating archive...", spinner="dots"):
-                with tarfile.open(archive_path, "w:gz") as tar:
-                    tar.add(str(local_cache), arcname=experiment_id)
+            with tarfile.open(archive_path, "w:gz") as tar:
+                tar.add(str(local_cache), arcname=experiment_id)
 
-            tree = Tree(f"[bold]{experiment_id}/[/bold]")
-            tree.add(f"[{SUCCESS}]{tsv_count}[/{SUCCESS}] .tsv files")
-            tree.add(f"[{ACCENT}]{json_count}[/{ACCENT}] .json files")
-            tree.add(f"[{DIM}]{len(real_files)} total files[/{DIM}]")
-            self.console.print(Panel(tree, title="Download Complete", border_style=SUCCESS))
-            self.console.print(f"  [{SUCCESS}]Files:[/{SUCCESS}]   {local_cache}")
-            self.console.print(f"  [{SUCCESS}]Archive:[/{SUCCESS}] {archive_path}\n")
+            self.write_log("[green]Download complete![/green]")
+            self.write_log(f"  {tsv_count} .tsv files, {json_count} .json files, {len(real_files)} total")
+            self.write_log(f"  [green]Files:[/green]   {local_cache}")
+            self.write_log(f"  [green]Archive:[/green] {archive_path}\n")
 
         except Exception as e:
-            self.console.print(f"[{ERR}]Error: {e}[/{ERR}]\n")
+            self.write_log(f"[red]Error: {e}[/red]\n")
         finally:
             asyncio.run(fs.close())
             set_file_service(saved_fs)
+
+    # ── Actions ───────────────────────────────────────────────────────────
+
+    def action_toggle_dark(self) -> None:
+        # Cycle: textual-ansi → textual-dark → textual-light → textual-ansi
+        cycle = ["textual-ansi", "textual-dark", "textual-light"]
+        idx = cycle.index(self.theme) if self.theme in cycle else 0
+        self.theme = cycle[(idx + 1) % len(cycle)]
+        self.write_log(f"[dim]Theme: {self.theme}[/dim]")
 
 
 # ── Direct invocation ─────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     base = sys.argv[1] if len(sys.argv) > 1 else BaseUrl.STANFORD_DEV_FORWARDED
-    tui = AtlantisTUI(base_url=base)
-    tui.run()
+    app = AtlantisTUI(base_url=base)
+    app.run()
