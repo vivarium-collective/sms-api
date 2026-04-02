@@ -14,9 +14,9 @@ import httpx
 from httpx import AsyncClient
 from tqdm import tqdm
 
-from sms_api.analysis.models import TsvOutputFile
-from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO, SimulationConfigFilename
-from sms_api.simulation.models import Simulation, Simulator, SimulatorVersion
+from sms_api.analysis.models import AnalysisRun, ExperimentAnalysisDTO, OutputFile, TsvOutputFile
+from sms_api.common.simulator_defaults import SimulationConfigFilename
+from sms_api.simulation.models import HpcRun, ParcaDataset, Simulation, SimulationRun, Simulator, SimulatorVersion
 
 
 class BaseUrl(StrEnum):
@@ -30,10 +30,9 @@ class BaseUrl(StrEnum):
     LOCAL_8080 = "http://localhost:8080"
 
 
-DEFAULT_BASE_URL = BaseUrl.RKE_DEV  # BaseUrl.STANFORD_DEV_FORWARDED  # choose a stable deployment :)
+DEFAULT_BASE_URL = BaseUrl.STANFORD_DEV_FORWARDED
 DEFAULT_REQUEST_TIMEOUT = 1000
 
-# TODO: dynamically parse/set this based on BaseUrl: make helpers
 SUPPORTED_CONFIGS = [name.replace(".json", "") for name in SimulationConfigFilename.values()]
 
 
@@ -54,6 +53,8 @@ class E2EDataService:
         self.base_url = base_url
         self.client = httpx.Client(base_url=self.base_url, timeout=timeout)
 
+    # -- Simulator --
+
     def get_simulator(self) -> SimulatorVersion:
         latest = self.submit_get_latest_simulator()
         uploaded = self.submit_upload_simulator(simulator=latest)
@@ -68,6 +69,8 @@ class E2EDataService:
 
     def get_simulator_status(self, simulator_id: int) -> str:
         return self.submit_get_simulator_status(simulator_id=simulator_id)
+
+    # -- Simulation --
 
     def run_workflow(
         self,
@@ -108,6 +111,9 @@ class E2EDataService:
         status = self.submit_get_workflow_status(simulation_id=simulation_id)
         return status
 
+    def cancel_workflow(self, simulation_id: int) -> SimulationRun:
+        return self.submit_cancel_workflow(simulation_id=simulation_id)
+
     async def get_output_data(self, simulation_id: int, dest: Path | None = None, timeout: int = 300) -> Path:
         if dest is None:
             dest = Path(os.getcwd()).absolute()
@@ -123,8 +129,34 @@ class E2EDataService:
         extracted_dir = archive_path.parent / archive_path.stem
         return extracted_dir
 
+    # -- Parca --
+
+    def get_parca_datasets(self) -> list[ParcaDataset]:
+        return self.submit_get_parca_datasets()
+
+    def get_parca_status(self, parca_id: int) -> HpcRun:
+        return self.submit_get_parca_status(parca_id=parca_id)
+
+    # -- Analysis --
+
+    def get_analysis(self, analysis_id: int) -> ExperimentAnalysisDTO:
+        return self.submit_get_analysis(analysis_id=analysis_id)
+
+    def get_analysis_status(self, analysis_id: int) -> AnalysisRun:
+        return self.submit_get_analysis_status(analysis_id=analysis_id)
+
+    def get_analysis_log(self, analysis_id: int) -> str:
+        return self.submit_get_analysis_log(analysis_id=analysis_id)
+
+    def get_analysis_plots(self, analysis_id: int) -> list[OutputFile]:
+        return self.submit_get_analysis_plots(analysis_id=analysis_id)
+
+    # -- Low-level HTTP methods: Simulator --
+
     def submit_get_latest_simulator(self, repo_url: str | None = None, branch: str | None = None) -> Simulator:
         try:
+            from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
+
             latest_response = self.client.get(
                 url="/core/v1/simulator/latest",
                 params={"git_branch": branch or DEFAULT_BRANCH, "git_repo_url": repo_url or DEFAULT_REPO},
@@ -173,6 +205,8 @@ class E2EDataService:
         except Exception as e:
             raise httpx.HTTPError(f"Could not fetch build status for simulator with id: {simulator_id}") from e
 
+    # -- Low-level HTTP methods: Simulation --
+
     def submit_run_workflow(
         self,
         params: httpx.QueryParams | None = None,
@@ -215,6 +249,17 @@ class E2EDataService:
         except Exception as e:
             raise httpx.HTTPError(f"Could not load status for simulation {simulation_id}") from e
 
+    def submit_cancel_workflow(self, simulation_id: int) -> SimulationRun:
+        try:
+            response = self.client.delete(url=f"/api/v1/simulations/{simulation_id}/cancel")
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return SimulationRun(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not cancel simulation {simulation_id}") from e
+
     def submit_get_output_data(self, simulation_id: int) -> list[TsvOutputFile]:
         try:
             data_response = self.client.post(url=f"/api/v1/simulations/{simulation_id}/data")
@@ -250,6 +295,78 @@ class E2EDataService:
             return structured_log.text
         except Exception as e:
             raise httpx.HTTPError("Could not load simulation log") from e
+
+    # -- Low-level HTTP methods: Parca --
+
+    def submit_get_parca_datasets(self) -> list[ParcaDataset]:
+        try:
+            response = self.client.get(url="/core/v1/simulation/parca/versions")
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return [ParcaDataset(**ds) for ds in response.json()]
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError("Could not load parca datasets") from e
+
+    def submit_get_parca_status(self, parca_id: int) -> HpcRun:
+        try:
+            response = self.client.get(url="/core/v1/simulation/parca/status", params={"parca_id": parca_id})
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return HpcRun(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not load parca status for id {parca_id}") from e
+
+    # -- Low-level HTTP methods: Analysis --
+
+    def submit_get_analysis(self, analysis_id: int) -> ExperimentAnalysisDTO:
+        try:
+            response = self.client.get(url=f"/api/v1/analyses/{analysis_id}")
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return ExperimentAnalysisDTO(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not load analysis {analysis_id}") from e
+
+    def submit_get_analysis_status(self, analysis_id: int) -> AnalysisRun:
+        try:
+            response = self.client.get(url=f"/api/v1/analyses/{analysis_id}/status")
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return AnalysisRun(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not load analysis status for id {analysis_id}") from e
+
+    def submit_get_analysis_log(self, analysis_id: int) -> str:
+        try:
+            response = self.client.get(url=f"/api/v1/analyses/{analysis_id}/log")
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return response.text
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not load analysis log for id {analysis_id}") from e
+
+    def submit_get_analysis_plots(self, analysis_id: int) -> list[OutputFile]:
+        try:
+            response = self.client.get(url=f"/api/v1/analyses/{analysis_id}/plots")
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return [OutputFile(**p) for p in response.json()]
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not load analysis plots for id {analysis_id}") from e
+
+    # -- Streaming output download --
 
     async def submit_stream_output_data(  # noqa: C901
         self, simulation_id: int, show_progress: bool = True, output_dirpath: Path | None = None, timeout: int = 300
