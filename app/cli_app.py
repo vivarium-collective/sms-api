@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from sms_api.common import StrEnumBase
+
 if TYPE_CHECKING:
     from rich.console import Console
 
@@ -13,27 +15,33 @@ if TYPE_CHECKING:
 import typer
 from typer import Argument, Option
 
-from app.app_data_service import BaseUrl, get_data_service
+from app.app_data_service import get_data_service
+from app.tui import AtlantisTUI
 from sms_api.common.simulator_defaults import SimulationConfigFilename
 
-API_BASE_URL = os.getenv("API_BASE_URL", BaseUrl.STANFORD_DEV_FORWARDED)
+
+class CliType(StrEnumBase):
+    SIMULATOR = "simulator"
+    SIMULATION = "simulation"
+    PARCA = "parca"
+    ANALYSIS = "analysis"
+    DEMO = "demo"
+    HELP = "help"
+    TUI = "tui"
 
 
-def display(content: Any) -> None:
-    from rich.console import Console
-    from rich.syntax import Syntax
-
-    console = Console()
-    import json
-
-    if isinstance(content, str):
-        console.print(content)
-    else:
-        formatted = json.dumps(content, indent=2, default=str)
-        console.print(Syntax(formatted, "json", theme="monokai", line_numbers=False))
+class ApiBaseUrl(StrEnumBase):
+    RKE_PROD = "https://sms.cam.uchc.edu"
+    RKE_DEV = "https://sms-dev.cam.uchc.edu"
+    LOCAL_8888 = "http://localhost:8888"
+    LOCAL_8000 = "http://localhost:8000"
+    LOCAL_1111 = "http://localhost:1111"
+    LOCAL_62505 = "http://localhost:62505"
+    LOCAL_8080 = "http://localhost:8080"
 
 
-# -- CLI structure --
+API_BASE_URL = os.getenv("API_BASE_URL", ApiBaseUrl.LOCAL_8080)
+
 
 cli = typer.Typer(name="atlantis", help="SMS API CLI for managing vEcoli simulations, simulators, parca, and analyses.")
 simulator_cli = typer.Typer(help="Manage simulator (vEcoli) versions and builds.")
@@ -41,23 +49,48 @@ simulation_cli = typer.Typer(help="Run and inspect simulation workflows.")
 parca_cli = typer.Typer(help="Inspect parca (parameter calculator) datasets and runs.")
 analysis_cli = typer.Typer(help="Inspect analysis jobs and outputs.")
 demo_cli = typer.Typer(help="Demo and utility commands.")
+tui_cli = typer.Typer(help="TUI command line interface.")
 
 cli.add_typer(simulator_cli, name="simulator")
 cli.add_typer(simulation_cli, name="simulation")
 cli.add_typer(parca_cli, name="parca")
 cli.add_typer(analysis_cli, name="analysis")
 cli.add_typer(demo_cli, name="demo")
+cli.add_typer(tui_cli)
+
+
+def main() -> None:
+    cli()
+
+
+# -- Info/Help --
+
+
+@cli.command(name="help")
+def display_help(app: CliType | None = typer.Argument(default=None)) -> None:
+    """Show help for a specific subcommand, or the main CLI."""
+    import click
+
+    cmd = typer.main.get_command(cli)
+    with click.Context(cmd) as ctx:
+        if app is None:
+            print(cmd.get_help(ctx))
+        else:
+            sub = cmd.get_command(ctx, app.value)  # type: ignore[attr-defined]
+            if sub is None:
+                print(f"Unknown command: {app.value}")
+                raise typer.Exit(1)
+            with click.Context(sub, parent=ctx) as sub_ctx:
+                print(sub.get_help(sub_ctx))
 
 
 # -- Top-level TUI command --
 
 
-@cli.command("tui", help="Launch the interactive terminal UI.")
+@tui_cli.command(name="tui", help="Launch the interactive terminal UI.")
 def launch_tui(
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
-    from app.tui import AtlantisTUI
-
     tui = AtlantisTUI(base_url=base_url)
     tui.run()
 
@@ -67,31 +100,31 @@ def launch_tui(
 
 @simulator_cli.command("latest", help="Fetch, upload, and build the latest simulator version from the default repo.")
 def simulator_latest(
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     simulator = data_service.get_simulator()
-    display(simulator.model_dump())
+    _display(simulator.model_dump())
 
 
 @simulator_cli.command("list", help="List all registered simulator versions.")
 def simulator_list(
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     simulators = data_service.show_simulators()
     for sim in simulators:
-        display(sim.model_dump())
+        _display(sim.model_dump())
 
 
 @simulator_cli.command("status", help="Get the container build status for a simulator by its database ID.")
 def simulator_status(
     simulator_id: int = Argument(help="Simulator database ID."),
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     status = data_service.get_simulator_status(simulator_id=simulator_id)
-    display(status)
+    _display(status)
 
 
 # -- Simulation commands --
@@ -112,7 +145,7 @@ def simulation_run(
         default=False,
         help="Run the parameter calculator before simulation. Increases overall runtime.",
     ),
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     simulation = data_service.run_workflow(
@@ -124,33 +157,33 @@ def simulation_run(
         description=description or f"sim{simulator_id}-{experiment_id}; {generations} Generations; {seeds} Seeds",
         run_parameter_calculator=run_parca,
     )
-    display(simulation.model_dump())
+    _display(simulation.model_dump())
 
 
 @simulation_cli.command("get", help="Get a simulation by its database ID.")
 def simulation_get(
     simulation_id: int = Argument(help="Simulation database ID."),
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     simulation = data_service.get_workflow(simulation_id=simulation_id)
-    display(simulation.model_dump())
+    _display(simulation.model_dump())
 
 
 @simulation_cli.command("list", help="List all simulations.")
 def simulation_list(
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     simulations = data_service.show_workflows()
     for sim in simulations:
-        display(sim.model_dump())
+        _display(sim.model_dump())
 
 
 @simulation_cli.command("status", help="Get the status and log for a simulation.")
 def simulation_status(
     simulation_id: int = Argument(help="Simulation database ID."),
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     log = data_service.get_workflow_log(simulation_id=simulation_id)
@@ -169,18 +202,18 @@ def simulation_status(
 @simulation_cli.command("cancel", help="Cancel a running simulation.")
 def simulation_cancel(
     simulation_id: int = Argument(help="Simulation database ID."),
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     result = data_service.cancel_workflow(simulation_id=simulation_id)
-    display(result.model_dump())
+    _display(result.model_dump())
 
 
 @simulation_cli.command("outputs", help="Download simulation output data as a tar.gz archive.")
 def simulation_outputs(
     simulation_id: int = Argument(help="Simulation database ID."),
     dest: str | None = Option(default=None, help="Destination directory. Defaults to ./simulation_id_<ID>."),
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     outdir = Path(dest) if dest is not None else Path(f"simulation_id_{simulation_id}")
@@ -195,22 +228,22 @@ def simulation_outputs(
 
 @parca_cli.command("list", help="List all parca datasets.")
 def parca_list(
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     datasets = data_service.get_parca_datasets()
     for ds in datasets:
-        display(ds.model_dump())
+        _display(ds.model_dump())
 
 
 @parca_cli.command("status", help="Get the status of a parca run by its database ID.")
 def parca_status(
     parca_id: int = Argument(help="Parca dataset database ID."),
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     status = data_service.get_parca_status(parca_id=parca_id)
-    display(status.model_dump())
+    _display(status.model_dump())
 
 
 # -- Analysis commands --
@@ -219,27 +252,27 @@ def parca_status(
 @analysis_cli.command("get", help="Get an analysis spec by its database ID.")
 def analysis_get(
     analysis_id: int = Argument(help="Analysis database ID."),
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     analysis = data_service.get_analysis(analysis_id=analysis_id)
-    display(analysis.model_dump())
+    _display(analysis.model_dump())
 
 
 @analysis_cli.command("status", help="Get the status of an analysis run.")
 def analysis_status(
     analysis_id: int = Argument(help="Analysis database ID."),
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     status = data_service.get_analysis_status(analysis_id=analysis_id)
-    display(status.model_dump())
+    _display(status.model_dump())
 
 
 @analysis_cli.command("log", help="Get the log output of an analysis run.")
 def analysis_log(
     analysis_id: int = Argument(help="Analysis database ID."),
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     log = data_service.get_analysis_log(analysis_id=analysis_id)
@@ -252,12 +285,12 @@ def analysis_log(
 @analysis_cli.command("plots", help="Get analysis plot outputs (HTML) for an analysis run.")
 def analysis_plots(
     analysis_id: int = Argument(help="Analysis database ID."),
-    base_url: BaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     data_service = get_data_service(base_url=base_url)
     plots = data_service.get_analysis_plots(analysis_id=analysis_id)
     for plot in plots:
-        display(plot.model_dump())
+        _display(plot.model_dump())
 
 
 # -- Demo commands --
@@ -421,8 +454,18 @@ async def _demo_get_data_async(dest: str) -> None:
         set_file_service(saved_fs)
 
 
-def main() -> None:
-    cli()
+def _display(content: Any) -> None:
+    from rich.console import Console
+    from rich.syntax import Syntax
+
+    console = Console()
+    import json
+
+    if isinstance(content, str):
+        console.print(content)
+    else:
+        formatted = json.dumps(content, indent=2, default=str)
+        console.print(Syntax(formatted, "json", theme="monokai", line_numbers=False))
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ class BaseUrl(StrEnum):
     LOCAL_8080 = "http://localhost:8080"
 
 
-DEFAULT_BASE_URL = BaseUrl.STANFORD_DEV_FORWARDED
+DEFAULT_BASE_URL = BaseUrl.LOCAL_8080
 DEFAULT_REQUEST_TIMEOUT = 1000
 
 SUPPORTED_CONFIGS = [name.replace(".json", "") for name in SimulationConfigFilename.values()]
@@ -504,5 +504,7 @@ class E2EDataService:
             await asyncio.sleep(0.1)
 
 
-def get_data_service(base_url: BaseUrl | None = None, timeout: int | None = None) -> E2EDataService:
-    return E2EDataService(base_url=base_url or DEFAULT_BASE_URL, timeout=timeout or DEFAULT_REQUEST_TIMEOUT)
+def get_data_service(base_url: BaseUrl | str | None = None, timeout: int | None = None) -> E2EDataService:
+    return E2EDataService(
+        base_url=BaseUrl(base_url) if base_url else DEFAULT_BASE_URL, timeout=timeout or DEFAULT_REQUEST_TIMEOUT
+    )
