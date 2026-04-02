@@ -139,15 +139,17 @@ async def test_get_simulation_data_from_s3(
     transport = ASGITransport(app=app)
     url = f"{base_router}/simulations/{simulation_id}/data?response_type={response_type}"
 
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        async with client.stream("POST", url) as response:
-            assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.aread()!r}"
-            assert response.headers["content-type"] == "application/gzip"
-            assert "attachment" in response.headers.get("content-disposition", "")
+    async with (
+        AsyncClient(transport=transport, base_url="http://testserver") as client,
+        client.stream("POST", url) as response,
+    ):
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.aread()!r}"
+        assert response.headers["content-type"] == "application/gzip"
+        assert "attachment" in response.headers.get("content-disposition", "")
 
-            chunks: list[bytes] = []
-            async for chunk in response.aiter_bytes():
-                chunks.append(chunk)
+        chunks: list[bytes] = []
+        async for chunk in response.aiter_bytes():
+            chunks.append(chunk)
 
     content = b"".join(chunks)
     assert len(content) > 0, "Response body is empty"

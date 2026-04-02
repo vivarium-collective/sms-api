@@ -122,12 +122,42 @@ if [ -d "{build_dir}" ]; then rm -rf "{build_dir}"; fi
 git clone --branch {branch} --single-branch {auth_repo_url} {build_dir}
 cd {build_dir}
 
+# Build and push base vEcoli task image
 bash runscripts/container/build-and-push-ecr.sh \
     -i {commit} \
     -r {settings.ecr_repository} \
     -R {settings.batch_region}
 
-cd /tmp && rm -rf {build_dir}
+# Get the base image URI for the submit image build
+BASE_URI=$(bash runscripts/container/build-and-push-ecr.sh \
+    -i {commit} -r {settings.ecr_repository} -R {settings.batch_region} -u)
+
+# Build vecoli-submit image (base + Java + Nextflow) for K8s workflow head
+SUBMIT_URI=$(bash runscripts/container/build-and-push-ecr.sh \
+    -i {commit} -r {settings.ecr_submit_repository} -R {settings.batch_region} -u)
+SUBMIT_REGISTRY="${{SUBMIT_URI%%/*}}"
+aws ecr get-login-password --region {settings.batch_region} | \
+    docker login --username AWS --password-stdin "$SUBMIT_REGISTRY"
+
+cat > /tmp/Dockerfile-vecoli-submit <<'DOCKERFILE'
+ARG BASE_IMAGE
+FROM ${{BASE_IMAGE}}
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends default-jre-headless \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+ARG NEXTFLOW_VERSION=25.10.2
+RUN curl -fsSL "https://github.com/nextflow-io/nextflow/releases/download/v${{NEXTFLOW_VERSION}}/nextflow" \
+    -o /usr/local/bin/nextflow && chmod +x /usr/local/bin/nextflow
+WORKDIR /vEcoli
+DOCKERFILE
+
+docker build -t "$SUBMIT_URI" \
+    --build-arg BASE_IMAGE="$BASE_URI" \
+    -f /tmp/Dockerfile-vecoli-submit /tmp
+docker push "$SUBMIT_URI"
+echo "Submit image pushed: $SUBMIT_URI"
+
+cd /tmp && rm -rf {build_dir} /tmp/Dockerfile-vecoli-submit
 """
 
     async def _submit_build_ssh(self, build_script: str, commit: str) -> None:
@@ -179,14 +209,13 @@ cd /tmp && rm -rf {build_dir}
         config_data = ecoli_simulation.config.model_dump()
         config_json = json.dumps(config_data)
 
-        # Build full ECR URI for K8s container image
-        # (config has short name repo:tag for workflow.py, but K8s needs the full URI)
+        # Build full ECR URI for the submit image (vecoli + Java + Nextflow)
         simulator = await database_service.get_simulator(simulator_id=ecoli_simulation.simulator_id)
         if simulator is None:
             raise ValueError(f"Simulator {ecoli_simulation.simulator_id} not found")
-        task_image = (
+        submit_image = (
             f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
-            f"/{settings.ecr_repository}:{simulator.git_commit_hash}"
+            f"/{settings.ecr_submit_repository}:{simulator.git_commit_hash}"
         )
 
         # Create ConfigMap with workflow config
@@ -200,26 +229,21 @@ cd /tmp && rm -rf {build_dir}
         )
         self._k8s.create_configmap(configmap)
 
-        # Build the init container command:
-        # 1. Run workflow.py --build-only to generate Nextflow files
-        # 2. Copy module files (sim.nf, analysis.nf) to shared volume
-        # 3. Persist generated files to S3 for debugging/audit/resume
-        s3_nf_path = f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/nextflow"
-        nf_temp = f"/vEcoli/nextflow_temp/{experiment_id}"
+        # Build the container command:
+        # 1. Inject GovCloud S3 endpoint into config.template (before workflow.py reads it)
+        # 2. Run workflow.py in full mode (generates Nextflow files + runs Nextflow)
+        # 3. Upload .nextflow.log to S3 on completion (success or failure)
         s3_endpoint = f"https://s3.{settings.batch_region}.amazonaws.com"
-        init_command = (
-            "python runscripts/workflow.py --config /config/workflow.json --build-only"
-            f" && cp {nf_temp}/main.nf {nf_temp}/nextflow.config /work/nextflow/"
-            " && cp runscripts/nextflow/sim.nf runscripts/nextflow/analysis.nf /work/nextflow/"
-            # GovCloud requires explicit S3 endpoint for Nextflow's Java SDK
-            # Insert client endpoint after aws.region line inside the aws profile block
-            f' && sed -i "/region = params.aws_region/a\\            client {{ endpoint = \\"{s3_endpoint}\\" }}" /work/nextflow/nextflow.config'
-            f" && aws s3 cp /work/nextflow/ {s3_nf_path}/ --recursive"
+        s3_log_dir = f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/logs"
+        command = (
+            f'sed -i "/region = params.aws_region/a\\            client {{ endpoint = \\"{s3_endpoint}\\" }}"'
+            " runscripts/nextflow/config.template"
+            " && python runscripts/workflow.py --config /config/workflow.json"
+            f" ; NF_EXIT=$? ; aws s3 cp .nextflow.log {s3_log_dir}/.nextflow.log 2>/dev/null || true"
+            " ; exit $NF_EXIT"
         )
 
-        nxf_work = f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}"
-
-        # Create the K8s Job with init container (vEcoli) + main container (Nextflow)
+        # Single-container K8s Job using vecoli-submit image (vEcoli + Java + Nextflow)
         job = k8s_client.V1Job(
             metadata=k8s_client.V1ObjectMeta(
                 name=job_name,
@@ -236,34 +260,17 @@ cd /tmp && rm -rf {build_dir}
                     spec=k8s_client.V1PodSpec(
                         service_account_name="batch-submit",
                         restart_policy="Never",
-                        image_pull_secrets=[k8s_client.V1LocalObjectReference(name="ghcr-secret")],
-                        init_containers=[
+                        containers=[
                             k8s_client.V1Container(
-                                name="generate-workflow",
-                                image=task_image,  # vEcoli image from ECR (multi-arch)
-                                command=["/bin/bash", "-c", init_command],
+                                name="workflow",
+                                image=submit_image,
+                                command=["/bin/bash", "-c", command],
                                 env=[
-                                    k8s_client.V1EnvVar(name="EXPERIMENT_ID", value=experiment_id),
                                     k8s_client.V1EnvVar(name="AWS_DEFAULT_REGION", value=settings.batch_region),
                                     k8s_client.V1EnvVar(name="USER", value="sms-api"),
                                 ],
                                 volume_mounts=[
                                     k8s_client.V1VolumeMount(name="config", mount_path="/config"),
-                                    k8s_client.V1VolumeMount(name="nextflow-files", mount_path="/work/nextflow"),
-                                ],
-                            ),
-                        ],
-                        containers=[
-                            k8s_client.V1Container(
-                                name="nextflow",
-                                image=settings.nextflow_container_image,
-                                env=[
-                                    k8s_client.V1EnvVar(name="EXPERIMENT_ID", value=experiment_id),
-                                    k8s_client.V1EnvVar(name="NXF_WORK", value=nxf_work),
-                                    k8s_client.V1EnvVar(name="AWS_DEFAULT_REGION", value=settings.batch_region),
-                                ],
-                                volume_mounts=[
-                                    k8s_client.V1VolumeMount(name="nextflow-files", mount_path="/work/nextflow"),
                                 ],
                                 resources=k8s_client.V1ResourceRequirements(
                                     requests={"cpu": "500m", "memory": "1Gi"},
@@ -275,10 +282,6 @@ cd /tmp && rm -rf {build_dir}
                             k8s_client.V1Volume(
                                 name="config",
                                 config_map=k8s_client.V1ConfigMapVolumeSource(name=configmap_name),
-                            ),
-                            k8s_client.V1Volume(
-                                name="nextflow-files",
-                                empty_dir=k8s_client.V1EmptyDirVolumeSource(),
                             ),
                         ],
                     ),
