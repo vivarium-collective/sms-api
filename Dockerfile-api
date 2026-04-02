@@ -35,6 +35,10 @@ RUN echo '#!/bin/bash\nPGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $
 RUN echo '#!/bin/bash\nssh -i $SLURM_SUBMIT_KEY_PATH -o UserKnownHostsFile=$SLURM_SUBMIT_KNOWN_HOSTS ${SLURM_SUBMIT_USER}@${SLURM_SUBMIT_HOST} "$@"' > /usr/local/bin/slurmshell && \
     chmod +x /usr/local/bin/slurmshell
 
+# Create SSH to build machine alias script
+RUN echo '#!/bin/bash\nssh -i $BUILD_NODE_KEY_PATH -o StrictHostKeyChecking=no ${BUILD_NODE_USER}@${BUILD_NODE_HOST} "$@"' > /usr/local/bin/buildshell && \
+    chmod +x /usr/local/bin/buildshell
+
 USER appuser
 
 # Set the working directory
