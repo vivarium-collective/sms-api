@@ -170,7 +170,9 @@ cd /tmp && rm -rf {build_dir}
         settings = get_settings()
 
         experiment_id = ecoli_simulation.config.experiment_id
-        job_name = f"nf-{experiment_id}"[:63]  # K8s name max 63 chars
+        # K8s names must be RFC 1123: lowercase alphanumeric, '-' or '.'
+        safe_id = experiment_id.replace("_", "-").lower()
+        job_name = f"nf-{safe_id}"[:63]
 
         # Get the simulator to determine the ECR image tag
         simulator = await database_service.get_simulator(simulator_id=ecoli_simulation.simulator_id)
@@ -183,11 +185,10 @@ cd /tmp && rm -rf {build_dir}
             f"{ecr_account}.dkr.ecr.{ecr_region}.amazonaws.com/{settings.ecr_repository}:{simulator.git_commit_hash}"
         )
 
-        # Build the workflow config
+        # Build the workflow config — override HPC/SLURM paths with AWS equivalents
         config_data = ecoli_simulation.config.model_dump()
-        config_data["emitter_arg"] = {
-            "out_uri": f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}"
-        }
+        s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}"
+        config_data["emitter_arg"] = {"out_uri": s3_output}
         config_data["aws"] = {
             "build_image": False,
             "container_image": task_image,
@@ -195,6 +196,12 @@ cd /tmp && rm -rf {build_dir}
             "batch_queue": settings.batch_job_queue,
         }
         config_data["progress_bar"] = False
+        # Remove SLURM-specific keys that don't apply to AWS Batch
+        config_data.pop("aws_cdk", None)
+        config_data.pop("ccam", None)
+        # Override parca outdir to use S3 instead of local filesystem
+        if "parca_options" in config_data:
+            config_data["parca_options"]["outdir"] = s3_output
         config_json = json.dumps(config_data)
 
         # Create ConfigMap with workflow config
