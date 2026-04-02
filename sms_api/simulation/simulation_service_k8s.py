@@ -213,7 +213,10 @@ cd /tmp && rm -rf {build_dir}
             " && cp runscripts/nextflow/sim.nf runscripts/nextflow/analysis.nf /work/nextflow/"
             # GovCloud requires explicit S3 endpoint for Nextflow's Java SDK
             # Insert client endpoint after aws.region line inside the aws profile block
-            f' && sed -i "/region = params.aws_region/a\\            client {{ endpoint = \\"{s3_endpoint}\\" }}" /work/nextflow/nextflow.config'
+            f" && sed -i"
+            f' "/region = params.aws_region/a\\'
+            f'            client {{ endpoint = \\"{s3_endpoint}\\" }}"'
+            f" /work/nextflow/nextflow.config"
             f" && aws s3 cp /work/nextflow/ {s3_nf_path}/ --recursive"
         )
 
