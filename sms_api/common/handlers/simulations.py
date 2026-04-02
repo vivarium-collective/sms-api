@@ -207,9 +207,8 @@ async def run_simulation_workflow(
         config_data["progress_bar"] = False
         if "parca_options" in config_data:
             config_data["parca_options"]["outdir"] = s3_output
-        ecr_account = settings.nextflow_container_image.split(".")[0] if settings.nextflow_container_image else ""
         task_image = (
-            f"{ecr_account}.dkr.ecr.{settings.batch_region}.amazonaws.com"
+            f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
             f"/{settings.ecr_repository}:{simulator.git_commit_hash}"
         )
         config_data["aws"] = {

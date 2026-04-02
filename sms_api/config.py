@@ -207,6 +207,7 @@ class Settings(BaseSettings):
     s3_output_prefix: str = "vecoli-output"  # Prefix for workflow output data
 
     # ECR settings
+    ecr_account_id: str = ""  # AWS account ID for ECR registry (e.g. "476270107793")
     ecr_repository: str = "vecoli"  # ECR repository name for vEcoli task images
 
     # EC2 build machine for Docker image builds (ARM64 for Graviton Batch compute)
