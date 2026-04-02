@@ -177,8 +177,17 @@ cd /tmp && rm -rf {build_dir}
         # Build the workflow config from the simulation record
         # (AWS overrides already applied by handler before DB insert)
         config_data = ecoli_simulation.config.model_dump()
-        task_image = config_data.get("aws", {}).get("container_image", "")
         config_json = json.dumps(config_data)
+
+        # Build full ECR URI for K8s container image
+        # (config has short name repo:tag for workflow.py, but K8s needs the full URI)
+        simulator = await database_service.get_simulator(simulator_id=ecoli_simulation.simulator_id)
+        if simulator is None:
+            raise ValueError(f"Simulator {ecoli_simulation.simulator_id} not found")
+        task_image = (
+            f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
+            f"/{settings.ecr_repository}:{simulator.git_commit_hash}"
+        )
 
         # Create ConfigMap with workflow config
         configmap_name = f"{job_name}-config"
