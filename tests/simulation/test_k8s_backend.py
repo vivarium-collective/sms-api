@@ -402,5 +402,5 @@ class TestSimulationServiceK8s:
         assert script_path.exists()
         content = script_path.read_text()
         assert "set -e" in content
-        assert "docker buildx build" in content
+        assert "build-and-push-ecr.sh" in content
         assert DEFAULT_SIMULATOR.git_commit_hash in content

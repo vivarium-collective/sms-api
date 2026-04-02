@@ -21,7 +21,7 @@ from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import ParcaDataset, Simulation, SimulatorVersion
+from sms_api.simulation.models import ParcaDataset, Simulation, Simulator, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)
@@ -91,11 +91,13 @@ class SimulationServiceK8s(SimulationService):
             name=f"build-{commit}",
         )
 
-    def _build_script(self, simulator_version: SimulatorVersion) -> str:
-        """Generate the bash script for multi-arch Docker build + ECR push.
+    def _build_script(self, simulator_version: Simulator) -> str:
+        """Generate the bash script for Docker build + ECR push.
 
-        Returns the script as a string. The script clones the vEcoli repo,
-        builds ARM64 + AMD64 images via docker buildx, and pushes to ECR.
+        Returns the script as a string. The script clones the vEcoli repo
+        and delegates to its build-and-push-ecr.sh for native Docker build
+        and ECR push. The image architecture matches the build node (ARM64
+        for Graviton, AMD64 for x86).
         """
         settings = get_settings()
         commit = simulator_version.git_commit_hash
@@ -120,45 +122,12 @@ if [ -d "{build_dir}" ]; then rm -rf "{build_dir}"; fi
 git clone --branch {branch} --single-branch {auth_repo_url} {build_dir}
 cd {build_dir}
 
-# Ensure ECR repository exists (create if needed)
-aws ecr describe-repositories \
-    --repository-names {settings.ecr_repository} \
-    --region {settings.batch_region} 2>/dev/null || \
-aws ecr create-repository \
-    --repository-name {settings.ecr_repository} \
-    --region {settings.batch_region}
-
-# Build ECR image URI
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-ECR_REGISTRY="${{ACCOUNT_ID}}.dkr.ecr.{settings.batch_region}.amazonaws.com"
-ECR_URI="${{ECR_REGISTRY}}/{settings.ecr_repository}:{commit}"
-
-# ECR login
-aws ecr get-login-password --region {settings.batch_region} | \
-    docker login --username AWS --password-stdin "$ECR_REGISTRY"
-
-# Ensure buildx builder with QEMU support
-docker buildx create --name multiarch --use 2>/dev/null || docker buildx use multiarch
-docker buildx inspect --bootstrap
-
-# Get git metadata for build args
-GIT_HASH=$(git rev-parse HEAD)
-GIT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "detached")
-TIMESTAMP=$(date '+%Y%m%d.%H%M%S')
-
-# Multi-arch build + push (ARM64 native, AMD64 via QEMU)
-docker buildx build \
-    --platform linux/amd64,linux/arm64 \
-    -f runscripts/container/Dockerfile \
-    -t "$ECR_URI" \
-    --push \
-    --build-arg git_hash="$GIT_HASH" \
-    --build-arg git_branch="$GIT_BRANCH" \
-    --build-arg timestamp="$TIMESTAMP" \
-    .
+bash runscripts/container/build-and-push-ecr.sh \
+    -i {commit} \
+    -r {settings.ecr_repository} \
+    -R {settings.batch_region}
 
 cd /tmp && rm -rf {build_dir}
-echo "Multi-arch image pushed: $ECR_URI"
 """
 
     async def _submit_build_ssh(self, build_script: str, commit: str) -> None:
@@ -168,14 +137,13 @@ echo "Multi-arch image pushed: $ECR_URI"
             return_code, _stdout, stderr = await ssh.run_command(build_script)
             if return_code != 0:
                 raise RuntimeError(f"Docker build failed on submit node: {stderr[:500]}")
-        logger.info(f"Built and pushed multi-arch image {settings.ecr_repository}:{commit}")
+        logger.info(f"Built and pushed image {settings.ecr_repository}:{commit}")
 
     async def _run_build(self, simulator_version: SimulatorVersion) -> None:
-        """Execute multi-arch Docker build + ECR push on the submit node via SSH.
+        """Execute Docker build + ECR push on the build node via SSH.
 
-        Uses docker buildx to build both ARM64 (native on submit node) and
-        AMD64 (via QEMU) images under a single tag. ARM64 is used by Batch
-        compute, AMD64 is used by the K8s init container on EKS nodes.
+        Delegates to vEcoli's build-and-push-ecr.sh for a native Docker build.
+        The image architecture matches the build node (ARM64 for Graviton).
         """
         build_script = self._build_script(simulator_version)
         await self._submit_build_ssh(build_script, simulator_version.git_commit_hash)
