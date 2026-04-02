@@ -207,13 +207,11 @@ async def run_simulation_workflow(
         config_data["progress_bar"] = False
         if "parca_options" in config_data:
             config_data["parca_options"]["outdir"] = s3_output
-        task_image = (
-            f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
-            f"/{settings.ecr_repository}:{simulator.git_commit_hash}"
-        )
+        # Use short image name (repo:tag) — workflow.py resolves the full ECR URI
+        # via build-and-push-ecr.sh -u at runtime
         config_data["aws"] = {
             "build_image": False,
-            "container_image": task_image,
+            "container_image": f"{settings.ecr_repository}:{simulator.git_commit_hash}",
             "region": settings.batch_region,
             "batch_queue": settings.batch_job_queue,
         }
