@@ -213,6 +213,9 @@ bash kustomize/scripts/build_and_push.sh
 
 Key K8s resources: `batch-submit` ServiceAccount (IRSA-annotated for AWS access), sealed secrets for GHCR/SSH/DB credentials, FSx PersistentVolume for shared filesystem.
 
+For detailed deployment steps, see [`docs/deployment-stanford-test.md`](docs/deployment-stanford-test.md).
+For GovCloud gotchas, IRSA setup, and other non-obvious issues, see [`docs/aws-batch-learnings.md`](docs/aws-batch-learnings.md).
+
 ## Tooling
 
 - **Linting/Formatting**: ruff (line length 120). Pre-commit runs ruff lint + ruff format.
