@@ -205,10 +205,15 @@ cd /tmp && rm -rf {build_dir}
         # 2. Copy module files (sim.nf, analysis.nf) to shared volume
         # 3. Persist generated files to S3 for debugging/audit/resume
         s3_nf_path = f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/nextflow"
+        nf_temp = f"/vEcoli/nextflow_temp/{experiment_id}"
+        s3_endpoint = f"https://s3.{settings.batch_region}.amazonaws.com"
         init_command = (
             "python runscripts/workflow.py --config /config/workflow.json --build-only"
-            " && cp runscripts/nextflow/sim.nf /work/nextflow/"
-            " && cp runscripts/nextflow/analysis.nf /work/nextflow/"
+            f" && cp {nf_temp}/main.nf {nf_temp}/nextflow.config /work/nextflow/"
+            " && cp runscripts/nextflow/sim.nf runscripts/nextflow/analysis.nf /work/nextflow/"
+            # GovCloud requires explicit S3 endpoint for Nextflow's Java SDK
+            # Insert client endpoint after aws.region line inside the aws profile block
+            f' && sed -i "/region = params.aws_region/a\\            client {{ endpoint = \\"{s3_endpoint}\\" }}" /work/nextflow/nextflow.config'
             f" && aws s3 cp /work/nextflow/ {s3_nf_path}/ --recursive"
         )
 
@@ -231,6 +236,7 @@ cd /tmp && rm -rf {build_dir}
                     spec=k8s_client.V1PodSpec(
                         service_account_name="batch-submit",
                         restart_policy="Never",
+                        image_pull_secrets=[k8s_client.V1LocalObjectReference(name="ghcr-secret")],
                         init_containers=[
                             k8s_client.V1Container(
                                 name="generate-workflow",
@@ -239,6 +245,7 @@ cd /tmp && rm -rf {build_dir}
                                 env=[
                                     k8s_client.V1EnvVar(name="EXPERIMENT_ID", value=experiment_id),
                                     k8s_client.V1EnvVar(name="AWS_DEFAULT_REGION", value=settings.batch_region),
+                                    k8s_client.V1EnvVar(name="USER", value="sms-api"),
                                 ],
                                 volume_mounts=[
                                     k8s_client.V1VolumeMount(name="config", mount_path="/config"),

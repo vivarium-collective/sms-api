@@ -51,11 +51,22 @@ fi
 # Run Nextflow
 cd "$NEXTFLOW_DIR"
 nextflow -C "$NEXTFLOW_DIR/nextflow.config" run "$NEXTFLOW_DIR/main.nf" \
+    -profile aws \
     -work-dir "$NXF_WORK" \
     -with-report "$NEXTFLOW_DIR/${EXPERIMENT_ID}_report.html" \
     $WEBLOG_FLAG
 
 NF_EXIT=$?
+
+# Upload logs to S3 for debugging (even on failure)
+if [ -n "$NXF_WORK" ]; then
+    S3_LOG_DIR="${NXF_WORK}/logs"
+    echo "=== Uploading logs to ${S3_LOG_DIR} ==="
+    aws s3 cp .nextflow.log "${S3_LOG_DIR}/.nextflow.log" 2>/dev/null || true
+    aws s3 cp "$NEXTFLOW_DIR/nextflow.config" "${S3_LOG_DIR}/nextflow.config" 2>/dev/null || true
+    [ -f "$NEXTFLOW_DIR/${EXPERIMENT_ID}_report.html" ] && \
+        aws s3 cp "$NEXTFLOW_DIR/${EXPERIMENT_ID}_report.html" "${S3_LOG_DIR}/report.html" 2>/dev/null || true
+fi
 
 # Cleanup weblog receiver
 if [ -n "$WEBLOG_PID" ]; then
