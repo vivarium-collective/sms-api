@@ -287,7 +287,16 @@ class TestSimulationServiceK8s:
         experiment_request: "SimulationRequest",
         database_service: "DatabaseServiceSQL",
     ) -> None:
-        """Verify workflow config in ConfigMap has aws section with build_image=false."""
+        """Verify workflow config in ConfigMap preserves aws section from handler."""
+        # Simulate what the handler does: inject aws block before DB insert
+        experiment_request.config.aws = {  # type: ignore[attr-defined]
+            "build_image": False,
+            "container_image": "123456.dkr.ecr.us-gov-west-1.amazonaws.com/vecoli:abc1234",
+            "region": "us-gov-west-1",
+            "batch_queue": "test-queue",
+        }
+        experiment_request.config.progress_bar = False  # type: ignore[attr-defined]
+
         simulation = await database_service.insert_simulation(sim_request=experiment_request)
         await simulation_service_k8s_mock.submit_ecoli_simulation_job(
             ecoli_simulation=simulation, database_service=database_service, correlation_id="test-corr"

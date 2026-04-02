@@ -174,34 +174,10 @@ cd /tmp && rm -rf {build_dir}
         safe_id = experiment_id.replace("_", "-").lower()
         job_name = f"nf-{safe_id}"[:63]
 
-        # Get the simulator to determine the ECR image tag
-        simulator = await database_service.get_simulator(simulator_id=ecoli_simulation.simulator_id)
-        if simulator is None:
-            raise ValueError(f"Simulator {ecoli_simulation.simulator_id} not found")
-
-        ecr_account = settings.nextflow_container_image.split(".")[0] if settings.nextflow_container_image else ""
-        ecr_region = settings.batch_region
-        task_image = (
-            f"{ecr_account}.dkr.ecr.{ecr_region}.amazonaws.com/{settings.ecr_repository}:{simulator.git_commit_hash}"
-        )
-
-        # Build the workflow config — override HPC/SLURM paths with AWS equivalents
+        # Build the workflow config from the simulation record
+        # (AWS overrides already applied by handler before DB insert)
         config_data = ecoli_simulation.config.model_dump()
-        s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}"
-        config_data["emitter_arg"] = {"out_uri": s3_output}
-        config_data["aws"] = {
-            "build_image": False,
-            "container_image": task_image,
-            "region": settings.batch_region,
-            "batch_queue": settings.batch_job_queue,
-        }
-        config_data["progress_bar"] = False
-        # Remove SLURM-specific keys that don't apply to AWS Batch
-        config_data.pop("aws_cdk", None)
-        config_data.pop("ccam", None)
-        # Override parca outdir to use S3 instead of local filesystem
-        if "parca_options" in config_data:
-            config_data["parca_options"]["outdir"] = s3_output
+        task_image = config_data.get("aws", {}).get("container_image", "")
         config_json = json.dumps(config_data)
 
         # Create ConfigMap with workflow config

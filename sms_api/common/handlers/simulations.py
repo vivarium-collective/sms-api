@@ -20,7 +20,7 @@ from sms_api.common.handlers.simulators import upload_simulator
 from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.models import JobBackend, JobStatus, SSHTarget
 from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
-from sms_api.config import get_settings
+from sms_api.config import get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_file_service, get_simulation_service, get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id
@@ -197,6 +197,27 @@ async def run_simulation_workflow(
     if not run_parca:
         # expedite completion time by using cached simData
         config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
+
+    # For K8s/Batch backend, override HPC paths with AWS equivalents
+    if get_job_backend() == "k8s":
+        s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{unique_experiment_id}"
+        config_data["emitter_arg"] = {"out_uri": s3_output}
+        config_data.pop("aws_cdk", None)
+        config_data.pop("ccam", None)
+        config_data["progress_bar"] = False
+        if "parca_options" in config_data:
+            config_data["parca_options"]["outdir"] = s3_output
+        ecr_account = settings.nextflow_container_image.split(".")[0] if settings.nextflow_container_image else ""
+        task_image = (
+            f"{ecr_account}.dkr.ecr.{settings.batch_region}.amazonaws.com"
+            f"/{settings.ecr_repository}:{simulator.git_commit_hash}"
+        )
+        config_data["aws"] = {
+            "build_image": False,
+            "container_image": task_image,
+            "region": settings.batch_region,
+            "batch_queue": settings.batch_job_queue,
+        }
 
     config = SimulationConfig(**config_data)
 
