@@ -25,6 +25,7 @@ from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
     DataTable,
+    DirectoryTree,
     Footer,
     Header,
     Input,
@@ -202,6 +203,146 @@ class RunSimulationScreen(ModalScreen[dict[str, Any] | None]):
         self.dismiss(None)
 
 
+class FileBrowserScreen(ModalScreen[None]):
+    """Full-screen file browser with directory tree + content viewer."""
+
+    BINDINGS = [("escape", "close", "Close")]
+    CSS = """
+    FileBrowserScreen {
+        align: center middle;
+    }
+    #browser-container {
+        width: 95%;
+        height: 90%;
+        border: thick ansi_cyan;
+        padding: 0;
+    }
+    #browser-tree {
+        width: 35;
+        border-right: solid ansi_bright_black;
+    }
+    #browser-viewer {
+        padding: 0 1;
+    }
+    #viewer-title {
+        height: 1;
+        text-style: bold;
+        color: ansi_cyan;
+        padding: 0 1;
+    }
+    #viewer-log {
+        height: 1fr;
+    }
+    #viewer-table {
+        height: 1fr;
+    }
+    #browser-status {
+        dock: bottom;
+        height: 1;
+        color: ansi_bright_black;
+        padding: 0 1;
+    }
+    """
+
+    def __init__(self, root_path: str | Path) -> None:
+        super().__init__()
+        self.root_path = Path(root_path)
+
+    def compose(self) -> ComposeResult:
+        with Horizontal(id="browser-container"):
+            yield DirectoryTree(str(self.root_path), id="browser-tree")
+            with Vertical(id="browser-viewer"):
+                yield Label("Select a file to view", id="viewer-title")
+                yield RichLog(id="viewer-log", highlight=True, markup=True, wrap=True)
+                yield DataTable(id="viewer-table")
+        yield Label(
+            f"  [dim]{self.root_path}  |  click a .tsv or .json file  |  ESC to close[/dim]",
+            id="browser-status",
+        )
+
+    def on_mount(self) -> None:
+        # Start with table hidden, log visible
+        self.query_one("#viewer-table", DataTable).display = False
+
+    def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
+        """Handle file selection — render TSV as table, JSON as highlighted syntax, others as text."""
+        file_path = Path(event.path)
+        suffix = file_path.suffix.lower()
+        title_label = self.query_one("#viewer-title", Label)
+        viewer_log = self.query_one("#viewer-log", RichLog)
+        viewer_table = self.query_one("#viewer-table", DataTable)
+
+        title_label.update(f"[bold cyan]{file_path.name}[/]  [dim]({file_path.parent})[/dim]")
+
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+        except Exception as e:
+            viewer_log.clear()
+            viewer_log.write(f"[red]Could not read file: {e}[/red]")
+            viewer_log.display = True
+            viewer_table.display = False
+            return
+
+        if suffix == ".tsv":
+            self._render_tsv(content, viewer_table, viewer_log)
+        elif suffix == ".json":
+            self._render_json(content, viewer_log, viewer_table)
+        else:
+            self._render_text(content, viewer_log, viewer_table)
+
+    @staticmethod
+    def _render_tsv(content: str, table: DataTable[str], log: RichLog) -> None:
+        """Parse TSV and display as a DataTable."""
+        log.display = False
+        table.display = True
+        table.clear(columns=True)
+
+        lines = [line for line in content.splitlines() if line.strip()]
+        if not lines:
+            log.display = True
+            table.display = False
+            log.clear()
+            log.write("[yellow]Empty TSV file[/yellow]")
+            return
+
+        # First line is header
+        headers = lines[0].split("\t")
+        for h in headers:
+            table.add_column(h.strip() or "—")
+
+        for line in lines[1:]:
+            cells = line.split("\t")
+            # Pad or trim to match header count
+            while len(cells) < len(headers):
+                cells.append("")
+            table.add_row(*[c.strip() for c in cells[: len(headers)]])
+
+    @staticmethod
+    def _render_json(content: str, log: RichLog, table: DataTable[str]) -> None:
+        """Parse and pretty-print JSON with syntax highlighting."""
+        table.display = False
+        log.display = True
+        log.clear()
+        try:
+            parsed = json.loads(content)
+            formatted = json.dumps(parsed, indent=2)
+            log.write(Syntax(formatted, "json", theme="native", word_wrap=True))
+        except json.JSONDecodeError:
+            # Not valid JSON — show as plain text
+            log.write(content)
+
+    @staticmethod
+    def _render_text(content: str, log: RichLog, table: DataTable[str]) -> None:
+        """Show plain text content."""
+        table.display = False
+        log.display = True
+        log.clear()
+        log.write(content)
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
 # ─── Main App ─────────────────────────────────────────────────────────────────
 
 
@@ -305,6 +446,9 @@ class AtlantisTUI(App[None]):
                 yield Label("DEMO", classes="nav-section-label")
                 yield Button("Download S3 Data", id="demo-s3", variant="warning")
 
+                yield Label("FILES", classes="nav-section-label")
+                yield Button("Browse Files", id="browse-files", variant="primary")
+
             # Main content area
             with Vertical(id="main-content"):
                 yield self._build_tabs()
@@ -407,6 +551,8 @@ class AtlantisTUI(App[None]):
             self._ask_id_then("Analysis ID", self._do_ana_plots)
         elif bid == "demo-s3":
             self._do_demo_s3()
+        elif bid == "browse-files":
+            self._do_browse_files()
 
     # ── ID prompt helper ──────────────────────────────────────────────────
 
@@ -714,13 +860,23 @@ class AtlantisTUI(App[None]):
             self.write_log("[green]Download complete![/green]")
             self.write_log(f"  {tsv_count} .tsv files, {json_count} .json files, {len(real_files)} total")
             self.write_log(f"  [green]Files:[/green]   {local_cache}")
-            self.write_log(f"  [green]Archive:[/green] {archive_path}\n")
+            self.write_log(f"  [green]Archive:[/green] {archive_path}")
+            self.write_log("[bold]Opening file browser...[/bold]\n")
+            self.call_from_thread(self.push_screen, FileBrowserScreen(local_cache))
 
         except Exception as e:
             self.write_log(f"[red]Error: {e}[/red]\n")
         finally:
             asyncio.run(fs.close())
             set_file_service(saved_fs)
+
+    # ── File Browser ──────────────────────────────────────────────────────
+
+    def _do_browse_files(self) -> None:
+        """Open file browser rooted at ./demo_outputs or cwd."""
+        demo_path = Path("./demo_outputs").resolve()
+        root = demo_path if demo_path.is_dir() else Path.cwd()
+        self.push_screen(FileBrowserScreen(root))
 
     # ── Actions ───────────────────────────────────────────────────────────
 
