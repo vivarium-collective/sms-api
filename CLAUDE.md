@@ -180,3 +180,67 @@ async with get_ssh_session_service().session() as ssh:
 - **Type checking**: mypy with strict mode. Excludes: `sms_api/api/client/`, `app/ui/`, `notes/`, `scratchpads/`.
 - **Python**: 3.12.9 (pinned exact).
 - **Package manager**: uv with hatchling build backend.
+
+
+## Notes
+
+### Full end-user E2E workflow (E.U.T.E: End User Tooling Experience)
+
+#### We consider the "full end-user end-to-end workflow (a.k.a: E.U.T.E: End User Tooling Experience) to be: *(build -> get build status -> workflow(parca --> simulation --> analyses)) -> get workflow status -> get simulation data (download)*
+We seek to have the Atlantis CLI (`app.cli_app`) to do this workflow, which again should be:
+
+```
+1. <GET> /core/v1/simulator/latest
+2. -> <POST> /core/v1/simulator/upload
+3. -> <GET> /core/v1/simulator/status (perhaps poll?, whatever is in the atlantis cli)
+4. (once done) -> <POST> /api/v1/simulations
+5. -> <GET> /api/v1/simulations/{id}/status (again, perhaps poll? Whatever is sleek and a good ux)
+6. -> (once done) <POST> /api/v1/simulations/{id}/data (saved to a specified outdir, which for our testing/debugging can be a dir at ./debug)
+```
+
+
+#### Development Flow State for EUTE
+
+*WHEN TESTING THE SMS_API's EUTE, MAKE SURE to use the atlantis cli (app.cli_app).* IN FACT, this is the iterative dev loop i want to get in: we use the cli to test end-user-facing e2e workflows (that is, the
+"product" itself, one that stakeholders and clients alike will use: must be sleek, easy to use, yet robust and informative, and most importantly useful/novel enough to where it would be perferred to use the cli over any other
+arbitrary external client that may call the api...I will then want to ensure that the same working functionality is exposed/present in the tui (basically, the entrypoint to the rest api defined in sms_api has 3
+entrypoints/clients (other than direct http requests to the endpoints themselves): a. the marimo notebooks found in app/ui/..., b. the cli (atlantis) found in app.cli_app, c. the tui found at app.tui. With that said, it is
+imperative that the aforementioned a, b, and c are implementations of the same thing (the full e2e end-user workflow calling the restapi endpoonts as mentioned), but within different media...ie: cli app, marimo gui (app mode in
+marimo), and tui (textual-based tui) all expose/provide the same functionality, just in those different formats. Let's fully make this happen! If youre in, say "I dig ya broski: let's cook!", then make it happen babbbby!
+
+### Stanford-Test Deploy Loop (K8s + AWS Batch)
+
+The iterative fix → deploy → test cycle for the `sms-api-stanford-test` namespace:
+
+```bash
+# 1. Fix code, then commit and push
+git add <files> && git commit -m "fix: ..." && git push
+
+# 2. Build and push Docker image via GitHub Action
+gh workflow run build-and-push.yml --ref atlantis-cli -f version=<VERSION>
+gh run watch $(gh run list --workflow=build-and-push.yml --limit 1 --json databaseId -q '.[0].databaseId')
+# NOTE: The action builds sms-api and sms-ptools. sms-api is the important one.
+# The ptools step may fail (Dockerfile-nextflow issue) — that's fine as long as sms-api succeeds.
+
+# 3. Deploy to K8s (rollout restart forces new image pull even if tag unchanged)
+kubectl rollout restart deployment/api -n sms-api-stanford-test
+kubectl rollout status deployment/api -n sms-api-stanford-test
+
+# 4. Start proxy for local access
+AWS_PROFILE=stanford-sso AWS_DEFAULT_REGION=us-gov-west-1 ../sms-cdk/scripts/ptools-proxy.sh -s smsvpctest
+
+# 5. Verify version
+curl -s http://localhost:8080/health
+
+# 6. Test E2E via Atlantis CLI (NOT curl)
+uv run atlantis simulator latest --repo-url https://github.com/CovertLabEcoli/vEcoli-private --branch master
+uv run atlantis simulation run test1 <SIMULATOR_ID> --generations 1 --seeds 1 --poll
+uv run atlantis simulation outputs <SIM_ID> --dest ./debug
+```
+
+**Version sync:** When bumping version, update `sms_api/version.py` AND `kustomize/overlays/sms-api-stanford-test/kustomization.yaml` (both `newTag` fields). Same tag is fine for iterative fixes — `rollout restart` forces a new pull regardless.
+
+**Alternative: Local build** (faster, no GH Action wait):
+```bash
+./kustomize/scripts/build_and_push.sh   # reads version from sms_api/version.py
+```
