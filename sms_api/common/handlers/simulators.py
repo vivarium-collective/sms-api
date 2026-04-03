@@ -1,7 +1,10 @@
+import asyncio
 import logging
 
 from fastapi import HTTPException
 
+from sms_api.common.hpc.job_service import JobStatusUpdate
+from sms_api.common.models import JobBackend, JobId, JobStatus
 from sms_api.common.simulator_defaults import ACCEPTED_REPOS, DEFAULT_BRANCH, DEFAULT_REPO, RepoUrl
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.database_service import DatabaseService
@@ -69,6 +72,44 @@ async def get_simulator_versions() -> RegisteredSimulators:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+def _register_build_done_callback(
+    local_tasks: dict[str, asyncio.Task],  # type: ignore[type-arg]
+    task_id: str,
+    database_service: DatabaseService,
+    hpcrun_id: int,
+) -> None:
+    """Register asyncio done-callback to propagate build result to DB."""
+    task = local_tasks.get(task_id)
+    if task is None:
+        return
+    callback = lambda t: asyncio.ensure_future(  # noqa: E731
+        _update_build_status(t, database_service, hpcrun_id, task_id)
+    )
+    task.add_done_callback(callback)
+
+
+async def _update_build_status(
+    task: asyncio.Task,  # type: ignore[type-arg]
+    db: DatabaseService,
+    hpcrun_id: int,
+    task_id: str,
+) -> None:
+    """Write final build status to the HpcRun record."""
+    if task.cancelled():
+        status, err = JobStatus.CANCELLED, None
+    elif task.exception():
+        status, err = JobStatus.FAILED, str(task.exception())
+    else:
+        status, err = JobStatus.COMPLETED, None
+    try:
+        await db.update_hpcrun_status(
+            hpcrun_id=hpcrun_id,
+            update=JobStatusUpdate(job_id=JobId.local(task_id), status=status, error_message=err),
+        )
+    except Exception:
+        logger.exception(f"Failed to update HpcRun {hpcrun_id} status to {status}")
+
+
 async def upload_simulator(
     commit_hash: str,
     git_repo_url: str,
@@ -107,11 +148,23 @@ async def upload_simulator(
 
         # Submit build job (which now includes cloning the repository)
         build_job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
-        await database_service.insert_hpcrun(
+        hpc_run = await database_service.insert_hpcrun(
             job_id=build_job_id,
             job_type=JobType.BUILD_IMAGE,
             ref_id=simulator.database_id,
             correlation_id="N/A",
         )
+
+        # For LOCAL builds, register a done-callback to propagate final status to DB
+        if build_job_id.backend == JobBackend.LOCAL:
+            from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
+
+            if isinstance(simulation_service_slurm, SimulationServiceK8s):
+                _register_build_done_callback(
+                    simulation_service_slurm._local._tasks,
+                    build_job_id.value,
+                    database_service,
+                    hpc_run.database_id,
+                )
 
     return simulator
