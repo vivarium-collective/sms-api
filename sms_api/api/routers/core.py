@@ -160,20 +160,25 @@ async def insert_simulator_version(
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
 
     existing_version = await db_service.get_simulator_by_commit(simulator.git_commit_hash)
-    if existing_version is None:
-        try:
-            return await handlers.simulators.upload_simulator(
-                commit_hash=simulator.git_commit_hash,
-                git_repo_url=simulator.git_repo_url,
-                git_branch=simulator.git_branch,
-                simulation_service_slurm=sim_service,
-                database_service=db_service,
-            )
-        except Exception as e:
-            logger.exception("Error inserting simulator version.")
-            raise HTTPException(status_code=500, detail=str(e)) from e
-    else:
-        return existing_version
+    if existing_version is not None:
+        # Check if previous build failed — if so, fall through to retry
+        existing_build = await db_service.get_hpcrun_by_ref(
+            ref_id=existing_version.database_id, job_type=JobType.BUILD_IMAGE
+        )
+        if existing_build is None or existing_build.status != JobStatus.FAILED:
+            return existing_version
+
+    try:
+        return await handlers.simulators.upload_simulator(
+            commit_hash=simulator.git_commit_hash,
+            git_repo_url=simulator.git_repo_url,
+            git_branch=simulator.git_branch,
+            simulation_service_slurm=sim_service,
+            database_service=db_service,
+        )
+    except Exception as e:
+        logger.exception("Error inserting simulator version.")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @config.router.post(
