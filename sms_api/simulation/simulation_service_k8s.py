@@ -173,7 +173,7 @@ cd {build_base} && rm -rf {build_dir} {build_base}/Dockerfile-vecoli-submit
         """Submit the build script to the EC2 build node via SSH."""
         settings = get_settings()
         async with get_ssh_session_service(SSHTarget.BUILD).session() as ssh:
-            return_code, stdout, stderr = await ssh.run_command(build_script)
+            return_code, stdout, stderr = await ssh.run_command(build_script, check=False)
             if return_code != 0:
                 logger.error(f"Build failed (exit {return_code}):\nSTDOUT: {stdout[-2000:]}\nSTDERR: {stderr[-2000:]}")
                 raise RuntimeError(f"SSH command failed with exit code {return_code}: {stderr[-500:]}")
