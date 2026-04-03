@@ -119,7 +119,7 @@ set -e
 export GIT_TERMINAL_PROMPT=0
 cd /tmp
 if [ -d "{build_dir}" ]; then rm -rf "{build_dir}"; fi
-git clone --branch {branch} --single-branch {auth_repo_url} {build_dir}
+git clone --depth 1 --branch {branch} --single-branch {auth_repo_url} {build_dir}
 cd {build_dir}
 
 # Build and push base vEcoli task image
