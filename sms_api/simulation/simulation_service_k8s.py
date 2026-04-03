@@ -113,12 +113,20 @@ class SimulationServiceK8s(SimulationService):
                     f"https://{settings.github_username}:{settings.github_token}@github.com/{match.group(1)}"
                 )
 
+        build_base = "/home/ssm-user/builds"
         build_dir = f"vEcoli-build-{commit}"
         return f"""\
 set -e
 export GIT_TERMINAL_PROMPT=0
-cd /tmp
+
+# Use EBS-backed storage instead of tmpfs /tmp (only 1.9G)
+mkdir -p {build_base}
+cd {build_base}
 if [ -d "{build_dir}" ]; then rm -rf "{build_dir}"; fi
+
+# Reclaim disk from old Docker images/layers
+docker system prune -f
+
 git clone --depth 1 --branch {branch} --single-branch {auth_repo_url} {build_dir}
 cd {build_dir}
 
@@ -139,7 +147,7 @@ SUBMIT_REGISTRY="${{SUBMIT_URI%%/*}}"
 aws ecr get-login-password --region {settings.batch_region} | \
     docker login --username AWS --password-stdin "$SUBMIT_REGISTRY"
 
-cat > /tmp/Dockerfile-vecoli-submit <<'DOCKERFILE'
+cat > {build_base}/Dockerfile-vecoli-submit <<'DOCKERFILE'
 ARG BASE_IMAGE
 FROM ${{BASE_IMAGE}}
 USER root
@@ -153,11 +161,11 @@ DOCKERFILE
 
 docker build -t "$SUBMIT_URI" \
     --build-arg BASE_IMAGE="$BASE_URI" \
-    -f /tmp/Dockerfile-vecoli-submit /tmp
+    -f {build_base}/Dockerfile-vecoli-submit {build_base}
 docker push "$SUBMIT_URI"
 echo "Submit image pushed: $SUBMIT_URI"
 
-cd /tmp && rm -rf {build_dir} /tmp/Dockerfile-vecoli-submit
+cd {build_base} && rm -rf {build_dir} {build_base}/Dockerfile-vecoli-submit
 """
 
     async def _submit_build_ssh(self, build_script: str, commit: str) -> None:
