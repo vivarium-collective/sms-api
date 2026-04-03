@@ -225,7 +225,7 @@ class DatabaseServiceSQL(DatabaseService):
 
     async def _get_orm_hpcrun_by_ref(self, session: AsyncSession, ref_id: int, job_type: JobType) -> ORMHpcRun | None:
         reference = self._get_job_type_ref(job_type)
-        stmt1 = select(ORMHpcRun).where(reference == ref_id).limit(1)  # type: ignore[arg-type]
+        stmt1 = select(ORMHpcRun).where(reference == ref_id).order_by(ORMHpcRun.id.desc()).limit(1)  # type: ignore[arg-type]
         result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
 
