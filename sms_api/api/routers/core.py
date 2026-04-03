@@ -10,6 +10,8 @@ from sms_api.api import request_examples
 from sms_api.common import handlers
 from sms_api.common.gateway.models import ServerMode
 from sms_api.common.gateway.utils import get_router_config
+from sms_api.common.hpc.job_service import JobStatusUpdate
+from sms_api.common.models import JobBackend, JobStatus
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.dependencies import (
     get_database_service,
@@ -110,6 +112,26 @@ async def get_simulator_status(simulator_id: int) -> HpcRun:
 
     if simulation_hpcrun is None:
         raise HTTPException(status_code=404, detail=f"Simulator container build with id {simulator_id} not found.")
+
+    # Live status check for LOCAL builds still showing RUNNING
+    if simulation_hpcrun.job_id.backend == JobBackend.LOCAL and simulation_hpcrun.status in (
+        JobStatus.RUNNING,
+        JobStatus.PENDING,
+    ):
+        sim_service = get_simulation_service()
+        if sim_service is not None:
+            live = await sim_service.get_job_status(simulation_hpcrun.job_id)
+            if live is not None and live.status != simulation_hpcrun.status:
+                update = JobStatusUpdate(
+                    job_id=simulation_hpcrun.job_id,
+                    status=live.status,
+                    error_message=live.error_message,
+                )
+                await db_service.update_hpcrun_status(hpcrun_id=simulation_hpcrun.database_id, update=update)
+                simulation_hpcrun.status = live.status
+                if live.error_message:
+                    simulation_hpcrun.error_message = live.error_message
+
     return simulation_hpcrun
 
 
