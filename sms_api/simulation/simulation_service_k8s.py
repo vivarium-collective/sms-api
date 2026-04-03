@@ -114,11 +114,11 @@ class SimulationServiceK8s(SimulationService):
 
         build_base = "/home/ssm-user/builds"
         build_dir = f"vEcoli-build-{commit}"
-        ssh_key = "~/.ssh/dev_machine_ssh"
+        ssh_key = "/home/ssm-user/.ssh/dev_machine_ssh"
         return f"""\
 set -e
 export GIT_TERMINAL_PROMPT=0
-export GIT_SSH_COMMAND="ssh -i {ssh_key} -o StrictHostKeyChecking=no"
+export GIT_SSH_COMMAND="/usr/bin/ssh -i {ssh_key} -o StrictHostKeyChecking=no"
 
 # Use EBS-backed storage instead of tmpfs /tmp (only 1.9G)
 mkdir -p {build_base}
@@ -173,9 +173,10 @@ cd {build_base} && rm -rf {build_dir} {build_base}/Dockerfile-vecoli-submit
         """Submit the build script to the EC2 build node via SSH."""
         settings = get_settings()
         async with get_ssh_session_service(SSHTarget.BUILD).session() as ssh:
-            return_code, _stdout, stderr = await ssh.run_command(build_script)
+            return_code, stdout, stderr = await ssh.run_command(build_script)
             if return_code != 0:
-                raise RuntimeError(f"Docker build failed on submit node: {stderr[:500]}")
+                logger.error(f"Build failed (exit {return_code}):\nSTDOUT: {stdout[-2000:]}\nSTDERR: {stderr[-2000:]}")
+                raise RuntimeError(f"SSH command failed with exit code {return_code}: {stderr[-500:]}")
         logger.info(f"Built and pushed image {settings.ecr_repository}:{commit}")
 
     async def _run_build(self, simulator_version: SimulatorVersion) -> None:

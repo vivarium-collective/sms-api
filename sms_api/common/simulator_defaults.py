@@ -53,6 +53,6 @@ AVAILABLE_CONFIG_FILENAMES = (
 )
 
 DEFAULT_REPO = RepoUrl.VECOLI_FORK_REPO_URL if PUBLIC_MODE else RepoUrl.VECOLI_PRIVATE_REPO_URL
-DEFAULT_BRANCH = "api-support" if PUBLIC_MODE else "api-analysis-patch"
+DEFAULT_BRANCH = "master"
 DEFAULT_COMMIT = "203ab2a" if PUBLIC_MODE else "2f3ead"  # should be "latest"
 DEFAULT_SIMULATOR = Simulator(git_commit_hash=DEFAULT_COMMIT, git_repo_url=DEFAULT_REPO, git_branch=DEFAULT_BRANCH)
