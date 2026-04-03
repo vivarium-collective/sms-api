@@ -143,7 +143,7 @@ BASE_URI=$(bash runscripts/container/build-and-push-ecr.sh \
 
 # Build vecoli-submit image (base + Java + Nextflow) for K8s workflow head
 SUBMIT_URI=$(bash runscripts/container/build-and-push-ecr.sh \
-    -i {commit} -r {settings.ecr_submit_repository} -R {settings.batch_region} -u)
+    -i {commit}-submit -r {settings.ecr_repository} -R {settings.batch_region} -u)
 SUBMIT_REGISTRY="${{SUBMIT_URI%%/*}}"
 aws ecr get-login-password --region {settings.batch_region} | \
     docker login --username AWS --password-stdin "$SUBMIT_REGISTRY"
@@ -225,7 +225,7 @@ cd {build_base} && rm -rf {build_dir} {build_base}/Dockerfile-vecoli-submit
             raise ValueError(f"Simulator {ecoli_simulation.simulator_id} not found")
         submit_image = (
             f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
-            f"/{settings.ecr_submit_repository}:{simulator.git_commit_hash}"
+            f"/{settings.ecr_repository}:{simulator.git_commit_hash}-submit"
         )
 
         # Create ConfigMap with workflow config
