@@ -110,7 +110,7 @@ async def _update_build_status(
         logger.exception(f"Failed to update HpcRun {hpcrun_id} status to {status}")
 
 
-async def upload_simulator(
+async def upload_simulator(  # noqa: C901
     commit_hash: str,
     git_repo_url: str,
     git_branch: str,
@@ -139,6 +139,17 @@ async def upload_simulator(
             simulator = _simulator
             break
 
+    # Check if we need to (re-)submit a build
+    needs_build = simulator is None
+    if simulator is not None:
+        # Re-trigger build if the previous one failed
+        existing_build = await database_service.get_hpcrun_by_ref(
+            ref_id=simulator.database_id, job_type=JobType.BUILD_IMAGE
+        )
+        if existing_build is not None and existing_build.status == JobStatus.FAILED:
+            logger.info(f"Previous build for simulator {simulator.database_id} failed, retrying")
+            needs_build = True
+
     # insert the latest commit into the database and submit build job
     if simulator is None:
         simulator = await database_service.insert_simulator(
@@ -146,7 +157,7 @@ async def upload_simulator(
         )
         verify_simulator_payload(simulator)
 
-        # Submit build job (which now includes cloning the repository)
+    if needs_build:
         build_job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
         hpc_run = await database_service.insert_hpcrun(
             job_id=build_job_id,

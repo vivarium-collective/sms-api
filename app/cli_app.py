@@ -100,11 +100,50 @@ def launch_tui(
 
 @simulator_cli.command("latest", help="Fetch, upload, and build the latest simulator version from the default repo.")
 def simulator_latest(
+    repo_url: str | None = Option(default=None, help="Git repo URL. Defaults to the configured default repo."),
+    branch: str | None = Option(default=None, help="Git branch. Defaults to the configured default branch."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    import time
+
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
     data_service = get_data_service(base_url=base_url)
-    simulator = data_service.get_simulator()
-    _display(simulator.model_dump())
+
+    # 1. Get latest commit
+    with console.status("[bold cyan]Fetching latest commit..."):
+        latest = data_service.submit_get_latest_simulator(repo_url=repo_url, branch=branch)
+    console.print(
+        f"[bold]Commit:[/bold] {latest.git_commit_hash}  [dim]({latest.git_repo_url} @ {latest.git_branch})[/dim]"
+    )
+
+    # 2. Upload (triggers build if new)
+    with console.status("[bold cyan]Uploading simulator..."):
+        uploaded = data_service.submit_upload_simulator(simulator=latest)
+    console.print(f"[bold]Simulator ID:[/bold] {uploaded.database_id}")
+
+    # 3. Poll build status with live feedback
+    console.print("[bold cyan]Waiting for build...[/bold cyan]")
+    poll_interval = 15
+    elapsed = 0
+    status = "running"
+    while status not in ("completed", "failed", "cancelled"):
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+        status = data_service.submit_get_simulator_build_status(simulator=uploaded)
+        console.print(f"  [{elapsed}s] status: [yellow]{status}[/yellow]")
+
+    style = "green" if status == "completed" else "red"
+    console.print(
+        Panel(
+            f"[bold {style}]{status.upper()}[/bold {style}]",
+            title=f"Build — simulator {uploaded.database_id}",
+            border_style=style,
+        )
+    )
+    _display(uploaded.model_dump())
 
 
 @simulator_cli.command("list", help="List all registered simulator versions.")
@@ -122,9 +161,23 @@ def simulator_status(
     simulator_id: int = Argument(help="Simulator database ID."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
     data_service = get_data_service(base_url=base_url)
-    status = data_service.get_simulator_status(simulator_id=simulator_id)
-    _display(status)
+    hpcrun = data_service.submit_get_simulator_build_status_full(simulator_id=simulator_id)
+    style = "green" if hpcrun.status == "completed" else ("red" if hpcrun.status == "failed" else "yellow")
+    console.print(
+        Panel(
+            f"[bold {style}]{hpcrun.status.upper() if hpcrun.status else 'no status'}[/bold {style}]",
+            title=f"Build — simulator {simulator_id}",
+            border_style=style,
+        )
+    )
+    if hpcrun.error_message:
+        console.print(f"[red]Error:[/red] {hpcrun.error_message}")
+    _display(hpcrun.model_dump())
 
 
 # -- Simulation commands --
@@ -145,19 +198,64 @@ def simulation_run(
         default=False,
         help="Run the parameter calculator before simulation. Increases overall runtime.",
     ),
+    poll: bool = Option(default=False, help="Poll simulation status until completion."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    import time
+
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
     data_service = get_data_service(base_url=base_url)
-    simulation = data_service.run_workflow(
-        experiment_id=experiment_id,
-        simulator_id=simulator_id,
-        config_filename=config_filename.value,  # type: ignore[attr-defined]
-        num_generations=generations,
-        num_seeds=seeds,
-        description=description or f"sim{simulator_id}-{experiment_id}; {generations} Generations; {seeds} Seeds",
-        run_parameter_calculator=run_parca,
-    )
+
+    with console.status("[bold cyan]Submitting simulation..."):
+        simulation = data_service.run_workflow(
+            experiment_id=experiment_id,
+            simulator_id=simulator_id,
+            config_filename=config_filename.value,  # type: ignore[attr-defined]
+            num_generations=generations,
+            num_seeds=seeds,
+            description=description or f"sim{simulator_id}-{experiment_id}; {generations} Generations; {seeds} Seeds",
+            run_parameter_calculator=run_parca,
+        )
+
+    console.print(f"[bold green]Simulation submitted![/bold green]  ID: {simulation.database_id}")
     _display(simulation.model_dump())
+
+    if not poll:
+        sim_id = simulation.database_id
+        console.print(f"\n[dim]Track progress:[/dim]  atlantis simulation status {sim_id}")
+        console.print(f"[dim]Download data:[/dim]   atlantis simulation outputs {sim_id} --dest ./debug")
+        return
+
+    # Poll until done
+    console.print("\n[bold cyan]Polling simulation status...[/bold cyan]")
+    poll_interval = 30
+    elapsed = 0
+    status = "running"
+    while status not in ("completed", "failed", "cancelled", "unknown"):
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+        try:
+            status = data_service.get_workflow_status(simulation_id=simulation.database_id)
+        except Exception as e:
+            console.print(f"  [{elapsed}s] [red]error: {e}[/red]")
+            continue
+        console.print(f"  [{elapsed}s] status: [yellow]{status}[/yellow]")
+
+    style = "green" if status == "completed" else "red"
+    console.print(
+        Panel(
+            f"[bold {style}]{status.upper()}[/bold {style}]",
+            title=f"Simulation {simulation.database_id}",
+            border_style=style,
+        )
+    )
+    if status == "completed":
+        console.print(
+            f"\n[dim]Download data:[/dim]  atlantis simulation outputs {simulation.database_id} --dest ./debug"
+        )
 
 
 @simulation_cli.command("get", help="Get a simulation by its database ID.")
@@ -183,20 +281,58 @@ def simulation_list(
 @simulation_cli.command("status", help="Get the status and log for a simulation.")
 def simulation_status(
     simulation_id: int = Argument(help="Simulation database ID."),
+    poll: bool = Option(default=False, help="Poll until simulation completes."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
-    data_service = get_data_service(base_url=base_url)
-    log = data_service.get_workflow_log(simulation_id=simulation_id)
+    import time
+
     from rich.console import Console
     from rich.panel import Panel
 
     console = Console()
-    console.print(Panel(log, title=f"Workflow Log (sim {simulation_id})", border_style="cyan"))
+    data_service = get_data_service(base_url=base_url)
+
+    # Show current log + status
     try:
-        status_update = data_service.get_workflow_status(simulation_id=simulation_id)
-        console.print(f"[bold]Status:[/bold] [green]{status_update.upper()}[/green]")
+        log = data_service.get_workflow_log(simulation_id=simulation_id)
+        console.print(Panel(log, title=f"Workflow Log (sim {simulation_id})", border_style="cyan"))
+    except Exception as e:
+        console.print(f"[dim]Log not available: {e}[/dim]")
+
+    try:
+        status = data_service.get_workflow_status(simulation_id=simulation_id)
+        console.print(f"[bold]Status:[/bold] [green]{status.upper()}[/green]")
     except Exception as e:
         console.print(f"[red]{e}[/red]")
+        return
+
+    if not poll or status in ("completed", "failed", "cancelled"):
+        return
+
+    # Poll until done
+    console.print("\n[bold cyan]Polling...[/bold cyan]")
+    poll_interval = 30
+    elapsed = 0
+    while status not in ("completed", "failed", "cancelled", "unknown"):
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+        try:
+            status = data_service.get_workflow_status(simulation_id=simulation_id)
+        except Exception as e:
+            console.print(f"  [{elapsed}s] [red]error: {e}[/red]")
+            continue
+        console.print(f"  [{elapsed}s] status: [yellow]{status}[/yellow]")
+
+    style = "green" if status == "completed" else "red"
+    console.print(
+        Panel(
+            f"[bold {style}]{status.upper()}[/bold {style}]",
+            title=f"Simulation {simulation_id}",
+            border_style=style,
+        )
+    )
+    if status == "completed":
+        console.print(f"\n[dim]Download data:[/dim]  atlantis simulation outputs {simulation_id} --dest ./debug")
 
 
 @simulation_cli.command("cancel", help="Cancel a running simulation.")

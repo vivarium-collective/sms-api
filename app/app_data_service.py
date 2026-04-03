@@ -194,6 +194,17 @@ class E2EDataService:
         except Exception as e:
             raise httpx.HTTPError(f"Could not fetch build status for simulator: {simulator.model_dump()}") from e
 
+    def submit_get_simulator_build_status_full(self, simulator_id: int) -> HpcRun:
+        try:
+            response = self.client.get(url="/core/v1/simulator/status", params={"simulator_id": simulator_id})
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return HpcRun(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not fetch build status for simulator {simulator_id}") from e
+
     def submit_get_simulator_status(self, simulator_id: int) -> str:
         try:
             status_update_response = self.client.get(
