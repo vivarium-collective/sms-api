@@ -104,20 +104,21 @@ class SimulationServiceK8s(SimulationService):
         branch = simulator_version.git_branch
         repo_url = simulator_version.git_repo_url
 
-        # Inject GitHub PAT for private repo cloning
-        auth_repo_url = repo_url
-        if settings.github_username and settings.github_token:
-            match = re.match(r"https://github\.com/(.+)", repo_url)
-            if match:
-                auth_repo_url = (
-                    f"https://{settings.github_username}:{settings.github_token}@github.com/{match.group(1)}"
-                )
+        # Convert HTTPS GitHub URL to SSH for deploy key auth
+        ssh_repo_url = repo_url
+        https_match = re.match(r"https://github\.com/(.+)", repo_url)
+        if https_match:
+            ssh_repo_url = f"git@github.com:{https_match.group(1)}"
+            if not ssh_repo_url.endswith(".git"):
+                ssh_repo_url += ".git"
 
         build_base = "/home/ssm-user/builds"
         build_dir = f"vEcoli-build-{commit}"
+        ssh_key = "~/.ssh/dev_machine_ssh"
         return f"""\
 set -e
 export GIT_TERMINAL_PROMPT=0
+export GIT_SSH_COMMAND="ssh -i {ssh_key} -o StrictHostKeyChecking=no"
 
 # Use EBS-backed storage instead of tmpfs /tmp (only 1.9G)
 mkdir -p {build_base}
@@ -127,7 +128,7 @@ if [ -d "{build_dir}" ]; then rm -rf "{build_dir}"; fi
 # Reclaim disk from old Docker images/layers
 docker system prune -f
 
-git clone --depth 1 --branch {branch} --single-branch {auth_repo_url} {build_dir}
+git clone --depth 1 --branch {branch} --single-branch {ssh_repo_url} {build_dir}
 cd {build_dir}
 
 # Build and push base vEcoli task image
