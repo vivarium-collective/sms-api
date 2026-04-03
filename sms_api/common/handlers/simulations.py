@@ -133,6 +133,23 @@ async def run_workflow_legacy(
     return simulation
 
 
+async def _verify_build_complete(database_service: DatabaseService, simulator_id: int) -> None:
+    """Raise ValueError if the simulator build is still running or failed."""
+    build_run = await database_service.get_hpcrun_by_ref(ref_id=simulator_id, job_type=JobType.BUILD_IMAGE)
+    if build_run is None:
+        return
+    if build_run.status in (JobStatus.RUNNING, JobStatus.PENDING):
+        raise ValueError(
+            f"Simulator {simulator_id} build is still in progress (status: {build_run.status.value}). "
+            "Wait for the build to complete before submitting a simulation."
+        )
+    if build_run.status == JobStatus.FAILED:
+        raise ValueError(
+            f"Simulator {simulator_id} build failed: {build_run.error_message or 'unknown error'}. "
+            "Re-upload the simulator to retry."
+        )
+
+
 async def run_simulation_workflow(
     database_service: DatabaseService,
     simulation_service: SimulationService,
@@ -172,6 +189,9 @@ async def run_simulation_workflow(
     simulator = await database_service.get_simulator(simulator_id)
     if simulator is None:
         raise ValueError(f"Simulator with id {simulator_id} not found")
+
+    # Verify simulator build is complete before submitting simulation
+    await _verify_build_complete(database_service, simulator_id)
 
     # 2. Read the config template via the simulation service (SSH for SLURM, GitHub API for K8s)
     config_str = await simulation_service.read_config_template(
