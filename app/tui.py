@@ -608,9 +608,12 @@ class AtlantisTUI(App[None]):
         self._switch_to_results()
         self.write_log(f"[cyan]Checking status for simulation {sid}...[/]")
         try:
-            status = self.svc.get_workflow_status(simulation_id=sid)
+            run = self.svc.get_workflow_status(simulation_id=sid)
+            status = run.status.value
             color = _status_color(status)
             self.write_log(f"  Status: [{color}]{status.upper()}[/{color}]")
+            if run.error_message:
+                self.write_log(f"  [red]Error: {run.error_message}[/red]")
             log = self.svc.get_workflow_log(simulation_id=sid)
             self.write_log(f"\n[dim]─── Log ───[/dim]\n{log}\n")
         except Exception as e:

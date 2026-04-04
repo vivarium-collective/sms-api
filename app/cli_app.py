@@ -234,20 +234,23 @@ def simulation_run(
     poll_interval = 30
     elapsed = 0
     status = "running"
+    run = None
     while status not in ("completed", "failed", "cancelled", "unknown"):
         time.sleep(poll_interval)
         elapsed += poll_interval
         try:
-            status = data_service.get_workflow_status(simulation_id=simulation.database_id)
+            run = data_service.get_workflow_status(simulation_id=simulation.database_id)
+            status = run.status.value
         except Exception as e:
             console.print(f"  [{elapsed}s] [red]error: {e}[/red]")
             continue
         console.print(f"  [{elapsed}s] status: [yellow]{status}[/yellow]")
 
     style = "green" if status == "completed" else "red"
+    error_detail = f"\n{run.error_message}" if run and run.error_message else ""
     console.print(
         Panel(
-            f"[bold {style}]{status.upper()}[/bold {style}]",
+            f"[bold {style}]{status.upper()}[/bold {style}]{error_detail}",
             title=f"Simulation {simulation.database_id}",
             border_style=style,
         )
@@ -300,8 +303,11 @@ def simulation_status(
         console.print(f"[dim]Log not available: {e}[/dim]")
 
     try:
-        status = data_service.get_workflow_status(simulation_id=simulation_id)
+        run = data_service.get_workflow_status(simulation_id=simulation_id)
+        status = run.status.value
         console.print(f"[bold]Status:[/bold] [green]{status.upper()}[/green]")
+        if run.error_message:
+            console.print(f"[bold red]Error:[/bold red] {run.error_message}")
     except Exception as e:
         console.print(f"[red]{e}[/red]")
         return
@@ -317,16 +323,18 @@ def simulation_status(
         time.sleep(poll_interval)
         elapsed += poll_interval
         try:
-            status = data_service.get_workflow_status(simulation_id=simulation_id)
+            run = data_service.get_workflow_status(simulation_id=simulation_id)
+            status = run.status.value
         except Exception as e:
             console.print(f"  [{elapsed}s] [red]error: {e}[/red]")
             continue
         console.print(f"  [{elapsed}s] status: [yellow]{status}[/yellow]")
 
     style = "green" if status == "completed" else "red"
+    error_detail = f"\n{run.error_message}" if run.error_message else ""
     console.print(
         Panel(
-            f"[bold {style}]{status.upper()}[/bold {style}]",
+            f"[bold {style}]{status.upper()}[/bold {style}]{error_detail}",
             title=f"Simulation {simulation_id}",
             border_style=style,
         )

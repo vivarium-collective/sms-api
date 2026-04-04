@@ -107,9 +107,8 @@ class E2EDataService:
     def get_workflow_log(self, simulation_id: int) -> str:
         return self.submit_get_workflow_log(simulation_id=simulation_id)
 
-    def get_workflow_status(self, simulation_id: int) -> str:
-        status = self.submit_get_workflow_status(simulation_id=simulation_id)
-        return status
+    def get_workflow_status(self, simulation_id: int) -> SimulationRun:
+        return self.submit_get_workflow_status(simulation_id=simulation_id)
 
     def cancel_workflow(self, simulation_id: int) -> SimulationRun:
         return self.submit_cancel_workflow(simulation_id=simulation_id)
@@ -251,12 +250,12 @@ class E2EDataService:
         except Exception as e:
             raise httpx.HTTPError(f"Could not submit a new simulation workflow with params {query_params}: {e}") from e
 
-    def submit_get_workflow_status(self, simulation_id: int) -> str:
+    def submit_get_workflow_status(self, simulation_id: int) -> SimulationRun:
         try:
             status_update_response = self.client.get(url=f"/api/v1/simulations/{simulation_id}/status")
             if status_update_response.status_code != 200:
                 raise httpx.HTTPError("Error!")  # noqa: TRY301
-            return status_update_response.json().get("status")  # type: ignore[no-any-return]
+            return SimulationRun(**status_update_response.json())
         except Exception as e:
             raise httpx.HTTPError(f"Could not load status for simulation {simulation_id}") from e
 
