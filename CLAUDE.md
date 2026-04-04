@@ -244,3 +244,7 @@ uv run atlantis simulation outputs <SIM_ID> --dest ./debug
 ```bash
 ./kustomize/scripts/build_and_push.sh   # reads version from sms_api/version.py
 ```
+
+# PRIORITY
+
+Implement that which is laid out in ./PLAN.md, if not already done.
