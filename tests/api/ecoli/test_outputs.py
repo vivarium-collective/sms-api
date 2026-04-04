@@ -127,6 +127,10 @@ async def simulation_id(database_service: DatabaseServiceSQL) -> int:
     len(get_settings().storage_s3_bucket) == 0 or len(get_settings().storage_s3_region) == 0,
     reason="aws s3 settings not provided",
 )
+@pytest.mark.skipif(
+    os.environ.get("RUN_S3_TESTS", "") != "1",
+    reason="RUN_S3_TESTS=1 not set — requires active AWS credentials",
+)
 @pytest.mark.parametrize("response_type", ["file", "streaming"])
 async def test_get_simulation_data_from_s3(
     database_service: DatabaseServiceSQL,
