@@ -160,6 +160,42 @@ async def test_k8s_log_retrieval(
 
 
 @pytest.mark.asyncio
+async def test_k8s_log_fallback_to_s3(
+    database_service: DatabaseServiceSQL,
+    simulation_service_k8s_mock: SimulationServiceK8s,
+    mock_k8s_job_service: MagicMock,
+    mock_file_service: MagicMock,
+    simulator_repo_info: SimulatorRepoInfo,
+) -> None:
+    """Test that log retrieval falls back to S3 when K8s pod logs are unavailable."""
+    simulator = await _get_or_create_simulator(database_service, simulator_repo_info)
+    await database_service.insert_parca_dataset(
+        parca_dataset_request=ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
+    )
+
+    simulation_service_k8s_mock.read_config_template = AsyncMock(return_value=CONFIG_TEMPLATE)  # type: ignore[method-assign]
+
+    # K8s pod logs unavailable (pod cleaned up)
+    mock_k8s_job_service.get_job_logs.return_value = None
+
+    # S3 has the .nextflow.log
+    mock_file_service.get_file_contents = AsyncMock(return_value=b"N E X T F L O W\nWorkflow completed from S3")
+
+    simulation = await sim_handlers.run_simulation_workflow(
+        database_service=database_service,
+        simulation_service=simulation_service_k8s_mock,
+        simulator_id=simulator.database_id,
+        experiment_id="k8s-s3-log-test",
+        simulation_config_filename="api_simulation_default.json",
+    )
+
+    response = await sim_handlers.get_simulation_log(db_service=database_service, simulation_id=simulation.database_id)
+    body = response.body
+    assert isinstance(body, bytes)
+    assert "from S3" in body.decode()
+
+
+@pytest.mark.asyncio
 async def test_k8s_workflow_config_contents(
     database_service: DatabaseServiceSQL,
     simulation_service_k8s_mock: SimulationServiceK8s,

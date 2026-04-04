@@ -748,7 +748,7 @@ async def get_simulation_log(db_service: DatabaseService, simulation_id: int) ->
         raise ValueError(f"No HPC run found for simulation {simulation_id}")
 
     if hpc_run.job_id.backend == JobBackend.K8S:
-        log_content = await _get_k8s_log(hpc_run)
+        log_content = await _get_k8s_log(hpc_run, db_service, simulation_id)
     elif hpc_run.job_id.backend == JobBackend.LOCAL:
         log_content = f"Logs not available for local tasks (job {hpc_run.job_id})"
     else:
@@ -776,15 +776,47 @@ async def _get_slurm_log(hpc_run: HpcRun) -> str:
     return log_stdout
 
 
-async def _get_k8s_log(hpc_run: HpcRun) -> str:
-    """Read K8s Job pod logs via the K8s API."""
+async def _get_k8s_log(hpc_run: HpcRun, db_service: DatabaseService, simulation_id: int) -> str:
+    """Read K8s Job pod logs via the K8s API, falling back to S3 .nextflow.log."""
     from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
 
     simulation_service = get_simulation_service()
     if not isinstance(simulation_service, SimulationServiceK8s):
         raise TypeError("K8s logs requested but simulation service is not SimulationServiceK8s")
 
+    # Try K8s pod logs first
     log_content = simulation_service._k8s.get_job_logs(hpc_run.job_id.value)
-    if log_content is None:
-        return f"No logs available for K8s Job {hpc_run.job_id.value} (pod may have been cleaned up)"
-    return log_content
+    if log_content is not None:
+        return log_content
+
+    # Fallback: download .nextflow.log from S3
+    log_content = await _get_s3_nextflow_log(db_service, simulation_id)
+    if log_content is not None:
+        return log_content
+
+    return f"No logs available for K8s Job {hpc_run.job_id.value} (pod cleaned up, S3 log not found)"
+
+
+async def _get_s3_nextflow_log(db_service: DatabaseService, simulation_id: int) -> str | None:
+    """Try to fetch .nextflow.log from S3 for a K8s simulation."""
+    settings = get_settings()
+    file_service = get_file_service()
+    if file_service is None:
+        return None
+
+    simulation = await db_service.get_simulation(simulation_id=simulation_id)
+    if simulation is None:
+        return None
+
+    experiment_id = simulation.config.experiment_id
+    log_key = f"{settings.s3_work_prefix}/{experiment_id}/logs/.nextflow.log"
+    log_s3 = S3FilePath(s3_path=Path(log_key))
+
+    try:
+        content = await file_service.get_file_contents(log_s3)
+        if content:
+            return content.decode("utf-8", errors="replace")
+    except Exception:
+        logger.debug(f"S3 .nextflow.log not found at {log_key}")
+
+    return None
