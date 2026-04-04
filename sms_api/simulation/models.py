@@ -60,6 +60,7 @@ class HpcRun(BaseModel):
 class SimulationRun(BaseModel):
     id: int
     status: JobStatus
+    error_message: str | None = None
 
 
 class Simulator(BaseModel):

@@ -356,7 +356,18 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
         logger.warning(f"Job {hpc_run.job_id} not yet visible in backend, returning UNKNOWN")
         return SimulationRun(id=int(id), status=JobStatus.UNKNOWN)
 
-    return SimulationRun(id=int(id), status=job_status_info.status)
+    # Persist terminal status to DB so future calls don't need to hit the backend
+    if job_status_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+        update = JobStatusUpdate(
+            job_id=hpc_run.job_id,
+            status=job_status_info.status,
+            start_time=job_status_info.start_time,
+            end_time=job_status_info.end_time,
+            error_message=job_status_info.error_message,
+        )
+        await db_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, update=update)
+
+    return SimulationRun(id=int(id), status=job_status_info.status, error_message=job_status_info.error_message)
 
 
 async def cancel_simulation(
