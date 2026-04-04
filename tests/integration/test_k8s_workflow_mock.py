@@ -11,7 +11,7 @@ Prerequisites:
 """
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -78,14 +78,14 @@ async def test_k8s_submit_and_status(
     assert simulation.database_id is not None
     assert simulation.job_id is not None
 
-    # Verify K8s Job was created with init container
+    # Verify K8s Job and ConfigMap were created
     mock_k8s_job_service.create_job.assert_called_once()
     mock_k8s_job_service.create_configmap.assert_called_once()
 
     job_spec = mock_k8s_job_service.create_job.call_args[0][0]
     pod_spec = job_spec.spec.template.spec
-    assert len(pod_spec.init_containers) == 1
-    assert pod_spec.init_containers[0].name == "generate-workflow"
+    assert len(pod_spec.containers) == 1
+    assert pod_spec.containers[0].name == "workflow"
 
     # Check status
     status = await sim_handlers.get_simulation_status(db_service=database_service, id=simulation.database_id)
@@ -174,13 +174,14 @@ async def test_k8s_workflow_config_contents(
 
     simulation_service_k8s_mock.read_config_template = AsyncMock(return_value=CONFIG_TEMPLATE)  # type: ignore[method-assign]
 
-    await sim_handlers.run_simulation_workflow(
-        database_service=database_service,
-        simulation_service=simulation_service_k8s_mock,
-        simulator_id=simulator.database_id,
-        experiment_id="k8s-config-test",
-        simulation_config_filename="api_simulation_default.json",
-    )
+    with patch("sms_api.common.handlers.simulations.get_job_backend", return_value="k8s"):
+        await sim_handlers.run_simulation_workflow(
+            database_service=database_service,
+            simulation_service=simulation_service_k8s_mock,
+            simulator_id=simulator.database_id,
+            experiment_id="k8s-config-test",
+            simulation_config_filename="api_simulation_default.json",
+        )
 
     configmap = mock_k8s_job_service.create_configmap.call_args[0][0]
     config_data = json.loads(configmap.data["workflow.json"])
