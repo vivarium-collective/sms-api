@@ -3,11 +3,13 @@ kind: Kustomization
 
 namespace: sms-api-stanford-test
 
+# STABLE: 0.5.9
+
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.5.9
+    newTag: 0.6.0
   - name: ghcr.io/vivarium-collective/sms-ptools
-    newTag: 0.5.9
+    newTag: 0.6.0
 
 replicas:
   - count: 1
