@@ -10,6 +10,7 @@ from sms_api.common import StrEnumBase
 if TYPE_CHECKING:
     from rich.console import Console
 
+    from app.app_data_service import E2EDataService
     from sms_api.common.storage.file_service_s3 import FileServiceS3
 
 import typer
@@ -281,6 +282,34 @@ def simulation_list(
         _display(sim.model_dump())
 
 
+def _show_simulation_result(
+    console: Console,
+    data_service: E2EDataService,
+    simulation_id: int,
+    status: str,
+    error_message: str | None,
+) -> None:
+    """Display a terminal simulation status with details."""
+    from rich.panel import Panel
+
+    style = "green" if status == "completed" else "red"
+    error_detail = f"\n{error_message}" if error_message else ""
+    console.print(
+        Panel(
+            f"[bold {style}]{status.upper()}[/bold {style}]{error_detail}",
+            title=f"Simulation {simulation_id}",
+            border_style=style,
+        )
+    )
+    try:
+        sim = data_service.get_workflow(simulation_id=simulation_id)
+        _display(sim.model_dump())
+    except Exception as e:
+        console.print(f"[dim]Details not available: {e}[/dim]")
+    if status == "completed":
+        console.print(f"\n[dim]Download data:[/dim]  atlantis simulation outputs {simulation_id} --dest ./debug")
+
+
 @simulation_cli.command("status", help="Get the status and log for a simulation.")
 def simulation_status(
     simulation_id: int = Argument(help="Simulation database ID."),
@@ -295,24 +324,28 @@ def simulation_status(
     console = Console()
     data_service = get_data_service(base_url=base_url)
 
-    # Show current log + status
+    # Get status first (always available)
+    try:
+        run = data_service.get_workflow_status(simulation_id=simulation_id)
+        status = run.status.value
+    except Exception as e:
+        console.print(f"[red]{e}[/red]")
+        return
+
+    # Terminal state: show result panel + simulation details
+    if status in ("completed", "failed", "cancelled"):
+        _show_simulation_result(console, data_service, simulation_id, status, run.error_message)
+        return
+
+    # Still running: show live log
+    console.print(f"[bold]Status:[/bold] [yellow]{status.upper()}[/yellow]")
     try:
         log = data_service.get_workflow_log(simulation_id=simulation_id)
         console.print(Panel(log, title=f"Workflow Log (sim {simulation_id})", border_style="cyan"))
     except Exception as e:
         console.print(f"[dim]Log not available: {e}[/dim]")
 
-    try:
-        run = data_service.get_workflow_status(simulation_id=simulation_id)
-        status = run.status.value
-        console.print(f"[bold]Status:[/bold] [green]{status.upper()}[/green]")
-        if run.error_message:
-            console.print(f"[bold red]Error:[/bold red] {run.error_message}")
-    except Exception as e:
-        console.print(f"[red]{e}[/red]")
-        return
-
-    if not poll or status in ("completed", "failed", "cancelled"):
+    if not poll:
         return
 
     # Poll until done
@@ -330,17 +363,7 @@ def simulation_status(
             continue
         console.print(f"  [{elapsed}s] status: [yellow]{status}[/yellow]")
 
-    style = "green" if status == "completed" else "red"
-    error_detail = f"\n{run.error_message}" if run.error_message else ""
-    console.print(
-        Panel(
-            f"[bold {style}]{status.upper()}[/bold {style}]{error_detail}",
-            title=f"Simulation {simulation_id}",
-            border_style=style,
-        )
-    )
-    if status == "completed":
-        console.print(f"\n[dim]Download data:[/dim]  atlantis simulation outputs {simulation_id} --dest ./debug")
+    _show_simulation_result(console, data_service, simulation_id, status, run.error_message)
 
 
 @simulation_cli.command("cancel", help="Cancel a running simulation.")
