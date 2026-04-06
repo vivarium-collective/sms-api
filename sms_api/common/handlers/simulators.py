@@ -116,6 +116,7 @@ async def upload_simulator(  # noqa: C901
     git_branch: str,
     simulation_service_slurm: SimulationService | SimulationServiceHpc | None = None,
     database_service: DatabaseService | None = None,
+    force: bool = False,
 ) -> SimulatorVersion:
     if not simulation_service_slurm:
         simulation_service_slurm = get_simulation_service()
@@ -140,8 +141,8 @@ async def upload_simulator(  # noqa: C901
             break
 
     # Check if we need to (re-)submit a build
-    needs_build = simulator is None
-    if simulator is not None:
+    needs_build = simulator is None or force
+    if simulator is not None and not force:
         # Re-trigger build if the previous one failed
         existing_build = await database_service.get_hpcrun_by_ref(
             ref_id=simulator.database_id, job_type=JobType.BUILD_IMAGE

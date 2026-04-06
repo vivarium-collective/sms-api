@@ -176,6 +176,7 @@ async def insert_simulator_version(
             git_branch=simulator.git_branch,
             simulation_service_slurm=sim_service,
             database_service=db_service,
+            force=force,
         )
     except Exception as e:
         logger.exception("Error inserting simulator version.")
