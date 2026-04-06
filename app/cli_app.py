@@ -102,6 +102,7 @@ def launch_tui(
 def simulator_latest(
     repo_url: str | None = Option(default=None, help="Git repo URL. Defaults to the configured default repo."),
     branch: str | None = Option(default=None, help="Git branch. Defaults to the configured default branch."),
+    force: bool = Option(default=False, help="Force rebuild even if a completed build exists."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     import time
@@ -119,9 +120,9 @@ def simulator_latest(
         f"[bold]Commit:[/bold] {latest.git_commit_hash}  [dim]({latest.git_repo_url} @ {latest.git_branch})[/dim]"
     )
 
-    # 2. Upload (triggers build if new)
+    # 2. Upload (triggers build if new, or force rebuild)
     with console.status("[bold cyan]Uploading simulator..."):
-        uploaded = data_service.submit_upload_simulator(simulator=latest)
+        uploaded = data_service.submit_upload_simulator(simulator=latest, force=force)
     console.print(f"[bold]Simulator ID:[/bold] {uploaded.database_id}")
 
     # 3. Poll build status with live feedback

@@ -145,6 +145,7 @@ async def get_simulator_status(simulator_id: int) -> HpcRun:
 )
 async def insert_simulator_version(
     simulator: Simulator,
+    force: bool = False,
 ) -> SimulatorVersion:
     # verify simulator request
     handlers.simulators.verify_simulator_payload(simulator)
@@ -160,7 +161,7 @@ async def insert_simulator_version(
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
 
     existing_version = await db_service.get_simulator_by_commit(simulator.git_commit_hash)
-    if existing_version is not None:
+    if existing_version is not None and not force:
         # Check if previous build failed — if so, fall through to retry
         existing_build = await db_service.get_hpcrun_by_ref(
             ref_id=existing_version.database_id, job_type=JobType.BUILD_IMAGE

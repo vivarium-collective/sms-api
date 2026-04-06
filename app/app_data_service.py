@@ -166,9 +166,12 @@ class E2EDataService:
                 f"Could not get the latest simulator from the repo {repo_url} on branch {branch}"
             ) from e
 
-    def submit_upload_simulator(self, simulator: Simulator) -> SimulatorVersion:
+    def submit_upload_simulator(self, simulator: Simulator, force: bool = False) -> SimulatorVersion:
         try:
-            uploaded_response = self.client.post(url="/core/v1/simulator/upload", json=simulator.model_dump())
+            params = {"force": "true"} if force else {}
+            uploaded_response = self.client.post(
+                url="/core/v1/simulator/upload", json=simulator.model_dump(), params=params
+            )
             return SimulatorVersion(**uploaded_response.json())
         except Exception as e:
             raise httpx.HTTPError(f"Could not build the simulator: {simulator.model_dump()}") from e
