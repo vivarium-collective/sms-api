@@ -1,0 +1,311 @@
+Atlantis CLI Tutorial
+=====================
+
+This tutorial walks you through the complete end-to-end workflow:
+building a simulator, running a simulation, and downloading your results.
+
+.. contents:: On this page
+   :local:
+   :depth: 2
+
+Quick Start
+-----------
+
+Run a complete simulation in three commands:
+
+.. code-block:: bash
+
+   # 1. Build the latest simulator
+   uv run atlantis simulator latest
+
+   # 2. Run a simulation (replace <SIMULATOR_ID> with the ID from step 1)
+   uv run atlantis simulation run my_experiment <SIMULATOR_ID> --run-parca --poll
+
+   # 3. Download results (replace <SIM_ID> with the ID from step 2)
+   uv run atlantis simulation outputs <SIM_ID> --dest ./results
+
+Connecting to an API Server
+---------------------------
+
+By default, Atlantis connects to ``http://localhost:8080``. Override this with
+``--base-url`` on any command, or set the ``API_BASE_URL`` environment variable:
+
+.. code-block:: bash
+
+   # Use a specific server
+   uv run atlantis simulator latest --base-url https://sms.cam.uchc.edu
+
+   # Or set it once for your session
+   export API_BASE_URL=https://sms.cam.uchc.edu
+
+.. list-table:: Available Servers
+   :header-rows: 1
+
+   * - Server
+     - URL
+   * - Production
+     - ``https://sms.cam.uchc.edu``
+   * - Development
+     - ``https://sms-dev.cam.uchc.edu``
+   * - Local (default)
+     - ``http://localhost:8080``
+
+Step 1: Build a Simulator
+--------------------------
+
+A **simulator** is a containerized build of the
+`vEcoli <https://github.com/CovertLabEcoli/vEcoli-private>`_ whole-cell model.
+Before running simulations, you need a built simulator image.
+
+Fetch and build the latest version:
+
+.. code-block:: bash
+
+   uv run atlantis simulator latest \
+     --repo-url https://github.com/CovertLabEcoli/vEcoli-private \
+     --branch master
+
+This command:
+
+1. Fetches the latest commit from the specified repo and branch
+2. Uploads the simulator metadata to the API
+3. Polls the container build until it completes
+
+The output will show a **Simulator ID** (e.g., ``Simulator ID: 11``) --- save
+this for the next step.
+
+Force a rebuild (even if the same commit was already built):
+
+.. code-block:: bash
+
+   uv run atlantis simulator latest --force
+
+Check build status for an existing simulator:
+
+.. code-block:: bash
+
+   uv run atlantis simulator status <SIMULATOR_ID>
+
+List all simulators:
+
+.. code-block:: bash
+
+   uv run atlantis simulator list
+
+Step 2: Run a Simulation
+-------------------------
+
+Submit a simulation workflow using the simulator ID from step 1:
+
+.. code-block:: bash
+
+   uv run atlantis simulation run my_experiment 11 \
+     --generations 1 \
+     --seeds 1 \
+     --run-parca \
+     --poll
+
+.. list-table:: Arguments
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``EXPERIMENT_ID``
+     - A name you choose for this experiment (e.g., ``my_experiment``)
+   * - ``SIMULATOR_ID``
+     - The database ID of the simulator to use
+
+.. list-table:: Options
+   :header-rows: 1
+   :widths: 25 15 60
+
+   * - Option
+     - Default
+     - Description
+   * - ``--generations``
+     - 1
+     - Number of cell generations to simulate per seed
+   * - ``--seeds``
+     - 3
+     - Number of independent lineages (seeds) to run
+   * - ``--run-parca``
+     - off
+     - Run the parameter calculator before simulation
+   * - ``--poll``
+     - off
+     - Wait and display status updates until completion
+   * - ``--config-filename``
+     - ``api_simulation_default.json``
+     - Simulation config file on HPC
+   * - ``--description``
+     - auto-generated
+     - Custom description for the run
+
+What happens under the hood
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``--run-parca`` flag triggers the full pipeline:
+**parca** (parameter calculator) -> **simulation** -> **analysis**.
+Without it, the simulation uses a pre-existing parca dataset.
+
+With ``--poll``, the CLI prints status updates every 30 seconds:
+
+.. code-block:: text
+
+   Simulation submitted!  ID: 35
+
+   Polling simulation status...
+     [30s] status: running
+     [60s] status: running
+     ...
+     [1110s] status: completed
+   +---------------------------- Simulation 35 ----------------------------+
+   | COMPLETED                                                             |
+   +-----------------------------------------------------------------------+
+
+   Download data:  atlantis simulation outputs 35 --dest ./results
+
+Submit without polling (fire and forget):
+
+.. code-block:: bash
+
+   uv run atlantis simulation run my_experiment 11 --generations 2 --seeds 3
+
+Then check status later:
+
+.. code-block:: bash
+
+   uv run atlantis simulation status 35
+
+Or poll an already-running simulation:
+
+.. code-block:: bash
+
+   uv run atlantis simulation status 35 --poll
+
+Step 3: Download Results
+------------------------
+
+Once a simulation completes, download the output data:
+
+.. code-block:: bash
+
+   uv run atlantis simulation outputs 35 --dest ./results
+
+This downloads a ``.tar.gz`` archive containing analysis outputs (TSV data
+files, metadata JSON) and extracts it to the specified directory.
+
+Output structure
+~~~~~~~~~~~~~~~~
+
+.. code-block:: text
+
+   results/
+     <experiment_id>/
+       analyses/
+         variant=0/
+           plots/
+             analysis=cd1_fluxomics/
+               cd1_fluxomics_detailed.tsv
+               metadata.json
+             analysis=cd1_proteomics/
+               proteomics.tsv
+               metadata.json
+             analysis=ptools_proteins/
+               ptools_proteins.tsv
+               metadata.json
+             ...
+       nextflow/
+         workflow_config.json
+     <experiment_id>.tar.gz
+
+Additional Commands
+-------------------
+
+Simulation management
+~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   # List all simulations
+   uv run atlantis simulation list
+
+   # Get details for a specific simulation
+   uv run atlantis simulation get <SIM_ID>
+
+   # Cancel a running simulation
+   uv run atlantis simulation cancel <SIM_ID>
+
+Parca (parameter calculator)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   # List all parca datasets
+   uv run atlantis parca list
+
+   # Check status of a parca run
+   uv run atlantis parca status <PARCA_ID>
+
+Analysis
+~~~~~~~~
+
+.. code-block:: bash
+
+   # Get analysis details
+   uv run atlantis analysis get <ANALYSIS_ID>
+
+   # Check analysis status
+   uv run atlantis analysis status <ANALYSIS_ID>
+
+   # View analysis log
+   uv run atlantis analysis log <ANALYSIS_ID>
+
+   # List analysis plot outputs
+   uv run atlantis analysis plots <ANALYSIS_ID>
+
+Interactive TUI
+~~~~~~~~~~~~~~~
+
+Launch a full terminal UI with sidebar navigation and forms:
+
+.. code-block:: bash
+
+   uv run atlantis tui tui
+
+Typical Run Times
+-----------------
+
+.. list-table::
+   :header-rows: 1
+
+   * - Pipeline Stage
+     - Approximate Duration
+   * - Simulator build (fresh)
+     - 5--10 minutes
+   * - Simulator build (cached)
+     - seconds
+   * - Parca (parameter calculator)
+     - 5--8 minutes
+   * - Simulation (1 gen, 1 seed)
+     - 5--7 minutes
+   * - Analysis (8 analyses)
+     - 3--5 minutes
+   * - **Full pipeline**
+     - **~20--30 minutes**
+
+Getting Help
+------------
+
+.. code-block:: bash
+
+   # Top-level help
+   uv run atlantis --help
+
+   # Subcommand help
+   uv run atlantis simulator --help
+   uv run atlantis simulation run --help
+
+   # Contextual help for any command group
+   uv run atlantis help simulator
+   uv run atlantis help simulation

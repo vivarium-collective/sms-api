@@ -82,12 +82,10 @@ dev = [
     "types-python-dateutil>=2.9.0.20251115",
 ]
 docs = [
-    "mkdocs>=1.4.2,<2",
-    "mkdocs-material>=9.2.7,<10",
-    "mkdocstrings[python]>=0.26.1,<0.27",
     "sphinx>=8.2.3,<9",
     "sphinx-autodoc-typehints>=3.2.0,<4",
     "sphinx-rtd-theme>=3.0.2,<4",
+    "myst-parser>=4.0.1,<5",
 ]
 
 [tool.uv]
@@ -117,11 +115,15 @@ build-backend = "hatchling.build"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/simulation_data_service\\.py$"]
+exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^app/tui\\.py$', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/simulation_data_service\\.py$"]
 
 [[tool.mypy.overrides]]
-module = ["fastapi_swagger_dark", "kubernetes.*"]
+module = ["fastapi_swagger_dark", "kubernetes.*", "textual", "textual.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["app.tui"]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
