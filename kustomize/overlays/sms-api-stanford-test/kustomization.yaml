@@ -5,9 +5,9 @@ namespace: sms-api-stanford-test
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.5.8
+    newTag: 0.5.9
   - name: ghcr.io/vivarium-collective/sms-ptools
-    newTag: 0.5.8
+    newTag: 0.5.9
 
 replicas:
   - count: 1
