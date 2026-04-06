@@ -714,7 +714,7 @@ async def _download_outputs_from_s3(experiment_id: str, local_cache: Path) -> No
     if file_service is None:
         raise RuntimeError("File service is not initialized")
 
-    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}"
+    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}/{experiment_id}"
 
     # 1. Download analyses/ contents
     analyses_prefix = S3FilePath(s3_path=Path(f"{experiment_prefix}/analyses"))

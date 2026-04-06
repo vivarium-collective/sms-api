@@ -421,7 +421,8 @@ class E2EDataService:
                         sys.stdout.flush()
 
                     if response.status_code != 200:
-                        raise httpx.HTTPError(message=f"{response.text}")  # noqa: TRY301
+                        body = await response.aread()
+                        raise httpx.HTTPError(message=body.decode(errors="replace"))  # noqa: TRY301
 
                     # Validate headers
                     if response.headers["content-type"] != "application/gzip":

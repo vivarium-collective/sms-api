@@ -17,7 +17,6 @@ from typer import Argument, Option
 
 from app.app_data_service import get_data_service
 from app.tui import AtlantisTUI
-from sms_api.common.simulator_defaults import SimulationConfigFilename
 
 
 class CliType(StrEnumBase):
@@ -188,9 +187,9 @@ def simulator_status(
 def simulation_run(
     experiment_id: str = Argument(help="Unique experiment identifier."),
     simulator_id: int = Argument(help="Database ID of the simulator to use."),
-    config_filename: SimulationConfigFilename = Option(  # type: ignore[valid-type]
-        default=SimulationConfigFilename.BASELINE,
-        help=f"Config filename in vEcoli/configs/ on HPC. Choices: {[m.name for m in SimulationConfigFilename]}",
+    config_filename: str = Option(
+        default="api_simulation_default.json",
+        help="Config filename in vEcoli/configs/ on HPC. The server validates accepted values.",
     ),
     generations: int = Option(default=1, help="Number of generations to run per lineage (seed)."),
     seeds: int = Option(default=3, help="Number of lineages (seeds)."),
@@ -214,7 +213,7 @@ def simulation_run(
         simulation = data_service.run_workflow(
             experiment_id=experiment_id,
             simulator_id=simulator_id,
-            config_filename=config_filename.value,  # type: ignore[attr-defined]
+            config_filename=config_filename,
             num_generations=generations,
             num_seeds=seeds,
             description=description or f"sim{simulator_id}-{experiment_id}; {generations} Generations; {seeds} Seeds",
