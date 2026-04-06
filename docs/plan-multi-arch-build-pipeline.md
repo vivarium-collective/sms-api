@@ -1,212 +1,232 @@
-# Plan: Multi-Arch Build Pipeline with CodeBuild (No Step Functions)
+# Plan: Multi-Arch Build Pipeline — Batch (ARM64) + K8s (AMD64) with Kaniko
 
 ## Problem
 
 - AWS Batch tasks need **ARM64** containers (Graviton compute — cheaper, better perf)
 - EKS worker nodes are **AMD64** only (GovCloud limitation)
-- Current build node is a single EC2 instance — builds one architecture only
+- CodeBuild ARM64 is not available in `us-gov-west-1`
+- Current single-arch EC2 build node cannot build both architectures
 
 ## Solution
 
-Two independent CodeBuild jobs — one ARM64, one AMD64 — each builds what it needs natively. No Step Functions, no multi-platform manifests, no orchestration layer.
+**Build where you run.** Use the target environment's own compute to build its images:
+
+- **AWS Batch Job (ARM64 Graviton)** → builds `vecoli:{commit}` (ARM64 task image)
+- **K8s Job (AMD64 EKS)** → builds `vecoli:{commit}-submit` (AMD64 submit image)
+
+Both use **Kaniko** — a container image builder that runs inside containers without needing a Docker daemon or privileged mode.
 
 ## Architecture
 
 ```
 sms-api (submit_build_image_job)
 │
-├── Start CodeBuild (ARM64 compute)
-│   └── Clone vEcoli, build + push vecoli:{commit}
-│       (ARM64 task image for Batch)
+├── AWS Batch Job (Graviton/ARM64 compute)
+│   └── Kaniko container:
+│       - Clones vEcoli repo
+│       - Builds vecoli:{commit} from vEcoli Dockerfile
+│       - Pushes to ECR (ARM64 native)
 │
-└── Start CodeBuild (AMD64 compute)
-    └── Clone vEcoli, build + push vecoli:{commit}-submit
-        (AMD64 submit image: vEcoli + Java + Nextflow, for EKS K8s Job)
+└── K8s Job (EKS/AMD64 compute)
+    └── Kaniko container:
+        - Clones vEcoli repo
+        - Builds vecoli:{commit}-amd64-base from vEcoli Dockerfile
+        - Builds vecoli:{commit}-submit from Dockerfile-vecoli-submit
+        - Pushes both to ECR (AMD64 native)
 ```
 
-Both jobs run independently and in parallel. sms-api polls both for completion.
+Both jobs run in parallel. sms-api polls both for completion.
 
 ## What Gets Built
 
-| Image | Architecture | Used By | Built In |
+| Image | Architecture | Used By | Built By |
 |-------|-------------|---------|----------|
-| `vecoli:{commit}` | ARM64 | AWS Batch tasks (Graviton) | CodeBuild ARM64 |
-| `vecoli:{commit}-submit` | AMD64 | K8s Nextflow head Job (EKS) | CodeBuild AMD64 |
+| `vecoli:{commit}` | ARM64 | AWS Batch tasks (Graviton) | Batch Job (Kaniko) |
+| `vecoli:{commit}-submit` | AMD64 | K8s Nextflow head Job (EKS) | K8s Job (Kaniko) |
 
-No multi-platform manifests. Explicit tags, explicit architectures.
+## Why Kaniko
+
+- **No Docker daemon needed** — runs as a regular container, no DinD complexity
+- **No privileged mode** — more secure, works in restricted K8s environments
+- **Standard tool** — widely used for K8s-native image builds, maintained by Google
+- **Direct ECR push** — authenticates to ECR and pushes without Docker CLI
+- **Works in both K8s and Batch** — same tool, same approach, both environments
 
 ## Implementation
 
-### 1. CDK Stack (sms-cdk repo)
+### 1. Kaniko Container Image
 
-Creates:
-- **CodeBuild project `vecoli-build-arm64`**
-  - Compute: `BUILD_GENERAL1_SMALL`, `ARM_CONTAINER`
-  - Image: `aws/codebuild/amazonlinux2-aarch64-standard:2.0`
-  - Privileged mode (Docker builds)
-- **CodeBuild project `vecoli-build-amd64`**
-  - Compute: `BUILD_GENERAL1_SMALL`, `LINUX_CONTAINER`
-  - Image: `aws/codebuild/amazonlinux2-x86_64-standard:4.0`
-  - Privileged mode (Docker builds)
-- **IAM role** for CodeBuild: ECR push/pull, CloudWatch Logs, Secrets Manager read
-- **Secrets Manager secret** for GitHub SSH deploy key (clone private vEcoli repo)
-- **ECR repository** `vecoli` (if not exists)
+Kaniko provides an official image: `gcr.io/kaniko-project/executor:latest`
 
-Stack outputs:
-- `Arm64ProjectName` — CodeBuild ARM64 project name
-- `Amd64ProjectName` — CodeBuild AMD64 project name
-- `GitSecretArn` — Secrets Manager ARN for GitHub credentials
-
-### 2. sms-api: Replace SSH build with CodeBuild
-
-**New config settings** (`sms_api/config.py`):
-```python
-codebuild_arm64_project: str = ""  # CodeBuild project name for ARM64 builds
-codebuild_amd64_project: str = ""  # CodeBuild project name for AMD64 builds
+For GovCloud (may not have access to gcr.io), mirror to ECR:
+```bash
+# One-time: pull and push Kaniko to your ECR
+docker pull gcr.io/kaniko-project/executor:latest
+docker tag gcr.io/kaniko-project/executor:latest \
+    476270107793.dkr.ecr.us-gov-west-1.amazonaws.com/kaniko:latest
+docker push 476270107793.dkr.ecr.us-gov-west-1.amazonaws.com/kaniko:latest
 ```
 
-**Remove:**
+### 2. ARM64 Task Image Build (Batch Job)
+
+sms-api submits an AWS Batch job that runs Kaniko:
+
+```python
+batch_client.submit_job(
+    jobName=f"build-arm64-{commit}",
+    jobQueue=settings.batch_job_queue,  # ARM64/Graviton queue
+    jobDefinition=settings.kaniko_job_definition,
+    containerOverrides={
+        "command": [
+            "--context", f"git://git@github.com/CovertLabEcoli/vEcoli-private.git#refs/heads/{branch}",
+            "--dockerfile", "runscripts/container/Dockerfile",
+            "--destination", f"{ecr_registry}/vecoli:{commit}",
+            "--build-arg", f"git_hash={commit}",
+            "--build-arg", f"git_branch={branch}",
+            "--build-arg", f"timestamp={timestamp}",
+            "--git", f"branch={branch}",
+        ],
+        "environment": [
+            {"name": "AWS_DEFAULT_REGION", "value": settings.batch_region},
+            {"name": "GIT_SSH_KEY", "value": "/kaniko/ssh-key"},
+        ],
+    },
+)
+```
+
+Kaniko handles:
+- Git clone (supports SSH keys for private repos)
+- Docker build (native ARM64 on Graviton)
+- ECR push (authenticates via instance role / IRSA)
+
+### 3. AMD64 Submit Image Build (K8s Job)
+
+sms-api creates a K8s Job with two Kaniko init containers + a completion container:
+
+```yaml
+# Step 1: Build AMD64 base vEcoli image
+initContainers:
+  - name: build-base
+    image: <ecr>/kaniko:latest
+    args:
+      - --context=git://git@github.com/.../vEcoli-private.git#refs/heads/{branch}
+      - --dockerfile=runscripts/container/Dockerfile
+      - --destination=<ecr>/vecoli:{commit}-amd64-base
+      - --build-arg=git_hash={commit}
+      - --build-arg=git_branch={branch}
+
+# Step 2: Build submit image (base + Java + Nextflow)
+  - name: build-submit
+    image: <ecr>/kaniko:latest
+    args:
+      - --context=dir:///workspace
+      - --dockerfile=/workspace/Dockerfile-vecoli-submit
+      - --destination=<ecr>/vecoli:{commit}-submit
+      - --build-arg=BASE_IMAGE=<ecr>/vecoli:{commit}-amd64-base
+
+containers:
+  - name: done
+    image: busybox
+    command: ["echo", "Build complete"]
+```
+
+The `Dockerfile-vecoli-submit` is delivered via ConfigMap (already in the sms-api repo).
+
+### 4. sms-api Code Changes
+
+**`sms_api/simulation/simulation_service_k8s.py`:**
+
+Replace `_build_script` + `_submit_build_ssh` + `_run_build` with:
+
+```python
+async def _start_builds(self, simulator_version: SimulatorVersion) -> None:
+    """Start ARM64 (Batch) and AMD64 (K8s) image builds in parallel."""
+
+    # ARM64 task image via Batch Job
+    batch = boto3.client("batch", region_name=settings.batch_region)
+    batch.submit_job(...)
+
+    # AMD64 submit image via K8s Job
+    self._k8s.create_job(kaniko_job_spec)
+```
+
+**Build status polling:**
+- Batch job status: `batch.describe_jobs()`
+- K8s job status: existing `_k8s.get_job_status()`
+- Both must complete → overall build COMPLETED
+
+**`sms_api/config.py`:**
+
+New:
+```python
+kaniko_image: str = ""  # ECR URI for Kaniko executor image
+kaniko_batch_job_definition: str = ""  # Batch job definition for ARM64 builds
+```
+
+Remove:
 - `build_node_host`, `build_node_user`, `build_node_key_path`
-- `SSHTarget.BUILD` enum value
-- `_build_script()`, `_submit_build_ssh()`, `_run_build()` methods
-- `buildshell` from Dockerfile-api
-- Build node entries from shared.env
+- `ecr_submit_repository` (submit image uses same `vecoli` repo with `-submit` suffix)
 
-**New methods** in `SimulationServiceK8s`:
+### 5. CDK Changes (sms-cdk repo)
 
-```python
-async def _start_codebuild(self, simulator_version: SimulatorVersion) -> None:
-    """Start ARM64 + AMD64 CodeBuild jobs in parallel."""
-    codebuild = boto3.client("codebuild", region_name=settings.batch_region)
+- **Batch Job Definition** for Kaniko ARM64 builds:
+  - Container image: `<ecr>/kaniko:latest`
+  - Uses Graviton compute environment
+  - IAM role with ECR push permissions
+  - Mount GitHub SSH key from Secrets Manager
 
-    # ARM64: build task image (vecoli:{commit})
-    codebuild.start_build(
-        projectName=settings.codebuild_arm64_project,
-        environmentVariablesOverride=[
-            {"name": "COMMIT", "value": commit},
-            {"name": "BRANCH", "value": branch},
-            {"name": "REPO_URL", "value": repo_url},
-            {"name": "IMAGE_TAG", "value": commit},
-        ],
-    )
+- **ECR Repository** for Kaniko image (one-time mirror from gcr.io)
 
-    # AMD64: build submit image (vecoli:{commit}-submit)
-    codebuild.start_build(
-        projectName=settings.codebuild_amd64_project,
-        environmentVariablesOverride=[
-            {"name": "COMMIT", "value": commit},
-            {"name": "BRANCH", "value": branch},
-            {"name": "REPO_URL", "value": repo_url},
-            {"name": "IMAGE_TAG", "value": f"{commit}-submit"},
-            {"name": "BUILD_SUBMIT", "value": "true"},
-        ],
-    )
+- **Secrets Manager** secret for GitHub SSH deploy key (may already exist)
+
+### 6. GitHub Repo Access
+
+Kaniko supports git contexts with SSH keys:
+```
+--context=git://git@github.com/CovertLabEcoli/vEcoli-private.git#refs/heads/master
 ```
 
-**Build status polling:** `codebuild.batch_get_builds()` returns build status. Both builds must complete for the overall build to be "done". Map to existing `JobStatus`:
-- Both `SUCCEEDED` → `COMPLETED`
-- Either `FAILED` → `FAILED`
-- Either `IN_PROGRESS` → `RUNNING`
+SSH key mounted as a Kubernetes secret or Batch secret.
 
-### 3. CodeBuild Buildspecs
+For K8s: mount the existing `ssh-secret` (already has deploy key)
+For Batch: reference Secrets Manager secret in job definition
 
-**ARM64 buildspec** (task image — same as current `build-and-push-ecr.sh`):
-```yaml
-version: 0.2
-env:
-  secrets-manager:
-    SSH_KEY: "vecoli-github-deploy-key:ssh-private-key"
-phases:
-  pre_build:
-    commands:
-      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-      - ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
-      - aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_REGISTRY
-      - mkdir -p ~/.ssh && echo "$SSH_KEY" > ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
-      - ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
-      - git clone --depth 1 --branch $BRANCH --single-branch $REPO_URL vEcoli
-      - cd vEcoli && git fetch --depth 1 origin $COMMIT && git checkout $COMMIT
-  build:
-    commands:
-      - cd vEcoli
-      - bash runscripts/container/build-and-push-ecr.sh
-          -i $IMAGE_TAG -r vecoli -R $AWS_DEFAULT_REGION
-```
+### 7. Batch Compute Environment
 
-**AMD64 buildspec** (submit image — builds base then layers Java + Nextflow):
-```yaml
-version: 0.2
-env:
-  secrets-manager:
-    SSH_KEY: "vecoli-github-deploy-key:ssh-private-key"
-phases:
-  pre_build:
-    commands:
-      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-      - ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
-      - aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_REGISTRY
-      - mkdir -p ~/.ssh && echo "$SSH_KEY" > ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
-      - ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
-      - git clone --depth 1 --branch $BRANCH --single-branch $REPO_URL vEcoli
-      - cd vEcoli && git fetch --depth 1 origin $COMMIT && git checkout $COMMIT
-  build:
-    commands:
-      - cd vEcoli
-      # Build base AMD64 image first (needed as base for submit)
-      - bash runscripts/container/build-and-push-ecr.sh
-          -i ${COMMIT}-amd64-base -r vecoli -R $AWS_DEFAULT_REGION
-      # Build submit image on top
-      - BASE_URI=$(bash runscripts/container/build-and-push-ecr.sh
-          -i ${COMMIT}-amd64-base -r vecoli -R $AWS_DEFAULT_REGION -u)
-      - |
-        cat > /tmp/Dockerfile-submit <<'EOF'
-        ARG BASE_IMAGE
-        FROM ${BASE_IMAGE}
-        USER root
-        RUN apt-get update && apt-get install -y --no-install-recommends default-jre-headless \
-            && apt-get clean && rm -rf /var/lib/apt/lists/*
-        ARG NEXTFLOW_VERSION=25.10.2
-        RUN curl -fsSL "https://github.com/nextflow-io/nextflow/releases/download/v${NEXTFLOW_VERSION}/nextflow" \
-            -o /usr/local/bin/nextflow && chmod +x /usr/local/bin/nextflow
-        WORKDIR /vEcoli
-        EOF
-      - docker build -t $ECR_REGISTRY/vecoli:$IMAGE_TAG
-          --build-arg BASE_IMAGE=$BASE_URI
-          -f /tmp/Dockerfile-submit /tmp
-      - docker push $ECR_REGISTRY/vecoli:$IMAGE_TAG
-```
-
-### 4. K8s Job and Batch Config
-
-No changes needed to the K8s Job spec — it already uses `vecoli:{commit}-submit`.
-
-For Batch, `container_image` in the workflow config is `vecoli:{commit}` which `workflow.py` resolves via `build-and-push-ecr.sh -u`. This returns the ARM64 image URI.
-
-### 5. Batch Compute Environment
-
-CDK change: switch Batch compute environment from AMD64 to ARM64/Graviton instances. The `vecoli:{commit}` image is now ARM64.
+CDK change: add or switch to ARM64/Graviton compute environment for Batch. The existing AMD64 environment can remain for backward compatibility during migration.
 
 ## What Stays the Same
 
-- `submit_build_image_job()` public interface
-- Build status polling from CLI/TUI (just polls CodeBuild instead of LocalTaskService)
-- K8s Job spec (uses `vecoli:{commit}-submit`)
-- Workflow config format
+- `submit_build_image_job()` public interface (returns JobId)
+- Build status polling from CLI/TUI
+- K8s simulation Job spec (uses `vecoli:{commit}-submit`)
+- Workflow config format (`container_image: vecoli:{commit}`)
 - ECR repository name `vecoli`
-- `Dockerfile-vecoli-submit` (reference copy in sms-api repo)
+- `Dockerfile-vecoli-submit` in sms-api repo
+
+## What Gets Removed
+
+- `SSHTarget.BUILD` and build node SSH configuration
+- `_build_script()`, `_submit_build_ssh()`, `_run_build()` methods
+- `buildshell` from Dockerfile-api
+- Build node EC2 instance (after migration verified)
+- Build node entries from shared.env
 
 ## Migration Path
 
-1. Deploy CDK stack with CodeBuild projects + IAM + Secrets Manager
-2. Update sms-api: replace SSH build with CodeBuild invocation
-3. Test with a new commit (both jobs build successfully)
-4. Switch Batch compute to Graviton instances
-5. Remove build node EC2 instance, SSH config, `SSHTarget.BUILD`
+1. Mirror Kaniko image to ECR
+2. Deploy CDK: Batch job definition for Kaniko, Graviton compute environment
+3. Update sms-api: replace SSH build with Batch + K8s Kaniko jobs
+4. Test: verify both images build and push correctly
+5. Switch Batch simulation compute to Graviton
+6. Verify EUTE pipeline end-to-end
+7. Decommission build node EC2 instance
 
 ## Verification
 
-1. Both CodeBuild jobs complete successfully
-2. ECR has `vecoli:{commit}` (ARM64) and `vecoli:{commit}-submit` (AMD64)
-3. K8s Job pulls `vecoli:{commit}-submit` on AMD64 EKS nodes
-4. Batch tasks pull `vecoli:{commit}` on ARM64 Graviton compute
-5. Full EUTE pipeline works end-to-end via `atlantis` CLI
+1. Batch Kaniko job completes → `vecoli:{commit}` (ARM64) in ECR
+2. K8s Kaniko job completes → `vecoli:{commit}-submit` (AMD64) in ECR
+3. K8s simulation Job pulls `vecoli:{commit}-submit` on AMD64 EKS
+4. Batch simulation tasks pull `vecoli:{commit}` on ARM64 Graviton
+5. `uv run atlantis simulator latest ...` triggers both builds
+6. `uv run atlantis simulation run ...` completes successfully
