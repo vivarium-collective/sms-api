@@ -107,6 +107,7 @@ class SimulationServiceK8s(SimulationService):
 
         base_script = f"""\
 set -ex
+export USER=${{USER:-sms-api}}
 
 # Install dependencies (docker:cli is Alpine-based, missing aws-cli and git)
 apk add --no-cache aws-cli git bash
