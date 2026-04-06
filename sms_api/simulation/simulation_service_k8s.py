@@ -122,11 +122,10 @@ GH_PAT=$(aws secretsmanager get-secret-value \
 # Inject PAT into clone URL for HTTPS auth (x-access-token is GitHub's convention)
 CLONE_URL=$(echo "{repo_url}" | sed "s|https://github.com/|https://x-access-token:${{GH_PAT}}@github.com/|")
 
-# Clone repo
+# Clone repo at the specified branch
 export GIT_TERMINAL_PROMPT=0
-git clone --depth 1 --branch {branch} --single-branch "$CLONE_URL" /build/vEcoli
+git clone --branch {branch} --single-branch "$CLONE_URL" /build/vEcoli
 cd /build/vEcoli
-git fetch --depth 1 origin {commit}
 git checkout {commit}
 
 # ECR login
