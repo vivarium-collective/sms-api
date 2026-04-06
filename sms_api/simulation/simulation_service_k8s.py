@@ -108,9 +108,12 @@ class SimulationServiceK8s(SimulationService):
         base_script = f"""\
 set -ex
 
-# Start Docker daemon
+# Install dependencies (docker:dind is Alpine-based, missing aws-cli and git)
+apk add --no-cache aws-cli git bash
+
+# Start Docker daemon and wait for it
 dockerd &
-for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break || sleep 1; done
+while ! docker info >/dev/null 2>&1; do sleep 1; done
 
 # Get GitHub PAT from Secrets Manager for private repo access
 GH_PAT=$(aws secretsmanager get-secret-value \
