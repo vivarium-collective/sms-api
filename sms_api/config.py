@@ -197,9 +197,10 @@ class Settings(BaseSettings):
     k8s_job_namespace: str = ""  # Namespace for Nextflow head Jobs (e.g. "sms-api-stanford")
 
     # AWS Batch settings (Nextflow submits tasks here)
-    batch_job_queue: str = ""  # Batch job queue name (from CDK stack output)
-    batch_region: str = "us-gov-west-1"  # AWS region for Batch
     batch_task_arch: str = "amd64"  # Architecture for Batch task images: "amd64" or "arm64"
+    batch_amd64_queue: str = ""  # AMD64 simulation task queue
+    batch_arm64_queue: str = ""  # ARM64 simulation task queue (Graviton)
+    batch_region: str = "us-gov-west-1"  # AWS region for Batch
 
     # S3 settings for workflow data
     s3_work_bucket: str = ""  # S3 bucket for Nextflow work dir and outputs
