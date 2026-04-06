@@ -278,19 +278,22 @@ sed \
 echo "✓ TargetGroupBinding YAML generated: ${TGB_FILE}"
 
 echo ""
-echo "=== Uploading GitHub Deploy Key to Secrets Manager ==="
+echo "=== Uploading GitHub PAT for DinD Builds to Secrets Manager ==="
 
-# Get the deploy key secret ARN from the build-batch stack
-DEPLOY_KEY_SECRET_ARN=$(get_stack_output "${STACK_PREFIX}-build-batch" "GitSecretArn")
+# Get the git secret ARN from the build-batch stack
+GIT_SECRET_ARN=$(get_stack_output "${STACK_PREFIX}-build-batch" "GitSecretArn")
 
-if [ -z "$DEPLOY_KEY_SECRET_ARN" ] || [ "$DEPLOY_KEY_SECRET_ARN" = "None" ]; then
-    echo "WARNING: Could not find GitSecretArn from ${STACK_PREFIX}-build-batch stack, skipping deploy key upload"
-elif [ -z "${GITHUB_DEPLOY_KEY_FILE:-}" ]; then
-    echo "WARNING: GITHUB_DEPLOY_KEY_FILE not set in secrets.dat, skipping deploy key upload"
-elif [ ! -f "$GITHUB_DEPLOY_KEY_FILE" ]; then
-    echo "WARNING: Deploy key file not found: $GITHUB_DEPLOY_KEY_FILE, skipping deploy key upload"
+if [ -z "$GIT_SECRET_ARN" ] || [ "$GIT_SECRET_ARN" = "None" ]; then
+    echo "WARNING: Could not find GitSecretArn from ${STACK_PREFIX}-build-batch stack, skipping"
+elif [ -z "${GITHUB_BUILD_PAT:-}" ]; then
+    echo "WARNING: GITHUB_BUILD_PAT not set in secrets.dat, skipping"
 else
-    ${SCRIPTS_DIR}/upload_deploy_key.sh "$DEPLOY_KEY_SECRET_ARN" "$GITHUB_DEPLOY_KEY_FILE" "$AWS_REGION"
+    # Allow reusing the GH_PAT used for GHCR
+    BUILD_PAT="${GITHUB_BUILD_PAT}"
+    if [ "$BUILD_PAT" = "use_gh_pat" ]; then
+        BUILD_PAT="${GH_PAT}"
+    fi
+    ${SCRIPTS_DIR}/upload_deploy_key.sh "$GIT_SECRET_ARN" "$BUILD_PAT" "$AWS_REGION"
 fi
 
 echo ""

@@ -213,7 +213,7 @@ class Settings(BaseSettings):
     build_arm64_queue: str = ""  # Batch queue for ARM64 builds (Graviton)
     build_amd64_queue: str = ""  # Batch queue for AMD64 builds
     build_job_definition: str = ""  # Batch job definition for DinD builds
-    build_git_secret_arn: str = ""  # Secrets Manager ARN for GitHub SSH deploy key
+    build_git_secret_arn: str = ""  # Secrets Manager ARN for GitHub PAT (private repo clone)
 
     # EC2 build machine (legacy, replaced by Batch DinD builds)
     build_node_host: str = ""

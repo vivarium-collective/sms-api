@@ -103,15 +103,7 @@ class SimulationServiceK8s(SimulationService):
         commit = simulator_version.git_commit_hash
         branch = simulator_version.git_branch
 
-        # Convert HTTPS GitHub URL to SSH for deploy key auth
         repo_url = simulator_version.git_repo_url
-        https_match = re.match(r"https://github\.com/(.+)", repo_url)
-        if https_match:
-            ssh_url = f"git@github.com:{https_match.group(1)}"
-            if not ssh_url.endswith(".git"):
-                ssh_url += ".git"
-        else:
-            ssh_url = repo_url
 
         base_script = f"""\
 set -ex
@@ -120,20 +112,19 @@ set -ex
 dockerd &
 for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break || sleep 1; done
 
-# Get GitHub SSH key from Secrets Manager
-mkdir -p ~/.ssh
-aws secretsmanager get-secret-value \
+# Get GitHub PAT from Secrets Manager for private repo access
+GH_PAT=$(aws secretsmanager get-secret-value \
     --secret-id {settings.build_git_secret_arn} \
-    --query SecretString --output text > ~/.ssh/id_ed25519
-chmod 600 ~/.ssh/id_ed25519
-ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+    --query SecretString --output text)
+
+# Inject PAT into clone URL for HTTPS auth (x-access-token is GitHub's convention)
+CLONE_URL=$(echo "{repo_url}" | sed "s|https://github.com/|https://x-access-token:${{GH_PAT}}@github.com/|")
 
 # Clone repo
-GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" \
-    git clone --depth 1 --branch {branch} --single-branch {ssh_url} /build/vEcoli
+export GIT_TERMINAL_PROMPT=0
+git clone --depth 1 --branch {branch} --single-branch "$CLONE_URL" /build/vEcoli
 cd /build/vEcoli
-GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" \
-    git fetch --depth 1 origin {commit}
+git fetch --depth 1 origin {commit}
 git checkout {commit}
 
 # ECR login

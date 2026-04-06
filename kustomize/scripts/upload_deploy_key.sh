@@ -1,26 +1,31 @@
 #!/usr/bin/env bash
-# Upload a GitHub SSH deploy key to AWS Secrets Manager.
+# Upload a GitHub credential (PAT or SSH key) to AWS Secrets Manager.
 #
-# Usage: upload_deploy_key.sh <secret-id> <key-file> <region>
+# Usage:
+#   upload_deploy_key.sh <secret-id> <credential-file-or-value> <region>
+#
+# If the second argument is a file path, the file contents are uploaded.
+# Otherwise, the argument is treated as a literal string value.
 #
 # The secret must already exist in Secrets Manager (created by CDK).
-# This script populates it with the contents of the SSH private key file.
 
 set -eu
 
-SECRET_ID="${1:?Usage: upload_deploy_key.sh <secret-id> <key-file> <region>}"
-KEY_FILE="${2:?Usage: upload_deploy_key.sh <secret-id> <key-file> <region>}"
-AWS_REGION="${3:?Usage: upload_deploy_key.sh <secret-id> <key-file> <region>}"
+SECRET_ID="${1:?Usage: upload_deploy_key.sh <secret-id> <credential> <region>}"
+CREDENTIAL="${2:?Usage: upload_deploy_key.sh <secret-id> <credential> <region>}"
+AWS_REGION="${3:?Usage: upload_deploy_key.sh <secret-id> <credential> <region>}"
 
-if [ ! -f "$KEY_FILE" ]; then
-    echo "ERROR: Key file not found: $KEY_FILE"
-    exit 1
+# If it's a file, read the contents; otherwise use as-is
+if [ -f "$CREDENTIAL" ]; then
+    SECRET_VALUE="$(cat "$CREDENTIAL")"
+else
+    SECRET_VALUE="$CREDENTIAL"
 fi
 
-echo "Uploading deploy key to Secrets Manager..."
+echo "Uploading credential to Secrets Manager: $SECRET_ID"
 aws secretsmanager put-secret-value \
     --secret-id "$SECRET_ID" \
-    --secret-string "$(cat "$KEY_FILE")" \
+    --secret-string "$SECRET_VALUE" \
     --region "$AWS_REGION"
 
-echo "✓ Deploy key uploaded to: $SECRET_ID"
+echo "✓ Credential uploaded to: $SECRET_ID"
