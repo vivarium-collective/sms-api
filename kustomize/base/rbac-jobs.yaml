@@ -21,7 +21,7 @@ metadata:
   name: batch-submit-role
 rules:
   - apiGroups: ["batch"]
-    resources: ["jobs"]
+    resources: ["jobs", "jobs/status"]
     verbs: ["create", "get", "list", "delete"]
   - apiGroups: [""]
     resources: ["configmaps"]
