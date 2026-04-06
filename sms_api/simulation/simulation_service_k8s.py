@@ -130,6 +130,7 @@ docker system prune -f
 
 git clone --depth 1 --branch {branch} --single-branch {ssh_repo_url} {build_dir}
 cd {build_dir}
+git fetch --depth 1 origin {commit} && git checkout {commit}
 
 # Build and push base vEcoli task image
 bash runscripts/container/build-and-push-ecr.sh \

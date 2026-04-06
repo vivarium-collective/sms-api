@@ -699,10 +699,12 @@ class DatabaseServiceSQL(DatabaseService):
             orm_hpcrun.status = JobStatusDB.from_job_status(update.status)
             if update.start_time is not None:
                 with contextlib.suppress(ValueError):
-                    orm_hpcrun.start_time = datetime.datetime.fromisoformat(update.start_time)
+                    dt = datetime.datetime.fromisoformat(update.start_time)
+                    orm_hpcrun.start_time = dt.replace(tzinfo=None)
             if update.end_time is not None:
                 with contextlib.suppress(ValueError):
-                    orm_hpcrun.end_time = datetime.datetime.fromisoformat(update.end_time)
+                    dt = datetime.datetime.fromisoformat(update.end_time)
+                    orm_hpcrun.end_time = dt.replace(tzinfo=None)
             if update.error_message:
                 orm_hpcrun.error_message = update.error_message
             await session.flush()
