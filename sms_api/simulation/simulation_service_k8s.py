@@ -7,9 +7,8 @@ Two-phase execution model:
 
 import json
 import logging
-import re
 
-import boto3
+import boto3  # type: ignore[import-untyped]
 import httpx
 from kubernetes import client as k8s_client
 from typing_extensions import override
@@ -164,9 +163,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
 
         return ["sh", "-c", base_script]
 
-    async def _submit_batch_build(
-        self, job_name: str, queue: str, command: list[str], commit: str
-    ) -> str:
+    async def _submit_batch_build(self, job_name: str, queue: str, command: list[str], commit: str) -> str:
         """Submit a DooD build job to AWS Batch. Returns the Batch job ID."""
         settings = get_settings()
         batch = boto3.client("batch", region_name=settings.batch_region)
@@ -183,7 +180,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
         )
         batch_job_id = response["jobId"]
         logger.info(f"Submitted Batch build job {job_name} (id={batch_job_id}) to queue {queue}")
-        return batch_job_id
+        return str(batch_job_id)
 
     async def _poll_batch_jobs(self, job_ids: list[str]) -> None:
         """Poll Batch jobs until all complete. Raises on failure."""
