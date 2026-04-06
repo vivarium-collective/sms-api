@@ -111,9 +111,11 @@ set -ex
 # Install dependencies (docker:dind is Alpine-based, missing aws-cli and git)
 apk add --no-cache aws-cli git bash
 
-# Start Docker daemon and wait for it
-dockerd &
+# Start Docker daemon using DinD entrypoint (handles cgroups, storage driver, etc.)
+dockerd-entrypoint.sh dockerd &
+echo "Waiting for Docker daemon..."
 while ! docker info >/dev/null 2>&1; do sleep 1; done
+echo "Docker daemon ready"
 
 # Get GitHub PAT from Secrets Manager for private repo access
 GH_PAT=$(aws secretsmanager get-secret-value \
