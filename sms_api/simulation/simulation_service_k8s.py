@@ -277,6 +277,8 @@ cd {build_base} && rm -rf {build_dir} {build_base}/Dockerfile-vecoli-submit
                                 command=["/bin/bash", "-c", command],
                                 env=[
                                     k8s_client.V1EnvVar(name="AWS_DEFAULT_REGION", value=settings.batch_region),
+                                    k8s_client.V1EnvVar(name="AWS_REGION", value=settings.batch_region),
+                                    k8s_client.V1EnvVar(name="AWS_STS_REGIONAL_ENDPOINTS", value="regional"),
                                     k8s_client.V1EnvVar(name="USER", value="sms-api"),
                                 ],
                                 volume_mounts=[
