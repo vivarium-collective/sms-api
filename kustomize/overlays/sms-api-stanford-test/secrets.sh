@@ -278,4 +278,20 @@ sed \
 echo "✓ TargetGroupBinding YAML generated: ${TGB_FILE}"
 
 echo ""
+echo "=== Uploading GitHub Deploy Key to Secrets Manager ==="
+
+# Get the deploy key secret ARN from the build-batch stack
+DEPLOY_KEY_SECRET_ARN=$(get_stack_output "${STACK_PREFIX}-build-batch" "GitSecretArn")
+
+if [ -z "$DEPLOY_KEY_SECRET_ARN" ] || [ "$DEPLOY_KEY_SECRET_ARN" = "None" ]; then
+    echo "WARNING: Could not find GitSecretArn from ${STACK_PREFIX}-build-batch stack, skipping deploy key upload"
+elif [ -z "${GITHUB_DEPLOY_KEY_FILE:-}" ]; then
+    echo "WARNING: GITHUB_DEPLOY_KEY_FILE not set in secrets.dat, skipping deploy key upload"
+elif [ ! -f "$GITHUB_DEPLOY_KEY_FILE" ]; then
+    echo "WARNING: Deploy key file not found: $GITHUB_DEPLOY_KEY_FILE, skipping deploy key upload"
+else
+    ${SCRIPTS_DIR}/upload_deploy_key.sh "$DEPLOY_KEY_SECRET_ARN" "$GITHUB_DEPLOY_KEY_FILE" "$AWS_REGION"
+fi
+
+echo ""
 echo "=== All secrets, ConfigMaps, and FSx configuration files generated successfully! ==="
