@@ -155,11 +155,11 @@ RUN curl -fsSL "https://github.com/nextflow-io/nextflow/releases/download/v${{NE
 WORKDIR /vEcoli
 DOCKERFILE
 
-docker build -t "$ECR_REGISTRY/{settings.ecr_repository}:{commit}-submit" \
+docker build -t "$ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-submit" \
     --build-arg BASE_IMAGE="$BASE_URI" \
     -f /tmp/Dockerfile-submit /tmp
-docker push "$ECR_REGISTRY/{settings.ecr_repository}:{commit}-submit"
-echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{commit}-submit"
+docker push "$ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-submit"
+echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-submit"
 """
 
         return ["sh", "-c", base_script]
@@ -216,16 +216,18 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{commit}-subm
         """Build Docker images via parallel DooD Batch jobs.
 
         Submits two Batch jobs in parallel:
-        - ARM64: builds vecoli:{commit} (task image for Graviton Batch compute)
-        - AMD64: builds vecoli:{commit}-submit (submit image for AMD64 EKS)
+        - ARM64: builds vecoli:{commit}-arm64 (task image for Graviton Batch)
+        - AMD64: builds vecoli:{commit}-amd64 (task image for x86 Batch)
+                 + vecoli:{commit}-amd64-submit (submit image for EKS K8s Job)
 
-        Polls both jobs until completion.
+        The Batch task architecture is configurable via batch_task_arch setting.
+        The K8s submit image is always AMD64 (EKS GovCloud constraint).
         """
         settings = get_settings()
         commit = simulator_version.git_commit_hash
 
-        # ARM64: task image only
-        arm64_cmd = self._build_command(simulator_version, image_tag=commit)
+        # ARM64: task image
+        arm64_cmd = self._build_command(simulator_version, image_tag=f"{commit}-arm64")
         arm64_job_id = await self._submit_batch_build(
             job_name=f"build-arm64-{commit}",
             queue=settings.build_arm64_queue,
@@ -233,8 +235,8 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{commit}-subm
             commit=commit,
         )
 
-        # AMD64: base image + submit image
-        amd64_cmd = self._build_command(simulator_version, image_tag=commit, submit_image=True)
+        # AMD64: task image + submit image
+        amd64_cmd = self._build_command(simulator_version, image_tag=f"{commit}-amd64", submit_image=True)
         amd64_job_id = await self._submit_batch_build(
             job_name=f"build-amd64-{commit}",
             queue=settings.build_amd64_queue,
@@ -283,7 +285,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{commit}-subm
             raise ValueError(f"Simulator {ecoli_simulation.simulator_id} not found")
         submit_image = (
             f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
-            f"/{settings.ecr_repository}:{simulator.git_commit_hash}-submit"
+            f"/{settings.ecr_repository}:{simulator.git_commit_hash}-amd64-submit"
         )
 
         # Create ConfigMap with workflow config

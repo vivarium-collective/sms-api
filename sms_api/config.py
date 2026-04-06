@@ -199,6 +199,7 @@ class Settings(BaseSettings):
     # AWS Batch settings (Nextflow submits tasks here)
     batch_job_queue: str = ""  # Batch job queue name (from CDK stack output)
     batch_region: str = "us-gov-west-1"  # AWS region for Batch
+    batch_task_arch: str = "amd64"  # Architecture for Batch task images: "amd64" or "arm64"
 
     # S3 settings for workflow data
     s3_work_bucket: str = ""  # S3 bucket for Nextflow work dir and outputs

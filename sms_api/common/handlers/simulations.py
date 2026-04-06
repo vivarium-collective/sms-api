@@ -231,7 +231,7 @@ async def run_simulation_workflow(
         # via build-and-push-ecr.sh -u at runtime
         config_data["aws"] = {
             "build_image": False,
-            "container_image": f"{settings.ecr_repository}:{simulator.git_commit_hash}",
+            "container_image": f"{settings.ecr_repository}:{simulator.git_commit_hash}-{settings.batch_task_arch}",
             "region": settings.batch_region,
             "batch_queue": settings.batch_job_queue,
         }
