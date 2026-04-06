@@ -108,14 +108,11 @@ class SimulationServiceK8s(SimulationService):
         base_script = f"""\
 set -ex
 
-# Install dependencies (docker:dind is Alpine-based, missing aws-cli and git)
+# Install dependencies (docker:cli is Alpine-based, missing aws-cli and git)
 apk add --no-cache aws-cli git bash
 
-# Start Docker daemon using DinD entrypoint (handles cgroups, storage driver, etc.)
-dockerd-entrypoint.sh dockerd &
-echo "Waiting for Docker daemon..."
-while ! docker info >/dev/null 2>&1; do sleep 1; done
-echo "Docker daemon ready"
+# Docker daemon runs on the host — verify socket is mounted
+docker info >/dev/null 2>&1 || {{ echo "ERROR: Docker socket not available"; exit 1; }}
 
 # Get GitHub PAT from Secrets Manager for private repo access
 GH_PAT=$(aws secretsmanager get-secret-value \

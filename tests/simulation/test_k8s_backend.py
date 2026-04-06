@@ -405,7 +405,7 @@ class TestSimulationServiceK8s:
         assert cmd[0] == "sh"
         assert cmd[1] == "-c"
         script = cmd[2]
-        assert "dockerd" in script
+        assert "docker info" in script
         assert "build-and-push-ecr.sh" in script
         assert "test123" in script
         assert "Dockerfile-submit" not in script
