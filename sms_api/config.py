@@ -207,14 +207,18 @@ class Settings(BaseSettings):
 
     # ECR settings
     ecr_account_id: str = ""  # AWS account ID for ECR registry (e.g. "476270107793")
-    ecr_repository: str = "vecoli"  # ECR repository name for vEcoli task images
-    ecr_submit_repository: str = "vecoli-submit"  # ECR repository for submit image (vecoli + Java + Nextflow)
+    ecr_repository: str = "vecoli"  # ECR repository name for vEcoli images
 
-    # EC2 build machine for Docker image builds (ARM64 for Graviton Batch compute)
-    # Used with SSHTarget.BUILD
-    build_node_host: str = "docker.build.internal"  # Hostname of the ARM64 build machine
-    build_node_user: str = ""  # SSH user for the build machine
-    build_node_key_path: str = ""  # SSH key path for the build machine
+    # Docker image build settings (DinD via AWS Batch)
+    build_arm64_queue: str = ""  # Batch queue for ARM64 builds (Graviton)
+    build_amd64_queue: str = ""  # Batch queue for AMD64 builds
+    build_job_definition: str = ""  # Batch job definition for DinD builds
+    build_git_secret_arn: str = ""  # Secrets Manager ARN for GitHub SSH deploy key
+
+    # EC2 build machine (legacy, replaced by Batch DinD builds)
+    build_node_host: str = ""
+    build_node_user: str = ""
+    build_node_key_path: str = ""
 
 
 _K8S_NAMESPACES = {"sms-api-stanford", "sms-api-stanford-test"}

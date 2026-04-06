@@ -393,22 +393,28 @@ class TestSimulationServiceK8s:
         assert "api.github.com/repos/test/repo" in call_url
         assert "test.json" in call_url
 
-    async def test_build_script_writes_to_artifacts(
+    async def test_build_command_generates_valid_script(
         self,
         simulation_service_k8s_mock: SimulationServiceK8s,
     ) -> None:
-        """Generate the build script and write it to artifacts/ for manual SSM execution."""
+        """Verify _build_command generates a valid DinD build script."""
         from sms_api.common.simulator_defaults import DEFAULT_SIMULATOR
 
-        script = simulation_service_k8s_mock._build_script(DEFAULT_SIMULATOR)
+        # Task image command (no submit)
+        cmd = simulation_service_k8s_mock._build_command(DEFAULT_SIMULATOR, image_tag="test123")
+        assert cmd[0] == "sh"
+        assert cmd[1] == "-c"
+        script = cmd[2]
+        assert "dockerd" in script
+        assert "build-and-push-ecr.sh" in script
+        assert "test123" in script
+        assert "Dockerfile-submit" not in script
 
-        artifacts_dir = Path(REPO_ROOT) / "artifacts"
-        artifacts_dir.mkdir(exist_ok=True)
-        script_path = artifacts_dir / f"build_{DEFAULT_SIMULATOR.git_commit_hash}.sh"
-        script_path.write_text(script)
-
-        assert script_path.exists()
-        content = script_path.read_text()
-        assert "set -e" in content
-        assert "build-and-push-ecr.sh" in content
-        assert DEFAULT_SIMULATOR.git_commit_hash in content
+        # Submit image command
+        cmd_submit = simulation_service_k8s_mock._build_command(
+            DEFAULT_SIMULATOR, image_tag="test123", submit_image=True
+        )
+        script_submit = cmd_submit[2]
+        assert "Dockerfile-submit" in script_submit
+        assert "default-jre-headless" in script_submit
+        assert "nextflow" in script_submit

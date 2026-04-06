@@ -1,7 +1,7 @@
 """Kubernetes + AWS Batch implementation of SimulationService.
 
 Two-phase execution model:
-  Phase 1 (build): SSH to ARM64 EC2 submit node for Docker image build + ECR push
+  Phase 1 (build): DinD Batch jobs build Docker images (ARM64 task + AMD64 submit)
   Phase 2 (workflow): K8s Job running Nextflow head, which submits tasks to AWS Batch
 """
 
@@ -9,6 +9,7 @@ import json
 import logging
 import re
 
+import boto3
 import httpx
 from kubernetes import client as k8s_client
 from typing_extensions import override
@@ -16,10 +17,9 @@ from typing_extensions import override
 from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.hpc.k8s_job_service import K8sJobService
 from sms_api.common.hpc.local_task_service import LocalTaskService
-from sms_api.common.models import JobBackend, JobId, SSHTarget
+from sms_api.common.models import JobBackend, JobId
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.config import get_settings
-from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import ParcaDataset, Simulation, Simulator, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationService
@@ -76,14 +76,14 @@ class SimulationServiceK8s(SimulationService):
 
     @override
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> JobId:
-        """Build a Docker image on the EC2 submit node via SSH (async).
+        """Build Docker images via DinD Batch jobs (ARM64 task + AMD64 submit).
 
-        Spawns the build as a background task and returns immediately with a
-        LOCAL JobId. The build clones the vEcoli repo at the specified commit,
-        then uses vEcoli's build-and-push-ecr.sh to build and push to ECR.
+        Submits two parallel Batch jobs:
+        - ARM64 queue: builds vecoli:{commit} (task image for Batch Graviton)
+        - AMD64 queue: builds vecoli:{commit}-submit (submit image for EKS K8s Job)
 
-        The image architecture matches the submit node (ARM64 for Graviton
-        Batch compute, or AMD64 if configured differently). No cross-compilation.
+        Returns immediately with a LOCAL JobId. The _run_build method polls
+        both Batch jobs for completion.
         """
         commit = simulator_version.git_commit_hash
         return self._local.submit(
@@ -91,103 +91,167 @@ class SimulationServiceK8s(SimulationService):
             name=f"build-{commit}",
         )
 
-    def _build_script(self, simulator_version: Simulator) -> str:
-        """Generate the bash script for Docker build + ECR push.
+    def _build_command(self, simulator_version: Simulator, image_tag: str, submit_image: bool = False) -> list[str]:
+        """Generate the DinD build command for a Batch job.
 
-        Returns the script as a string. The script clones the vEcoli repo
-        and delegates to its build-and-push-ecr.sh for native Docker build
-        and ECR push. The image architecture matches the build node (ARM64
-        for Graviton, AMD64 for x86).
+        Args:
+            simulator_version: Simulator with commit, branch, repo URL
+            image_tag: ECR image tag to build and push
+            submit_image: If True, also build the submit image (base + Java + Nextflow)
         """
         settings = get_settings()
         commit = simulator_version.git_commit_hash
         branch = simulator_version.git_branch
-        repo_url = simulator_version.git_repo_url
 
         # Convert HTTPS GitHub URL to SSH for deploy key auth
-        ssh_repo_url = repo_url
+        repo_url = simulator_version.git_repo_url
         https_match = re.match(r"https://github\.com/(.+)", repo_url)
         if https_match:
-            ssh_repo_url = f"git@github.com:{https_match.group(1)}"
-            if not ssh_repo_url.endswith(".git"):
-                ssh_repo_url += ".git"
+            ssh_url = f"git@github.com:{https_match.group(1)}"
+            if not ssh_url.endswith(".git"):
+                ssh_url += ".git"
+        else:
+            ssh_url = repo_url
 
-        build_base = "/home/ssm-user/builds"
-        build_dir = f"vEcoli-build-{commit}"
-        ssh_key = "/home/ssm-user/.ssh/dev_machine_ssh"
-        return f"""\
-set -e
-export GIT_TERMINAL_PROMPT=0
-export GIT_SSH_COMMAND="/usr/bin/ssh -i {ssh_key} -o StrictHostKeyChecking=no"
+        base_script = f"""\
+set -ex
 
-# Use EBS-backed storage instead of tmpfs /tmp (only 1.9G)
-mkdir -p {build_base}
-cd {build_base}
-if [ -d "{build_dir}" ]; then rm -rf "{build_dir}"; fi
+# Start Docker daemon
+dockerd &
+for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break || sleep 1; done
 
-# Reclaim disk from old Docker images/layers
-docker system prune -f
+# Get GitHub SSH key from Secrets Manager
+mkdir -p ~/.ssh
+aws secretsmanager get-secret-value \
+    --secret-id {settings.build_git_secret_arn} \
+    --query SecretString --output text > ~/.ssh/id_ed25519
+chmod 600 ~/.ssh/id_ed25519
+ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
 
-git clone --depth 1 --branch {branch} --single-branch {ssh_repo_url} {build_dir}
-cd {build_dir}
-git fetch --depth 1 origin {commit} && git checkout {commit}
+# Clone repo
+GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" \
+    git clone --depth 1 --branch {branch} --single-branch {ssh_url} /build/vEcoli
+cd /build/vEcoli
+GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" \
+    git fetch --depth 1 origin {commit}
+git checkout {commit}
 
-# Build and push base vEcoli task image
+# ECR login
+aws ecr get-login-password --region $AWS_DEFAULT_REGION | \
+    docker login --username AWS --password-stdin $ECR_REGISTRY
+
+# Build and push
 bash runscripts/container/build-and-push-ecr.sh \
-    -i {commit} \
-    -r {settings.ecr_repository} \
-    -R {settings.batch_region}
+    -i {image_tag} -r {settings.ecr_repository} -R {settings.batch_region}
+"""
 
-# Get the base image URI for the submit image build
-BASE_URI=$(bash runscripts/container/build-and-push-ecr.sh \
-    -i {commit} -r {settings.ecr_repository} -R {settings.batch_region} -u)
+        if submit_image:
+            base_script += f"""
+# Build submit image (base + Java + Nextflow) on top
+BASE_URI=$ECR_REGISTRY/{settings.ecr_repository}:{image_tag}
 
-# Build vecoli-submit image (base + Java + Nextflow) for K8s workflow head
-SUBMIT_URI=$(bash runscripts/container/build-and-push-ecr.sh \
-    -i {commit}-submit -r {settings.ecr_repository} -R {settings.batch_region} -u)
-SUBMIT_REGISTRY="${{SUBMIT_URI%%/*}}"
-aws ecr get-login-password --region {settings.batch_region} | \
-    docker login --username AWS --password-stdin "$SUBMIT_REGISTRY"
-
-cat > {build_base}/Dockerfile-vecoli-submit <<'DOCKERFILE'
+cat > /tmp/Dockerfile-submit <<'DOCKERFILE'
 ARG BASE_IMAGE
 FROM ${{BASE_IMAGE}}
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends default-jre-headless \
+RUN apt-get update && apt-get install -y --no-install-recommends default-jre-headless \\
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 ARG NEXTFLOW_VERSION=25.10.2
-RUN curl -fsSL "https://github.com/nextflow-io/nextflow/releases/download/v${{NEXTFLOW_VERSION}}/nextflow" \
+RUN curl -fsSL "https://github.com/nextflow-io/nextflow/releases/download/v${{NEXTFLOW_VERSION}}/nextflow" \\
     -o /usr/local/bin/nextflow && chmod +x /usr/local/bin/nextflow
 WORKDIR /vEcoli
 DOCKERFILE
 
-docker build -t "$SUBMIT_URI" \
+docker build -t "$ECR_REGISTRY/{settings.ecr_repository}:{commit}-submit" \
     --build-arg BASE_IMAGE="$BASE_URI" \
-    -f {build_base}/Dockerfile-vecoli-submit {build_base}
-docker push "$SUBMIT_URI"
-echo "Submit image pushed: $SUBMIT_URI"
-
-cd {build_base} && rm -rf {build_dir} {build_base}/Dockerfile-vecoli-submit
+    -f /tmp/Dockerfile-submit /tmp
+docker push "$ECR_REGISTRY/{settings.ecr_repository}:{commit}-submit"
+echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{commit}-submit"
 """
 
-    async def _submit_build_ssh(self, build_script: str, commit: str) -> None:
-        """Submit the build script to the EC2 build node via SSH."""
+        return ["sh", "-c", base_script]
+
+    async def _submit_batch_build(
+        self, job_name: str, queue: str, command: list[str], commit: str
+    ) -> str:
+        """Submit a DinD build job to AWS Batch. Returns the Batch job ID."""
         settings = get_settings()
-        async with get_ssh_session_service(SSHTarget.BUILD).session() as ssh:
-            return_code, stdout, stderr = await ssh.run_command(build_script, check=False)
-            if return_code != 0:
-                logger.error(f"Build failed (exit {return_code}):\nSTDOUT: {stdout[-2000:]}\nSTDERR: {stderr[-2000:]}")
-                raise RuntimeError(f"SSH command failed with exit code {return_code}: {stderr[-500:]}")
-        logger.info(f"Built and pushed image {settings.ecr_repository}:{commit}")
+        batch = boto3.client("batch", region_name=settings.batch_region)
+        response = batch.submit_job(
+            jobName=job_name,
+            jobQueue=queue,
+            jobDefinition=settings.build_job_definition,
+            containerOverrides={
+                "command": command,
+                "environment": [
+                    {"name": "IMAGE_TAG", "value": commit},
+                ],
+            },
+        )
+        batch_job_id = response["jobId"]
+        logger.info(f"Submitted Batch build job {job_name} (id={batch_job_id}) to queue {queue}")
+        return batch_job_id
+
+    async def _poll_batch_jobs(self, job_ids: list[str]) -> None:
+        """Poll Batch jobs until all complete. Raises on failure."""
+        import asyncio
+
+        settings = get_settings()
+        batch = boto3.client("batch", region_name=settings.batch_region)
+
+        while True:
+            response = batch.describe_jobs(jobs=job_ids)
+            statuses = {j["jobId"]: j["status"] for j in response["jobs"]}
+
+            failed = [jid for jid, s in statuses.items() if s == "FAILED"]
+            if failed:
+                # Get failure reason
+                reasons = []
+                for job in response["jobs"]:
+                    if job["jobId"] in failed:
+                        reason = job.get("statusReason", "unknown")
+                        reasons.append(f"{job['jobName']}: {reason}")
+                raise RuntimeError(f"Batch build job(s) failed: {'; '.join(reasons)}")
+
+            if all(s == "SUCCEEDED" for s in statuses.values()):
+                logger.info(f"All {len(job_ids)} Batch build jobs completed successfully")
+                return
+
+            await asyncio.sleep(15)
 
     async def _run_build(self, simulator_version: SimulatorVersion) -> None:
-        """Execute Docker build + ECR push on the build node via SSH.
+        """Build Docker images via parallel DinD Batch jobs.
 
-        Delegates to vEcoli's build-and-push-ecr.sh for a native Docker build.
-        The image architecture matches the build node (ARM64 for Graviton).
+        Submits two Batch jobs in parallel:
+        - ARM64: builds vecoli:{commit} (task image for Graviton Batch compute)
+        - AMD64: builds vecoli:{commit}-submit (submit image for AMD64 EKS)
+
+        Polls both jobs until completion.
         """
-        build_script = self._build_script(simulator_version)
-        await self._submit_build_ssh(build_script, simulator_version.git_commit_hash)
+        settings = get_settings()
+        commit = simulator_version.git_commit_hash
+
+        # ARM64: task image only
+        arm64_cmd = self._build_command(simulator_version, image_tag=commit)
+        arm64_job_id = await self._submit_batch_build(
+            job_name=f"build-arm64-{commit}",
+            queue=settings.build_arm64_queue,
+            command=arm64_cmd,
+            commit=commit,
+        )
+
+        # AMD64: base image + submit image
+        amd64_cmd = self._build_command(simulator_version, image_tag=commit, submit_image=True)
+        amd64_job_id = await self._submit_batch_build(
+            job_name=f"build-amd64-{commit}",
+            queue=settings.build_amd64_queue,
+            command=amd64_cmd,
+            commit=commit,
+        )
+
+        # Poll both until done
+        await self._poll_batch_jobs([arm64_job_id, amd64_job_id])
+        logger.info(f"Multi-arch build complete for {settings.ecr_repository}:{commit}")
 
     @override
     async def submit_parca_job(self, parca_dataset: ParcaDataset) -> JobId:
