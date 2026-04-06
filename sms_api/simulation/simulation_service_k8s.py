@@ -1,7 +1,7 @@
 """Kubernetes + AWS Batch implementation of SimulationService.
 
 Two-phase execution model:
-  Phase 1 (build): DinD Batch jobs build Docker images (ARM64 task + AMD64 submit)
+  Phase 1 (build): DooD Batch jobs build Docker images (ARM64 task + AMD64 submit)
   Phase 2 (workflow): K8s Job running Nextflow head, which submits tasks to AWS Batch
 """
 
@@ -76,7 +76,7 @@ class SimulationServiceK8s(SimulationService):
 
     @override
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> JobId:
-        """Build Docker images via DinD Batch jobs (ARM64 task + AMD64 submit).
+        """Build Docker images via DooD Batch jobs (ARM64 task + AMD64 submit).
 
         Submits two parallel Batch jobs:
         - ARM64 queue: builds vecoli:{commit} (task image for Batch Graviton)
@@ -92,7 +92,7 @@ class SimulationServiceK8s(SimulationService):
         )
 
     def _build_command(self, simulator_version: Simulator, image_tag: str, submit_image: bool = False) -> list[str]:
-        """Generate the DinD build command for a Batch job.
+        """Generate the DooD build command for a Batch job.
 
         Args:
             simulator_version: Simulator with commit, branch, repo URL
@@ -167,7 +167,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{commit}-subm
     async def _submit_batch_build(
         self, job_name: str, queue: str, command: list[str], commit: str
     ) -> str:
-        """Submit a DinD build job to AWS Batch. Returns the Batch job ID."""
+        """Submit a DooD build job to AWS Batch. Returns the Batch job ID."""
         settings = get_settings()
         batch = boto3.client("batch", region_name=settings.batch_region)
         response = batch.submit_job(
@@ -213,7 +213,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{commit}-subm
             await asyncio.sleep(15)
 
     async def _run_build(self, simulator_version: SimulatorVersion) -> None:
-        """Build Docker images via parallel DinD Batch jobs.
+        """Build Docker images via parallel DooD Batch jobs.
 
         Submits two Batch jobs in parallel:
         - ARM64: builds vecoli:{commit} (task image for Graviton Batch compute)

@@ -397,7 +397,7 @@ class TestSimulationServiceK8s:
         self,
         simulation_service_k8s_mock: SimulationServiceK8s,
     ) -> None:
-        """Verify _build_command generates a valid DinD build script."""
+        """Verify _build_command generates a valid DooD build script."""
         from sms_api.common.simulator_defaults import DEFAULT_SIMULATOR
 
         # Task image command (no submit)

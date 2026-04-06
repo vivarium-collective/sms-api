@@ -278,7 +278,7 @@ sed \
 echo "✓ TargetGroupBinding YAML generated: ${TGB_FILE}"
 
 echo ""
-echo "=== Uploading GitHub PAT for DinD Builds to Secrets Manager ==="
+echo "=== Uploading GitHub PAT for DooD Builds to Secrets Manager ==="
 
 # Get the git secret ARN from the build-batch stack
 GIT_SECRET_ARN=$(get_stack_output "${STACK_PREFIX}-build-batch" "GitSecretArn")

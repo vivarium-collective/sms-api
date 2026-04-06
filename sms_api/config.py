@@ -209,13 +209,13 @@ class Settings(BaseSettings):
     ecr_account_id: str = ""  # AWS account ID for ECR registry (e.g. "476270107793")
     ecr_repository: str = "vecoli"  # ECR repository name for vEcoli images
 
-    # Docker image build settings (DinD via AWS Batch)
+    # Docker image build settings (DooD via AWS Batch)
     build_arm64_queue: str = ""  # Batch queue for ARM64 builds (Graviton)
     build_amd64_queue: str = ""  # Batch queue for AMD64 builds
-    build_job_definition: str = ""  # Batch job definition for DinD builds
+    build_job_definition: str = ""  # Batch job definition for DooD builds
     build_git_secret_arn: str = ""  # Secrets Manager ARN for GitHub PAT (private repo clone)
 
-    # EC2 build machine (legacy, replaced by Batch DinD builds)
+    # EC2 build machine (legacy, replaced by Batch DooD builds)
     build_node_host: str = ""
     build_node_user: str = ""
     build_node_key_path: str = ""
