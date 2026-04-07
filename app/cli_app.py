@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sms_api.common import StrEnumBase
 
@@ -17,6 +17,7 @@ import typer
 from typer import Argument, Option
 
 from app.app_data_service import get_data_service
+from app.cli_theme import display_json, get_console, print_banner, status_border, status_style
 from app.tui import AtlantisTUI
 
 
@@ -71,6 +72,9 @@ def display_help(app: CliType | None = typer.Argument(default=None)) -> None:
     """Show help for a specific subcommand, or the main CLI."""
     import click
 
+    console = get_console()
+    print_banner(console)
+
     cmd = typer.main.get_command(cli)
     with click.Context(cmd) as ctx:
         if app is None:
@@ -107,26 +111,24 @@ def simulator_latest(
 ) -> None:
     import time
 
-    from rich.console import Console
     from rich.panel import Panel
 
-    console = Console()
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
 
     # 1. Get latest commit
-    with console.status("[bold cyan]Fetching latest commit..."):
+    with console.status("[memphis.spinner]Fetching latest commit..."):
         latest = data_service.submit_get_latest_simulator(repo_url=repo_url, branch=branch)
-    console.print(
-        f"[bold]Commit:[/bold] {latest.git_commit_hash}  [dim]({latest.git_repo_url} @ {latest.git_branch})[/dim]"
-    )
+    commit_info = f"({latest.git_repo_url} @ {latest.git_branch})"
+    console.print(f"[memphis.label]Commit:[/] {latest.git_commit_hash}  [memphis.dim]{commit_info}[/]")
 
     # 2. Upload (triggers build if new, or force rebuild)
-    with console.status("[bold cyan]Uploading simulator..."):
+    with console.status("[memphis.spinner]Uploading simulator..."):
         uploaded = data_service.submit_upload_simulator(simulator=latest, force=force)
-    console.print(f"[bold]Simulator ID:[/bold] {uploaded.database_id}")
+    console.print(f"[memphis.label]Simulator ID:[/] {uploaded.database_id}")
 
     # 3. Poll build status with live feedback
-    console.print("[bold cyan]Waiting for build...[/bold cyan]")
+    console.print("[memphis.info]Waiting for build...[/]")
     poll_interval = 15
     elapsed = 0
     status = "running"
@@ -134,27 +136,27 @@ def simulator_latest(
         time.sleep(poll_interval)
         elapsed += poll_interval
         status = data_service.submit_get_simulator_build_status(simulator=uploaded)
-        console.print(f"  [{elapsed}s] status: [yellow]{status}[/yellow]")
+        console.print(f"  [{elapsed}s] status: [{status_style(status)}]{status}[/]")
 
-    style = "green" if status == "completed" else "red"
     console.print(
         Panel(
-            f"[bold {style}]{status.upper()}[/bold {style}]",
+            f"[{status_style(status)}]{status.upper()}[/]",
             title=f"Build — simulator {uploaded.database_id}",
-            border_style=style,
+            border_style=status_border(status),
         )
     )
-    _display(uploaded.model_dump())
+    display_json(uploaded.model_dump(), console)
 
 
 @simulator_cli.command("list", help="List all registered simulator versions.")
 def simulator_list(
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
     simulators = data_service.show_simulators()
     for sim in simulators:
-        _display(sim.model_dump())
+        display_json(sim.model_dump(), console)
 
 
 @simulator_cli.command("status", help="Get the container build status for a simulator by its database ID.")
@@ -162,23 +164,22 @@ def simulator_status(
     simulator_id: int = Argument(help="Simulator database ID."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
-    from rich.console import Console
     from rich.panel import Panel
 
-    console = Console()
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
     hpcrun = data_service.submit_get_simulator_build_status_full(simulator_id=simulator_id)
-    style = "green" if hpcrun.status == "completed" else ("red" if hpcrun.status == "failed" else "yellow")
+    s = hpcrun.status or "unknown"
     console.print(
         Panel(
-            f"[bold {style}]{hpcrun.status.upper() if hpcrun.status else 'no status'}[/bold {style}]",
+            f"[{status_style(s)}]{s.upper()}[/]",
             title=f"Build — simulator {simulator_id}",
-            border_style=style,
+            border_style=status_border(s),
         )
     )
     if hpcrun.error_message:
-        console.print(f"[red]Error:[/red] {hpcrun.error_message}")
-    _display(hpcrun.model_dump())
+        console.print(f"[memphis.error]Error:[/] {hpcrun.error_message}")
+    display_json(hpcrun.model_dump(), console)
 
 
 # -- Simulation commands --
@@ -204,13 +205,12 @@ def simulation_run(
 ) -> None:
     import time
 
-    from rich.console import Console
     from rich.panel import Panel
 
-    console = Console()
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
 
-    with console.status("[bold cyan]Submitting simulation..."):
+    with console.status("[memphis.spinner]Submitting simulation..."):
         simulation = data_service.run_workflow(
             experiment_id=experiment_id,
             simulator_id=simulator_id,
@@ -221,17 +221,17 @@ def simulation_run(
             run_parameter_calculator=run_parca,
         )
 
-    console.print(f"[bold green]Simulation submitted![/bold green]  ID: {simulation.database_id}")
-    _display(simulation.model_dump())
+    console.print(f"[memphis.success]Simulation submitted![/]  ID: {simulation.database_id}")
+    display_json(simulation.model_dump(), console)
 
     if not poll:
         sim_id = simulation.database_id
-        console.print(f"\n[dim]Track progress:[/dim]  atlantis simulation status {sim_id}")
-        console.print(f"[dim]Download data:[/dim]   atlantis simulation outputs {sim_id} --dest ./debug")
+        console.print(f"\n[memphis.hint]Track progress:[/]  atlantis simulation status {sim_id}")
+        console.print(f"[memphis.hint]Download data:[/]   atlantis simulation outputs {sim_id} --dest ./debug")
         return
 
     # Poll until done
-    console.print("\n[bold cyan]Polling simulation status...[/bold cyan]")
+    console.print("\n[memphis.info]Polling simulation status...[/]")
     poll_interval = 30
     elapsed = 0
     status = "running"
@@ -243,22 +243,21 @@ def simulation_run(
             run = data_service.get_workflow_status(simulation_id=simulation.database_id)
             status = run.status.value
         except Exception as e:
-            console.print(f"  [{elapsed}s] [red]error: {e}[/red]")
+            console.print(f"  [{elapsed}s] [memphis.error]error: {e}[/]")
             continue
-        console.print(f"  [{elapsed}s] status: [yellow]{status}[/yellow]")
+        console.print(f"  [{elapsed}s] status: [{status_style(status)}]{status}[/]")
 
-    style = "green" if status == "completed" else "red"
     error_detail = f"\n{run.error_message}" if run and run.error_message else ""
     console.print(
         Panel(
-            f"[bold {style}]{status.upper()}[/bold {style}]{error_detail}",
+            f"[{status_style(status)}]{status.upper()}[/]{error_detail}",
             title=f"Simulation {simulation.database_id}",
-            border_style=style,
+            border_style=status_border(status),
         )
     )
     if status == "completed":
         console.print(
-            f"\n[dim]Download data:[/dim]  atlantis simulation outputs {simulation.database_id} --dest ./debug"
+            f"\n[memphis.hint]Download data:[/]  atlantis simulation outputs {simulation.database_id} --dest ./debug"
         )
 
 
@@ -267,19 +266,21 @@ def simulation_get(
     simulation_id: int = Argument(help="Simulation database ID."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
     simulation = data_service.get_workflow(simulation_id=simulation_id)
-    _display(simulation.model_dump())
+    display_json(simulation.model_dump(), console)
 
 
 @simulation_cli.command("list", help="List all simulations.")
 def simulation_list(
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
     simulations = data_service.show_workflows()
     for sim in simulations:
-        _display(sim.model_dump())
+        display_json(sim.model_dump(), console)
 
 
 def _show_simulation_result(
@@ -292,22 +293,21 @@ def _show_simulation_result(
     """Display a terminal simulation status with details."""
     from rich.panel import Panel
 
-    style = "green" if status == "completed" else "red"
     error_detail = f"\n{error_message}" if error_message else ""
     console.print(
         Panel(
-            f"[bold {style}]{status.upper()}[/bold {style}]{error_detail}",
+            f"[{status_style(status)}]{status.upper()}[/]{error_detail}",
             title=f"Simulation {simulation_id}",
-            border_style=style,
+            border_style=status_border(status),
         )
     )
     try:
         sim = data_service.get_workflow(simulation_id=simulation_id)
-        _display(sim.model_dump())
+        display_json(sim.model_dump(), console)
     except Exception as e:
-        console.print(f"[dim]Details not available: {e}[/dim]")
+        console.print(f"[memphis.dim]Details not available: {e}[/]")
     if status == "completed":
-        console.print(f"\n[dim]Download data:[/dim]  atlantis simulation outputs {simulation_id} --dest ./debug")
+        console.print(f"\n[memphis.hint]Download data:[/]  atlantis simulation outputs {simulation_id} --dest ./debug")
 
 
 @simulation_cli.command("status", help="Get the status and log for a simulation.")
@@ -318,10 +318,9 @@ def simulation_status(
 ) -> None:
     import time
 
-    from rich.console import Console
     from rich.panel import Panel
 
-    console = Console()
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
 
     # Get status first (always available)
@@ -329,7 +328,7 @@ def simulation_status(
         run = data_service.get_workflow_status(simulation_id=simulation_id)
         status = run.status.value
     except Exception as e:
-        console.print(f"[red]{e}[/red]")
+        console.print(f"[memphis.error]{e}[/]")
         return
 
     # Terminal state: show result panel + simulation details
@@ -338,18 +337,18 @@ def simulation_status(
         return
 
     # Still running: show live log
-    console.print(f"[bold]Status:[/bold] [yellow]{status.upper()}[/yellow]")
+    console.print(f"[memphis.label]Status:[/] [{status_style(status)}]{status.upper()}[/]")
     try:
         log = data_service.get_workflow_log(simulation_id=simulation_id)
-        console.print(Panel(log, title=f"Workflow Log (sim {simulation_id})", border_style="cyan"))
+        console.print(Panel(log, title=f"Workflow Log (sim {simulation_id})", border_style="memphis.border.info"))
     except Exception as e:
-        console.print(f"[dim]Log not available: {e}[/dim]")
+        console.print(f"[memphis.dim]Log not available: {e}[/]")
 
     if not poll:
         return
 
     # Poll until done
-    console.print("\n[bold cyan]Polling...[/bold cyan]")
+    console.print("\n[memphis.info]Polling...[/]")
     poll_interval = 30
     elapsed = 0
     while status not in ("completed", "failed", "cancelled", "unknown"):
@@ -359,9 +358,9 @@ def simulation_status(
             run = data_service.get_workflow_status(simulation_id=simulation_id)
             status = run.status.value
         except Exception as e:
-            console.print(f"  [{elapsed}s] [red]error: {e}[/red]")
+            console.print(f"  [{elapsed}s] [memphis.error]error: {e}[/]")
             continue
-        console.print(f"  [{elapsed}s] status: [yellow]{status}[/yellow]")
+        console.print(f"  [{elapsed}s] status: [{status_style(status)}]{status}[/]")
 
     _show_simulation_result(console, data_service, simulation_id, status, run.error_message)
 
@@ -371,9 +370,10 @@ def simulation_cancel(
     simulation_id: int = Argument(help="Simulation database ID."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
     result = data_service.cancel_workflow(simulation_id=simulation_id)
-    _display(result.model_dump())
+    display_json(result.model_dump(), console)
 
 
 @simulation_cli.command("outputs", help="Download simulation output data as a tar.gz archive.")
@@ -382,12 +382,11 @@ def simulation_outputs(
     dest: str | None = Option(default=None, help="Destination directory. Defaults to ./simulation_id_<ID>."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
     outdir = Path(dest) if dest is not None else Path(f"simulation_id_{simulation_id}")
     archive_dir = asyncio.run(data_service.get_output_data(simulation_id=simulation_id, dest=outdir))
-    from rich.console import Console
-
-    Console().print(f"[bold green]Saved simulation outputs to:[/bold green] {archive_dir!s}")
+    console.print(f"[memphis.success]Saved simulation outputs to:[/] {archive_dir!s}")
 
 
 # -- Parca commands --
@@ -397,10 +396,11 @@ def simulation_outputs(
 def parca_list(
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
     datasets = data_service.get_parca_datasets()
     for ds in datasets:
-        _display(ds.model_dump())
+        display_json(ds.model_dump(), console)
 
 
 @parca_cli.command("status", help="Get the status of a parca run by its database ID.")
@@ -408,9 +408,10 @@ def parca_status(
     parca_id: int = Argument(help="Parca dataset database ID."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
     status = data_service.get_parca_status(parca_id=parca_id)
-    _display(status.model_dump())
+    display_json(status.model_dump(), console)
 
 
 # -- Analysis commands --
@@ -421,9 +422,10 @@ def analysis_get(
     analysis_id: int = Argument(help="Analysis database ID."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
     analysis = data_service.get_analysis(analysis_id=analysis_id)
-    _display(analysis.model_dump())
+    display_json(analysis.model_dump(), console)
 
 
 @analysis_cli.command("status", help="Get the status of an analysis run.")
@@ -431,9 +433,10 @@ def analysis_status(
     analysis_id: int = Argument(help="Analysis database ID."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
     status = data_service.get_analysis_status(analysis_id=analysis_id)
-    _display(status.model_dump())
+    display_json(status.model_dump(), console)
 
 
 @analysis_cli.command("log", help="Get the log output of an analysis run.")
@@ -441,12 +444,12 @@ def analysis_log(
     analysis_id: int = Argument(help="Analysis database ID."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
-    data_service = get_data_service(base_url=base_url)
-    log = data_service.get_analysis_log(analysis_id=analysis_id)
-    from rich.console import Console
     from rich.panel import Panel
 
-    Console().print(Panel(log, title=f"Analysis Log ({analysis_id})", border_style="cyan"))
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    log = data_service.get_analysis_log(analysis_id=analysis_id)
+    console.print(Panel(log, title=f"Analysis Log ({analysis_id})", border_style="memphis.border.info"))
 
 
 @analysis_cli.command("plots", help="Get analysis plot outputs (HTML) for an analysis run.")
@@ -454,10 +457,11 @@ def analysis_plots(
     analysis_id: int = Argument(help="Analysis database ID."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    console = get_console()
     data_service = get_data_service(base_url=base_url)
     plots = data_service.get_analysis_plots(analysis_id=analysis_id)
     for plot in plots:
-        _display(plot.model_dump())
+        display_json(plot.model_dump(), console)
 
 
 # -- Demo commands --
@@ -493,7 +497,7 @@ async def _download_s3_with_progress(
     from sms_api.common.storage.file_paths import S3FilePath
 
     # List files in S3
-    with console.status("[bold cyan]Listing S3 objects...", spinner="dots"):
+    with console.status("[memphis.spinner]Listing S3 objects..."):
         analyses_prefix = S3FilePath(s3_path=Path(f"{experiment_prefix}/analyses"))
         analyses_listing = await fs.get_listing(analyses_prefix)
 
@@ -517,9 +521,9 @@ async def _download_s3_with_progress(
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
     with Progress(
-        SpinnerColumn(),
-        TextColumn("[bold cyan]{task.description}"),
-        BarColumn(bar_width=40),
+        SpinnerColumn(style="memphis.spinner"),
+        TextColumn("[memphis.progress]{task.description}"),
+        BarColumn(bar_width=40, complete_style="bright_magenta", finished_style="bright_green"),
         MofNCompleteColumn(),
         TimeElapsedColumn(),
         console=console,
@@ -527,12 +531,12 @@ async def _download_s3_with_progress(
         task = progress.add_task("Downloading from S3", total=len(download_items))
         for s3_key, local_file in download_items:
             local_file.parent.mkdir(parents=True, exist_ok=True)
-            progress.update(task, description=f"[cyan]{Path(s3_key).name}")
+            progress.update(task, description=f"[memphis.progress]{Path(s3_key).name}")
             try:
                 await fs.download_file(S3FilePath(s3_path=Path(s3_key)), local_file)
             except Exception:
                 if _WORKFLOW_CONFIG_KEY in s3_key:
-                    console.print("[dim]workflow_config.json not found, skipping[/dim]")
+                    console.print("[memphis.dim]workflow_config.json not found, skipping[/]")
                 else:
                     raise
             progress.advance(task)
@@ -543,25 +547,24 @@ async def _demo_get_data_async(dest: str) -> None:
     import tarfile
     from urllib.parse import urlparse
 
-    from rich.console import Console
     from rich.panel import Panel
     from rich.tree import Tree
 
-    console = Console()
+    console = get_console()
 
     # 1. Derive experiment_id from TEST_BUCKET_EXPERIMENT_OUTDIR (same as test_outputs.py)
     test_outdir = os.environ.get("TEST_BUCKET_EXPERIMENT_OUTDIR", "")
     if not test_outdir:
         console.print(
-            "[bold red]TEST_BUCKET_EXPERIMENT_OUTDIR is not set.[/bold red]\n"
-            "[dim]Set it in assets/dev/config/.dev_env or your environment, e.g.:\n"
-            "  TEST_BUCKET_EXPERIMENT_OUTDIR=s3://bucket/prefix/experiment_id/[/dim]"
+            "[memphis.error]TEST_BUCKET_EXPERIMENT_OUTDIR is not set.[/]\n"
+            "[memphis.dim]Set it in assets/dev/config/.dev_env or your environment, e.g.:\n"
+            "  TEST_BUCKET_EXPERIMENT_OUTDIR=s3://bucket/prefix/experiment_id/[/]"
         )
         raise typer.Exit(1)
 
     experiment_id = urlparse(test_outdir).path.strip("/").rsplit("/", 1)[-1]
-    console.print(f"[bold cyan]Experiment ID:[/bold cyan] {experiment_id}")
-    console.print(f"[dim]Source: {test_outdir}[/dim]\n")
+    console.print(f"[memphis.info]Experiment ID:[/] {experiment_id}")
+    console.print(f"[memphis.dim]Source: {test_outdir}[/]\n")
 
     # 2. Initialise FileServiceS3 and wire into global deps
     from sms_api.common.storage.file_service_s3 import FileServiceS3
@@ -570,12 +573,12 @@ async def _demo_get_data_async(dest: str) -> None:
 
     settings = get_settings()
     if not settings.storage_s3_bucket or not settings.storage_s3_region:
-        console.print("[bold red]S3 settings (STORAGE_S3_BUCKET, STORAGE_S3_REGION) not configured.[/bold red]")
+        console.print("[memphis.error]S3 settings (STORAGE_S3_BUCKET, STORAGE_S3_REGION) not configured.[/]")
         raise typer.Exit(1)
 
-    console.print(f"[bold cyan]S3 bucket:[/bold cyan] {settings.storage_s3_bucket}")
-    console.print(f"[bold cyan]S3 region:[/bold cyan] {settings.storage_s3_region}")
-    console.print(f"[bold cyan]Output prefix:[/bold cyan] {settings.s3_output_prefix}\n")
+    console.print(f"[memphis.info]S3 bucket:[/] {settings.storage_s3_bucket}")
+    console.print(f"[memphis.info]S3 region:[/] {settings.storage_s3_region}")
+    console.print(f"[memphis.info]Output prefix:[/] {settings.s3_output_prefix}\n")
 
     saved_fs = get_file_service()
     fs = FileServiceS3()
@@ -592,8 +595,8 @@ async def _demo_get_data_async(dest: str) -> None:
         # 3. Verify what we got
         real_files = [f for f in local_cache.rglob("*") if f.is_file()]
         if not real_files:
-            console.print(f"[bold red]No files downloaded for experiment '{experiment_id}'.[/bold red]")
-            console.print("[dim]Check that TEST_BUCKET_EXPERIMENT_OUTDIR points to valid simulation output.[/dim]")
+            console.print(f"[memphis.error]No files downloaded for experiment '{experiment_id}'.[/]")
+            console.print("[memphis.dim]Check that TEST_BUCKET_EXPERIMENT_OUTDIR points to valid simulation output.[/]")
             raise typer.Exit(1)
 
         tsv_count = sum(1 for f in real_files if f.suffix == ".tsv")
@@ -602,37 +605,23 @@ async def _demo_get_data_async(dest: str) -> None:
         # 4. Create tar.gz archive (same as the test's artifact saving)
         archive_path = dest_path / f"{experiment_id}.tar.gz"
         with (
-            console.status("[bold cyan]Creating archive...", spinner="dots"),
+            console.status("[memphis.spinner]Creating archive..."),
             tarfile.open(archive_path, "w:gz") as tar,
         ):
             tar.add(str(local_cache), arcname=experiment_id)
 
         # 5. Report
-        tree = Tree(f"[bold]{experiment_id}/[/bold]")
-        tree.add(f"[green]{tsv_count}[/green] .tsv files")
-        tree.add(f"[blue]{json_count}[/blue] .json files")
-        tree.add(f"[dim]{len(real_files)} total files[/dim]")
-        console.print(Panel(tree, title="Download Complete", border_style="green"))
-        console.print(f"[bold green]Extracted to:[/bold green]  {local_cache}")
-        console.print(f"[bold green]Archive saved:[/bold green] {archive_path}")
+        tree = Tree(f"[memphis.label]{experiment_id}/[/]")
+        tree.add(f"[memphis.success]{tsv_count}[/] .tsv files")
+        tree.add(f"[memphis.info]{json_count}[/] .json files")
+        tree.add(f"[memphis.dim]{len(real_files)} total files[/]")
+        console.print(Panel(tree, title="Download Complete", border_style="memphis.border.success"))
+        console.print(f"[memphis.success]Extracted to:[/]  {local_cache}")
+        console.print(f"[memphis.success]Archive saved:[/] {archive_path}")
 
     finally:
         await fs.close()
         set_file_service(saved_fs)
-
-
-def _display(content: Any) -> None:
-    from rich.console import Console
-    from rich.syntax import Syntax
-
-    console = Console()
-    import json
-
-    if isinstance(content, str):
-        console.print(content)
-    else:
-        formatted = json.dumps(content, indent=2, default=str)
-        console.print(Syntax(formatted, "json", theme="monokai", line_numbers=False))
 
 
 if __name__ == "__main__":
