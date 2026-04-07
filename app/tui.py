@@ -41,14 +41,13 @@ from app.app_data_service import BaseUrl, E2EDataService, get_data_service
 # ─── Constants ────────────────────────────────────────────────────────────────
 
 BANNER = (
-    "[bold cyan]"
-    "  █████╗ ████████╗██╗      █████╗ ███╗   ██╗████████╗██╗███████╗\n"
-    " ██╔══██╗╚══██╔══╝██║     ██╔══██╗████╗  ██║╚══██╔══╝██║██╔════╝\n"
-    " ███████║   ██║   ██║     ███████║██╔██╗ ██║   ██║   ██║███████╗\n"
-    " ██╔══██║   ██║   ██║     ██╔══██║██║╚██╗██║   ██║   ██║╚════██║\n"
-    " ██║  ██║   ██║   ███████╗██║  ██║██║ ╚████║   ██║   ██║███████║\n"
-    " ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝╚══════╝"
-    "[/bold cyan]"
+    "[bold cyan]     ╭─⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉─╮[/]\n"
+    "[bold magenta]   ╭─╯                                            ╰─╮[/]\n"
+    "[bold yellow]  ╭╯   ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀              ╰╮~∿~∿[/]\n"
+    "[bold magenta] (     █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██    ◌ ◌ ◌       )∿~∿~[/]\n"
+    "[bold magenta]  ╰╮                                               ╭╯~∿~~∿[/]\n"
+    "[bold white]   ╰─╮   ∿ whole-cell simulation platform ∿    ╭─╯∿~∿~[/]\n"
+    "[bold cyan]     ╰─⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉─╯[/]"
 )
 
 SERVER_OPTIONS = [(f"{u.name}  ({u.value})", u.value) for u in BaseUrl]
@@ -363,7 +362,7 @@ class AtlantisTUI(App[None]):
         dock: bottom;
         height: 3;
         padding: 0 2;
-        border-top: solid ansi_bright_black;
+        border-top: solid ansi_magenta;
     }
     #server-bar Label {
         padding-top: 1;
@@ -374,10 +373,10 @@ class AtlantisTUI(App[None]):
         width: 1fr;
     }
 
-    /* ── Sidebar — scrollable with full button styling ── */
+    /* ── Sidebar — scrollable with Memphis accents ── */
     #sidebar {
         width: 30;
-        border-right: solid ansi_bright_black;
+        border-right: solid ansi_magenta;
         padding: 1;
     }
     #sidebar Button {
@@ -385,7 +384,7 @@ class AtlantisTUI(App[None]):
     }
     .nav-section-label {
         text-style: bold;
-        color: ansi_cyan;
+        color: ansi_magenta;
         margin: 1 0 0 0;
     }
 
@@ -395,13 +394,13 @@ class AtlantisTUI(App[None]):
     }
     #result-log {
         height: 1fr;
-        border: round ansi_bright_black;
+        border: round ansi_cyan;
     }
 
     /* ── Data table ── */
     DataTable {
         height: 1fr;
-        border: round ansi_bright_black;
+        border: round ansi_cyan;
     }
     """
 
@@ -614,8 +613,23 @@ class AtlantisTUI(App[None]):
             self.write_log(f"  Status: [{color}]{status.upper()}[/{color}]")
             if run.error_message:
                 self.write_log(f"  [red]Error: {run.error_message}[/red]")
-            log = self.svc.get_workflow_log(simulation_id=sid)
-            self.write_log(f"\n[dim]─── Log ───[/dim]\n{log}\n")
+
+            if status in ("completed", "failed", "cancelled"):
+                # Terminal state: show simulation details instead of (unavailable) log
+                try:
+                    sim = self.svc.get_workflow(simulation_id=sid)
+                    self._show_json(sim.model_dump(), title=f"Simulation {sid}")
+                except Exception as e:
+                    self.write_log(f"[dim]Details not available: {e}[/dim]")
+                if status == "completed":
+                    self.write_log(f"[dim]Download: click 'Download Outputs' with ID {sid}[/dim]\n")
+            else:
+                # Still running: show live Nextflow log
+                try:
+                    log = self.svc.get_workflow_log(simulation_id=sid)
+                    self.write_log(f"\n[dim]─── Log ───[/dim]\n{log}\n")
+                except Exception:
+                    self.write_log("[dim]Log not yet available[/dim]\n")
         except Exception as e:
             self.write_log(f"[red]Error: {e}[/red]\n")
 
