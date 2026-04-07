@@ -6,6 +6,9 @@ import sys
 sys.path.insert(0, os.path.abspath("../../sms_api"))
 sys.path.insert(0, os.path.abspath("../.."))
 
+# Detect ReadTheDocs environment (sms_api not installable due to Python pin)
+on_rtd = os.environ.get("READTHEDOCS") == "True"
+
 # -- Project information -----------------------------------------------------
 
 project = "Atlantis API (SMS API)"
@@ -15,16 +18,23 @@ author = "Alexander Patrie, Jim Schaff, Ryan Spangler"
 # -- General configuration ---------------------------------------------------
 
 extensions = [
-    "sphinx.ext.autodoc",
-    "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
-    "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
     "myst_parser",
 ]
 
+if not on_rtd:
+    extensions += [
+        "sphinx.ext.autodoc",
+        "sphinx.ext.autosummary",
+        "sphinx.ext.viewcode",
+    ]
+
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+
+if on_rtd:
+    exclude_patterns += ["api/*"]
 
 # MyST (Markdown) settings
 myst_enable_extensions = [
@@ -36,7 +46,7 @@ source_suffix = {
     ".md": "markdown",
 }
 
-# Autodoc settings
+# Autodoc settings (only used in local builds)
 autoclass_content = "both"
 autosummary_generate = True
 autodoc_default_options = {
