@@ -1,7 +1,7 @@
 Choosing a Client Application
 =============================
 
-Atlantis provides four client applications. Each one exposes the same
+Atlantis provides three client applications. Each one exposes the same
 end-to-end workflow --- the difference is the interface.
 
 .. contents:: On this page
@@ -27,14 +27,10 @@ Quick Comparison
      - ``uv run atlantis tui``
      - Interactive terminal sessions, SSH environments
      - Sidebar navigation, tabbed results, file browser. No browser needed.
-   * - **Desktop GUI**
-     - ``uv run atlantis tkapp``
-     - Visual workflow on desktop, DAW-style layout
-     - Animated Memphis theme, resizable panels, JSON viewer. Requires Tcl/Tk.
    * - **Web GUI**
      - ``uv run atlantis gui``
      - Point-and-click in the browser, collaborative demos
-     - Marimo reactive notebook. Opens in your default browser.
+     - Marimo reactive notebook with Tensorboard-style cards.
 
 CLI
 ---
@@ -79,28 +75,6 @@ Features:
 
 The TUI uses ANSI 256-color mode for compatibility with all terminals.
 
-Desktop GUI (Tkinter)
----------------------
-
-The desktop GUI is a native Tkinter application with a Memphis-inspired
-visual theme:
-
-.. code-block:: bash
-
-   uv run atlantis tkapp
-
-Features:
-
-- Four-tab notebook: Simulator, Simulation, Data, Parca/Analysis
-- Animated DNA helix banner and geometric Memphis decorations
-- Treeview tables for listing simulators and simulations
-- JSON syntax-highlighted output panel
-- Pulsing status indicator
-- Resizable split panels (DAW-style layout)
-
-All API calls run in background threads --- the UI stays responsive during
-long-running operations.
-
 Web GUI (Marimo)
 ----------------
 
@@ -113,16 +87,17 @@ opens in your browser:
 
 Features:
 
+- Tensorboard-style card layout with rounded edges and coloured headers
 - Interactive forms with live reactivity
 - CSS-animated Memphis banner
 - Iconify icons throughout the interface
 - Status badges with colour-coded states
-- In-browser file listing after download
+- Grid layout for compact, dashboard-like arrangement
 
 Workflow Mapping
 ----------------
 
-All four clients map to the same six workflow steps:
+All three clients map to the same six workflow steps:
 
 .. list-table::
    :header-rows: 1
@@ -131,25 +106,25 @@ All four clients map to the same six workflow steps:
    * - Step
      - Action
      - CLI
-     - TUI / Desktop GUI
+     - TUI
      - Web GUI
    * - 1--3
      - Build simulator
      - ``simulator latest``
      - Build Latest button
-     - Section 1 form
+     - Simulator card
    * - 4
      - Submit simulation
      - ``simulation run``
      - Run New button / form
-     - Section 2 form
+     - Simulation card
    * - 5
      - Check status
      - ``simulation status``
      - Status button / Poll
-     - Section 2 poll
+     - Status check card
    * - 6
      - Download results
      - ``simulation outputs``
      - Download Outputs
-     - Section 3 form
+     - Outputs card

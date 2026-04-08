@@ -49,19 +49,6 @@ buttons to:
 2. Click **Run New** under SIMULATIONS, fill in the form, and submit
 3. Click **Download Outputs** and enter the simulation ID
 
-Desktop GUI Quickstart
-----------------------
-
-.. code-block:: bash
-
-   uv run atlantis tkapp
-
-The Tkinter desktop app has a tabbed interface:
-
-1. Go to the **Simulator** tab, click **Build Latest**
-2. Go to the **Simulation** tab, fill in the form, click **Submit**
-3. Go to the **Data** tab, enter the simulation ID, click **Download Outputs**
-
 Web GUI Quickstart
 ------------------
 
@@ -69,8 +56,9 @@ Web GUI Quickstart
 
    uv run atlantis gui
 
-This opens a Marimo notebook in your browser with interactive sections for
-each workflow step. Fill in the forms and click the run buttons in order.
+This opens a Marimo notebook in your browser with interactive card-based
+sections for each workflow step. Fill in the forms and click the run
+buttons in order.
 
 What Happens During a Run
 -------------------------

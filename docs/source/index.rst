@@ -9,7 +9,7 @@ Atlantis
 simulations of *E. coli* using the
 `vEcoli <https://github.com/CovertLabEcoli/vEcoli-private>`_ model.
 
-You interact with Atlantis through one of four client applications --- each
+You interact with Atlantis through one of three client applications --- each
 exposes the same end-to-end workflow (build a simulator, run a simulation,
 download results) in a different format:
 
@@ -22,9 +22,6 @@ download results) in a different format:
    * - **TUI**
      - ``uv run atlantis tui``
      - Interactive terminal UI with sidebar navigation
-   * - **Desktop GUI**
-     - ``uv run atlantis tkapp``
-     - Tkinter desktop app with DAW-style layout
    * - **Web GUI**
      - ``uv run atlantis gui``
      - Marimo notebook UI (opens in browser)

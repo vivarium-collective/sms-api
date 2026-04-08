@@ -20,8 +20,8 @@ Install from Source
    cd sms-api
    uv sync
 
-This installs the ``atlantis`` command and all four client applications
-(CLI, TUI, Desktop GUI, Web GUI).
+This installs the ``atlantis`` command and all three client applications
+(CLI, TUI, Web GUI).
 
 Verify the Installation
 -----------------------
@@ -31,20 +31,6 @@ Verify the Installation
    uv run atlantis help
 
 You should see the Atlantis banner and a list of available commands.
-
-Tkinter Note (macOS)
-~~~~~~~~~~~~~~~~~~~~
-
-The Desktop GUI (``atlantis tkapp``) uses Tkinter, which requires Tcl/Tk.
-If you see a ``TclError`` about ``init.tcl``, set the Tcl library path:
-
-.. code-block:: bash
-
-   # Find your Tcl 8.6 library (common locations)
-   find ~/.local/share/mamba -name "init.tcl" -path "*/tcl8.6*" 2>/dev/null
-
-   # Add to your shell profile (~/.zshrc or ~/.bashrc)
-   export TCL_LIBRARY="/path/to/tcl8.6"
 
 Connecting to an API Server
 ---------------------------

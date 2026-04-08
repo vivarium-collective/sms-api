@@ -71,5 +71,3 @@ These environment variables affect client behavior:
      - Description
    * - ``API_BASE_URL``
      - Default API server URL (overrides ``http://localhost:8080``)
-   * - ``TCL_LIBRARY``
-     - Path to Tcl library (needed for Desktop GUI on some systems)

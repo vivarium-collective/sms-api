@@ -44,17 +44,16 @@ HPC Workflow Pipeline
 3. **Run Simulation** -- Execute vEcoli simulation via SLURM or Nextflow + Batch
 4. **Run Analysis** -- Post-process simulation outputs (8 analysis types)
 
-Four Client Interfaces
-----------------------
+Three Client Interfaces
+-----------------------
 
-The API has four client interfaces that all expose the same workflow:
+The API has three client interfaces that all expose the same workflow:
 
-1. **CLI** (``atlantis``) -- Typer-based command-line interface (``app/cli_app.py``)
-2. **TUI** -- Textual-based terminal UI with sidebar navigation (``app/tui_app.py``)
-3. **Desktop GUI** -- Memphis-themed Tkinter desktop app (``app/tk_app.py``)
-4. **Web GUI** -- Marimo notebook interface (``app/gui_app.py``)
+1. **CLI** (``atlantis``) -- Typer-based command-line interface (``app/cli.py``)
+2. **TUI** -- Textual-based terminal UI with sidebar navigation (``app/tui.py``)
+3. **Web GUI** -- Marimo notebook with Tensorboard-style card layout (``app/gui.py``)
 
-All four use ``E2EDataService`` (``app/app_data_service.py``) as the shared
+All three use ``E2EDataService`` (``app/app_data_service.py``) as the shared
 data layer, which calls the REST API endpoints via ``httpx``.
 
 Key Services

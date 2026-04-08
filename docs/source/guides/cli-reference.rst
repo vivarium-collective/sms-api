@@ -15,7 +15,7 @@ Top-Level
    atlantis [OPTIONS] COMMAND [ARGS]...
 
 Commands: ``simulator``, ``simulation``, ``parca``, ``analysis``, ``demo``,
-``tui``, ``gui``, ``tkapp``, ``help``.
+``tui``, ``gui``, ``help``.
 
 Global option: ``--base-url`` selects the API server (default:
 ``http://localhost:8080``). Can also be set via the ``API_BASE_URL``
@@ -218,15 +218,6 @@ Launch the Marimo web GUI (opens in browser).
 .. code-block:: bash
 
    uv run atlantis gui [--base-url URL]
-
-tkapp
-~~~~~
-
-Launch the Memphis-themed Tkinter desktop GUI.
-
-.. code-block:: bash
-
-   uv run atlantis tkapp [--base-url URL]
 
 demo
 ----
