@@ -1,7 +1,7 @@
 import marimo
 
 __generated_with = "0.22.4"
-app = marimo.App(width="medium", layout_file="layouts/gui_app.grid.json")
+app = marimo.App(width="medium", layout_file="layouts/gui.grid.json")
 
 
 @app.cell
@@ -99,9 +99,91 @@ def _(mo):
     .memphis-dot-magenta {{ background: {MAGENTA}; }}
     .memphis-dot-cyan {{ background: {CYAN}; }}
     .memphis-dot-yellow {{ background: {YELLOW}; }}
+
+    /* ── Tensorboard-style cards ─────────────────────────────── */
+    .tb-card {{
+        background: {BG_CARD};
+        border: 1px solid {MAGENTA}30;
+        border-radius: 12px;
+        padding: 0;
+        margin: 0.4rem 0;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }}
+    .tb-card:hover {{
+        border-color: {MAGENTA}80;
+        box-shadow: 0 4px 16px rgba(233,30,144,0.15);
+    }}
+    .tb-card-header {{
+        padding: 0.6rem 1rem;
+        font-family: 'Courier New', monospace;
+        font-weight: 800;
+        font-size: 0.95rem;
+        letter-spacing: 0.06em;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }}
+    .tb-card-body {{
+        padding: 0.8rem 1rem 1rem 1rem;
+    }}
+    .tb-card-header-magenta {{
+        background: linear-gradient(135deg, {MAGENTA}25, {MAGENTA}08);
+        color: {MAGENTA};
+        border-bottom: 2px solid {MAGENTA}40;
+    }}
+    .tb-card-header-cyan {{
+        background: linear-gradient(135deg, {CYAN}25, {CYAN}08);
+        color: {CYAN};
+        border-bottom: 2px solid {CYAN}40;
+    }}
+    .tb-card-header-green {{
+        background: linear-gradient(135deg, {GREEN}25, {GREEN}08);
+        color: {GREEN};
+        border-bottom: 2px solid {GREEN}40;
+    }}
+    .tb-card-header-purple {{
+        background: linear-gradient(135deg, {PURPLE}25, {PURPLE}08);
+        color: {PURPLE};
+        border-bottom: 2px solid {PURPLE}40;
+    }}
+    .tb-card-header-yellow {{
+        background: linear-gradient(135deg, {YELLOW}25, {YELLOW}08);
+        color: {YELLOW};
+        border-bottom: 2px solid {YELLOW}40;
+    }}
     </style>""")
     _memphis_css
-    return CYAN, MAGENTA
+
+    def card(title: str, icon: str, body: str, color: str = "magenta") -> str:
+        """Wrap HTML content in a Tensorboard-style card."""
+        return (
+            f'<div class="tb-card">'
+            f'<div class="tb-card-header tb-card-header-{color}">'
+            f"{icon} {title}</div>"
+            f'<div class="tb-card-body">{body}</div>'
+            f"</div>"
+        )
+
+    def card_wrap(title: str, icon: str, *children, color: str = "magenta"):
+        """Wrap marimo renderables in a card with a coloured header.
+
+        Unlike ``card()``, this accepts marimo UI elements (widgets, stacks, etc.)
+        as children, not just raw HTML strings.
+        """
+        header = mo.Html(
+            f'<div class="tb-card-header tb-card-header-{color}">{icon} {title}</div>'
+        )
+        return mo.Html(
+            f'<div class="tb-card">'
+            f'{header.text}'
+            f'<div class="tb-card-body">'
+            f'{"".join(c.text if hasattr(c, "text") else str(c) for c in children)}'
+            f'</div></div>'
+        )
+
+    return CYAN, MAGENTA, card, card_wrap
 
 
 @app.cell
@@ -126,18 +208,14 @@ def _(mo):
     return (
         ICO_CHECK,
         ICO_CROSS,
-        ICO_DNA,
         ICO_DNA_SM,
         ICO_DOWN_ARROW,
-        ICO_FILE_FOLDER,
         ICO_GEAR,
         ICO_HOURGLASS,
         ICO_LINK,
         ICO_MICROBE,
-        ICO_MICROSCOPE,
         ICO_ROCKET,
         ICO_STOP,
-        ICO_TEST_TUBE,
     )
 
 
@@ -161,28 +239,65 @@ def _(ICO_CHECK, ICO_CROSS, ICO_HOURGLASS, ICO_ROCKET, ICO_STOP, mo):
 @app.cell
 def _(CYAN, ICO_DNA_SM, ICO_MICROBE, MAGENTA, mo):
     _dna = ICO_DNA_SM.text
-    _ecoli_art = (
-        '<div style="text-align: center;">'
-        '<span style="font-family: monospace; font-size: 0.7rem; line-height: 1.3; '
-        f'color: {CYAN}; display: inline-block; white-space: pre; text-align: left;">'
-        f'<span style="color:#ffd700">  \u256d\u2500</span><span style="color:#008080">{_dna}</span><span style="color:#ffd700">\u2500\u2500</span><span style="color:#ff69b4">{_dna}</span><span style="color:#ffd700">\u2500\u2500</span><span style="color:#008080">{_dna}</span><span style="color:#ffd700">\u2500\u2500</span><span style="color:#ff69b4">{_dna}</span><span style="color:#ffd700">\u2500\u2500</span><span style="color:#008080">{_dna}</span><span style="color:#ffd700">\u2500\u2500</span><span style="color:#ff69b4">{_dna}</span><span style="color:#ffd700">\u2500\u256e</span>\n'
-        f'<span style="color:{MAGENTA}">\u256d\u2500\u256f                              \u2570\u2500\u256e</span>\n'
-        f'<span style="color:#00ff00">\u2570\u256e   \u2584\u2580\u2584 \u2580\u2588\u2580 \u2588   \u2584\u2580\u2584 \u2588\u2584 \u2588 \u2580\u2588\u2580 \u2588 \u2584\u2580\u2580  \u256d\u256f~\u223f~\u223f</span>\n'
-        f'<span style="color:#9370db"> (   \u2588\u2580\u2588  \u2588  \u2588\u2584\u2584 \u2588\u2580\u2588 \u2588 \u2580\u2588  \u2588  \u2588 \u2584\u2588\u2588  )\u223f~\u223f~</span>\n'
-        f'<span style="color:{CYAN}">\u256d\u256f                              \u2570\u256e~\u223f~~\u223f</span>\n'
-        f'<span style="color:{MAGENTA}">\u2570\u2500\u256e  \u223f whole-cell simulation \u223f  \u256d\u2500\u256f\u223f~\u223f~</span>\n'
-        f'<span style="color:#ffd700">  \u2570\u2500</span><span style="color:#ff69b4">{_dna}</span><span style="color:#ffd700">\u2500\u2500</span><span style="color:#008080">{_dna}</span><span style="color:#ffd700">\u2500\u2500</span><span style="color:#ff69b4">{_dna}</span><span style="color:#ffd700">\u2500\u2500</span><span style="color:#008080">{_dna}</span><span style="color:#ffd700">\u2500\u2500</span><span style="color:#ff69b4">{_dna}</span><span style="color:#ffd700">\u2500\u2500</span><span style="color:#008080">{_dna}</span><span style="color:#ffd700">\u2500\u256f</span>'
-        "</span></div>"
-    )
-
     _microbe = ICO_MICROBE.text
-    mo.Html(
-        '<div class="memphis-banner"></div>'
-        f"{_ecoli_art}"
-        f'<p class="memphis-subtitle" style="margin-top:0.6rem; text-align: center;">'
-        f"{_dna} whole-cell simulation platform {_dna} gui client {_microbe}</p>"
-        '<div class="memphis-banner" style="margin-top:0.8rem;"></div>'
-    )
+
+    # E. coli rod-cell shape: rounded capsule with flagella trailing right.
+    # Uses CSS border-radius (pill shape) + wavy tail via SVG path.
+    _banner = mo.Html(f"""
+    <div style="text-align: center; margin: 0.5rem 0;">
+      <div style="display: inline-flex; align-items: center; gap: 0;">
+        <!-- Rod-cell body (rounded capsule) -->
+        <div style="
+          border: 2px solid {MAGENTA};
+          border-radius: 50px;
+          padding: 0.8rem 2.2rem;
+          background: linear-gradient(135deg, rgba(233,30,144,0.08), rgba(0,229,255,0.05));
+          text-align: center;
+          min-width: 340px;
+        ">
+          <div style="
+            font-family: 'Courier New', monospace;
+            font-weight: 900;
+            font-size: 1.4rem;
+            letter-spacing: 0.15em;
+            background: linear-gradient(90deg, {MAGENTA}, {CYAN});
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+          ">
+            {_dna} ATLANTIS {_dna}
+          </div>
+          <div style="
+            font-family: 'Courier New', monospace;
+            font-size: 0.7rem;
+            color: {CYAN};
+            letter-spacing: 0.1em;
+            margin-top: 0.2rem;
+          ">
+            whole-cell simulation platform
+          </div>
+        </div>
+        <!-- Flagella tail (SVG wavy lines) -->
+        <svg width="90" height="60" viewBox="0 0 90 60" style="margin-left: -2px;">
+          <path d="M0,30 C15,15 25,45 40,30 S60,15 75,30 S85,42 90,35"
+                stroke="{MAGENTA}" fill="none" stroke-width="2" opacity="0.7"/>
+          <path d="M0,25 C12,10 22,40 35,25 S55,10 70,25 S82,38 88,30"
+                stroke="{CYAN}" fill="none" stroke-width="1.5" opacity="0.5"/>
+          <path d="M0,35 C18,20 28,50 45,35 S65,20 80,35 S88,48 90,40"
+                stroke="#ffd700" fill="none" stroke-width="1.5" opacity="0.5"/>
+        </svg>
+      </div>
+      <p class="memphis-subtitle" style="margin-top: 0.5rem;">
+        {_dna} sms-api {_microbe}
+      </p>
+    </div>
+    <div class="memphis-banner" style="margin-top: 0.4rem;"></div>
+    """)
+    _banner
+    return
+
+
+@app.cell
+def _():
     return
 
 
@@ -217,31 +332,12 @@ def _(base_url_dropdown):
 
 
 @app.cell(hide_code=True)
-def _(ICO_MICROSCOPE, mo):
-    mo.md(f"""
-    <p class="memphis-title">{ICO_MICROSCOPE.text} Simulator</p>
-    """)
+def _():
     return
 
 
 @app.cell
-def _(ICO_DNA, mo):
-    mo.md(f"""
-    <p class="memphis-subtitle">{ICO_DNA.text} fetch \u00b7 upload \u00b7 build {ICO_DNA.text}</p>
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md("""
-    <div class="memphis-banner"></div>
-    """)
-    return
-
-
-@app.cell
-def _(mo):
+def _(card_wrap, mo):
     repo_url_input = mo.ui.text(
         value="https://github.com/CovertLabEcoli/vEcoli-private",
         label="Repository URL",
@@ -250,14 +346,18 @@ def _(mo):
     branch_input = mo.ui.text(value="master", label="Branch")
     force_rebuild = mo.ui.checkbox(label="Force rebuild", value=False)
 
-    mo.hstack([repo_url_input, branch_input, force_rebuild], justify="start", gap=1)
+    card_wrap(
+        "Simulator Build", "\U0001f9ec",
+        mo.hstack([repo_url_input, branch_input, force_rebuild], justify="start", gap=1),
+        color="cyan",
+    )
     return branch_input, force_rebuild, repo_url_input
 
 
 @app.cell
-def _(mo):
-    build_button = mo.ui.run_button(label="Build Simulator", kind="success")
-    build_button
+def _(card_wrap, mo):
+    build_button = mo.ui.run_button(label=f"{mo.icon('gravity-ui:function')} Build Simulator", kind="success")
+    card_wrap("", build_button, color="green")
     return (build_button,)
 
 
@@ -267,6 +367,7 @@ def _(
     ICO_LINK,
     branch_input,
     build_button,
+    card,
     force_rebuild,
     get_svc,
     json,
@@ -305,18 +406,25 @@ def _(
             _dna = ICO_DNA_SM.text
             _link = ICO_LINK.text
             _sim_output = mo.Html(
-                f"<div class='memphis-card'>"
-                f"{_dna} <strong>Simulator ID:</strong> {_uploaded.database_id}<br>"
-                f"{_dna} <strong>Status:</strong> {_badge.text}<br>"
-                f"{_link} <strong>Commit:</strong> {_uploaded.git_commit_hash}<br>"
-                f"<pre style='font-size:0.75rem; max-height:200px; overflow:auto;'>{_details}</pre>"
-                f"</div>"
+                card(
+                    "Build Result",
+                    _dna,
+                    f"<strong>Simulator ID:</strong> {_uploaded.database_id}<br>"
+                    f"<strong>Status:</strong> {_badge.text}<br>"
+                    f"{_link} <strong>Commit:</strong> {_uploaded.git_commit_hash}<br>"
+                    f"<pre style='font-size:0.75rem; max-height:200px; overflow:auto;'>{_details}</pre>",
+                    color="green",
+                )
             )
         except Exception:
             _sim_output = mo.Html(
-                f"<div class='memphis-card' style='border-color:var(--memphis-red);'>"
-                f"<span class='memphis-status-failed'>ERROR</span><br>"
-                f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre></div>"
+                card(
+                    "Error",
+                    "\u26a0\ufe0f",
+                    f"<span class='memphis-status-failed'>ERROR</span><br>"
+                    f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre>",
+                    color="magenta",
+                )
             )
 
     _sim_output
@@ -324,9 +432,9 @@ def _(
 
 
 @app.cell
-def _(mo):
+def _(card_wrap, mo):
     list_sims_button = mo.ui.run_button(label="List Simulators")
-    list_sims_button
+    card_wrap("Browse Versions", "\U0001f4cb", list_sims_button, color="purple")
     return (list_sims_button,)
 
 
@@ -352,15 +460,20 @@ def _(get_svc, list_sims_button, mo):
 
 
 @app.cell
-def _(mo):
+def _(card_wrap, mo):
     sim_status_id = mo.ui.number(label="Simulator ID", start=1, stop=99999, value=1)
     sim_status_button = mo.ui.run_button(label="Check Build Status")
-    mo.hstack([sim_status_id, sim_status_button], justify="start", gap=1)
+    card_wrap(
+        "Check Build", "\U0001f50d",
+        mo.hstack([sim_status_id, sim_status_button], justify="start", gap=1),
+        color="cyan",
+    )
     return sim_status_button, sim_status_id
 
 
 @app.cell
 def _(
+    card,
     get_svc,
     json,
     mo,
@@ -383,47 +496,30 @@ def _(
                 else ""
             )
             _build_status_output = mo.Html(
-                f"<div class='memphis-card'>"
-                f"<strong>Build Status:</strong> {_badge.text}{_err}<br>"
-                f"<pre style='font-size:0.75rem; max-height:200px; overflow:auto;'>{_details}</pre>"
-                f"</div>"
+                card(
+                    "Build Status",
+                    "\U0001f9ec",
+                    f"<strong>Status:</strong> {_badge.text}{_err}<br>"
+                    f"<pre style='font-size:0.75rem; max-height:200px; overflow:auto;'>{_details}</pre>",
+                    color="cyan",
+                )
             )
         except Exception:
             _build_status_output = mo.Html(
-                f"<div class='memphis-card' style='border-color:var(--memphis-red);'>"
-                f"<span class='memphis-status-failed'>ERROR</span><br>"
-                f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre></div>"
+                card(
+                    "Error",
+                    "\u26a0\ufe0f",
+                    f"<span class='memphis-status-failed'>ERROR</span><br>"
+                    f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre>",
+                    color="magenta",
+                )
             )
     _build_status_output
     return
 
 
 @app.cell
-def _(ICO_TEST_TUBE, mo):
-    mo.md(f"""
-    <p class="memphis-title">{ICO_TEST_TUBE.text} Simulation</p>
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(ICO_DNA, mo):
-    mo.md(f"""
-    <p class="memphis-subtitle">{ICO_DNA.text} submit \u00b7 poll \u00b7 monitor {ICO_DNA.text}</p>
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md("""
-    <div class="memphis-banner"></div>
-    """)
-    return
-
-
-@app.cell
-def _(mo):
+def _(card_wrap, mo):
     exp_id_input = mo.ui.text(value="", label="Experiment ID", full_width=True)
     sim_id_input = mo.ui.number(label="Simulator ID", start=1, stop=99999, value=1)
     config_dropdown = mo.ui.dropdown(
@@ -443,11 +539,15 @@ def _(mo):
     run_parca_checkbox = mo.ui.checkbox(label="Run ParCa", value=False)
     description_input = mo.ui.text(value="", label="Description (optional)", full_width=True)
 
-    mo.vstack([
-        mo.hstack([exp_id_input], justify="start"),
-        mo.hstack([sim_id_input, config_dropdown, gens_input, seeds_input, run_parca_checkbox], justify="start", gap=1),
-        description_input,
-    ])
+    card_wrap(
+        "Simulation", "\U0001f52c",
+        mo.vstack([
+            mo.hstack([exp_id_input], justify="start"),
+            mo.hstack([sim_id_input, config_dropdown, gens_input, seeds_input, run_parca_checkbox], justify="start", gap=1),
+            description_input,
+        ]),
+        color="magenta",
+    )
     return (
         config_dropdown,
         description_input,
@@ -460,9 +560,9 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    run_sim_button = mo.ui.run_button(label="Submit Simulation", kind="success")
-    run_sim_button
+def _(card_wrap, mo):
+    run_sim_button = mo.ui.run_button(label=f"{mo.icon('hugeicons:ai-dna')} Submit Simulation", kind="success")
+    card_wrap('', run_sim_button, color="green")
     return (run_sim_button,)
 
 
@@ -470,6 +570,7 @@ def _(mo):
 def _(
     ICO_DNA_SM,
     ICO_ROCKET,
+    card,
     config_dropdown,
     description_input,
     exp_id_input,
@@ -508,34 +609,46 @@ def _(
                 _dna = ICO_DNA_SM.text
                 _rocket = ICO_ROCKET.text
                 _run_output = mo.Html(
-                    f"<div class='memphis-card'>"
-                    f"{_rocket} <span class='memphis-status-completed'>SUBMITTED</span><br>"
-                    f"{_dna} <strong>Simulation ID:</strong> {_simulation.database_id}<br>"
-                    f"{_dna} <strong>Experiment:</strong> {_simulation.experiment_id}<br>"
-                    f"<pre style='font-size:0.75rem; max-height:200px; overflow:auto;'>{_details}</pre>"
-                    f"</div>"
+                    card(
+                        "Simulation Submitted",
+                        _rocket,
+                        f"<span class='memphis-status-completed'>SUBMITTED</span><br>"
+                        f"{_dna} <strong>Simulation ID:</strong> {_simulation.database_id}<br>"
+                        f"{_dna} <strong>Experiment:</strong> {_simulation.experiment_id}<br>"
+                        f"<pre style='font-size:0.75rem; max-height:200px; overflow:auto;'>{_details}</pre>",
+                        color="green",
+                    )
                 )
             except Exception:
                 _run_output = mo.Html(
-                    f"<div class='memphis-card' style='border-color:var(--memphis-red);'>"
-                    f"<span class='memphis-status-failed'>ERROR</span><br>"
-                    f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre></div>"
+                    card(
+                        "Error",
+                        "\u26a0\ufe0f",
+                        f"<span class='memphis-status-failed'>ERROR</span><br>"
+                        f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre>",
+                        color="magenta",
+                    )
                 )
     _run_output
     return
 
 
 @app.cell
-def _(mo):
+def _(card_wrap, mo):
     poll_sim_id = mo.ui.number(label="Simulation ID", start=1, stop=99999, value=1)
     poll_sim_button = mo.ui.run_button(label="Check Status")
     poll_sim_poll = mo.ui.checkbox(label="Poll until done", value=False)
-    mo.hstack([poll_sim_id, poll_sim_button, poll_sim_poll], justify="start", gap=1)
+    card_wrap(
+        "Status / Poll", "\u2139\ufe0f",
+        mo.hstack([poll_sim_id, poll_sim_button, poll_sim_poll], justify="start", gap=1),
+        color="cyan",
+    )
     return poll_sim_button, poll_sim_id, poll_sim_poll
 
 
 @app.cell
 def _(
+    card,
     get_svc,
     json,
     mo,
@@ -574,25 +687,32 @@ def _(
                 _detail_json = "(details not available)"
 
             _poll_output = mo.Html(
-                f"<div class='memphis-card'>"
-                f"<strong>Simulation {_sid}:</strong> {_badge.text}{_err}<br>"
-                f"<pre style='font-size:0.75rem; max-height:200px; overflow:auto;'>{_detail_json}</pre>"
-                f"</div>"
+                card(
+                    f"Simulation {_sid}",
+                    "\U0001f52c",
+                    f"<strong>Status:</strong> {_badge.text}{_err}<br>"
+                    f"<pre style='font-size:0.75rem; max-height:200px; overflow:auto;'>{_detail_json}</pre>",
+                    color="cyan",
+                )
             )
         except Exception:
             _poll_output = mo.Html(
-                f"<div class='memphis-card' style='border-color:var(--memphis-red);'>"
-                f"<span class='memphis-status-failed'>ERROR</span><br>"
-                f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre></div>"
+                card(
+                    "Error",
+                    "\u26a0\ufe0f",
+                    f"<span class='memphis-status-failed'>ERROR</span><br>"
+                    f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre>",
+                    color="magenta",
+                )
             )
     _poll_output
     return
 
 
 @app.cell
-def _(mo):
+def _(card_wrap, mo):
     list_workflows_button = mo.ui.run_button(label="List Simulations")
-    list_workflows_button
+    card_wrap("Browse Simulations", "\U0001f4cb", list_workflows_button, color="purple")
     return (list_workflows_button,)
 
 
@@ -615,10 +735,14 @@ def _(get_svc, list_workflows_button, mo):
 
 
 @app.cell
-def _(mo):
+def _(card_wrap, mo):
     cancel_sim_id = mo.ui.number(label="Simulation ID to cancel", start=1, stop=99999, value=1)
     cancel_button = mo.ui.run_button(label="Cancel Simulation", kind="danger")
-    mo.hstack([cancel_sim_id, cancel_button], justify="start", gap=1)
+    card_wrap(
+        "Cancel", "\U0001f6d1",
+        mo.hstack([cancel_sim_id, cancel_button], justify="start", gap=1),
+        color="yellow",
+    )
     return cancel_button, cancel_sim_id
 
 
@@ -626,6 +750,7 @@ def _(mo):
 def _(
     cancel_button,
     cancel_sim_id,
+    card,
     get_svc,
     json,
     mo,
@@ -639,51 +764,38 @@ def _(
             _result = _svc.cancel_workflow(simulation_id=int(cancel_sim_id.value))
             _badge = status_badge(_result.status.value)
             _cancel_output = mo.Html(
-                f"<div class='memphis-card'>"
-                f"<strong>Cancel result:</strong> {_badge.text}<br>"
-                f"<pre style='font-size:0.75rem;'>{json.dumps(_result.model_dump(), indent=2, default=str)}</pre>"
-                f"</div>"
+                card(
+                    "Cancel Result",
+                    "\U0001f6d1",
+                    f"<strong>Status:</strong> {_badge.text}<br>"
+                    f"<pre style='font-size:0.75rem;'>{json.dumps(_result.model_dump(), indent=2, default=str)}</pre>",
+                    color="yellow",
+                )
             )
         except Exception:
             _cancel_output = mo.Html(
-                f"<div class='memphis-card' style='border-color:var(--memphis-red);'>"
-                f"<span class='memphis-status-failed'>ERROR</span><br>"
-                f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre></div>"
+                card(
+                    "Error",
+                    "\u26a0\ufe0f",
+                    f"<span class='memphis-status-failed'>ERROR</span><br>"
+                    f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre>",
+                    color="magenta",
+                )
             )
     _cancel_output
     return
 
 
 @app.cell
-def _(ICO_FILE_FOLDER, mo):
-    mo.md(f"""
-    <p class="memphis-title">{ICO_FILE_FOLDER.text} Outputs</p>
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(ICO_DNA, mo):
-    mo.md(f"""
-    <p class="memphis-subtitle">{ICO_DNA.text} download \u00b7 extract \u00b7 browse {ICO_DNA.text}</p>
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md("""
-    <div class="memphis-banner"></div>
-    """)
-    return
-
-
-@app.cell
-def _(mo):
+def _(card_wrap, mo):
     dl_sim_id = mo.ui.number(label="Simulation ID", start=1, stop=99999, value=1)
     dl_dest = mo.ui.text(value="./debug", label="Destination directory", full_width=True)
     dl_button = mo.ui.run_button(label="Download Outputs", kind="success")
-    mo.hstack([dl_sim_id, dl_dest, dl_button], justify="start", gap=1)
+    card_wrap(
+        "Download Outputs", "\U0001f4e6",
+        mo.hstack([dl_sim_id, dl_dest, dl_button], justify="start", gap=1),
+        color="green",
+    )
     return dl_button, dl_dest, dl_sim_id
 
 
@@ -692,6 +804,7 @@ def _(
     ICO_DNA_SM,
     ICO_DOWN_ARROW,
     Path,
+    card,
     dl_button,
     dl_dest,
     dl_sim_id,
@@ -716,18 +829,25 @@ def _(
             _dna = ICO_DNA_SM.text
             _arrow = ICO_DOWN_ARROW.text
             _dl_output = mo.Html(
-                f"<div class='memphis-card'>"
-                f"{_arrow} <span class='memphis-status-completed'>DOWNLOAD COMPLETE</span><br>"
-                f"{_dna} <strong>Extracted to:</strong> {_extracted}<br>"
-                f"{_dna} <strong>Files:</strong> {_file_count}<br>"
-                f"<pre style='font-size:0.7rem; max-height:300px; overflow:auto;'>{_file_list}{_truncated}</pre>"
-                f"</div>"
+                card(
+                    "Download Complete",
+                    _arrow,
+                    f"<span class='memphis-status-completed'>DONE</span><br>"
+                    f"{_dna} <strong>Extracted to:</strong> {_extracted}<br>"
+                    f"{_dna} <strong>Files:</strong> {_file_count}<br>"
+                    f"<pre style='font-size:0.7rem; max-height:300px; overflow:auto;'>{_file_list}{_truncated}</pre>",
+                    color="green",
+                )
             )
         except Exception:
             _dl_output = mo.Html(
-                f"<div class='memphis-card' style='border-color:var(--memphis-red);'>"
-                f"<span class='memphis-status-failed'>ERROR</span><br>"
-                f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre></div>"
+                card(
+                    "Error",
+                    "\u26a0\ufe0f",
+                    f"<span class='memphis-status-failed'>ERROR</span><br>"
+                    f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre>",
+                    color="magenta",
+                )
             )
     _dl_output
     return

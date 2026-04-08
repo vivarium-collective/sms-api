@@ -7,17 +7,11 @@ paths are exercised (with mocked HTTP).
 
 from __future__ import annotations
 
-import importlib
-import json
 from pathlib import Path
 from types import ModuleType
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import httpx
 import marimo
-import pytest
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -158,30 +152,22 @@ def _make_mock_service() -> MagicMock:
         error_message=None,
         model_dump=lambda: {"id": 10, "status": "completed", "error_message": None},
     )
-    mock.get_workflow.return_value = MagicMock(
-        model_dump=lambda: {"database_id": 10, "experiment_id": "test_exp"}
-    )
-    mock.show_workflows.return_value = [
-        MagicMock(model_dump=lambda: {"database_id": 10, "experiment_id": "test_exp"})
-    ]
+    mock.get_workflow.return_value = MagicMock(model_dump=lambda: {"database_id": 10, "experiment_id": "test_exp"})
+    mock.show_workflows.return_value = [MagicMock(model_dump=lambda: {"database_id": 10, "experiment_id": "test_exp"})]
     mock.cancel_workflow.return_value = MagicMock(
         status=JobStatus.CANCELLED,
         model_dump=lambda: {"id": 10, "status": "cancelled"},
     )
 
     # Parca methods
-    mock.get_parca_datasets.return_value = [
-        MagicMock(model_dump=lambda: {"id": 1, "name": "test_parca"})
-    ]
+    mock.get_parca_datasets.return_value = [MagicMock(model_dump=lambda: {"id": 1, "name": "test_parca"})]
     mock.get_parca_status.return_value = MagicMock(
         status=JobStatus.COMPLETED,
         model_dump=lambda: {"status": "completed"},
     )
 
     # Analysis methods
-    mock.get_analysis.return_value = MagicMock(
-        model_dump=lambda: {"id": 1, "name": "test_analysis"}
-    )
+    mock.get_analysis.return_value = MagicMock(model_dump=lambda: {"id": 1, "name": "test_analysis"})
     mock.get_analysis_status.return_value = MagicMock(
         status=JobStatus.COMPLETED,
         error_message=None,

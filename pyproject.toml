@@ -90,6 +90,7 @@ docs = [
     "sphinx-autodoc-typehints>=3.2.0,<4",
     "sphinx-rtd-theme>=3.0.2,<4",
     "myst-parser>=4.0.1,<5",
+    "furo>=2025.12.19",
 ]
 
 [tool.uv]
@@ -250,7 +251,7 @@ ignore = [
 #    # UP035 `typing.Dict` is deprecated, use `dict` instead
 #    "UP035",
 ]
-exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "notes/*"]
+exclude = [".venv/*", "app/ui/*", "sms_api/api/client/*", "documentation/*", "home/*", "scratchpads/*", "simulation_configs/*", "notes/*", "app/gui.py"]
 
 [tool.ruff.format]
 preview = true
