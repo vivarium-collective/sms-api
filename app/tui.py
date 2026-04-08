@@ -40,14 +40,30 @@ from app.app_data_service import BaseUrl, E2EDataService, get_data_service
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
+_HT = "[bold #008080]"  # teal
+_HP = "[bold #ff69b4]"  # 90s pink
+_HY = "[bold #ffd700]"  # yellow
+_HR = "[/]"
+_TUI_HELIX_TOP = (
+    f"     {_HY}╭─{_HR}"
+    f"{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}──{_HR}"
+    f"{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}──{_HR}"
+    f"{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}─╮{_HR}"
+)
+_TUI_HELIX_BOT = (
+    f"     {_HY}╰─{_HR}"
+    f"{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}──{_HR}"
+    f"{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}──{_HR}"
+    f"{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}─╯{_HR}"
+)
 BANNER = (
-    "[bold cyan]     ╭─⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉─╮[/]\n"
+    f"{_TUI_HELIX_TOP}\n"
     "[bold magenta]   ╭─╯                                            ╰─╮[/]\n"
-    "[bold yellow]  ╭╯   ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀              ╰╮~∿~∿[/]\n"
-    "[bold magenta] (     █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██    ◌ ◌ ◌       )∿~∿~[/]\n"
+    "[bold #00ff00]  ╭╯   ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀              ╰╮~∿~∿[/]\n"
+    "[bold #9370db] (     █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██    ◌ ◌ ◌       )∿~∿~[/]\n"
     "[bold magenta]  ╰╮                                               ╭╯~∿~~∿[/]\n"
     "[bold white]   ╰─╮   ∿ whole-cell simulation platform ∿    ╭─╯∿~∿~[/]\n"
-    "[bold cyan]     ╰─⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉─╯[/]"
+    f"{_TUI_HELIX_BOT}"
 )
 
 SERVER_OPTIONS = [(f"{u.name}  ({u.value})", u.value) for u in BaseUrl]

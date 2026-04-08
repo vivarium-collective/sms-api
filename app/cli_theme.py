@@ -45,14 +45,32 @@ JSON_SYNTAX_THEME = "native"
 # stylized E. coli rod cell: elongated capsule body with ⧬ (U+29EC,
 # DNA double helix) in the membrane border, flagella bundle trailing
 # from the right pole, half-block 90s/BBS font, Memphis dot accent.
+# Helix border: alternating teal(⋊⋉) / pink(⋊⋉) with yellow connectors
+_T = "[bold dark_cyan]"  # teal (256-color safe)
+_P = "[bold hot_pink]"  # 90s pink (256-color safe)
+_Y = "[bold gold1]"  # yellow (256-color safe)
+_R = "[/]"
+_HELIX_TOP = (
+    f"     {_Y}╭─{_R}"
+    f"{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}──{_R}"
+    f"{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}──{_R}"
+    f"{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}─╮{_R}"
+)
+_HELIX_BOT = (
+    f"     {_Y}╰─{_R}"
+    f"{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}──{_R}"
+    f"{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}──{_R}"
+    f"{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}─╯{_R}"
+)
+
 _BANNER = [
-    ("bright_cyan", "     ╭─⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉─╮"),
+    (None, _HELIX_TOP),
     ("bright_magenta", "   ╭─╯                                            ╰─╮"),
-    ("bright_yellow", "  ╭╯   ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀              ╰╮~∿~∿"),
-    ("purple", " (     █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██    ◌ ◌ ◌       )∿~∿~"),
+    ("green1", "  ╭╯   ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀              ╰╮~∿~∿"),
+    ("medium_purple1", " (     █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██    ◌ ◌ ◌       )∿~∿~"),
     ("bright_magenta", "  ╰╮                                               ╭╯~∿~~∿"),
     ("bright_white", "   ╰─╮   ∿ whole-cell simulation platform ∿    ╭─╯∿~∿~"),
-    ("bright_cyan", "     ╰─⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉──⋊⋉─╯"),
+    (None, _HELIX_BOT),
 ]
 
 
@@ -60,7 +78,10 @@ def print_banner(console: Console) -> None:
     """Print the Memphis-styled color-cycling banner."""
     console.print()
     for color, line in _BANNER:
-        console.print(f"[bold {color}]{line}[/]")
+        if color is None:
+            console.print(line)
+        else:
+            console.print(f"[bold {color}]{line}[/]")
     console.print()
 
 
@@ -68,8 +89,12 @@ def print_banner(console: Console) -> None:
 
 
 def get_console() -> Console:
-    """Create a Console with the Memphis theme applied."""
-    return Console(theme=MEMPHIS_THEME)
+    """Create a Console with the Memphis theme applied.
+
+    Forces 256-color mode to avoid truecolor rendering artifacts in
+    terminals with incomplete 24-bit support (e.g. macOS Terminal.app).
+    """
+    return Console(theme=MEMPHIS_THEME, color_system="256")
 
 
 # -- Display helpers ----------------------------------------------------------

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,6 +30,8 @@ class CliType(StrEnumBase):
     DEMO = "demo"
     HELP = "help"
     TUI = "tui"
+    GUI = "gui"
+    TKAPP = "tkapp"
 
 
 class ApiBaseUrl(StrEnumBase):
@@ -50,7 +53,9 @@ simulation_cli = typer.Typer(help="Run and inspect simulation workflows.")
 parca_cli = typer.Typer(help="Inspect parca (parameter calculator) datasets and runs.")
 analysis_cli = typer.Typer(help="Inspect analysis jobs and outputs.")
 demo_cli = typer.Typer(help="Demo and utility commands.")
-tui_cli = typer.Typer(help="TUI command line interface.")
+tui_cli = typer.Typer(help="TUI's command line interface.")
+gui_cli = typer.Typer(help="GUI's command line interface.")
+tkapp_cli = typer.Typer(help="Tkinter desktop GUI.")
 
 cli.add_typer(simulator_cli, name="simulator")
 cli.add_typer(simulation_cli, name="simulation")
@@ -58,6 +63,8 @@ cli.add_typer(parca_cli, name="parca")
 cli.add_typer(analysis_cli, name="analysis")
 cli.add_typer(demo_cli, name="demo")
 cli.add_typer(tui_cli)
+cli.add_typer(gui_cli)
+cli.add_typer(tkapp_cli)
 
 
 def main() -> None:
@@ -67,9 +74,8 @@ def main() -> None:
 # -- Info/Help --
 
 
-@cli.command(name="help")
-def display_help(app: CliType | None = typer.Argument(default=None)) -> None:
-    """Show help for a specific subcommand, or the main CLI."""
+def _show_group_help(group_name: str) -> None:
+    """Print the banner then display help for *group_name* (a sub-typer)."""
     import click
 
     console = get_console()
@@ -77,18 +83,51 @@ def display_help(app: CliType | None = typer.Argument(default=None)) -> None:
 
     cmd = typer.main.get_command(cli)
     with click.Context(cmd) as ctx:
-        if app is None:
-            print(cmd.get_help(ctx))
-        else:
-            sub = cmd.get_command(ctx, app.value)  # type: ignore[attr-defined]
-            if sub is None:
-                print(f"Unknown command: {app.value}")
-                raise typer.Exit(1)
-            with click.Context(sub, parent=ctx) as sub_ctx:
-                print(sub.get_help(sub_ctx))
+        sub = cmd.get_command(ctx, group_name)  # type: ignore[attr-defined]
+        if sub is None:
+            print(f"Unknown command: {group_name}")
+            raise typer.Exit(1)
+        with click.Context(sub, parent=ctx) as sub_ctx:
+            print(sub.get_help(sub_ctx))
 
 
-# -- Top-level TUI command --
+@cli.command(name="help")
+def display_help(app: CliType | None = typer.Argument(default=None)) -> None:
+    """Show help for a specific subcommand, or the main CLI."""
+    import click
+
+    if app is not None:
+        _show_group_help(app.value)
+        return
+
+    console = get_console()
+    print_banner(console)
+    cmd = typer.main.get_command(cli)
+    with click.Context(cmd) as ctx:
+        print(cmd.get_help(ctx))
+
+
+# Register a "help" command on every sub-typer so that e.g.
+# `atlantis simulation help` works identically to `atlantis help simulation`.
+def _register_subgroup_help(sub_typer: typer.Typer, group_name: str) -> None:
+    @sub_typer.command(name="help", help=f"Show help for {group_name} commands.")
+    def _help() -> None:
+        _show_group_help(group_name)
+
+
+for _name, _sub in [
+    ("simulator", simulator_cli),
+    ("simulation", simulation_cli),
+    ("parca", parca_cli),
+    ("analysis", analysis_cli),
+    ("demo", demo_cli),
+]:
+    _register_subgroup_help(_sub, _name)
+# tui_cli / gui_cli are single-command typers added without a name (flattened),
+# so they don't need sub-group help — use `atlantis tui --help` instead.
+
+
+# -- Top-level App launch commands --
 
 
 @tui_cli.command(name="tui", help="Launch the interactive terminal UI.")
@@ -97,6 +136,13 @@ def launch_tui(
 ) -> None:
     tui = AtlantisTUI(base_url=base_url)
     tui.run()
+
+
+@gui_cli.command(name="gui", help="Launch the interactive graphical user interface.")
+def launch_gui(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    _ = subprocess.run(["uv", "run", "marimo", "edit", "app/gui_app.py", "--no-token"], capture_output=True, check=True)  # noqa: S603, S607
 
 
 # -- Simulator commands --
@@ -622,6 +668,215 @@ async def _demo_get_data_async(dest: str) -> None:
     finally:
         await fs.close()
         set_file_service(saved_fs)
+
+
+def fonts(txt: str, color: str = "bold spring_green3") -> None:
+    """Browse all RichFiglet fonts with a given text string."""
+    import typing
+
+    import rich_pyfiglet
+
+    hints = typing.get_type_hints(rich_pyfiglet.RichFiglet.__init__)
+    font_type = hints.get("font")
+    font_names = typing.get_args(font_type)
+    for font_name in font_names:
+        console = get_console()
+        a = rich_pyfiglet.RichFiglet("atlantis", font=font_name, colors=["purple"])
+        console.print(f"[memphis.running]=== FONT: {font_name} ===[/]")
+        console.print(a)
+        print()
+
+
+def draw_ecoli(
+    width: int = 160,
+    height: int = 80,
+    cell_color: tuple[int, ...] = (120, 195, 130),
+    show_panel: bool = True,
+) -> None:
+    """Draw a biologically accurate E. coli cell via rich-pixels."""
+    import math
+    import random
+
+    from PIL import Image, ImageDraw, ImageFilter
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich_pixels import Pixels
+
+    console = Console()
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    cx = width // 2
+    cy = height // 2
+
+    # ── Proportions (all relative to canvas) ─────────────────────────────────
+    body_rx = int(width * 0.38)  # half-length of cell body
+    body_ry = int(height * 0.30)  # half-width of cell body
+    margin_x = cx - body_rx
+    margin_y = cy - body_ry
+
+    # Color palette — biologically inspired greens
+    capsule_col = (*cell_color[:3], 28)  # very faint halo
+    outer_mem_col = tuple(max(0, c - 30) for c in cell_color)  # darker rim
+    peri_col = tuple(min(255, c + 40) for c in cell_color)  # lighter band
+    cytoplasm_col = cell_color
+    nucleoid_col = (50, 120, 70)
+    ribosome_col = (80, 160, 95)
+    flagella_col = (60, 130, 75)
+    pili_col = (90, 150, 100)
+
+    # ── 1. Capsule (polysaccharide halo) ─────────────────────────────────────
+    cap_pad = 6
+    draw.ellipse(
+        [margin_x - cap_pad, margin_y - cap_pad, margin_x + body_rx * 2 + cap_pad, margin_y + body_ry * 2 + cap_pad],
+        fill=capsule_col,
+    )
+
+    # ── 2. Outer membrane (outermost solid layer) ─────────────────────────────
+    draw.ellipse(
+        [margin_x, margin_y, margin_x + body_rx * 2, margin_y + body_ry * 2],
+        fill=outer_mem_col,
+    )
+
+    # ── 3. Periplasmic space (lighter band just inside outer membrane) ────────
+    peri_shrink = max(3, int(body_ry * 0.18))
+    draw.ellipse(
+        [
+            margin_x + peri_shrink,
+            margin_y + peri_shrink,
+            margin_x + body_rx * 2 - peri_shrink,
+            margin_y + body_ry * 2 - peri_shrink,
+        ],
+        fill=peri_col,
+    )
+
+    # ── 4. Inner membrane + cytoplasm ─────────────────────────────────────────
+    inner_shrink = peri_shrink + max(2, int(body_ry * 0.12))
+    draw.ellipse(
+        [
+            margin_x + inner_shrink,
+            margin_y + inner_shrink,
+            margin_x + body_rx * 2 - inner_shrink,
+            margin_y + body_ry * 2 - inner_shrink,
+        ],
+        fill=cytoplasm_col,
+    )
+
+    # ── 5. Nucleoid — irregular blob center (compacted DNA mass) ─────────────
+    # Approximated as overlapping ellipses to look organic
+    n_cx, n_cy = cx, cy
+    n_rx = int(body_rx * 0.38)
+    n_ry = int(body_ry * 0.52)
+    for dx, dy, rx_frac, ry_frac in [
+        (0, 0, 1.0, 1.0),
+        (int(n_rx * 0.3), int(n_ry * 0.2), 0.7, 0.6),
+        (-int(n_rx * 0.3), -int(n_ry * 0.2), 0.65, 0.55),
+    ]:
+        draw.ellipse(
+            [
+                n_cx + dx - int(n_rx * rx_frac),
+                n_cy + dy - int(n_ry * ry_frac),
+                n_cx + dx + int(n_rx * rx_frac),
+                n_cy + dy + int(n_ry * ry_frac),
+            ],
+            fill=nucleoid_col,
+        )
+
+    # ── 6. Ribosomes — tiny dots scattered in cytoplasm ──────────────────────
+    rng = random.Random(42)  # fixed seed → deterministic layout
+    r_dot = max(1, int(min(width, height) * 0.018))
+    attempts = 0
+    placed = 0
+    while placed < 28 and attempts < 400:
+        attempts += 1
+        # Sample inside the inner membrane ellipse
+        angle = rng.uniform(0, 2 * math.pi)
+        rad = rng.uniform(0.1, 0.82)
+        rx = int((body_rx - inner_shrink - r_dot) * rad)
+        ry = int((body_ry - inner_shrink - r_dot) * rad)
+        px = cx + int(rx * math.cos(angle))
+        py = cy + int(ry * math.sin(angle))
+        # Skip if too close to nucleoid center
+        dist_nuc = math.sqrt(((px - n_cx) / n_rx) ** 2 + ((py - n_cy) / n_ry) ** 2)
+        if dist_nuc < 1.05:
+            continue
+        draw.ellipse([px - r_dot, py - r_dot, px + r_dot, py + r_dot], fill=ribosome_col)
+        placed += 1
+
+    # ── 7. Pili / fimbriae — short thin projections around perimeter ──────────
+    pili_count = 14
+    pili_len = max(4, int(body_ry * 0.35))
+    for i in range(pili_count):
+        angle = (2 * math.pi * i / pili_count) + 0.15
+        # Point on the outer membrane ellipse surface
+        sx = cx + int(body_rx * math.cos(angle))
+        sy = cy + int(body_ry * math.sin(angle))
+        ex = cx + int((body_rx + pili_len) * math.cos(angle))
+        ey = cy + int((body_ry + pili_len) * math.sin(angle))
+        draw.line([(sx, sy), (ex, ey)], fill=pili_col, width=1)
+
+    # ── 8. Peritrichous flagella — long wavy filaments all around cell ────────
+    flagella_specs = [
+        # (start_angle_frac, wave_amp, wave_freq, length, direction)
+        (0.00, 0.18, 2.8, 0.52, 1),
+        (0.12, -0.16, 3.2, 0.48, -1),
+        (0.25, 0.20, 2.5, 0.55, 1),
+        (0.38, -0.18, 3.0, 0.50, -1),
+        (0.50, 0.15, 2.7, 0.52, 1),
+        (0.62, -0.20, 3.1, 0.46, -1),
+        (0.75, 0.17, 2.9, 0.54, 1),
+        (0.88, -0.15, 3.3, 0.48, -1),
+    ]
+    f_thick = max(1, int(min(width, height) * 0.015))
+    for angle_frac, amp_frac, freq, length_frac, direction in flagella_specs:
+        base_angle = 2 * math.pi * angle_frac
+        # Start at outer membrane surface
+        sx = cx + int(body_rx * math.cos(base_angle))
+        sy = cy + int(body_ry * math.sin(base_angle))
+
+        f_len = int(min(width, height) * length_frac)
+        amp = int(min(width, height) * abs(amp_frac))
+        steps = 32
+        points = [(sx, sy)]
+
+        # Outward direction vector (perpendicular to cell surface normal → away)
+        out_dx = math.cos(base_angle)
+        out_dy = math.sin(base_angle)
+        # Perpendicular (tangent) for the wave oscillation
+        perp_dx = -math.sin(base_angle)
+        perp_dy = math.cos(base_angle)
+
+        for s in range(1, steps + 1):
+            t = s / steps
+            dist = f_len * t
+            wave = amp * math.sin(freq * 2 * math.pi * t) * direction
+            px = sx + int(out_dx * dist + perp_dx * wave)
+            py = sy + int(out_dy * dist + perp_dy * wave)
+            points.append((px, py))
+
+        # Draw as polyline segments
+        for k in range(len(points) - 1):
+            draw.line([points[k], points[k + 1]], fill=flagella_col, width=f_thick)
+
+    # ── 9. Slight soft-edge on the whole image (anti-alias feel) ─────────────
+    img = img.filter(ImageFilter.SMOOTH_MORE)
+    img = img.filter(ImageFilter.SMOOTH)
+
+    # ── Render ────────────────────────────────────────────────────────────────
+    pixels = Pixels.from_image(img)
+
+    if show_panel:
+        console.print(
+            Panel(
+                pixels,
+                title="[bold green]E. coli[/bold green]",
+                subtitle="[dim]Escherichia coli · rod-shaped bacterium[/dim]",
+                border_style="green",
+                padding=(0, 1),
+            )
+        )
+    else:
+        console.print(pixels)
 
 
 if __name__ == "__main__":
