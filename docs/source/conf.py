@@ -66,11 +66,20 @@ intersphinx_mapping = {
 
 # -- Options for HTML output -------------------------------------------------
 
-html_theme = "sphinx_rtd_theme"
+html_theme = "furo"
 html_static_path = ["_static"]
 html_logo = "_static/wholecellecoli.png"
 html_theme_options = {
-    "logo_only": False,
-    "navigation_depth": 3,
+    "dark_css_variables": {
+        "color-brand-primary": "#e91e90",
+        "color-brand-content": "#00e5ff",
+    },
+    "light_css_variables": {
+        "color-brand-primary": "#b3006b",
+        "color-brand-content": "#0088aa",
+    },
+    "navigation_with_keys": True,
 }
+# Dark mode is the default; users can toggle via the sun/moon button
 pygments_style = "sphinx"
+pygments_dark_style = "monokai"
