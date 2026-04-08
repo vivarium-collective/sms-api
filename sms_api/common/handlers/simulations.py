@@ -233,7 +233,9 @@ async def run_simulation_workflow(
             "build_image": False,
             "container_image": f"{settings.ecr_repository}:{simulator.git_commit_hash}-{settings.batch_task_arch}",
             "region": settings.batch_region,
-            "batch_queue": settings.batch_arm64_queue if settings.batch_task_arch == "arm64" else settings.batch_amd64_queue,
+            "batch_queue": settings.batch_arm64_queue
+            if settings.batch_task_arch == "arm64"
+            else settings.batch_amd64_queue,
         }
 
     config = SimulationConfig(**config_data)

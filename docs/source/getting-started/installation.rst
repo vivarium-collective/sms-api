@@ -4,75 +4,71 @@ Installation
 Prerequisites
 -------------
 
-- **Python 3.12+** (pinned to 3.12.9 in this project)
+- **Python 3.12** (pinned to 3.12.9)
 - `uv <https://docs.astral.sh/uv/>`_ package manager
 - **Git**
 
-For running simulations, you also need access to a running SMS API server
-(local development server, or a deployed instance).
+You also need access to a running Atlantis API server --- either a deployed
+instance (production or development) or a local development server.
 
 Install from Source
 -------------------
-
-Clone the repository and install dependencies:
 
 .. code-block:: bash
 
    git clone https://github.com/vivarium-collective/sms-api.git
    cd sms-api
    uv sync
-   uv run pre-commit install
 
-This installs the ``atlantis`` CLI, the full ``sms_api`` library, and all
-development tools (linting, testing, type checking).
+This installs the ``atlantis`` command and all four client applications
+(CLI, TUI, Desktop GUI, Web GUI).
 
 Verify the Installation
 -----------------------
 
 .. code-block:: bash
 
-   # Check CLI is available
-   uv run atlantis --help
+   uv run atlantis help
 
-   # Run the test suite
-   uv run pytest
+You should see the Atlantis banner and a list of available commands.
 
-   # Run quality checks
-   make check
+Tkinter Note (macOS)
+~~~~~~~~~~~~~~~~~~~~
 
-Starting a Local Dev Server
----------------------------
-
-To run the API locally for development:
+The Desktop GUI (``atlantis tkapp``) uses Tkinter, which requires Tcl/Tk.
+If you see a ``TclError`` about ``init.tcl``, set the Tcl library path:
 
 .. code-block:: bash
 
-   make gateway
+   # Find your Tcl 8.6 library (common locations)
+   find ~/.local/share/mamba -name "init.tcl" -path "*/tcl8.6*" 2>/dev/null
 
-This starts a FastAPI server on ``http://localhost:8888`` with auto-reload.
+   # Add to your shell profile (~/.zshrc or ~/.bashrc)
+   export TCL_LIBRARY="/path/to/tcl8.6"
 
-Configuration
--------------
+Connecting to an API Server
+---------------------------
 
-Environment variables are loaded from ``assets/dev/config/.dev_env``. Key settings:
+By default, Atlantis connects to ``http://localhost:8080``. Override this
+with ``--base-url`` on any command, or set the ``API_BASE_URL`` environment
+variable:
 
-.. list-table::
+.. code-block:: bash
+
+   # Use a specific server for one command
+   uv run atlantis simulator latest --base-url https://sms.cam.uchc.edu
+
+   # Or set it for your entire session
+   export API_BASE_URL=https://sms.cam.uchc.edu
+
+.. list-table:: Available Servers
    :header-rows: 1
-   :widths: 30 70
 
-   * - Variable
-     - Description
-   * - ``SLURM_SUBMIT_HOST``
-     - SSH hostname for the HPC cluster
-   * - ``SLURM_SUBMIT_USER``
-     - SSH username for job submission
-   * - ``SLURM_SUBMIT_KEY_PATH``
-     - Path to SSH private key
-   * - ``POSTGRES_*``
-     - Database connection settings
-   * - ``STORAGE_S3_BUCKET``
-     - S3 bucket for simulation outputs
-   * - ``STORAGE_S3_REGION``
-     - AWS region for S3 bucket
-
-See ``sms_api/config.py`` for the full list of configuration options.
+   * - Server
+     - URL
+   * - Production
+     - ``https://sms.cam.uchc.edu``
+   * - Development
+     - ``https://sms-dev.cam.uchc.edu``
+   * - Local (default)
+     - ``http://localhost:8080``

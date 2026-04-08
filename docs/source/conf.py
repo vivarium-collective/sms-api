@@ -71,7 +71,6 @@ html_static_path = ["_static"]
 html_logo = "_static/wholecellecoli.png"
 html_theme_options = {
     "logo_only": False,
-    "display_version": True,
     "navigation_depth": 3,
 }
 pygments_style = "sphinx"

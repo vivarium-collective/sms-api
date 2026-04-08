@@ -15,11 +15,22 @@ Top-Level
    atlantis [OPTIONS] COMMAND [ARGS]...
 
 Commands: ``simulator``, ``simulation``, ``parca``, ``analysis``, ``demo``,
-``tui``, ``help``.
+``tui``, ``gui``, ``tkapp``, ``help``.
 
 Global option: ``--base-url`` selects the API server (default:
 ``http://localhost:8080``). Can also be set via the ``API_BASE_URL``
 environment variable.
+
+help
+----
+
+Show help for the top-level CLI or any command group:
+
+.. code-block:: bash
+
+   uv run atlantis help
+   uv run atlantis help simulator
+   uv run atlantis simulator help    # equivalent
 
 simulator
 ---------
@@ -44,7 +55,7 @@ Fetch the latest commit, upload, and build a simulator image.
    * - ``--repo-url TEXT``
      - Git repo URL. Defaults to the configured default.
    * - ``--branch TEXT``
-     - Git branch. Defaults to the configured default.
+     - Git branch. Defaults to ``master``.
    * - ``--force / --no-force``
      - Force rebuild even if a completed build exists.
 
@@ -89,7 +100,7 @@ Submit a simulation workflow (parca -> simulation -> analysis).
      - Description
    * - ``--config-filename``
      - ``api_simulation_default.json``
-     - Simulation config file on HPC
+     - Simulation config preset
    * - ``--generations``
      - 1
      - Generations per seed
@@ -187,6 +198,36 @@ analysis get / status / log / plots
    uv run atlantis analysis log ANALYSIS_ID
    uv run atlantis analysis plots ANALYSIS_ID
 
+Application Launchers
+---------------------
+
+tui
+~~~
+
+Launch the interactive terminal UI.
+
+.. code-block:: bash
+
+   uv run atlantis tui [--base-url URL]
+
+gui
+~~~
+
+Launch the Marimo web GUI (opens in browser).
+
+.. code-block:: bash
+
+   uv run atlantis gui [--base-url URL]
+
+tkapp
+~~~~~
+
+Launch the Memphis-themed Tkinter desktop GUI.
+
+.. code-block:: bash
+
+   uv run atlantis tkapp [--base-url URL]
+
 demo
 ----
 
@@ -200,12 +241,3 @@ Download S3 simulation outputs directly (no running API server needed).
    uv run atlantis demo get-data [--dest DIR]
 
 Requires ``TEST_BUCKET_EXPERIMENT_OUTDIR`` and S3 credentials in environment.
-
-tui
----
-
-Launch the interactive terminal UI.
-
-.. code-block:: bash
-
-   uv run atlantis tui tui [--base-url URL]

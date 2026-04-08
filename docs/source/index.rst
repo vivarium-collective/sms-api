@@ -1,37 +1,63 @@
-Atlantis API (SMS API)
-=====================
+Atlantis
+========
 
 .. image:: _static/wholecellecoli.png
    :width: 200px
    :align: right
 
-**Atlantis API** is a REST API and CLI for designing, running, and analyzing
-whole-cell simulations of *E. coli* using the `vEcoli <https://github.com/CovertLabEcoli/vEcoli-private>`_ model.
+**Atlantis** is a platform for designing, running, and analyzing whole-cell
+simulations of *E. coli* using the
+`vEcoli <https://github.com/CovertLabEcoli/vEcoli-private>`_ model.
 
-The platform orchestrates HPC jobs via SLURM on remote clusters or AWS Batch,
-manages simulation metadata in PostgreSQL, and provides three client interfaces:
-a **CLI** (``atlantis``), a **TUI**, and **Marimo** notebooks.
+You interact with Atlantis through one of four client applications --- each
+exposes the same end-to-end workflow (build a simulator, run a simulation,
+download results) in a different format:
+
+.. list-table::
+   :widths: 15 35 50
+
+   * - **CLI**
+     - ``uv run atlantis``
+     - Command-line interface (fastest for scripting)
+   * - **TUI**
+     - ``uv run atlantis tui``
+     - Interactive terminal UI with sidebar navigation
+   * - **Desktop GUI**
+     - ``uv run atlantis tkapp``
+     - Tkinter desktop app with DAW-style layout
+   * - **Web GUI**
+     - ``uv run atlantis gui``
+     - Marimo notebook UI (opens in browser)
 
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started
 
    getting-started/installation
-   getting-started/tutorial
+   getting-started/quickstart
 
 .. toctree::
    :maxdepth: 2
    :caption: User Guide
 
+   guides/end-to-end-workflow
+   guides/choosing-a-client
    guides/cli-reference
-   guides/aws-s3-setup
-   guides/qumulo-setup
 
 .. toctree::
    :maxdepth: 2
-   :caption: Architecture
+   :caption: Reference
+
+   reference/configuration
+   reference/run-times
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Architecture (Internal)
 
    architecture/overview
+   guides/aws-s3-setup
+   guides/qumulo-setup
    architecture/aws-batch
    architecture/build-pipeline
 
