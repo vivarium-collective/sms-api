@@ -142,7 +142,7 @@ def launch_tui(
 def launch_gui(
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
-    _ = subprocess.run(["uv", "run", "marimo", "edit", "app/gui_app.py", "--no-token"], capture_output=True, check=True)  # noqa: S603, S607
+    _ = subprocess.run(["uv", "run", "marimo", "edit", "app/gui.py", "--no-token"], capture_output=True, check=True)  # noqa: S603, S607
 
 
 # -- Simulator commands --

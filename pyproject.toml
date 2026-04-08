@@ -53,10 +53,13 @@ dependencies = [
     "kubernetes>=31.0.0",
     "httpx>=0.28.0",
     "textual>=3.2.0",
+    "rich-pyfiglet>=1.0.0",
+    "rich-pixels>=3.0.1",
+    "pillow>=12.2.0",
 ]
 
 [project.scripts]
-atlantis = "app.cli_app:main"
+atlantis = "app.cli:main"
 
 [project.urls]
 Repository = "https://github.com/vivarium-collective/sms-api"

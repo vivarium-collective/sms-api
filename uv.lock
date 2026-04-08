@@ -2124,7 +2124,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess" },
+    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
@@ -2461,6 +2461,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyfiglet"
+version = "1.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c8/e3/0a86276ad2c383ce08d76110a8eec2fe22e7051c4b8ba3fa163a0b08c428/pyfiglet-1.0.4.tar.gz", hash = "sha256:db9c9940ed1bf3048deff534ed52ff2dafbbc2cd7610b17bb5eca1df6d4278ef", size = 1560615, upload-time = "2025-08-15T18:32:47.302Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9f/5c/fe9f95abd5eaedfa69f31e450f7e2768bef121dbdf25bcddee2cd3087a16/pyfiglet-1.0.4-py3-none-any.whl", hash = "sha256:65b57b7a8e1dff8a67dc8e940a117238661d5e14c3e49121032bd404d9b2b39f", size = 1806118, upload-time = "2025-08-15T18:32:45.556Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2753,6 +2762,33 @@ wheels = [
 ]
 
 [[package]]
+name = "rich-pixels"
+version = "3.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pillow" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/31/71/6d5cd4b8d67cd49366eda19aaf37f20094ce562223a91166109202590237/rich_pixels-3.0.1.tar.gz", hash = "sha256:4a81977d45437ce5009cdcaf70af80256c3bdfab870e87ab802c577ba4133235", size = 24631, upload-time = "2024-03-30T09:37:52.834Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/08/72/7264494bc0944db1166b73c88f19d9ddfc584dbbc77c210cd0f52f59c511/rich_pixels-3.0.1-py3-none-any.whl", hash = "sha256:e82c5aa0d00885609675494f16e1ef814c68fa795634f1d6917cae9159b755e1", size = 6004, upload-time = "2024-03-30T09:37:51.169Z" },
+]
+
+[[package]]
+name = "rich-pyfiglet"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "pyfiglet" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/63/45/e9fe32d846099de94bb89402a0bd87ae536d5317329cc4adb1373e027c8d/rich_pyfiglet-1.0.0.tar.gz", hash = "sha256:a9ba2ae109eb43112a2eb8f35abb3fc4113be0927d4718cdbbc47513957f38ed", size = 13575, upload-time = "2025-07-31T04:17:42.218Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7e/33/594d2997ce77d4a18984a9bfc01907d456b8f60dbcc313c8ad1cb568526e/rich_pyfiglet-1.0.0-py3-none-any.whl", hash = "sha256:0b1653b0381cab356772c562e528c091171beeaa1821f71cfd65c379197b4244", size = 15319, upload-time = "2025-07-31T04:17:40.748Z" },
+]
+
+[[package]]
 name = "roman-numerals"
 version = "4.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3040,6 +3076,7 @@ dependencies = [
     { name = "numpy" },
     { name = "orjson" },
     { name = "pandas-stubs" },
+    { name = "pillow" },
     { name = "polars" },
     { name = "polars-lts-cpu", extra = ["pyarrow"] },
     { name = "pydantic" },
@@ -3049,6 +3086,8 @@ dependencies = [
     { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "redis" },
+    { name = "rich-pixels" },
+    { name = "rich-pyfiglet" },
     { name = "ruff" },
     { name = "seaborn" },
     { name = "simhash" },
@@ -3118,6 +3157,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.3.1,<3" },
     { name = "orjson", specifier = ">=3.11.1" },
     { name = "pandas-stubs", specifier = ">=2.3.0.250703" },
+    { name = "pillow", specifier = ">=12.2.0" },
     { name = "polars", specifier = ">=1.33.1" },
     { name = "polars-lts-cpu", extras = ["pyarrow"], specifier = ">=1.31.0,<2" },
     { name = "pydantic", specifier = ">=2.11.5,<3" },
@@ -3127,6 +3167,8 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.22" },
     { name = "pyyaml", specifier = ">=6.0.2,<7" },
     { name = "redis", specifier = ">=5.0.0,<6" },
+    { name = "rich-pixels", specifier = ">=3.0.1" },
+    { name = "rich-pyfiglet", specifier = ">=1.0.0" },
     { name = "ruff", specifier = ">=0.12.2,<0.13" },
     { name = "seaborn", specifier = ">=0.13.2,<0.14" },
     { name = "simhash", specifier = ">=2.1.2" },
