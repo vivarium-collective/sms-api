@@ -1,7 +1,11 @@
 import marimo
 
-__generated_with = "0.22.4"
-app = marimo.App(width="medium", layout_file="layouts/gui.grid.json")
+__generated_with = "0.23.0"
+app = marimo.App(
+    width="medium",
+    layout_file="layouts/gui.grid.json",
+    css_file="/app/ui/style.css",
+)
 
 
 @app.cell
@@ -124,39 +128,45 @@ def _(mo):
         display: flex;
         align-items: center;
         gap: 0.5rem;
-    }}
-    .tb-card-body {{
-        padding: 0.8rem 1rem 1rem 1rem;
+        color: #ffffff;
+        border-radius: 8px 8px 0 0;
+        background-color: #2e7d6e;
     }}
     .tb-card-header-magenta {{
-        background: linear-gradient(135deg, {MAGENTA}25, {MAGENTA}08);
-        color: {MAGENTA};
-        border-bottom: 2px solid {MAGENTA}40;
+        background: {MAGENTA};
+        color: #ffffff;
+        border-bottom: none;
     }}
     .tb-card-header-cyan {{
-        background: linear-gradient(135deg, {CYAN}25, {CYAN}08);
-        color: {CYAN};
-        border-bottom: 2px solid {CYAN}40;
+        background: {CYAN};
+        color: #0a0a0a;
+        border-bottom: none;
     }}
     .tb-card-header-green {{
-        background: linear-gradient(135deg, {GREEN}25, {GREEN}08);
-        color: {GREEN};
-        border-bottom: 2px solid {GREEN}40;
+        background: #2e7d6e;
+        color: #ffffff;
+        border-bottom: none;
     }}
     .tb-card-header-purple {{
-        background: linear-gradient(135deg, {PURPLE}25, {PURPLE}08);
-        color: {PURPLE};
-        border-bottom: 2px solid {PURPLE}40;
+        background: {PURPLE};
+        color: #0a0a0a;
+        border-bottom: none;
     }}
     .tb-card-header-yellow {{
-        background: linear-gradient(135deg, {YELLOW}25, {YELLOW}08);
-        color: {YELLOW};
-        border-bottom: 2px solid {YELLOW}40;
+        background: {YELLOW};
+        color: #0a0a0a;
+        border-bottom: none;
+    }}
+    .tb-card-footer {{
+        padding: 0.5rem 1rem 0.6rem 1rem;
+        display: flex;
+        justify-content: flex-start;
+        border-top: 1px solid {MAGENTA}20;
     }}
     </style>""")
     _memphis_css
 
-    def card(title: str, icon: str, body: str, color: str = "magenta") -> str:
+    def card(title: str, icon: str, body: str, color: str = "green") -> str:
         """Wrap HTML content in a Tensorboard-style card."""
         return (
             f'<div class="tb-card">'
@@ -166,21 +176,25 @@ def _(mo):
             f"</div>"
         )
 
-    def card_wrap(title: str, icon: str, *children, color: str = "magenta"):
+    def card_wrap(title: str, icon: str, *children, color: str = "green", action=None):
         """Wrap marimo renderables in a card with a coloured header.
 
-        Unlike ``card()``, this accepts marimo UI elements (widgets, stacks, etc.)
-        as children, not just raw HTML strings.
+        If *action* is provided (e.g. a run_button), it is rendered in a
+        footer row pinned to the bottom-left of the card.
         """
-        header = mo.Html(
-            f'<div class="tb-card-header tb-card-header-{color}">{icon} {title}</div>'
-        )
+        children_html = "".join(c.text if hasattr(c, "text") else str(c) for c in children)
+        footer = ""
+        if action is not None:
+            action_html = action.text if hasattr(action, "text") else str(action)
+            footer = f'<div class="tb-card-footer">{action_html}</div>'
         return mo.Html(
             f'<div class="tb-card">'
-            f'{header.text}'
-            f'<div class="tb-card-body">'
-            f'{"".join(c.text if hasattr(c, "text") else str(c) for c in children)}'
-            f'</div></div>'
+            f'<div class="tb-card-header tb-card-header-{color}">'
+            f"{icon} {title}"
+            f"</div>"
+            f'<div class="tb-card-body">{children_html}</div>'
+            f"{footer}"
+            f"</div>"
         )
 
     return CYAN, MAGENTA, card, card_wrap
@@ -338,6 +352,7 @@ def _():
 
 @app.cell
 def _(card_wrap, mo):
+    # ── Build inputs ──
     repo_url_input = mo.ui.text(
         value="https://github.com/CovertLabEcoli/vEcoli-private",
         label="Repository URL",
@@ -345,20 +360,49 @@ def _(card_wrap, mo):
     )
     branch_input = mo.ui.text(value="master", label="Branch")
     force_rebuild = mo.ui.checkbox(label="Force rebuild", value=False)
+    build_button = mo.ui.run_button(label=f"{mo.icon('gravity-ui:function')} Build", kind="success")
 
-    card_wrap(
-        "Simulator Build", "\U0001f9ec",
-        mo.hstack([repo_url_input, branch_input, force_rebuild], justify="start", gap=1),
-        color="cyan",
+    # ── Status check ──
+    sim_status_id = mo.ui.number(label="Simulator ID", start=1, stop=99999, value=1)
+    sim_status_button = mo.ui.run_button(label="Check Status")
+
+    # ── List ──
+    list_sims_button = mo.ui.run_button(label="\U0001f4cb List Versions")
+
+    _div = '<div style="border-top:1px solid rgba(255,255,255,0.08); margin:0.6rem 0;"></div>'
+
+    def _lbl(text: str) -> str:
+        return (
+            f'<div style="font-size:0.65rem; color:rgba(255,255,255,0.4); '
+            f'text-transform:uppercase; letter-spacing:0.12em; margin-bottom:0.3rem;">{text}</div>'
+        )
+
+    simulator_card = card_wrap(
+        "Simulator",
+        "\U0001f9ec",
+        mo.vstack([
+            mo.Html(_lbl("Build Simulator")),
+            mo.hstack([repo_url_input, branch_input, force_rebuild], justify="start", gap=1),
+            build_button,
+            mo.Html(_div + _lbl("Build Status")),
+            mo.hstack([sim_status_id, sim_status_button], justify="start", gap=1),
+            mo.Html(_div + _lbl("Versions")),
+            list_sims_button,
+        ]),
+        color="green",
     )
-    return branch_input, force_rebuild, repo_url_input
 
-
-@app.cell
-def _(card_wrap, mo):
-    build_button = mo.ui.run_button(label=f"{mo.icon('gravity-ui:function')} Build Simulator", kind="success")
-    card_wrap("", build_button, color="green")
-    return (build_button,)
+    simulator_card
+    return (
+        branch_input,
+        build_button,
+        force_rebuild,
+        list_sims_button,
+        repo_url_input,
+        sim_status_button,
+        sim_status_id,
+        simulator_card,
+    )
 
 
 @app.cell
@@ -432,13 +476,6 @@ def _(
 
 
 @app.cell
-def _(card_wrap, mo):
-    list_sims_button = mo.ui.run_button(label="List Simulators")
-    card_wrap("Browse Versions", "\U0001f4cb", list_sims_button, color="purple")
-    return (list_sims_button,)
-
-
-@app.cell
 def _(get_svc, list_sims_button, mo):
     _sims_table = mo.Html("")
     if list_sims_button.value:
@@ -457,18 +494,6 @@ def _(get_svc, list_sims_button, mo):
             _sims_table = mo.Html(f"<span class='memphis-status-failed'>Error: {e}</span>")
     _sims_table
     return
-
-
-@app.cell
-def _(card_wrap, mo):
-    sim_status_id = mo.ui.number(label="Simulator ID", start=1, stop=99999, value=1)
-    sim_status_button = mo.ui.run_button(label="Check Build Status")
-    card_wrap(
-        "Check Build", "\U0001f50d",
-        mo.hstack([sim_status_id, sim_status_button], justify="start", gap=1),
-        color="cyan",
-    )
-    return sim_status_button, sim_status_id
 
 
 @app.cell
@@ -520,6 +545,7 @@ def _(
 
 @app.cell
 def _(card_wrap, mo):
+    # ── Run inputs ──
     exp_id_input = mo.ui.text(value="", label="Experiment ID", full_width=True)
     sim_id_input = mo.ui.number(label="Simulator ID", start=1, stop=99999, value=1)
     config_dropdown = mo.ui.dropdown(
@@ -538,32 +564,76 @@ def _(card_wrap, mo):
     seeds_input = mo.ui.number(label="Seeds", start=1, stop=100, step=1, value=1)
     run_parca_checkbox = mo.ui.checkbox(label="Run ParCa", value=False)
     description_input = mo.ui.text(value="", label="Description (optional)", full_width=True)
+    run_sim_button = mo.ui.run_button(label=f"{mo.icon('hugeicons:ai-dna')} Submit", kind="success")
 
-    card_wrap(
-        "Simulation", "\U0001f52c",
+    # ── Status / Poll ──
+    poll_sim_id = mo.ui.number(label="Simulation ID", start=1, stop=99999, value=1)
+    poll_sim_button = mo.ui.run_button(label="Check Status")
+    poll_sim_poll = mo.ui.checkbox(label="Poll until done", value=False)
+
+    # ── Cancel ──
+    cancel_sim_id = mo.ui.number(label="Simulation ID to cancel", start=1, stop=99999, value=1)
+    cancel_button = mo.ui.run_button(label="Cancel", kind="danger")
+
+    # ── Download ──
+    dl_sim_id = mo.ui.number(label="Simulation ID", start=1, stop=99999, value=1)
+    dl_dest = mo.ui.text(value="./debug", label="Destination", full_width=True)
+    dl_button = mo.ui.run_button(label="\U0001f4e6 Download", kind="success")
+
+    # ── List ──
+    list_workflows_button = mo.ui.run_button(label="\U0001f4cb List Simulations")
+
+    _div = '<div style="border-top:1px solid rgba(255,255,255,0.08); margin:0.6rem 0;"></div>'
+
+    def _lbl(text: str) -> str:
+        return (
+            f'<div style="font-size:0.65rem; color:rgba(255,255,255,0.4); '
+            f'text-transform:uppercase; letter-spacing:0.12em; margin-bottom:0.3rem;">{text}</div>'
+        )
+
+    simulation_card = card_wrap(
+        "Simulation",
+        "\U0001f52c",
         mo.vstack([
+            mo.Html(_lbl("Submit Workflow")),
             mo.hstack([exp_id_input], justify="start"),
-            mo.hstack([sim_id_input, config_dropdown, gens_input, seeds_input, run_parca_checkbox], justify="start", gap=1),
+            mo.hstack(
+                [sim_id_input, config_dropdown, gens_input, seeds_input, run_parca_checkbox], justify="start", gap=1
+            ),
             description_input,
+            run_sim_button,
+            mo.Html(_div + _lbl("Status & Polling")),
+            mo.hstack([poll_sim_id, poll_sim_button, poll_sim_poll], justify="start", gap=1),
+            mo.Html(_div + _lbl("Download Outputs")),
+            mo.hstack([dl_sim_id, dl_dest, dl_button], justify="start", gap=1),
+            mo.Html(_div + _lbl("Cancel")),
+            mo.hstack([cancel_sim_id, cancel_button], justify="start", gap=1),
+            mo.Html(_div + _lbl("Browse")),
+            list_workflows_button,
         ]),
-        color="magenta",
+        color="green",
     )
+    simulation_card
     return (
+        cancel_button,
+        cancel_sim_id,
         config_dropdown,
         description_input,
+        dl_button,
+        dl_dest,
+        dl_sim_id,
         exp_id_input,
         gens_input,
+        list_workflows_button,
+        poll_sim_button,
+        poll_sim_id,
+        poll_sim_poll,
         run_parca_checkbox,
+        run_sim_button,
         seeds_input,
         sim_id_input,
+        simulation_card,
     )
-
-
-@app.cell
-def _(card_wrap, mo):
-    run_sim_button = mo.ui.run_button(label=f"{mo.icon('hugeicons:ai-dna')} Submit Simulation", kind="success")
-    card_wrap('', run_sim_button, color="green")
-    return (run_sim_button,)
 
 
 @app.cell
@@ -634,19 +704,6 @@ def _(
 
 
 @app.cell
-def _(card_wrap, mo):
-    poll_sim_id = mo.ui.number(label="Simulation ID", start=1, stop=99999, value=1)
-    poll_sim_button = mo.ui.run_button(label="Check Status")
-    poll_sim_poll = mo.ui.checkbox(label="Poll until done", value=False)
-    card_wrap(
-        "Status / Poll", "\u2139\ufe0f",
-        mo.hstack([poll_sim_id, poll_sim_button, poll_sim_poll], justify="start", gap=1),
-        color="cyan",
-    )
-    return poll_sim_button, poll_sim_id, poll_sim_poll
-
-
-@app.cell
 def _(
     card,
     get_svc,
@@ -710,13 +767,6 @@ def _(
 
 
 @app.cell
-def _(card_wrap, mo):
-    list_workflows_button = mo.ui.run_button(label="List Simulations")
-    card_wrap("Browse Simulations", "\U0001f4cb", list_workflows_button, color="purple")
-    return (list_workflows_button,)
-
-
-@app.cell
 def _(get_svc, list_workflows_button, mo):
     _wf_table = mo.Html("")
     if list_workflows_button.value:
@@ -732,18 +782,6 @@ def _(get_svc, list_workflows_button, mo):
             _wf_table = mo.Html(f"<span class='memphis-status-failed'>Error: {e}</span>")
     _wf_table
     return
-
-
-@app.cell
-def _(card_wrap, mo):
-    cancel_sim_id = mo.ui.number(label="Simulation ID to cancel", start=1, stop=99999, value=1)
-    cancel_button = mo.ui.run_button(label="Cancel Simulation", kind="danger")
-    card_wrap(
-        "Cancel", "\U0001f6d1",
-        mo.hstack([cancel_sim_id, cancel_button], justify="start", gap=1),
-        color="yellow",
-    )
-    return cancel_button, cancel_sim_id
 
 
 @app.cell
@@ -784,19 +822,6 @@ def _(
             )
     _cancel_output
     return
-
-
-@app.cell
-def _(card_wrap, mo):
-    dl_sim_id = mo.ui.number(label="Simulation ID", start=1, stop=99999, value=1)
-    dl_dest = mo.ui.text(value="./debug", label="Destination directory", full_width=True)
-    dl_button = mo.ui.run_button(label="Download Outputs", kind="success")
-    card_wrap(
-        "Download Outputs", "\U0001f4e6",
-        mo.hstack([dl_sim_id, dl_dest, dl_button], justify="start", gap=1),
-        color="green",
-    )
-    return dl_button, dl_dest, dl_sim_id
 
 
 @app.cell
@@ -864,8 +889,17 @@ def _(CYAN, ICO_DNA_SM, ICO_MICROBE, MAGENTA, mo):
         f"{_dna} simulating {_dna} microbial {_dna} systems {_dna}"
         f"</p>"
         f'<p style="text-align:center; font-size:0.6rem; color: {MAGENTA};">'
-        f"{_microbe} simulating microbial systems \u2014 whole-cell E. coli platform \u2014 UCONN CCAM {_microbe}</p>"
+        f"{_microbe} team stanford \u2014 whole-cell E. coli platform \u2014 UCONN CCAM {_microbe}</p>"
     )
+    return
+
+
+@app.cell
+def _(mo, simulation_card, simulator_card):
+    mo.ui.tabs({
+        f"{mo.icon('gravity-ui:function')} Simulator": simulator_card,
+        f"{mo.icon('healthicons:biomarker-24px')} Simulation": simulation_card,
+    })
     return
 
 

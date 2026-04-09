@@ -1,9 +1,9 @@
 {
   "type": "grid",
   "data": {
-    "columns": 24,
+    "columns": 49,
     "rowHeight": 20,
-    "maxWidth": 1600,
+    "maxWidth": 2700,
     "bordered": true,
     "cells": [
       {
@@ -25,8 +25,8 @@
         "position": [
           0,
           0,
-          24,
-          10
+          49,
+          7
         ]
       },
       {
@@ -34,129 +34,63 @@
       },
       {
         "position": [
+          4,
+          27,
+          12,
+          3
+        ]
+      },
+      {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
+        "position": [
           0,
-          10,
           8,
-          3
-        ]
-      },
-      {
-        "position": null
-      },
-      {
-        "position": null
-      },
-      {
-        "position": [
-          0,
-          14,
-          10,
-          5
-        ]
-      },
-      {
-        "position": [
-          0,
           19,
-          3,
-          4
+          18
         ]
       },
       {
         "position": null
       },
       {
+        "position": null
+      },
+      {
+        "position": null
+      },
+      {
         "position": [
-          7,
           19,
-          3,
-          4
+          8,
+          30,
+          36
         ]
       },
       {
         "position": null
       },
       {
-        "position": [
-          3,
-          19,
-          4,
-          8
-        ]
+        "position": null
       },
       {
         "position": null
       },
       {
-        "position": [
-          11,
-          14,
-          13,
-          12
-        ]
-      },
-      {
-        "position": [
-          11,
-          26,
-          4,
-          4
-        ]
+        "position": null
       },
       {
         "position": null
       },
       {
-        "position": [
-          15,
-          26,
-          7,
-          6
-        ]
-      },
-      {
         "position": null
       },
       {
-        "position": [
-          0,
-          48,
-          12,
-          2
-        ]
-      },
-      {
         "position": null
-      },
-      {
-        "position": [
-          12,
-          48,
-          12,
-          3
-        ]
-      },
-      {
-        "position": null
-      },
-      {
-        "position": [
-          0,
-          60,
-          12,
-          3
-        ]
-      },
-      {
-        "position": null
-      },
-      {
-        "position": [
-          0,
-          72,
-          24,
-          4
-        ]
       },
       {
         "position": null
