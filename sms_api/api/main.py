@@ -59,7 +59,7 @@ APP_ORIGINS = [
 APP_ROUTERS = [
     # "antibiotics",
     # "biofactory",
-    "gateway",
+    "sms",
     "core",
     # "inference",
     # "variants",

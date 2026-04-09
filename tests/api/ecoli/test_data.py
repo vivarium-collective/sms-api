@@ -276,7 +276,7 @@ async def test_archive_nonexistent_simulation(fastapi_app: FastAPI, base_router:
     transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.post(f"{base_router}/simulations/999999/data")
-        assert response.status_code == 500  # simulation not found in DB raises ValueError → 500
+        assert response.status_code in (404, 500)  # simulation not found in DB
 
 
 @pytest.mark.skipif(

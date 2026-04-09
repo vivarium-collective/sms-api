@@ -34,7 +34,7 @@ from sms_api.common.simulator_defaults import (
 )
 from sms_api.config import get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
-from sms_api.simulation.models import Simulation, SimulationRun
+from sms_api.simulation.models import AnalysisOptions, Simulation, SimulationRun
 
 ENV = get_settings()
 
@@ -44,6 +44,9 @@ config = get_router_config(prefix="api", version_major=False)
 
 def get_experiment_id(simulator_id: int, config_filename: SimulationConfigFilenameType) -> str:
     return f"sim{simulator_id}-{config_filename.replace('.json', '')}"
+
+
+AnalysisOptions()
 
 
 @config.router.post(
@@ -75,6 +78,14 @@ async def run_simulation_workflow(
         "to running simulation (re-parameterizes simulation "
         "workflow).",
     ),
+    observables: list[str] | None = Query(
+        default=None,
+        description="Dot-separated vEcoli output paths to observe. "
+        "E.g. ['bulk', 'listeners.mass.cell_mass']. "
+        "Maps to engine_process_reports in the vEcoli config. "
+        "If omitted, all outputs are emitted.",
+    ),
+    analysis_options: AnalysisOptions | None = None,
 ) -> Simulation:
     """Run a vEcoli simulation workflow with simplified parameters.
 
@@ -102,6 +113,7 @@ async def run_simulation_workflow(
             num_seeds=num_seeds,
             description=description,
             run_parca=run_parca,
+            observables=observables,
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
@@ -186,12 +198,19 @@ async def cancel_simulation(id: int = FastAPIPath(description="Database ID of th
     dependencies=[Depends(get_database_service)],
     summary="Get the structured output of a given simulation workflow log.",
 )
-async def get_simulation_log(id: int = FastAPIPath(...)) -> Response:
+async def get_simulation_log(
+    id: int = FastAPIPath(...),
+    truncate: bool = Query(
+        default=True,
+        description="If true, return only the Nextflow header + final status block "
+        "(separated by '... truncated ...'). Set to false for the full log.",
+    ),
+) -> Response:
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
     try:
-        return await handlers.simulations.get_simulation_log(db_service=db_service, simulation_id=id)
+        return await handlers.simulations.get_simulation_log(db_service=db_service, simulation_id=id, truncate=truncate)
     except Exception as e:
         logger.exception(
             """Error getting simulation status.\
