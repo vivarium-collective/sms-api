@@ -214,10 +214,6 @@ async def run_simulation_workflow(
         config_data["n_init_sims"] = num_seeds
     if description is not None:
         config_data["description"] = description
-    if not run_parca:
-        # expedite completion time by using cached simData
-        config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
-
     # For K8s/Batch backend, override HPC paths with AWS equivalents
     if get_job_backend() == "k8s":
         s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{unique_experiment_id}"
@@ -237,6 +233,12 @@ async def run_simulation_workflow(
             if settings.batch_task_arch == "arm64"
             else settings.batch_amd64_queue,
         }
+        if not run_parca:
+            # Use cached simData from S3 instead of re-running parca
+            config_data["sim_data_path"] = f"s3://{settings.s3_work_bucket}/sim_data/default/kb/simData.cPickle"
+    elif not run_parca:
+        # SLURM: use cached simData from HPC filesystem
+        config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
 
     config = SimulationConfig(**config_data)
 
