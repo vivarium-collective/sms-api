@@ -113,9 +113,41 @@ Submit a simulation workflow (parca -> simulation -> analysis).
    * - ``--run-parca / --no-run-parca``
      - off
      - Run parameter calculator first
+   * - ``--observables``
+     - baseline (all analysis paths)
+     - Comma-separated dot-path observables to record.
+       Limits simulation output to the specified vEcoli state paths.
+       If omitted, uses the default baseline set (55 paths covering
+       all analysis modules).
    * - ``--poll / --no-poll``
      - off
      - Poll until completion
+
+**Examples:**
+
+.. code-block:: bash
+
+   # Minimal: 1 generation, 1 seed, default observables
+   uv run atlantis simulation run my-experiment 11
+
+   # Large-scale: 10 generations, 1000 seeds, with parca
+   uv run atlantis simulation run baseline-1k 11 --generations 10 --seeds 1000 --run-parca
+
+   # Poll until completion
+   uv run atlantis simulation run quick-test 11 --generations 1 --seeds 1 --poll
+
+   # Custom observables (only mass and bulk)
+   uv run atlantis simulation run mass-only 11 --observables "bulk,listeners.mass.cell_mass,listeners.mass.dry_mass"
+
+   # Target a specific server
+   uv run atlantis simulation run test1 11 --base-url https://sms.cam.uchc.edu
+
+   # With a custom config preset and description
+   uv run atlantis simulation run violacein-run 12 \
+     --config-filename api_test_violacein_with_metabolism.json \
+     --generations 5 --seeds 10 \
+     --description "Violacein pathway test with metabolism" \
+     --poll
 
 simulation get
 ~~~~~~~~~~~~~~
@@ -138,11 +170,24 @@ List all simulations.
 simulation status
 ~~~~~~~~~~~~~~~~~
 
-Get the status and log for a simulation.
+Show the workflow log tail and status for a simulation. Displays the Nextflow
+executor summary block (last progress snapshot) followed by a status panel.
+Fast even for large simulations — only the log tail is rendered.
 
 .. code-block:: bash
 
    uv run atlantis simulation status SIMULATION_ID [--poll]
+
+Use ``--poll`` to keep checking until the simulation reaches a terminal state.
+
+simulation log
+~~~~~~~~~~~~~~
+
+Show the full Nextflow workflow log for a simulation (any state).
+
+.. code-block:: bash
+
+   uv run atlantis simulation log SIMULATION_ID
 
 simulation cancel
 ~~~~~~~~~~~~~~~~~
@@ -210,6 +255,10 @@ Launch the interactive terminal UI.
 
    uv run atlantis tui [--base-url URL]
 
+Three navigation buttons (Simulations, Simulators, Analyses) with auto-listing
+and status enrichment. Double-click a completed simulation to browse its output
+files interactively.
+
 gui
 ~~~
 
@@ -232,3 +281,30 @@ Download S3 simulation outputs directly (no running API server needed).
    uv run atlantis demo get-data [--dest DIR]
 
 Requires ``TEST_BUCKET_EXPERIMENT_OUTDIR`` and S3 credentials in environment.
+
+Observables
+-----------
+
+The ``--observables`` flag controls which vEcoli state paths are recorded in
+simulation output. Each observable is a dot-separated path that maps to a node
+in the simulation state tree:
+
+.. code-block:: text
+
+   bulk                                   # all bulk molecule counts
+   listeners.mass.cell_mass               # scalar cell mass
+   listeners.fba_results.base_reaction_fluxes  # FBA fluxes
+   listeners.monomer_counts               # protein counts
+
+When omitted, the **baseline set** (55 paths) is used automatically. This set
+covers every analysis module shipped with vEcoli (single, multigeneration,
+multiseed, multivariant). The full list is defined in
+``sms_api.common.simulator_defaults.DEFAULT_OBSERVABLES``.
+
+To emit **all** simulation data (no filtering), pass an empty string:
+``--observables ""``.
+
+.. note::
+
+   The baseline observables reference file is also available at
+   ``assets/observables_baseline.json`` in the repository.

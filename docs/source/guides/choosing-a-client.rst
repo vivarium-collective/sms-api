@@ -67,13 +67,15 @@ steps as buttons in a sidebar:
 
 Features:
 
-- Sidebar with grouped navigation (Simulators, Simulations, Parca, Analyses)
-- Tabbed results view (rich text log + data table)
+- Three domain navigation buttons (Simulations, Simulators, Analyses)
+- Auto-listing with per-row status enrichment on click
+- Split view: data table (top) + rich log (bottom)
+- Double-click a completed simulation to download and browse its output files
 - Modal forms for simulation submission
-- Built-in file browser for exploring downloaded outputs
+- Animated E. coli banner with green/purple gradient cycling
 - Server selector at the bottom
 
-The TUI uses ANSI 256-color mode for compatibility with all terminals.
+The TUI uses ANSI colors for compatibility with all terminals.
 
 Web GUI (Marimo)
 ----------------
@@ -111,20 +113,20 @@ All three clients map to the same six workflow steps:
    * - 1--3
      - Build simulator
      - ``simulator latest``
-     - Build Latest button
-     - Simulator card
+     - Simulators > Build Latest
+     - Simulator card > Build
    * - 4
      - Submit simulation
      - ``simulation run``
-     - Run New button / form
-     - Simulation card
+     - Simulations > Run New
+     - Simulation card > Submit
    * - 5
      - Check status
      - ``simulation status``
-     - Status button / Poll
-     - Status check card
+     - Simulations (auto-listed with status)
+     - Simulation card > Check Status
    * - 6
      - Download results
      - ``simulation outputs``
-     - Download Outputs
-     - Outputs card
+     - Double-click completed row
+     - Simulation card > Download

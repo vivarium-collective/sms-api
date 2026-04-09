@@ -118,6 +118,11 @@ Submit a simulation workflow using your simulator ID:
    * - ``--config-filename``
      - ``api_simulation_default.json``
      - Simulation configuration preset
+   * - ``--observables``
+     - baseline (55 paths)
+     - Comma-separated dot-path observables to record.
+       Limits output to specified vEcoli state paths.
+       If omitted, the default baseline set is used (covers all analysis modules).
    * - ``--description``
      - auto-generated
      - Custom description for the run
@@ -174,6 +179,9 @@ Managing simulations
 
    # Cancel a running simulation
    uv run atlantis simulation cancel 35
+
+   # View the full Nextflow workflow log
+   uv run atlantis simulation log 35
 
 Step 6: Download Results
 -------------------------
