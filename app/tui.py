@@ -34,8 +34,6 @@ from textual.widgets import (
     RichLog,
     Select,
     Static,
-    TabbedContent,
-    TabPane,
 )
 
 from app.app_data_service import BaseUrl, E2EDataService, get_data_service
@@ -285,7 +283,7 @@ class FileBrowserScreen(ModalScreen[None]):
                 yield RichLog(id="viewer-log", highlight=True, markup=True, wrap=True)
                 yield DataTable(id="viewer-table")
         yield Label(
-            f"  [dim]{self.root_path}  |  click a .tsv or .json file  |  ESC to close[/dim]",
+            f"  [dim]{self.root_path}  |  click a file to view  |  ESC to close[/dim]",
             id="browser-status",
         )
 
@@ -312,16 +310,19 @@ class FileBrowserScreen(ModalScreen[None]):
             viewer_table.display = False
             return
 
-        if suffix == ".tsv":
-            self._render_tsv(content, viewer_table, viewer_log)
+        if suffix in (".tsv", ".csv"):
+            sep = "\t" if suffix == ".tsv" else ","
+            self._render_tabular(content, sep, viewer_table, viewer_log)
         elif suffix == ".json":
             self._render_json(content, viewer_log, viewer_table)
+        elif suffix in (".html", ".htm"):
+            self._render_html(content, viewer_log, viewer_table)
         else:
             self._render_text(content, viewer_log, viewer_table)
 
     @staticmethod
-    def _render_tsv(content: str, table: DataTable[str], log: RichLog) -> None:
-        """Parse TSV and display as a DataTable."""
+    def _render_tabular(content: str, sep: str, table: DataTable[str], log: RichLog) -> None:
+        """Parse TSV/CSV and display as a DataTable."""
         log.display = False
         table.display = True
         table.clear(columns=True)
@@ -331,17 +332,16 @@ class FileBrowserScreen(ModalScreen[None]):
             log.display = True
             table.display = False
             log.clear()
-            log.write("[yellow]Empty TSV file[/yellow]")
+            log.write("[yellow]Empty file[/yellow]")
             return
 
         # First line is header
-        headers = lines[0].split("\t")
+        headers = lines[0].split(sep)
         for h in headers:
             table.add_column(h.strip() or "—")
 
         for line in lines[1:]:
-            cells = line.split("\t")
-            # Pad or trim to match header count
+            cells = line.split(sep)
             while len(cells) < len(headers):
                 cells.append("")
             table.add_row(*[c.strip() for c in cells[: len(headers)]])
@@ -367,6 +367,14 @@ class FileBrowserScreen(ModalScreen[None]):
         log.display = True
         log.clear()
         log.write(content)
+
+    @staticmethod
+    def _render_html(content: str, log: RichLog, table: DataTable[str]) -> None:
+        """Render HTML with syntax highlighting."""
+        table.display = False
+        log.display = True
+        log.clear()
+        log.write(Syntax(content, "html", theme="native", word_wrap=True, line_numbers=True))
 
     def action_close(self) -> None:
         self.dismiss(None)
@@ -403,9 +411,9 @@ class AtlantisTUI(App[None]):
         width: 1fr;
     }
 
-    /* ── Sidebar — scrollable with Memphis accents ── */
+    /* ── Sidebar ── */
     #sidebar {
-        width: 30;
+        width: 22;
         border-right: solid ansi_magenta;
         padding: 1;
     }
@@ -423,22 +431,28 @@ class AtlantisTUI(App[None]):
         height: auto;
         width: 100%;
         padding: 0 1;
-        margin-bottom: 1;
     }
 
     /* ── Main content ── */
     #main-content {
         padding: 1 2;
     }
-    #result-log {
-        height: 1fr;
+    #data-table {
+        height: 2fr;
+        min-height: 6;
         border: round ansi_cyan;
     }
-
-    /* ── Data table ── */
-    DataTable {
-        height: 1fr;
+    .action-bar {
+        height: auto;
+        padding: 1 0 0 0;
+    }
+    .action-bar Button {
+        margin: 0 1 0 0;
+    }
+    #result-log {
+        height: 3fr;
         border: round ansi_cyan;
+        margin-top: 1;
     }
     """
 
@@ -450,75 +464,65 @@ class AtlantisTUI(App[None]):
         self.theme = "textual-ansi"
         self.base_url = BaseUrl(base_url) if isinstance(base_url, str) else base_url
         self.svc: E2EDataService = get_data_service(base_url=self.base_url)
+        self._active_domain: str = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
 
         with Horizontal():
-            # Sidebar navigation (scrollable for small terminals)
             with VerticalScroll(id="sidebar"):
-                yield Label("SIMULATIONS", classes="nav-section-label")
-                yield Button("List All", id="sim-list", variant="primary")
-                yield Button("Get by ID", id="sim-get")
-                yield Button("Check Status", id="sim-status")
-                yield Button("Run New", id="sim-run", variant="success")
-                yield Button("Cancel", id="sim-cancel", variant="error")
-                yield Button("Download Outputs", id="sim-outputs")
+                yield Button("Simulations", id="nav-simulations", variant="primary")
+                yield Button("Simulators", id="nav-simulators", variant="primary")
+                yield Button("Analyses", id="nav-analyses", variant="primary")
 
-                yield Label("SIMULATORS", classes="nav-section-label")
-                yield Button("List Versions", id="ver-list", variant="primary")
-                yield Button("Build Status", id="ver-status")
-                yield Button("Build Latest", id="ver-latest", variant="success")
+                yield Label("UTILITIES", classes="nav-section-label")
+                yield Button("Browse Files", id="browse-files")
+                yield Button("Demo S3", id="demo-s3", variant="warning")
 
-                yield Label("PARCA", classes="nav-section-label")
-                yield Button("List Datasets", id="parca-list", variant="primary")
-                yield Button("Run Status", id="parca-status")
-
-                yield Label("ANALYSES", classes="nav-section-label")
-                yield Button("Get Spec", id="ana-get")
-                yield Button("Run Status", id="ana-status")
-                yield Button("View Log", id="ana-log")
-                yield Button("Get Plots", id="ana-plots")
-
-                yield Label("DEMO", classes="nav-section-label")
-                yield Button("Download S3 Data", id="demo-s3", variant="warning")
-
-                yield Label("FILES", classes="nav-section-label")
-                yield Button("Browse Files", id="browse-files", variant="primary")
-
-            # Main content area
             with Vertical(id="main-content"):
                 yield Static(id="banner")
-                yield self._build_tabs()
+                yield DataTable(id="data-table")
 
-        # Server selector bar at bottom
+                # Domain action bars (shown/hidden based on nav selection)
+                with Horizontal(id="actions-simulations", classes="action-bar"):
+                    yield Button("Run New", id="sim-run", variant="success")
+                    yield Button("Get by ID", id="sim-get")
+                    yield Button("Cancel", id="sim-cancel", variant="error")
+                    yield Button("Download", id="sim-outputs")
+                with Horizontal(id="actions-simulators", classes="action-bar"):
+                    yield Button("Build Latest", id="ver-latest", variant="success")
+                    yield Button("Check Build", id="ver-status")
+                with Horizontal(id="actions-analyses", classes="action-bar"):
+                    yield Button("Get Spec", id="ana-get")
+                    yield Button("Status", id="ana-status")
+                    yield Button("View Log", id="ana-log")
+                    yield Button("Plots", id="ana-plots")
+
+                yield RichLog(id="result-log", highlight=True, markup=True, wrap=True)
+
         with Horizontal(id="server-bar"):
             yield Label("Server: ", id="server-label")
             yield Select(SERVER_OPTIONS, value=self.base_url.value, id="server-select", allow_blank=False)
 
         yield Footer()
 
-    @staticmethod
-    def _build_tabs() -> TabbedContent:
-        tabs = TabbedContent(id="tabs")
-        results_pane = TabPane("Results", id="tab-results")
-        results_pane.compose_add_child(RichLog(id="result-log", highlight=True, markup=True, wrap=True))
-        table_pane = TabPane("Table", id="tab-table")
-        table_pane.compose_add_child(DataTable(id="data-table"))
-        tabs.compose_add_child(results_pane)
-        tabs.compose_add_child(table_pane)
-        return tabs
-
     def on_mount(self) -> None:
         self._banner_phase = 0.0
         self._animate_banner()
         self.set_interval(0.1, self._animate_banner)
+        # Hide all action bars initially
+        for domain in ("simulations", "simulators", "analyses"):
+            self.query_one(f"#actions-{domain}").display = False
         self.write_log("[dim]Simulating Microbial Systems — Interactive Terminal[/dim]")
         self.write_log(f"[dim]Server: {self.base_url.name} ({self.base_url.value})[/dim]")
         self.write_log("")
-        self.write_log(
-            "[bold]Click a button in the sidebar to get started.  [dim]q[/dim]=quit  [dim]d[/dim]=theme[/bold]\n"
-        )
+        self.write_log("[bold]Select a domain in the sidebar.  [dim]q[/dim]=quit  [dim]d[/dim]=theme[/bold]\n")
+
+    def _show_domain(self, domain: str) -> None:
+        """Show the action bar for *domain* and hide the others."""
+        self._active_domain = domain
+        for d in ("simulations", "simulators", "analyses"):
+            self.query_one(f"#actions-{d}").display = d == domain
 
     def _animate_banner(self) -> None:
         self._banner_phase += 0.15
@@ -545,11 +549,6 @@ class AtlantisTUI(App[None]):
             table.add_column(col)
         for row in rows:
             table.add_row(*row)
-        # Switch to table tab
-        self.query_one("#tabs", TabbedContent).active = "tab-table"
-
-    def _switch_to_results(self) -> None:
-        self.query_one("#tabs", TabbedContent).active = "tab-results"
 
     # ── Server change ─────────────────────────────────────────────────────
 
@@ -563,28 +562,31 @@ class AtlantisTUI(App[None]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:  # noqa: C901
         bid = event.button.id
-        if bid == "sim-list":
+        # ── Nav buttons (auto-load listing + show domain actions) ──
+        if bid == "nav-simulations":
+            self._show_domain("simulations")
             self._do_sim_list()
+        elif bid == "nav-simulators":
+            self._show_domain("simulators")
+            self._do_ver_list()
+        elif bid == "nav-analyses":
+            self._show_domain("analyses")
+            self._do_ana_list()
+        # ── Simulation actions ──
         elif bid == "sim-get":
             self._ask_id_then("Simulation ID", self._do_sim_get)
-        elif bid == "sim-status":
-            self._ask_id_then("Simulation ID", self._do_sim_status)
         elif bid == "sim-run":
             self._do_sim_run()
         elif bid == "sim-cancel":
             self._ask_id_then("Simulation ID to cancel", self._do_sim_cancel)
         elif bid == "sim-outputs":
             self._ask_id_then("Simulation ID", self._do_sim_outputs)
-        elif bid == "ver-list":
-            self._do_ver_list()
+        # ── Simulator actions ──
         elif bid == "ver-status":
             self._ask_id_then("Simulator ID", self._do_ver_status)
         elif bid == "ver-latest":
             self._do_ver_latest()
-        elif bid == "parca-list":
-            self._do_parca_list()
-        elif bid == "parca-status":
-            self._ask_id_then("Parca ID", self._do_parca_status)
+        # ── Analysis actions ──
         elif bid == "ana-get":
             self._ask_id_then("Analysis ID", self._do_ana_get)
         elif bid == "ana-status":
@@ -593,10 +595,40 @@ class AtlantisTUI(App[None]):
             self._ask_id_then("Analysis ID", self._do_ana_log)
         elif bid == "ana-plots":
             self._ask_id_then("Analysis ID", self._do_ana_plots)
+        # ── Utilities ──
         elif bid == "demo-s3":
             self._do_demo_s3()
         elif bid == "browse-files":
             self._do_browse_files()
+
+    # ── Table row selection (double-click) ──────────────────────────────
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Double-click a row → open outputs explorer for simulations."""
+        if self._active_domain != "simulations":
+            return
+        table = self.query_one("#data-table", DataTable)
+        row_data = table.get_row(event.row_key)
+        if not row_data:
+            return
+        try:
+            sim_id = int(row_data[0])  # first column is ID
+        except (ValueError, IndexError):
+            return
+        self._do_sim_explore(sim_id)
+
+    @work(thread=True)
+    def _do_sim_explore(self, sid: int) -> None:
+        """Download outputs for a simulation and open the file browser."""
+        self.write_log(f"[cyan]Downloading outputs for simulation {sid}...[/]")
+        try:
+            dest_path = Path(f"./simulation_id_{sid}").resolve()
+            dest_path.mkdir(parents=True, exist_ok=True)
+            result = asyncio.run(self.svc.get_output_data(simulation_id=sid, dest=dest_path))
+            self.write_log("[green]Outputs ready — opening explorer...[/green]\n")
+            self.app.call_from_thread(self.push_screen, FileBrowserScreen(result))
+        except Exception as e:
+            self.write_log(f"[red]Error downloading outputs: {e}[/red]\n")
 
     # ── ID prompt helper ──────────────────────────────────────────────────
 
@@ -611,7 +643,7 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_sim_list(self) -> None:
-        self._switch_to_results()
+        self._clear_log()
         self.write_log("[bold cyan]Loading simulations...[/]")
         try:
             sims = self.svc.show_workflows()
@@ -621,25 +653,27 @@ class AtlantisTUI(App[None]):
         if not sims:
             self.write_log("[yellow]No simulations found.[/yellow]\n")
             return
-        self._populate_table(
-            ["ID", "Experiment", "Simulator", "Config", "Gens", "Job ID"],
-            [
-                [
-                    str(s.database_id),
-                    s.experiment_id,
-                    str(s.simulator_id),
-                    s.simulation_config_filename,
-                    str(s.config.generations),
-                    s.job_id or "-",
-                ]
-                for s in sims
-            ],
-        )
-        self.write_log(f"[green]Loaded {len(sims)} simulations (see Table tab)[/green]\n")
+        # Enrich each simulation with its workflow status
+        rows: list[list[str]] = []
+        for s in sims:
+            try:
+                run = self.svc.get_workflow_status(simulation_id=s.database_id)
+                status = run.status.value.upper()
+            except Exception:
+                status = "UNKNOWN"
+            rows.append([
+                str(s.database_id),
+                s.experiment_id,
+                str(s.simulator_id),
+                s.simulation_config_filename,
+                str(s.config.generations),
+                status,
+            ])
+        self._populate_table(["ID", "Experiment", "Simulator", "Config", "Gens", "Status"], rows)
+        self.write_log(f"[green]Loaded {len(sims)} simulations[/green]\n")
 
     @work(thread=True)
     def _do_sim_get(self, sid: int) -> None:
-        self._switch_to_results()
         self.write_log(f"[cyan]Fetching simulation {sid}...[/]")
         try:
             sim = self.svc.get_workflow(simulation_id=sid)
@@ -649,7 +683,6 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_sim_status(self, sid: int) -> None:
-        self._switch_to_results()
         self.write_log(f"[cyan]Checking status for simulation {sid}...[/]")
         try:
             run = self.svc.get_workflow_status(simulation_id=sid)
@@ -687,7 +720,6 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _submit_sim_run(self, params: dict[str, Any]) -> None:
-        self._switch_to_results()
         self.write_log("[cyan]Submitting simulation...[/]")
         try:
             sim = self.svc.run_workflow(**params)
@@ -698,7 +730,6 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_sim_cancel(self, sid: int) -> None:
-        self._switch_to_results()
         self.write_log(f"[yellow]Cancelling simulation {sid}...[/]")
         try:
             result = self.svc.cancel_workflow(simulation_id=sid)
@@ -709,7 +740,6 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_sim_outputs(self, sid: int) -> None:
-        self._switch_to_results()
         self.write_log(f"[cyan]Downloading outputs for simulation {sid}...[/]")
         try:
             dest_path = Path(f"./simulation_id_{sid}").resolve()
@@ -723,7 +753,7 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_ver_list(self) -> None:
-        self._switch_to_results()
+        self._clear_log()
         self.write_log("[cyan]Loading simulator versions...[/]")
         try:
             versions = self.svc.show_simulators()
@@ -733,24 +763,26 @@ class AtlantisTUI(App[None]):
         if not versions:
             self.write_log("[yellow]No simulators found.[/yellow]\n")
             return
-        self._populate_table(
-            ["ID", "Commit", "Branch", "Repo", "Created"],
-            [
-                [
-                    str(sv.database_id),
-                    sv.git_commit_hash[:12],
-                    sv.git_branch,
-                    sv.git_repo_url.rsplit("/", 1)[-1] if "/" in sv.git_repo_url else sv.git_repo_url,
-                    str(sv.created_at)[:19] if sv.created_at else "-",
-                ]
-                for sv in versions
-            ],
-        )
-        self.write_log(f"[green]Loaded {len(versions)} simulators (see Table tab)[/green]\n")
+        # Enrich each simulator with its build status
+        rows: list[list[str]] = []
+        for sv in versions:
+            try:
+                status = self.svc.get_simulator_status(simulator_id=sv.database_id).upper()
+            except Exception:
+                status = "UNKNOWN"
+            rows.append([
+                str(sv.database_id),
+                sv.git_commit_hash[:12],
+                sv.git_branch,
+                sv.git_repo_url.rsplit("/", 1)[-1] if "/" in sv.git_repo_url else sv.git_repo_url,
+                str(sv.created_at)[:19] if sv.created_at else "-",
+                status,
+            ])
+        self._populate_table(["ID", "Commit", "Branch", "Repo", "Created", "Status"], rows)
+        self.write_log(f"[green]Loaded {len(versions)} simulators[/green]\n")
 
     @work(thread=True)
     def _do_ver_status(self, sid: int) -> None:
-        self._switch_to_results()
         self.write_log(f"[cyan]Checking build status for simulator {sid}...[/]")
         try:
             status = self.svc.get_simulator_status(simulator_id=sid)
@@ -761,7 +793,6 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_ver_latest(self) -> None:
-        self._switch_to_results()
         self.write_log("[cyan]Building latest simulator (this may take a while)...[/]")
         try:
             sv = self.svc.get_simulator()
@@ -774,7 +805,6 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_parca_list(self) -> None:
-        self._switch_to_results()
         self.write_log("[cyan]Loading parca datasets...[/]")
         try:
             datasets = self.svc.get_parca_datasets()
@@ -799,7 +829,6 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_parca_status(self, pid: int) -> None:
-        self._switch_to_results()
         self.write_log(f"[cyan]Checking parca status for {pid}...[/]")
         try:
             hpc_run = self.svc.get_parca_status(parca_id=pid)
@@ -810,8 +839,16 @@ class AtlantisTUI(App[None]):
     # ── Analyses ──────────────────────────────────────────────────────────
 
     @work(thread=True)
+    def _do_ana_list(self) -> None:
+        self._clear_log()
+        self.write_log("[cyan]Analyses — use the action buttons to inspect by ID.[/]")
+        self.write_log("[dim]No listing endpoint available; enter an analysis ID below.[/dim]\n")
+        # Clear the table since there's no list endpoint
+        table = self.query_one("#data-table", DataTable)
+        table.clear(columns=True)
+
+    @work(thread=True)
     def _do_ana_get(self, aid: int) -> None:
-        self._switch_to_results()
         self.write_log(f"[cyan]Fetching analysis {aid}...[/]")
         try:
             analysis = self.svc.get_analysis(analysis_id=aid)
@@ -821,7 +858,6 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_ana_status(self, aid: int) -> None:
-        self._switch_to_results()
         self.write_log(f"[cyan]Checking analysis status for {aid}...[/]")
         try:
             status = self.svc.get_analysis_status(analysis_id=aid)
@@ -835,7 +871,6 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_ana_log(self, aid: int) -> None:
-        self._switch_to_results()
         self.write_log(f"[cyan]Fetching analysis log for {aid}...[/]")
         try:
             log = self.svc.get_analysis_log(analysis_id=aid)
@@ -845,7 +880,6 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_ana_plots(self, aid: int) -> None:
-        self._switch_to_results()
         self.write_log(f"[cyan]Fetching plots for analysis {aid}...[/]")
         try:
             plots = self.svc.get_analysis_plots(analysis_id=aid)
@@ -866,7 +900,6 @@ class AtlantisTUI(App[None]):
 
     @work(thread=True)
     def _do_demo_s3(self) -> None:
-        self._switch_to_results()
         self.write_log("[bold cyan]Demo: Download S3 Data[/]")
 
         test_outdir = os.environ.get("TEST_BUCKET_EXPERIMENT_OUTDIR", "")
