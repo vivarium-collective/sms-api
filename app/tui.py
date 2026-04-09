@@ -14,6 +14,7 @@ import json
 import math
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -200,6 +201,7 @@ class RunSimulationScreen(ModalScreen[dict[str, Any] | None]):
                     yield Label("Seeds:")
                     yield Input(value="3", id="run-seeds", type="integer")
             yield Input(placeholder="Description (optional)", id="run-desc")
+            yield Input(placeholder="Observables (comma-sep dot-paths, optional)", id="run-observables")
             with Horizontal(classes="run-buttons"):
                 yield Button("Submit", variant="primary", id="run-submit")
                 yield Button("Cancel", id="run-cancel")
@@ -217,6 +219,8 @@ class RunSimulationScreen(ModalScreen[dict[str, Any] | None]):
             self.notify("Experiment ID and numeric Simulator ID are required", severity="error")
             return
         config_select = self.query_one("#run-config", Select)
+        obs_raw = self.query_one("#run-observables", Input).value.strip()
+        obs_list = [o.strip() for o in obs_raw.split(",") if o.strip()] if obs_raw else None
         self.dismiss({
             "experiment_id": exp_id,
             "simulator_id": int(sim_id),
@@ -224,6 +228,7 @@ class RunSimulationScreen(ModalScreen[dict[str, Any] | None]):
             "num_generations": int(self.query_one("#run-gens", Input).value or "1"),
             "num_seeds": int(self.query_one("#run-seeds", Input).value or "3"),
             "description": self.query_one("#run-desc", Input).value.strip() or None,
+            "observables": obs_list,
         })
 
     def action_cancel(self) -> None:
@@ -465,6 +470,7 @@ class AtlantisTUI(App[None]):
         self.base_url = BaseUrl(base_url) if isinstance(base_url, str) else base_url
         self.svc: E2EDataService = get_data_service(base_url=self.base_url)
         self._active_domain: str = ""
+        self._temp_dirs: list[tempfile.TemporaryDirectory[str]] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -481,7 +487,7 @@ class AtlantisTUI(App[None]):
 
             with Vertical(id="main-content"):
                 yield Static(id="banner")
-                yield DataTable(id="data-table")
+                yield DataTable(id="data-table", cursor_type="row")
 
                 # Domain action bars (shown/hidden based on nav selection)
                 with Horizontal(id="actions-simulations", classes="action-bar"):
@@ -604,27 +610,35 @@ class AtlantisTUI(App[None]):
     # ── Table row selection (double-click) ──────────────────────────────
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Double-click a row → open outputs explorer for simulations."""
+        """Double-click a completed simulation row → download outputs and open file explorer."""
         if self._active_domain != "simulations":
             return
         table = self.query_one("#data-table", DataTable)
         row_data = table.get_row(event.row_key)
         if not row_data:
             return
+        # Status is the last column (index 5)
+        status = str(row_data[-1]).strip().upper()
+        if status != "COMPLETED":
+            self.write_log(
+                f"[yellow]Simulation {row_data[0]} is {status} — only COMPLETED simulations can be explored.[/]\n"
+            )
+            return
         try:
-            sim_id = int(row_data[0])  # first column is ID
+            sim_id = int(row_data[0])
         except (ValueError, IndexError):
             return
         self._do_sim_explore(sim_id)
 
     @work(thread=True)
     def _do_sim_explore(self, sid: int) -> None:
-        """Download outputs for a simulation and open the file browser."""
+        """Download outputs to a temp dir and open the file browser."""
         self.write_log(f"[cyan]Downloading outputs for simulation {sid}...[/]")
         try:
-            dest_path = Path(f"./simulation_id_{sid}").resolve()
-            dest_path.mkdir(parents=True, exist_ok=True)
-            result = asyncio.run(self.svc.get_output_data(simulation_id=sid, dest=dest_path))
+            tmp = tempfile.TemporaryDirectory(prefix=f"atlantis_sim{sid}_")
+            self._temp_dirs.append(tmp)
+            dest_path = Path(tmp.name)
+            result = self.svc.get_output_data_sync(simulation_id=sid, dest=dest_path)
             self.write_log("[green]Outputs ready — opening explorer...[/green]\n")
             self.app.call_from_thread(self.push_screen, FileBrowserScreen(result))
         except Exception as e:
@@ -981,6 +995,15 @@ class AtlantisTUI(App[None]):
         idx = cycle.index(self.theme) if self.theme in cycle else 0
         self.theme = cycle[(idx + 1) % len(cycle)]
         self.write_log(f"[dim]Theme: {self.theme}[/dim]")
+
+    def on_unmount(self) -> None:
+        """Clean up temporary directories created for simulation output browsing."""
+        import contextlib
+
+        for tmp in self._temp_dirs:
+            with contextlib.suppress(Exception):
+                tmp.cleanup()
+        self._temp_dirs.clear()
 
 
 # ── Direct invocation ─────────────────────────────────────────────────────────

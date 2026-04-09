@@ -564,6 +564,7 @@ def _(card_wrap, mo):
     seeds_input = mo.ui.number(label="Seeds", start=1, stop=100, step=1, value=1)
     run_parca_checkbox = mo.ui.checkbox(label="Run ParCa", value=False)
     description_input = mo.ui.text(value="", label="Description (optional)", full_width=True)
+    observables_input = mo.ui.text(value="", label="Observables (comma-sep dot-paths, optional)", full_width=True)
     run_sim_button = mo.ui.run_button(label=f"{mo.icon('hugeicons:ai-dna')} Submit", kind="success")
 
     # ── Status / Poll ──
@@ -601,6 +602,7 @@ def _(card_wrap, mo):
                 [sim_id_input, config_dropdown, gens_input, seeds_input, run_parca_checkbox], justify="start", gap=1
             ),
             description_input,
+            observables_input,
             run_sim_button,
             mo.Html(_div + _lbl("Status & Polling")),
             mo.hstack([poll_sim_id, poll_sim_button, poll_sim_poll], justify="start", gap=1),
@@ -625,6 +627,7 @@ def _(card_wrap, mo):
         exp_id_input,
         gens_input,
         list_workflows_button,
+        observables_input,
         poll_sim_button,
         poll_sim_id,
         poll_sim_poll,
@@ -648,6 +651,7 @@ def _(
     get_svc,
     json,
     mo,
+    observables_input,
     run_parca_checkbox,
     run_sim_button,
     seeds_input,
@@ -666,6 +670,8 @@ def _(
                     f"sim{int(sim_id_input.value)}-{_exp_id}; "
                     f"{int(gens_input.value)} Generations; {int(seeds_input.value)} Seeds"
                 )
+                _obs_raw = observables_input.value.strip()
+                _obs_list = [o.strip() for o in _obs_raw.split(",") if o.strip()] if _obs_raw else None
                 _simulation = _svc.run_workflow(
                     experiment_id=_exp_id,
                     simulator_id=int(sim_id_input.value),
@@ -674,6 +680,7 @@ def _(
                     num_seeds=int(seeds_input.value),
                     description=_desc,
                     run_parameter_calculator=run_parca_checkbox.value,
+                    observables=_obs_list,
                 )
                 _details = json.dumps(_simulation.model_dump(), indent=2, default=str)
                 _dna = ICO_DNA_SM.text
