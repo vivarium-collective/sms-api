@@ -1,0 +1,179 @@
+/* ============================================================
+   Memphis Group (early-90s) inspired stylesheet
+   For use with marimo: App(css_file="memphis.css")
+   ============================================================ */
+
+/* ── CSS custom properties ───────────────────────────────── */
+:root {
+    --memphis-magenta:  #e91e90;
+    --memphis-cyan:     #00e5ff;
+    --memphis-yellow:   #ffe100;
+    --memphis-green:    #39ff14;
+    --memphis-red:      #ff3131;
+    --memphis-coral:    #ff6f61;
+    --memphis-purple:   #b388ff;
+    --memphis-teal:     #00bfa5;
+    --memphis-bg:       #1a1a2e;
+    --memphis-card:     #16213e;
+    --memphis-text:     #e0e0e0;
+    --memphis-border:   #e91e90;
+}
+
+/* ── Animated banner strip ───────────────────────────────── */
+.memphis-banner {
+    background: linear-gradient(
+        90deg,
+        #e91e90,
+        #00e5ff,
+        #ffe100,
+        #e91e90
+    );
+    background-size: 300% 100%;
+    animation: memphis-scroll 8s linear infinite;
+    height: 6px;
+    border-radius: 3px;
+    margin: 0 0 1.2rem 0;
+}
+
+@keyframes memphis-scroll {
+    0%   { background-position: 0%   50%; }
+    100% { background-position: 300% 50%; }
+}
+
+/* ── Typography ──────────────────────────────────────────── */
+.memphis-title {
+    font-family: 'Courier New', monospace;
+    font-weight: 900;
+    font-size: 1.6rem;
+    background: linear-gradient(90deg, #e91e90, #00e5ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 0.08em;
+}
+
+.memphis-subtitle {
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    color: #00e5ff;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+/* ── Generic Memphis card ────────────────────────────────── */
+.memphis-card {
+    border: 1px solid #e91e9040;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 0.5rem 0;
+}
+
+/* ── Status labels ───────────────────────────────────────── */
+.memphis-status-completed  { color: #39ff14; font-weight: bold; }
+.memphis-status-running    { color: #ffe100; font-weight: bold; }
+.memphis-status-failed     { color: #ff3131; font-weight: bold; }
+.memphis-status-pending    { color: #00e5ff; font-weight: bold; }
+.memphis-status-cancelled  { color: #ff6f61; font-weight: bold; }
+.memphis-status-unknown    { color: #b388ff; font-weight: bold; }
+
+/* ── Accent dots ─────────────────────────────────────────── */
+.memphis-accent {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.memphis-dot-magenta { background: #e91e90; }
+.memphis-dot-cyan    { background: #00e5ff; }
+.memphis-dot-yellow  { background: #ffe100; }
+
+/* ============================================================
+   Tensorboard-style cards
+   ============================================================ */
+
+.tb-card {
+    background: #16213e;
+    border: 1px solid #e91e9030;
+    border-radius: 12px;
+    padding: 0;
+    margin: 0.4rem 0;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tb-card:hover {
+    border-color: #e91e9080;
+    box-shadow: 0 4px 16px rgba(233, 30, 144, 0.15);
+}
+
+/* ── Card header — base (forest green default) ───────────── */
+.tb-card-header {
+    padding: 0.6rem 1rem;
+    font-family: 'Courier New', monospace;
+    font-weight: 800;
+    font-size: 0.95rem;
+    letter-spacing: 0.06em;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #ffffff;
+    border-radius: 8px 8px 0 0;
+    background-color: #2e7d6e;
+}
+
+/* ── Card header color variants ──────────────────────────── */
+.tb-card-header-magenta {
+    background: #e91e90;
+    color: #ffffff;
+    border-bottom: none;
+}
+
+.tb-card-header-cyan {
+    background: #00e5ff;
+    color: #0a0a0a;
+    border-bottom: none;
+}
+
+.tb-card-header-green {
+    background: #2e7d6e;
+    color: #ffffff;
+    border-bottom: none;
+}
+
+.tb-card-header-purple {
+    background: #b388ff;
+    color: #0a0a0a;
+    border-bottom: none;
+}
+
+.tb-card-header-yellow {
+    background: #ffe100;
+    color: #0a0a0a;
+    border-bottom: none;
+}
+
+.tb-card-header-red {
+    background: #ff3131;
+    color: #ffffff;
+    border-bottom: none;
+}
+
+.tb-card-header-teal {
+    background: #00bfa5;
+    color: #0a0a0a;
+    border-bottom: none;
+}
+
+.tb-card-header-coral {
+    background: #ff6f61;
+    color: #ffffff;
+    border-bottom: none;
+}
+
+/* ── Card body ───────────────────────────────────────────── */
+.tb-card-body {
+    padding: 0.8rem 1rem 1rem 1rem;
+}

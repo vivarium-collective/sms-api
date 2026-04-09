@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-SMS API (Simulating Microbial Systems API, also known as Atlantis API) is a FastAPI-based REST API for designing, running, and analyzing whole-cell simulations of E. coli using the vEcoli model. The API orchestrates HPC (High Performance Computing) jobs via SLURM on remote clusters.
+SMS API (Simulating Microbial Systems API, also known as Atlantis API) is a FastAPI-based REST API for designing, running, and analyzing whole-cell simulations of E. coli using the vEcoli model. The API supports two compute backends: **SLURM** (on-prem HPC at UCONN CCAM) and **K8s + AWS Batch** (GovCloud, Stanford deployment). Backend selection is automatic based on `deployment_namespace` in config.
 
 ## Architecture
 
@@ -62,6 +62,31 @@ API requests hit FastAPI routers (`sms_api/api/routers/`) which depend on servic
 - **SSHSessionService** (`common/ssh/ssh_service.py`): asyncssh connection pooling. Session reuse is critical for polling loops.
 - **FileService** (`common/storage/`): Abstraction over GCS, S3, and Qumulo S3 storage backends.
 - **JobScheduler** (`simulation/job_scheduler.py`): Coordinates multi-step HPC workflows.
+
+### Compute Backend Dispatch
+
+Backend selection is determined by `deployment_namespace` in `sms_api/config.py`:
+- **SLURM** (default): `sms-api-rke`, `sms-api-rke-dev` — UCONN CCAM on-prem HPC
+- **K8s + AWS Batch**: `sms-api-stanford`, `sms-api-stanford-test` — GovCloud
+
+The dispatch happens in `dependencies.py` at startup: `SimulationServiceHpc` for SLURM, `SimulationServiceK8s` for K8s.
+
+Config filenames are also namespace-aware via `sms_api/common/simulator_defaults.py`:
+- `SimulationConfigPublic` (CCAM/RKE deployments)
+- `SimulationConfigPrivate` (Stanford deployments)
+- `SimulationConfigFilename` is dynamically set based on `PUBLIC_MODE`
+
+### Three Client Interfaces
+
+The API has three client entrypoints that implement the same EUTE workflow:
+- **CLI** (`app.cli`): `uv run atlantis <command>` — Typer + Rich, Memphis theme
+- **TUI** (`app.tui`): `uv run atlantis tui` — Textual app, animated logo banner
+- **GUI** (`app.gui`): `uv run atlantis gui` — Marimo notebook, Memphis CSS theme
+
+The Atlantis logo (E. coli capsule + flagella squigglies) is defined in:
+- `app/cli_theme.py` — CLI Rich markup
+- `app/tui.py` — TUI with animated green↔purple gradient (`_animated_banner()`)
+- `app/gui.py` — GUI with HTML/CSS + SVG flagella
 
 ### HPC Workflow Pipeline
 
@@ -187,7 +212,7 @@ async with get_ssh_session_service().session() as ssh:
 ### Full end-user E2E workflow (E.U.T.E: End User Tooling Experience)
 
 #### We consider the "full end-user end-to-end workflow (a.k.a: E.U.T.E: End User Tooling Experience) to be: *(build -> get build status -> workflow(parca --> simulation --> analyses)) -> get workflow status -> get simulation data (download)*
-We seek to have the Atlantis CLI (`app.cli_app`) to do this workflow, which again should be:
+We seek to have the Atlantis CLI (`app.cli`) to do this workflow, which again should be:
 
 ```
 1. <GET> /core/v1/simulator/latest
@@ -201,10 +226,10 @@ We seek to have the Atlantis CLI (`app.cli_app`) to do this workflow, which agai
 
 #### Development Flow State for EUTE
 
-*WHEN TESTING THE SMS_API's EUTE, MAKE SURE to use the atlantis cli (app.cli_app).* IN FACT, this is the iterative dev loop i want to get in: we use the cli to test end-user-facing e2e workflows (that is, the
+*WHEN TESTING THE SMS_API's EUTE, MAKE SURE to use the atlantis cli (app.cli).* IN FACT, this is the iterative dev loop i want to get in: we use the cli to test end-user-facing e2e workflows (that is, the
 "product" itself, one that stakeholders and clients alike will use: must be sleek, easy to use, yet robust and informative, and most importantly useful/novel enough to where it would be perferred to use the cli over any other
 arbitrary external client that may call the api...I will then want to ensure that the same working functionality is exposed/present in the tui (basically, the entrypoint to the rest api defined in sms_api has 3
-entrypoints/clients (other than direct http requests to the endpoints themselves): a. the marimo notebooks found in app/ui/..., b. the cli (atlantis) found in app.cli_app, c. the tui found at app.tui. With that said, it is
+entrypoints/clients (other than direct http requests to the endpoints themselves): a. the marimo notebooks found in app/ui/..., b. the cli (atlantis) found in app.cli, c. the tui found at app.tui. With that said, it is
 imperative that the aforementioned a, b, and c are implementations of the same thing (the full e2e end-user workflow calling the restapi endpoonts as mentioned), but within different media...ie: cli app, marimo gui (app mode in
 marimo), and tui (textual-based tui) all expose/provide the same functionality, just in those different formats. Let's fully make this happen! If youre in, say "I dig ya broski: let's cook!", then make it happen babbbby!
 
