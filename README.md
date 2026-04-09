@@ -52,3 +52,13 @@ of the vEcoli repo, run parameter calculator, etc.
 This project uses the Marimo web app functionality to act as a client to the aforementioned server. There is a client for each
 API router (or simply, API). This ui is accessible within a "splash page" by navigating to [https://sms.cam.uchc.edu/home](https://sms.cam.uchc.edu/home). Please contact
 our organization for authentication, if needed.
+
+---
+
+```
+    ╭────────────────────────────────────────────╮
+    │    ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀          │∿~∿~~∿~∿~
+    │    █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██           │~∿~∿~~∿~∿
+    │     ∿ whole-cell simulation platform ∿     │∿~~∿~∿~~∿
+    ╰────────────────────────────────────────────╯
+```

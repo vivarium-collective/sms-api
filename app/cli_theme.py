@@ -41,36 +41,20 @@ JSON_SYNTAX_THEME = "native"
 
 # -- Banner ------------------------------------------------------------------
 
-# Each tuple: (color, line) — color-cycling Memphis banner shaped as a
-# stylized E. coli rod cell: elongated capsule body with ⧬ (U+29EC,
-# DNA double helix) in the membrane border, flagella bundle trailing
-# from the right pole, half-block 90s/BBS font, Memphis dot accent.
-# Helix border: alternating teal(⋊⋉) / pink(⋊⋉) with yellow connectors
-_T = "[bold dark_cyan]"  # teal (256-color safe)
-_P = "[bold hot_pink]"  # 90s pink (256-color safe)
-_Y = "[bold gold1]"  # yellow (256-color safe)
+# E. coli rod-cell banner: clean capsule body (matching the GUI's
+# pill-shaped border) with colored flagella squigglies trailing right.
+# Half-block 90s/BBS font, Memphis color palette, 256-color safe.
+_M = "[bold bright_magenta]"
+_C = "[bold bright_cyan]"
+_G = "[bold gold1]"
 _R = "[/]"
-_HELIX_TOP = (
-    f"     {_Y}╭─{_R}"
-    f"{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}──{_R}"
-    f"{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}──{_R}"
-    f"{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}─╮{_R}"
-)
-_HELIX_BOT = (
-    f"     {_Y}╰─{_R}"
-    f"{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}──{_R}"
-    f"{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}──{_R}"
-    f"{_P}⋊⋉{_R}{_Y}──{_R}{_T}⋊⋉{_R}{_Y}──{_R}{_P}⋊⋉{_R}{_Y}─╯{_R}"
-)
 
 _BANNER = [
-    (None, _HELIX_TOP),
-    ("bright_magenta", "   ╭─╯                                            ╰─╮"),
-    ("green1", "  ╭╯   ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀              ╰╮~∿~∿"),
-    ("medium_purple1", " (     █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██    ◌ ◌ ◌       )∿~∿~"),
-    ("bright_magenta", "  ╰╮                                               ╭╯~∿~~∿"),
-    ("bright_white", "   ╰─╮   ∿ whole-cell simulation platform ∿    ╭─╯∿~∿~"),
-    (None, _HELIX_BOT),
+    (None, f"    {_M}╭────────────────────────────────────────────╮{_R}"),
+    (None, f"    [bold green1]│    ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀          │[/]{_M}∿~∿~~∿~∿~{_R}"),
+    (None, f"    [bold medium_purple1]│    █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██           │[/]{_C}~∿~∿~~∿~∿{_R}"),
+    (None, f"    [bold bright_white]│     ∿ whole-cell simulation platform ∿     │[/]{_G}∿~~∿~∿~~∿{_R}"),
+    (None, f"    {_M}╰────────────────────────────────────────────╯{_R}"),
 ]
 
 

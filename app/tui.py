@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -32,6 +33,7 @@ from textual.widgets import (
     Label,
     RichLog,
     Select,
+    Static,
     TabbedContent,
     TabPane,
 )
@@ -40,31 +42,43 @@ from app.app_data_service import BaseUrl, E2EDataService, get_data_service
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-_HT = "[bold #008080]"  # teal
-_HP = "[bold #ff69b4]"  # 90s pink
-_HY = "[bold #ffd700]"  # yellow
+_HM = "[bold magenta]"
+_HC = "[bold #00ffff]"
+_HG = "[bold #ffd700]"
 _HR = "[/]"
-_TUI_HELIX_TOP = (
-    f"     {_HY}╭─{_HR}"
-    f"{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}──{_HR}"
-    f"{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}──{_HR}"
-    f"{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}─╮{_HR}"
-)
-_TUI_HELIX_BOT = (
-    f"     {_HY}╰─{_HR}"
-    f"{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}──{_HR}"
-    f"{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}──{_HR}"
-    f"{_HP}⋊⋉{_HR}{_HY}──{_HR}{_HT}⋊⋉{_HR}{_HY}──{_HR}{_HP}⋊⋉{_HR}{_HY}─╯{_HR}"
-)
 BANNER = (
-    f"{_TUI_HELIX_TOP}\n"
-    "[bold magenta]   ╭─╯                                            ╰─╮[/]\n"
-    "[bold #00ff00]  ╭╯   ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀              ╰╮~∿~∿[/]\n"
-    "[bold #9370db] (     █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██    ◌ ◌ ◌       )∿~∿~[/]\n"
-    "[bold magenta]  ╰╮                                               ╭╯~∿~~∿[/]\n"
-    "[bold white]   ╰─╮   ∿ whole-cell simulation platform ∿    ╭─╯∿~∿~[/]\n"
-    f"{_TUI_HELIX_BOT}"
+    f"    {_HM}╭────────────────────────────────────────────╮{_HR}\n"
+    f"    [bold #00ff00]│    ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀          │[/]{_HM}∿~∿~~∿~∿~{_HR}\n"
+    f"    [bold #9370db]│    █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██           │[/]{_HC}~∿~∿~~∿~∿{_HR}\n"
+    f"    [bold white]│     ∿ whole-cell simulation platform ∿     │[/]{_HG}∿~~∿~∿~~∿{_HR}\n"
+    f"    {_HM}╰────────────────────────────────────────────╯{_HR}"
 )
+
+
+def _animated_banner(phase: float) -> str:
+    """Generate banner markup with colors phasing between green and royal purple."""
+
+    def _lerp(t: float) -> str:
+        # Green (0, 255, 0) ↔ Royal Purple (120, 81, 169)
+        r = int(120 * t)
+        g = int(255 - 174 * t)
+        b = int(169 * t)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    c1 = _lerp((math.sin(phase) + 1) / 2)
+    c2 = _lerp((math.sin(phase + 0.7) + 1) / 2)
+    c3 = _lerp((math.sin(phase + 1.4) + 1) / 2)
+    c4 = _lerp((math.sin(phase + 2.1) + 1) / 2)
+    c5 = _lerp((math.sin(phase + 2.8) + 1) / 2)
+
+    return (
+        f"    [bold {c1}]╭────────────────────────────────────────────╮[/]\n"
+        f"    [bold {c2}]│    ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀          │[/][bold {c4}]∿~∿~~∿~∿~[/]\n"
+        f"    [bold {c3}]│    █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██           │[/][bold {c5}]~∿~∿~~∿~∿[/]\n"
+        f"    [bold {c4}]│     ∿ whole-cell simulation platform ∿     │[/][bold {c1}]∿~~∿~∿~~∿[/]\n"
+        f"    [bold {c5}]╰────────────────────────────────────────────╯[/]"
+    )
+
 
 SERVER_OPTIONS = [(f"{u.name}  ({u.value})", u.value) for u in BaseUrl]
 
@@ -404,6 +418,14 @@ class AtlantisTUI(App[None]):
         margin: 1 0 0 0;
     }
 
+    /* ── Animated banner ── */
+    #banner {
+        height: auto;
+        width: 100%;
+        padding: 0 1;
+        margin-bottom: 1;
+    }
+
     /* ── Main content ── */
     #main-content {
         padding: 1 2;
@@ -466,6 +488,7 @@ class AtlantisTUI(App[None]):
 
             # Main content area
             with Vertical(id="main-content"):
+                yield Static(id="banner")
                 yield self._build_tabs()
 
         # Server selector bar at bottom
@@ -487,13 +510,19 @@ class AtlantisTUI(App[None]):
         return tabs
 
     def on_mount(self) -> None:
-        self.write_log(BANNER)
+        self._banner_phase = 0.0
+        self._animate_banner()
+        self.set_interval(0.1, self._animate_banner)
         self.write_log("[dim]Simulating Microbial Systems — Interactive Terminal[/dim]")
         self.write_log(f"[dim]Server: {self.base_url.name} ({self.base_url.value})[/dim]")
         self.write_log("")
         self.write_log(
             "[bold]Click a button in the sidebar to get started.  [dim]q[/dim]=quit  [dim]d[/dim]=theme[/bold]\n"
         )
+
+    def _animate_banner(self) -> None:
+        self._banner_phase += 0.15
+        self.query_one("#banner", Static).update(_animated_banner(self._banner_phase))
 
     # ── Helpers ───────────────────────────────────────────────────────────
 
