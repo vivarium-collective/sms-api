@@ -302,7 +302,16 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
         # 3. Upload .nextflow.log to S3 on completion (success or failure)
         s3_endpoint = f"https://s3.{settings.batch_region}.amazonaws.com"
         s3_log_dir = f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/logs"
+        # If sim_data_path is /tmp/simData.cPickle, download cached simData from S3 first
+        # (vEcoli only accepts local paths for sim_data_path)
+        download_step = ""
+        sim_data_path = config_data.get("sim_data_path")
+        _cached_simdata = "/tmp/simData.cPickle"  # noqa: S108
+        if sim_data_path == _cached_simdata:
+            s3_sim_data = f"s3://{settings.s3_work_bucket}/sim_data/default/kb/simData.cPickle"
+            download_step = f"aws s3 cp {s3_sim_data} {sim_data_path} && "
         command = (
+            f"{download_step}"
             f'sed -i "/region = params.aws_region/a\\            client {{ endpoint = \\"{s3_endpoint}\\" }}"'
             " runscripts/nextflow/config.template"
             " && python runscripts/workflow.py --config /config/workflow.json"
