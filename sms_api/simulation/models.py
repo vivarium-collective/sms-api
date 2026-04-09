@@ -6,9 +6,9 @@ from dataclasses import field
 from typing import Any
 
 from pydantic import BaseModel as _BaseModel
-from pydantic import ConfigDict, Field, computed_field, field_validator
+from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
-from sms_api.common.models import JobId, JobStatus
+from sms_api.common.models import JobBackend, JobId, JobStatus
 from sms_api.config import get_settings
 
 
@@ -44,6 +44,14 @@ class HpcRun(BaseModel):
     start_time: str | None = None  # ISO format datetime string
     end_time: str | None = None  # ISO format datetime string or None if still running
     error_message: str | None = None  # Error message if the simulation failed
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reconstruct_job_id(cls, data: Any) -> Any:
+        """Rebuild ``job_id`` from ``job_id_ext`` + ``job_backend`` when deserializing API responses."""
+        if isinstance(data, dict) and "job_id" not in data and "job_id_ext" in data:
+            data["job_id"] = JobId(value=data["job_id_ext"], backend=JobBackend(data["job_backend"]))
+        return data
 
     # Computed fields for API serialization
     @computed_field  # type: ignore[prop-decorator]
