@@ -339,19 +339,20 @@ def _show_simulation_result(
     """Display a terminal simulation status with details."""
     from rich.panel import Panel
 
+    try:
+        log = data_service.get_workflow_log(simulation_id=simulation_id)
+        console.print(Panel(log, title=f"Workflow Log (sim {simulation_id})", border_style="memphis.border.info"))
+    except Exception as e:
+        console.print(f"[memphis.dim]Log not available: {e}[/]")
+
     error_detail = f"\n{error_message}" if error_message else ""
     console.print(
         Panel(
             f"[{status_style(status)}]{status.upper()}[/]{error_detail}",
-            title=f"Simulation {simulation_id}",
+            title="Simulation Status",
             border_style=status_border(status),
         )
     )
-    try:
-        sim = data_service.get_workflow(simulation_id=simulation_id)
-        display_json(sim.model_dump(), console)
-    except Exception as e:
-        console.print(f"[memphis.dim]Details not available: {e}[/]")
     if status == "completed":
         console.print(f"\n[memphis.hint]Download data:[/]  atlantis simulation outputs {simulation_id} --dest ./debug")
 
@@ -420,6 +421,22 @@ def simulation_cancel(
     data_service = get_data_service(base_url=base_url)
     result = data_service.cancel_workflow(simulation_id=simulation_id)
     display_json(result.model_dump(), console)
+
+
+@simulation_cli.command("log", help="Show the Nextflow workflow log for a simulation.")
+def simulation_log(
+    simulation_id: int = Argument(help="Simulation database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    try:
+        log = data_service.get_workflow_log(simulation_id=simulation_id)
+        console.print(Panel(log, title=f"Workflow Log (sim {simulation_id})", border_style="memphis.border.info"))
+    except Exception as e:
+        console.print(f"[memphis.error]Error: {e}[/]")
 
 
 @simulation_cli.command("outputs", help="Download simulation output data as a tar.gz archive.")
