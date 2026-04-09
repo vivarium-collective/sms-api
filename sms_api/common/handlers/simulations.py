@@ -19,12 +19,14 @@ from sms_api.common import StrEnumBase
 from sms_api.common.handlers.simulators import upload_simulator
 from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.models import JobBackend, JobStatus, SSHTarget
+from sms_api.common.simulator_defaults import DEFAULT_OBSERVABLES
 from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
 from sms_api.config import get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_file_service, get_simulation_service, get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import (
+    AnalysisOptions,
     HpcRun,
     JobType,
     ParcaDataset,
@@ -150,7 +152,10 @@ async def _verify_build_complete(database_service: DatabaseService, simulator_id
         )
 
 
-async def run_simulation_workflow(
+# TODO: formalize config template overwrite logic to favor dataclasses over dict mutation
+
+
+async def run_simulation_workflow(  # noqa: C901
     database_service: DatabaseService,
     simulation_service: SimulationService,
     simulator_id: int,
@@ -160,6 +165,8 @@ async def run_simulation_workflow(
     num_seeds: int | None = None,
     description: str | None = None,
     run_parca: bool | None = None,
+    observables: list[str] | None = None,
+    analysis_options: AnalysisOptions | None = None,
 ) -> Simulation:
     """
     Simplified workflow execution with just the essential parameters.
@@ -179,6 +186,10 @@ async def run_simulation_workflow(
         description: Description of the simulation (optional)
         run_parca: If `True`, the simulation parameter calculator is run prior to simulation execution, otherwise
             a cached "default" simulation parameter dataset is used.
+        observables: a flat, list of strings representing dot-delimited hierarchical paths within the vEcoli output, for
+            otherwise comma-delimited hierarchical paths to exclusively include in the output reporting.
+        analysis_options: Analysis options specific to the vecoli workflow API, corresponding to specific existing
+            analysis modules in the vecoli repo.
     """
     if run_parca is None:
         run_parca = True
@@ -214,6 +225,8 @@ async def run_simulation_workflow(
         config_data["n_init_sims"] = num_seeds
     if description is not None:
         config_data["description"] = description
+    effective_observables = observables if observables else DEFAULT_OBSERVABLES
+    config_data["engine_process_reports"] = [obs.split(".") for obs in effective_observables]
     # For K8s/Batch backend, override HPC paths with AWS equivalents
     if get_job_backend() == "k8s":
         s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{unique_experiment_id}"
@@ -234,12 +247,26 @@ async def run_simulation_workflow(
             else settings.batch_amd64_queue,
         }
         if not run_parca:
-            # Use cached simData from S3 instead of re-running parca
-            config_data["sim_data_path"] = f"s3://{settings.s3_work_bucket}/sim_data/default/kb/simData.cPickle"
+            # Set local path for cached simData — the K8s job command will download
+            # from S3 to this path before workflow.py runs (vEcoli only accepts local paths)
+            config_data["sim_data_path"] = "/tmp/simData.cPickle"  # noqa: S108
     elif not run_parca:
         # SLURM: use cached simData from HPC filesystem
         config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
 
+    specified_analyses = {
+        "multiseed": {
+            "cd1_metabolomics": {"generation_lower_bound": 5},
+            "cd1_transcriptomics": {"generation_lower_bound": 5},
+            "cd1_higher_order_properties": {"generation_lower_bound": 5},
+            "cd1_fluxomics": {"generation_lower_bound": 5},
+            "cd1_proteomics": {"generation_lower_bound": 5},
+        }
+    }
+    if analysis_options is not None:
+        specified_analyses = analysis_options.model_dump()
+
+    config_data["analysis_options"] = specified_analyses
     config = SimulationConfig(**config_data)
 
     # 5. Create placeholder parca dataset entry
@@ -745,7 +772,7 @@ async def _download_outputs_from_s3(experiment_id: str, local_cache: Path) -> No
             logger.warning(f"workflow_config.json not found at {workflow_config_key}, skipping")
 
 
-async def get_simulation_log(db_service: DatabaseService, simulation_id: int) -> Response:
+async def get_simulation_log(db_service: DatabaseService, simulation_id: int, truncate: bool = True) -> Response:
     """Get simulation workflow log. Dispatches to SLURM or K8s based on backend."""
     hpc_run = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
     if hpc_run is None:
@@ -762,7 +789,92 @@ async def get_simulation_log(db_service: DatabaseService, simulation_id: int) ->
         if after:
             log_content = "N E X T F L O W" + after
 
+    if truncate:
+        log_content = _truncate_log(log_content)
+
     return Response(content=log_content, media_type="text/plain")
+
+
+_LOG_HEAD_LINES = 20
+_TRUNCATION_MARKER = "\n... truncated ...\n\n"
+
+
+def _truncate_log(log: str) -> str:
+    """Return the head (Nextflow header) + tail (final executor block) of a log.
+
+    The tail starts from the last line containing ``executor`` (the Nextflow
+    summary block) and continues to EOF.  If no executor line is found, the
+    last 15 lines are returned as the tail.
+    """
+    lines = log.splitlines(keepends=True)
+    if len(lines) <= _LOG_HEAD_LINES + 15:
+        return log  # already small enough
+
+    head = "".join(lines[:_LOG_HEAD_LINES])
+
+    # Find the last line containing "executor" — marks the final summary block
+    tail_start = None
+    for i in range(len(lines) - 1, -1, -1):
+        if "executor" in lines[i].lower():
+            tail_start = i
+            break
+
+    if tail_start is not None and tail_start > _LOG_HEAD_LINES:
+        tail = "".join(lines[tail_start:])
+    else:
+        # Fallback: last 15 lines
+        tail = "".join(lines[-15:])
+
+    return head + _TRUNCATION_MARKER + tail
+
+
+def workflow_log(simulation_id: int, base_url: str = "http://localhost:8080", timeout: int = 300) -> None:
+    """Fetch the workflow log tail for a simulation and print it to the console.
+
+    This is a convenience function for quick interactive debugging — it fetches
+    the full log client-side, extracts the executor summary block, and prints
+    it with Rich formatting.  No deploy required.
+
+    Usage::
+
+        from sms_api.common.handlers.simulations import workflow_log
+        workflow_log(44)
+    """
+    from app.app_data_service import E2EDataService
+    from app.cli_theme import get_console
+
+    console = get_console()
+    svc = E2EDataService(base_url=base_url, timeout=timeout)  # type: ignore[arg-type]
+
+    with console.status("[memphis.spinner]Fetching status..."):
+        run = svc.get_workflow_status(simulation_id=simulation_id)
+    status = run.status.value.upper()
+
+    with console.status("[memphis.spinner]Fetching log..."):
+        log = svc.get_workflow_log(simulation_id=simulation_id, truncate=False)
+
+    # Extract tail starting from last "executor" line
+    lines = log.splitlines()
+    tail_start = None
+    for i in range(len(lines) - 1, -1, -1):
+        if "executor" in lines[i].lower():
+            tail_start = i
+            break
+    tail = "\n".join(lines[tail_start:]) if tail_start is not None else "\n".join(lines[-15:])
+
+    from rich.panel import Panel
+
+    console.print(Panel(tail, title=f"Workflow Log — sim {simulation_id}", border_style="memphis.border.info"))
+    from app.cli_theme import status_border, status_style
+
+    error_detail = f"\n{run.error_message}" if run.error_message else ""
+    console.print(
+        Panel(
+            f"[{status_style(status.lower())}]{status}[/]{error_detail}",
+            title="Simulation Status",
+            border_style=status_border(status.lower()),
+        )
+    )
 
 
 async def _get_slurm_log(hpc_run: HpcRun) -> str:
