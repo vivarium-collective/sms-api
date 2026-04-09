@@ -11,7 +11,6 @@ from sms_api.common import StrEnumBase
 if TYPE_CHECKING:
     from rich.console import Console
 
-    from app.app_data_service import E2EDataService
     from sms_api.common.storage.file_service_s3 import FileServiceS3
 
 import typer
@@ -246,6 +245,11 @@ def simulation_run(
         default=False,
         help="Run the parameter calculator before simulation. Increases overall runtime.",
     ),
+    observables: str | None = Option(
+        default=None,
+        help="Comma-separated dot-path observables to record (e.g. 'bulk,listeners.mass.cell_mass'). "
+        "If omitted, all outputs are emitted.",
+    ),
     poll: bool = Option(default=False, help="Poll simulation status until completion."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
@@ -255,6 +259,7 @@ def simulation_run(
 
     console = get_console()
     data_service = get_data_service(base_url=base_url)
+    observables_list = [o.strip() for o in observables.split(",") if o.strip()] if observables else None
 
     with console.status("[memphis.spinner]Submitting simulation..."):
         simulation = data_service.run_workflow(
@@ -265,6 +270,7 @@ def simulation_run(
             num_seeds=seeds,
             description=description or f"sim{simulator_id}-{experiment_id}; {generations} Generations; {seeds} Seeds",
             run_parameter_calculator=run_parca,
+            observables=observables_list,
         )
 
     console.print(f"[memphis.success]Simulation submitted![/]  ID: {simulation.database_id}")
@@ -329,35 +335,7 @@ def simulation_list(
         display_json(sim.model_dump(), console)
 
 
-def _show_simulation_result(
-    console: Console,
-    data_service: E2EDataService,
-    simulation_id: int,
-    status: str,
-    error_message: str | None,
-) -> None:
-    """Display a terminal simulation status with details."""
-    from rich.panel import Panel
-
-    try:
-        log = data_service.get_workflow_log(simulation_id=simulation_id)
-        console.print(Panel(log, title=f"Workflow Log (sim {simulation_id})", border_style="memphis.border.info"))
-    except Exception as e:
-        console.print(f"[memphis.dim]Log not available: {e}[/]")
-
-    error_detail = f"\n{error_message}" if error_message else ""
-    console.print(
-        Panel(
-            f"[{status_style(status)}]{status.upper()}[/]{error_detail}",
-            title="Simulation Status",
-            border_style=status_border(status),
-        )
-    )
-    if status == "completed":
-        console.print(f"\n[memphis.hint]Download data:[/]  atlantis simulation outputs {simulation_id} --dest ./debug")
-
-
-@simulation_cli.command("status", help="Get the status and log for a simulation.")
+@simulation_cli.command("status", help="Get the workflow log tail and status for a simulation.")
 def simulation_status(
     simulation_id: int = Argument(help="Simulation database ID."),
     poll: bool = Option(default=False, help="Poll until simulation completes."),
@@ -365,39 +343,19 @@ def simulation_status(
 ) -> None:
     import time
 
-    from rich.panel import Panel
-
-    console = get_console()
-    data_service = get_data_service(base_url=base_url)
-
-    # Get status first (always available)
-    try:
-        run = data_service.get_workflow_status(simulation_id=simulation_id)
-        status = run.status.value
-    except Exception as e:
-        console.print(f"[memphis.error]{e}[/]")
-        return
-
-    # Terminal state: show result panel + simulation details
-    if status in ("completed", "failed", "cancelled"):
-        _show_simulation_result(console, data_service, simulation_id, status, run.error_message)
-        return
-
-    # Still running: show live log
-    console.print(f"[memphis.label]Status:[/] [{status_style(status)}]{status.upper()}[/]")
-    try:
-        log = data_service.get_workflow_log(simulation_id=simulation_id)
-        console.print(Panel(log, title=f"Workflow Log (sim {simulation_id})", border_style="memphis.border.info"))
-    except Exception as e:
-        console.print(f"[memphis.dim]Log not available: {e}[/]")
+    from sms_api.common.handlers.simulations import workflow_log
 
     if not poll:
+        workflow_log(simulation_id=simulation_id, base_url=base_url)
         return
 
-    # Poll until done
-    console.print("\n[memphis.info]Polling...[/]")
+    # Poll until terminal state
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    console.print("[memphis.info]Polling...[/]")
     poll_interval = 30
     elapsed = 0
+    status = "running"
     while status not in ("completed", "failed", "cancelled", "unknown"):
         time.sleep(poll_interval)
         elapsed += poll_interval
@@ -409,7 +367,7 @@ def simulation_status(
             continue
         console.print(f"  [{elapsed}s] status: [{status_style(status)}]{status}[/]")
 
-    _show_simulation_result(console, data_service, simulation_id, status, run.error_message)
+    workflow_log(simulation_id=simulation_id, base_url=base_url)
 
 
 @simulation_cli.command("cancel", help="Cancel a running simulation.")
@@ -433,7 +391,7 @@ def simulation_log(
     console = get_console()
     data_service = get_data_service(base_url=base_url)
     try:
-        log = data_service.get_workflow_log(simulation_id=simulation_id)
+        log = data_service.get_workflow_log(simulation_id=simulation_id, truncate=False)
         console.print(Panel(log, title=f"Workflow Log (sim {simulation_id})", border_style="memphis.border.info"))
     except Exception as e:
         console.print(f"[memphis.error]Error: {e}[/]")
@@ -894,6 +852,9 @@ def draw_ecoli(
         )
     else:
         console.print(pixels)
+
+
+# atlantis simulation run test-cli-baseline-seeds1000-generations10 11 --generations 10 --seeds 1000 --base-url http://localhost:8080
 
 
 if __name__ == "__main__":

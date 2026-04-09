@@ -82,6 +82,7 @@ class E2EDataService:
         num_seeds: int | None = None,
         description: str | None = None,
         run_parameter_calculator: bool | None = None,
+        observables: list[str] | None = None,
     ) -> Simulation:
         simulation = self.submit_run_workflow(
             params=params,
@@ -92,6 +93,7 @@ class E2EDataService:
             num_seeds=num_seeds,
             description=description,
             run_parameter_calculator=run_parameter_calculator,
+            observables=observables,
         )
         return simulation
 
@@ -104,14 +106,31 @@ class E2EDataService:
     def show_simulators(self) -> list[SimulatorVersion]:
         return self.submit_list_simulators()
 
-    def get_workflow_log(self, simulation_id: int) -> str:
-        return self.submit_get_workflow_log(simulation_id=simulation_id)
+    def get_workflow_log(self, simulation_id: int, truncate: bool = True) -> str:
+        return self.submit_get_workflow_log(simulation_id=simulation_id, truncate=truncate)
 
     def get_workflow_status(self, simulation_id: int) -> SimulationRun:
         return self.submit_get_workflow_status(simulation_id=simulation_id)
 
     def cancel_workflow(self, simulation_id: int) -> SimulationRun:
         return self.submit_cancel_workflow(simulation_id=simulation_id)
+
+    def get_output_data_sync(self, simulation_id: int, dest: Path) -> Path:
+        """Download simulation outputs synchronously (no async event loop required)."""
+        simulation = self.submit_get_workflow(simulation_id=simulation_id)
+        experiment_id = simulation.experiment_id
+        output_path = dest / f"{experiment_id}.tar.gz"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.client.stream("POST", f"/api/v1/simulations/{simulation_id}/data") as response:
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}")
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_bytes():
+                    f.write(chunk)
+        with tarfile.open(output_path, "r:gz") as tar:
+            tar.extractall(output_path.parent)  # noqa: S202
+        # .stem on .tar.gz gives "foo.tar", so strip both suffixes
+        return output_path.parent / experiment_id
 
     async def get_output_data(self, simulation_id: int, dest: Path | None = None, timeout: int = 300) -> Path:
         if dest is None:
@@ -230,16 +249,28 @@ class E2EDataService:
         num_seeds: int | None = None,
         description: str | None = None,
         run_parameter_calculator: bool | None = None,
+        observables: list[str] | None = None,
     ) -> Simulation:
-        query_params = params or httpx.QueryParams(
-            simulator_id=simulator_id,
-            simulation_config_filename=config_filename,
-            num_generations=num_generations,
-            num_seeds=num_seeds,
-            description=description,
-            experiment_id=experiment_id,
-            run_parca=run_parameter_calculator,
-        )
+        if params is not None:
+            query_params = params
+        else:
+            # Build query items — httpx needs repeated keys for list params
+            items: list[tuple[str, str | int | float | bool | None]] = [
+                (k, str(v))
+                for k, v in {
+                    "simulator_id": simulator_id,
+                    "simulation_config_filename": config_filename,
+                    "num_generations": num_generations,
+                    "num_seeds": num_seeds,
+                    "description": description,
+                    "experiment_id": experiment_id,
+                    "run_parca": run_parameter_calculator,
+                }.items()
+                if v is not None
+            ]
+            if observables:
+                items.extend(("observables", obs) for obs in observables)
+            query_params = httpx.QueryParams(items)
         try:
             simulation_response = self.client.post(
                 url="/api/v1/simulations",
@@ -300,9 +331,12 @@ class E2EDataService:
         except Exception as e:
             raise httpx.HTTPError("Could not load simulation data") from e
 
-    def submit_get_workflow_log(self, simulation_id: int) -> str:
+    def submit_get_workflow_log(self, simulation_id: int, truncate: bool = True) -> str:
         try:
-            structured_log = self.client.get(url=f"/api/v1/simulations/{simulation_id}/log")
+            structured_log = self.client.get(
+                url=f"/api/v1/simulations/{simulation_id}/log",
+                params={"truncate": str(truncate).lower()},
+            )
             if structured_log.status_code != 200:
                 raise httpx.HTTPError("Error!")  # noqa: TRY301
             return structured_log.text
