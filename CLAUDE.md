@@ -239,24 +239,42 @@ marimo), and tui (textual-based tui) all expose/provide the same functionality, 
 The iterative fix → deploy → test cycle for the `sms-api-stanford-test` namespace:
 
 ```bash
-# 1. Fix code, then commit and push
-git add <files> && git commit -m "fix: ..." && git push
+# 1. Commit and push the fix (THIS MUST HAPPEN BEFORE STEP 2 — see "Pitfall 1" below)
+git add <files> && git commit -m "fix: ..." && git push origin atlantis-cli
 
 # 2. Build and push Docker image via GitHub Action
+#    The GH Action checks out the ref at the REMOTE branch tip, not your local
+#    working tree. If your fix isn't pushed, the action builds the old code.
 gh workflow run build-and-push.yml --ref atlantis-cli -f version=<VERSION>
 gh run watch $(gh run list --workflow=build-and-push.yml --limit 1 --json databaseId -q '.[0].databaseId')
-# NOTE: The action builds sms-api and sms-ptools. sms-api is the important one.
-# The ptools step may fail (Dockerfile-nextflow issue) — that's fine as long as sms-api succeeds.
+# NOTE: The action builds sms-api and sms-nextflow (aka sms-ptools). sms-api is
+# the important one. The sms-nextflow step is known-broken
+# (`ERROR: failed to build: base name (${BASE_IMAGE}) should not be blank` in
+# Dockerfile-nextflow). That's fine — as long as "Built and pushed service api"
+# appears in the logs before the nextflow step fails, you're good. DO NOT bump
+# the sms-ptools newTag in kustomize to match the new api version because there
+# is no sms-ptools:0.6.x image on ghcr.io; keep it pinned to 0.5.9.
 
-# 3. Deploy to K8s (rollout restart forces new image pull even if tag unchanged)
+# 3. Apply + roll Stanford-test
+kubectl kustomize kustomize/overlays/sms-api-stanford-test | kubectl apply -f -
 kubectl rollout restart deployment/api -n sms-api-stanford-test
-kubectl rollout status deployment/api -n sms-api-stanford-test
+kubectl rollout status  deployment/api -n sms-api-stanford-test
 
-# 4. Start proxy for local access
-AWS_PROFILE=stanford-sso AWS_DEFAULT_REGION=us-gov-west-1 ../sms-cdk/scripts/ptools-proxy.sh -s smsvpctest
+# 4. Start the external tunnel for local access
+AWS_PROFILE=stanford-sso AWS_DEFAULT_REGION=us-gov-west-1 \
+  ../sms-cdk/scripts/ptools-proxy.sh -s smsvpctest
+#    (keep this terminal open)
 
-# 5. Verify version
-curl -s http://localhost:8080/health
+# 5. Verify the running pod actually has your fix
+POD=$(kubectl get pod -n sms-api-stanford-test -l app=api \
+  --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n sms-api-stanford-test $POD -- grep -c <marker> \
+  /app/sms_api/<path/to/changed/file>.py
+#    ^ Replace <marker> with something unique to your fix (an identifier,
+#      a log string, etc.). If this returns 0, step 2's build didn't pick up
+#      your commit. Stop. Do not proceed.
+
+curl -s http://localhost:8080/version   # sanity check the tunnel
 
 # 6. Test E2E via Atlantis CLI (NOT curl)
 uv run atlantis simulator latest --repo-url https://github.com/CovertLabEcoli/vEcoli-private --branch master
@@ -264,12 +282,83 @@ uv run atlantis simulation run test1 <SIMULATOR_ID> --generations 1 --seeds 1 --
 uv run atlantis simulation outputs <SIM_ID> --dest ./debug
 ```
 
-**Version sync:** When bumping version, update `sms_api/version.py` AND `kustomize/overlays/sms-api-stanford-test/kustomization.yaml` (both `newTag` fields). Same tag is fine for iterative fixes — `rollout restart` forces a new pull regardless.
+**Version sync:** When bumping version, update ALL of:
+- `sms_api/version.py`
+- `pyproject.toml`
+- `kustomize/overlays/sms-api-stanford-test/kustomization.yaml` (the `sms-api` image entry only — leave `sms-ptools` pinned to 0.5.9)
+- `kustomize/overlays/sms-api-rke/kustomization.yaml`
+- `kustomize/overlays/sms-api-rke-dev/kustomization.yaml`
+
+Prefer bumping the tag to reusing the same one — a new tag is the unambiguous signal that a new image must exist on ghcr, and eliminates all "did the rollout actually pull new bits?" confusion.
 
 **Alternative: Local build** (faster, no GH Action wait):
 ```bash
 ./kustomize/scripts/build_and_push.sh   # reads version from sms_api/version.py
 ```
+
+**Helper script:** `scripts/deploy-namespace.sh` wraps steps 1–6 (mostly) for the
+three-namespace fleet. Read it before running it — it's been the source of
+several subtle bugs (e.g. an earlier VERSION-variable ordering bug silently
+built image tags with empty version strings).
+
+---
+
+#### Pitfalls the team has hit (documented here so nobody re-hits them)
+
+**Pitfall 1 — GH Action builds the REMOTE branch, not your working tree.**
+`gh workflow run ... --ref atlantis-cli` runs the action against whatever the
+remote branch points at when it starts. If you forgot to `git push` before firing
+the action, the build will produce an image with your OLD code — and
+`imagePullPolicy: Always` will faithfully pull that old code onto the new pod.
+Symptom: you deployed, pods rolled, `/health` works, but the fix isn't there.
+Verification step 5 above catches this — always grep a marker unique to your
+fix inside `/app/sms_api/...` on the live pod before declaring victory.
+
+**Pitfall 2 — Ephemeral storage eviction on large downloads.**
+The `api` pod mounts `/app/.results_cache` as an `emptyDir` with
+`ephemeral-storage: requests=4Gi, limits=12Gi` (see `kustomize/base/api.yaml`).
+Those numbers are sized against the `m6i.large` node's ~16.9 GiB allocatable —
+do **NOT** raise them without bumping `diskSize` in `../sms-cdk/lib/eks-stack.ts`
+first, or you'll overcommit and trigger eviction cascades under load. If a real
+workload exceeds the 12 GiB cache ceiling, the correct answer is **task 11**
+(stream S3 → tar response without ever touching disk), not raising the limit.
+
+**Pitfall 3 — The Stanford-test ingress.yaml is DEAD CODE.**
+`kustomize/overlays/sms-api-stanford-test/kustomization.yaml` has
+`#  - ingress.yaml` commented out of its `resources:` list. Stanford-test uses
+`target-group-binding.yaml` to attach pods directly to a CDK-managed ALB. Any
+edit to that `ingress.yaml` file is a no-op. The real ALB config (including
+`idleTimeout`) lives in `../sms-cdk/lib/internal-alb-stack.ts` on the
+`aws-batch-manual` branch and requires `cdk deploy` to change.
+
+**Pitfall 4 — The ALB target group occasionally flakes to `Target.Timeout`.**
+After sustained outbound traffic (e.g. many S3 downloads), the ALB's view of
+the api pod can transition to `unhealthy: Target.Timeout` even though the pod
+is fine. The pod itself remains reachable via cluster-internal paths
+(`kubectl port-forward`, other pods, /health probes from inside the pod all
+work). When this happens, any CLI request via `ptools-proxy.sh → ALB` will
+hang. **Workaround:** bypass the ALB entirely with `kubectl port-forward`:
+
+```bash
+# In a dedicated terminal, kill the ptools-proxy first
+kubectl port-forward -n sms-api-stanford-test deployment/api 8080:8000
+# Then point the CLI at the same local port
+uv run atlantis simulation outputs 44 --base-url http://localhost:8080
+```
+
+Port-forward routes through the kube-apiserver HTTP/2 tunnel — slower than the
+ALB path (~1–3 MiB/s sustained) but 100% reliable. Good enough for a single-user
+CLI workflow. The proper long-term fix is task 11 (streaming responses keep the
+connection chatty, which sidesteps the ALB conntrack staleness entirely).
+
+**Pitfall 5 — `kubectl port-forward` and multi-request handlers don't mix.**
+If a client-side code path opens a SECOND TCP connection to the port-forwarded
+local port while a large async stream is already in flight over the same
+kubectl port-forward session, the second connection can get RST'd by the
+HTTP/2 multiplexer. We hit this once in `E2EDataService.submit_stream_output_data`
+(fixed by parsing the filename from `Content-Disposition` instead of making a
+second `GET /simulations/{id}` call). Rule of thumb: inside an
+`async with client.stream(...)` block, don't make additional HTTP calls.
 
 # PRIORITY
 
