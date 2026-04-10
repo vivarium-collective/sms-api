@@ -36,6 +36,26 @@ DEFAULT_REQUEST_TIMEOUT = 1000
 SUPPORTED_CONFIGS = [name.replace(".json", "") for name in SimulationConfigFilename.values()]
 
 
+def _parse_content_disposition_filename(header_value: str) -> str | None:
+    """Return the ``filename`` parameter from a Content-Disposition header, or None.
+
+    Accepts both the quoted form (``attachment; filename="foo.tar.gz"``) and the
+    unquoted form (``attachment; filename=foo.tar.gz``).  The RFC 6266 ``filename*``
+    form is not supported because the server emits plain ASCII filenames.
+    """
+    if not header_value:
+        return None
+    for part in header_value.split(";"):
+        kv = part.strip()
+        if not kv.lower().startswith("filename="):
+            continue
+        value = kv[len("filename=") :].strip()
+        if value.startswith('"') and value.endswith('"'):
+            value = value[1:-1]
+        return value or None
+    return None
+
+
 @asynccontextmanager
 async def async_client(base_url: BaseUrl, timeout: int = 300) -> AsyncIterator[AsyncClient]:
     try:
@@ -480,10 +500,11 @@ class E2EDataService:
                             f"Got: {response.headers['content-type']}"
                         )
 
-                    if "attachment" not in response.headers.get("content-disposition", ""):
+                    content_disposition = response.headers.get("content-disposition", "")
+                    if "attachment" not in content_disposition:
                         raise httpx.HTTPError(  # noqa: TRY301
                             f"Unexpected content-disposition header. Expected: {'attachment'}; "
-                            f"Got: {response.headers.get('content-disposition', '')}"
+                            f"Got: {content_disposition}"
                         )
 
                     # Get total size if available for progress bar
@@ -491,10 +512,22 @@ class E2EDataService:
                     total_bytes = int(total_size) if total_size else None
 
                     if output_dirpath is not None:
-                        # Stream directly to disk (memory-efficient for large files)
-                        simulation = self.submit_get_workflow(simulation_id=simulation_id)
-                        experiment_id = simulation.experiment_id
-                        output_path = output_dirpath / f"{experiment_id}.tar.gz"
+                        # Stream directly to disk (memory-efficient for large files).
+                        #
+                        # Parse the output filename from the Content-Disposition header the
+                        # server already set (e.g. ``attachment; filename="sim-foo.tar.gz"``).
+                        # Previously this code made a *second* synchronous HTTP call to
+                        # ``GET /api/v1/simulations/{id}`` just to rebuild the filename from
+                        # the simulation's experiment_id — but opening a second connection to
+                        # the same base_url while an async streaming response is still open
+                        # can get RST'd over ``kubectl port-forward`` (HTTP/2 multiplex
+                        # weirdness), which would abort an otherwise-successful download.
+                        archive_filename = _parse_content_disposition_filename(content_disposition)
+                        if archive_filename is None:
+                            raise httpx.HTTPError(  # noqa: TRY301
+                                f"Could not parse filename from content-disposition header: {content_disposition}"
+                            )
+                        output_path = output_dirpath / archive_filename
                         output_path.parent.mkdir(parents=True, exist_ok=True)
                         with open(output_path, "wb") as f:
                             if show_progress:
