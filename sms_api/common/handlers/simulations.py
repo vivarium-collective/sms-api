@@ -732,6 +732,7 @@ async def get_simulation_outputs(
 
 _ACCEPTED_ANALYSES_EXTENSIONS = (".tsv", ".json")
 _WORKFLOW_CONFIG_KEY = "nextflow/workflow_config.json"
+_S3_DOWNLOAD_CONCURRENCY = 32
 
 
 async def _download_outputs_from_s3(experiment_id: str, local_cache: Path) -> None:
@@ -740,6 +741,11 @@ async def _download_outputs_from_s3(experiment_id: str, local_cache: Path) -> No
     Downloads only:
     - All files under ``analyses/`` matching accepted extensions (.tsv, .json)
     - ``nextflow/workflow_config.json``
+
+    Downloads are parallelized with a bounded semaphore to avoid overwhelming
+    the event loop while still finishing fast enough that reverse-proxy
+    idle timeouts (60s default on ALB/NGINX) don't trigger a 504 before the
+    streaming response begins.
     """
     settings = get_settings()
     file_service = get_file_service()
@@ -748,9 +754,11 @@ async def _download_outputs_from_s3(experiment_id: str, local_cache: Path) -> No
 
     experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}/{experiment_id}"
 
-    # 1. Download analyses/ contents
+    # 1. Plan analyses/ downloads
     analyses_prefix = S3FilePath(s3_path=Path(f"{experiment_prefix}/analyses"))
     analyses_listing = await file_service.get_listing(analyses_prefix)
+
+    download_plan: list[tuple[S3FilePath, Path]] = []
     for item in analyses_listing:
         if not item.Key.endswith(_ACCEPTED_ANALYSES_EXTENSIONS):
             continue
@@ -759,9 +767,33 @@ async def _download_outputs_from_s3(experiment_id: str, local_cache: Path) -> No
         if local_file.exists():
             continue
         local_file.parent.mkdir(parents=True, exist_ok=True)
-        await file_service.download_file(S3FilePath(s3_path=Path(item.Key)), local_file)
+        download_plan.append((S3FilePath(s3_path=Path(item.Key)), local_file))
 
-    # 2. Download nextflow/workflow_config.json
+    logger.info(
+        f"Downloading {len(download_plan)} analysis files from S3 for "
+        f"experiment {experiment_id} (concurrency={_S3_DOWNLOAD_CONCURRENCY})"
+    )
+
+    # 2. Run downloads concurrently with a bounded semaphore
+    sem = asyncio.Semaphore(_S3_DOWNLOAD_CONCURRENCY)
+
+    async def _bounded_download(remote: S3FilePath, local: Path) -> None:
+        async with sem:
+            await file_service.download_file(remote, local)
+
+    if download_plan:
+        results = await asyncio.gather(
+            *(_bounded_download(remote, local) for remote, local in download_plan),
+            return_exceptions=True,
+        )
+        failures = [r for r in results if isinstance(r, BaseException)]
+        if failures:
+            logger.warning(
+                f"{len(failures)}/{len(download_plan)} S3 downloads failed for {experiment_id}; "
+                f"continuing with partial archive. First error: {failures[0]!r}"
+            )
+
+    # 3. Download nextflow/workflow_config.json
     workflow_config_key = f"{experiment_prefix}/{_WORKFLOW_CONFIG_KEY}"
     workflow_config_s3 = S3FilePath(s3_path=Path(workflow_config_key))
     local_workflow_config = local_cache / _WORKFLOW_CONFIG_KEY
