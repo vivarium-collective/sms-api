@@ -119,6 +119,11 @@ Submit a simulation workflow (parca -> simulation -> analysis).
        Limits simulation output to the specified vEcoli state paths.
        If omitted, uses the default baseline set (55 paths covering
        all analysis modules).
+   * - ``--analysis-options``
+     - default ptools modules
+     - JSON string overriding which analysis modules run as part of the
+       workflow. E.g. ``'{"multiseed": {"ptools_rna": {"n_tp": 10}}}'``.
+       If omitted, uses the default set.
    * - ``--poll / --no-poll``
      - off
      - Poll until completion
@@ -138,6 +143,10 @@ Submit a simulation workflow (parca -> simulation -> analysis).
 
    # Custom observables (only mass and bulk)
    uv run atlantis simulation run mass-only 11 --observables "bulk,listeners.mass.cell_mass,listeners.mass.dry_mass"
+
+   # Custom analysis modules
+   uv run atlantis simulation run my-exp 11 \
+     --analysis-options '{"multiseed": {"ptools_rna": {"n_tp": 10}, "ptools_rxns": {"n_tp": 10}}}'
 
    # Target a specific server
    uv run atlantis simulation run test1 11 --base-url https://sms.cam.uchc.edu
@@ -208,6 +217,39 @@ Download simulation output data as a tar.gz archive.
    uv run atlantis simulation outputs SIMULATION_ID [--dest DIR]
 
 ``--dest`` defaults to ``./simulation_id_<ID>``.
+
+simulation analysis
+~~~~~~~~~~~~~~~~~~~
+
+Run standalone analysis on existing simulation output. Useful for re-running
+specific analysis modules on a completed simulation without re-running the
+entire workflow.
+
+.. code-block:: bash
+
+   uv run atlantis simulation analysis SIMULATION_ID [--modules JSON]
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Option
+     - Description
+   * - ``--modules``
+     - JSON string of analysis modules keyed by domain.
+       E.g. ``'{"multiseed": {"ptools_rna": {"n_tp": 10}}}'``.
+       If omitted, runs default ptools modules (rna, rxns, proteins).
+
+**Examples:**
+
+.. code-block:: bash
+
+   # Default ptools analysis on simulation 44
+   uv run atlantis simulation analysis 44
+
+   # Specific modules only
+   uv run atlantis simulation analysis 44 \
+     --modules '{"multiseed": {"ptools_rna": {"n_tp": 10}, "cd1_fluxomics": {"generation_lower_bound": 5}}}'
 
 parca
 -----

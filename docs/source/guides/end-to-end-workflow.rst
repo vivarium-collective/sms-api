@@ -228,8 +228,24 @@ You can inspect parca datasets independently:
    # Check the status of a specific parca run
    uv run atlantis parca status <PARCA_ID>
 
-Inspecting Analysis Results
+Running Standalone Analysis
 ----------------------------
+
+You can re-run specific analysis modules on a completed simulation without
+re-running the entire workflow. This is useful when the original workflow
+included unwanted modules or you want to try different parameters:
+
+.. code-block:: bash
+
+   # Default ptools analysis on a completed simulation
+   uv run atlantis simulation analysis 44
+
+   # Only specific modules
+   uv run atlantis simulation analysis 44 \
+     --modules '{"multiseed": {"ptools_rna": {"n_tp": 10}, "ptools_rxns": {"n_tp": 10}}}'
+
+Inspecting Analysis Results
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Each simulation produces analysis outputs. You can inspect them individually:
 

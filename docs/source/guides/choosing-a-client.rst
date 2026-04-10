@@ -130,3 +130,8 @@ All three clients map to the same six workflow steps:
      - ``simulation outputs``
      - Double-click completed row
      - Simulation card > Download
+   * - 7
+     - Re-run analysis
+     - ``simulation analysis``
+     - Analyses domain
+     - (endpoint available)

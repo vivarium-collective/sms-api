@@ -221,6 +221,7 @@ We seek to have the Atlantis CLI (`app.cli`) to do this workflow, which again sh
 4. (once done) -> <POST> /api/v1/simulations
 5. -> <GET> /api/v1/simulations/{id}/status (again, perhaps poll? Whatever is sleek and a good ux)
 6. -> (once done) <POST> /api/v1/simulations/{id}/data (saved to a specified outdir, which for our testing/debugging can be a dir at ./debug)
+7. -> (optional) <POST> /api/v1/simulations/{id}/analysis (re-run specific analysis modules on existing output)
 ```
 
 
