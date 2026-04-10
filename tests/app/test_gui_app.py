@@ -400,7 +400,14 @@ class TestEUTEParity:
         """GUI should let user choose API base URL, like CLI --base-url."""
         source = GUI_APP_PATH.read_text()
         assert "base_url_dropdown" in source
-        assert "localhost:8080" in source
+        # The dropdown should be sourced from the shared BaseUrl enum so that
+        # CLI/TUI/GUI expose the same set of deployment targets (incl. CCAM).
+        assert "BaseUrl" in source
+        from app.app_data_service import BaseUrl
+
+        # Sanity check that CCAM (RKE_PROD) is a valid option exposed via the enum
+        assert BaseUrl.RKE_PROD.value == "https://sms.cam.uchc.edu"
+        assert BaseUrl.LOCAL_8080.value == "http://localhost:8080"
 
     def test_run_parca_option(self) -> None:
         """GUI should expose the 'run parca' checkbox, like CLI --run-parca."""

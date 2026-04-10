@@ -144,7 +144,7 @@ class E2EDataService:
         # .stem on .tar.gz gives "foo.tar", so strip both suffixes
         return output_path.parent / experiment_id
 
-    async def get_output_data(self, simulation_id: int, dest: Path | None = None, timeout: int = 300) -> Path:
+    async def get_output_data(self, simulation_id: int, dest: Path | None = None, timeout: int = 1800) -> Path:
         if dest is None:
             dest = Path(os.getcwd()).absolute()
         archive_path = await self.submit_stream_output_data(
@@ -431,7 +431,7 @@ class E2EDataService:
     # -- Streaming output download --
 
     async def submit_stream_output_data(  # noqa: C901
-        self, simulation_id: int, show_progress: bool = True, output_dirpath: Path | None = None, timeout: int = 300
+        self, simulation_id: int, show_progress: bool = True, output_dirpath: Path | None = None, timeout: int = 1800
     ) -> set[str] | Path:
         """
         Download simulation output data as a streamable tar.gz archive.

@@ -317,16 +317,14 @@ def _():
 
 @app.cell
 def _(ICO_GEAR, mo):
-    _base_url_options = {
-        "Local (8080)": "http://localhost:8080",
-        "Local (8888)": "http://localhost:8888",
-        "Stanford Forwarded (8080)": "http://localhost:8080",
-        "CCAM Prod": "https://sms.cam.uchc.edu",
-        "CCAM Dev": "https://sms-dev.cam.uchc.edu",
-    }
+    from app.app_data_service import BaseUrl
+
+    # Derive the dropdown directly from BaseUrl so CLI/TUI/GUI all expose the
+    # same set of deployment targets (e.g. RKE_PROD / CCAM).
+    _base_url_options = {f"{u.name} ({u.value})": u.value for u in BaseUrl}
     base_url_dropdown = mo.ui.dropdown(
         options=_base_url_options,
-        value="Local (8080)",
+        value=f"{BaseUrl.LOCAL_8080.name} ({BaseUrl.LOCAL_8080.value})",
         label=f"{ICO_GEAR.text} API base URL",
     )
     base_url_dropdown
