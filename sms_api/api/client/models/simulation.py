@@ -1,15 +1,10 @@
 from collections.abc import Mapping
-from typing import Any, TypeVar, Optional, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, TypeVar, Union, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
-
-from ..types import UNSET, Unset
-from typing import cast
-from typing import cast, Union
-from typing import Union
 
 if TYPE_CHECKING:
     from ..models.simulation_config import SimulationConfig
@@ -27,21 +22,23 @@ class Simulation:
         simulator_id (int):
         parca_dataset_id (int):
         config (SimulationConfig):
-        last_updated (Union[Unset, str]):  Default: '2026-01-13 13:08:18.336429'.
-        job_id (Union[None, Unset, int]):
+        simulation_config_filename (str):
+        experiment_id (str):
+        last_updated (Union[Unset, str]):  Default: '2026-03-31 23:33:56.358973'.
+        job_id (Union[None, Unset, str]):
     """
 
     database_id: int
     simulator_id: int
     parca_dataset_id: int
     config: "SimulationConfig"
-    last_updated: Union[Unset, str] = "2026-01-13 13:08:18.336429"
-    job_id: Union[None, Unset, int] = UNSET
+    simulation_config_filename: str
+    experiment_id: str
+    last_updated: Union[Unset, str] = "2026-03-31 23:33:56.358973"
+    job_id: Union[None, Unset, str] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.simulation_config import SimulationConfig
-
         database_id = self.database_id
 
         simulator_id = self.simulator_id
@@ -50,9 +47,13 @@ class Simulation:
 
         config = self.config.to_dict()
 
+        simulation_config_filename = self.simulation_config_filename
+
+        experiment_id = self.experiment_id
+
         last_updated = self.last_updated
 
-        job_id: Union[None, Unset, int]
+        job_id: Union[None, Unset, str]
         if isinstance(self.job_id, Unset):
             job_id = UNSET
         else:
@@ -65,6 +66,8 @@ class Simulation:
             "simulator_id": simulator_id,
             "parca_dataset_id": parca_dataset_id,
             "config": config,
+            "simulation_config_filename": simulation_config_filename,
+            "experiment_id": experiment_id,
         })
         if last_updated is not UNSET:
             field_dict["last_updated"] = last_updated
@@ -86,14 +89,18 @@ class Simulation:
 
         config = SimulationConfig.from_dict(d.pop("config"))
 
+        simulation_config_filename = d.pop("simulation_config_filename")
+
+        experiment_id = d.pop("experiment_id")
+
         last_updated = d.pop("last_updated", UNSET)
 
-        def _parse_job_id(data: object) -> Union[None, Unset, int]:
+        def _parse_job_id(data: object) -> Union[None, Unset, str]:
             if data is None:
                 return data
             if isinstance(data, Unset):
                 return data
-            return cast(Union[None, Unset, int], data)
+            return cast(Union[None, Unset, str], data)
 
         job_id = _parse_job_id(d.pop("job_id", UNSET))
 
@@ -102,6 +109,8 @@ class Simulation:
             simulator_id=simulator_id,
             parca_dataset_id=parca_dataset_id,
             config=config,
+            simulation_config_filename=simulation_config_filename,
+            experiment_id=experiment_id,
             last_updated=last_updated,
             job_id=job_id,
         )

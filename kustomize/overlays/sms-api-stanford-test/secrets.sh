@@ -278,4 +278,23 @@ sed \
 echo "✓ TargetGroupBinding YAML generated: ${TGB_FILE}"
 
 echo ""
+echo "=== Uploading GitHub PAT for DooD Builds to Secrets Manager ==="
+
+# Get the git secret ARN from the build-batch stack
+GIT_SECRET_ARN=$(get_stack_output "${STACK_PREFIX}-build-batch" "GitSecretArn")
+
+if [ -z "$GIT_SECRET_ARN" ] || [ "$GIT_SECRET_ARN" = "None" ]; then
+    echo "WARNING: Could not find GitSecretArn from ${STACK_PREFIX}-build-batch stack, skipping"
+elif [ -z "${GITHUB_BUILD_PAT:-}" ]; then
+    echo "WARNING: GITHUB_BUILD_PAT not set in secrets.dat, skipping"
+else
+    # Allow reusing the GH_PAT used for GHCR
+    BUILD_PAT="${GITHUB_BUILD_PAT}"
+    if [ "$BUILD_PAT" = "use_gh_pat" ]; then
+        BUILD_PAT="${GH_PAT}"
+    fi
+    ${SCRIPTS_DIR}/upload_deploy_key.sh "$GIT_SECRET_ARN" "$BUILD_PAT" "$AWS_REGION"
+fi
+
+echo ""
 echo "=== All secrets, ConfigMaps, and FSx configuration files generated successfully! ==="

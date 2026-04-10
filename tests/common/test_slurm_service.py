@@ -8,6 +8,7 @@ import pytest
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.models import SSHTarget
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
@@ -110,7 +111,7 @@ def test_slurm_job_from_scontrol_output_cancelled_with_reason() -> None:
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_query_squeue(slurm_service: SlurmService) -> None:
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         all_jobs: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh)
         assert all_jobs is not None
         if len(all_jobs) > 0:
@@ -125,7 +126,7 @@ async def test_slurm_job_query_squeue(slurm_service: SlurmService) -> None:
 @pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_query_sacct(slurm_service: SlurmService) -> None:
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         all_jobs: list[SlurmJob] = await slurm_service._get_job_status_sacct(ssh)
         assert all_jobs is not None
         if len(all_jobs) > 0:
@@ -141,7 +142,7 @@ async def test_slurm_job_query_sacct(slurm_service: SlurmService) -> None:
 @pytest.mark.asyncio
 async def test_slurm_job_query_scontrol(slurm_service: SlurmService) -> None:
     """Test scontrol-based job query (alternative to sacct when accounting is disabled)."""
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         # First get running jobs from squeue
         running_jobs: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh)
         if len(running_jobs) == 0:
@@ -172,7 +173,7 @@ async def test_slurm_job_submit(slurm_service: SlurmService, slurm_template_hell
             f.write(slurm_template_hello_1s)
 
         remote_sbatch_file = remote_path / local_sbatch_file.name
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             job_id: int = await slurm_service.submit_job(
                 ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
             )
@@ -279,7 +280,7 @@ async def _run_nextflow_workflow_test(
         remote_sbatch_file = remote_base_path / local_sbatch_file.name
 
         # Use single SSH session for file upload, job submission, and polling
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             # Upload files to remote
             await ssh.scp_upload(local_file=local_nf_script, remote_path=remote_nf_script)
             await ssh.scp_upload(local_file=local_nf_config, remote_path=remote_nf_config)

@@ -6,9 +6,9 @@ from dataclasses import field
 from typing import Any
 
 from pydantic import BaseModel as _BaseModel
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobBackend, JobId, JobStatus
 from sms_api.config import get_settings
 
 
@@ -36,7 +36,7 @@ class JobType(enum.Enum):
 
 class HpcRun(BaseModel):
     database_id: int
-    slurmjobid: int  # Slurm job ID if applicable
+    job_id: JobId = Field(exclude=True)  # Backend-tagged job identifier (not serialized directly)
     correlation_id: str  # to correlate with the WorkerEvent, if applicable ("N/A" if not applicable)
     job_type: JobType
     ref_id: int  # primary key of the object this HPC run is associated with (sim, parca, etc.)
@@ -45,10 +45,43 @@ class HpcRun(BaseModel):
     end_time: str | None = None  # ISO format datetime string or None if still running
     error_message: str | None = None  # Error message if the simulation failed
 
+    @model_validator(mode="before")
+    @classmethod
+    def _reconstruct_job_id(cls, data: Any) -> Any:
+        """Rebuild ``job_id`` from API response fields.
+
+        Handles three formats:
+        - Modern: ``job_id_ext`` + ``job_backend`` (current serialization)
+        - Already an object with ``job_id``
+        - Legacy: ``slurmjobid`` integer (older deployments, e.g. sms-api-rke
+          running a pre-JobBackend release)
+
+        The legacy path lets the current CLI/TUI/GUI remain compatible with
+        an older deployment while rolling out new versions.
+        """
+        if isinstance(data, dict) and "job_id" not in data:
+            if "job_id_ext" in data:
+                data["job_id"] = JobId(value=data["job_id_ext"], backend=JobBackend(data["job_backend"]))
+            elif "slurmjobid" in data:
+                data["job_id"] = JobId(value=str(data["slurmjobid"]), backend=JobBackend.SLURM)
+        return data
+
+    # Computed fields for API serialization
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def job_id_ext(self) -> str:
+        return str(self.job_id)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def job_backend(self) -> str:
+        return self.job_id.backend.value
+
 
 class SimulationRun(BaseModel):
     id: int
     status: JobStatus
+    error_message: str | None = None
 
 
 class Simulator(BaseModel):
@@ -333,4 +366,4 @@ class Simulation(BaseModel):
     simulation_config_filename: str
     experiment_id: str
     last_updated: str = Field(default=str(datetime.datetime.now()))
-    job_id: int | None = None
+    job_id: str | None = None  # Backend-specific job ID (str(slurm_int) or k8s_job_name)

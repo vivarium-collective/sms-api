@@ -10,6 +10,7 @@ import tarfile
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 from fastapi import BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -17,13 +18,16 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from sms_api.analysis.models import TsvOutputFile
 from sms_api.common import StrEnumBase
 from sms_api.common.handlers.simulators import upload_simulator
-from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.storage.file_paths import HPCFilePath
-from sms_api.config import get_settings
-from sms_api.dependencies import get_database_service, get_simulation_service, get_ssh_session_service
+from sms_api.common.hpc.job_service import JobStatusUpdate
+from sms_api.common.models import JobBackend, JobStatus, SSHTarget
+from sms_api.common.simulator_defaults import DEFAULT_OBSERVABLES
+from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
+from sms_api.config import get_job_backend, get_settings
+from sms_api.dependencies import get_database_service, get_file_service, get_simulation_service, get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import (
+    AnalysisOptions,
     HpcRun,
     JobType,
     ParcaDataset,
@@ -118,22 +122,41 @@ async def run_workflow_legacy(
         random_string=random_string_7_hex,
         simulator=simulator,  # type: ignore[arg-type]
     )
-    async with get_ssh_session_service().session() as ssh:
-        slurmjob_id = await simulation_service.submit_ecoli_simulation_job(
-            ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id, ssh=ssh
-        )
+    job_id = await simulation_service.submit_ecoli_simulation_job(
+        ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
+    )
     _ = await database_service.insert_hpcrun(
-        slurmjobid=slurmjob_id,
+        job_id=job_id,
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id=correlation_id,
     )
 
-    simulation.job_id = slurmjob_id
+    simulation.job_id = str(job_id)
     return simulation
 
 
-async def run_simulation_workflow(
+async def _verify_build_complete(database_service: DatabaseService, simulator_id: int) -> None:
+    """Raise ValueError if the simulator build is still running or failed."""
+    build_run = await database_service.get_hpcrun_by_ref(ref_id=simulator_id, job_type=JobType.BUILD_IMAGE)
+    if build_run is None:
+        return
+    if build_run.status in (JobStatus.RUNNING, JobStatus.PENDING):
+        raise ValueError(
+            f"Simulator {simulator_id} build is still in progress (status: {build_run.status.value}). "
+            "Wait for the build to complete before submitting a simulation."
+        )
+    if build_run.status == JobStatus.FAILED:
+        raise ValueError(
+            f"Simulator {simulator_id} build failed: {build_run.error_message or 'unknown error'}. "
+            "Re-upload the simulator to retry."
+        )
+
+
+# TODO: formalize config template overwrite logic to favor dataclasses over dict mutation
+
+
+async def run_simulation_workflow(  # noqa: C901
     database_service: DatabaseService,
     simulation_service: SimulationService,
     simulator_id: int,
@@ -143,6 +166,8 @@ async def run_simulation_workflow(
     num_seeds: int | None = None,
     description: str | None = None,
     run_parca: bool | None = None,
+    observables: list[str] | None = None,
+    analysis_options: AnalysisOptions | None = None,
 ) -> Simulation:
     """
     Simplified workflow execution with just the essential parameters.
@@ -162,6 +187,10 @@ async def run_simulation_workflow(
         description: Description of the simulation (optional)
         run_parca: If `True`, the simulation parameter calculator is run prior to simulation execution, otherwise
             a cached "default" simulation parameter dataset is used.
+        observables: a flat, list of strings representing dot-delimited hierarchical paths within the vEcoli output, for
+            otherwise comma-delimited hierarchical paths to exclusively include in the output reporting.
+        analysis_options: Analysis options specific to the vecoli workflow API, corresponding to specific existing
+            analysis modules in the vecoli repo.
     """
     if run_parca is None:
         run_parca = True
@@ -173,21 +202,15 @@ async def run_simulation_workflow(
     if simulator is None:
         raise ValueError(f"Simulator with id {simulator_id} not found")
 
-    # 2. Read the config file from the remote HPC system
-    remote_config_path = (
-        settings.hpc_repo_base_path.remote_path
-        / simulator.git_commit_hash
-        / "vEcoli"
-        / "configs"
-        / simulation_config_filename
+    # Verify simulator build is complete before submitting simulation
+    await _verify_build_complete(database_service, simulator_id)
+
+    # 2. Read the config template via the simulation service (SSH for SLURM, GitHub API for K8s)
+    config_str = await simulation_service.read_config_template(
+        simulator_version=simulator, config_filename=simulation_config_filename
     )
-    async with get_ssh_session_service().session() as ssh:
-        returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
-        if returncode != 0:
-            raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
 
     # 3. Replace placeholders in the config template
-    config_str = stdout
 
     unique_experiment_id = f"sim{simulator.database_id}-{experiment_id}-{str(uuid.uuid4())[:4]}"
     config_str = config_str.replace("EXPERIMENT_ID_PLACEHOLDER", unique_experiment_id)
@@ -203,10 +226,48 @@ async def run_simulation_workflow(
         config_data["n_init_sims"] = num_seeds
     if description is not None:
         config_data["description"] = description
-    if not run_parca:
-        # expedite completion time by using cached simData
+    effective_observables = observables if observables else DEFAULT_OBSERVABLES
+    config_data["engine_process_reports"] = [obs.split(".") for obs in effective_observables]
+    # For K8s/Batch backend, override HPC paths with AWS equivalents
+    if get_job_backend() == "k8s":
+        s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{unique_experiment_id}"
+        config_data["emitter_arg"] = {"out_uri": s3_output}
+        config_data.pop("aws_cdk", None)
+        config_data.pop("ccam", None)
+        config_data["progress_bar"] = False
+        if "parca_options" in config_data:
+            config_data["parca_options"]["outdir"] = s3_output
+        # Use short image name (repo:tag) — workflow.py resolves the full ECR URI
+        # via build-and-push-ecr.sh -u at runtime
+        config_data["aws"] = {
+            "build_image": False,
+            "container_image": f"{settings.ecr_repository}:{simulator.git_commit_hash}-{settings.batch_task_arch}",
+            "region": settings.batch_region,
+            "batch_queue": settings.batch_arm64_queue
+            if settings.batch_task_arch == "arm64"
+            else settings.batch_amd64_queue,
+        }
+        if not run_parca:
+            # Set local path for cached simData — the K8s job command will download
+            # from S3 to this path before workflow.py runs (vEcoli only accepts local paths)
+            config_data["sim_data_path"] = "/tmp/simData.cPickle"  # noqa: S108
+    elif not run_parca:
+        # SLURM: use cached simData from HPC filesystem
         config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
 
+    specified_analyses = {
+        "multiseed": {
+            "cd1_metabolomics": {"generation_lower_bound": 5},
+            "cd1_transcriptomics": {"generation_lower_bound": 5},
+            "cd1_higher_order_properties": {"generation_lower_bound": 5},
+            "cd1_fluxomics": {"generation_lower_bound": 5},
+            "cd1_proteomics": {"generation_lower_bound": 5},
+        }
+    }
+    if analysis_options is not None:
+        specified_analyses = analysis_options.model_dump()
+
+    config_data["analysis_options"] = specified_analyses
     config = SimulationConfig(**config_data)
 
     # 5. Create placeholder parca dataset entry
@@ -235,20 +296,19 @@ async def run_simulation_workflow(
         random_string=random_string_7_hex,
         simulator=simulator,
     )
-    async with get_ssh_session_service().session() as ssh:
-        slurmjob_id = await simulation_service.submit_ecoli_simulation_job(
-            ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id, ssh=ssh
-        )
+    job_id = await simulation_service.submit_ecoli_simulation_job(
+        ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
+    )
 
     # 8. Record HPC run
     _ = await database_service.insert_hpcrun(
-        slurmjobid=slurmjob_id,
+        job_id=job_id,
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id=correlation_id,
     )
 
-    simulation.job_id = slurmjob_id
+    simulation.job_id = str(job_id)
     return simulation
 
 
@@ -275,10 +335,9 @@ async def run_parca(
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
     # Submit parca job
-    async with get_ssh_session_service().session() as ssh:
-        parca_slurmjobid = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset, ssh=ssh)
+    parca_job_id = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
     _hpc_run = await database_service.insert_hpcrun(
-        slurmjobid=parca_slurmjobid,
+        job_id=parca_job_id,
         job_type=JobType.PARCA,
         ref_id=parca_dataset.database_id,
         correlation_id="N/A",
@@ -315,31 +374,59 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
     if sim_record is None:
         raise ValueError(f"Simulation with id {id} not found.")
 
-    # Get the HpcRun record for this simulation to find the SLURM job ID
+    # Get the HpcRun record for this simulation to find the job ID
     hpc_run = await db_service.get_hpcrun_by_ref(ref_id=id, job_type=JobType.SIMULATION)
     if hpc_run is None:
         raise RuntimeError(f"No HPC run found for simulation {id}")
-    if hpc_run.slurmjobid is None:
-        raise RuntimeError(f"Simulation {id} not yet dispatched to SLURM")
 
-    slurm_service = SlurmService()
-    async with get_ssh_session_service().session() as ssh:
-        # First try squeue (for running/pending jobs)
-        slurm_jobs = await slurm_service.get_job_status_squeue(ssh, job_ids=[hpc_run.slurmjobid])
-        if not slurm_jobs:
-            # Job not in queue, check sacct for completed jobs
-            slurm_jobs = await slurm_service.get_job_status_scontrol(ssh, job_ids=[hpc_run.slurmjobid])
+    simulation_service = get_simulation_service()
+    if simulation_service is None:
+        raise RuntimeError("Simulation service is not initialized")
 
-    if not slurm_jobs:
-        # Job was just submitted and may not have propagated to SLURM yet
-        # Return UNKNOWN since we can't confirm the actual state
-        from sms_api.common.models import JobStatus
-
-        logger.warning(f"SLURM job {hpc_run.slurmjobid} not yet visible in squeue/sacct, returning UNKNOWN")
+    job_status_info = await simulation_service.get_job_status(hpc_run.job_id)
+    if job_status_info is None:
+        logger.warning(f"Job {hpc_run.job_id} not yet visible in backend, returning UNKNOWN")
         return SimulationRun(id=int(id), status=JobStatus.UNKNOWN)
 
-    slurm_job = slurm_jobs[0]
-    return SimulationRun(id=int(id), status=slurm_job.get_job_status())
+    # Persist terminal status to DB so future calls don't need to hit the backend
+    if job_status_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+        update = JobStatusUpdate(
+            job_id=hpc_run.job_id,
+            status=job_status_info.status,
+            start_time=job_status_info.start_time,
+            end_time=job_status_info.end_time,
+            error_message=job_status_info.error_message,
+        )
+        await db_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, update=update)
+
+    return SimulationRun(id=int(id), status=job_status_info.status, error_message=job_status_info.error_message)
+
+
+async def cancel_simulation(
+    db_service: DatabaseService,
+    simulation_service: SimulationService,
+    simulation_id: int,
+) -> SimulationRun:
+    """Cancel a running simulation by killing its backend job."""
+    hpc_run = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
+    if hpc_run is None:
+        raise ValueError(f"No HPC run found for simulation {simulation_id}")
+
+    # Only cancel jobs that are still active
+    if hpc_run.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+        return SimulationRun(id=simulation_id, status=hpc_run.status)
+
+    # Cancel the backend job
+    await simulation_service.cancel_job(hpc_run.job_id)
+
+    # Update the database record
+    update = JobStatusUpdate(
+        job_id=hpc_run.job_id,
+        status=JobStatus.CANCELLED,
+    )
+    await db_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, update=update)
+
+    return SimulationRun(id=simulation_id, status=JobStatus.CANCELLED)
 
 
 async def list_simulations(db_service: DatabaseService) -> list[Simulation]:
@@ -386,7 +473,7 @@ async def fetch_omics_outputs(
 async def get_available_omics_output_paths(remote_analysis_outdir: HPCFilePath) -> list[HPCFilePath]:
     cmd = f'find "{remote_analysis_outdir!s}" -type f'
     try:
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             ret, out, err = await ssh.run_command(cmd)
         paths = []
         accepted_extensions = ["tsv", "html", "csv", "txt"]
@@ -583,7 +670,7 @@ async def download_analysis_output(
     local.parent.mkdir(parents=True, exist_ok=True)
 
     if not local.exists():
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             await ssh.scp_download(local_file=local, remote_path=remote_path)
 
     if response_type == SimulationAnalysisResponseType.DATA_CONTENT:
@@ -602,40 +689,37 @@ async def get_simulation_outputs(
 ) -> StreamingResponse | FileResponse:
     """Get simulation outputs as a tar.gz archive.
 
-    Args:
-        db_service: Database service instance
-        simulation_id: ID of the simulation to get outputs for
-        hpc_sim_base_path: Base path for simulation outputs on HPC
-        data_response_type: Type of response - STREAMING for chunked streaming,
-            FILE for direct file download
-        bg_tasks: Background tasks for cleanup (required for FILE response type)
-
-    Returns:
-        StreamingResponse or FileResponse containing the tar.gz archive
+    Dispatches to SSH/SCP (SLURM backend) or S3 (K8s/LOCAL backend) based on the HpcRun record.
     """
     simulation = await db_service.get_simulation(simulation_id=simulation_id)
     if simulation is None:
         raise ValueError(f"Simulation with id {simulation_id} not found in database.")
 
     experiment_id = simulation.config.experiment_id
-    exp_analysis_outdir = hpc_sim_base_path / experiment_id / "analyses"
 
     # Download files to local cache, preserving directory structure
     analysis_request_cache = Path(get_settings().cache_dir) / experiment_id
-    if not analysis_request_cache.exists():
-        analysis_request_cache.mkdir(parents=True)
-    available_paths: list[HPCFilePath] = await get_available_omics_output_paths(
-        remote_analysis_outdir=exp_analysis_outdir
-    )
-    for remote_path in available_paths:
-        await download_analysis_output(
-            local_dir=analysis_request_cache,
-            remote_path=remote_path,
-            response_type=SimulationAnalysisResponseType.TAR_GZIP_STREAM,
-            remote_base_dir=exp_analysis_outdir,
-        )
+    analysis_request_cache.mkdir(parents=True, exist_ok=True)
 
-    # Return appropriate response type
+    # Dispatch based on backend
+    hpc_run = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
+    if hpc_run and hpc_run.job_id.backend in (JobBackend.K8S, JobBackend.LOCAL):
+        await _download_outputs_from_s3(experiment_id, analysis_request_cache)
+    else:
+        # SLURM path: download via SSH/SCP
+        exp_analysis_outdir = hpc_sim_base_path / experiment_id / "analyses"
+        available_paths: list[HPCFilePath] = await get_available_omics_output_paths(
+            remote_analysis_outdir=exp_analysis_outdir
+        )
+        for remote_path in available_paths:
+            await download_analysis_output(
+                local_dir=analysis_request_cache,
+                remote_path=remote_path,
+                response_type=SimulationAnalysisResponseType.TAR_GZIP_STREAM,
+                remote_base_dir=exp_analysis_outdir,
+            )
+
+    # Return appropriate response type (same for both backends)
     if data_response_type == SimulationAnalysisDataResponseType.FILE:
         if bg_tasks is None:
             raise ValueError("BackgroundTasks required for FILE response type")
@@ -646,20 +730,283 @@ async def get_simulation_outputs(
         return await stream_analysis_output_archive(dir_path=analysis_request_cache)
 
 
-async def get_simulation_log(db_service: DatabaseService, simulation_id: int) -> Response:
-    stdout = await _get_slurm_log(db_service=db_service, simulation_id=simulation_id)
-    _, _, after = stdout.partition("N E X T F L O W")
-    result = "N E X T F L O W" + after
-    return Response(content=result, media_type="text/plain")
+_ACCEPTED_ANALYSES_EXTENSIONS = (".tsv", ".json")
+_WORKFLOW_CONFIG_KEY = "nextflow/workflow_config.json"
+_S3_DOWNLOAD_CONCURRENCY = 32
 
 
-async def _get_slurm_log(db_service: DatabaseService, simulation_id: int) -> str:
-    hpc_run: HpcRun | None = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
+async def _download_outputs_from_s3(experiment_id: str, local_cache: Path) -> None:
+    """Download simulation outputs from S3 to local cache.
+
+    Downloads only:
+    - All files under ``analyses/`` matching accepted extensions (.tsv, .json)
+    - ``nextflow/workflow_config.json``
+
+    Downloads are parallelized with a bounded semaphore to avoid overwhelming
+    the event loop while still finishing fast enough that reverse-proxy
+    idle timeouts (60s default on ALB/NGINX) don't trigger a 504 before the
+    streaming response begins.
+    """
+    settings = get_settings()
+    file_service = get_file_service()
+    if file_service is None:
+        raise RuntimeError("File service is not initialized")
+
+    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}/{experiment_id}"
+
+    # 1. Plan analyses/ downloads
+    analyses_prefix = S3FilePath(s3_path=Path(f"{experiment_prefix}/analyses"))
+    analyses_listing = await file_service.get_listing(analyses_prefix)
+
+    download_plan: list[tuple[S3FilePath, Path]] = []
+    for item in analyses_listing:
+        if not item.Key.endswith(_ACCEPTED_ANALYSES_EXTENSIONS):
+            continue
+        relative = Path(item.Key).relative_to(experiment_prefix)
+        local_file = local_cache / relative
+        if local_file.exists():
+            continue
+        local_file.parent.mkdir(parents=True, exist_ok=True)
+        download_plan.append((S3FilePath(s3_path=Path(item.Key)), local_file))
+
+    logger.info(
+        f"Downloading {len(download_plan)} analysis files from S3 for "
+        f"experiment {experiment_id} (concurrency={_S3_DOWNLOAD_CONCURRENCY})"
+    )
+
+    # 2. Run downloads concurrently with a bounded semaphore
+    sem = asyncio.Semaphore(_S3_DOWNLOAD_CONCURRENCY)
+
+    async def _bounded_download(remote: S3FilePath, local: Path) -> None:
+        async with sem:
+            await file_service.download_file(remote, local)
+
+    if download_plan:
+        results = await asyncio.gather(
+            *(_bounded_download(remote, local) for remote, local in download_plan),
+            return_exceptions=True,
+        )
+        failures = [r for r in results if isinstance(r, BaseException)]
+        if failures:
+            logger.warning(
+                f"{len(failures)}/{len(download_plan)} S3 downloads failed for {experiment_id}; "
+                f"continuing with partial archive. First error: {failures[0]!r}"
+            )
+
+    # 3. Download nextflow/workflow_config.json
+    workflow_config_key = f"{experiment_prefix}/{_WORKFLOW_CONFIG_KEY}"
+    workflow_config_s3 = S3FilePath(s3_path=Path(workflow_config_key))
+    local_workflow_config = local_cache / _WORKFLOW_CONFIG_KEY
+    if not local_workflow_config.exists():
+        local_workflow_config.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            await file_service.download_file(workflow_config_s3, local_workflow_config)
+        except Exception:
+            logger.warning(f"workflow_config.json not found at {workflow_config_key}, skipping")
+
+
+async def get_simulation_log(db_service: DatabaseService, simulation_id: int, truncate: bool = True) -> Response:
+    """Get simulation workflow log. Dispatches to SLURM or K8s based on backend."""
+    hpc_run = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
     if hpc_run is None:
-        raise ValueError(f"No hpc run found for simulation with id: {simulation_id}")
-    job_id = hpc_run.slurmjobid
-    log_stdout = None
-    async with get_ssh_session_service().session() as ssh:
+        raise ValueError(f"No HPC run found for simulation {simulation_id}")
+
+    if hpc_run.job_id.backend == JobBackend.K8S:
+        log_content = await _get_k8s_log(hpc_run, db_service, simulation_id)
+    elif hpc_run.job_id.backend == JobBackend.LOCAL:
+        log_content = f"Logs not available for local tasks (job {hpc_run.job_id})"
+    else:
+        log_content = await _get_slurm_log(hpc_run)
+        # Extract Nextflow section from SLURM log
+        _, _, after = log_content.partition("N E X T F L O W")
+        if after:
+            log_content = "N E X T F L O W" + after
+
+    if truncate:
+        log_content = _truncate_log(log_content)
+
+    return Response(content=log_content, media_type="text/plain")
+
+
+_LOG_HEAD_LINES = 20
+_TRUNCATION_MARKER = "\n... truncated ...\n\n"
+
+
+def _truncate_log(log: str) -> str:
+    """Return the head (Nextflow header) + tail (final executor block) of a log.
+
+    The tail starts from the last line containing ``executor`` (the Nextflow
+    summary block) and continues to EOF.  If no executor line is found, the
+    last 15 lines are returned as the tail.
+    """
+    lines = log.splitlines(keepends=True)
+    if len(lines) <= _LOG_HEAD_LINES + 15:
+        return log  # already small enough
+
+    head = "".join(lines[:_LOG_HEAD_LINES])
+
+    # Find the last line containing "executor" — marks the final summary block
+    tail_start = None
+    for i in range(len(lines) - 1, -1, -1):
+        if "executor" in lines[i].lower():
+            tail_start = i
+            break
+
+    if tail_start is not None and tail_start > _LOG_HEAD_LINES:
+        tail = "".join(lines[tail_start:])
+    else:
+        # Fallback: last 15 lines
+        tail = "".join(lines[-15:])
+
+    return head + _TRUNCATION_MARKER + tail
+
+
+def workflow_log(simulation_id: int, base_url: str = "http://localhost:8080", timeout: int = 300) -> None:
+    """Fetch the workflow log tail for a simulation and print it to the console.
+
+    This is a convenience function for quick interactive debugging — it fetches
+    the full log client-side, extracts the executor summary block, and prints
+    it with Rich formatting.  No deploy required.
+
+    Usage::
+
+        from sms_api.common.handlers.simulations import workflow_log
+        workflow_log(44)
+    """
+    from app.app_data_service import E2EDataService
+    from app.cli_theme import get_console
+
+    console = get_console()
+    svc = E2EDataService(base_url=base_url, timeout=timeout)  # type: ignore[arg-type]
+
+    with console.status("[memphis.spinner]Fetching status..."):
+        run = svc.get_workflow_status(simulation_id=simulation_id)
+    status = run.status.value.upper()
+
+    with console.status("[memphis.spinner]Fetching log..."):
+        log = svc.get_workflow_log(simulation_id=simulation_id, truncate=False)
+
+    # Extract tail starting from last "executor" line
+    lines = log.splitlines()
+    tail_start = None
+    for i in range(len(lines) - 1, -1, -1):
+        if "executor" in lines[i].lower():
+            tail_start = i
+            break
+    tail = "\n".join(lines[tail_start:]) if tail_start is not None else "\n".join(lines[-15:])
+
+    from rich.panel import Panel
+
+    console.print(Panel(tail, title=f"Workflow Log — sim {simulation_id}", border_style="memphis.border.info"))
+    from app.cli_theme import status_border, status_style
+
+    error_detail = f"\n{run.error_message}" if run.error_message else ""
+    console.print(
+        Panel(
+            f"[{status_style(status.lower())}]{status}[/]{error_detail}",
+            title="Simulation Status",
+            border_style=status_border(status.lower()),
+        )
+    )
+
+
+async def run_standalone_analysis(
+    database_service: DatabaseService,
+    simulation_id: int,
+    modules: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Run standalone vEcoli analysis on existing simulation output.
+
+    Builds an analysis config from the simulation's experiment_id and paths,
+    then submits it as a K8s Job (Batch) or returns the config for SLURM.
+
+    Args:
+        database_service: DB service for looking up the simulation.
+        simulation_id: Database ID of a completed simulation.
+        modules: Analysis modules to run, keyed by domain.
+            E.g. ``{"multiseed": {"ptools_rna": {"n_tp": 10}, "ptools_rxns": {"n_tp": 10}}}``
+            If None, uses a default set of ptools modules.
+    """
+    settings = get_settings()
+    simulation = await database_service.get_simulation(simulation_id=simulation_id)
+    if simulation is None:
+        raise ValueError(f"Simulation {simulation_id} not found")
+
+    experiment_id = simulation.experiment_id
+
+    # Default analysis modules if none specified
+    if modules is None:
+        modules = {
+            "multiseed": {
+                "ptools_rna": {"n_tp": 10},
+                "ptools_rxns": {"n_tp": 10},
+                "ptools_proteins": {"n_tp": 10},
+            }
+        }
+
+    # Build analysis config — path patterns match vEcoli conventions
+    backend = get_job_backend()
+    if backend == "k8s":
+        s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}"
+        analysis_name = f"analysis-{experiment_id[:20]}-{str(uuid.uuid4())[:4]}"
+        analysis_config: dict[str, Any] = {
+            "analysis_options": {
+                "experiment_id": [experiment_id],
+                "variant_data_dir": [f"{s3_output}/variant_sim_data"],
+                "validation_data_path": [f"{s3_output}/parca/kb/validationData.cPickle"],
+                "outdir": f"{s3_output}/analyses/{analysis_name}",
+                "single": {},
+                "multidaughter": {},
+                "multigeneration": {},
+                **{domain: domain_modules for domain, domain_modules in modules.items()},
+            },
+            "emitter_arg": {"out_uri": s3_output},
+        }
+
+        # Submit as K8s Job
+        sim_service = get_simulation_service()
+        if sim_service is None:
+            raise ValueError("Simulation service not initialized")
+
+        from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
+
+        if not isinstance(sim_service, SimulationServiceK8s):
+            raise ValueError("Standalone K8s analysis requires K8s backend")
+
+        job_id = await sim_service.submit_standalone_analysis(
+            experiment_id=experiment_id,
+            analysis_config=analysis_config,
+            database_service=database_service,
+            simulator_id=simulation.simulator_id,
+        )
+        return {"job_id": str(job_id), "analysis_name": analysis_name, "config": analysis_config}
+    else:
+        # SLURM path
+        sim_base = settings.hpc_sim_base_path.remote_path
+        analysis_name = f"analysis-{experiment_id[:20]}-{str(uuid.uuid4())[:4]}"
+        analysis_config = {
+            "analysis_options": {
+                "experiment_id": [experiment_id],
+                "variant_data_dir": [str(sim_base / experiment_id / "variant_sim_data")],
+                "validation_data_path": [
+                    str(settings.hpc_parca_base_path.remote_path / "default" / "kb" / "validationData.cPickle")
+                ],
+                "outdir": str(settings.analysis_outdir.remote_path / analysis_name),
+                "single": {},
+                "multidaughter": {},
+                "multigeneration": {},
+                **{domain: domain_modules for domain, domain_modules in modules.items()},
+            },
+            "emitter_arg": {"out_dir": str(sim_base)},
+        }
+        # For SLURM, return the config — the caller can submit it via the analysis service
+        return {"analysis_name": analysis_name, "config": analysis_config, "backend": "slurm"}
+
+
+async def _get_slurm_log(hpc_run: HpcRun) -> str:
+    """Read SLURM job log via SSH."""
+    job_id = str(hpc_run.job_id)
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         returncode, stdout, stderr = await ssh.run_command(f"scontrol show job {job_id}")
         try:
             k = "JobName="
@@ -667,5 +1014,51 @@ async def _get_slurm_log(db_service: DatabaseService, simulation_id: int) -> str
             log_path = get_settings().slurm_log_base_path / f"{job_name}.out"
             _, log_stdout, _ = await ssh.run_command(f"cat {log_path!s}")
         except StopIteration:
-            raise RuntimeError(f"No simulation job name available for simulation with id: {simulation_id}")
+            raise RuntimeError(f"No simulation job name available for HPC run {hpc_run.database_id}")
     return log_stdout
+
+
+async def _get_k8s_log(hpc_run: HpcRun, db_service: DatabaseService, simulation_id: int) -> str:
+    """Read K8s Job pod logs via the K8s API, falling back to S3 .nextflow.log."""
+    from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
+
+    simulation_service = get_simulation_service()
+    if not isinstance(simulation_service, SimulationServiceK8s):
+        raise TypeError("K8s logs requested but simulation service is not SimulationServiceK8s")
+
+    # Try K8s pod logs first
+    log_content = simulation_service._k8s.get_job_logs(hpc_run.job_id.value)
+    if log_content is not None:
+        return log_content
+
+    # Fallback: download .nextflow.log from S3
+    log_content = await _get_s3_nextflow_log(db_service, simulation_id)
+    if log_content is not None:
+        return log_content
+
+    return f"No logs available for K8s Job {hpc_run.job_id.value} (pod cleaned up, S3 log not found)"
+
+
+async def _get_s3_nextflow_log(db_service: DatabaseService, simulation_id: int) -> str | None:
+    """Try to fetch .nextflow.log from S3 for a K8s simulation."""
+    settings = get_settings()
+    file_service = get_file_service()
+    if file_service is None:
+        return None
+
+    simulation = await db_service.get_simulation(simulation_id=simulation_id)
+    if simulation is None:
+        return None
+
+    experiment_id = simulation.config.experiment_id
+    log_key = f"{settings.s3_work_prefix}/{experiment_id}/logs/.nextflow.log"
+    log_s3 = S3FilePath(s3_path=Path(log_key))
+
+    try:
+        content = await file_service.get_file_contents(log_s3)
+        if content:
+            return content.decode("utf-8", errors="replace")
+    except Exception:
+        logger.debug(f"S3 .nextflow.log not found at {log_key}")
+
+    return None

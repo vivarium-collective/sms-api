@@ -1,60 +1,36 @@
 from http import HTTPStatus
-from typing import Any, Optional, Union, cast
+from typing import Any, Optional, Union
 
 import httpx
 
-from ...client import AuthenticatedClient, Client
-from ...types import Response, UNSET
 from ... import errors
-
+from ...client import AuthenticatedClient, Client
 from ...models.http_validation_error import HTTPValidationError
-from ...types import UNSET, Unset
-from typing import cast
-from typing import cast, Union
-from typing import Union
+from ...models.simulation_analysis_data_response_type import SimulationAnalysisDataResponseType
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     id: int,
     *,
-    body: Union[None, list[str]],
-    lineage_seed: Union[Unset, int] = 6,
-    generation: Union[Unset, int] = 1,
-    variant: Union[Unset, int] = 0,
-    agent_id: Union[Unset, int] = 0,
+    response_type: Union[Unset, SimulationAnalysisDataResponseType] = UNSET,
 ) -> dict[str, Any]:
-    headers: dict[str, Any] = {}
-
     params: dict[str, Any] = {}
 
-    params["lineage_seed"] = lineage_seed
+    json_response_type: Union[Unset, str] = UNSET
+    if not isinstance(response_type, Unset):
+        json_response_type = response_type.value
 
-    params["generation"] = generation
-
-    params["variant"] = variant
-
-    params["agent_id"] = agent_id
+    params["response_type"] = json_response_type
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
     _kwargs: dict[str, Any] = {
         "method": "post",
-        "url": "/api/v1/simulations/{id}/data".format(
-            id=id,
-        ),
+        "url": f"/api/v1/simulations/{id}/data",
         "params": params,
     }
 
-    _kwargs["json"]: Union[None, list[str]]
-    if isinstance(body, list):
-        _kwargs["json"] = body
-
-    else:
-        _kwargs["json"] = body
-
-    headers["Content-Type"] = "application/json"
-
-    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -89,21 +65,22 @@ def sync_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union[None, list[str]],
-    lineage_seed: Union[Unset, int] = 6,
-    generation: Union[Unset, int] = 1,
-    variant: Union[Unset, int] = 0,
-    agent_id: Union[Unset, int] = 0,
+    response_type: Union[Unset, SimulationAnalysisDataResponseType] = UNSET,
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """Get/Stream simulation data
+    r"""Get simulation omics data as a downloadable tar.gz archive
+
+     Get simulation outputs as a tar.gz archive.
+
+    Choose response_type based on your use case:
+    - **file**: Creates the archive and returns it as a downloadable file.
+      Best for browser downloads and Swagger UI - shows a \"Download\" button.
+    - **streaming**: Streams the archive in chunks as it's created.
+      Better for very large files or when you want to start processing before download completes.
 
     Args:
         id (int): Database ID of the simulation.
-        lineage_seed (Union[Unset, int]):  Default: 6.
-        generation (Union[Unset, int]):  Default: 1.
-        variant (Union[Unset, int]):  Default: 0.
-        agent_id (Union[Unset, int]):  Default: 0.
-        body (Union[None, list[str]]):
+        response_type (Union[Unset, SimulationAnalysisDataResponseType]): Response type for
+            simulation data endpoint.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -115,11 +92,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         id=id,
-        body=body,
-        lineage_seed=lineage_seed,
-        generation=generation,
-        variant=variant,
-        agent_id=agent_id,
+        response_type=response_type,
     )
 
     response = client.get_httpx_client().request(
@@ -133,21 +106,22 @@ def sync(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union[None, list[str]],
-    lineage_seed: Union[Unset, int] = 6,
-    generation: Union[Unset, int] = 1,
-    variant: Union[Unset, int] = 0,
-    agent_id: Union[Unset, int] = 0,
+    response_type: Union[Unset, SimulationAnalysisDataResponseType] = UNSET,
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """Get/Stream simulation data
+    r"""Get simulation omics data as a downloadable tar.gz archive
+
+     Get simulation outputs as a tar.gz archive.
+
+    Choose response_type based on your use case:
+    - **file**: Creates the archive and returns it as a downloadable file.
+      Best for browser downloads and Swagger UI - shows a \"Download\" button.
+    - **streaming**: Streams the archive in chunks as it's created.
+      Better for very large files or when you want to start processing before download completes.
 
     Args:
         id (int): Database ID of the simulation.
-        lineage_seed (Union[Unset, int]):  Default: 6.
-        generation (Union[Unset, int]):  Default: 1.
-        variant (Union[Unset, int]):  Default: 0.
-        agent_id (Union[Unset, int]):  Default: 0.
-        body (Union[None, list[str]]):
+        response_type (Union[Unset, SimulationAnalysisDataResponseType]): Response type for
+            simulation data endpoint.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -160,11 +134,7 @@ def sync(
     return sync_detailed(
         id=id,
         client=client,
-        body=body,
-        lineage_seed=lineage_seed,
-        generation=generation,
-        variant=variant,
-        agent_id=agent_id,
+        response_type=response_type,
     ).parsed
 
 
@@ -172,21 +142,22 @@ async def asyncio_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union[None, list[str]],
-    lineage_seed: Union[Unset, int] = 6,
-    generation: Union[Unset, int] = 1,
-    variant: Union[Unset, int] = 0,
-    agent_id: Union[Unset, int] = 0,
+    response_type: Union[Unset, SimulationAnalysisDataResponseType] = UNSET,
 ) -> Response[Union[Any, HTTPValidationError]]:
-    """Get/Stream simulation data
+    r"""Get simulation omics data as a downloadable tar.gz archive
+
+     Get simulation outputs as a tar.gz archive.
+
+    Choose response_type based on your use case:
+    - **file**: Creates the archive and returns it as a downloadable file.
+      Best for browser downloads and Swagger UI - shows a \"Download\" button.
+    - **streaming**: Streams the archive in chunks as it's created.
+      Better for very large files or when you want to start processing before download completes.
 
     Args:
         id (int): Database ID of the simulation.
-        lineage_seed (Union[Unset, int]):  Default: 6.
-        generation (Union[Unset, int]):  Default: 1.
-        variant (Union[Unset, int]):  Default: 0.
-        agent_id (Union[Unset, int]):  Default: 0.
-        body (Union[None, list[str]]):
+        response_type (Union[Unset, SimulationAnalysisDataResponseType]): Response type for
+            simulation data endpoint.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -198,11 +169,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         id=id,
-        body=body,
-        lineage_seed=lineage_seed,
-        generation=generation,
-        variant=variant,
-        agent_id=agent_id,
+        response_type=response_type,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -214,21 +181,22 @@ async def asyncio(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: Union[None, list[str]],
-    lineage_seed: Union[Unset, int] = 6,
-    generation: Union[Unset, int] = 1,
-    variant: Union[Unset, int] = 0,
-    agent_id: Union[Unset, int] = 0,
+    response_type: Union[Unset, SimulationAnalysisDataResponseType] = UNSET,
 ) -> Optional[Union[Any, HTTPValidationError]]:
-    """Get/Stream simulation data
+    r"""Get simulation omics data as a downloadable tar.gz archive
+
+     Get simulation outputs as a tar.gz archive.
+
+    Choose response_type based on your use case:
+    - **file**: Creates the archive and returns it as a downloadable file.
+      Best for browser downloads and Swagger UI - shows a \"Download\" button.
+    - **streaming**: Streams the archive in chunks as it's created.
+      Better for very large files or when you want to start processing before download completes.
 
     Args:
         id (int): Database ID of the simulation.
-        lineage_seed (Union[Unset, int]):  Default: 6.
-        generation (Union[Unset, int]):  Default: 1.
-        variant (Union[Unset, int]):  Default: 0.
-        agent_id (Union[Unset, int]):  Default: 0.
-        body (Union[None, list[str]]):
+        response_type (Union[Unset, SimulationAnalysisDataResponseType]): Response type for
+            simulation data endpoint.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -242,10 +210,6 @@ async def asyncio(
         await asyncio_detailed(
             id=id,
             client=client,
-            body=body,
-            lineage_seed=lineage_seed,
-            generation=generation,
-            variant=variant,
-            agent_id=agent_id,
+            response_type=response_type,
         )
     ).parsed

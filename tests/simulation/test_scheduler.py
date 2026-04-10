@@ -11,7 +11,7 @@ import pytest
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service_redis import MessagingServiceRedis
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobId, JobStatus, SSHTarget
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService
@@ -71,7 +71,7 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
     random_string = "".join(random.choices(string.hexdigits, k=7))
     correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string, simulator=simulator)
     hpcrun = await database_service.insert_hpcrun(
-        slurmjobid=slurm_job.job_id,
+        job_id=JobId.slurm(slurm_job.job_id),
         job_type=JobType.SIMULATION,
         ref_id=simulation.database_id,
         correlation_id=correlation_id,
@@ -146,7 +146,7 @@ async def test_job_scheduler(
             f.write(slurm_template_hello_10s)
 
         remote_sbatch_file = remote_path / local_sbatch_file.name
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             job_id: int = await slurm_service.submit_job(
                 ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
             )
@@ -162,7 +162,7 @@ async def test_job_scheduler(
 
     while asyncio.get_event_loop().time() - start_time < max_wait:
         await asyncio.sleep(2)
-        running_hpcrun = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+        running_hpcrun = await database_service.get_hpcrun_by_job_id(job_id=JobId.slurm(job_id))
         if running_hpcrun and running_hpcrun.status == JobStatus.RUNNING:
             break
 
@@ -177,7 +177,7 @@ async def test_job_scheduler(
 
     while asyncio.get_event_loop().time() - start_time_complete < max_wait_complete:
         await asyncio.sleep(2)
-        completed_hpcrun = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+        completed_hpcrun = await database_service.get_hpcrun_by_job_id(job_id=JobId.slurm(job_id))
         if completed_hpcrun and completed_hpcrun.status == JobStatus.COMPLETED:
             break
 
@@ -277,7 +277,7 @@ async def test_job_scheduler_with_storage(
 
             # Copy helpers script to temp dir and upload to remote
             remote_helpers = remote_path / "s3_helpers.sh"
-            async with get_ssh_session_service().session() as ssh:
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 await ssh.scp_upload(local_file=helpers_script_path, remote_path=remote_helpers)
             print(f"✅ Uploaded helper script to {remote_helpers}")
 
@@ -327,7 +327,7 @@ export AWS_SECRET_ACCESS_KEY="{settings.storage_qumulo_secret_access_key}"
             # Submit job
             remote_sbatch_file = remote_path / local_sbatch_file.name
             print(f"✅ Submitting job with script: {remote_sbatch_file}")
-            async with get_ssh_session_service().session() as ssh:
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 job_id: int = await slurm_service.submit_job(
                     ssh, local_sbatch_file=local_sbatch_file, remote_sbatch_file=remote_sbatch_file
                 )
@@ -348,14 +348,14 @@ export AWS_SECRET_ACCESS_KEY="{settings.storage_qumulo_secret_access_key}"
             await asyncio.sleep(check_interval)
             elapsed += check_interval
 
-            completed_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+            completed_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_job_id(job_id=JobId.slurm(job_id))
             if completed_hpcrun and completed_hpcrun.status == JobStatus.COMPLETED:
                 print(f"✅ Job completed after {elapsed}s")
                 break
             print(f"   Waiting... ({elapsed}s / {max_wait}s)")
 
         # Verify job completed
-        final_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_slurmjobid(slurmjobid=job_id)
+        final_hpcrun: HpcRun | None = await database_service.get_hpcrun_by_job_id(job_id=JobId.slurm(job_id))
         assert final_hpcrun is not None, "Job not found in database"
         assert final_hpcrun.status == JobStatus.COMPLETED, f"Job failed with status: {final_hpcrun.status}"
 

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import cast
 
@@ -32,6 +33,55 @@ class StrEnumBase(StrEnum):
         return sorted(vals) if sort else vals
 
 
+class SSHTarget(StrEnumBase):
+    """Named SSH connection targets."""
+
+    SLURM = "slurm"  # SLURM login node (slurm_submit_*) — job submission, status, logs, data
+    BUILD = "build"  # ARM64 build machine (build_node_*) — Docker image builds + ECR push
+
+
+class JobBackend(StrEnumBase):
+    """Backend system used to execute HPC jobs."""
+
+    SLURM = "slurm"
+    K8S = "k8s"
+    LOCAL = "local"  # In-process async task (e.g. SSH build on submit node)
+
+
+@dataclass(frozen=True)
+class JobId:
+    """Backend-tagged job identifier.
+
+    Wraps a backend-specific job identifier string with its backend type.
+    Use the factory methods to construct instances.
+    """
+
+    value: str
+    backend: JobBackend
+
+    @classmethod
+    def slurm(cls, slurm_id: int) -> "JobId":
+        return cls(value=str(slurm_id), backend=JobBackend.SLURM)
+
+    @classmethod
+    def k8s(cls, job_name: str) -> "JobId":
+        return cls(value=job_name, backend=JobBackend.K8S)
+
+    @classmethod
+    def local(cls, task_id: str) -> "JobId":
+        return cls(value=task_id, backend=JobBackend.LOCAL)
+
+    @property
+    def as_slurm_int(self) -> int:
+        """Get SLURM job ID as int. Raises TypeError if not a SLURM job."""
+        if self.backend != JobBackend.SLURM:
+            raise TypeError(f"Not a SLURM job ID: {self}")
+        return int(self.value)
+
+    def __str__(self) -> str:
+        return self.value
+
+
 class JobStatus(StrEnumBase):
     """Shared job status enum for simulations, analyses, and other HPC jobs."""
 
@@ -41,6 +91,7 @@ class JobStatus(StrEnumBase):
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
+    CANCELLED = "cancelled"
     FAILED = "failed"
 
     @classmethod
@@ -78,7 +129,7 @@ _SLURM_STATE_MAP: dict[str, JobStatus] = {
     "COMPLETED": JobStatus.COMPLETED,
     # Failed states
     "FAILED": JobStatus.FAILED,
-    "CANCELLED": JobStatus.FAILED,
+    "CANCELLED": JobStatus.CANCELLED,
     "TIMEOUT": JobStatus.FAILED,
     "NODE_FAIL": JobStatus.FAILED,
     "OUT_OF_MEMORY": JobStatus.FAILED,

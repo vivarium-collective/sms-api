@@ -190,6 +190,50 @@ class Settings(BaseSettings):
     # slurm constraint for arch mismatches
     slurm_constraint: str = ""
 
+    # --- Kubernetes / AWS Batch backend settings ---
+    # Used when job_backend is "k8s" (Stanford deployments)
+
+    # K8s Job settings
+    k8s_job_namespace: str = ""  # Namespace for Nextflow head Jobs (e.g. "sms-api-stanford")
+
+    # AWS Batch settings (Nextflow submits tasks here)
+    batch_task_arch: str = "amd64"  # Architecture for Batch task images: "amd64" or "arm64"
+    batch_amd64_queue: str = ""  # AMD64 simulation task queue
+    batch_arm64_queue: str = ""  # ARM64 simulation task queue (Graviton)
+    batch_region: str = "us-gov-west-1"  # AWS region for Batch
+
+    # S3 settings for workflow data
+    s3_work_bucket: str = ""  # S3 bucket for Nextflow work dir and outputs
+    s3_work_prefix: str = "nextflow/work"  # Prefix for Nextflow work directory
+    s3_output_prefix: str = "vecoli-output"  # Prefix for workflow output data
+
+    # ECR settings
+    ecr_account_id: str = ""  # AWS account ID for ECR registry (e.g. "476270107793")
+    ecr_repository: str = "vecoli"  # ECR repository name for vEcoli images
+
+    # Docker image build settings (DooD via AWS Batch)
+    build_arm64_queue: str = ""  # Batch queue for ARM64 builds (Graviton)
+    build_amd64_queue: str = ""  # Batch queue for AMD64 builds
+    build_job_definition: str = ""  # Batch job definition for DooD builds
+    build_git_secret_arn: str = ""  # Secrets Manager ARN for GitHub PAT (private repo clone)
+
+    # EC2 build machine (legacy, replaced by Batch DooD builds)
+    build_node_host: str = ""
+    build_node_user: str = ""
+    build_node_key_path: str = ""
+
+
+_K8S_NAMESPACES = {"sms-api-stanford", "sms-api-stanford-test"}
+
+
+def get_job_backend() -> str:
+    """Return the job backend for the current deployment namespace.
+
+    Returns "k8s" for Stanford namespaces, "slurm" otherwise.
+    """
+    ns = get_settings().deployment_namespace
+    return "k8s" if ns in _K8S_NAMESPACES else "slurm"
+
 
 @lru_cache
 def get_settings(env_file: Path | None = None) -> Settings:

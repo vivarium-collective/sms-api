@@ -1,14 +1,25 @@
+import asyncio
+from collections.abc import AsyncGenerator
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Optional
+
 import pytest
+import pytest_asyncio
 
 from sms_api.analysis.models import TsvOutputFile
 from sms_api.common.handlers.simulations import (
+    _S3_DOWNLOAD_CONCURRENCY,
     SimulationAnalysisResponseType,
+    _download_outputs_from_s3,
     fetch_omics_outputs,
     get_available_omics_output_paths,
 )
 from sms_api.common.ssh.ssh_service import SSHSessionService
-from sms_api.common.storage.file_paths import HPCFilePath
+from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
+from sms_api.common.storage.file_service import FileService, ListingItem
 from sms_api.config import get_settings
+from sms_api.dependencies import get_file_service, set_file_service
 
 
 @pytest.mark.integration
@@ -32,3 +43,205 @@ async def test_fetch_simulation_omics_outputs(
         exp_analysis_outdir=analysis_outdir, output_type=SimulationAnalysisResponseType.DATA_CONTENT
     )
     assert len(results)
+
+
+# ---------------------------------------------------------------------------
+# _download_outputs_from_s3 — concurrency & failure-resilience unit tests
+#
+# These tests verify the fix for the 504 Gateway Timeout on
+# `atlantis simulation outputs` for the 10k-cell simulation.  The server-side
+# download loop used to create one S3 client per file sequentially, which
+# took longer than the reverse-proxy idle timeout for large archives.  The
+# fix parallelizes downloads with a bounded semaphore.
+# ---------------------------------------------------------------------------
+
+
+class _FakeFileService(FileService):
+    """Minimal in-memory FileService stub for unit testing."""
+
+    def __init__(
+        self,
+        listing: list[ListingItem],
+        per_download_sleep: float = 0.0,
+        fail_keys: set[str] | None = None,
+    ) -> None:
+        self._listing = listing
+        self._per_download_sleep = per_download_sleep
+        self._fail_keys = fail_keys or set()
+        self.downloads: list[str] = []
+        self._active = 0
+        self.max_active = 0
+        self._lock = asyncio.Lock()
+
+    async def download_file(self, s3_path: S3FilePath, file_path: Optional[Path] = None) -> tuple[S3FilePath, str]:
+        async with self._lock:
+            self._active += 1
+            self.max_active = max(self.max_active, self._active)
+        try:
+            if str(s3_path.s3_path) in self._fail_keys:
+                raise RuntimeError(f"simulated S3 failure for {s3_path.s3_path}")
+            if self._per_download_sleep:
+                await asyncio.sleep(self._per_download_sleep)
+            if file_path is not None:
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_bytes(b"fake-content")
+            self.downloads.append(str(s3_path.s3_path))
+            return s3_path, str(file_path)
+        finally:
+            async with self._lock:
+                self._active -= 1
+
+    async def upload_file(self, file_path: Path, s3_path: S3FilePath) -> S3FilePath:  # pragma: no cover
+        raise NotImplementedError
+
+    async def upload_bytes(self, file_contents: bytes, s3_path: S3FilePath) -> S3FilePath:  # pragma: no cover
+        raise NotImplementedError
+
+    async def get_modified_date(self, s3_path: S3FilePath) -> datetime:  # pragma: no cover
+        return datetime.now(timezone.utc)
+
+    async def get_listing(self, s3_path: S3FilePath) -> list[ListingItem]:
+        prefix = str(s3_path.s3_path)
+        if not prefix.endswith("/"):
+            prefix = prefix + "/"
+        return [item for item in self._listing if item.Key.startswith(prefix)]
+
+    async def get_file_contents(self, s3_path: S3FilePath) -> bytes | None:  # pragma: no cover
+        return b"fake-content"
+
+    async def delete_file(self, s3_path: S3FilePath) -> None:  # pragma: no cover
+        pass
+
+    async def close(self) -> None:
+        pass
+
+
+def _make_listing(experiment_prefix: str, n_files: int) -> list[ListingItem]:
+    """Build a fake S3 listing with ``n_files`` .tsv entries + one workflow_config.json."""
+    now = datetime.now(timezone.utc)
+    items: list[ListingItem] = []
+    for i in range(n_files):
+        items.append(
+            ListingItem(
+                Key=f"{experiment_prefix}/analyses/variant=0/plots/analysis={i}/output.tsv",
+                LastModified=now,
+                ETag=f"etag-{i}",
+                Size=100,
+            )
+        )
+    # A non-accepted extension should be filtered out
+    items.append(
+        ListingItem(
+            Key=f"{experiment_prefix}/analyses/variant=0/plots/ignored.csv",
+            LastModified=now,
+            ETag="etag-ignored",
+            Size=50,
+        )
+    )
+    # workflow_config.json at experiment root (listed under the analyses prefix shouldn't match;
+    # the real handler fetches it by exact key, so listing it here is not required)
+    return items
+
+
+@pytest_asyncio.fixture()
+async def _swap_file_service() -> AsyncGenerator[None, Any]:
+    saved = get_file_service()
+    yield
+    set_file_service(saved)
+
+
+@pytest.mark.asyncio
+async def test_download_outputs_from_s3_parallelizes(tmp_path: Path, _swap_file_service: None) -> None:
+    """Downloads should run concurrently, with concurrency bounded by the semaphore."""
+    experiment_id = "test-exp"
+    settings = get_settings()
+    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}/{experiment_id}"
+    n_files = _S3_DOWNLOAD_CONCURRENCY * 2 + 5  # enough to saturate the semaphore
+    listing = _make_listing(experiment_prefix, n_files=n_files)
+
+    fake = _FakeFileService(listing=listing, per_download_sleep=0.05)
+    set_file_service(fake)
+
+    local_cache = tmp_path / experiment_id
+    local_cache.mkdir()
+
+    await _download_outputs_from_s3(experiment_id, local_cache)
+
+    # Only .tsv files should have been downloaded; the .csv is filtered out.
+    assert len(fake.downloads) == n_files + 1  # +1 for workflow_config.json attempt
+    # workflow_config.json is downloaded last (separate path); the .csv should never have been attempted
+    assert all(not k.endswith(".csv") for k in fake.downloads)
+    # Concurrency should have actually been exercised (more than 1 in-flight)
+    assert fake.max_active > 1, "downloads did not run concurrently"
+    # And must be bounded by the semaphore
+    assert fake.max_active <= _S3_DOWNLOAD_CONCURRENCY
+
+
+@pytest.mark.asyncio
+async def test_download_outputs_from_s3_tolerates_partial_failures(tmp_path: Path, _swap_file_service: None) -> None:
+    """A handful of failed files should not abort the whole batch."""
+    experiment_id = "test-exp-fail"
+    settings = get_settings()
+    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}/{experiment_id}"
+    listing = _make_listing(experiment_prefix, n_files=10)
+
+    # Fail 3 specific files
+    fail_keys = {
+        f"{experiment_prefix}/analyses/variant=0/plots/analysis=2/output.tsv",
+        f"{experiment_prefix}/analyses/variant=0/plots/analysis=5/output.tsv",
+        f"{experiment_prefix}/analyses/variant=0/plots/analysis=8/output.tsv",
+    }
+    fake = _FakeFileService(listing=listing, fail_keys=fail_keys)
+    set_file_service(fake)
+
+    local_cache = tmp_path / experiment_id
+    local_cache.mkdir()
+
+    # Should not raise — failures are logged and the handler continues
+    await _download_outputs_from_s3(experiment_id, local_cache)
+
+    # 10 tsvs were attempted; the 3 failing ones did not write files
+    successful_tsvs = [k for k in fake.downloads if k.endswith(".tsv") and k not in fail_keys]
+    assert len(successful_tsvs) == 10 - 3
+
+    # Files that succeeded should exist on disk
+    for i in range(10):
+        key = f"{experiment_prefix}/analyses/variant=0/plots/analysis={i}/output.tsv"
+        relative = Path(key).relative_to(experiment_prefix)
+        local_file = local_cache / relative
+        if key in fail_keys:
+            assert not local_file.exists()
+        else:
+            assert local_file.exists(), f"expected {local_file} to exist"
+
+
+@pytest.mark.asyncio
+async def test_download_outputs_from_s3_skips_cached_files(tmp_path: Path, _swap_file_service: None) -> None:
+    """Already-present files should not be re-downloaded."""
+    experiment_id = "test-exp-cached"
+    settings = get_settings()
+    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}/{experiment_id}"
+    listing = _make_listing(experiment_prefix, n_files=5)
+
+    fake = _FakeFileService(listing=listing)
+    set_file_service(fake)
+
+    local_cache = tmp_path / experiment_id
+    local_cache.mkdir()
+
+    # Pre-create 2 of the 5 files — they should be skipped on download
+    cached_keys = {
+        f"{experiment_prefix}/analyses/variant=0/plots/analysis=1/output.tsv",
+        f"{experiment_prefix}/analyses/variant=0/plots/analysis=3/output.tsv",
+    }
+    for key in cached_keys:
+        rel = Path(key).relative_to(experiment_prefix)
+        local = local_cache / rel
+        local.parent.mkdir(parents=True, exist_ok=True)
+        local.write_bytes(b"already-cached")
+
+    await _download_outputs_from_s3(experiment_id, local_cache)
+
+    downloaded_tsvs = [k for k in fake.downloads if k.endswith(".tsv")]
+    assert len(downloaded_tsvs) == 5 - len(cached_keys)
+    assert all(k not in cached_keys for k in downloaded_tsvs)

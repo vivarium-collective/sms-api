@@ -3,9 +3,10 @@ import logging
 
 from async_lru import alru_cache
 
+from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.messaging.messaging_service import MessagingService
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobBackend, JobStatus, SSHTarget
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
@@ -16,13 +17,16 @@ logger = logging.getLogger(__name__)
 
 class JobScheduler:
     database_service: DatabaseService
-    slurm_service: SlurmService
+    slurm_service: SlurmService | None
     messaging_service: MessagingService
     _polling_task: asyncio.Task[None] | None = None
     _stop_event: asyncio.Event
 
     def __init__(
-        self, messaging_service: MessagingService, database_service: DatabaseService, slurm_service: SlurmService
+        self,
+        messaging_service: MessagingService,
+        database_service: DatabaseService,
+        slurm_service: SlurmService | None = None,
     ):
         self.messaging_service = messaging_service
         self.database_service = database_service
@@ -85,31 +89,53 @@ class JobScheduler:
             await asyncio.sleep(interval_seconds)
 
     async def update_running_jobs(self) -> None:
+        if self.slurm_service is None:
+            return  # No SLURM polling when using K8s backend
+
         # Fetch all active (PENDING or RUNNING) HpcRun jobs
         running_jobs = await self.database_service.list_active_hpcruns()
         if not running_jobs:
             logger.debug("No active jobs found for polling.")
             return
-        job_ids = [job.slurmjobid for job in running_jobs if job.slurmjobid]
-        if not job_ids:
-            logger.debug("No valid slurm job IDs found in running jobs.")
+        # Filter to SLURM-backend jobs (K8s jobs will be polled separately)
+        slurm_runs = [job for job in running_jobs if job.job_id.backend == JobBackend.SLURM]
+        if not slurm_runs:
+            logger.debug("No active SLURM jobs found for polling.")
             return
-        async with get_ssh_session_service().session() as ssh:
-            slurm_jobs_from_squeue = await self.slurm_service.get_job_status_squeue(ssh, job_ids)
-            slurm_jobs_from_sacct = await self.slurm_service.get_job_status_scontrol(ssh, job_ids)
+        slurm_job_ids = [job.job_id.as_slurm_int for job in slurm_runs]
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
+            slurm_jobs_from_squeue = await self.slurm_service.get_job_status_squeue(ssh, slurm_job_ids)
+            slurm_jobs_from_sacct = await self.slurm_service.get_job_status_scontrol(ssh, slurm_job_ids)
         slurm_job_map = {job.job_id: job for job in slurm_jobs_from_squeue}
         slurm_job_map.update({job.job_id: job for job in slurm_jobs_from_sacct})
-        for hpc_run in running_jobs:
-            slurm_job = slurm_job_map.get(hpc_run.slurmjobid)
+        for hpc_run in slurm_runs:
+            slurm_job = slurm_job_map.get(hpc_run.job_id.as_slurm_int)
             if not slurm_job or not slurm_job.job_state:
                 continue
             new_status = JobStatus.from_slurm_state(slurm_job.job_state)
             if new_status == hpc_run.status:
                 logger.debug(f"HpcRun {hpc_run.database_id} is still running with status {new_status}")
                 continue
-            if hpc_run.status != new_status:
-                await self.database_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, new_slurm_job=slurm_job)
-                logger.info(f"Updated HpcRun {hpc_run.database_id} status to {new_status}")
+
+            # Build error message for failed/cancelled jobs
+            error_message = None
+            if new_status in (JobStatus.FAILED, JobStatus.CANCELLED):
+                error_parts = [f"SLURM state: {slurm_job.job_state}"]
+                if slurm_job.reason:
+                    error_parts.append(f"reason: {slurm_job.reason}")
+                if slurm_job.exit_code:
+                    error_parts.append(f"exit_code: {slurm_job.exit_code}")
+                error_message = ", ".join(error_parts)
+
+            update = JobStatusUpdate(
+                job_id=hpc_run.job_id,
+                status=new_status,
+                start_time=slurm_job.start_time,
+                end_time=slurm_job.end_time,
+                error_message=error_message,
+            )
+            await self.database_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, update=update)
+            logger.info(f"Updated HpcRun {hpc_run.database_id} status to {new_status}")
 
     async def close(self) -> None:
         await self.stop_polling()

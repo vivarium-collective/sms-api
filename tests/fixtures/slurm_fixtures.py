@@ -142,6 +142,7 @@ exit $NF_EXIT_CODE
 
 @pytest_asyncio.fixture(scope="session")
 async def ssh_session_service() -> AsyncGenerator[SSHSessionService]:
+    from sms_api.common.models import SSHTarget
     from sms_api.dependencies import set_ssh_session_service
 
     settings = get_settings()
@@ -152,10 +153,10 @@ async def ssh_session_service() -> AsyncGenerator[SSHSessionService]:
         known_hosts=Path(settings.slurm_submit_known_hosts) if settings.slurm_submit_known_hosts else None,
     )
     # Set the singleton so it's available throughout the test session
-    set_ssh_session_service(ssh_session_service)
+    set_ssh_session_service(ssh_session_service, name=SSHTarget.SLURM)
     yield ssh_session_service
     # Clean up the singleton at end of session
-    set_ssh_session_service(None)
+    set_ssh_session_service(None, name=SSHTarget.SLURM)
 
 
 @pytest_asyncio.fixture(scope="session")

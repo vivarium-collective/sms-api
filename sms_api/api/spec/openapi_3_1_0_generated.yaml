@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.4.6
+  version: 0.4.14
 paths:
   /api/v1/simulations:
     post:
@@ -39,24 +39,20 @@ paths:
         in: query
         required: false
         schema:
-          $ref: '#/components/schemas/SimulationConfigFilename'
-          description: " Config filename in vEcoli/configs/ on HPC, chosen according\
-            \ to the given deployment's linked\n            vEcoli repo (api_simulation_default_ccam.json,\
-            \ api_simulation_default_aws_cdk.json,\n            or api_simulation_ptools.json))\n\
-            \        "
-          default: api_simulation_default_ccam.json
-        description: " Config filename in vEcoli/configs/ on HPC, chosen according\
-          \ to the given deployment's linked\n            vEcoli repo (api_simulation_default_ccam.json,\
-          \ api_simulation_default_aws_cdk.json,\n            or api_simulation_ptools.json))\n\
-          \        "
+          $ref: '#/components/schemas/SimulationConfigPrivate'
+          description: " Config filename in vEcoli/configs/ on HPC,\n            chosen\
+            \ according to the given deployment's linked\n            vEcoli repo.\
+            \ See user docs for more details\n        "
+          default: api_simulation_default.json
+        description: " Config filename in vEcoli/configs/ on HPC,\n            chosen\
+          \ according to the given deployment's linked\n            vEcoli repo. See\
+          \ user docs for more details\n        "
       - name: num_generations
         in: query
         required: false
         schema:
           anyOf:
           - type: integer
-            maximum: 10
-            minimum: 1
           - type: 'null'
           description: Number of generations to simulate
           title: Num Generations
@@ -67,8 +63,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            maximum: 100
-            minimum: 1
           - type: 'null'
           description: Number of initial seeds (lineages)
           title: Num Seeds
@@ -180,6 +174,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/simulations/{id}/cancel:
+    delete:
+      tags:
+      - Simulations
+      summary: Cancel a running simulation
+      description: Cancel a running simulation by killing its backend job.
+      operationId: cancel-ecoli-simulation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the simulation
+          title: Id
+        description: Database ID of the simulation
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationRun'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/simulations/{id}/log:
+    get:
+      tags:
+      - Simulations
+      summary: Get the structured output of a given simulation workflow log.
+      operationId: get-ecoli-simulation-log
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/simulations/{id}/data:
     post:
       tags:
@@ -238,7 +286,7 @@ paths:
             schema:
               $ref: '#/components/schemas/ExperimentAnalysisRequest'
               default:
-                experiment_id: sms_multiseed_0-2794dfa74b9cf37c_1759844363435
+                experiment_id: sim3-baseline-ca00
                 multiseed:
                 - name: ptools_rna
                   n_tp: 8
@@ -388,14 +436,14 @@ paths:
         required: false
         schema:
           type: string
-          default: https://github.com/vivarium-collective/vEcoli
+          default: https://github.com/CovertLabEcoli/vEcoli-private
           title: Git Repo Url
       - name: git_branch
         in: query
         required: false
         schema:
           type: string
-          default: api-support
+          default: api-analysis-patch
           title: Git Branch
       responses:
         '200':
@@ -487,13 +535,13 @@ paths:
               $ref: '#/components/schemas/ParcaDatasetRequest'
               default:
                 simulator_version:
-                  git_commit_hash: 203ab2a
-                  git_repo_url: https://github.com/vivarium-collective/vEcoli
-                  git_branch: api-support
+                  git_commit_hash: 2f3ead
+                  git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
+                  git_branch: api-analysis-patch
                   database_id: 25
-                  created_at: '2026-02-01T17:09:25.117504'
+                  created_at: '2026-03-31T23:33:56.589291'
                 parca_config:
-                  outdir: /projects/SMS/sms_api/alex/sims
+                  outdir: /projects/SMS/sms_api/jim/sims
       responses:
         '200':
           description: Successful Response
@@ -788,9 +836,6 @@ components:
         database_id:
           type: integer
           title: Database Id
-        slurmjobid:
-          type: integer
-          title: Slurmjobid
         correlation_id:
           type: string
           title: Correlation Id
@@ -818,14 +863,23 @@ components:
           - type: string
           - type: 'null'
           title: Error Message
+        job_id_ext:
+          type: string
+          title: Job Id Ext
+          readOnly: true
+        job_backend:
+          type: string
+          title: Job Backend
+          readOnly: true
       additionalProperties: true
       type: object
       required:
       - database_id
-      - slurmjobid
       - correlation_id
       - job_type
       - ref_id
+      - job_id_ext
+      - job_backend
       title: HpcRun
     JobStatus:
       type: string
@@ -836,6 +890,7 @@ components:
       - queued
       - running
       - completed
+      - cancelled
       - failed
       title: JobStatus
       description: Shared job status enum for simulations, analyses, and other HPC
@@ -919,7 +974,7 @@ components:
         parca_config:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: /projects/SMS/sms_api/alex/sims
+            outdir: /projects/SMS/sms_api/jim/sims
       additionalProperties: true
       type: object
       required:
@@ -930,7 +985,7 @@ components:
         outdir:
           type: string
           title: Outdir
-          default: /projects/SMS/sms_api/alex/sims
+          default: /projects/SMS/sms_api/jim/sims
       additionalProperties: true
       type: object
       title: ParcaOptions
@@ -1017,10 +1072,10 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-02-01 17:09:24.322730'
+          default: '2026-03-31 23:33:56.358973'
         job_id:
           anyOf:
-          - type: integer
+          - type: string
           - type: 'null'
           title: Job Id
       additionalProperties: true
@@ -1049,7 +1104,7 @@ components:
         parca_options:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: /projects/SMS/sms_api/alex/sims
+            outdir: /projects/SMS/sms_api/jim/sims
         analysis_options:
           $ref: '#/components/schemas/AnalysisOptions'
           default: {}
@@ -1062,14 +1117,14 @@ components:
       required:
       - experiment_id
       title: SimulationConfig
-    SimulationConfigFilename:
+    SimulationConfigPrivate:
       type: string
       enum:
       - api_simulation_default.json
-      - api_simulation_default_ccam.json
-      - api_simulation_default_aws_cdk.json
-      - api_simulation_ptools_ccam.json
-      title: SimulationConfigFilename
+      - api_test_violacein_with_metabolism.json
+      - api_test_violacein_no_metabolism.json
+      - api_final_mec.json
+      title: SimulationConfigPrivate
     SimulationRun:
       properties:
         id:

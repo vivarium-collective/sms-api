@@ -20,7 +20,7 @@ from sms_api.analysis.models import (
     TsvOutputFile,
 )
 from sms_api.common.hpc.slurm_service import SlurmService
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobStatus, SSHTarget
 from sms_api.common.ssh.ssh_service import SSHSession
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import capture_slurm_script
@@ -74,7 +74,7 @@ class AnalysisServiceSlurm:
         remote_config_path = (
             settings.hpc_repo_base_path.remote_path / simulator_hash / "vEcoli" / "configs" / "api_analysis_ptools.json"
         )
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
             if returncode != 0:
                 raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
@@ -189,7 +189,7 @@ class AnalysisServiceSlurm:
         """
         cmd = f'find "{remote_analysis_outdir!s}" -type f'
         try:
-            async with get_ssh_session_service().session() as ssh:
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 ret, out, err = await ssh.run_command(cmd)
             # Filter to only include text-based file types
             accepted_extensions = ["txt", "tsv", "csv", "html"]
@@ -210,7 +210,7 @@ class AnalysisServiceSlurm:
         local = local_dir / requested_filename
 
         if not local.exists():
-            async with get_ssh_session_service().session() as ssh:
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 await ssh.scp_download(local_file=local, remote_path=remote_path)
 
         file_content = local.read_text()

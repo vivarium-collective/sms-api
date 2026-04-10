@@ -1,17 +1,12 @@
 from collections.abc import Mapping
-from typing import Any, TypeVar, Optional, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, TypeVar, Union, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
 from ..models.job_status import JobStatus
 from ..models.job_type import JobType
 from ..types import UNSET, Unset
-from typing import cast, Union
-from typing import Union
-
 
 T = TypeVar("T", bound="HpcRun")
 
@@ -21,10 +16,11 @@ class HpcRun:
     """
     Attributes:
         database_id (int):
-        slurmjobid (int):
         correlation_id (str):
         job_type (JobType):
         ref_id (int):
+        job_id_ext (str):
+        job_backend (str):
         status (Union[JobStatus, None, Unset]):
         start_time (Union[None, Unset, str]):
         end_time (Union[None, Unset, str]):
@@ -32,10 +28,11 @@ class HpcRun:
     """
 
     database_id: int
-    slurmjobid: int
     correlation_id: str
     job_type: JobType
     ref_id: int
+    job_id_ext: str
+    job_backend: str
     status: Union[JobStatus, None, Unset] = UNSET
     start_time: Union[None, Unset, str] = UNSET
     end_time: Union[None, Unset, str] = UNSET
@@ -45,13 +42,15 @@ class HpcRun:
     def to_dict(self) -> dict[str, Any]:
         database_id = self.database_id
 
-        slurmjobid = self.slurmjobid
-
         correlation_id = self.correlation_id
 
         job_type = self.job_type.value
 
         ref_id = self.ref_id
+
+        job_id_ext = self.job_id_ext
+
+        job_backend = self.job_backend
 
         status: Union[None, Unset, str]
         if isinstance(self.status, Unset):
@@ -83,10 +82,11 @@ class HpcRun:
         field_dict.update(self.additional_properties)
         field_dict.update({
             "database_id": database_id,
-            "slurmjobid": slurmjobid,
             "correlation_id": correlation_id,
             "job_type": job_type,
             "ref_id": ref_id,
+            "job_id_ext": job_id_ext,
+            "job_backend": job_backend,
         })
         if status is not UNSET:
             field_dict["status"] = status
@@ -104,13 +104,15 @@ class HpcRun:
         d = dict(src_dict)
         database_id = d.pop("database_id")
 
-        slurmjobid = d.pop("slurmjobid")
-
         correlation_id = d.pop("correlation_id")
 
         job_type = JobType(d.pop("job_type"))
 
         ref_id = d.pop("ref_id")
+
+        job_id_ext = d.pop("job_id_ext")
+
+        job_backend = d.pop("job_backend")
 
         def _parse_status(data: object) -> Union[JobStatus, None, Unset]:
             if data is None:
@@ -158,10 +160,11 @@ class HpcRun:
 
         hpc_run = cls(
             database_id=database_id,
-            slurmjobid=slurmjobid,
             correlation_id=correlation_id,
             job_type=job_type,
             ref_id=ref_id,
+            job_id_ext=job_id_ext,
+            job_backend=job_backend,
             status=status,
             start_time=start_time,
             end_time=end_time,

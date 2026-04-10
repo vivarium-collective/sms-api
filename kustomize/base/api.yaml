@@ -14,6 +14,7 @@ spec:
       labels:
         app: api
     spec:
+      serviceAccountName: batch-submit
       nodeSelector:
         vlan: internal
       securityContext:
@@ -57,6 +58,28 @@ spec:
                   key: postgres-port
             - name: SLURM_SUBMIT_KEY_PATH
               value: "/run/secrets/slurm_submit_key_file/ssh-privatekey"
+          # Reserve ephemeral-storage so the kubelet schedules us on a node
+          # with enough disk for the per-request results cache below.  Without
+          # this, large downloads (e.g. 10k-sim analyses) trigger eviction
+          # under "The node was low on resource: ephemeral-storage".
+          #
+          # Sizing is derived from actual node allocatable, not wishful
+          # thinking.  On the sms-api-stanford-test EKS node group (m6i.large,
+          # default 20 GiB root EBS) each node reports ~16.9 GiB allocatable
+          # ephemeral-storage.  We therefore:
+          #   - request 4 GiB so we fit on either node without crowding out
+          #     the other workloads on -44-192 that share the overlay fs,
+          #   - limit to 12 GiB (~71% of node allocatable) so the kubelet
+          #     can actually enforce the ceiling without cascading eviction
+          #     of unrelated pods.
+          # If sim 44's real cache size exceeds 12 GiB, the proper fix is
+          # task 11 (stream S3 directly into tar response, zero cache) —
+          # NOT cranking these numbers up past what the node can honor.
+          resources:
+            requests:
+              ephemeral-storage: "4Gi"
+            limits:
+              ephemeral-storage: "12Gi"
           volumeMounts:
             - name: vivarium-home-pvc
               mountPath: /home/FCAM/svc_vivarium
@@ -66,6 +89,12 @@ spec:
             - name: ssh-known-hosts
               mountPath: /run/secrets/ssh-known-hosts
               readOnly: true
+            # Dedicated results cache so /app/.results_cache does NOT live on
+            # the container's overlay filesystem.  The emptyDir is subject to
+            # the pod's ephemeral-storage limit above, but it gives us a clean
+            # accounting boundary and lets us size downloads deterministically.
+            - name: results-cache
+              mountPath: /app/.results_cache
       volumes:
         - name: vivarium-home-pvc
           persistentVolumeClaim:
@@ -80,6 +109,12 @@ spec:
         - name: ssh-known-hosts
           configMap:
             name: ssh-known-hosts
+        - name: results-cache
+          emptyDir:
+            # Match the container's ephemeral-storage limit above so the
+            # kubelet enforces them consistently.  Must stay <= node
+            # allocatable (~16.9 GiB on m6i.large w/ 20 GiB root EBS).
+            sizeLimit: 12Gi
       imagePullSecrets:
         - name: ghcr-secret
 

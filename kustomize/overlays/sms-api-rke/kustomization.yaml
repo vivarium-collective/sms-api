@@ -4,15 +4,18 @@ kind: Kustomization
 # STABLE SRI WORKING VERSION:
 # - name: ghcr.io/vivarium-collective/sms-api
 #   (old)newTag: 0.2.74-dev
-#   newTag: 0.4.5
+#   newTag: 0.4.14
 
 namespace: sms-api-rke
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.4.14
+    newTag: 0.6.2
+  # ptools pinned to last-known-good tag — see Stanford-test kustomization
+  # for rationale.  No sms-ptools:0.6.x image exists on ghcr.io because the
+  # build-and-push GH Action's ptools step is broken.
   - name: ghcr.io/vivarium-collective/sms-ptools
-    newTag: 0.4.5
+    newTag: 0.5.9
 
 replicas:
   - count: 1

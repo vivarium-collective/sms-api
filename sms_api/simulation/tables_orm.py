@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from sms_api.analysis.models import AnalysisConfig, AnalysisConfigOptions, ExperimentAnalysisDTO
-from sms_api.common.models import JobStatus
+from sms_api.common.models import JobBackend, JobId, JobStatus
 from sms_api.simulation.models import (
     HpcRun,
     JobType,
@@ -26,6 +26,7 @@ class JobStatusDB(enum.Enum):
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
+    CANCELLED = "cancelled"
     FAILED = "failed"
 
     def to_job_status(self) -> JobStatus:
@@ -84,7 +85,8 @@ class ORMHpcRun(Base):
 
     job_type: Mapped[JobTypeDB] = mapped_column(nullable=False)
     correlation_id: Mapped[str] = mapped_column(nullable=False, index=True)
-    slurmjobid: Mapped[int] = mapped_column(nullable=True)
+    job_id_ext: Mapped[Optional[str]] = mapped_column(nullable=True)  # Backend-specific job ID as string
+    job_backend: Mapped[str] = mapped_column(nullable=False, server_default="slurm")
     start_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
     end_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
     status: Mapped[JobStatusDB] = mapped_column(nullable=False)
@@ -95,13 +97,19 @@ class ORMHpcRun(Base):
     )
     jobref_simulator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("simulator.id"), nullable=True, index=True)
 
+    def _build_job_id(self) -> JobId:
+        """Construct a JobId from the ORM columns."""
+        if self.job_id_ext is None:
+            raise RuntimeError(f"ORMHpcRun {self.id} has no job_id_ext set")
+        return JobId(value=self.job_id_ext, backend=JobBackend(self.job_backend))
+
     def to_hpc_run(self) -> HpcRun:
         ref_id = self.jobref_simulation_id or self.jobref_parca_dataset_id or self.jobref_simulator_id
         if ref_id is None:
             raise RuntimeError("ORMHpcRun must have at least one job reference set.")
         return HpcRun(
             database_id=self.id,
-            slurmjobid=self.slurmjobid,
+            job_id=self._build_job_id(),
             correlation_id=self.correlation_id,
             job_type=self.job_type.to_job_type(),
             ref_id=ref_id,

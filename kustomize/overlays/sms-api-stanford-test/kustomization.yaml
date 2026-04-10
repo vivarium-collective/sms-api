@@ -3,11 +3,18 @@ kind: Kustomization
 
 namespace: sms-api-stanford-test
 
+# STABLE: 0.5.9
+
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.4.5
+    newTag: 0.6.2
+  # ptools pinned to last-known-good tag — the build-and-push GH Action's
+  # ptools step is currently broken (Dockerfile-nextflow issue), so there is
+  # no sms-ptools:0.6.x image on ghcr.io.  0.5.9 is the tag the live Stanford
+  # pod has been running successfully; keeping both namespaces pointing here
+  # avoids an ErrImagePull ReplicaSet while api iterates independently.
   - name: ghcr.io/vivarium-collective/sms-ptools
-    newTag: 0.4.5
+    newTag: 0.5.9
 
 replicas:
   - count: 1
@@ -32,6 +39,13 @@ resources:
   - ../../base
 
 patches:
+  - patch: |-
+      - op: add
+        path: /metadata/annotations/eks.amazonaws.com~1role-arn
+        value: arn:aws-us-gov:iam::476270107793:role/smsvpctest-batch-BatchSubmitIrsaRole31BE49CD-xETZl8o1n6cE
+    target:
+      kind: ServiceAccount
+      name: batch-submit
   - patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/volumeMounts/0

@@ -21,6 +21,7 @@ from sms_api.analysis.models import (
     OutputFileMetadata,
     TsvOutputFile,
 )
+from sms_api.common.models import SSHTarget
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import get_data_id, timestamp
 from sms_api.config import get_settings
@@ -70,7 +71,7 @@ async def handle_run_analysis_slurm(
         # 2a. mk local cache (use makedirs with exist_ok for empty directories)
         analysis_request_cache.mkdir(parents=True, exist_ok=True)
         # Use a single SSH session for job submission and polling
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             # 2c. dispatch job
             jobname, jobid, config = await analysis_service.dispatch_analysis(
                 request=request,
@@ -135,7 +136,7 @@ async def handle_get_analysis_status(
     )
     if analysis_record.job_id is None:
         raise ValueError("Analysis record has no job_id")
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         return await analysis_service.get_analysis_status(
             job_id=analysis_record.job_id, db_id=analysis_record.database_id, ssh=ssh
         )
@@ -145,7 +146,7 @@ async def handle_get_analysis_log(db_service: DatabaseService, id: int) -> str:
     analysis_record = await db_service.get_analysis(database_id=id)
     slurm_logfile = get_settings().slurm_log_base_path / f"{analysis_record.job_name}.out"
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         ret, stdout, stdin = await ssh.run_command(f"cat {slurm_logfile!s}")
 
     return stdout
@@ -172,7 +173,7 @@ async def get_html_outputs_local(output_id: str) -> list[OutputFile]:
     remote_uv_executable = slurm_base / ".local" / "bin" / "uv"
     workspace_dir = slurm_base / "workspace"
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         ret, stdin, stdout = await ssh.run_command(
             dedent(f"""
                     cd {workspace_dir} \
