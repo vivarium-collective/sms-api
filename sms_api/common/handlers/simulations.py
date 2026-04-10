@@ -10,6 +10,7 @@ import tarfile
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 from fastapi import BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -875,6 +876,99 @@ def workflow_log(simulation_id: int, base_url: str = "http://localhost:8080", ti
             border_style=status_border(status.lower()),
         )
     )
+
+
+async def run_standalone_analysis(
+    database_service: DatabaseService,
+    simulation_id: int,
+    modules: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Run standalone vEcoli analysis on existing simulation output.
+
+    Builds an analysis config from the simulation's experiment_id and paths,
+    then submits it as a K8s Job (Batch) or returns the config for SLURM.
+
+    Args:
+        database_service: DB service for looking up the simulation.
+        simulation_id: Database ID of a completed simulation.
+        modules: Analysis modules to run, keyed by domain.
+            E.g. ``{"multiseed": {"ptools_rna": {"n_tp": 10}, "ptools_rxns": {"n_tp": 10}}}``
+            If None, uses a default set of ptools modules.
+    """
+    settings = get_settings()
+    simulation = await database_service.get_simulation(simulation_id=simulation_id)
+    if simulation is None:
+        raise ValueError(f"Simulation {simulation_id} not found")
+
+    experiment_id = simulation.experiment_id
+
+    # Default analysis modules if none specified
+    if modules is None:
+        modules = {
+            "multiseed": {
+                "ptools_rna": {"n_tp": 10},
+                "ptools_rxns": {"n_tp": 10},
+                "ptools_proteins": {"n_tp": 10},
+            }
+        }
+
+    # Build analysis config — path patterns match vEcoli conventions
+    backend = get_job_backend()
+    if backend == "k8s":
+        s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}"
+        analysis_name = f"analysis-{experiment_id[:20]}-{str(uuid.uuid4())[:4]}"
+        analysis_config: dict[str, Any] = {
+            "analysis_options": {
+                "experiment_id": [experiment_id],
+                "variant_data_dir": [f"{s3_output}/variant_sim_data"],
+                "validation_data_path": [f"{s3_output}/parca/kb/validationData.cPickle"],
+                "outdir": f"{s3_output}/analyses/{analysis_name}",
+                "single": {},
+                "multidaughter": {},
+                "multigeneration": {},
+                **{domain: domain_modules for domain, domain_modules in modules.items()},
+            },
+            "emitter_arg": {"out_uri": s3_output},
+        }
+
+        # Submit as K8s Job
+        sim_service = get_simulation_service()
+        if sim_service is None:
+            raise ValueError("Simulation service not initialized")
+
+        from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
+
+        if not isinstance(sim_service, SimulationServiceK8s):
+            raise ValueError("Standalone K8s analysis requires K8s backend")
+
+        job_id = await sim_service.submit_standalone_analysis(
+            experiment_id=experiment_id,
+            analysis_config=analysis_config,
+            database_service=database_service,
+            simulator_id=simulation.simulator_id,
+        )
+        return {"job_id": str(job_id), "analysis_name": analysis_name, "config": analysis_config}
+    else:
+        # SLURM path
+        sim_base = settings.hpc_sim_base_path.remote_path
+        analysis_name = f"analysis-{experiment_id[:20]}-{str(uuid.uuid4())[:4]}"
+        analysis_config = {
+            "analysis_options": {
+                "experiment_id": [experiment_id],
+                "variant_data_dir": [str(sim_base / experiment_id / "variant_sim_data")],
+                "validation_data_path": [
+                    str(settings.hpc_parca_base_path.remote_path / "default" / "kb" / "validationData.cPickle")
+                ],
+                "outdir": str(settings.analysis_outdir.remote_path / analysis_name),
+                "single": {},
+                "multidaughter": {},
+                "multigeneration": {},
+                **{domain: domain_modules for domain, domain_modules in modules.items()},
+            },
+            "emitter_arg": {"out_dir": str(sim_base)},
+        }
+        # For SLURM, return the config — the caller can submit it via the analysis service
+        return {"analysis_name": analysis_name, "config": analysis_config, "backend": "slurm"}
 
 
 async def _get_slurm_log(hpc_run: HpcRun) -> str:

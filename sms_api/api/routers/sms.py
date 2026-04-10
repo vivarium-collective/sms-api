@@ -7,6 +7,7 @@
 #   IE: where do we provide this special config: in vEcoli or API?
 # TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
 # TODO: labkey preprocessing
+import json
 import logging
 from collections.abc import Sequence
 
@@ -114,6 +115,7 @@ async def run_simulation_workflow(
             description=description,
             run_parca=run_parca,
             observables=observables,
+            analysis_options=analysis_options,
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
@@ -217,6 +219,37 @@ async def get_simulation_log(
                 Are you sure that you've passed the experiment_tag? (not the experiment id)
             """
         )
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/simulations/{id}/analysis",
+    operation_id="run-ecoli-simulation-analysis",
+    tags=["Simulations"],
+    dependencies=[Depends(get_database_service)],
+    summary="Run standalone analysis on existing simulation output",
+)
+async def run_simulation_analysis(
+    id: int = FastAPIPath(description="Database ID of a completed simulation."),
+    modules: str | None = Query(
+        default=None,
+        description="JSON object mapping analysis domains to module configs. "
+        'E.g. \'{"multiseed": {"ptools_rna": {"n_tp": 10}}}\'.'
+        " If omitted, runs default ptools modules.",
+    ),
+) -> dict:  # type: ignore[type-arg]
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    try:
+        parsed_modules = json.loads(modules) if modules else None
+        return await handlers.simulations.run_standalone_analysis(
+            database_service=db_service,
+            simulation_id=id,
+            modules=parsed_modules,
+        )
+    except Exception as e:
+        logger.exception("Error running standalone analysis")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

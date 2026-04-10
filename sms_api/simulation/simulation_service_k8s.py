@@ -370,6 +370,90 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
         logger.info(f"Created K8s Job {job_name} for experiment {experiment_id}")
         return JobId.k8s(job_name)
 
+    async def submit_standalone_analysis(
+        self,
+        experiment_id: str,
+        analysis_config: dict,  # type: ignore[type-arg]
+        database_service: "DatabaseService",
+        simulator_id: int,
+    ) -> JobId:
+        """Create a K8s Job that runs vEcoli standalone analysis on existing simulation output."""
+        settings = get_settings()
+        safe_id = experiment_id.replace("_", "-").lower()
+        job_name = f"ana-{safe_id}"[:63]
+        config_json = json.dumps(analysis_config)
+
+        simulator = await database_service.get_simulator(simulator_id=simulator_id)
+        if simulator is None:
+            raise ValueError(f"Simulator {simulator_id} not found")
+        submit_image = (
+            f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
+            f"/{settings.ecr_repository}:{simulator.git_commit_hash}-amd64-submit"
+        )
+
+        configmap_name = f"{job_name}-config"
+        configmap = k8s_client.V1ConfigMap(
+            metadata=k8s_client.V1ObjectMeta(
+                name=configmap_name,
+                labels={"app": "sms-api", "job-type": "analysis", "experiment-id": experiment_id},
+            ),
+            data={"analysis.json": config_json},
+        )
+        self._k8s.create_configmap(configmap)
+
+        s3_endpoint = f"https://s3.{settings.batch_region}.amazonaws.com"
+        command = (
+            f'sed -i "/region = params.aws_region/a\\            client {{ endpoint = \\"{s3_endpoint}\\" }}"'
+            " runscripts/nextflow/config.template"
+            " && python runscripts/analysis.py --config /config/analysis.json"
+        )
+
+        job = k8s_client.V1Job(
+            metadata=k8s_client.V1ObjectMeta(
+                name=job_name,
+                labels={"app": "sms-api", "job-type": "analysis", "experiment-id": experiment_id},
+            ),
+            spec=k8s_client.V1JobSpec(
+                backoff_limit=0,
+                ttl_seconds_after_finished=86400,
+                template=k8s_client.V1PodTemplateSpec(
+                    spec=k8s_client.V1PodSpec(
+                        service_account_name="batch-submit",
+                        restart_policy="Never",
+                        containers=[
+                            k8s_client.V1Container(
+                                name="analysis",
+                                image=submit_image,
+                                command=["/bin/bash", "-c", command],
+                                env=[
+                                    k8s_client.V1EnvVar(name="AWS_DEFAULT_REGION", value=settings.batch_region),
+                                    k8s_client.V1EnvVar(name="AWS_REGION", value=settings.batch_region),
+                                    k8s_client.V1EnvVar(name="AWS_STS_REGIONAL_ENDPOINTS", value="regional"),
+                                    k8s_client.V1EnvVar(name="USER", value="sms-api"),
+                                ],
+                                volume_mounts=[
+                                    k8s_client.V1VolumeMount(name="config", mount_path="/config"),
+                                ],
+                                resources=k8s_client.V1ResourceRequirements(
+                                    requests={"cpu": "500m", "memory": "1Gi"},
+                                    limits={"cpu": "1", "memory": "2Gi"},
+                                ),
+                            ),
+                        ],
+                        volumes=[
+                            k8s_client.V1Volume(
+                                name="config",
+                                config_map=k8s_client.V1ConfigMapVolumeSource(name=configmap_name),
+                            ),
+                        ],
+                    ),
+                ),
+            ),
+        )
+        self._k8s.create_job(job)
+        logger.info(f"Created K8s analysis Job {job_name} for experiment {experiment_id}")
+        return JobId.k8s(job_name)
+
     @override
     async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
         """Read a vEcoli config template from the GitHub repo via the Contents API."""

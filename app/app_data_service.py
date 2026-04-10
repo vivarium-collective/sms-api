@@ -83,6 +83,7 @@ class E2EDataService:
         description: str | None = None,
         run_parameter_calculator: bool | None = None,
         observables: list[str] | None = None,
+        analysis_options: dict[str, object] | None = None,
     ) -> Simulation:
         simulation = self.submit_run_workflow(
             params=params,
@@ -94,6 +95,7 @@ class E2EDataService:
             description=description,
             run_parameter_calculator=run_parameter_calculator,
             observables=observables,
+            analysis_options=analysis_options,
         )
         return simulation
 
@@ -114,6 +116,16 @@ class E2EDataService:
 
     def cancel_workflow(self, simulation_id: int) -> SimulationRun:
         return self.submit_cancel_workflow(simulation_id=simulation_id)
+
+    def run_analysis(self, simulation_id: int, modules: str | None = None) -> dict:  # type: ignore[type-arg]
+        """Run standalone analysis on existing simulation output."""
+        params: dict[str, str] = {}
+        if modules:
+            params["modules"] = modules
+        response = self.client.post(url=f"/api/v1/simulations/{simulation_id}/analysis", params=params)
+        if response.status_code != 200:
+            raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")
+        return response.json()  # type: ignore[no-any-return]
 
     def get_output_data_sync(self, simulation_id: int, dest: Path) -> Path:
         """Download simulation outputs synchronously (no async event loop required)."""
@@ -250,6 +262,7 @@ class E2EDataService:
         description: str | None = None,
         run_parameter_calculator: bool | None = None,
         observables: list[str] | None = None,
+        analysis_options: dict[str, object] | None = None,
     ) -> Simulation:
         if params is not None:
             query_params = params
@@ -272,9 +285,11 @@ class E2EDataService:
                 items.extend(("observables", obs) for obs in observables)
             query_params = httpx.QueryParams(items)
         try:
+            json_body = analysis_options if analysis_options else None
             simulation_response = self.client.post(
                 url="/api/v1/simulations",
                 params=query_params,
+                json=json_body,
             )
             if simulation_response.status_code != 200:
                 raise httpx.HTTPError(f"Server returned {simulation_response.status_code}: {simulation_response.text}")  # noqa: TRY301

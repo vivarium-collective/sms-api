@@ -250,9 +250,15 @@ def simulation_run(
         help="Comma-separated dot-path observables to record (e.g. 'bulk,listeners.mass.cell_mass'). "
         "If omitted, all outputs are emitted.",
     ),
+    analysis_options: str | None = Option(
+        default=None,
+        help='JSON string of analysis module overrides. E.g. \'{"multiseed": {"ptools_rna": {"n_tp": 10}}}\'.'
+        " If omitted, uses default analysis modules.",
+    ),
     poll: bool = Option(default=False, help="Poll simulation status until completion."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
+    import json as _json
     import time
 
     from rich.panel import Panel
@@ -260,6 +266,7 @@ def simulation_run(
     console = get_console()
     data_service = get_data_service(base_url=base_url)
     observables_list = [o.strip() for o in observables.split(",") if o.strip()] if observables else None
+    analysis_opts_parsed = _json.loads(analysis_options) if analysis_options else None
 
     with console.status("[memphis.spinner]Submitting simulation..."):
         simulation = data_service.run_workflow(
@@ -271,6 +278,7 @@ def simulation_run(
             description=description or f"sim{simulator_id}-{experiment_id}; {generations} Generations; {seeds} Seeds",
             run_parameter_calculator=run_parca,
             observables=observables_list,
+            analysis_options=analysis_opts_parsed,
         )
 
     console.print(f"[memphis.success]Simulation submitted![/]  ID: {simulation.database_id}")
@@ -408,6 +416,26 @@ def simulation_outputs(
     outdir = Path(dest) if dest is not None else Path(f"simulation_id_{simulation_id}")
     archive_dir = asyncio.run(data_service.get_output_data(simulation_id=simulation_id, dest=outdir))
     console.print(f"[memphis.success]Saved simulation outputs to:[/] {archive_dir!s}")
+
+
+@simulation_cli.command("analysis", help="Run standalone analysis on existing simulation output.")
+def simulation_analysis(
+    simulation_id: int = Argument(help="Simulation database ID (must be completed)."),
+    modules: str | None = Option(
+        default=None,
+        help='JSON string of analysis modules. E.g. \'{"multiseed": {"ptools_rna": {"n_tp": 10}}}\'.'
+        " If omitted, runs default ptools modules.",
+    ),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    try:
+        result = data_service.run_analysis(simulation_id=simulation_id, modules=modules)
+        console.print("[memphis.success]Analysis submitted![/]")
+        display_json(result, console)
+    except Exception as e:
+        console.print(f"[memphis.error]Error: {e}[/]")
 
 
 # -- Parca commands --
