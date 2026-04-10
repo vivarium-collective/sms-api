@@ -48,9 +48,22 @@ class HpcRun(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _reconstruct_job_id(cls, data: Any) -> Any:
-        """Rebuild ``job_id`` from ``job_id_ext`` + ``job_backend`` when deserializing API responses."""
-        if isinstance(data, dict) and "job_id" not in data and "job_id_ext" in data:
-            data["job_id"] = JobId(value=data["job_id_ext"], backend=JobBackend(data["job_backend"]))
+        """Rebuild ``job_id`` from API response fields.
+
+        Handles three formats:
+        - Modern: ``job_id_ext`` + ``job_backend`` (current serialization)
+        - Already an object with ``job_id``
+        - Legacy: ``slurmjobid`` integer (older deployments, e.g. sms-api-rke
+          running a pre-JobBackend release)
+
+        The legacy path lets the current CLI/TUI/GUI remain compatible with
+        an older deployment while rolling out new versions.
+        """
+        if isinstance(data, dict) and "job_id" not in data:
+            if "job_id_ext" in data:
+                data["job_id"] = JobId(value=data["job_id_ext"], backend=JobBackend(data["job_backend"]))
+            elif "slurmjobid" in data:
+                data["job_id"] = JobId(value=str(data["slurmjobid"]), backend=JobBackend.SLURM)
         return data
 
     # Computed fields for API serialization
