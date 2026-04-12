@@ -51,14 +51,6 @@ get_stack_output() {
 echo ""
 echo "=== Looking up resources from CloudFormation stacks ==="
 
-# Get login node instance ID from login stack
-LOGIN_NODE_INSTANCE_ID=$(get_stack_output "${STACK_PREFIX}-login" "LoginInstanceId")
-if [ -z "$LOGIN_NODE_INSTANCE_ID" ] || [ "$LOGIN_NODE_INSTANCE_ID" = "None" ]; then
-    echo "ERROR: Could not find LoginInstanceId from ${STACK_PREFIX}-login stack"
-    exit 1
-fi
-echo "✓ Login node instance ID: $LOGIN_NODE_INSTANCE_ID"
-
 # Get database secret ARN from shared stack
 SECRET_ARN=$(get_stack_output "${STACK_PREFIX}-shared" "DbSecretArn")
 if [ -z "$SECRET_ARN" ] || [ "$SECRET_ARN" = "None" ]; then
@@ -75,58 +67,6 @@ POSTGRES_PASSWORD=$(echo $SECRET_JSON | jq -r '.password')
 POSTGRES_HOST=$(echo $SECRET_JSON | jq -r '.host')
 POSTGRES_PORT=$(echo $SECRET_JSON | jq -r '.port')
 POSTGRES_DATABASE=postgres
-
-# Function to generate SSH known_hosts ConfigMap
-function generate_ssh_known_hosts_configmap() {
-    local instance_id=$1
-    local output_file=$2
-
-    echo "Retrieving SSH host keys from login node instance: ${instance_id}..."
-
-    # Send SSM command to retrieve SSH host keys
-    local command_id=$(aws ssm send-command \
-        --region $AWS_REGION \
-        --instance-ids "${instance_id}" \
-        --document-name "AWS-RunShellScript" \
-        --parameters 'commands=["cd /etc/ssh && for f in ssh_host_*.pub; do echo -n \"login-node.pcs.internal \"; cat $f; done"]' \
-        --query 'Command.CommandId' \
-        --output text)
-
-    # Wait for command to complete
-    echo "Waiting for SSM command to complete..."
-    sleep 3
-
-    # Retrieve command output
-    local host_keys=$(aws ssm get-command-invocation \
-        --region $AWS_REGION \
-        --command-id "${command_id}" \
-        --instance-id "${instance_id}" \
-        --query "StandardOutputContent" \
-        --output text)
-
-    if [ -z "$host_keys" ]; then
-        echo "ERROR: Failed to retrieve SSH host keys"
-        return 1
-    fi
-
-    # Generate ConfigMap YAML with proper indentation
-    cat > "${output_file}" <<EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ssh-known-hosts
-data:
-  known_hosts: |
-$(echo "$host_keys" | sed 's/^/    /')
-EOF
-
-    echo "✓ SSH known_hosts ConfigMap generated: ${output_file}"
-}
-
-# Generate SSH known_hosts ConfigMap
-echo ""
-echo "=== Generating SSH Known Hosts ConfigMap ==="
-generate_ssh_known_hosts_configmap "${LOGIN_NODE_INSTANCE_ID}" "${CONFIG_DIR}/ssh-known-hosts-configmap.yaml"
 
 # Generate sealed secrets
 echo ""
@@ -156,69 +96,6 @@ ${SCRIPTS_DIR}/sealed_secret_ghcr.sh --cert "${CERT_FILE}" --controller-name sea
 cp ${SECRETS_DIR}/secret-ghcr.yaml ${MIGRATION_DIR}/secret-ghcr.yaml
 echo "✓ secret-ghcr.yaml generated"
 
-# call sealed_secret_ssh.sh <namespace> <priv_key_file> <pub_key_file>
-echo "Generating SSH secrets..."
-${SCRIPTS_DIR}/sealed_secret_ssh.sh --cert "${CERT_FILE}" --controller-name sealed-secrets --controller-namespace kube-system ${NAMESPACE} ${SSH_PRIV_KEY_FILE} ${SSH_PUB_KEY_FILE} > ${SECRETS_DIR}/secret-ssh.yaml
-# cp ${SECRETS_DIR}/secret-ssh.yaml ${MIGRATION_DIR}/secret-ssh.yaml
-echo "✓ secret-ssh.yaml generated"
-
-echo ""
-echo "=== Updating FSx Persistent Volume Configuration ==="
-
-# Get FSx file system details from CloudFormation stack outputs
-echo "Retrieving FSx file system details from ${STACK_PREFIX}-shared stack..."
-FSX_ID=$(get_stack_output "${STACK_PREFIX}-shared" "FsxFileSystemId")
-FSX_DNS=$(get_stack_output "${STACK_PREFIX}-shared" "FsxDnsName")
-FSX_MOUNT=$(get_stack_output "${STACK_PREFIX}-shared" "FsxMountName")
-
-if [ -z "$FSX_ID" ] || [ "$FSX_ID" = "None" ]; then
-    echo "ERROR: Could not find FsxFileSystemId from ${STACK_PREFIX}-shared stack"
-    exit 1
-fi
-
-if [ -z "$FSX_MOUNT" ] || [ "$FSX_MOUNT" = "None" ]; then
-    echo "ERROR: Could not find FsxMountName from ${STACK_PREFIX}-shared stack"
-    exit 1
-fi
-
-# Get FSx IP address from the file system's network interface
-echo "Retrieving FSx network interface IP..."
-FSX_ENI=$(aws fsx describe-file-systems \
-  --region $AWS_REGION \
-  --file-system-ids "$FSX_ID" \
-  --query 'FileSystems[0].NetworkInterfaceIds[0]' \
-  --output text)
-
-FSX_IP=$(aws ec2 describe-network-interfaces \
-  --region $AWS_REGION \
-  --network-interface-ids "$FSX_ENI" \
-  --query 'NetworkInterfaces[0].PrivateIpAddress' \
-  --output text)
-
-if [ -z "$FSX_IP" ] || [ "$FSX_IP" = "None" ]; then
-    echo "ERROR: Failed to retrieve FSx network interface IP"
-    exit 1
-fi
-
-echo "✓ FSx file system ID: ${FSX_ID}"
-echo "✓ FSx DNS name: ${FSX_DNS}"
-echo "✓ FSx IP address: ${FSX_IP}"
-echo "✓ FSx mount name: ${FSX_MOUNT}"
-
-# Generate the FSx PV YAML file from template
-FSX_PV_TEMPLATE="${SECRETS_DIR}/fsx-pcs-root-pv.yaml.template"
-FSX_PV_FILE="${SECRETS_DIR}/fsx-pcs-root-pv.yaml"
-echo "Generating FSx PersistentVolume YAML from template..."
-
-# Generate YAML from template by replacing placeholders
-sed \
-  -e "s/\${FSX_ID}/${FSX_ID}/g" \
-  -e "s/\${FSX_IP}/${FSX_IP}/g" \
-  -e "s/\${FSX_MOUNT}/${FSX_MOUNT}/g" \
-  "${FSX_PV_TEMPLATE}" > "${FSX_PV_FILE}"
-
-echo "✓ FSx PersistentVolume YAML generated: ${FSX_PV_FILE}"
-
 echo ""
 echo "=== Updating Redis Configuration in shared.env ==="
 
@@ -243,6 +120,40 @@ sed -i.bak \
   "${SHARED_ENV_FILE}" && rm -f "${SHARED_ENV_FILE}.bak"
 
 echo "✓ Redis configuration updated in shared.env"
+
+echo ""
+echo "=== Updating Batch Queue Names in shared.env ==="
+
+# Look up queue names from CloudFormation stack outputs so they stay in sync
+# with the CDK-managed Batch infrastructure (queues are prefixed with STACK_PREFIX).
+echo "Retrieving Batch queue names from ${STACK_PREFIX}-batch and ${STACK_PREFIX}-build-batch stacks..."
+
+BATCH_AMD64=$(get_stack_output "${STACK_PREFIX}-batch" "Amd64TaskQueueName")
+BATCH_ARM64=$(get_stack_output "${STACK_PREFIX}-batch" "Arm64TaskQueueName")
+BUILD_AMD64=$(get_stack_output "${STACK_PREFIX}-build-batch" "Amd64BuildQueueName")
+BUILD_ARM64=$(get_stack_output "${STACK_PREFIX}-build-batch" "Arm64BuildQueueName")
+
+for var_name in BATCH_AMD64 BATCH_ARM64 BUILD_AMD64 BUILD_ARM64; do
+    val="${!var_name}"
+    if [ -z "$val" ] || [ "$val" = "None" ]; then
+        echo "ERROR: Could not resolve ${var_name} from CloudFormation outputs"
+        exit 1
+    fi
+done
+
+echo "✓ BATCH_AMD64_QUEUE: ${BATCH_AMD64}"
+echo "✓ BATCH_ARM64_QUEUE: ${BATCH_ARM64}"
+echo "✓ BUILD_AMD64_QUEUE: ${BUILD_AMD64}"
+echo "✓ BUILD_ARM64_QUEUE: ${BUILD_ARM64}"
+
+sed -i.bak \
+  -e "s|^BATCH_AMD64_QUEUE=.*|BATCH_AMD64_QUEUE=${BATCH_AMD64}|" \
+  -e "s|^BATCH_ARM64_QUEUE=.*|BATCH_ARM64_QUEUE=${BATCH_ARM64}|" \
+  -e "s|^BUILD_AMD64_QUEUE=.*|BUILD_AMD64_QUEUE=${BUILD_AMD64}|" \
+  -e "s|^BUILD_ARM64_QUEUE=.*|BUILD_ARM64_QUEUE=${BUILD_ARM64}|" \
+  "${SHARED_ENV_FILE}" && rm -f "${SHARED_ENV_FILE}.bak"
+
+echo "✓ Batch queue names updated in shared.env"
 
 echo ""
 echo "=== Updating Target Group Bindings for Verified Access ==="
@@ -278,4 +189,23 @@ sed \
 echo "✓ TargetGroupBinding YAML generated: ${TGB_FILE}"
 
 echo ""
-echo "=== All secrets, ConfigMaps, and FSx configuration files generated successfully! ==="
+echo "=== Uploading GitHub PAT for DooD Builds to Secrets Manager ==="
+
+# Get the git secret ARN from the build-batch stack
+GIT_SECRET_ARN=$(get_stack_output "${STACK_PREFIX}-build-batch" "GitSecretArn")
+
+if [ -z "$GIT_SECRET_ARN" ] || [ "$GIT_SECRET_ARN" = "None" ]; then
+    echo "WARNING: Could not find GitSecretArn from ${STACK_PREFIX}-build-batch stack, skipping"
+elif [ -z "${GITHUB_BUILD_PAT:-}" ]; then
+    echo "WARNING: GITHUB_BUILD_PAT not set in secrets.dat, skipping"
+else
+    # Allow reusing the GH_PAT used for GHCR
+    BUILD_PAT="${GITHUB_BUILD_PAT}"
+    if [ "$BUILD_PAT" = "use_gh_pat" ]; then
+        BUILD_PAT="${GH_PAT}"
+    fi
+    ${SCRIPTS_DIR}/upload_deploy_key.sh "$GIT_SECRET_ARN" "$BUILD_PAT" "$AWS_REGION"
+fi
+
+echo ""
+echo "=== All secrets and configuration files generated successfully! ==="
