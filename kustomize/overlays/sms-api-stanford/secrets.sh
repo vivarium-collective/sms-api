@@ -133,8 +133,9 @@ BATCH_ARM64=$(get_stack_output "${STACK_PREFIX}-batch" "Arm64TaskQueueName")
 BUILD_AMD64=$(get_stack_output "${STACK_PREFIX}-build-batch" "Amd64BuildQueueName")
 BUILD_ARM64=$(get_stack_output "${STACK_PREFIX}-build-batch" "Arm64BuildQueueName")
 BUILD_JOB_DEF=$(get_stack_output "${STACK_PREFIX}-build-batch" "DindBuildJobDefinitionName")
+BUILD_GIT_SECRET=$(get_stack_output "${STACK_PREFIX}-build-batch" "GitSecretArn")
 
-for var_name in BATCH_AMD64 BATCH_ARM64 BUILD_AMD64 BUILD_ARM64 BUILD_JOB_DEF; do
+for var_name in BATCH_AMD64 BATCH_ARM64 BUILD_AMD64 BUILD_ARM64 BUILD_JOB_DEF BUILD_GIT_SECRET; do
     val="${!var_name}"
     if [ -z "$val" ] || [ "$val" = "None" ]; then
         echo "ERROR: Could not resolve ${var_name} from CloudFormation outputs"
@@ -147,6 +148,7 @@ echo "✓ BATCH_ARM64_QUEUE: ${BATCH_ARM64}"
 echo "✓ BUILD_AMD64_QUEUE: ${BUILD_AMD64}"
 echo "✓ BUILD_ARM64_QUEUE: ${BUILD_ARM64}"
 echo "✓ BUILD_JOB_DEFINITION: ${BUILD_JOB_DEF}"
+echo "✓ BUILD_GIT_SECRET_ARN: ${BUILD_GIT_SECRET}"
 
 sed -i.bak \
   -e "s|^BATCH_AMD64_QUEUE=.*|BATCH_AMD64_QUEUE=${BATCH_AMD64}|" \
@@ -154,6 +156,7 @@ sed -i.bak \
   -e "s|^BUILD_AMD64_QUEUE=.*|BUILD_AMD64_QUEUE=${BUILD_AMD64}|" \
   -e "s|^BUILD_ARM64_QUEUE=.*|BUILD_ARM64_QUEUE=${BUILD_ARM64}|" \
   -e "s|^BUILD_JOB_DEFINITION=.*|BUILD_JOB_DEFINITION=${BUILD_JOB_DEF}|" \
+  -e "s|^BUILD_GIT_SECRET_ARN=.*|BUILD_GIT_SECRET_ARN=${BUILD_GIT_SECRET}|" \
   "${SHARED_ENV_FILE}" && rm -f "${SHARED_ENV_FILE}.bak"
 
 echo "✓ Batch queue names updated in shared.env"
