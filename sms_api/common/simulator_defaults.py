@@ -37,8 +37,7 @@ ACCEPTED_REPOS = {
     RepoUrl.VECOLI_PRIVATE_REPO_URL: ["api-analysis-patch", "master"],
 }
 
-NAMESPACE = get_settings().deployment_namespace
-PUBLIC_MODE = NAMESPACE == "sms-api-rke" or NAMESPACE == "sms-api-rke-dev"
+PUBLIC_MODE = get_settings().public_mode
 
 SimulationConfigFilename: type[SimulationConfigPublic] | type[SimulationConfigPrivate] = (
     SimulationConfigPublic if PUBLIC_MODE else SimulationConfigPrivate
@@ -48,9 +47,7 @@ SimulationConfigFilenameType = SimulationConfigPublic | SimulationConfigPrivate
 
 AVAILABLE_CONFIG_FILENAMES_CCAM = SimulationConfigPublic.values()
 AVAILABLE_CONFIG_FILENAMES_STANFORD_DEV = SimulationConfigPrivate.values()
-AVAILABLE_CONFIG_FILENAMES = (
-    AVAILABLE_CONFIG_FILENAMES_CCAM if "rke" in NAMESPACE else AVAILABLE_CONFIG_FILENAMES_STANFORD_DEV
-)
+AVAILABLE_CONFIG_FILENAMES = AVAILABLE_CONFIG_FILENAMES_CCAM if PUBLIC_MODE else AVAILABLE_CONFIG_FILENAMES_STANFORD_DEV
 
 DEFAULT_REPO = RepoUrl.VECOLI_FORK_REPO_URL if PUBLIC_MODE else RepoUrl.VECOLI_PRIVATE_REPO_URL
 DEFAULT_BRANCH = "master"

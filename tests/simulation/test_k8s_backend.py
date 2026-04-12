@@ -62,32 +62,25 @@ class TestJobToStatus:
 
 
 class TestGetJobBackend:
-    def test_slurm_for_rke(self) -> None:
+    def test_slurm_backend(self) -> None:
         from sms_api.config import get_job_backend
 
         with patch("sms_api.config.get_settings") as mock_settings:
-            mock_settings.return_value = MagicMock(deployment_namespace="sms-api-rke")
+            mock_settings.return_value = MagicMock(compute_backend="slurm")
             assert get_job_backend() == ComputeBackend.SLURM
 
-    def test_k8s_for_stanford(self) -> None:
+    def test_batch_backend(self) -> None:
         from sms_api.config import get_job_backend
 
         with patch("sms_api.config.get_settings") as mock_settings:
-            mock_settings.return_value = MagicMock(deployment_namespace="sms-api-stanford")
+            mock_settings.return_value = MagicMock(compute_backend="batch")
             assert get_job_backend() == ComputeBackend.BATCH
 
-    def test_k8s_for_stanford_test(self) -> None:
+    def test_default_is_slurm(self) -> None:
         from sms_api.config import get_job_backend
 
         with patch("sms_api.config.get_settings") as mock_settings:
-            mock_settings.return_value = MagicMock(deployment_namespace="sms-api-stanford-test")
-            assert get_job_backend() == ComputeBackend.BATCH
-
-    def test_slurm_for_empty_namespace(self) -> None:
-        from sms_api.config import get_job_backend
-
-        with patch("sms_api.config.get_settings") as mock_settings:
-            mock_settings.return_value = MagicMock(deployment_namespace="")
+            mock_settings.return_value = MagicMock(compute_backend="slurm")
             assert get_job_backend() == ComputeBackend.SLURM
 
 

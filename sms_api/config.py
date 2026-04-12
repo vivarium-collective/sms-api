@@ -187,6 +187,13 @@ class Settings(BaseSettings):
     # valid namespaces correspond 1:1 with namespaces in kustomize/ config
     deployment_namespace: str = ""
 
+    # Compute backend: "slurm" (SLURM via SSH) or "batch" (AWS Batch via Nextflow)
+    compute_backend: str = "slurm"
+
+    # Public mode exposes the CCAM fork repo and public simulation configs.
+    # Private mode (default) uses the Stanford private repo and private configs.
+    public_mode: bool = False
+
     # slurm constraint for arch mismatches
     slurm_constraint: str = ""
 
@@ -230,13 +237,9 @@ class ComputeBackend(StrEnum):
     BATCH = "batch"  # AWS Batch via Nextflow (Stanford)
 
 
-_BATCH_NAMESPACES = {"sms-api-stanford", "sms-api-stanford-test"}
-
-
 def get_job_backend() -> ComputeBackend:
-    """Return the compute backend for the current deployment namespace."""
-    ns = get_settings().deployment_namespace
-    return ComputeBackend.BATCH if ns in _BATCH_NAMESPACES else ComputeBackend.SLURM
+    """Return the compute backend for the current deployment."""
+    return ComputeBackend(get_settings().compute_backend)
 
 
 @lru_cache
