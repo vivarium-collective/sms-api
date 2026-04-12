@@ -33,7 +33,7 @@ from sms_api.common.simulator_defaults import (
     SimulationConfigFilename,
     SimulationConfigFilenameType,
 )
-from sms_api.config import get_settings
+from sms_api.config import get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.models import AnalysisOptions, Simulation, SimulationRun
 
@@ -334,6 +334,11 @@ async def run_analysis(
     _request: Request,
     request: ExperimentAnalysisRequest = request_examples.analysis_ptools,
 ) -> Sequence[TsvOutputFile | OutputFileMetadata]:
+    if get_job_backend() != "slurm":
+        raise HTTPException(
+            status_code=501,
+            detail="Legacy analysis not supported for K8s backend. Use POST /api/v1/simulations/{id}/analysis instead.",
+        )
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")
@@ -392,6 +397,8 @@ async def get_analysis_spec(id: int) -> ExperimentAnalysisDTO:
     summary="Get the status of an existing experiment analysis run",
 )
 async def get_analysis_status(id: int = FastAPIPath(..., description="Database ID of the analysis")) -> AnalysisRun:
+    if get_job_backend() != "slurm":
+        raise HTTPException(status_code=501, detail="Legacy analysis status not supported for K8s backend")
     db_service = get_database_service()
     if db_service is None:
         raise HTTPException(status_code=404, detail="Database not found")

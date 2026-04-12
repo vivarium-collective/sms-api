@@ -29,12 +29,8 @@ replicas:
 resources:
 #  - ingress.yaml
   - target-group-binding.yaml # to accept traffic from predefined ALB rather than use an ingres
-  - storageclass-gp3-retain.yaml
-  - fsx-pcs-root-pv.yaml
-  - vivarium-home-pvc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
-  - secret-ssh.yaml
   - ../../config/sms-api-stanford-test
   - ../../base
 
@@ -47,18 +43,29 @@ patches:
       kind: ServiceAccount
       name: batch-submit
   - patch: |-
-      - op: replace
-        path: /spec/template/spec/containers/0/volumeMounts/0
-        value:
-          name: vivarium-home-pvc
-          mountPath: /mnt/fsx/home/svc_vivarium
-          subPath: home/svc_vivarium
+      - op: remove
+        path: /spec/template/spec/nodeSelector
     target:
       kind: Deployment
       name: api
+  # Remove SLURM/SSH infrastructure from base api.yaml — stanford-test uses
+  # K8s/AWS Batch exclusively.  Order: highest index first so removals don't
+  # shift the indices of subsequent operations.
   - patch: |-
       - op: remove
-        path: /spec/template/spec/nodeSelector
+        path: /spec/template/spec/containers/0/env/5
+      - op: remove
+        path: /spec/template/spec/containers/0/volumeMounts/2
+      - op: remove
+        path: /spec/template/spec/containers/0/volumeMounts/1
+      - op: remove
+        path: /spec/template/spec/containers/0/volumeMounts/0
+      - op: remove
+        path: /spec/template/spec/volumes/2
+      - op: remove
+        path: /spec/template/spec/volumes/1
+      - op: remove
+        path: /spec/template/spec/volumes/0
     target:
       kind: Deployment
       name: api
