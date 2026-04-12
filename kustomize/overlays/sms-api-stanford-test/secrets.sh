@@ -156,6 +156,25 @@ sed -i.bak \
 echo "✓ Batch queue names updated in shared.env"
 
 echo ""
+echo "=== Updating IRSA Role ARN in kustomization.yaml ==="
+
+BATCH_SUBMIT_ROLE_ARN=$(get_stack_output "${STACK_PREFIX}-batch" "BatchSubmitRoleArn")
+if [ -z "$BATCH_SUBMIT_ROLE_ARN" ] || [ "$BATCH_SUBMIT_ROLE_ARN" = "None" ]; then
+    echo "ERROR: Could not find BatchSubmitRoleArn from ${STACK_PREFIX}-batch stack"
+    exit 1
+fi
+echo "✓ BatchSubmitRoleArn: ${BATCH_SUBMIT_ROLE_ARN}"
+
+KUSTOMIZATION_FILE="${SECRETS_DIR}/kustomization.yaml"
+# Escape slashes and special chars for sed (ARNs contain colons and slashes)
+ESCAPED_ARN=$(printf '%s\n' "$BATCH_SUBMIT_ROLE_ARN" | sed 's/[&/\]/\\&/g')
+sed -i.bak \
+  -e "s|value: arn:aws-us-gov:iam:.*BatchSubmitIrsa.*|value: ${ESCAPED_ARN}|" \
+  "${KUSTOMIZATION_FILE}" && rm -f "${KUSTOMIZATION_FILE}.bak"
+
+echo "✓ IRSA role ARN updated in kustomization.yaml"
+
+echo ""
 echo "=== Updating Target Group Bindings for Verified Access ==="
 
 # Get Target Group ARNs from CDK stack outputs
