@@ -38,6 +38,13 @@ resources:
 
 patches:
   - patch: |-
+      - op: add
+        path: /metadata/annotations/eks.amazonaws.com~1role-arn
+        value: REPLACE_WITH_SMSCDK_BATCH_SUBMIT_IRSA_ROLE_ARN
+    target:
+      kind: ServiceAccount
+      name: batch-submit
+  - patch: |-
       - op: remove
         path: /spec/template/spec/nodeSelector
     target:
