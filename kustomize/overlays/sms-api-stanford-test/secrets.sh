@@ -122,6 +122,40 @@ sed -i.bak \
 echo "✓ Redis configuration updated in shared.env"
 
 echo ""
+echo "=== Updating Batch Queue Names in shared.env ==="
+
+# Look up queue names from CloudFormation stack outputs so they stay in sync
+# with the CDK-managed Batch infrastructure (queues are prefixed with STACK_PREFIX).
+echo "Retrieving Batch queue names from ${STACK_PREFIX}-batch and ${STACK_PREFIX}-build-batch stacks..."
+
+BATCH_AMD64=$(get_stack_output "${STACK_PREFIX}-batch" "Amd64TaskQueueName")
+BATCH_ARM64=$(get_stack_output "${STACK_PREFIX}-batch" "Arm64TaskQueueName")
+BUILD_AMD64=$(get_stack_output "${STACK_PREFIX}-build-batch" "Amd64BuildQueueName")
+BUILD_ARM64=$(get_stack_output "${STACK_PREFIX}-build-batch" "Arm64BuildQueueName")
+
+for var_name in BATCH_AMD64 BATCH_ARM64 BUILD_AMD64 BUILD_ARM64; do
+    val="${!var_name}"
+    if [ -z "$val" ] || [ "$val" = "None" ]; then
+        echo "ERROR: Could not resolve ${var_name} from CloudFormation outputs"
+        exit 1
+    fi
+done
+
+echo "✓ BATCH_AMD64_QUEUE: ${BATCH_AMD64}"
+echo "✓ BATCH_ARM64_QUEUE: ${BATCH_ARM64}"
+echo "✓ BUILD_AMD64_QUEUE: ${BUILD_AMD64}"
+echo "✓ BUILD_ARM64_QUEUE: ${BUILD_ARM64}"
+
+sed -i.bak \
+  -e "s|^BATCH_AMD64_QUEUE=.*|BATCH_AMD64_QUEUE=${BATCH_AMD64}|" \
+  -e "s|^BATCH_ARM64_QUEUE=.*|BATCH_ARM64_QUEUE=${BATCH_ARM64}|" \
+  -e "s|^BUILD_AMD64_QUEUE=.*|BUILD_AMD64_QUEUE=${BUILD_AMD64}|" \
+  -e "s|^BUILD_ARM64_QUEUE=.*|BUILD_ARM64_QUEUE=${BUILD_ARM64}|" \
+  "${SHARED_ENV_FILE}" && rm -f "${SHARED_ENV_FILE}.bak"
+
+echo "✓ Batch queue names updated in shared.env"
+
+echo ""
 echo "=== Updating Target Group Bindings for Verified Access ==="
 
 # Get Target Group ARNs from CDK stack outputs
