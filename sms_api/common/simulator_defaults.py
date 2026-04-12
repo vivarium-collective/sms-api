@@ -4,7 +4,7 @@ This module is kept separate to avoid circular imports.
 """
 
 from sms_api.common import StrEnumBase
-from sms_api.config import get_settings
+from sms_api.config import get_public_mode, get_settings
 from sms_api.simulation.models import Simulator
 
 
@@ -37,7 +37,7 @@ ACCEPTED_REPOS = {
     RepoUrl.VECOLI_PRIVATE_REPO_URL: ["api-analysis-patch", "master"],
 }
 
-PUBLIC_MODE = get_settings().public_mode
+PUBLIC_MODE = get_public_mode()
 
 SimulationConfigFilename: type[SimulationConfigPublic] | type[SimulationConfigPrivate] = (
     SimulationConfigPublic if PUBLIC_MODE else SimulationConfigPrivate

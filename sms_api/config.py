@@ -187,12 +187,14 @@ class Settings(BaseSettings):
     # valid namespaces correspond 1:1 with namespaces in kustomize/ config
     deployment_namespace: str = ""
 
-    # Compute backend: "slurm" (SLURM via SSH) or "batch" (AWS Batch via Nextflow)
-    compute_backend: str = "slurm"
+    # Compute backend: "slurm" (SLURM via SSH) or "batch" (AWS Batch via Nextflow).
+    # Must be set explicitly — no default.
+    compute_backend: str = ""
 
     # Public mode exposes the CCAM fork repo and public simulation configs.
-    # Private mode (default) uses the Stanford private repo and private configs.
-    public_mode: bool = False
+    # Private mode uses the Stanford private repo and private configs.
+    # Must be set explicitly — no default.
+    public_mode: str = ""
 
     # slurm constraint for arch mismatches
     slurm_constraint: str = ""
@@ -238,8 +240,25 @@ class ComputeBackend(StrEnum):
 
 
 def get_job_backend() -> ComputeBackend:
-    """Return the compute backend for the current deployment."""
-    return ComputeBackend(get_settings().compute_backend)
+    """Return the compute backend for the current deployment.
+
+    Raises ValueError if COMPUTE_BACKEND is not set or invalid.
+    """
+    value = get_settings().compute_backend
+    if not value:
+        raise ValueError("COMPUTE_BACKEND must be set explicitly to 'slurm' or 'batch'")
+    return ComputeBackend(value)
+
+
+def get_public_mode() -> bool:
+    """Return whether the deployment runs in public mode.
+
+    Raises ValueError if PUBLIC_MODE is not set.
+    """
+    value = get_settings().public_mode
+    if not value:
+        raise ValueError("PUBLIC_MODE must be set explicitly to 'true' or 'false'")
+    return value.lower() == "true"
 
 
 @lru_cache
