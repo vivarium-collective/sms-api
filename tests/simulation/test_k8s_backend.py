@@ -10,6 +10,7 @@ import pytest
 from sms_api.common.hpc.k8s_job_service import K8sJobService, _job_to_status
 from sms_api.common.hpc.local_task_service import LocalTaskService
 from sms_api.common.models import JobBackend, JobId, JobStatus
+from sms_api.config import ComputeBackend
 from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
 
 if TYPE_CHECKING:
@@ -66,28 +67,28 @@ class TestGetJobBackend:
 
         with patch("sms_api.config.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(deployment_namespace="sms-api-rke")
-            assert get_job_backend() == "slurm"
+            assert get_job_backend() == ComputeBackend.SLURM
 
     def test_k8s_for_stanford(self) -> None:
         from sms_api.config import get_job_backend
 
         with patch("sms_api.config.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(deployment_namespace="sms-api-stanford")
-            assert get_job_backend() == "k8s"
+            assert get_job_backend() == ComputeBackend.BATCH
 
     def test_k8s_for_stanford_test(self) -> None:
         from sms_api.config import get_job_backend
 
         with patch("sms_api.config.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(deployment_namespace="sms-api-stanford-test")
-            assert get_job_backend() == "k8s"
+            assert get_job_backend() == ComputeBackend.BATCH
 
     def test_slurm_for_empty_namespace(self) -> None:
         from sms_api.config import get_job_backend
 
         with patch("sms_api.config.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(deployment_namespace="")
-            assert get_job_backend() == "slurm"
+            assert get_job_backend() == ComputeBackend.SLURM
 
 
 class TestK8sJobService:

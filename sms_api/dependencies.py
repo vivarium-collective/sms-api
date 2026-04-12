@@ -13,7 +13,7 @@ from sms_api.common.storage.file_service import FileService
 from sms_api.common.storage.file_service_gcs import FileServiceGCS
 from sms_api.common.storage.file_service_qumulo_s3 import FileServiceQumuloS3
 from sms_api.common.storage.file_service_s3 import FileServiceS3
-from sms_api.config import Settings, get_job_backend, get_settings
+from sms_api.config import ComputeBackend, Settings, get_job_backend, get_settings
 from sms_api.log_config import setup_logging
 from sms_api.simulation.database_service import DatabaseService, DatabaseServiceSQL
 from sms_api.simulation.tables_orm import create_db
@@ -160,7 +160,7 @@ def _init_simulation_service(job_backend: str, settings: Settings) -> None:
     """Initialize the simulation service based on the job backend."""
     from sms_api.simulation.simulation_service import SimulationServiceHpc
 
-    if job_backend == "k8s":
+    if job_backend == ComputeBackend.BATCH:
         from sms_api.common.hpc.k8s_job_service import K8sJobService
         from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
 
@@ -273,7 +273,7 @@ async def init_standalone(enable_ssl: bool = True) -> None:
 
         # Initialize Slurm service (SLURM backend only)
         slurm_service: SlurmService | None = None
-        if job_backend == "slurm":
+        if job_backend == ComputeBackend.SLURM:
             slurm_service = SlurmService()
             logger.info("✓ SlurmService initialized")
 

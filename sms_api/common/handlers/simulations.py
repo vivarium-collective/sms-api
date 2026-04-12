@@ -22,7 +22,7 @@ from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.models import JobBackend, JobStatus, SSHTarget
 from sms_api.common.simulator_defaults import DEFAULT_OBSERVABLES
 from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
-from sms_api.config import get_job_backend, get_settings
+from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_file_service, get_simulation_service, get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id
@@ -228,8 +228,8 @@ async def run_simulation_workflow(  # noqa: C901
         config_data["description"] = description
     effective_observables = observables if observables else DEFAULT_OBSERVABLES
     config_data["engine_process_reports"] = [obs.split(".") for obs in effective_observables]
-    # For K8s/Batch backend, override HPC paths with AWS equivalents
-    if get_job_backend() == "k8s":
+    # For Batch backend, override HPC paths with AWS equivalents
+    if get_job_backend() == ComputeBackend.BATCH:
         s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{unique_experiment_id}"
         config_data["emitter_arg"] = {"out_uri": s3_output}
         config_data.pop("aws_cdk", None)
@@ -946,7 +946,7 @@ async def run_standalone_analysis(
 
     # Build analysis config — path patterns match vEcoli conventions
     backend = get_job_backend()
-    if backend == "k8s":
+    if backend == ComputeBackend.BATCH:
         s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}"
         analysis_name = f"analysis-{experiment_id[:20]}-{str(uuid.uuid4())[:4]}"
         analysis_config: dict[str, Any] = {

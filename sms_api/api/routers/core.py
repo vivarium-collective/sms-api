@@ -13,7 +13,7 @@ from sms_api.common.gateway.utils import get_router_config
 from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.models import JobBackend, JobStatus
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
-from sms_api.config import get_job_backend
+from sms_api.config import ComputeBackend, get_job_backend
 from sms_api.dependencies import (
     get_database_service,
     get_postgres_engine,
@@ -192,7 +192,7 @@ async def insert_simulator_version(
     summary="Run a parameter calculation",
 )
 async def run_parameter_calculator(parca_request: ParcaDatasetRequest = request_examples.base_parca) -> ParcaDataset:
-    if get_job_backend() != "slurm":
+    if get_job_backend() != ComputeBackend.SLURM:
         raise HTTPException(
             status_code=501,
             detail="Standalone parca not supported for K8s backend (runs as part of the Nextflow workflow)",

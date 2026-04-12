@@ -190,8 +190,8 @@ class Settings(BaseSettings):
     # slurm constraint for arch mismatches
     slurm_constraint: str = ""
 
-    # --- Kubernetes / AWS Batch backend settings ---
-    # Used when job_backend is "k8s" (Stanford deployments)
+    # --- AWS Batch backend settings ---
+    # Used when job_backend is "batch" (Stanford deployments)
 
     # K8s Job settings
     k8s_job_namespace: str = ""  # Namespace for Nextflow head Jobs (e.g. "sms-api-stanford")
@@ -223,16 +223,20 @@ class Settings(BaseSettings):
     build_node_key_path: str = ""
 
 
-_K8S_NAMESPACES = {"sms-api-stanford", "sms-api-stanford-test"}
+class ComputeBackend(StrEnum):
+    """Compute backend for simulation workloads."""
+
+    SLURM = "slurm"  # SLURM via SSH to a login node (UCONN CCAM)
+    BATCH = "batch"  # AWS Batch via Nextflow (Stanford)
 
 
-def get_job_backend() -> str:
-    """Return the job backend for the current deployment namespace.
+_BATCH_NAMESPACES = {"sms-api-stanford", "sms-api-stanford-test"}
 
-    Returns "k8s" for Stanford namespaces, "slurm" otherwise.
-    """
+
+def get_job_backend() -> ComputeBackend:
+    """Return the compute backend for the current deployment namespace."""
     ns = get_settings().deployment_namespace
-    return "k8s" if ns in _K8S_NAMESPACES else "slurm"
+    return ComputeBackend.BATCH if ns in _BATCH_NAMESPACES else ComputeBackend.SLURM
 
 
 @lru_cache
