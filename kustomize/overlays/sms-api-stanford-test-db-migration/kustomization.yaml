@@ -5,7 +5,7 @@ namespace: sms-api-stanford-test
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.5.0
+    newTag: 0.6.3
 
 resources:
   - alembic-job.yaml
