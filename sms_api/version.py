@@ -6,4 +6,5 @@
 # LATEST STABLE AFTER HACKATHON FOR AWS: 0.6.0
 # 0.6.2 — task-8 parallel S3 downloads + results-cache emptyDir volume
 # 0.6.3 — remove PCS/SLURM/FSx from stanford-test, backend guards on legacy endpoints
-__version__ = "0.6.3"
+# 0.7.0 — Atlantis CLI, AWS Batch backend, PCS/SLURM/FSx removal, ComputeBackend enum
+__version__ = "0.7.0"
