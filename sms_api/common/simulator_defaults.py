@@ -4,7 +4,7 @@ This module is kept separate to avoid circular imports.
 """
 
 from sms_api.common import StrEnumBase
-from sms_api.config import get_public_mode, get_settings
+from sms_api.config import get_public_mode
 from sms_api.simulation.models import Simulator
 
 
