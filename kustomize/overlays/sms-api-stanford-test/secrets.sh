@@ -122,6 +122,23 @@ sed -i.bak \
 echo "✓ Redis configuration updated in shared.env"
 
 echo ""
+echo "=== Updating S3 Bucket in shared.env ==="
+
+S3_BUCKET=$(get_stack_output "${STACK_PREFIX}-shared" "SharedBucketName")
+if [ -z "$S3_BUCKET" ] || [ "$S3_BUCKET" = "None" ]; then
+    echo "ERROR: Could not find SharedBucketName from ${STACK_PREFIX}-shared stack"
+    exit 1
+fi
+echo "✓ S3 bucket: ${S3_BUCKET}"
+
+sed -i.bak \
+  -e "s|^S3_WORK_BUCKET=.*|S3_WORK_BUCKET=${S3_BUCKET}|" \
+  -e "s|^STORAGE_S3_BUCKET=.*|STORAGE_S3_BUCKET=${S3_BUCKET}|" \
+  "${SHARED_ENV_FILE}" && rm -f "${SHARED_ENV_FILE}.bak"
+
+echo "✓ S3 bucket updated in shared.env"
+
+echo ""
 echo "=== Updating Batch Queue Names in shared.env ==="
 
 # Look up queue names from CloudFormation stack outputs so they stay in sync
