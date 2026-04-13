@@ -253,11 +253,13 @@ def get_job_backend() -> ComputeBackend:
 def get_public_mode() -> bool:
     """Return whether the deployment runs in public mode.
 
-    Raises ValueError if PUBLIC_MODE is not set.
+    Defaults to ``False`` when PUBLIC_MODE is not set so that the CLI and
+    other local tooling can import ``simulator_defaults`` without requiring
+    every server-side env var to be present.
     """
     value = get_settings().public_mode
     if not value:
-        raise ValueError("PUBLIC_MODE must be set explicitly to 'true' or 'false'")
+        return False
     return value.lower() == "true"
 
 
