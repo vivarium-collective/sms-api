@@ -1,3 +1,10 @@
+import os
+
+# Set mandatory config before any sms_api imports (module-level code in
+# simulator_defaults.py reads these at import time).
+os.environ.setdefault("COMPUTE_BACKEND", "slurm")
+os.environ.setdefault("PUBLIC_MODE", "false")
+
 import pytest_asyncio  # noqa: F401
 
 from tests.fixtures.api_fixtures import (  # noqa: F401
