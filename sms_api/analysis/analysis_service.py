@@ -98,14 +98,8 @@ class AnalysisServiceSlurm:
         for domain in requested_analyses:
             requested = getattr(request, domain)
             if requested is not None:
-                for config in requested:
-                    requested_analyses[domain][config.name] = {"n_tp": config.n_tp}
-                    # n_tp = config.n_tp
-        # analysis_config.analysis_options.multiseed = {
-        #     'ptools_rxns': {'n_tp': n_tp},
-        #     'ptools_proteins': {'n_tp': n_tp},
-        #     'ptools_rna': {'n_tp': n_tp},
-        # }
+                for module_config in requested:
+                    requested_analyses[domain].update(module_config.to_dict())
         config_data["analysis_options"].update(requested_analyses)
         analysis_config = AnalysisConfig(**config_data)
         return analysis_config

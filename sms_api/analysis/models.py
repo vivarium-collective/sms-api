@@ -75,11 +75,18 @@ class PtoolsAnalysisType(StrEnumBase):
 
 
 class PtoolsAnalysisConfig(BaseModel):
-    """
-    :param name: (str) Analysis module type name...
-        (One of ["ptools_rxns", "ptools_rna", "ptools_proteins"]). Defaults to "ptools_rxns".
-    :param n_tp: (int) Number of timepoints/columns to use in the tsv
-    :param files: (list[OutputFileMetadata]) Specification of files requested to be returned
+    """Configuration for a single ptools analysis module.
+
+    :param name: Analysis module type name
+        (one of ``"ptools_rxns"``, ``"ptools_rna"``, ``"ptools_proteins"``).
+    :param n_tp: Number of timepoints/columns in the output TSV.
+    :param generation_start: Include only generations >= this value.
+        Maps to vEcoli's ``generation_lower_bound`` param.
+    :param generation_end: Include only generations <= this value.
+        Maps to vEcoli's ``generation_upper_bound`` param.
+    :param seeds: Restrict analysis to these lineage seeds.  When ``None``
+        (default), all seeds are included.
+    :param files: Specification of files requested to be returned
         with the completion of the analysis.
     """
 
@@ -89,6 +96,9 @@ class PtoolsAnalysisConfig(BaseModel):
     generation: int | None = None
     lineage_seed: int | None = None
     agent_id: int | None = None
+    generation_start: int | None = None
+    generation_end: int | None = None
+    seeds: list[int] | None = None
     files: list[OutputFileMetadata] | None = None
 
     def model_post_init(self, context: Any, /) -> None:
@@ -97,8 +107,22 @@ class PtoolsAnalysisConfig(BaseModel):
             if getattr(self, attrname, None) is None:
                 delattr(self, attrname)
 
-    def to_dict(self) -> dict[str, dict[str, int]]:
-        return {self.name: {"n_tp": self.n_tp}}
+    def to_dict(self) -> dict[str, dict[str, Any]]:
+        """Serialize to the dict format expected by vEcoli analysis configs.
+
+        Keys are mapped to vEcoli param names:
+        - ``generation_start`` → ``generation_lower_bound``
+        - ``generation_end`` → ``generation_upper_bound``
+        - ``seeds`` → ``lineage_seeds``
+        """
+        params: dict[str, Any] = {"n_tp": self.n_tp}
+        if getattr(self, "generation_start", None) is not None:
+            params["generation_lower_bound"] = self.generation_start
+        if getattr(self, "generation_end", None) is not None:
+            params["generation_upper_bound"] = self.generation_end
+        if getattr(self, "seeds", None) is not None:
+            params["lineage_seeds"] = self.seeds
+        return {self.name: params}
 
 
 class AnalysisConfigOptions(BaseModel):
