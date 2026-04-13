@@ -73,6 +73,52 @@ clean-build: ## Clean build artifacts
 	@echo "🚀 Removing build artifacts"
 	@uv run python -c "import shutil; import os; shutil.rmtree('dist') if os.path.exists('dist') else None"
 
+# ----------------------------------------------------------------------------
+# PyPI publish — mirrors ../vecoli_deployment's publish workflow so that
+# `pip install sms-api` ships the full end-user bundle (app.cli, app.tui,
+# app.gui, app_data_service, etc.) to stakeholders.
+#
+# Usage:
+#   make publish                              # reads token from ~/.ssh/.pypi-sms-api
+#   make publish token=pypi-AgEN...           # explicit token
+#   make upload_package token=pypi-...        # upload already-built dist/
+# ----------------------------------------------------------------------------
+
+.PHONY: sync_publish
+sync_publish: ## Recreate uv.lock and sync all groups (no-cache) for a clean publish
+	@echo "🚀 Refreshing uv environment for publish"
+	@uv cache clean
+	@rm -f uv.lock
+	@uv lock --no-cache
+	@uv sync --no-cache --all-groups
+
+.PHONY: build_package
+build_package: clean-build ## Build sdist + wheel into dist/ using the standard PEP 517 builder
+	@echo "🚀 Building sms_api package (sdist + wheel)"
+	@uvx --from build pyproject-build --installer uv
+
+.PHONY: upload_package
+upload_package: ## Upload dist/* to PyPI (requires token=... and a pre-built dist/)
+	@if [ -z "$(token)" ]; then \
+		echo "❌ upload_package requires token=..."; exit 1; \
+	fi
+	@echo "🚀 Uploading sms_api package to PyPI"
+	@uv publish --no-cache --token $(token)
+
+.PHONY: publish
+publish: ## Publish sms_api to PyPI (sync → build → upload). Reads token from ~/.ssh/.pypi-sms-api unless token=... is set.
+	@TOKEN="$(token)"; \
+	if [ -z "$$TOKEN" ] && [ -f "$$HOME/.ssh/.pypi-sms-api" ]; then \
+		TOKEN=$$(cat "$$HOME/.ssh/.pypi-sms-api"); \
+	fi; \
+	if [ -z "$$TOKEN" ]; then \
+		echo "❌ No PyPI token. Set token=... or write one to ~/.ssh/.pypi-sms-api"; \
+		exit 1; \
+	fi; \
+	$(MAKE) sync_publish && \
+	$(MAKE) build_package && \
+	$(MAKE) upload_package token=$$TOKEN
+
 .PHONY: docs-test
 docs-test: ## Test if documentation can be built without warnings or errors
 	@cd docs && uv run make html SPHINXOPTS="-W"

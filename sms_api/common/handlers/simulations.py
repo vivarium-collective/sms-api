@@ -197,6 +197,15 @@ async def run_simulation_workflow(  # noqa: C901
 
     settings = get_settings()
 
+    # Batch backend requires parca to run: vEcoli's workflow.py resolves
+    # sim_data_path with os.path.abspath which mangles S3 URIs, and then
+    # passes the local kb_dir into Nextflow channels where Batch task
+    # containers can't access it.  Until vEcoli supports cloud-native
+    # sim_data_path, parca must run as part of the workflow on Batch.
+    if not run_parca and get_job_backend() == ComputeBackend.BATCH:
+        logger.warning("Forcing run_parca=True: --no-run-parca is not supported on the Batch backend")
+        run_parca = True
+
     # 1. Get the simulator (must exist)
     simulator = await database_service.get_simulator(simulator_id)
     if simulator is None:
