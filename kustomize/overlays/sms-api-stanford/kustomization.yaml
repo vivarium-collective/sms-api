@@ -40,7 +40,7 @@ patches:
   - patch: |-
       - op: add
         path: /metadata/annotations/eks.amazonaws.com~1role-arn
-        value: REPLACE_WITH_SMSCDK_BATCH_SUBMIT_IRSA_ROLE_ARN
+        value: arn:aws-us-gov:iam::476270107793:role/smscdk-batch-BatchSubmitIrsaRole31BE49CD-vYkQKg5TNDXz
     target:
       kind: ServiceAccount
       name: batch-submit
