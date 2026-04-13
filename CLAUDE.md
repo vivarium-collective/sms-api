@@ -211,28 +211,21 @@ async with get_ssh_session_service().session() as ssh:
 
 Follow this exact sequence to cut a release:
 
-1. **Merge all work to `main`** — ensure CI passes, all feature PRs merged
-2. **Create release branch** from `main`:
-   ```bash
-   git checkout main && git pull
-   git checkout -b release/vX.Y.Z
-   ```
-3. **Bump version** in exactly two files:
+1. **Include the version bump in the feature/fix branch** before merging:
    - `sms_api/version.py` — `__version__ = "X.Y.Z"`
    - `pyproject.toml` — `version = "X.Y.Z"`
-4. **Single commit**: `chore: bump version to X.Y.Z`
-5. **PR to main**, merge (or fast-forward)
-6. **Tag the merge commit**:
+2. **Single PR to `main`** — contains all changes + version bump. Merge.
+3. **Tag the merge commit**:
    ```bash
    git checkout main && git pull
    git tag vX.Y.Z
    git push origin vX.Y.Z
    ```
-7. **Create GitHub Release** from the tag with release notes:
+4. **Create GitHub Release** from the tag with release notes:
    ```bash
    gh release create vX.Y.Z --title "vX.Y.Z — <summary>" --notes-file <notes.md>
    ```
-8. **Build + deploy** (if deploying):
+5. **Build + deploy** (if deploying):
    ```bash
    gh workflow run build-and-push.yml --ref main -f version=X.Y.Z
    ```
