@@ -18,6 +18,7 @@ import pytest
 from sms_api.common.handlers import simulations as sim_handlers
 from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.models import JobId, JobStatus
+from sms_api.config import ComputeBackend
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
     ParcaDatasetRequest,
@@ -210,7 +211,7 @@ async def test_k8s_workflow_config_contents(
 
     simulation_service_k8s_mock.read_config_template = AsyncMock(return_value=CONFIG_TEMPLATE)  # type: ignore[method-assign]
 
-    with patch("sms_api.common.handlers.simulations.get_job_backend", return_value="k8s"):
+    with patch("sms_api.common.handlers.simulations.get_job_backend", return_value=ComputeBackend.BATCH):
         await sim_handlers.run_simulation_workflow(
             database_service=database_service,
             simulation_service=simulation_service_k8s_mock,
