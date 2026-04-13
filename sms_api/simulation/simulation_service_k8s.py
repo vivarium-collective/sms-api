@@ -25,6 +25,55 @@ from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)
 
+# Embedded config template used when the target vEcoli repo does not ship
+# an api_simulation_default.json (e.g. the public CovertLab/vEcoli repo).
+# Mirrors vEcoli-private/configs/api_simulation_default.json with the same
+# placeholders that the handler's replacement logic expects.
+_DEFAULT_CONFIG_TEMPLATE: dict[str, object] = {
+    "experiment_id": "EXPERIMENT_ID_PLACEHOLDER",
+    "parca_options": {
+        "cpus": 6,
+        "outdir": "HPC_SIM_BASE_PATH_PLACEHOLDER",
+        "operons": True,
+        "ribosome_fitting": True,
+        "remove_rrna_operons": False,
+        "remove_rrff": False,
+        "stable_rrna": False,
+        "new_genes": "off",
+        "debug_parca": False,
+        "save_intermediates": False,
+        "intermediates_directory": "",
+        "variable_elongation_transcription": True,
+        "variable_elongation_translation": False,
+    },
+    "sim_data_path": None,
+    "suffix_time": False,
+    "generations": 8,
+    "n_init_sims": 3,
+    "max_duration": 10800.0,
+    "initial_global_time": 0.0,
+    "time_step": 1.0,
+    "single_daughters": True,
+    "emitter": "parquet",
+    "emitter_arg": {"out_dir": "HPC_SIM_BASE_PATH_PLACEHOLDER"},
+    "analysis_options": {
+        "multiseed": {
+            "cd1_higher_order_properties": {"generation_lower_bound": 5},
+            "cd1_transcriptomics": {"generation_lower_bound": 5},
+            "cd1_proteomics": {"generation_lower_bound": 5},
+            "cd1_metabolomics": {"generation_lower_bound": 5},
+            "cd1_fluxomics": {"generation_lower_bound": 5},
+            "ptools_rxns": {"n_tp": 10},
+            "ptools_rna": {"n_tp": 10},
+            "ptools_proteins": {"n_tp": 10},
+        }
+    },
+    "aws_cdk": {
+        "build_image": False,
+        "container_image": "SIMULATOR_IMAGE_PATH_PLACEHOLDER",
+    },
+}
+
 
 def _github_api_url(repo_url: str) -> str:
     """Convert a GitHub HTTPS URL to the API equivalent.
@@ -456,7 +505,12 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
 
     @override
     async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
-        """Read a vEcoli config template from the GitHub repo via the Contents API."""
+        """Read a vEcoli config template from the GitHub repo via the Contents API.
+
+        Falls back to the embedded ``_DEFAULT_CONFIG_TEMPLATE`` when the
+        requested config file does not exist in the repo (e.g. the public
+        CovertLab/vEcoli repo does not ship ``api_simulation_default.json``).
+        """
         settings = get_settings()
         base = _github_api_url(simulator_version.git_repo_url)
         api_url = f"{base}/contents/configs/{config_filename}?ref={simulator_version.git_commit_hash}"
@@ -465,6 +519,14 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
             headers["Authorization"] = f"token {settings.github_token}"
         async with httpx.AsyncClient() as client:
             response = await client.get(api_url, headers=headers)
+            if response.status_code == 404:
+                logger.warning(
+                    "Config %s not found in %s@%s — using embedded default template",
+                    config_filename,
+                    simulator_version.git_repo_url,
+                    simulator_version.git_commit_hash,
+                )
+                return json.dumps(_DEFAULT_CONFIG_TEMPLATE)
             response.raise_for_status()
             return response.text
 
