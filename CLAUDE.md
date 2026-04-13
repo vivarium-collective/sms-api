@@ -207,6 +207,45 @@ async with get_ssh_session_service().session() as ssh:
 - **Package manager**: uv with hatchling build backend.
 
 
+## Release Protocol
+
+Follow this exact sequence to cut a release:
+
+1. **Merge all work to `main`** — ensure CI passes, all feature PRs merged
+2. **Create release branch** from `main`:
+   ```bash
+   git checkout main && git pull
+   git checkout -b release/vX.Y.Z
+   ```
+3. **Bump version** in exactly two files:
+   - `sms_api/version.py` — `__version__ = "X.Y.Z"`
+   - `pyproject.toml` — `version = "X.Y.Z"`
+4. **Single commit**: `chore: bump version to X.Y.Z`
+5. **PR to main**, merge (or fast-forward)
+6. **Tag the merge commit**:
+   ```bash
+   git checkout main && git pull
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+7. **Create GitHub Release** from the tag with release notes:
+   ```bash
+   gh release create vX.Y.Z --title "vX.Y.Z — <summary>" --notes-file <notes.md>
+   ```
+8. **Build + deploy** (if deploying):
+   ```bash
+   gh workflow run build-and-push.yml --ref main -f version=X.Y.Z
+   ```
+   Then bump `newTag` in all kustomize overlays and apply.
+
+**Version sync checklist** (when bumping version):
+- `sms_api/version.py`
+- `pyproject.toml`
+- `kustomize/overlays/sms-api-stanford-test/kustomization.yaml` (sms-api only — keep sms-ptools at 0.5.9)
+- `kustomize/overlays/sms-api-stanford/kustomization.yaml`
+- `kustomize/overlays/sms-api-rke/kustomization.yaml`
+- `kustomize/overlays/sms-api-rke-dev/kustomization.yaml`
+
 ## Notes
 
 ### Full end-user E2E workflow (E.U.T.E: End User Tooling Experience)
