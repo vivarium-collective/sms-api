@@ -56,18 +56,7 @@ _DEFAULT_CONFIG_TEMPLATE: dict[str, object] = {
     "single_daughters": True,
     "emitter": "parquet",
     "emitter_arg": {"out_dir": "HPC_SIM_BASE_PATH_PLACEHOLDER"},
-    "analysis_options": {
-        "multiseed": {
-            "cd1_higher_order_properties": {"generation_lower_bound": 5},
-            "cd1_transcriptomics": {"generation_lower_bound": 5},
-            "cd1_proteomics": {"generation_lower_bound": 5},
-            "cd1_metabolomics": {"generation_lower_bound": 5},
-            "cd1_fluxomics": {"generation_lower_bound": 5},
-            "ptools_rxns": {"n_tp": 10},
-            "ptools_rna": {"n_tp": 10},
-            "ptools_proteins": {"n_tp": 10},
-        }
-    },
+    "analysis_options": {"multiseed": {}},
     "aws_cdk": {
         "build_image": False,
         "container_image": "SIMULATOR_IMAGE_PATH_PLACEHOLDER",
