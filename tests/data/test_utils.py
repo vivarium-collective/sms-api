@@ -1,6 +1,11 @@
-import numpy
-import polars as pl
 import pytest
+
+try:
+    import polars as pl
+except (ImportError, AttributeError):
+    pytest.skip("polars broken on this platform (polars vs polars-lts-cpu conflict)", allow_module_level=True)
+
+import numpy
 
 from sms_api.data.utils import serialize_dataframe
 

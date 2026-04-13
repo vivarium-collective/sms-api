@@ -2,6 +2,11 @@ import os
 
 import pytest
 
+try:
+    import polars  # noqa: F401
+except (ImportError, AttributeError):
+    pytest.skip("polars broken on this platform (polars vs polars-lts-cpu conflict)", allow_module_level=True)
+
 from sms_api.config import get_settings
 from sms_api.data.data_service import AnalysisType, SimulationDataServiceFS
 
