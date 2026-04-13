@@ -80,14 +80,13 @@ class PtoolsAnalysisConfig(BaseModel):
     :param name: Analysis module type name
         (one of ``"ptools_rxns"``, ``"ptools_rna"``, ``"ptools_proteins"``).
     :param n_tp: Number of timepoints/columns in the output TSV.
-    :param generation_start: Include only generations >= this value.
-        Maps to vEcoli's ``generation_lower_bound`` param.
-    :param generation_end: Include only generations <= this value.
-        Maps to vEcoli's ``generation_upper_bound`` param.
-    :param seeds: Restrict analysis to these lineage seeds.  When ``None``
-        (default), all seeds are included.
     :param files: Specification of files requested to be returned
         with the completion of the analysis.
+
+    Generation/seed filtering is handled at the request level
+    (``ExperimentAnalysisRequest.generation_start/end/seeds``), not per-module,
+    because vEcoli's ``build_duckdb_filter`` applies a single WHERE clause to
+    the entire dataset before any analysis module runs.
     """
 
     name: str = PtoolsAnalysisType.REACTIONS.value
@@ -96,9 +95,6 @@ class PtoolsAnalysisConfig(BaseModel):
     generation: int | None = None
     lineage_seed: int | None = None
     agent_id: int | None = None
-    generation_start: int | None = None
-    generation_end: int | None = None
-    seeds: list[int] | None = None
     files: list[OutputFileMetadata] | None = None
 
     def model_post_init(self, context: Any, /) -> None:
@@ -107,22 +103,8 @@ class PtoolsAnalysisConfig(BaseModel):
             if getattr(self, attrname, None) is None:
                 delattr(self, attrname)
 
-    def to_dict(self) -> dict[str, dict[str, Any]]:
-        """Serialize to the dict format expected by vEcoli analysis configs.
-
-        Keys are mapped to vEcoli param names:
-        - ``generation_start`` → ``generation_lower_bound``
-        - ``generation_end`` → ``generation_upper_bound``
-        - ``seeds`` → ``lineage_seeds``
-        """
-        params: dict[str, Any] = {"n_tp": self.n_tp}
-        if getattr(self, "generation_start", None) is not None:
-            params["generation_lower_bound"] = self.generation_start
-        if getattr(self, "generation_end", None) is not None:
-            params["generation_upper_bound"] = self.generation_end
-        if getattr(self, "seeds", None) is not None:
-            params["lineage_seeds"] = self.seeds
-        return {self.name: params}
+    def to_dict(self) -> dict[str, dict[str, int]]:
+        return {self.name: {"n_tp": self.n_tp}}
 
 
 class AnalysisConfigOptions(BaseModel):
@@ -181,7 +163,21 @@ class AnalysisConfig(BaseModel):
 
 
 class ExperimentAnalysisRequest(BaseModel):
+    """Request body for the ``POST /analyses`` (ptools) endpoint.
+
+    Top-level ``generation_start``, ``generation_end``, and ``seeds`` apply
+    globally to the DuckDB dataset filter in vEcoli's ``analysis.py``
+    (``build_duckdb_filter``).  They restrict **which simulation data rows**
+    are fed to every analysis module in this request.
+
+    Per-module params (``n_tp``, ``time_unit``, …) are set inside each
+    ``PtoolsAnalysisConfig`` entry and only affect the module they belong to.
+    """
+
     experiment_id: str
+    generation_start: int | None = None
+    generation_end: int | None = None
+    seeds: list[int] | None = None
     single: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multidaughter: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
     multigeneration: list[AnalysisModuleConfig | PtoolsAnalysisConfig] | None = None
@@ -220,7 +216,19 @@ class ExperimentAnalysisRequest(BaseModel):
             multiseed=dict_options(self.multiseed),
         )
         emitter_arg = {"out_dir": str(experiment_outdir)}
-        return AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)  # type: ignore[call-arg]
+        config = AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)  # type: ignore[call-arg]
+
+        # Top-level DuckDB filters read by vEcoli's build_duckdb_filter().
+        # generation_range is [start, end) (exclusive end, per Python range()).
+        if self.generation_start is not None or self.generation_end is not None:
+            start = self.generation_start if self.generation_start is not None else 0
+            # vEcoli's range() is exclusive on end, so +1 to include the end generation
+            end = (self.generation_end + 1) if self.generation_end is not None else 1000
+            config.generation_range = [start, end]  # type: ignore[attr-defined]
+        if self.seeds is not None:
+            config.lineage_seed = self.seeds  # type: ignore[attr-defined]
+
+        return config
 
     @property
     def requested(self) -> dict[str, list[PtoolsAnalysisConfig]]:

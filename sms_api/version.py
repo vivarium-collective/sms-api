@@ -10,4 +10,5 @@
 # 0.7.1 — fix public_mode default, stale secret ARN, enforce run_parca on Batch
 # 0.7.2 — config template fallback for public vEcoli repo, kustomize tag sync, RKE DB migration
 # 0.7.3 — generation range and seed filtering for ptools analysis endpoint
-__version__ = "0.7.3"
+# 0.7.4 — top-level DuckDB filters, strip private analyses from embedded template
+__version__ = "0.7.4"

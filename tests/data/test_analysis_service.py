@@ -55,71 +55,91 @@ async def test_normalize() -> None:
 # -- generation/seed filtering tests --
 
 
-class TestPtoolsAnalysisConfigFiltering:
-    """Tests for generation_start, generation_end, and seeds filtering params."""
+class TestAnalysisDataFiltering:
+    """Tests for top-level generation_start, generation_end, and seeds filtering.
 
-    def test_to_dict_no_filters(self) -> None:
+    These map to vEcoli's ``build_duckdb_filter`` which applies DuckDB WHERE
+    clauses to the simulation dataset *before* any analysis module runs.
+    """
+
+    def test_to_dict_passes_n_tp(self) -> None:
         config = PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=10)
         result = config.to_dict()
         assert result == {"ptools_rxns": {"n_tp": 10}}
 
-    def test_to_dict_generation_start(self) -> None:
-        config = PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8, generation_start=3)
-        result = config.to_dict()
-        assert result == {"ptools_rna": {"n_tp": 8, "generation_lower_bound": 3}}
-
-    def test_to_dict_generation_end(self) -> None:
-        config = PtoolsAnalysisConfig(name=PtoolsAnalysisType.PROTEINS, n_tp=5, generation_end=7)
-        result = config.to_dict()
-        assert result == {"ptools_proteins": {"n_tp": 5, "generation_upper_bound": 7}}
-
-    def test_to_dict_generation_range(self) -> None:
-        config = PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8, generation_start=2, generation_end=8)
-        result = config.to_dict()
-        assert result == {"ptools_rxns": {"n_tp": 8, "generation_lower_bound": 2, "generation_upper_bound": 8}}
-
-    def test_to_dict_seeds(self) -> None:
-        config = PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8, seeds=[0, 3, 5])
-        result = config.to_dict()
-        assert result == {"ptools_rna": {"n_tp": 8, "lineage_seeds": [0, 3, 5]}}
-
-    def test_to_dict_all_filters(self) -> None:
-        config = PtoolsAnalysisConfig(
-            name=PtoolsAnalysisType.REACTIONS, n_tp=10, generation_start=2, generation_end=9, seeds=[1, 2]
-        )
-        result = config.to_dict()
-        assert result == {
-            "ptools_rxns": {
-                "n_tp": 10,
-                "generation_lower_bound": 2,
-                "generation_upper_bound": 9,
-                "lineage_seeds": [1, 2],
-            }
-        }
-
-    def test_request_to_config_preserves_filters(self) -> None:
+    def test_request_generation_start_sets_generation_range(self) -> None:
         request = ExperimentAnalysisRequest(
             experiment_id="test-exp",
-            multiseed=[
-                PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8, generation_start=5),
-                PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8, seeds=[0, 1]),
-            ],
+            generation_start=3,
+            multiseed=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8)],
         )
         config = request.to_config(analysis_name="test-analysis", env=ENV)
-        multiseed = config.analysis_options.multiseed  # type: ignore[attr-defined]
-        assert multiseed["ptools_rxns"]["generation_lower_bound"] == 5
-        assert multiseed["ptools_rna"]["lineage_seeds"] == [0, 1]
+        # generation_range is [start, end) exclusive — so start=3, end=1000 (no upper bound)
+        assert config.generation_range == [3, 1000]  # type: ignore[attr-defined]
 
-    def test_request_serialization_roundtrip(self) -> None:
-        config = PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8, generation_start=3, generation_end=8)
+    def test_request_generation_end_sets_generation_range(self) -> None:
         request = ExperimentAnalysisRequest(
             experiment_id="test-exp",
-            multiseed=[config],
+            generation_end=7,
+            multiseed=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8)],
+        )
+        config = request.to_config(analysis_name="test-analysis", env=ENV)
+        # generation_end=7 → range [0, 8) to include generation 7
+        assert config.generation_range == [0, 8]  # type: ignore[attr-defined]
+
+    def test_request_generation_range_both_bounds(self) -> None:
+        request = ExperimentAnalysisRequest(
+            experiment_id="test-exp",
+            generation_start=2,
+            generation_end=8,
+            multiseed=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8)],
+        )
+        config = request.to_config(analysis_name="test-analysis", env=ENV)
+        assert config.generation_range == [2, 9]  # type: ignore[attr-defined]
+
+    def test_request_seeds_sets_lineage_seed(self) -> None:
+        request = ExperimentAnalysisRequest(
+            experiment_id="test-exp",
+            seeds=[0, 3, 5],
+            multiseed=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8)],
+        )
+        config = request.to_config(analysis_name="test-analysis", env=ENV)
+        assert config.lineage_seed == [0, 3, 5]  # type: ignore[attr-defined]
+
+    def test_request_all_filters(self) -> None:
+        request = ExperimentAnalysisRequest(
+            experiment_id="test-exp",
+            generation_start=2,
+            generation_end=9,
+            seeds=[1, 2],
+            multiseed=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=10)],
+        )
+        config = request.to_config(analysis_name="test-analysis", env=ENV)
+        assert config.generation_range == [2, 10]  # type: ignore[attr-defined]
+        assert config.lineage_seed == [1, 2]  # type: ignore[attr-defined]
+        # Module params are still preserved
+        multiseed = config.analysis_options.multiseed  # type: ignore[attr-defined]
+        assert multiseed["ptools_rxns"]["n_tp"] == 10
+
+    def test_request_no_filters_omits_keys(self) -> None:
+        request = ExperimentAnalysisRequest(
+            experiment_id="test-exp",
+            multiseed=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8)],
+        )
+        config = request.to_config(analysis_name="test-analysis", env=ENV)
+        assert not hasattr(config, "generation_range")
+        assert not hasattr(config, "lineage_seed")
+
+    def test_request_serialization_roundtrip(self) -> None:
+        request = ExperimentAnalysisRequest(
+            experiment_id="test-exp",
+            generation_start=3,
+            generation_end=8,
+            seeds=[0, 1],
+            multiseed=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8)],
         )
         dumped = request.model_dump()
         restored = ExperimentAnalysisRequest(**dumped)
-        assert restored.multiseed is not None
-        item = restored.multiseed[0]
-        assert isinstance(item, PtoolsAnalysisConfig)
-        assert item.generation_start == 3
-        assert item.generation_end == 8
+        assert restored.generation_start == 3
+        assert restored.generation_end == 8
+        assert restored.seeds == [0, 1]
