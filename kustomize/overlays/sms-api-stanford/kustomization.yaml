@@ -9,9 +9,14 @@ namespace: sms-api-stanford
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.4.11-dev
+    newTag: 0.6.3
+  # ptools pinned to last-known-good tag — the build-and-push GH Action's
+  # ptools step is currently broken (Dockerfile-nextflow issue), so there is
+  # no sms-ptools:0.6.x image on ghcr.io.  0.5.9 is the tag the live Stanford
+  # pod has been running successfully; keeping both namespaces pointing here
+  # avoids an ErrImagePull ReplicaSet while api iterates independently.
   - name: ghcr.io/vivarium-collective/sms-ptools
-    newTag: 0.4.5
+    newTag: 0.5.9
 
 replicas:
   - count: 1
@@ -26,29 +31,43 @@ replicas:
 resources:
 #  - ingress.yaml
   - target-group-binding.yaml
-  - storageclass-gp3-retain.yaml
-  - fsx-pcs-root-pv.yaml
-  - vivarium-home-pvc.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
-  - secret-ssh.yaml
   - ../../config/sms-api-stanford
   - ../../base
 
 patches:
   - patch: |-
-      - op: replace
-        path: /spec/template/spec/containers/0/volumeMounts/0
-        value:
-          name: vivarium-home-pvc
-          mountPath: /mnt/fsx/home/svc_vivarium
-          subPath: home/svc_vivarium
+      - op: add
+        path: /metadata/annotations/eks.amazonaws.com~1role-arn
+        value: arn:aws-us-gov:iam::476270107793:role/smscdk-batch-BatchSubmitIrsaRole31BE49CD-vYkQKg5TNDXz
     target:
-      kind: Deployment
-      name: api
+      kind: ServiceAccount
+      name: batch-submit
   - patch: |-
       - op: remove
         path: /spec/template/spec/nodeSelector
+    target:
+      kind: Deployment
+      name: api
+  # Remove SLURM/SSH infrastructure from base api.yaml — stanford uses
+  # K8s/AWS Batch exclusively.  Order: highest index first so removals don't
+  # shift the indices of subsequent operations.
+  - patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/env/5
+      - op: remove
+        path: /spec/template/spec/containers/0/volumeMounts/2
+      - op: remove
+        path: /spec/template/spec/containers/0/volumeMounts/1
+      - op: remove
+        path: /spec/template/spec/containers/0/volumeMounts/0
+      - op: remove
+        path: /spec/template/spec/volumes/2
+      - op: remove
+        path: /spec/template/spec/volumes/1
+      - op: remove
+        path: /spec/template/spec/volumes/0
     target:
       kind: Deployment
       name: api

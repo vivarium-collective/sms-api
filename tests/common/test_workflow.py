@@ -15,8 +15,10 @@ from pathlib import Path
 
 import pytest
 
+from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.models import JobStatus, SSHTarget
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.config import get_settings
@@ -46,7 +48,7 @@ async def _check_repo_exists(commit_hash: str) -> bool:
     settings = get_settings()
     repo_path = settings.hpc_repo_base_path / commit_hash / "vEcoli"
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -d {repo_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
         return "EXISTS" in result
@@ -55,7 +57,7 @@ async def _check_repo_exists(commit_hash: str) -> bool:
 async def _check_image_exists(simulator: SimulatorVersion) -> bool:
     """Check if the singularity image already exists on HPC."""
     image_path = get_apptainer_image_file(simulator)
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -f {image_path.remote_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
         return "EXISTS" in result
@@ -106,30 +108,29 @@ async def _ensure_repo_and_image_exist(
     # Need to build - this clones the repo and builds the image
     print(f"\nCloning repo and building image for {repo_info.commit_hash}...")
 
-    async with get_ssh_session_service().session() as ssh:
-        job_id = await simulation_service.submit_build_image_job(simulator_version=simulator, ssh=ssh)
-        assert job_id is not None, "Failed to submit build job"
+    job_id = await simulation_service.submit_build_image_job(simulator_version=simulator)
+    assert job_id is not None, "Failed to submit build job"
 
-        print(f"  Submitted build job {job_id}")
+    print(f"  Submitted build job {job_id}")
 
-        # Poll for completion (30 minute timeout for build)
-        start_time = time.time()
-        slurm_job = None
-        while start_time + 1800 > time.time():
-            slurm_job = await simulation_service.get_slurm_job_status(slurmjobid=job_id, ssh=ssh)
-            if slurm_job is not None and slurm_job.is_done():
-                break
-            elapsed = int(time.time() - start_time)
-            if elapsed % 60 == 0:
-                print(f"  Build job {job_id} running... ({elapsed}s elapsed)")
-            await asyncio.sleep(10)
+    # Poll for completion (30 minute timeout for build)
+    start_time = time.time()
+    job_info: JobStatusInfo | None = None
+    while start_time + 1800 > time.time():
+        job_info = await simulation_service.get_job_status(job_id=job_id)
+        if job_info is not None and job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+            break
+        elapsed = int(time.time() - start_time)
+        if elapsed % 60 == 0:
+            print(f"  Build job {job_id} running... ({elapsed}s elapsed)")
+        await asyncio.sleep(10)
 
-        assert slurm_job is not None, "Build job did not complete in time"
-        assert slurm_job.job_state.upper() == "COMPLETED", (
-            f"Build job failed with state: {slurm_job.job_state}, exit code: {slurm_job.exit_code}"
-        )
+    assert job_info is not None, "Build job did not complete in time"
+    assert job_info.status == JobStatus.COMPLETED, (
+        f"Build job failed with status: {job_info.status}, exit code: {job_info.exit_code}"
+    )
 
-        print(f"  Build job {job_id} completed successfully")
+    print(f"  Build job {job_id} completed successfully")
 
     return simulator, repo_path
 
@@ -198,7 +199,7 @@ async def _run_workflow_test(
         remote_sbatch_file = remote_base_path / local_sbatch_file.name
 
         # Use single SSH session for all operations
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             # Create remote output directory
             await ssh.run_command(f"mkdir -p {remote_output_dir}")
 
@@ -321,7 +322,7 @@ async def test_workflow_py_execution(
     print(f"  Output dir: {result.remote_output_dir}")
 
     # Check job output for errors
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         # Read last 50 lines of output file
         tail_cmd = f"tail -50 {result.remote_output_file} 2>/dev/null || echo 'NO_OUTPUT'"
         _, output, _ = await ssh.run_command(tail_cmd)

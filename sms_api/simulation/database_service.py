@@ -1,3 +1,4 @@
+import contextlib
 import datetime
 import logging
 from abc import ABC, abstractmethod
@@ -8,8 +9,8 @@ from sqlalchemy.orm import InstrumentedAttribute
 from typing_extensions import override
 
 from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisDTO
-from sms_api.common.hpc.models import SlurmJob
-from sms_api.common.models import JobStatus
+from sms_api.common.hpc.job_service import JobStatusUpdate
+from sms_api.common.models import JobId
 from sms_api.simulation.models import (
     HpcRun,
     JobType,
@@ -85,9 +86,15 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def insert_hpcrun(self, slurmjobid: int, job_type: JobType, ref_id: int, correlation_id: str) -> HpcRun:
+    async def insert_hpcrun(
+        self,
+        job_id: JobId,
+        job_type: JobType,
+        ref_id: int,
+        correlation_id: str,
+    ) -> HpcRun:
         """
-        :param slurmjobid: (`int`) slurm job id for the associated `job_type`.
+        :param job_id: Backend-tagged job identifier.
         :param job_type: (`JobType`) job type to be run. Choose one of the following:
             `JobType.SIMULATION`(/vecoli/run), `JobType.PARCA`(/vecoli/parca), `JobType.BUILD_IMAGE`(/simulator/new)
         :param ref_id: primary key of the object this HPC run is associated with (sim, parca, etc.).
@@ -99,7 +106,7 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def get_hpcrun_by_slurmjobid(self, slurmjobid: int) -> HpcRun | None:
+    async def get_hpcrun_by_job_id(self, job_id: JobId) -> HpcRun | None:
         pass
 
     @abstractmethod
@@ -157,7 +164,7 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def update_hpcrun_status(self, hpcrun_id: int, new_slurm_job: SlurmJob) -> None:
+    async def update_hpcrun_status(self, hpcrun_id: int, update: JobStatusUpdate) -> None:
         """Update the status of a given HpcRun job."""
         pass
 
@@ -196,8 +203,12 @@ class DatabaseServiceSQL(DatabaseService):
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
         return orm_hpc_job
 
-    async def _get_orm_hpcrun_by_slurmjobid(self, session: AsyncSession, slurmjobid: int) -> ORMHpcRun | None:
-        stmt1 = select(ORMHpcRun).where(ORMHpcRun.slurmjobid == slurmjobid).limit(1)
+    async def _get_orm_hpcrun_by_job_id(self, session: AsyncSession, job_id: JobId) -> ORMHpcRun | None:
+        stmt1 = (
+            select(ORMHpcRun)
+            .where(ORMHpcRun.job_id_ext == str(job_id), ORMHpcRun.job_backend == job_id.backend.value)
+            .limit(1)
+        )
         result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
         return orm_hpc_job
@@ -214,7 +225,7 @@ class DatabaseServiceSQL(DatabaseService):
 
     async def _get_orm_hpcrun_by_ref(self, session: AsyncSession, ref_id: int, job_type: JobType) -> ORMHpcRun | None:
         reference = self._get_job_type_ref(job_type)
-        stmt1 = select(ORMHpcRun).where(reference == ref_id).limit(1)  # type: ignore[arg-type]
+        stmt1 = select(ORMHpcRun).where(reference == ref_id).order_by(ORMHpcRun.id.desc()).limit(1)  # type: ignore[arg-type]
         result1: Result[tuple[ORMHpcRun]] = await session.execute(stmt1)
         orm_hpc_job: ORMHpcRun | None = result1.scalars().one_or_none()
 
@@ -339,15 +350,21 @@ class DatabaseServiceSQL(DatabaseService):
             return simulator_versions
 
     @override
-    async def insert_hpcrun(self, slurmjobid: int, job_type: JobType, ref_id: int, correlation_id: str) -> HpcRun:
+    async def insert_hpcrun(
+        self,
+        job_id: JobId,
+        job_type: JobType,
+        ref_id: int,
+        correlation_id: str,
+    ) -> HpcRun:
         jobref_simulation_id = ref_id if job_type == JobType.SIMULATION else None
-        # jobref_parca_dataset_id = None if job_type == JobType.PARCA else None
-        # jobref_simulator_id = None if job_type == JobType.BUILD_IMAGE else None
         jobref_parca_dataset_id = ref_id if job_type == JobType.PARCA else None
         jobref_simulator_id = ref_id if job_type == JobType.BUILD_IMAGE else None
+
         async with self.async_sessionmaker() as session, session.begin():
             orm_hpc_run = ORMHpcRun(
-                slurmjobid=slurmjobid,
+                job_id_ext=str(job_id),
+                job_backend=job_id.backend,
                 job_type=JobTypeDB.from_job_type(job_type),
                 status=JobStatusDB.RUNNING,
                 jobref_simulator_id=jobref_simulator_id,
@@ -361,9 +378,9 @@ class DatabaseServiceSQL(DatabaseService):
             return orm_hpc_run.to_hpc_run()
 
     @override
-    async def get_hpcrun_by_slurmjobid(self, slurmjobid: int) -> HpcRun | None:
+    async def get_hpcrun_by_job_id(self, job_id: JobId) -> HpcRun | None:
         async with self.async_sessionmaker() as session, session.begin():
-            orm_hpc_job: ORMHpcRun | None = await self._get_orm_hpcrun_by_slurmjobid(session, slurmjobid=slurmjobid)
+            orm_hpc_job: ORMHpcRun | None = await self._get_orm_hpcrun_by_job_id(session, job_id=job_id)
             if orm_hpc_job is None:
                 return None
             return orm_hpc_job.to_hpc_run()
@@ -674,25 +691,22 @@ class DatabaseServiceSQL(DatabaseService):
             return [orm_hpcrun.to_hpc_run() for orm_hpcrun in orm_hpcruns]
 
     @override
-    async def update_hpcrun_status(self, hpcrun_id: int, new_slurm_job: SlurmJob) -> None:
+    async def update_hpcrun_status(self, hpcrun_id: int, update: JobStatusUpdate) -> None:
         async with self.async_sessionmaker() as session, session.begin():
             orm_hpcrun: ORMHpcRun | None = await self._get_orm_hpcrun(session, hpcrun_id=hpcrun_id)
             if orm_hpcrun is None:
                 raise Exception(f"HpcRun with id {hpcrun_id} not found in the database")
-            new_status = JobStatus.from_slurm_state(new_slurm_job.job_state)
-            orm_hpcrun.status = JobStatusDB.from_job_status(new_status)
-            if new_slurm_job.start_time is not None and new_slurm_job.start_time != orm_hpcrun.start_time:
-                orm_hpcrun.start_time = datetime.datetime.fromisoformat(new_slurm_job.start_time)
-            if new_slurm_job.end_time is not None and new_slurm_job.end_time != orm_hpcrun.end_time:
-                orm_hpcrun.end_time = datetime.datetime.fromisoformat(new_slurm_job.end_time)
-            # Capture error message for failed jobs
-            if new_status == JobStatus.FAILED:
-                error_parts = [f"SLURM state: {new_slurm_job.job_state}"]
-                if new_slurm_job.reason:
-                    error_parts.append(f"reason: {new_slurm_job.reason}")
-                if new_slurm_job.exit_code:
-                    error_parts.append(f"exit_code: {new_slurm_job.exit_code}")
-                orm_hpcrun.error_message = ", ".join(error_parts)
+            orm_hpcrun.status = JobStatusDB.from_job_status(update.status)
+            if update.start_time is not None:
+                with contextlib.suppress(ValueError):
+                    dt = datetime.datetime.fromisoformat(update.start_time)
+                    orm_hpcrun.start_time = dt.replace(tzinfo=None)
+            if update.end_time is not None:
+                with contextlib.suppress(ValueError):
+                    dt = datetime.datetime.fromisoformat(update.end_time)
+                    orm_hpcrun.end_time = dt.replace(tzinfo=None)
+            if update.error_message:
+                orm_hpcrun.error_message = update.error_message
             await session.flush()
 
     @override

@@ -29,6 +29,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from sms_api.api.main import app
+from sms_api.common.hpc.job_service import JobStatusInfo
+from sms_api.common.models import JobStatus, SSHTarget
 from sms_api.common.ssh.ssh_service import SSHSessionService
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
@@ -74,7 +76,7 @@ async def get_or_create_simulator(
 async def check_image_exists(simulator: SimulatorVersion) -> bool:
     """Check if the singularity image already exists on HPC."""
     image_path = get_apptainer_image_file(simulator)
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         try:
             await ssh.run_command(f"test -f {image_path.remote_path}")
             return True
@@ -92,7 +94,7 @@ async def scan_hpc_for_parca_dir(commit_hash: str) -> str | None:
     parca_base = settings.hpc_parca_base_path.remote_path
     pattern = f"parca_{commit_hash}_*"
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         try:
             _retcode, stdout, _stderr = await ssh.run_command(f"ls -d {parca_base}/{pattern} 2>/dev/null | head -1")
             if stdout.strip():
@@ -113,7 +115,7 @@ async def scan_hpc_for_simulation_output(experiment_id: str) -> bool:
     sim_outdir = settings.simulation_outdir.remote_path
     variant_data_path = f"{sim_outdir}/{experiment_id}/variant_sim_data"
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         try:
             await ssh.run_command(f"test -d {variant_data_path}")
             return True
@@ -173,23 +175,20 @@ async def test_1_build_image(
         image_path = get_apptainer_image_file(simulator)
         pytest.skip(f"Image already exists: {image_path.remote_path}")
 
-    # Reuse SSH session for job submission and polling
-    async with get_ssh_session_service().session() as ssh:
-        job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator, ssh=ssh)
-        assert job_id is not None
+    job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
+    assert job_id is not None
 
-        start_time = time.time()
-        slurm_job = None
-        while start_time + 1800 > time.time():  # 30 minute timeout for build
-            slurm_job = await simulation_service_slurm.get_slurm_job_status(slurmjobid=job_id, ssh=ssh)
-            if slurm_job is not None and slurm_job.is_done():
-                break
-            await asyncio.sleep(10)
+    start_time = time.time()
+    job_info: JobStatusInfo | None = None
+    while start_time + 1800 > time.time():  # 30 minute timeout for build
+        job_info = await simulation_service_slurm.get_job_status(job_id=job_id)
+        if job_info is not None and job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+            break
+        await asyncio.sleep(10)
 
-    assert slurm_job is not None, "Build job did not complete in time"
-    assert slurm_job.is_done()
-    assert slurm_job.job_id == job_id
-    assert slurm_job.name.startswith(f"build-image-{simulator_repo_info.commit_hash}-")
+    assert job_info is not None, "Build job did not complete in time"
+    assert job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+    assert job_info.job_id == job_id
 
 
 @pytest.mark.asyncio
@@ -212,23 +211,20 @@ async def test_2_run_parca(
     parca_dataset_request = ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_dataset_request)
 
-    # Reuse SSH session for job submission and polling
-    async with get_ssh_session_service().session() as ssh:
-        job_id = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset, ssh=ssh)
-        assert job_id is not None
+    job_id = await simulation_service_slurm.submit_parca_job(parca_dataset=parca_dataset)
+    assert job_id is not None
 
-        start_time = time.time()
-        slurm_job = None
-        while start_time + 1800 > time.time():  # 30 minute timeout for parca
-            slurm_job = await simulation_service_slurm.get_slurm_job_status(slurmjobid=job_id, ssh=ssh)
-            if slurm_job is not None and slurm_job.is_done():
-                break
-            await asyncio.sleep(10)
+    start_time = time.time()
+    job_info: JobStatusInfo | None = None
+    while start_time + 1800 > time.time():  # 30 minute timeout for parca
+        job_info = await simulation_service_slurm.get_job_status(job_id=job_id)
+        if job_info is not None and job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+            break
+        await asyncio.sleep(10)
 
-    assert slurm_job is not None, "Parca job did not complete in time"
-    assert slurm_job.is_done()
-    assert slurm_job.job_id == job_id
-    assert slurm_job.name.startswith(f"parca-{simulator_repo_info.commit_hash}-")
+    assert job_info is not None, "Parca job did not complete in time"
+    assert job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+    assert job_info.job_id == job_id
 
 
 @pytest.mark.asyncio
@@ -262,32 +258,29 @@ async def test_3_run_simulation(
     random_string = "".join(random.choices(string.hexdigits, k=7))
     correlation_id = get_correlation_id(ecoli_simulation=simulation, random_string=random_string, simulator=simulator)
 
-    # Reuse SSH session for job submission and polling
-    async with get_ssh_session_service().session() as ssh:
-        job_id = await simulation_service_slurm.submit_ecoli_simulation_job(
-            ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id, ssh=ssh
-        )
-        assert job_id is not None
+    job_id = await simulation_service_slurm.submit_ecoli_simulation_job(
+        ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
+    )
+    assert job_id is not None
 
-        await database_service.insert_hpcrun(
-            slurmjobid=job_id,
-            job_type=JobType.SIMULATION,
-            ref_id=simulation.database_id,
-            correlation_id=correlation_id,
-        )
+    await database_service.insert_hpcrun(
+        job_id=job_id,
+        job_type=JobType.SIMULATION,
+        ref_id=simulation.database_id,
+        correlation_id=correlation_id,
+    )
 
-        start_time = time.time()
-        slurm_job = None
-        while start_time + 1800 > time.time():  # 30 minute timeout for simulation
-            slurm_job = await simulation_service_slurm.get_slurm_job_status(slurmjobid=job_id, ssh=ssh)
-            if slurm_job is not None and slurm_job.is_done():
-                break
-            await asyncio.sleep(10)
+    start_time = time.time()
+    job_info: JobStatusInfo | None = None
+    while start_time + 1800 > time.time():  # 30 minute timeout for simulation
+        job_info = await simulation_service_slurm.get_job_status(job_id=job_id)
+        if job_info is not None and job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+            break
+        await asyncio.sleep(10)
 
-    assert slurm_job is not None, "Simulation job did not complete in time"
-    assert slurm_job.is_done()
-    assert slurm_job.job_id == job_id
-    assert slurm_job.name.startswith(f"sim-{simulator_repo_info.commit_hash}-")
+    assert job_info is not None, "Simulation job did not complete in time"
+    assert job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+    assert job_info.job_id == job_id
 
 
 @pytest.mark.asyncio

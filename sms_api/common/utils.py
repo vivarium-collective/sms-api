@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import numpy as np
 
-from sms_api.common.models import DataId
+from sms_api.common.models import DataId, SSHTarget
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.models import SimulatorVersion
@@ -107,7 +107,7 @@ async def complete_config_template(
     remote_config_path = (
         settings.hpc_repo_base_path.remote_path / simulator.git_commit_hash / "vEcoli" / "configs" / config_filename
     )
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
         if returncode != 0:
             raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")

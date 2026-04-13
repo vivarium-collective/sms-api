@@ -10,11 +10,12 @@ from textwrap import dedent
 
 from typing_extensions import override
 
+from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.common.hpc.nextflow_weblog import WEBLOG_RECEIVER_SCRIPT
 from sms_api.common.hpc.slurm_service import SlurmService
+from sms_api.common.models import JobId, JobStatus, SSHTarget
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
-from sms_api.common.ssh.ssh_service import SSHSession
 from sms_api.common.storage.file_paths import HPCFilePath
 from sms_api.common.utils import capture_slurm_script
 from sms_api.config import get_settings
@@ -73,21 +74,43 @@ class SimulationService(ABC):
         pass
 
     @abstractmethod
-    async def submit_build_image_job(self, simulator_version: SimulatorVersion, ssh: SSHSession) -> int:
+    async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> JobId:
+        """Submit a container image build job. Returns backend-tagged job ID."""
         pass
 
     @abstractmethod
-    async def submit_parca_job(self, parca_dataset: ParcaDataset, ssh: SSHSession) -> int:
+    async def submit_parca_job(self, parca_dataset: ParcaDataset) -> JobId:
+        """Submit a parca parameter calculator job. Returns backend-tagged job ID."""
         pass
 
     @abstractmethod
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str, ssh: SSHSession
-    ) -> int:
+        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str
+    ) -> JobId:
+        """Submit a simulation workflow job. Returns backend-tagged job ID."""
         pass
 
     @abstractmethod
-    async def get_slurm_job_status(self, slurmjobid: int, ssh: SSHSession) -> SlurmJob | None:
+    async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
+        """Read a vEcoli config template file for the given simulator version.
+
+        Args:
+            simulator_version: The simulator whose repo contains the config.
+            config_filename: Filename under vEcoli/configs/ (e.g. "api_simulation_default.json").
+
+        Returns:
+            The raw JSON string contents of the config template.
+        """
+        pass
+
+    @abstractmethod
+    async def get_job_status(self, job_id: JobId) -> JobStatusInfo | None:
+        """Get the current status of a job by its backend-tagged ID."""
+        pass
+
+    @abstractmethod
+    async def cancel_job(self, job_id: JobId) -> None:
+        """Cancel a running job."""
         pass
 
     @abstractmethod
@@ -110,7 +133,7 @@ class SimulationServiceHpc(SimulationService):
         """
         settings = get_settings()
         auth_url = _get_authenticated_git_url(git_repo_url, settings.github_username, settings.github_token)
-        async with get_ssh_session_service().session() as ssh:
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             return_code, stdout, stderr = await ssh.run_command(f"git ls-remote -h {auth_url} {git_branch}")
         if return_code != 0:
             raise RuntimeError(f"Failed to list git commits for repository: {stderr.strip()}")
@@ -119,7 +142,7 @@ class SimulationServiceHpc(SimulationService):
         return latest_commit_hash
 
     @override
-    async def submit_build_image_job(self, simulator_version: SimulatorVersion, ssh: SSHSession) -> int:
+    async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> JobId:
         settings = get_settings()
         slurm_service = SlurmService()
 
@@ -298,13 +321,14 @@ class SimulationServiceHpc(SimulationService):
                 f.write(script_content)
 
             # submit the build script to slurm
-            slurm_jobid = await slurm_service.submit_job(
-                ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
-            )
-            return slurm_jobid
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
+                slurm_jobid = await slurm_service.submit_job(
+                    ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+                )
+            return JobId.slurm(slurm_jobid)
 
     @override
-    async def submit_parca_job(self, parca_dataset: ParcaDataset, ssh: SSHSession) -> int:
+    async def submit_parca_job(self, parca_dataset: ParcaDataset) -> JobId:
         settings = get_settings()
         slurm_service = SlurmService()
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
@@ -371,16 +395,17 @@ class SimulationServiceHpc(SimulationService):
                 capture_slurm_script(script_content, "parca.sbatch")
                 f.write(script_content)
 
-            # submit the build script to slurm
-            slurm_jobid = await slurm_service.submit_job(
-                ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
-            )
-            return slurm_jobid
+            # submit the parca script to slurm
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
+                slurm_jobid = await slurm_service.submit_job(
+                    ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+                )
+            return JobId.slurm(slurm_jobid)
 
     @override
     async def submit_ecoli_simulation_job(
-        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str, ssh: SSHSession
-    ) -> int:
+        self, ecoli_simulation: Simulation, database_service: DatabaseService, correlation_id: str
+    ) -> JobId:
         # settings = get_settings()
         if database_service is None:
             raise RuntimeError("DatabaseService is not available. Cannot submit Simulation job.")
@@ -413,25 +438,62 @@ class SimulationServiceHpc(SimulationService):
                 capture_slurm_script(script_content, "simulation_workflow.sbatch")
                 f.write(script_content)
 
-            # submit the build script to slurm
-            slurm_jobid = await slurm_service.submit_job(
-                ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
-            )
-            return slurm_jobid
+            # submit the simulation script to slurm
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
+                slurm_jobid = await slurm_service.submit_job(
+                    ssh, local_sbatch_file=local_submit_file, remote_sbatch_file=slurm_submit_file
+                )
+            return JobId.slurm(slurm_jobid)
 
     @override
-    async def get_slurm_job_status(self, slurmjobid: int, ssh: SSHSession) -> SlurmJob | None:
+    async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
+        settings = get_settings()
+        remote_config_path = (
+            settings.hpc_repo_base_path.remote_path
+            / simulator_version.git_commit_hash
+            / "vEcoli"
+            / "configs"
+            / config_filename
+        )
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
+            returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
+            if returncode != 0:
+                raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
+        return stdout
+
+    @override
+    async def get_job_status(self, job_id: JobId) -> JobStatusInfo | None:
         slurm_service = SlurmService()
-        job_ids: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh, job_ids=[slurmjobid])
-        if len(job_ids) == 0:
-            job_ids = await slurm_service.get_job_status_scontrol(ssh, job_ids=[slurmjobid])
-            if len(job_ids) == 0:
-                logger.warning(f"No job found with ID {slurmjobid} in both squeue and sacct.")
-                return None
-        if len(job_ids) == 1:
-            return job_ids[0]
+        slurmjobid = job_id.as_slurm_int
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
+            slurm_jobs: list[SlurmJob] = await slurm_service.get_job_status_squeue(ssh, job_ids=[slurmjobid])
+            if len(slurm_jobs) == 0:
+                slurm_jobs = await slurm_service.get_job_status_scontrol(ssh, job_ids=[slurmjobid])
+                if len(slurm_jobs) == 0:
+                    logger.warning(f"No job found with ID {slurmjobid} in both squeue and scontrol.")
+                    return None
+        if len(slurm_jobs) == 1:
+            slurm_job = slurm_jobs[0]
+            status = JobStatus.from_slurm_state(slurm_job.job_state)
+            return JobStatusInfo(
+                job_id=job_id,
+                status=status,
+                start_time=slurm_job.start_time,
+                end_time=slurm_job.end_time,
+                exit_code=slurm_job.exit_code,
+            )
         else:
-            raise RuntimeError(f"Multiple jobs found with ID {slurmjobid}: {job_ids}")
+            raise RuntimeError(f"Multiple jobs found with ID {slurmjobid}: {slurm_jobs}")
+
+    @override
+    async def cancel_job(self, job_id: JobId) -> None:
+        """Cancel a SLURM job via scancel."""
+        slurm_id = job_id.as_slurm_int
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
+            return_code, _stdout, stderr = await ssh.run_command(f"scancel {slurm_id}")
+            if return_code != 0:
+                raise RuntimeError(f"Failed to cancel SLURM job {slurm_id}: {stderr.strip()}")
+            logger.info(f"Cancelled SLURM job {slurm_id}")
 
     @override
     async def close(self) -> None:

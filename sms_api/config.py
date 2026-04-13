@@ -187,8 +187,78 @@ class Settings(BaseSettings):
     # valid namespaces correspond 1:1 with namespaces in kustomize/ config
     deployment_namespace: str = ""
 
+    # Compute backend: "slurm" (SLURM via SSH) or "batch" (AWS Batch via Nextflow).
+    # Must be set explicitly — no default.
+    compute_backend: str = ""
+
+    # Public mode exposes the CCAM fork repo and public simulation configs.
+    # Private mode uses the Stanford private repo and private configs.
+    # Must be set explicitly — no default.
+    public_mode: str = ""
+
     # slurm constraint for arch mismatches
     slurm_constraint: str = ""
+
+    # --- AWS Batch backend settings ---
+    # Used when job_backend is "batch" (Stanford deployments)
+
+    # K8s Job settings
+    k8s_job_namespace: str = ""  # Namespace for Nextflow head Jobs (e.g. "sms-api-stanford")
+
+    # AWS Batch settings (Nextflow submits tasks here)
+    batch_task_arch: str = "amd64"  # Architecture for Batch task images: "amd64" or "arm64"
+    batch_amd64_queue: str = ""  # AMD64 simulation task queue
+    batch_arm64_queue: str = ""  # ARM64 simulation task queue (Graviton)
+    batch_region: str = "us-gov-west-1"  # AWS region for Batch
+
+    # S3 settings for workflow data
+    s3_work_bucket: str = ""  # S3 bucket for Nextflow work dir and outputs
+    s3_work_prefix: str = "nextflow/work"  # Prefix for Nextflow work directory
+    s3_output_prefix: str = "vecoli-output"  # Prefix for workflow output data
+
+    # ECR settings
+    ecr_account_id: str = ""  # AWS account ID for ECR registry (e.g. "476270107793")
+    ecr_repository: str = "vecoli"  # ECR repository name for vEcoli images
+
+    # Docker image build settings (DooD via AWS Batch)
+    build_arm64_queue: str = ""  # Batch queue for ARM64 builds (Graviton)
+    build_amd64_queue: str = ""  # Batch queue for AMD64 builds
+    build_job_definition: str = ""  # Batch job definition for DooD builds
+    build_git_secret_arn: str = ""  # Secrets Manager ARN for GitHub PAT (private repo clone)
+
+    # EC2 build machine (legacy, replaced by Batch DooD builds)
+    build_node_host: str = ""
+    build_node_user: str = ""
+    build_node_key_path: str = ""
+
+
+class ComputeBackend(StrEnum):
+    """Compute backend for simulation workloads."""
+
+    SLURM = "slurm"  # SLURM via SSH to a login node (UCONN CCAM)
+    BATCH = "batch"  # AWS Batch via Nextflow (Stanford)
+
+
+def get_job_backend() -> ComputeBackend:
+    """Return the compute backend for the current deployment.
+
+    Raises ValueError if COMPUTE_BACKEND is not set or invalid.
+    """
+    value = get_settings().compute_backend
+    if not value:
+        raise ValueError("COMPUTE_BACKEND must be set explicitly to 'slurm' or 'batch'")
+    return ComputeBackend(value)
+
+
+def get_public_mode() -> bool:
+    """Return whether the deployment runs in public mode.
+
+    Raises ValueError if PUBLIC_MODE is not set.
+    """
+    value = get_settings().public_mode
+    if not value:
+        raise ValueError("PUBLIC_MODE must be set explicitly to 'true' or 'false'")
+    return value.lower() == "true"
 
 
 @lru_cache

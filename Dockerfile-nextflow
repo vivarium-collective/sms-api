@@ -1,0 +1,26 @@
+# Nextflow submit image — extends the vEcoli task image with Java + Nextflow.
+#
+# This image runs workflow.py in full mode (not --build-only), which generates
+# Nextflow workflow files and runs Nextflow as a subprocess. Used as the single
+# container in the K8s Job for AWS Batch simulation workflows.
+#
+# Build with:
+#   docker build -t vecoli-submit:TAG \
+#       --build-arg BASE_IMAGE=<ecr-uri>/vecoli:TAG \
+#       -f Dockerfile-vecoli-submit .
+
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+USER root
+
+# Install Java (required by Nextflow, OpenJDK 17 on Debian bookworm)
+RUN apt-get update && apt-get install -y --no-install-recommends default-jre-headless \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install Nextflow
+ARG NEXTFLOW_VERSION=25.10.2
+RUN curl -fsSL "https://github.com/nextflow-io/nextflow/releases/download/v${NEXTFLOW_VERSION}/nextflow" \
+    -o /usr/local/bin/nextflow && chmod +x /usr/local/bin/nextflow
+
+WORKDIR /vEcoli

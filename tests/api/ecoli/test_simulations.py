@@ -203,6 +203,10 @@ async def api_client() -> AsyncGenerator[httpx.AsyncClient]:
     len(get_settings().slurm_submit_key_path) == 0,
     reason="slurm ssh key file not supplied",
 )
+@pytest.mark.skipif(
+    not Path("/Volumes/SMS").exists(),
+    reason="NFS Mount not connected — HPC repo/config data required",
+)
 @pytest.mark.asyncio
 async def test_run_simulation_workflow_e2e(
     base_router: str,

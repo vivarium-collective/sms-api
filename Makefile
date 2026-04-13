@@ -75,15 +75,15 @@ clean-build: ## Clean build artifacts
 
 .PHONY: docs-test
 docs-test: ## Test if documentation can be built without warnings or errors
-	@uv run mkdocs build -s
+	@cd docs && uv run make html SPHINXOPTS="-W"
 
 .PHONY: docs
-docs: ## Build and serve the documentation
-	@uv run mkdocs serve
+docs: ## Build the documentation
+	@cd docs && uv run make html
 
-PHONY: generate-docs
-generate-docs: ## Build and serve the documentation
-	@cd documentation && uv run make clean && uv run sphinx-apidoc -o source ../sms_api && uv run make html
+.PHONY: docs-clean
+docs-clean: ## Clean built documentation
+	@cd docs && uv run make clean
 
 .PHONY: help
 help:

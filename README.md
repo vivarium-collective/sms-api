@@ -22,33 +22,74 @@
 Design, run, and analyze reproducible simulations of dynamic cellular processes in Escherichia coli. SMS API uses the vEcoli model. Please refer to [the vEcoli documentation](https://covertlab.github.io/vEcoli/) for more details.
 The vEcoli documentation is very well written and we highly recommend that users become familiar with it.
 
-## Getting Started
+## Quick Start (Atlantis CLI)
 
-### The SMS API uniquely acts as both a server _and_ client:
+```bash
+# Install
+uv sync
 
-This project uses FastAPI, Uvicorn, and Marimo to serve a REST API as well as host Marimo user interfaces. For more information
-on Marimo, please [refer to their documentation](https://docs.marimo.io/).
+# Build a simulator
+uv run atlantis simulator latest --repo-url https://github.com/CovertLabEcoli/vEcoli-private --branch master
 
-#### Server:
+# Run a simulation (1 generation, 1 seed)
+uv run atlantis simulation run my-experiment 11 --generations 1 --seeds 1 --poll
 
-A kubernetes cluster containing an ASGI application (FastAPI) is hosted and available at [https://sms.cam.uchc.edu/](https://sms.cam.uchc.edu/)
-An API router of endpoints is assigned for each API in this project's scope and available by name in the request url. For example the
-primary multigeneration, multiseed cell simulation endpoints are hosted at [https://sms.cam.uchc.edu/v1/ecoli](https://sms.cam.uchc.edu/v1/ecoli). Other APIs include
-the Antibiotic and Biomanufacturing and Core (single cell).
+# Check status (fast — shows log tail + status)
+uv run atlantis simulation status 37
 
-The endpoints exposed by this project are designed as such:
+# Download outputs
+uv run atlantis simulation outputs 37 --dest ./results
+```
 
-`"${BASE_URL}/${ROUTER}/...`
+## Three Client Interfaces
 
-where `${BASE_URL}` is currently `https://sms.cam.uchc.edu` and `${ROUTER}` is one of: `core`, `api`.
+All three clients expose the same end-to-end workflow:
 
-**_Routers_**:
-- `core`: this router is mostly administrative, as it allows users to create new singularity images based on the on a given git branch and commit
-of the vEcoli repo, run parameter calculator, etc.
-- `api`: this is the user-facing api.
+| Client | Launch | Best For |
+|--------|--------|----------|
+| **CLI** | `uv run atlantis <command>` | Scripting, automation, quick commands |
+| **TUI** | `uv run atlantis tui` | Interactive terminal sessions, SSH |
+| **GUI** | `uv run atlantis gui` | Browser-based point-and-click |
 
-#### Client:
+## Architecture
 
-This project uses the Marimo web app functionality to act as a client to the aforementioned server. There is a client for each
-API router (or simply, API). This ui is accessible within a "splash page" by navigating to [https://sms.cam.uchc.edu/home](https://sms.cam.uchc.edu/home). Please contact
-our organization for authentication, if needed.
+### Server
+
+A Kubernetes cluster running a FastAPI application, hosted at [https://sms.cam.uchc.edu/](https://sms.cam.uchc.edu/). Supports two compute backends:
+
+- **SLURM** (UCONN CCAM on-prem HPC) — `sms-api-rke` namespace
+- **K8s + AWS Batch** (GovCloud) — `sms-api-stanford-test` namespace
+
+**Routers:**
+- `core`: Administrative — simulator builds, parca management
+- `api`: User-facing — simulation workflows, status, data download
+
+### Client
+
+Three client applications connect to the server:
+
+- **CLI** (`app/cli.py`): Typer + Rich, Memphis design theme
+- **TUI** (`app/tui.py`): Textual terminal app with animated banner, auto-listing with status, file explorer
+- **GUI** (`app/gui.py`): Marimo reactive notebook with Memphis-styled cards
+
+---
+
+```
+    ╭────────────────────────────────────────────╮
+    │    ▄▀▄ ▀█▀ █   ▄▀▄ █▄ █ ▀█▀ █ ▄▀▀          │∿~∿~~∿~∿~
+    │    █▀█  █  █▄▄ █▀█ █ ▀█  █  █ ▄██           │~∿~∿~~∿~∿
+    │     ∿ whole-cell simulation platform ∿     │∿~~∿~∿~~∿
+    ╰────────────────────────────────────────────╯
+```
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200" width="100" height="200">
+  <style>
+    .sk { fill: none; stroke: #006600; stroke-width: 7; stroke-linecap: round; }
+  </style>
+  <path class="sk"
+    d="M 50 10
+       C 10 10, 10 100, 50 100
+       C 90 100, 90 190, 50 190"
+  />
+  <line class="sk" x1="50" y1="10" x2="50" y2="190" />
+</svg>

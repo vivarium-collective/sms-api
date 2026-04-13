@@ -1,0 +1,889 @@
+from __future__ import annotations
+
+import asyncio
+import os
+import subprocess
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from sms_api.common import StrEnumBase
+
+if TYPE_CHECKING:
+    from rich.console import Console
+
+    from sms_api.common.storage.file_service_s3 import FileServiceS3
+
+import typer
+from typer import Argument, Option
+
+from app.app_data_service import get_data_service
+from app.cli_theme import display_json, get_console, print_banner, status_border, status_style
+from app.tui import AtlantisTUI
+
+
+class CliType(StrEnumBase):
+    SIMULATOR = "simulator"
+    SIMULATION = "simulation"
+    PARCA = "parca"
+    ANALYSIS = "analysis"
+    DEMO = "demo"
+    HELP = "help"
+    TUI = "tui"
+    GUI = "gui"
+    TKAPP = "tkapp"
+
+
+class ApiBaseUrl(StrEnumBase):
+    RKE_PROD = "https://sms.cam.uchc.edu"
+    RKE_DEV = "https://sms-dev.cam.uchc.edu"
+    LOCAL_8888 = "http://localhost:8888"
+    LOCAL_8000 = "http://localhost:8000"
+    LOCAL_1111 = "http://localhost:1111"
+    LOCAL_62505 = "http://localhost:62505"
+    LOCAL_8080 = "http://localhost:8080"
+
+
+API_BASE_URL = os.getenv("API_BASE_URL", ApiBaseUrl.LOCAL_8080)
+
+
+cli = typer.Typer(name="atlantis", help="SMS API CLI for managing vEcoli simulations, simulators, parca, and analyses.")
+simulator_cli = typer.Typer(help="Manage simulator (vEcoli) versions and builds.")
+simulation_cli = typer.Typer(help="Run and inspect simulation workflows.")
+parca_cli = typer.Typer(help="Inspect parca (parameter calculator) datasets and runs.")
+analysis_cli = typer.Typer(help="Inspect analysis jobs and outputs.")
+demo_cli = typer.Typer(help="Demo and utility commands.")
+tui_cli = typer.Typer(help="TUI's command line interface.")
+gui_cli = typer.Typer(help="GUI's command line interface.")
+tkapp_cli = typer.Typer(help="Tkinter desktop GUI.")
+
+cli.add_typer(simulator_cli, name="simulator")
+cli.add_typer(simulation_cli, name="simulation")
+cli.add_typer(parca_cli, name="parca")
+cli.add_typer(analysis_cli, name="analysis")
+cli.add_typer(demo_cli, name="demo")
+cli.add_typer(tui_cli)
+cli.add_typer(gui_cli)
+cli.add_typer(tkapp_cli)
+
+
+def main() -> None:
+    cli()
+
+
+# -- Info/Help --
+
+
+def _show_group_help(group_name: str) -> None:
+    """Print the banner then display help for *group_name* (a sub-typer)."""
+    import click
+
+    console = get_console()
+    print_banner(console)
+
+    cmd = typer.main.get_command(cli)
+    with click.Context(cmd) as ctx:
+        sub = cmd.get_command(ctx, group_name)  # type: ignore[attr-defined]
+        if sub is None:
+            print(f"Unknown command: {group_name}")
+            raise typer.Exit(1)
+        with click.Context(sub, parent=ctx) as sub_ctx:
+            print(sub.get_help(sub_ctx))
+
+
+@cli.command(name="help")
+def display_help(app: CliType | None = typer.Argument(default=None)) -> None:
+    """Show help for a specific subcommand, or the main CLI."""
+    import click
+
+    if app is not None:
+        _show_group_help(app.value)
+        return
+
+    console = get_console()
+    print_banner(console)
+    cmd = typer.main.get_command(cli)
+    with click.Context(cmd) as ctx:
+        print(cmd.get_help(ctx))
+
+
+# Register a "help" command on every sub-typer so that e.g.
+# `atlantis simulation help` works identically to `atlantis help simulation`.
+def _register_subgroup_help(sub_typer: typer.Typer, group_name: str) -> None:
+    @sub_typer.command(name="help", help=f"Show help for {group_name} commands.")
+    def _help() -> None:
+        _show_group_help(group_name)
+
+
+for _name, _sub in [
+    ("simulator", simulator_cli),
+    ("simulation", simulation_cli),
+    ("parca", parca_cli),
+    ("analysis", analysis_cli),
+    ("demo", demo_cli),
+]:
+    _register_subgroup_help(_sub, _name)
+# tui_cli / gui_cli are single-command typers added without a name (flattened),
+# so they don't need sub-group help — use `atlantis tui --help` instead.
+
+
+# -- Top-level App launch commands --
+
+
+@tui_cli.command(name="tui", help="Launch the interactive terminal UI.")
+def launch_tui(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    tui = AtlantisTUI(base_url=base_url)
+    tui.run()
+
+
+@gui_cli.command(name="gui", help="Launch the interactive graphical user interface.")
+def launch_gui(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    _ = subprocess.run(["uv", "run", "marimo", "edit", "app/gui.py", "--no-token"], capture_output=True, check=True)  # noqa: S603, S607
+
+
+# -- Simulator commands --
+
+
+@simulator_cli.command("latest", help="Fetch, upload, and build the latest simulator version from the default repo.")
+def simulator_latest(
+    repo_url: str | None = Option(default=None, help="Git repo URL. Defaults to the configured default repo."),
+    branch: str | None = Option(default=None, help="Git branch. Defaults to the configured default branch."),
+    force: bool = Option(default=False, help="Force rebuild even if a completed build exists."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import time
+
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+
+    # 1. Get latest commit
+    with console.status("[memphis.spinner]Fetching latest commit..."):
+        latest = data_service.submit_get_latest_simulator(repo_url=repo_url, branch=branch)
+    commit_info = f"({latest.git_repo_url} @ {latest.git_branch})"
+    console.print(f"[memphis.label]Commit:[/] {latest.git_commit_hash}  [memphis.dim]{commit_info}[/]")
+
+    # 2. Upload (triggers build if new, or force rebuild)
+    with console.status("[memphis.spinner]Uploading simulator..."):
+        uploaded = data_service.submit_upload_simulator(simulator=latest, force=force)
+    console.print(f"[memphis.label]Simulator ID:[/] {uploaded.database_id}")
+
+    # 3. Poll build status with live feedback
+    console.print("[memphis.info]Waiting for build...[/]")
+    poll_interval = 15
+    elapsed = 0
+    status = "running"
+    while status not in ("completed", "failed", "cancelled"):
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+        status = data_service.submit_get_simulator_build_status(simulator=uploaded)
+        console.print(f"  [{elapsed}s] status: [{status_style(status)}]{status}[/]")
+
+    console.print(
+        Panel(
+            f"[{status_style(status)}]{status.upper()}[/]",
+            title=f"Build — simulator {uploaded.database_id}",
+            border_style=status_border(status),
+        )
+    )
+    display_json(uploaded.model_dump(), console)
+
+
+@simulator_cli.command("list", help="List all registered simulator versions.")
+def simulator_list(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    simulators = data_service.show_simulators()
+    for sim in simulators:
+        display_json(sim.model_dump(), console)
+
+
+@simulator_cli.command("status", help="Get the container build status for a simulator by its database ID.")
+def simulator_status(
+    simulator_id: int = Argument(help="Simulator database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    hpcrun = data_service.submit_get_simulator_build_status_full(simulator_id=simulator_id)
+    s = hpcrun.status or "unknown"
+    console.print(
+        Panel(
+            f"[{status_style(s)}]{s.upper()}[/]",
+            title=f"Build — simulator {simulator_id}",
+            border_style=status_border(s),
+        )
+    )
+    if hpcrun.error_message:
+        console.print(f"[memphis.error]Error:[/] {hpcrun.error_message}")
+    display_json(hpcrun.model_dump(), console)
+
+
+# -- Simulation commands --
+
+
+@simulation_cli.command("run", help="Submit a simulation workflow (parca -> simulation -> analysis).")
+def simulation_run(
+    experiment_id: str = Argument(help="Unique experiment identifier."),
+    simulator_id: int = Argument(help="Database ID of the simulator to use."),
+    config_filename: str = Option(
+        default="api_simulation_default.json",
+        help="Config filename in vEcoli/configs/ on HPC. The server validates accepted values.",
+    ),
+    generations: int = Option(default=1, help="Number of generations to run per lineage (seed)."),
+    seeds: int = Option(default=3, help="Number of lineages (seeds)."),
+    description: str | None = Option(default=None, help="Custom description for this simulation run."),
+    run_parca: bool = Option(
+        default=False,
+        help="Run the parameter calculator before simulation. Increases overall runtime.",
+    ),
+    observables: str | None = Option(
+        default=None,
+        help="Comma-separated dot-path observables to record (e.g. 'bulk,listeners.mass.cell_mass'). "
+        "If omitted, all outputs are emitted.",
+    ),
+    analysis_options: str | None = Option(
+        default=None,
+        help='JSON string of analysis module overrides. E.g. \'{"multiseed": {"ptools_rna": {"n_tp": 10}}}\'.'
+        " If omitted, uses default analysis modules.",
+    ),
+    poll: bool = Option(default=False, help="Poll simulation status until completion."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import json as _json
+    import time
+
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    observables_list = [o.strip() for o in observables.split(",") if o.strip()] if observables else None
+    analysis_opts_parsed = _json.loads(analysis_options) if analysis_options else None
+
+    with console.status("[memphis.spinner]Submitting simulation..."):
+        simulation = data_service.run_workflow(
+            experiment_id=experiment_id,
+            simulator_id=simulator_id,
+            config_filename=config_filename,
+            num_generations=generations,
+            num_seeds=seeds,
+            description=description or f"sim{simulator_id}-{experiment_id}; {generations} Generations; {seeds} Seeds",
+            run_parameter_calculator=run_parca,
+            observables=observables_list,
+            analysis_options=analysis_opts_parsed,
+        )
+
+    console.print(f"[memphis.success]Simulation submitted![/]  ID: {simulation.database_id}")
+    display_json(simulation.model_dump(), console)
+
+    if not poll:
+        sim_id = simulation.database_id
+        console.print(f"\n[memphis.hint]Track progress:[/]  atlantis simulation status {sim_id}")
+        console.print(f"[memphis.hint]Download data:[/]   atlantis simulation outputs {sim_id} --dest ./debug")
+        return
+
+    # Poll until done
+    console.print("\n[memphis.info]Polling simulation status...[/]")
+    poll_interval = 30
+    elapsed = 0
+    status = "running"
+    run = None
+    while status not in ("completed", "failed", "cancelled", "unknown"):
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+        try:
+            run = data_service.get_workflow_status(simulation_id=simulation.database_id)
+            status = run.status.value
+        except Exception as e:
+            console.print(f"  [{elapsed}s] [memphis.error]error: {e}[/]")
+            continue
+        console.print(f"  [{elapsed}s] status: [{status_style(status)}]{status}[/]")
+
+    error_detail = f"\n{run.error_message}" if run and run.error_message else ""
+    console.print(
+        Panel(
+            f"[{status_style(status)}]{status.upper()}[/]{error_detail}",
+            title=f"Simulation {simulation.database_id}",
+            border_style=status_border(status),
+        )
+    )
+    if status == "completed":
+        console.print(
+            f"\n[memphis.hint]Download data:[/]  atlantis simulation outputs {simulation.database_id} --dest ./debug"
+        )
+
+
+@simulation_cli.command("get", help="Get a simulation by its database ID.")
+def simulation_get(
+    simulation_id: int = Argument(help="Simulation database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    simulation = data_service.get_workflow(simulation_id=simulation_id)
+    display_json(simulation.model_dump(), console)
+
+
+@simulation_cli.command("list", help="List all simulations.")
+def simulation_list(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    simulations = data_service.show_workflows()
+    for sim in simulations:
+        display_json(sim.model_dump(), console)
+
+
+@simulation_cli.command("status", help="Get the workflow log tail and status for a simulation.")
+def simulation_status(
+    simulation_id: int = Argument(help="Simulation database ID."),
+    poll: bool = Option(default=False, help="Poll until simulation completes."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import time
+
+    from sms_api.common.handlers.simulations import workflow_log
+
+    if not poll:
+        workflow_log(simulation_id=simulation_id, base_url=base_url)
+        return
+
+    # Poll until terminal state
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    console.print("[memphis.info]Polling...[/]")
+    poll_interval = 30
+    elapsed = 0
+    status = "running"
+    while status not in ("completed", "failed", "cancelled", "unknown"):
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+        try:
+            run = data_service.get_workflow_status(simulation_id=simulation_id)
+            status = run.status.value
+        except Exception as e:
+            console.print(f"  [{elapsed}s] [memphis.error]error: {e}[/]")
+            continue
+        console.print(f"  [{elapsed}s] status: [{status_style(status)}]{status}[/]")
+
+    workflow_log(simulation_id=simulation_id, base_url=base_url)
+
+
+@simulation_cli.command("cancel", help="Cancel a running simulation.")
+def simulation_cancel(
+    simulation_id: int = Argument(help="Simulation database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.cancel_workflow(simulation_id=simulation_id)
+    display_json(result.model_dump(), console)
+
+
+@simulation_cli.command("log", help="Show the Nextflow workflow log for a simulation.")
+def simulation_log(
+    simulation_id: int = Argument(help="Simulation database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    try:
+        log = data_service.get_workflow_log(simulation_id=simulation_id, truncate=False)
+        console.print(Panel(log, title=f"Workflow Log (sim {simulation_id})", border_style="memphis.border.info"))
+    except Exception as e:
+        console.print(f"[memphis.error]Error: {e}[/]")
+
+
+@simulation_cli.command("outputs", help="Download simulation output data as a tar.gz archive.")
+def simulation_outputs(
+    simulation_id: int = Argument(help="Simulation database ID."),
+    dest: str | None = Option(default=None, help="Destination directory. Defaults to ./simulation_id_<ID>."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    outdir = Path(dest) if dest is not None else Path(f"simulation_id_{simulation_id}")
+    archive_dir = asyncio.run(data_service.get_output_data(simulation_id=simulation_id, dest=outdir))
+    console.print(f"[memphis.success]Saved simulation outputs to:[/] {archive_dir!s}")
+
+
+@simulation_cli.command("analysis", help="Run standalone analysis on existing simulation output.")
+def simulation_analysis(
+    simulation_id: int = Argument(help="Simulation database ID (must be completed)."),
+    modules: str | None = Option(
+        default=None,
+        help='JSON string of analysis modules. E.g. \'{"multiseed": {"ptools_rna": {"n_tp": 10}}}\'.'
+        " If omitted, runs default ptools modules.",
+    ),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    try:
+        result = data_service.run_analysis(simulation_id=simulation_id, modules=modules)
+        console.print("[memphis.success]Analysis submitted![/]")
+        display_json(result, console)
+    except Exception as e:
+        console.print(f"[memphis.error]Error: {e}[/]")
+
+
+# -- Parca commands --
+
+
+@parca_cli.command("list", help="List all parca datasets.")
+def parca_list(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    datasets = data_service.get_parca_datasets()
+    for ds in datasets:
+        display_json(ds.model_dump(), console)
+
+
+@parca_cli.command("status", help="Get the status of a parca run by its database ID.")
+def parca_status(
+    parca_id: int = Argument(help="Parca dataset database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    status = data_service.get_parca_status(parca_id=parca_id)
+    display_json(status.model_dump(), console)
+
+
+# -- Analysis commands --
+
+
+@analysis_cli.command("get", help="Get an analysis spec by its database ID.")
+def analysis_get(
+    analysis_id: int = Argument(help="Analysis database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    analysis = data_service.get_analysis(analysis_id=analysis_id)
+    display_json(analysis.model_dump(), console)
+
+
+@analysis_cli.command("status", help="Get the status of an analysis run.")
+def analysis_status(
+    analysis_id: int = Argument(help="Analysis database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    status = data_service.get_analysis_status(analysis_id=analysis_id)
+    display_json(status.model_dump(), console)
+
+
+@analysis_cli.command("log", help="Get the log output of an analysis run.")
+def analysis_log(
+    analysis_id: int = Argument(help="Analysis database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    log = data_service.get_analysis_log(analysis_id=analysis_id)
+    console.print(Panel(log, title=f"Analysis Log ({analysis_id})", border_style="memphis.border.info"))
+
+
+@analysis_cli.command("plots", help="Get analysis plot outputs (HTML) for an analysis run.")
+def analysis_plots(
+    analysis_id: int = Argument(help="Analysis database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    plots = data_service.get_analysis_plots(analysis_id=analysis_id)
+    for plot in plots:
+        display_json(plot.model_dump(), console)
+
+
+# -- Demo commands --
+
+
+@demo_cli.command("get-data", help="Download S3 simulation outputs directly (mirrors test_outputs.py e2e test).")
+def demo_get_data(
+    dest: str = Option(default="./demo_outputs", help="Local destination directory for downloaded + extracted files."),
+) -> None:
+    """Download simulation output data directly from S3 — no running API server needed.
+
+    Replicates the exact flow from tests/api/ecoli/test_outputs.py:
+    1. Reads TEST_BUCKET_EXPERIMENT_OUTDIR from .dev_env to derive the experiment_id.
+    2. Initialises a real FileServiceS3 (uses AWS creds from env).
+    3. Calls the handler's _download_outputs_from_s3() to pull analyses/ + workflow_config.json.
+    4. Creates a tar.gz archive and extracts it locally.
+
+    Prerequisites:
+    - AWS credentials configured (AWS_ACCESS_KEY_ID etc. in .dev_env or environment)
+    - TEST_BUCKET_EXPERIMENT_OUTDIR set in .dev_env or environment
+    """
+    asyncio.run(_demo_get_data_async(dest))
+
+
+async def _download_s3_with_progress(
+    fs: FileServiceS3,
+    experiment_prefix: str,
+    local_cache: Path,
+    console: Console,
+) -> None:
+    """List, filter, and download S3 objects with a Rich progress bar."""
+    from sms_api.common.handlers.simulations import _ACCEPTED_ANALYSES_EXTENSIONS, _WORKFLOW_CONFIG_KEY
+    from sms_api.common.storage.file_paths import S3FilePath
+
+    # List files in S3
+    with console.status("[memphis.spinner]Listing S3 objects..."):
+        analyses_prefix = S3FilePath(s3_path=Path(f"{experiment_prefix}/analyses"))
+        analyses_listing = await fs.get_listing(analyses_prefix)
+
+    # Filter to accepted extensions
+    download_items: list[tuple[str, Path]] = []
+    for item in analyses_listing:
+        if not item.Key.endswith(_ACCEPTED_ANALYSES_EXTENSIONS):
+            continue
+        relative = Path(item.Key).relative_to(experiment_prefix)
+        local_file = local_cache / relative
+        if not local_file.exists():
+            download_items.append((item.Key, local_file))
+
+    # Add workflow_config.json
+    workflow_config_key = f"{experiment_prefix}/{_WORKFLOW_CONFIG_KEY}"
+    local_workflow_config = local_cache / _WORKFLOW_CONFIG_KEY
+    if not local_workflow_config.exists():
+        download_items.append((workflow_config_key, local_workflow_config))
+
+    # Download with progress bar
+    from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+
+    with Progress(
+        SpinnerColumn(style="memphis.spinner"),
+        TextColumn("[memphis.progress]{task.description}"),
+        BarColumn(bar_width=40, complete_style="bright_magenta", finished_style="bright_green"),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Downloading from S3", total=len(download_items))
+        for s3_key, local_file in download_items:
+            local_file.parent.mkdir(parents=True, exist_ok=True)
+            progress.update(task, description=f"[memphis.progress]{Path(s3_key).name}")
+            try:
+                await fs.download_file(S3FilePath(s3_path=Path(s3_key)), local_file)
+            except Exception:
+                if _WORKFLOW_CONFIG_KEY in s3_key:
+                    console.print("[memphis.dim]workflow_config.json not found, skipping[/]")
+                else:
+                    raise
+            progress.advance(task)
+
+
+async def _demo_get_data_async(dest: str) -> None:
+    import os
+    import tarfile
+    from urllib.parse import urlparse
+
+    from rich.panel import Panel
+    from rich.tree import Tree
+
+    console = get_console()
+
+    # 1. Derive experiment_id from TEST_BUCKET_EXPERIMENT_OUTDIR (same as test_outputs.py)
+    test_outdir = os.environ.get("TEST_BUCKET_EXPERIMENT_OUTDIR", "")
+    if not test_outdir:
+        console.print(
+            "[memphis.error]TEST_BUCKET_EXPERIMENT_OUTDIR is not set.[/]\n"
+            "[memphis.dim]Set it in assets/dev/config/.dev_env or your environment, e.g.:\n"
+            "  TEST_BUCKET_EXPERIMENT_OUTDIR=s3://bucket/prefix/experiment_id/[/]"
+        )
+        raise typer.Exit(1)
+
+    experiment_id = urlparse(test_outdir).path.strip("/").rsplit("/", 1)[-1]
+    console.print(f"[memphis.info]Experiment ID:[/] {experiment_id}")
+    console.print(f"[memphis.dim]Source: {test_outdir}[/]\n")
+
+    # 2. Initialise FileServiceS3 and wire into global deps
+    from sms_api.common.storage.file_service_s3 import FileServiceS3
+    from sms_api.config import get_settings
+    from sms_api.dependencies import get_file_service, set_file_service
+
+    settings = get_settings()
+    if not settings.storage_s3_bucket or not settings.storage_s3_region:
+        console.print("[memphis.error]S3 settings (STORAGE_S3_BUCKET, STORAGE_S3_REGION) not configured.[/]")
+        raise typer.Exit(1)
+
+    console.print(f"[memphis.info]S3 bucket:[/] {settings.storage_s3_bucket}")
+    console.print(f"[memphis.info]S3 region:[/] {settings.storage_s3_region}")
+    console.print(f"[memphis.info]Output prefix:[/] {settings.s3_output_prefix}\n")
+
+    saved_fs = get_file_service()
+    fs = FileServiceS3()
+    set_file_service(fs)
+
+    try:
+        dest_path = Path(dest).resolve()
+        local_cache = dest_path / experiment_id
+        local_cache.mkdir(parents=True, exist_ok=True)
+
+        experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}"
+        await _download_s3_with_progress(fs, experiment_prefix, local_cache, console)
+
+        # 3. Verify what we got
+        real_files = [f for f in local_cache.rglob("*") if f.is_file()]
+        if not real_files:
+            console.print(f"[memphis.error]No files downloaded for experiment '{experiment_id}'.[/]")
+            console.print("[memphis.dim]Check that TEST_BUCKET_EXPERIMENT_OUTDIR points to valid simulation output.[/]")
+            raise typer.Exit(1)
+
+        tsv_count = sum(1 for f in real_files if f.suffix == ".tsv")
+        json_count = sum(1 for f in real_files if f.suffix == ".json")
+
+        # 4. Create tar.gz archive (same as the test's artifact saving)
+        archive_path = dest_path / f"{experiment_id}.tar.gz"
+        with (
+            console.status("[memphis.spinner]Creating archive..."),
+            tarfile.open(archive_path, "w:gz") as tar,
+        ):
+            tar.add(str(local_cache), arcname=experiment_id)
+
+        # 5. Report
+        tree = Tree(f"[memphis.label]{experiment_id}/[/]")
+        tree.add(f"[memphis.success]{tsv_count}[/] .tsv files")
+        tree.add(f"[memphis.info]{json_count}[/] .json files")
+        tree.add(f"[memphis.dim]{len(real_files)} total files[/]")
+        console.print(Panel(tree, title="Download Complete", border_style="memphis.border.success"))
+        console.print(f"[memphis.success]Extracted to:[/]  {local_cache}")
+        console.print(f"[memphis.success]Archive saved:[/] {archive_path}")
+
+    finally:
+        await fs.close()
+        set_file_service(saved_fs)
+
+
+def fonts(txt: str, color: str = "bold spring_green3") -> None:
+    """Browse all RichFiglet fonts with a given text string."""
+    import typing
+
+    import rich_pyfiglet
+
+    hints = typing.get_type_hints(rich_pyfiglet.RichFiglet.__init__)
+    font_type = hints.get("font")
+    font_names = typing.get_args(font_type)
+    for font_name in font_names:
+        console = get_console()
+        a = rich_pyfiglet.RichFiglet("atlantis", font=font_name, colors=["purple"])
+        console.print(f"[memphis.running]=== FONT: {font_name} ===[/]")
+        console.print(a)
+        print()
+
+
+def draw_ecoli(
+    width: int = 160,
+    height: int = 80,
+    cell_color: tuple[int, ...] = (120, 195, 130),
+    show_panel: bool = True,
+) -> None:
+    """Draw a biologically accurate E. coli cell via rich-pixels."""
+    import math
+    import random
+
+    from PIL import Image, ImageDraw, ImageFilter
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich_pixels import Pixels
+
+    console = Console()
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    cx = width // 2
+    cy = height // 2
+
+    # ── Proportions (all relative to canvas) ─────────────────────────────────
+    body_rx = int(width * 0.38)  # half-length of cell body
+    body_ry = int(height * 0.30)  # half-width of cell body
+    margin_x = cx - body_rx
+    margin_y = cy - body_ry
+
+    # Color palette — biologically inspired greens
+    capsule_col = (*cell_color[:3], 28)  # very faint halo
+    outer_mem_col = tuple(max(0, c - 30) for c in cell_color)  # darker rim
+    peri_col = tuple(min(255, c + 40) for c in cell_color)  # lighter band
+    cytoplasm_col = cell_color
+    nucleoid_col = (50, 120, 70)
+    ribosome_col = (80, 160, 95)
+    flagella_col = (60, 130, 75)
+    pili_col = (90, 150, 100)
+
+    # ── 1. Capsule (polysaccharide halo) ─────────────────────────────────────
+    cap_pad = 6
+    draw.ellipse(
+        [margin_x - cap_pad, margin_y - cap_pad, margin_x + body_rx * 2 + cap_pad, margin_y + body_ry * 2 + cap_pad],
+        fill=capsule_col,
+    )
+
+    # ── 2. Outer membrane (outermost solid layer) ─────────────────────────────
+    draw.ellipse(
+        [margin_x, margin_y, margin_x + body_rx * 2, margin_y + body_ry * 2],
+        fill=outer_mem_col,
+    )
+
+    # ── 3. Periplasmic space (lighter band just inside outer membrane) ────────
+    peri_shrink = max(3, int(body_ry * 0.18))
+    draw.ellipse(
+        [
+            margin_x + peri_shrink,
+            margin_y + peri_shrink,
+            margin_x + body_rx * 2 - peri_shrink,
+            margin_y + body_ry * 2 - peri_shrink,
+        ],
+        fill=peri_col,
+    )
+
+    # ── 4. Inner membrane + cytoplasm ─────────────────────────────────────────
+    inner_shrink = peri_shrink + max(2, int(body_ry * 0.12))
+    draw.ellipse(
+        [
+            margin_x + inner_shrink,
+            margin_y + inner_shrink,
+            margin_x + body_rx * 2 - inner_shrink,
+            margin_y + body_ry * 2 - inner_shrink,
+        ],
+        fill=cytoplasm_col,
+    )
+
+    # ── 5. Nucleoid — irregular blob center (compacted DNA mass) ─────────────
+    # Approximated as overlapping ellipses to look organic
+    n_cx, n_cy = cx, cy
+    n_rx = int(body_rx * 0.38)
+    n_ry = int(body_ry * 0.52)
+    for dx, dy, rx_frac, ry_frac in [
+        (0, 0, 1.0, 1.0),
+        (int(n_rx * 0.3), int(n_ry * 0.2), 0.7, 0.6),
+        (-int(n_rx * 0.3), -int(n_ry * 0.2), 0.65, 0.55),
+    ]:
+        draw.ellipse(
+            [
+                n_cx + dx - int(n_rx * rx_frac),
+                n_cy + dy - int(n_ry * ry_frac),
+                n_cx + dx + int(n_rx * rx_frac),
+                n_cy + dy + int(n_ry * ry_frac),
+            ],
+            fill=nucleoid_col,
+        )
+
+    # ── 6. Ribosomes — tiny dots scattered in cytoplasm ──────────────────────
+    rng = random.Random(42)  # fixed seed → deterministic layout
+    r_dot = max(1, int(min(width, height) * 0.018))
+    attempts = 0
+    placed = 0
+    while placed < 28 and attempts < 400:
+        attempts += 1
+        # Sample inside the inner membrane ellipse
+        angle = rng.uniform(0, 2 * math.pi)
+        rad = rng.uniform(0.1, 0.82)
+        rx = int((body_rx - inner_shrink - r_dot) * rad)
+        ry = int((body_ry - inner_shrink - r_dot) * rad)
+        px = cx + int(rx * math.cos(angle))
+        py = cy + int(ry * math.sin(angle))
+        # Skip if too close to nucleoid center
+        dist_nuc = math.sqrt(((px - n_cx) / n_rx) ** 2 + ((py - n_cy) / n_ry) ** 2)
+        if dist_nuc < 1.05:
+            continue
+        draw.ellipse([px - r_dot, py - r_dot, px + r_dot, py + r_dot], fill=ribosome_col)
+        placed += 1
+
+    # ── 7. Pili / fimbriae — short thin projections around perimeter ──────────
+    pili_count = 14
+    pili_len = max(4, int(body_ry * 0.35))
+    for i in range(pili_count):
+        angle = (2 * math.pi * i / pili_count) + 0.15
+        # Point on the outer membrane ellipse surface
+        sx = cx + int(body_rx * math.cos(angle))
+        sy = cy + int(body_ry * math.sin(angle))
+        ex = cx + int((body_rx + pili_len) * math.cos(angle))
+        ey = cy + int((body_ry + pili_len) * math.sin(angle))
+        draw.line([(sx, sy), (ex, ey)], fill=pili_col, width=1)
+
+    # ── 8. Peritrichous flagella — long wavy filaments all around cell ────────
+    flagella_specs = [
+        # (start_angle_frac, wave_amp, wave_freq, length, direction)
+        (0.00, 0.18, 2.8, 0.52, 1),
+        (0.12, -0.16, 3.2, 0.48, -1),
+        (0.25, 0.20, 2.5, 0.55, 1),
+        (0.38, -0.18, 3.0, 0.50, -1),
+        (0.50, 0.15, 2.7, 0.52, 1),
+        (0.62, -0.20, 3.1, 0.46, -1),
+        (0.75, 0.17, 2.9, 0.54, 1),
+        (0.88, -0.15, 3.3, 0.48, -1),
+    ]
+    f_thick = max(1, int(min(width, height) * 0.015))
+    for angle_frac, amp_frac, freq, length_frac, direction in flagella_specs:
+        base_angle = 2 * math.pi * angle_frac
+        # Start at outer membrane surface
+        sx = cx + int(body_rx * math.cos(base_angle))
+        sy = cy + int(body_ry * math.sin(base_angle))
+
+        f_len = int(min(width, height) * length_frac)
+        amp = int(min(width, height) * abs(amp_frac))
+        steps = 32
+        points = [(sx, sy)]
+
+        # Outward direction vector (perpendicular to cell surface normal → away)
+        out_dx = math.cos(base_angle)
+        out_dy = math.sin(base_angle)
+        # Perpendicular (tangent) for the wave oscillation
+        perp_dx = -math.sin(base_angle)
+        perp_dy = math.cos(base_angle)
+
+        for s in range(1, steps + 1):
+            t = s / steps
+            dist = f_len * t
+            wave = amp * math.sin(freq * 2 * math.pi * t) * direction
+            px = sx + int(out_dx * dist + perp_dx * wave)
+            py = sy + int(out_dy * dist + perp_dy * wave)
+            points.append((px, py))
+
+        # Draw as polyline segments
+        for k in range(len(points) - 1):
+            draw.line([points[k], points[k + 1]], fill=flagella_col, width=f_thick)
+
+    # ── 9. Slight soft-edge on the whole image (anti-alias feel) ─────────────
+    img = img.filter(ImageFilter.SMOOTH_MORE)
+    img = img.filter(ImageFilter.SMOOTH)
+
+    # ── Render ────────────────────────────────────────────────────────────────
+    pixels = Pixels.from_image(img)
+
+    if show_panel:
+        console.print(
+            Panel(
+                pixels,
+                title="[bold green]E. coli[/bold green]",
+                subtitle="[dim]Escherichia coli · rod-shaped bacterium[/dim]",
+                border_style="green",
+                padding=(0, 1),
+            )
+        )
+    else:
+        console.print(pixels)
+
+
+# atlantis simulation run test-cli-baseline-seeds1000-generations10 11 --generations 10 --seeds 1000 --base-url http://localhost:8080
+
+
+if __name__ == "__main__":
+    main()

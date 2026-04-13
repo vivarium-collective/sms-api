@@ -21,6 +21,8 @@ import uuid
 import pytest
 
 from sms_api.common.handlers import simulations
+from sms_api.common.hpc.job_service import JobStatusInfo
+from sms_api.common.models import JobId, JobStatus, SSHTarget
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseServiceSQL
@@ -61,7 +63,7 @@ async def _check_repo_exists(commit_hash: str) -> bool:
     settings = get_settings()
     repo_path = settings.hpc_repo_base_path.remote_path / commit_hash / "vEcoli"
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -d {repo_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
         return "EXISTS" in result
@@ -70,7 +72,7 @@ async def _check_repo_exists(commit_hash: str) -> bool:
 async def _check_image_exists(simulator: SimulatorVersion) -> bool:
     """Check if the singularity image already exists on HPC."""
     image_path = get_apptainer_image_file(simulator)
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -f {image_path.remote_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
         return "EXISTS" in result
@@ -81,7 +83,7 @@ async def _check_config_exists(commit_hash: str, config_filename: str) -> bool:
     settings = get_settings()
     config_path = settings.hpc_repo_base_path.remote_path / commit_hash / "vEcoli" / "configs" / config_filename
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -f {config_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
         return "EXISTS" in result
@@ -111,29 +113,32 @@ async def _ensure_prerequisites(
     if not repo_exists or not image_exists:
         print(f"\nBuilding repo and image for {repo_info.commit_hash}...")
 
-        async with get_ssh_session_service().session() as ssh:
-            job_id = await simulation_service.submit_build_image_job(simulator_version=simulator, ssh=ssh)
-            assert job_id is not None, "Failed to submit build job"
+        job_id = await simulation_service.submit_build_image_job(simulator_version=simulator)
+        assert job_id is not None, "Failed to submit build job"
 
-            print(f"  Submitted build job {job_id}")
+        print(f"  Submitted build job {job_id}")
 
-            # Poll for completion (30 minute timeout)
-            start_time = time.time()
-            slurm_job = None
-            while start_time + 1800 > time.time():
-                slurm_job = await simulation_service.get_slurm_job_status(slurmjobid=job_id, ssh=ssh)
-                if slurm_job is not None and slurm_job.is_done():
-                    break
-                elapsed = int(time.time() - start_time)
-                if elapsed % 60 == 0:
-                    print(f"  Build job {job_id} running... ({elapsed}s elapsed)")
-                await asyncio.sleep(10)
+        # Poll for completion (30 minute timeout)
+        start_time = time.time()
+        job_info: JobStatusInfo | None = None
+        while start_time + 1800 > time.time():
+            job_info = await simulation_service.get_job_status(job_id=job_id)
+            if job_info is not None and job_info.status in (
+                JobStatus.COMPLETED,
+                JobStatus.FAILED,
+                JobStatus.CANCELLED,
+            ):
+                break
+            elapsed = int(time.time() - start_time)
+            if elapsed % 60 == 0:
+                print(f"  Build job {job_id} running... ({elapsed}s elapsed)")
+            await asyncio.sleep(10)
 
-            assert slurm_job is not None, "Build job did not complete in time"
-            assert slurm_job.job_state.upper() == "COMPLETED", (
-                f"Build job failed with state: {slurm_job.job_state}, exit code: {slurm_job.exit_code}"
-            )
-            print(f"  Build job {job_id} completed successfully")
+        assert job_info is not None, "Build job did not complete in time"
+        assert job_info.status == JobStatus.COMPLETED, (
+            f"Build job failed with status: {job_info.status}, exit code: {job_info.exit_code}"
+        )
+        print(f"  Build job {job_id} completed successfully")
 
     # Check config exists
     config_exists = await _check_config_exists(repo_info.commit_hash, CONFIG_FILENAME)
@@ -203,35 +208,35 @@ async def test_run_workflow_simple(
     max_wait_seconds = 7200  # 2 hour timeout
     poll_interval = 30
 
-    async with get_ssh_session_service().session() as ssh:
-        while time.time() - start_time < max_wait_seconds:
-            slurm_job = await simulation_service_slurm.get_slurm_job_status(slurmjobid=simulation.job_id, ssh=ssh)
+    job_info: JobStatusInfo | None = None
+    while time.time() - start_time < max_wait_seconds:
+        job_info = await simulation_service_slurm.get_job_status(job_id=JobId.slurm(int(simulation.job_id)))
 
-            if slurm_job is not None:
-                elapsed = int(time.time() - start_time)
-                if slurm_job.is_done():
-                    print(f"\n  Job {simulation.job_id} completed after {elapsed}s")
-                    print(f"  State: {slurm_job.job_state}")
-                    print(f"  Exit code: {slurm_job.exit_code}")
-                    break
-                elif elapsed % 60 == 0:
-                    print(f"  Job {simulation.job_id} status: {slurm_job.job_state} ({elapsed}s elapsed)")
+        if job_info is not None:
+            elapsed = int(time.time() - start_time)
+            if job_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+                print(f"\n  Job {simulation.job_id} completed after {elapsed}s")
+                print(f"  Status: {job_info.status}")
+                print(f"  Exit code: {job_info.exit_code}")
+                break
+            elif elapsed % 60 == 0:
+                print(f"  Job {simulation.job_id} status: {job_info.status} ({elapsed}s elapsed)")
 
-            await asyncio.sleep(poll_interval)
-        else:
-            pytest.fail(f"Workflow job {simulation.job_id} did not complete within {max_wait_seconds}s")
+        await asyncio.sleep(poll_interval)
+    else:
+        pytest.fail(f"Workflow job {simulation.job_id} did not complete within {max_wait_seconds}s")
 
     # Verify job completed successfully
-    assert slurm_job is not None, "Should have final job status"
-    assert slurm_job.job_state.upper() == "COMPLETED", (
-        f"Workflow should complete successfully. State: {slurm_job.job_state}, Exit code: {slurm_job.exit_code}"
+    assert job_info is not None, "Should have final job status"
+    assert job_info.status == JobStatus.COMPLETED, (
+        f"Workflow should complete successfully. Status: {job_info.status}, Exit code: {job_info.exit_code}"
     )
 
     # Verify simulation output exists
     settings = get_settings()
     output_path = settings.simulation_outdir.remote_path / experiment_id
 
-    async with get_ssh_session_service().session() as ssh:
+    async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
         check_cmd = f"test -d {output_path} && echo 'EXISTS' || echo 'MISSING'"
         _, result, _ = await ssh.run_command(check_cmd)
 
