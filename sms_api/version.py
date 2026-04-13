@@ -9,4 +9,5 @@
 # 0.7.0 — Atlantis CLI, AWS Batch backend, PCS/SLURM/FSx removal, ComputeBackend enum
 # 0.7.1 — fix public_mode default, stale secret ARN, enforce run_parca on Batch
 # 0.7.2 — config template fallback for public vEcoli repo, kustomize tag sync, RKE DB migration
-__version__ = "0.7.2"
+# 0.7.3 — generation range and seed filtering for ptools analysis endpoint
+__version__ = "0.7.3"
