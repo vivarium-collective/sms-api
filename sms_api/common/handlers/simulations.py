@@ -267,6 +267,26 @@ async def run_simulation_workflow(  # noqa: C901
     config_str = config_str.replace("SIMULATOR_IMAGE_PATH_PLACEHOLDER", str(image_path))
     config_data = json.loads(config_str)
 
+    # 3b. Ensure required fields exist (vanilla vEcoli configs may lack API placeholders)
+    config_data.setdefault("experiment_id", unique_experiment_id)
+    if config_data.get("experiment_id") is None:
+        config_data["experiment_id"] = unique_experiment_id
+    config_data.setdefault("emitter", "parquet")
+    config_data.setdefault("emitter_arg", {})
+    # Always ensure emitter_arg.out_dir points to the HPC output path (vanilla configs use relative "out")
+    if config_data.get("emitter_arg", {}).get("out_dir") in (None, "", "out"):
+        config_data["emitter_arg"]["out_dir"] = str(settings.hpc_sim_base_path)
+    config_data.setdefault("analysis_options", {"multiseed": {}})
+    config_data.setdefault("single_daughters", True)
+    config_data.setdefault("suffix_time", False)
+    # Ensure parca_options.outdir points to HPC path (vanilla configs use relative "out")
+    if "parca_options" in config_data:
+        parca_outdir = config_data["parca_options"].get("outdir", "")
+        if not parca_outdir or parca_outdir == "out":
+            config_data["parca_options"]["outdir"] = str(settings.hpc_sim_base_path)
+    else:
+        config_data["parca_options"] = {"outdir": str(settings.hpc_sim_base_path), "cpus": 6}
+
     # 4. Override config values if provided
     if num_generations is not None:
         config_data["generations"] = num_generations
@@ -299,9 +319,27 @@ async def run_simulation_workflow(  # noqa: C901
             # Set local path for cached simData — the K8s job command will download
             # from S3 to this path before workflow.py runs (vEcoli only accepts local paths)
             config_data["sim_data_path"] = "/tmp/simData.cPickle"  # noqa: S108
-    elif not run_parca:
-        # SLURM: use cached simData from HPC filesystem
-        config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
+    else:
+        # SLURM path: replace K8s-specific sections with SLURM equivalents.
+        # The ccam Nextflow profile only exists in the fork (api-support branch)
+        # and the private repo — not in the public CovertLab/vEcoli repo.
+        config_data.pop("aws_cdk", None)
+        config_data.pop("aws", None)
+        _ccam_repos = {RepoUrl.VECOLI_FORK_REPO_URL, RepoUrl.VECOLI_PRIVATE_REPO_URL}
+        if simulator.git_repo_url not in _ccam_repos:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Simulator {simulator.database_id} ({simulator.git_repo_url} @ {simulator.git_branch}) "
+                    f"cannot run on SLURM — the ccam Nextflow profile is only available in the fork "
+                    f"(vivarium-collective/vEcoli @ api-support) or the private repo. "
+                    f"Build a simulator from one of those repos, or use the stanford-test (K8s) backend."
+                ),
+            )
+        image_path_str = str(get_settings().hpc_image_base_path / f"vecoli-{simulator.git_commit_hash}.sif")
+        config_data["ccam"] = {"build_image": False, "container_image": image_path_str}
+        if not run_parca:
+            config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
 
     # Default analysis modules depend on the simulator's source repo:
     # cd1_* modules only exist in the private vEcoli repo, so public-repo
@@ -322,6 +360,9 @@ async def run_simulation_workflow(  # noqa: C901
         specified_analyses = {"multiseed": {}}
 
     config_data["analysis_options"] = specified_analyses
+    # The fork repo's workflow.py expects analysis_options.memory_gb
+    if simulator.git_repo_url == RepoUrl.VECOLI_FORK_REPO_URL:
+        config_data["analysis_options"].setdefault("memory_gb", 3)
     config = SimulationConfig(**config_data)
 
     # 5. Create placeholder parca dataset entry

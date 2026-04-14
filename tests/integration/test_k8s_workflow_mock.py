@@ -255,13 +255,14 @@ async def test_analysis_options_default_public_repo(
     )
     simulation_service_k8s_mock.read_config_template = AsyncMock(return_value=CONFIG_TEMPLATE)  # type: ignore[method-assign]
 
-    await sim_handlers.run_simulation_workflow(
-        database_service=database_service,
-        simulation_service=simulation_service_k8s_mock,
-        simulator_id=simulator.database_id,
-        experiment_id="public-repo-analysis",
-        simulation_config_filename="api_simulation_default.json",
-    )
+    with patch("sms_api.common.handlers.simulations.get_job_backend", return_value=ComputeBackend.BATCH):
+        await sim_handlers.run_simulation_workflow(
+            database_service=database_service,
+            simulation_service=simulation_service_k8s_mock,
+            simulator_id=simulator.database_id,
+            experiment_id="public-repo-analysis",
+            simulation_config_filename="api_simulation_default.json",
+        )
 
     configmap = mock_k8s_job_service.create_configmap.call_args[0][0]
     config_data = json.loads(configmap.data["workflow.json"])
@@ -404,14 +405,15 @@ async def test_analysis_options_validation_accepts_valid_module(
     simulation_service_k8s_mock.discover_repo_contents = AsyncMock(return_value=discovery)  # type: ignore[method-assign]
 
     valid_analyses = AnalysisOptions.model_validate({"multiseed": {"ptools_rna": {"n_tp": 10}}})
-    simulation = await sim_handlers.run_simulation_workflow(
-        database_service=database_service,
-        simulation_service=simulation_service_k8s_mock,
-        simulator_id=simulator.database_id,
-        experiment_id="valid-module-test",
-        simulation_config_filename="api_simulation_default.json",
-        analysis_options=valid_analyses,
-    )
+    with patch("sms_api.common.handlers.simulations.get_job_backend", return_value=ComputeBackend.BATCH):
+        simulation = await sim_handlers.run_simulation_workflow(
+            database_service=database_service,
+            simulation_service=simulation_service_k8s_mock,
+            simulator_id=simulator.database_id,
+            experiment_id="valid-module-test",
+            simulation_config_filename="api_simulation_default.json",
+            analysis_options=valid_analyses,
+        )
     assert simulation.database_id is not None
 
 
@@ -434,13 +436,14 @@ async def test_discovery_failure_does_not_block_workflow(
     simulation_service_k8s_mock.discover_repo_contents = AsyncMock(side_effect=RuntimeError("GitHub API down"))  # type: ignore[method-assign]
 
     user_analyses = AnalysisOptions.model_validate({"multiseed": {"anything": {}}})
-    simulation = await sim_handlers.run_simulation_workflow(
-        database_service=database_service,
-        simulation_service=simulation_service_k8s_mock,
-        simulator_id=simulator.database_id,
-        experiment_id="discovery-fail-test",
-        simulation_config_filename="api_simulation_default.json",
-        analysis_options=user_analyses,
-    )
+    with patch("sms_api.common.handlers.simulations.get_job_backend", return_value=ComputeBackend.BATCH):
+        simulation = await sim_handlers.run_simulation_workflow(
+            database_service=database_service,
+            simulation_service=simulation_service_k8s_mock,
+            simulator_id=simulator.database_id,
+            experiment_id="discovery-fail-test",
+            simulation_config_filename="api_simulation_default.json",
+            analysis_options=user_analyses,
+        )
     # Should succeed despite discovery failure
     assert simulation.database_id is not None
