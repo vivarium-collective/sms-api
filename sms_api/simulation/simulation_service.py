@@ -460,6 +460,8 @@ class SimulationServiceHpc(SimulationService):
 
     @override
     async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
+        from sms_api.simulation.simulation_service_k8s import _DEFAULT_CONFIG_TEMPLATE
+
         settings = get_settings()
         remote_config_path = (
             settings.hpc_repo_base_path.remote_path
@@ -471,7 +473,14 @@ class SimulationServiceHpc(SimulationService):
         async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
             if returncode != 0:
-                raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
+                # Config not found in repo — fall back to embedded API template
+                # (same behavior as K8s backend for public repos without api_* configs)
+                logger.warning(
+                    "Config %s not found at %s — using embedded default template",
+                    config_filename,
+                    remote_config_path,
+                )
+                return json.dumps(_DEFAULT_CONFIG_TEMPLATE)
         return stdout
 
     @override
