@@ -44,13 +44,13 @@ the platform. It supports all workflow steps as subcommands:
    uv run atlantis simulation run ...     # Run
    uv run atlantis simulation outputs ... # Download
 
-Use ``--help`` on any command or subcommand for details:
+Use ``help`` as a trailing word on any command (equivalent to ``--help``):
 
 .. code-block:: bash
 
    uv run atlantis help
-   uv run atlantis help simulation
    uv run atlantis simulation help
+   uv run atlantis simulation run help
 
 See :doc:`cli-reference` for the full command reference.
 

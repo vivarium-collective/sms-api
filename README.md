@@ -10,7 +10,7 @@
 [![Documentation](https://img.shields.io/badge/documentation-online-blue.svg)](https://sms-api.readthedocs.io/en/latest/)
 
 <p align="center">
-  <img src="https://github.com/vivarium-collective/sms-api/blob/main/documentation/source/_static/wholecellecoli.png?raw=true" width="400" />
+  <img src="https://github.com/vivarium-collective/sms-api/blob/main/docs/source/_static/wholecellecoli.png?raw=true" width="400" />
 </p>
 
 - **Github repository**: <https://github.com/vivarium-collective/sms-api/>
@@ -28,17 +28,24 @@ The vEcoli documentation is very well written and we highly recommend that users
 # Install
 uv sync
 
-# Build a simulator
-uv run atlantis simulator latest --repo-url https://github.com/CovertLabEcoli/vEcoli-private --branch master
+# Build a simulator (public vEcoli repo)
+uv run atlantis simulator latest --repo-url https://github.com/CovertLab/vEcoli --branch master
+
+# Discover available configs and analysis modules for your simulator
+uv run atlantis simulation configs 16
+uv run atlantis simulation analyses 16
 
 # Run a simulation (1 generation, 1 seed)
-uv run atlantis simulation run my-experiment 11 --generations 1 --seeds 1 --poll
+uv run atlantis simulation run my-experiment 16 --generations 1 --seeds 1 --poll
 
 # Check status (fast — shows log tail + status)
 uv run atlantis simulation status 37
 
 # Download outputs
 uv run atlantis simulation outputs 37 --dest ./results
+
+# Help works at any nesting level
+uv run atlantis simulation run help
 ```
 
 ## Three Client Interfaces
