@@ -20,7 +20,7 @@ from sms_api.common import StrEnumBase
 from sms_api.common.handlers.simulators import upload_simulator
 from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.models import JobBackend, JobStatus, SSHTarget
-from sms_api.common.simulator_defaults import DEFAULT_OBSERVABLES
+from sms_api.common.simulator_defaults import DEFAULT_OBSERVABLES, RepoUrl
 from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
 from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_file_service, get_simulation_service, get_ssh_session_service
@@ -264,17 +264,23 @@ async def run_simulation_workflow(  # noqa: C901
         # SLURM: use cached simData from HPC filesystem
         config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
 
-    specified_analyses = {
-        "multiseed": {
-            "cd1_metabolomics": {"generation_lower_bound": 5},
-            "cd1_transcriptomics": {"generation_lower_bound": 5},
-            "cd1_higher_order_properties": {"generation_lower_bound": 5},
-            "cd1_fluxomics": {"generation_lower_bound": 5},
-            "cd1_proteomics": {"generation_lower_bound": 5},
-        }
-    }
+    # Default analysis modules depend on the simulator's source repo:
+    # cd1_* modules only exist in the private vEcoli repo, so public-repo
+    # simulators get an empty default that users can override via --analysis-options.
     if analysis_options is not None:
         specified_analyses = analysis_options.model_dump()
+    elif simulator.git_repo_url == RepoUrl.VECOLI_PRIVATE_REPO_URL:
+        specified_analyses = {
+            "multiseed": {
+                "cd1_metabolomics": {"generation_lower_bound": 5},
+                "cd1_transcriptomics": {"generation_lower_bound": 5},
+                "cd1_higher_order_properties": {"generation_lower_bound": 5},
+                "cd1_fluxomics": {"generation_lower_bound": 5},
+                "cd1_proteomics": {"generation_lower_bound": 5},
+            }
+        }
+    else:
+        specified_analyses = {"multiseed": {}}
 
     config_data["analysis_options"] = specified_analyses
     config = SimulationConfig(**config_data)

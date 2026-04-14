@@ -18,9 +18,11 @@ import pytest
 from sms_api.common.handlers import simulations as sim_handlers
 from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.models import JobId, JobStatus
+from sms_api.common.simulator_defaults import RepoUrl
 from sms_api.config import ComputeBackend
 from sms_api.simulation.database_service import DatabaseServiceSQL
 from sms_api.simulation.models import (
+    AnalysisOptions,
     ParcaDatasetRequest,
     ParcaOptions,
     SimulatorVersion,
@@ -232,3 +234,100 @@ async def test_k8s_workflow_config_contents(
     # Verify placeholders were replaced
     assert "EXPERIMENT_ID_PLACEHOLDER" not in config_data["experiment_id"]
     assert "k8s-config-test" in config_data["experiment_id"]
+
+
+@pytest.mark.asyncio
+async def test_analysis_options_default_public_repo(
+    database_service: DatabaseServiceSQL,
+    simulation_service_k8s_mock: SimulationServiceK8s,
+    mock_k8s_job_service: MagicMock,
+) -> None:
+    """Public-repo simulators should NOT get cd1_* analysis defaults."""
+    simulator = await database_service.insert_simulator(
+        git_commit_hash="abc1234",
+        git_repo_url=RepoUrl.VECOLI_PUBLIC_REPO_URL,
+        git_branch="master",
+    )
+    await database_service.insert_parca_dataset(
+        parca_dataset_request=ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
+    )
+    simulation_service_k8s_mock.read_config_template = AsyncMock(return_value=CONFIG_TEMPLATE)  # type: ignore[method-assign]
+
+    await sim_handlers.run_simulation_workflow(
+        database_service=database_service,
+        simulation_service=simulation_service_k8s_mock,
+        simulator_id=simulator.database_id,
+        experiment_id="public-repo-analysis",
+        simulation_config_filename="api_simulation_default.json",
+    )
+
+    configmap = mock_k8s_job_service.create_configmap.call_args[0][0]
+    config_data = json.loads(configmap.data["workflow.json"])
+    analysis = config_data["analysis_options"]
+    assert "multiseed" in analysis
+    assert not any(k.startswith("cd1_") for k in analysis.get("multiseed", {}))
+
+
+@pytest.mark.asyncio
+async def test_analysis_options_default_private_repo(
+    database_service: DatabaseServiceSQL,
+    simulation_service_k8s_mock: SimulationServiceK8s,
+    mock_k8s_job_service: MagicMock,
+) -> None:
+    """Private-repo simulators should get cd1_* analysis defaults."""
+    simulator = await database_service.insert_simulator(
+        git_commit_hash="def5678",
+        git_repo_url=RepoUrl.VECOLI_PRIVATE_REPO_URL,
+        git_branch="master",
+    )
+    await database_service.insert_parca_dataset(
+        parca_dataset_request=ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
+    )
+    simulation_service_k8s_mock.read_config_template = AsyncMock(return_value=CONFIG_TEMPLATE)  # type: ignore[method-assign]
+
+    await sim_handlers.run_simulation_workflow(
+        database_service=database_service,
+        simulation_service=simulation_service_k8s_mock,
+        simulator_id=simulator.database_id,
+        experiment_id="private-repo-analysis",
+        simulation_config_filename="api_simulation_default.json",
+    )
+
+    configmap = mock_k8s_job_service.create_configmap.call_args[0][0]
+    config_data = json.loads(configmap.data["workflow.json"])
+    analysis = config_data["analysis_options"]
+    assert any(k.startswith("cd1_") for k in analysis.get("multiseed", {}))
+
+
+@pytest.mark.asyncio
+async def test_analysis_options_user_override(
+    database_service: DatabaseServiceSQL,
+    simulation_service_k8s_mock: SimulationServiceK8s,
+    mock_k8s_job_service: MagicMock,
+) -> None:
+    """User-specified analysis_options should override defaults regardless of repo."""
+    simulator = await database_service.insert_simulator(
+        git_commit_hash="ghi9012",
+        git_repo_url=RepoUrl.VECOLI_PRIVATE_REPO_URL,
+        git_branch="master",
+    )
+    await database_service.insert_parca_dataset(
+        parca_dataset_request=ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
+    )
+    simulation_service_k8s_mock.read_config_template = AsyncMock(return_value=CONFIG_TEMPLATE)  # type: ignore[method-assign]
+
+    user_analyses = AnalysisOptions.model_validate({"multiseed": {"ptools_rna": {"n_tp": 10}}})
+    await sim_handlers.run_simulation_workflow(
+        database_service=database_service,
+        simulation_service=simulation_service_k8s_mock,
+        simulator_id=simulator.database_id,
+        experiment_id="user-override-analysis",
+        simulation_config_filename="api_simulation_default.json",
+        analysis_options=user_analyses,
+    )
+
+    configmap = mock_k8s_job_service.create_configmap.call_args[0][0]
+    config_data = json.loads(configmap.data["workflow.json"])
+    analysis = config_data["analysis_options"]
+    assert "ptools_rna" in analysis.get("multiseed", {})
+    assert not any(k.startswith("cd1_") for k in analysis.get("multiseed", {}))

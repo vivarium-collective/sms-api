@@ -252,8 +252,9 @@ def simulation_run(
     ),
     analysis_options: str | None = Option(
         default=None,
-        help='JSON string of analysis module overrides. E.g. \'{"multiseed": {"ptools_rna": {"n_tp": 10}}}\'.'
-        " If omitted, uses default analysis modules.",
+        help='JSON string of vEcoli analysis module config. E.g. \'{"multiseed": {"ptools_rna": {"n_tp": 10}}}\'.'
+        " Keys are analysis categories (single, multiseed, multigeneration, etc.);"
+        " values map module names to params. If omitted, defaults depend on the simulator repo.",
     ),
     poll: bool = Option(default=False, help="Poll simulation status until completion."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
