@@ -473,14 +473,23 @@ class SimulationServiceHpc(SimulationService):
         async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
             if returncode != 0:
-                # Config not found in repo — fall back to embedded API template
-                # (same behavior as K8s backend for public repos without api_* configs)
                 logger.warning(
                     "Config %s not found at %s — using embedded default template",
                     config_filename,
                     remote_config_path,
                 )
                 return json.dumps(_DEFAULT_CONFIG_TEMPLATE)
+
+        # If the config is a vanilla vEcoli config (no API placeholders), use
+        # the embedded template instead — vanilla configs have internal relative
+        # paths that don't work in the API pipeline.
+        if "EXPERIMENT_ID_PLACEHOLDER" not in stdout:
+            logger.warning(
+                "Config %s is a vanilla vEcoli config (no API placeholders) — using embedded default template",
+                config_filename,
+            )
+            return json.dumps(_DEFAULT_CONFIG_TEMPLATE)
+
         return stdout
 
     @override
