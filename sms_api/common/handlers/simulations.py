@@ -51,6 +51,33 @@ DEFAULT_SIMDATA_PATH = get_settings().hpc_parca_base_path / "default" / "kb" / "
 # repo/image build)
 
 
+ANALYSIS_CATEGORIES = {"single", "multiseed", "multigeneration", "multidaughter", "multivariant", "multiexperiment"}
+
+
+def _validate_analysis_options(analysis_options: AnalysisOptions, available_modules: dict[str, list[str]]) -> None:
+    """Validate user-specified analysis modules against what exists in the repo.
+
+    Raises HTTPException(400) with a clear message if any module is not found.
+    """
+    opts = analysis_options.model_dump()
+    for category, modules in opts.items():
+        if category not in ANALYSIS_CATEGORIES or not isinstance(modules, dict):
+            continue
+        available = available_modules.get(category, [])
+        if not available:
+            continue  # Can't validate if discovery didn't return this category
+        for module_name in modules:
+            if module_name not in available:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Analysis module '{module_name}' not found in category '{category}'. "
+                        f"Available {category} modules: {', '.join(available)}. "
+                        f"Use GET /api/v1/simulations/discovery?simulator_id=<id> to list all."
+                    ),
+                )
+
+
 class SimulationAnalysisResponseType(StrEnumBase):
     FILE = "application/octet-stream"
     DATA_CONTENT = "application/octet-stream"
@@ -213,6 +240,18 @@ async def run_simulation_workflow(  # noqa: C901
 
     # Verify simulator build is complete before submitting simulation
     await _verify_build_complete(database_service, simulator_id)
+
+    # 1b. Validate analysis_options against what exists in the repo (if user specified them)
+    if analysis_options is not None:
+        try:
+            discovery = await simulation_service.discover_repo_contents(simulator)
+            if discovery.analysis_modules:
+                _validate_analysis_options(analysis_options, discovery.analysis_modules)
+        except HTTPException:
+            raise
+        except Exception:
+            # Discovery failure should not block the workflow — log and continue
+            logger.warning("Could not validate analysis_options against repo (discovery failed), proceeding anyway")
 
     # 2. Read the config template via the simulation service (SSH for SLURM, GitHub API for K8s)
     config_str = await simulation_service.read_config_template(

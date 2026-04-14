@@ -16,7 +16,15 @@ from tqdm import tqdm
 
 from sms_api.analysis.models import AnalysisRun, ExperimentAnalysisDTO, OutputFile, TsvOutputFile
 from sms_api.common.simulator_defaults import SimulationConfigFilename
-from sms_api.simulation.models import HpcRun, ParcaDataset, Simulation, SimulationRun, Simulator, SimulatorVersion
+from sms_api.simulation.models import (
+    HpcRun,
+    ParcaDataset,
+    RepoDiscovery,
+    Simulation,
+    SimulationRun,
+    Simulator,
+    SimulatorVersion,
+)
 
 
 class BaseUrl(StrEnum):
@@ -127,6 +135,17 @@ class E2EDataService:
 
     def show_simulators(self) -> list[SimulatorVersion]:
         return self.submit_list_simulators()
+
+    def discover_repo(self, simulator_id: int) -> RepoDiscovery:
+        try:
+            response = self.client.get("/api/v1/simulations/discovery", params={"simulator_id": simulator_id})
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return RepoDiscovery(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not discover repo contents for simulator {simulator_id}") from e
 
     def get_workflow_log(self, simulation_id: int, truncate: bool = True) -> str:
         return self.submit_get_workflow_log(simulation_id=simulation_id, truncate=truncate)

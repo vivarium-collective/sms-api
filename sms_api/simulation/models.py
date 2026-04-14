@@ -100,6 +100,16 @@ class RegisteredSimulators(BaseModel):
     timestamp: datetime.datetime | None = Field(default_factory=datetime.datetime.now)
 
 
+class RepoDiscovery(BaseModel):
+    """Available config filenames and analysis modules discovered from a simulator's repo."""
+
+    simulator_id: int
+    git_repo_url: str
+    git_commit_hash: str
+    config_filenames: list[str] = Field(default_factory=list)
+    analysis_modules: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class ParcaOptions(BaseModel):
     # cpus: int | None = None
     outdir: str = str(get_settings().simulation_outdir)

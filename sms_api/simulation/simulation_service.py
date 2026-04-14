@@ -30,6 +30,7 @@ from sms_api.simulation.hpc_utils import (
 )
 from sms_api.simulation.models import (
     ParcaDataset,
+    RepoDiscovery,
     Simulation,
     SimulationConfig,
     SimulatorVersion,
@@ -102,6 +103,18 @@ class SimulationService(ABC):
             The raw JSON string contents of the config template.
         """
         pass
+
+    async def discover_repo_contents(self, simulator_version: SimulatorVersion) -> RepoDiscovery:
+        """Discover available config files and analysis modules in the simulator's repo.
+
+        Default implementation returns empty discovery. Backends override with
+        actual introspection (GitHub API for K8s, SSH for SLURM).
+        """
+        return RepoDiscovery(
+            simulator_id=simulator_version.database_id,
+            git_repo_url=simulator_version.git_repo_url,
+            git_commit_hash=simulator_version.git_commit_hash,
+        )
 
     @abstractmethod
     async def get_job_status(self, job_id: JobId) -> JobStatusInfo | None:
@@ -460,6 +473,36 @@ class SimulationServiceHpc(SimulationService):
             if returncode != 0:
                 raise ValueError(f"Failed to read config file {remote_config_path}: {stderr}")
         return stdout
+
+    @override
+    async def discover_repo_contents(self, simulator_version: SimulatorVersion) -> RepoDiscovery:
+        settings = get_settings()
+        repo_root = settings.hpc_repo_base_path.remote_path / simulator_version.git_commit_hash / "vEcoli"
+        configs_dir = repo_root / "configs"
+        analysis_base = repo_root / "ecoli" / "analysis"
+        categories = ["single", "multiseed", "multigeneration", "multidaughter", "multivariant"]
+
+        async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
+            # List config files
+            rc, stdout, _ = await ssh.run_command(f"ls {configs_dir}/*.json 2>/dev/null", check=False)
+            config_filenames = [Path(p).name for p in stdout.strip().splitlines()] if rc == 0 and stdout.strip() else []
+
+            # List analysis modules per category
+            analysis_modules: dict[str, list[str]] = {}
+            for category in categories:
+                rc, stdout, _ = await ssh.run_command(f"ls {analysis_base / category}/*.py 2>/dev/null", check=False)
+                if rc == 0 and stdout.strip():
+                    modules = [Path(p).stem for p in stdout.strip().splitlines() if not Path(p).name.startswith("__")]
+                    if modules:
+                        analysis_modules[category] = sorted(modules)
+
+        return RepoDiscovery(
+            simulator_id=simulator_version.database_id,
+            git_repo_url=simulator_version.git_repo_url,
+            git_commit_hash=simulator_version.git_commit_hash,
+            config_filenames=sorted(config_filenames),
+            analysis_modules=analysis_modules,
+        )
 
     @override
     async def get_job_status(self, job_id: JobId) -> JobStatusInfo | None:

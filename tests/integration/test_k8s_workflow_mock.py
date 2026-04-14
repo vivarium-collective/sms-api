@@ -14,6 +14,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from sms_api.common.handlers import simulations as sim_handlers
 from sms_api.common.hpc.job_service import JobStatusInfo
@@ -25,6 +26,7 @@ from sms_api.simulation.models import (
     AnalysisOptions,
     ParcaDatasetRequest,
     ParcaOptions,
+    RepoDiscovery,
     SimulatorVersion,
 )
 from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
@@ -331,3 +333,114 @@ async def test_analysis_options_user_override(
     analysis = config_data["analysis_options"]
     assert "ptools_rna" in analysis.get("multiseed", {})
     assert not any(k.startswith("cd1_") for k in analysis.get("multiseed", {}))
+
+
+@pytest.mark.asyncio
+async def test_analysis_options_validation_rejects_invalid_module(
+    database_service: DatabaseServiceSQL,
+    simulation_service_k8s_mock: SimulationServiceK8s,
+    mock_k8s_job_service: MagicMock,
+) -> None:
+    """User-specified analysis module that doesn't exist in the repo should be rejected."""
+    simulator = await database_service.insert_simulator(
+        git_commit_hash="val1234",
+        git_repo_url=RepoUrl.VECOLI_PUBLIC_REPO_URL,
+        git_branch="master",
+    )
+    await database_service.insert_parca_dataset(
+        parca_dataset_request=ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
+    )
+    simulation_service_k8s_mock.read_config_template = AsyncMock(return_value=CONFIG_TEMPLATE)  # type: ignore[method-assign]
+
+    # Mock discovery to return known modules
+    discovery = RepoDiscovery(
+        simulator_id=simulator.database_id,
+        git_repo_url=simulator.git_repo_url,
+        git_commit_hash=simulator.git_commit_hash,
+        config_filenames=["api_simulation_default.json"],
+        analysis_modules={"multiseed": ["mass_fraction_summary", "ptools_rna"]},
+    )
+    simulation_service_k8s_mock.discover_repo_contents = AsyncMock(return_value=discovery)  # type: ignore[method-assign]
+
+    bad_analyses = AnalysisOptions.model_validate({"multiseed": {"nonexistent_module": {}}})
+    with pytest.raises(HTTPException) as exc_info:
+        await sim_handlers.run_simulation_workflow(
+            database_service=database_service,
+            simulation_service=simulation_service_k8s_mock,
+            simulator_id=simulator.database_id,
+            experiment_id="bad-module-test",
+            simulation_config_filename="api_simulation_default.json",
+            analysis_options=bad_analyses,
+        )
+    assert exc_info.value.status_code == 400
+    assert "nonexistent_module" in str(exc_info.value.detail)
+    assert "mass_fraction_summary" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_analysis_options_validation_accepts_valid_module(
+    database_service: DatabaseServiceSQL,
+    simulation_service_k8s_mock: SimulationServiceK8s,
+    mock_k8s_job_service: MagicMock,
+) -> None:
+    """User-specified analysis module that exists in the repo should pass validation."""
+    simulator = await database_service.insert_simulator(
+        git_commit_hash="val5678",
+        git_repo_url=RepoUrl.VECOLI_PUBLIC_REPO_URL,
+        git_branch="master",
+    )
+    await database_service.insert_parca_dataset(
+        parca_dataset_request=ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
+    )
+    simulation_service_k8s_mock.read_config_template = AsyncMock(return_value=CONFIG_TEMPLATE)  # type: ignore[method-assign]
+
+    discovery = RepoDiscovery(
+        simulator_id=simulator.database_id,
+        git_repo_url=simulator.git_repo_url,
+        git_commit_hash=simulator.git_commit_hash,
+        config_filenames=["api_simulation_default.json"],
+        analysis_modules={"multiseed": ["mass_fraction_summary", "ptools_rna"]},
+    )
+    simulation_service_k8s_mock.discover_repo_contents = AsyncMock(return_value=discovery)  # type: ignore[method-assign]
+
+    valid_analyses = AnalysisOptions.model_validate({"multiseed": {"ptools_rna": {"n_tp": 10}}})
+    simulation = await sim_handlers.run_simulation_workflow(
+        database_service=database_service,
+        simulation_service=simulation_service_k8s_mock,
+        simulator_id=simulator.database_id,
+        experiment_id="valid-module-test",
+        simulation_config_filename="api_simulation_default.json",
+        analysis_options=valid_analyses,
+    )
+    assert simulation.database_id is not None
+
+
+@pytest.mark.asyncio
+async def test_discovery_failure_does_not_block_workflow(
+    database_service: DatabaseServiceSQL,
+    simulation_service_k8s_mock: SimulationServiceK8s,
+    mock_k8s_job_service: MagicMock,
+) -> None:
+    """If discovery fails (e.g. GitHub API down), the workflow should still proceed."""
+    simulator = await database_service.insert_simulator(
+        git_commit_hash="fail123",
+        git_repo_url=RepoUrl.VECOLI_PUBLIC_REPO_URL,
+        git_branch="master",
+    )
+    await database_service.insert_parca_dataset(
+        parca_dataset_request=ParcaDatasetRequest(simulator_version=simulator, parca_config=ParcaOptions())
+    )
+    simulation_service_k8s_mock.read_config_template = AsyncMock(return_value=CONFIG_TEMPLATE)  # type: ignore[method-assign]
+    simulation_service_k8s_mock.discover_repo_contents = AsyncMock(side_effect=RuntimeError("GitHub API down"))  # type: ignore[method-assign]
+
+    user_analyses = AnalysisOptions.model_validate({"multiseed": {"anything": {}}})
+    simulation = await sim_handlers.run_simulation_workflow(
+        database_service=database_service,
+        simulation_service=simulation_service_k8s_mock,
+        simulator_id=simulator.database_id,
+        experiment_id="discovery-fail-test",
+        simulation_config_filename="api_simulation_default.json",
+        analysis_options=user_analyses,
+    )
+    # Should succeed despite discovery failure
+    assert simulation.database_id is not None

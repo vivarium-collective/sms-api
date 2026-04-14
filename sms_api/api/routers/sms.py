@@ -29,13 +29,9 @@ from sms_api.analysis.models import (
 from sms_api.api import request_examples
 from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_router_config
-from sms_api.common.simulator_defaults import (
-    SimulationConfigFilename,
-    SimulationConfigFilenameType,
-)
 from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
-from sms_api.simulation.models import AnalysisOptions, Simulation, SimulationRun
+from sms_api.simulation.models import AnalysisOptions, RepoDiscovery, Simulation, SimulationRun
 
 ENV = get_settings()
 
@@ -43,11 +39,32 @@ logger = logging.getLogger(__name__)
 config = get_router_config(prefix="api", version_major=False)
 
 
-def get_experiment_id(simulator_id: int, config_filename: SimulationConfigFilenameType) -> str:
+def get_experiment_id(simulator_id: int, config_filename: str) -> str:
     return f"sim{simulator_id}-{config_filename.replace('.json', '')}"
 
 
 AnalysisOptions()
+
+
+@config.router.get(
+    path="/simulations/discovery",
+    operation_id="discover-simulator-repo-contents",
+    response_model=RepoDiscovery,
+    tags=["Simulations"],
+    summary="Discover available config files and analysis modules for a simulator",
+)
+async def discover_repo_contents(
+    simulator_id: int = Query(..., description="database_id of the simulator to introspect"),
+) -> RepoDiscovery:
+    """Enumerate config filenames and analysis modules available in the simulator's repo."""
+    sim_service = get_simulation_service()
+    database_service = get_database_service()
+    if sim_service is None or database_service is None:
+        raise HTTPException(status_code=500, detail="Services not initialized")
+    simulator = await database_service.get_simulator(simulator_id)
+    if simulator is None:
+        raise HTTPException(status_code=404, detail=f"Simulator {simulator_id} not found")
+    return await sim_service.discover_repo_contents(simulator)
 
 
 @config.router.post(
@@ -63,12 +80,9 @@ async def run_simulation_workflow(
         ..., description="`database_id` of the simulator object returned by /core/v1/simulator/upload"
     ),
     experiment_id: str | None = Query(default=None, description="Unique experiment identifier"),
-    simulation_config_filename: SimulationConfigFilename = Query(  # type: ignore[valid-type]
-        default=SimulationConfigFilename.BASELINE,
-        description=""" Config filename in vEcoli/configs/ on HPC,
-            chosen according to the given deployment's linked
-            vEcoli repo. See user docs for more details
-        """,
+    simulation_config_filename: str = Query(
+        default="api_simulation_default.json",
+        description="Config filename in vEcoli/configs/. Use GET /simulations/discovery to list available files.",
     ),
     num_generations: int | None = Query(default=None, description="Number of generations to simulate"),
     num_seeds: int | None = Query(default=None, description="Number of initial seeds (lineages)"),
