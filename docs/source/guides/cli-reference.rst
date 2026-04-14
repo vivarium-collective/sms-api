@@ -24,13 +24,15 @@ environment variable.
 help
 ----
 
-Show help for the top-level CLI or any command group:
+Show help for the top-level CLI or any command group. The word ``help`` works
+as a trailing argument at any nesting level:
 
 .. code-block:: bash
 
    uv run atlantis help
    uv run atlantis help simulator
-   uv run atlantis simulator help    # equivalent
+   uv run atlantis simulator help         # equivalent
+   uv run atlantis simulation run help    # same as --help
 
 simulator
 ---------
@@ -120,10 +122,12 @@ Submit a simulation workflow (parca -> simulation -> analysis).
        If omitted, uses the default baseline set (55 paths covering
        all analysis modules).
    * - ``--analysis-options``
-     - default ptools modules
-     - JSON string overriding which analysis modules run as part of the
-       workflow. E.g. ``'{"multiseed": {"ptools_rna": {"n_tp": 10}}}'``.
-       If omitted, uses the default set.
+     - repo-aware defaults
+     - JSON string specifying which analysis modules to run. Keys are
+       categories (``single``, ``multiseed``, ``multigeneration``, etc.);
+       values map module names to params. Defaults depend on the simulator's
+       repo — private vEcoli gets cd1_* modules, public gets none. Use
+       ``simulation analyses SIMULATOR_ID`` to discover available modules.
    * - ``--poll / --no-poll``
      - off
      - Poll until completion
@@ -175,6 +179,37 @@ List all simulations.
 .. code-block:: bash
 
    uv run atlantis simulation list
+
+simulation configs
+~~~~~~~~~~~~~~~~~~
+
+List available config filenames for a simulator's repo. The available configs
+depend on what exists in the simulator's vEcoli commit.
+
+.. code-block:: bash
+
+   uv run atlantis simulation configs SIMULATOR_ID
+
+simulation analyses
+~~~~~~~~~~~~~~~~~~~
+
+List available analysis modules for a simulator's repo, grouped by category
+(single, multiseed, multigeneration, etc.).
+
+.. code-block:: bash
+
+   uv run atlantis simulation analyses SIMULATOR_ID
+
+**Example:**
+
+.. code-block:: bash
+
+   # Discover what analyses are available before submitting
+   uv run atlantis simulation analyses 16 --base-url http://localhost:8080
+
+   # Then use a discovered module in a run
+   uv run atlantis simulation run my-exp 16 \
+     --analysis-options '{"multiseed": {"protein_counts_validation": {}}}'
 
 simulation status
 ~~~~~~~~~~~~~~~~~

@@ -73,6 +73,23 @@ Managing simulators
    # Force a rebuild (e.g. after a code change on the same commit)
    uv run atlantis simulator latest --force
 
+Discover Available Configs and Analyses
+----------------------------------------
+
+Before running a simulation, you can discover what config files and analysis
+modules are available for your simulator:
+
+.. code-block:: bash
+
+   # List config files in the simulator's vEcoli repo
+   uv run atlantis simulation configs 11
+
+   # List available analysis modules by category
+   uv run atlantis simulation analyses 11
+
+This is especially useful when working with custom vEcoli branches where the
+available configs and analysis modules differ from the defaults.
+
 Step 4--5: Run a Simulation
 ----------------------------
 
@@ -117,7 +134,12 @@ Submit a simulation workflow using your simulator ID:
      - Wait and display status updates until completion
    * - ``--config-filename``
      - ``api_simulation_default.json``
-     - Simulation configuration preset
+     - Simulation config file. Use ``simulation configs SIMULATOR_ID`` to
+       discover available files for your simulator.
+   * - ``--analysis-options``
+     - repo-aware defaults
+     - JSON string of analysis modules to run. Use ``simulation analyses
+       SIMULATOR_ID`` to discover available modules.
    * - ``--observables``
      - baseline (55 paths)
      - Comma-separated dot-path observables to record.

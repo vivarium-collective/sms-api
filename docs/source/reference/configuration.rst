@@ -41,22 +41,38 @@ to switch servers at any time.
 Simulation Configuration Presets
 --------------------------------
 
-When submitting a simulation, you choose a configuration preset via
-``--config-filename`` (CLI) or the config dropdown (GUI/TUI):
+Available config filenames are **discovered dynamically** from the simulator's
+vEcoli repository. Different simulators (different commits, repos, branches)
+may have different configs available. Use the discovery command to see what's
+available for a given simulator:
 
-.. list-table::
-   :header-rows: 1
+.. code-block:: bash
 
-   * - Preset
-     - Description
-   * - ``api_simulation_default.json``
-     - Standard configuration (default)
-   * - ``api_simulation_default_ccam.json``
-     - CCAM configuration
-   * - ``api_simulation_default_aws_cdk.json``
-     - AWS CDK / Batch configuration
-   * - ``api_simulation_ptools_ccam.json``
-     - PTools CCAM configuration
+   uv run atlantis simulation configs SIMULATOR_ID
+
+The default is ``api_simulation_default.json``. If the config file doesn't
+exist in the repo, the server falls back to an embedded default template.
+
+Analysis Module Discovery
+-------------------------
+
+Analysis modules available for ``--analysis-options`` depend on what exists in
+the simulator's vEcoli repo under ``ecoli/analysis/{category}/``. Discover
+available modules before submitting:
+
+.. code-block:: bash
+
+   uv run atlantis simulation analyses SIMULATOR_ID
+
+Or via the REST API:
+
+.. code-block:: bash
+
+   curl http://localhost:8080/api/v1/simulations/discovery?simulator_id=16
+
+Analysis defaults are **repo-aware**: private vEcoli repo simulators get cd1_*
+modules by default; public repo simulators get no default analyses. User-specified
+``--analysis-options`` always overrides the defaults.
 
 Environment Variables
 ---------------------

@@ -7,7 +7,7 @@ Atlantis
 
 **Atlantis** is a platform for designing, running, and analyzing whole-cell
 simulations of *E. coli* using the
-`vEcoli <https://github.com/CovertLabEcoli/vEcoli-private>`_ model.
+`vEcoli <https://github.com/CovertLab/vEcoli>`_ model.
 
 You interact with Atlantis through one of three client applications --- each
 exposes the same end-to-end workflow (build a simulator, run a simulation,
