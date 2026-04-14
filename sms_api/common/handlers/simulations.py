@@ -272,7 +272,10 @@ async def run_simulation_workflow(  # noqa: C901
     if config_data.get("experiment_id") is None:
         config_data["experiment_id"] = unique_experiment_id
     config_data.setdefault("emitter", "parquet")
-    config_data.setdefault("emitter_arg", {"out_dir": str(settings.hpc_sim_base_path)})
+    config_data.setdefault("emitter_arg", {})
+    # Always ensure emitter_arg.out_dir points to the HPC output path (vanilla configs use relative "out")
+    if config_data.get("emitter_arg", {}).get("out_dir") in (None, "", "out"):
+        config_data["emitter_arg"]["out_dir"] = str(settings.hpc_sim_base_path)
     config_data.setdefault("analysis_options", {"multiseed": {}})
     config_data.setdefault("single_daughters", True)
     config_data.setdefault("suffix_time", False)
