@@ -277,6 +277,9 @@ async def run_simulation_workflow(  # noqa: C901
     if config_data.get("emitter_arg", {}).get("out_dir") in (None, "", "out"):
         config_data["emitter_arg"]["out_dir"] = str(settings.hpc_sim_base_path)
     config_data.setdefault("analysis_options", {"multiseed": {}})
+    # The fork repo's workflow.py expects analysis_options.memory_gb
+    if simulator.git_repo_url == RepoUrl.VECOLI_FORK_REPO_URL:
+        config_data["analysis_options"].setdefault("memory_gb", 3)
     config_data.setdefault("single_daughters", True)
     config_data.setdefault("suffix_time", False)
     # Ensure parca_options.outdir points to HPC path (vanilla configs use relative "out")
