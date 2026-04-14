@@ -67,6 +67,13 @@ cli.add_typer(tkapp_cli)
 
 
 def main() -> None:
+    import sys
+
+    # Allow "help" as a trailing word at any nesting level:
+    # e.g. "atlantis simulation run help" → "atlantis simulation run --help"
+    if len(sys.argv) > 1 and sys.argv[-1] == "help":
+        sys.argv[-1] = "--help"
+
     cli()
 
 
