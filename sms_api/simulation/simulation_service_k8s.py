@@ -20,7 +20,7 @@ from sms_api.common.models import JobBackend, JobId
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import ParcaDataset, Simulation, Simulator, SimulatorVersion
+from sms_api.simulation.models import ParcaDataset, RepoDiscovery, Simulation, Simulator, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)
@@ -56,18 +56,7 @@ _DEFAULT_CONFIG_TEMPLATE: dict[str, object] = {
     "single_daughters": True,
     "emitter": "parquet",
     "emitter_arg": {"out_dir": "HPC_SIM_BASE_PATH_PLACEHOLDER"},
-    "analysis_options": {
-        "multiseed": {
-            "cd1_higher_order_properties": {"generation_lower_bound": 5},
-            "cd1_transcriptomics": {"generation_lower_bound": 5},
-            "cd1_proteomics": {"generation_lower_bound": 5},
-            "cd1_metabolomics": {"generation_lower_bound": 5},
-            "cd1_fluxomics": {"generation_lower_bound": 5},
-            "ptools_rxns": {"n_tp": 10},
-            "ptools_rna": {"n_tp": 10},
-            "ptools_proteins": {"n_tp": 10},
-        }
-    },
+    "analysis_options": {"multiseed": {}},
     "aws_cdk": {
         "build_image": False,
         "container_image": "SIMULATOR_IMAGE_PATH_PLACEHOLDER",
@@ -529,6 +518,46 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
                 return json.dumps(_DEFAULT_CONFIG_TEMPLATE)
             response.raise_for_status()
             return response.text
+
+    @override
+    async def discover_repo_contents(self, simulator_version: SimulatorVersion) -> RepoDiscovery:
+        """Discover available configs and analysis modules via GitHub Contents API."""
+        settings = get_settings()
+        base = _github_api_url(simulator_version.git_repo_url)
+        headers = _github_headers(settings.github_token)
+        ref = simulator_version.git_commit_hash
+        categories = ["single", "multiseed", "multigeneration", "multidaughter", "multivariant"]
+
+        async with httpx.AsyncClient() as client:
+            # List config files
+            config_filenames: list[str] = []
+            resp = await client.get(f"{base}/contents/configs?ref={ref}", headers=headers)
+            if resp.status_code == 200:
+                for item in resp.json():
+                    name = item.get("name", "")
+                    if name.endswith(".json"):
+                        config_filenames.append(name)
+
+            # List analysis modules per category
+            analysis_modules: dict[str, list[str]] = {}
+            for category in categories:
+                resp = await client.get(f"{base}/contents/ecoli/analysis/{category}?ref={ref}", headers=headers)
+                if resp.status_code == 200:
+                    modules = [
+                        item["name"].removesuffix(".py")
+                        for item in resp.json()
+                        if item.get("name", "").endswith(".py") and not item["name"].startswith("__")
+                    ]
+                    if modules:
+                        analysis_modules[category] = sorted(modules)
+
+        return RepoDiscovery(
+            simulator_id=simulator_version.database_id,
+            git_repo_url=simulator_version.git_repo_url,
+            git_commit_hash=simulator_version.git_commit_hash,
+            config_filenames=sorted(config_filenames),
+            analysis_modules=analysis_modules,
+        )
 
     @override
     async def get_job_status(self, job_id: JobId) -> JobStatusInfo | None:

@@ -252,8 +252,9 @@ def simulation_run(
     ),
     analysis_options: str | None = Option(
         default=None,
-        help='JSON string of analysis module overrides. E.g. \'{"multiseed": {"ptools_rna": {"n_tp": 10}}}\'.'
-        " If omitted, uses default analysis modules.",
+        help='JSON string of vEcoli analysis module config. E.g. \'{"multiseed": {"ptools_rna": {"n_tp": 10}}}\'.'
+        " Keys are analysis categories (single, multiseed, multigeneration, etc.);"
+        " values map module names to params. If omitted, defaults depend on the simulator repo.",
     ),
     poll: bool = Option(default=False, help="Poll simulation status until completion."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
@@ -341,6 +342,42 @@ def simulation_list(
     simulations = data_service.show_workflows()
     for sim in simulations:
         display_json(sim.model_dump(), console)
+
+
+@simulation_cli.command("configs", help="List available config filenames for a simulator's repo.")
+def simulation_configs(
+    simulator_id: int = Argument(help="Simulator database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    discovery = data_service.discover_repo(simulator_id=simulator_id)
+    repo = f"{discovery.git_repo_url} @ {discovery.git_commit_hash}"
+    console.print(f"[memphis.info]Config files for simulator {simulator_id}[/] ({repo}):\n")
+    if discovery.config_filenames:
+        for name in discovery.config_filenames:
+            console.print(f"  {name}")
+    else:
+        console.print("  [dim]No config files found (embedded default will be used)[/]")
+
+
+@simulation_cli.command("analyses", help="List available analysis modules for a simulator's repo.")
+def simulation_analyses(
+    simulator_id: int = Argument(help="Simulator database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    discovery = data_service.discover_repo(simulator_id=simulator_id)
+    repo = f"{discovery.git_repo_url} @ {discovery.git_commit_hash}"
+    console.print(f"[memphis.info]Analysis modules for simulator {simulator_id}[/] ({repo}):\n")
+    if discovery.analysis_modules:
+        for category, modules in sorted(discovery.analysis_modules.items()):
+            console.print(f"  [bold]{category}:[/]")
+            for mod in modules:
+                console.print(f"    {mod}")
+    else:
+        console.print("  [dim]No analysis modules discovered[/]")
 
 
 @simulation_cli.command("status", help="Get the workflow log tail and status for a simulation.")

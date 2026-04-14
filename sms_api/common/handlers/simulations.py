@@ -20,7 +20,7 @@ from sms_api.common import StrEnumBase
 from sms_api.common.handlers.simulators import upload_simulator
 from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.models import JobBackend, JobStatus, SSHTarget
-from sms_api.common.simulator_defaults import DEFAULT_OBSERVABLES
+from sms_api.common.simulator_defaults import DEFAULT_OBSERVABLES, RepoUrl
 from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
 from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_file_service, get_simulation_service, get_ssh_session_service
@@ -49,6 +49,33 @@ DEBUG_ARTIFACTS_DIR = REPO_DIR / "artifacts"
 DEFAULT_SIMDATA_PATH = get_settings().hpc_parca_base_path / "default" / "kb" / "simData.cPickle"
 # DEFAULT_SIMDATA_PATH = REPO_DIR / "assets" / "simData.cPickle"  # or, keep a remote copy (run parca along with
 # repo/image build)
+
+
+ANALYSIS_CATEGORIES = {"single", "multiseed", "multigeneration", "multidaughter", "multivariant", "multiexperiment"}
+
+
+def _validate_analysis_options(analysis_options: AnalysisOptions, available_modules: dict[str, list[str]]) -> None:
+    """Validate user-specified analysis modules against what exists in the repo.
+
+    Raises HTTPException(400) with a clear message if any module is not found.
+    """
+    opts = analysis_options.model_dump()
+    for category, modules in opts.items():
+        if category not in ANALYSIS_CATEGORIES or not isinstance(modules, dict):
+            continue
+        available = available_modules.get(category, [])
+        if not available:
+            continue  # Can't validate if discovery didn't return this category
+        for module_name in modules:
+            if module_name not in available:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Analysis module '{module_name}' not found in category '{category}'. "
+                        f"Available {category} modules: {', '.join(available)}. "
+                        f"Use GET /api/v1/simulations/discovery?simulator_id=<id> to list all."
+                    ),
+                )
 
 
 class SimulationAnalysisResponseType(StrEnumBase):
@@ -214,6 +241,18 @@ async def run_simulation_workflow(  # noqa: C901
     # Verify simulator build is complete before submitting simulation
     await _verify_build_complete(database_service, simulator_id)
 
+    # 1b. Validate analysis_options against what exists in the repo (if user specified them)
+    if analysis_options is not None:
+        try:
+            discovery = await simulation_service.discover_repo_contents(simulator)
+            if discovery.analysis_modules:
+                _validate_analysis_options(analysis_options, discovery.analysis_modules)
+        except HTTPException:
+            raise
+        except Exception:
+            # Discovery failure should not block the workflow — log and continue
+            logger.warning("Could not validate analysis_options against repo (discovery failed), proceeding anyway")
+
     # 2. Read the config template via the simulation service (SSH for SLURM, GitHub API for K8s)
     config_str = await simulation_service.read_config_template(
         simulator_version=simulator, config_filename=simulation_config_filename
@@ -264,17 +303,23 @@ async def run_simulation_workflow(  # noqa: C901
         # SLURM: use cached simData from HPC filesystem
         config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
 
-    specified_analyses = {
-        "multiseed": {
-            "cd1_metabolomics": {"generation_lower_bound": 5},
-            "cd1_transcriptomics": {"generation_lower_bound": 5},
-            "cd1_higher_order_properties": {"generation_lower_bound": 5},
-            "cd1_fluxomics": {"generation_lower_bound": 5},
-            "cd1_proteomics": {"generation_lower_bound": 5},
-        }
-    }
+    # Default analysis modules depend on the simulator's source repo:
+    # cd1_* modules only exist in the private vEcoli repo, so public-repo
+    # simulators get an empty default that users can override via --analysis-options.
     if analysis_options is not None:
         specified_analyses = analysis_options.model_dump()
+    elif simulator.git_repo_url == RepoUrl.VECOLI_PRIVATE_REPO_URL:
+        specified_analyses = {
+            "multiseed": {
+                "cd1_metabolomics": {"generation_lower_bound": 5},
+                "cd1_transcriptomics": {"generation_lower_bound": 5},
+                "cd1_higher_order_properties": {"generation_lower_bound": 5},
+                "cd1_fluxomics": {"generation_lower_bound": 5},
+                "cd1_proteomics": {"generation_lower_bound": 5},
+            }
+        }
+    else:
+        specified_analyses = {"multiseed": {}}
 
     config_data["analysis_options"] = specified_analyses
     config = SimulationConfig(**config_data)
