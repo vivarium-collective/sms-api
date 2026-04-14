@@ -320,9 +320,22 @@ async def run_simulation_workflow(  # noqa: C901
             # from S3 to this path before workflow.py runs (vEcoli only accepts local paths)
             config_data["sim_data_path"] = "/tmp/simData.cPickle"  # noqa: S108
     else:
-        # SLURM path: replace K8s-specific sections with SLURM equivalents
+        # SLURM path: replace K8s-specific sections with SLURM equivalents.
+        # The ccam Nextflow profile only exists in the fork (api-support branch)
+        # and the private repo — not in the public CovertLab/vEcoli repo.
         config_data.pop("aws_cdk", None)
         config_data.pop("aws", None)
+        _ccam_repos = {RepoUrl.VECOLI_FORK_REPO_URL, RepoUrl.VECOLI_PRIVATE_REPO_URL}
+        if simulator.git_repo_url not in _ccam_repos:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Simulator {simulator.database_id} ({simulator.git_repo_url} @ {simulator.git_branch}) "
+                    f"cannot run on SLURM — the ccam Nextflow profile is only available in the fork "
+                    f"(vivarium-collective/vEcoli @ api-support) or the private repo. "
+                    f"Build a simulator from one of those repos, or use the stanford-test (K8s) backend."
+                ),
+            )
         image_path_str = str(get_settings().hpc_image_base_path / f"vecoli-{simulator.git_commit_hash}.sif")
         config_data["ccam"] = {"build_image": False, "container_image": image_path_str}
         if not run_parca:
