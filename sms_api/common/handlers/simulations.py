@@ -279,6 +279,13 @@ async def run_simulation_workflow(  # noqa: C901
     config_data.setdefault("analysis_options", {"multiseed": {}})
     config_data.setdefault("single_daughters", True)
     config_data.setdefault("suffix_time", False)
+    # Ensure parca_options.outdir points to HPC path (vanilla configs use relative "out")
+    if "parca_options" in config_data:
+        parca_outdir = config_data["parca_options"].get("outdir", "")
+        if not parca_outdir or parca_outdir == "out":
+            config_data["parca_options"]["outdir"] = str(settings.hpc_sim_base_path)
+    else:
+        config_data["parca_options"] = {"outdir": str(settings.hpc_sim_base_path), "cpus": 6}
 
     # 4. Override config values if provided
     if num_generations is not None:
