@@ -267,6 +267,16 @@ async def run_simulation_workflow(  # noqa: C901
     config_str = config_str.replace("SIMULATOR_IMAGE_PATH_PLACEHOLDER", str(image_path))
     config_data = json.loads(config_str)
 
+    # 3b. Ensure required fields exist (vanilla vEcoli configs may lack API placeholders)
+    config_data.setdefault("experiment_id", unique_experiment_id)
+    if config_data.get("experiment_id") is None:
+        config_data["experiment_id"] = unique_experiment_id
+    config_data.setdefault("emitter", "parquet")
+    config_data.setdefault("emitter_arg", {"out_dir": str(settings.hpc_sim_base_path)})
+    config_data.setdefault("analysis_options", {"multiseed": {}})
+    config_data.setdefault("single_daughters", True)
+    config_data.setdefault("suffix_time", False)
+
     # 4. Override config values if provided
     if num_generations is not None:
         config_data["generations"] = num_generations
