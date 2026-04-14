@@ -758,9 +758,27 @@ async def get_simulation_outputs(
     # Dispatch based on backend
     hpc_run = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
     if hpc_run and hpc_run.job_id.backend in (JobBackend.K8S, JobBackend.LOCAL):
-        await _download_outputs_from_s3(experiment_id, analysis_request_cache)
+        # K8s/S3 path: stream directly from S3 into tar.gz response (no disk cache).
+        # This avoids ALB 504 timeouts on large simulations by sending bytes immediately.
+        if data_response_type == SimulationAnalysisDataResponseType.FILE:
+            # FILE mode still needs disk — fall back to download-then-serve
+            await _download_outputs_from_s3(experiment_id, analysis_request_cache)
+            if bg_tasks is None:
+                raise ValueError("BackgroundTasks required for FILE response type")
+            return await file_analysis_output_archive(
+                dir_path=analysis_request_cache, bg_tasks=bg_tasks, experiment_id=experiment_id
+            )
+        archive_name = f"{experiment_id}.tar.gz"
+        return StreamingResponse(
+            _stream_s3_tar_gz(experiment_id),
+            media_type="application/gzip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{archive_name}"',
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
     else:
-        # SLURM path: download via SSH/SCP
+        # SLURM path: download via SSH/SCP then stream
         exp_analysis_outdir = hpc_sim_base_path / experiment_id / "analyses"
         available_paths: list[HPCFilePath] = await get_available_omics_output_paths(
             remote_analysis_outdir=exp_analysis_outdir
@@ -773,14 +791,12 @@ async def get_simulation_outputs(
                 remote_base_dir=exp_analysis_outdir,
             )
 
-    # Return appropriate response type (same for both backends)
-    if data_response_type == SimulationAnalysisDataResponseType.FILE:
-        if bg_tasks is None:
-            raise ValueError("BackgroundTasks required for FILE response type")
-        return await file_analysis_output_archive(
-            dir_path=analysis_request_cache, bg_tasks=bg_tasks, experiment_id=experiment_id
-        )
-    else:
+        if data_response_type == SimulationAnalysisDataResponseType.FILE:
+            if bg_tasks is None:
+                raise ValueError("BackgroundTasks required for FILE response type")
+            return await file_analysis_output_archive(
+                dir_path=analysis_request_cache, bg_tasks=bg_tasks, experiment_id=experiment_id
+            )
         return await stream_analysis_output_archive(dir_path=analysis_request_cache)
 
 
@@ -857,6 +873,100 @@ async def _download_outputs_from_s3(experiment_id: str, local_cache: Path) -> No
             await file_service.download_file(workflow_config_s3, local_workflow_config)
         except Exception:
             logger.warning(f"workflow_config.json not found at {workflow_config_key}, skipping")
+
+
+async def _fetch_s3_file_entries(
+    experiment_id: str, download_keys: list[str], experiment_prefix: str
+) -> list[tuple[str, bytes]]:
+    """Fetch S3 objects in-memory as (arcname, content) pairs for tar creation."""
+    file_service = get_file_service()
+    if file_service is None:
+        raise RuntimeError("File service is not initialized")
+
+    entries: list[tuple[str, bytes]] = []
+    for key in download_keys:
+        try:
+            content = await file_service.get_file_contents(S3FilePath(s3_path=Path(key)))
+            if content is not None:
+                relative = str(Path(key).relative_to(experiment_prefix))
+                entries.append((f"{experiment_id}/{relative}", content))
+        except Exception:
+            logger.warning(f"Failed to fetch {key}, skipping")
+    return entries
+
+
+def _write_tar_entries(write_file: io.BufferedWriter, file_entries: list[tuple[str, bytes]]) -> None:
+    """Write (arcname, content) pairs into a streaming tar archive."""
+    try:
+        with tarfile.open(fileobj=write_file, mode="w|") as tar:
+            for arcname, data in file_entries:
+                info = tarfile.TarInfo(name=arcname)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+    finally:
+        write_file.close()
+
+
+async def _stream_s3_tar_gz(experiment_id: str, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
+    """Stream S3 simulation outputs directly into a tar.gz response.
+
+    Fetches S3 objects in-memory and pipes them into a tar stream on-the-fly,
+    so bytes flow to the client continuously — avoids ALB 504 timeouts that
+    occur when the server downloads all files to disk before responding.
+    """
+    settings = get_settings()
+    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}/{experiment_id}"
+
+    file_service = get_file_service()
+    if file_service is None:
+        raise RuntimeError("File service is not initialized")
+
+    analyses_prefix = S3FilePath(s3_path=Path(f"{experiment_prefix}/analyses"))
+    analyses_listing = await file_service.get_listing(analyses_prefix)
+    download_keys = [item.Key for item in analyses_listing if item.Key.endswith(_ACCEPTED_ANALYSES_EXTENSIONS)]
+    download_keys.append(f"{experiment_prefix}/{_WORKFLOW_CONFIG_KEY}")
+    logger.info(f"Streaming {len(download_keys)} files from S3 for experiment {experiment_id}")
+
+    file_entries = await _fetch_s3_file_entries(experiment_id, download_keys, experiment_prefix)
+
+    read_fd, write_fd = os.pipe()
+    read_file = os.fdopen(read_fd, "rb")
+    write_file = os.fdopen(write_fd, "wb")
+    loop = asyncio.get_event_loop()
+
+    tar_future = loop.run_in_executor(None, _write_tar_entries, write_file, file_entries)
+
+    async for chunk in _gzip_pipe_stream(read_file, loop, chunk_size):
+        yield chunk
+
+    await tar_future
+
+
+async def _gzip_pipe_stream(
+    read_file: io.BufferedReader, loop: asyncio.AbstractEventLoop, chunk_size: int
+) -> AsyncIterator[bytes]:
+    """Read raw tar data from a pipe, gzip-compress, and yield chunks."""
+    gzip_buffer = io.BytesIO()
+    gzip_file = gzip.GzipFile(fileobj=gzip_buffer, mode="wb")
+    try:
+        while True:
+            raw = await loop.run_in_executor(None, read_file.read, chunk_size)
+            if not raw:
+                break
+            gzip_file.write(raw)
+            if gzip_buffer.tell() > 0:
+                gzip_buffer.seek(0)
+                compressed = gzip_buffer.read()
+                gzip_buffer.seek(0)
+                gzip_buffer.truncate()
+                yield compressed
+        gzip_file.close()
+        gzip_buffer.seek(0)
+        final = gzip_buffer.read()
+        if final:
+            yield final
+    finally:
+        read_file.close()
 
 
 async def get_simulation_log(db_service: DatabaseService, simulation_id: int, truncate: bool = True) -> Response:
