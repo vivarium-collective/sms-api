@@ -319,9 +319,14 @@ async def run_simulation_workflow(  # noqa: C901
             # Set local path for cached simData — the K8s job command will download
             # from S3 to this path before workflow.py runs (vEcoli only accepts local paths)
             config_data["sim_data_path"] = "/tmp/simData.cPickle"  # noqa: S108
-    elif not run_parca:
-        # SLURM: use cached simData from HPC filesystem
-        config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
+    else:
+        # SLURM path: replace K8s-specific sections with SLURM equivalents
+        config_data.pop("aws_cdk", None)
+        config_data.pop("aws", None)
+        image_path_str = str(get_settings().hpc_image_base_path / f"vecoli-{simulator.git_commit_hash}.sif")
+        config_data["ccam"] = {"build_image": False, "container_image": image_path_str}
+        if not run_parca:
+            config_data["sim_data_path"] = DEFAULT_SIMDATA_PATH.__str__()
 
     # Default analysis modules depend on the simulator's source repo:
     # cd1_* modules only exist in the private vEcoli repo, so public-repo
