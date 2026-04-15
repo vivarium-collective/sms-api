@@ -218,15 +218,15 @@ class ExperimentAnalysisRequest(BaseModel):
         emitter_arg = {"out_dir": str(experiment_outdir)}
         config = AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)  # type: ignore[call-arg]
 
-        # Top-level DuckDB filters read by vEcoli's build_duckdb_filter().
+        # DuckDB filters go inside analysis_options (where vEcoli reads them).
         # generation_range is [start, end) (exclusive end, per Python range()).
         if self.generation_start is not None or self.generation_end is not None:
             start = self.generation_start if self.generation_start is not None else 0
             # vEcoli's range() is exclusive on end, so +1 to include the end generation
             end = (self.generation_end + 1) if self.generation_end is not None else 1000
-            config.generation_range = [start, end]  # type: ignore[attr-defined]
+            options.generation_range = [start, end]  # type: ignore[attr-defined]
         if self.seeds is not None:
-            config.lineage_seed = self.seeds  # type: ignore[attr-defined]
+            options.lineage_seed = self.seeds  # type: ignore[attr-defined]
 
         return config
 
