@@ -4,7 +4,6 @@ __generated_with = "0.23.0"
 app = marimo.App(
     width="medium",
     layout_file="layouts/gui.grid.json",
-    css_file="/app/ui/style.css",
 )
 
 
@@ -27,65 +26,62 @@ def _():
 
 @app.cell
 def _(mo):
-    # Memphis Group (early-90s) inspired color constants
-    MAGENTA = "#e91e90"
-    CYAN = "#00e5ff"
-    YELLOW = "#ffe100"
-    GREEN = "#39ff14"
+    # DAW-inspired color palette (dark theme, neon accents)
+    # Sourced from uqEcoli/app/dashboard.py
+    MAGENTA = "#ff3366"
+    CYAN = "#00f0ff"
+    YELLOW = "#ffaa00"
+    GREEN = "#33ff99"
     RED = "#ff3131"
     CORAL = "#ff6f61"
-    PURPLE = "#b388ff"
+    PURPLE = "#aa66ff"
     TEAL = "#00bfa5"
-    BG_DARK = "#1a1a2e"
-    BG_CARD = "#16213e"
+    BG_DARK = "#0d0d0d"
+    BG_CARD = "#1a1a2e"
+    BORDER = "#2a2a4a"
     TEXT_LIGHT = "#e0e0e0"
-    BORDER_GLOW = MAGENTA
+    TEXT_DIM = "#888"
 
-    # Inject a global stylesheet with Memphis accents
+    # DAW-inspired stylesheet (from uqEcoli/app/dashboard.py)
     _memphis_css = mo.Html(f"""<style>
     :root {{
-        --memphis-magenta: {MAGENTA};
-        --memphis-cyan: {CYAN};
-        --memphis-yellow: {YELLOW};
-        --memphis-green: {GREEN};
-        --memphis-red: {RED};
-        --memphis-purple: {PURPLE};
-        --memphis-bg: {BG_DARK};
-        --memphis-card: {BG_CARD};
+        --daw-bg: {BG_DARK};
+        --daw-panel: {BG_CARD};
+        --daw-border: {BORDER};
+        --daw-text: {TEXT_LIGHT};
+        --daw-dim: {TEXT_DIM};
+        --daw-accent1: {CYAN};
+        --daw-accent2: {MAGENTA};
+        --daw-accent3: {GREEN};
+        --daw-accent4: {YELLOW};
     }}
     .memphis-banner {{
         background: linear-gradient(90deg, {MAGENTA}, {CYAN}, {YELLOW}, {MAGENTA});
         background-size: 300% 100%;
         animation: memphis-scroll 8s linear infinite;
-        height: 6px;
-        border-radius: 3px;
-        margin: 0 0 1.2rem 0;
+        height: 4px;
+        border-radius: 2px;
+        margin: 0 0 1rem 0;
     }}
     @keyframes memphis-scroll {{
         0% {{ background-position: 0% 50%; }}
         100% {{ background-position: 300% 50%; }}
     }}
     .memphis-title {{
-        font-family: 'Courier New', monospace;
+        font-family: JetBrains Mono, SF Mono, Fira Code, monospace;
         font-weight: 900;
         font-size: 1.6rem;
-        background: linear-gradient(90deg, {MAGENTA}, {CYAN});
+        background: linear-gradient(90deg, {CYAN}, {MAGENTA});
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         letter-spacing: 0.08em;
     }}
     .memphis-subtitle {{
-        font-family: 'Courier New', monospace;
-        font-size: 0.85rem;
-        color: {CYAN};
-        letter-spacing: 0.12em;
+        font-family: JetBrains Mono, SF Mono, Fira Code, monospace;
+        font-size: 0.75rem;
+        color: {TEXT_DIM};
+        letter-spacing: 0.15em;
         text-transform: uppercase;
-    }}
-    .memphis-card {{
-        border: 1px solid {MAGENTA}40;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
     }}
     .memphis-status-completed {{ color: {GREEN}; font-weight: bold; }}
     .memphis-status-running {{ color: {YELLOW}; font-weight: bold; }}
@@ -93,106 +89,88 @@ def _(mo):
     .memphis-status-pending {{ color: {CYAN}; font-weight: bold; }}
     .memphis-status-cancelled {{ color: {CORAL}; font-weight: bold; }}
     .memphis-status-unknown {{ color: {PURPLE}; font-weight: bold; }}
-    .memphis-accent {{
-        display: inline-block;
-        width: 8px; height: 8px;
-        border-radius: 50%;
-        margin-right: 6px;
-        vertical-align: middle;
-    }}
-    .memphis-dot-magenta {{ background: {MAGENTA}; }}
-    .memphis-dot-cyan {{ background: {CYAN}; }}
-    .memphis-dot-yellow {{ background: {YELLOW}; }}
 
-    /* ── Tensorboard-style cards ─────────────────────────────── */
+    /* ── DAW-style panel cards ─────────────────────────────── */
     .tb-card {{
         background: {BG_CARD};
-        border: 1px solid {MAGENTA}30;
-        border-radius: 12px;
+        border: 1px solid {BORDER};
+        border-radius: 8px;
         padding: 0;
         margin: 0.4rem 0;
         overflow: hidden;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }}
     .tb-card:hover {{
-        border-color: {MAGENTA}80;
-        box-shadow: 0 4px 16px rgba(233,30,144,0.15);
+        border-color: {CYAN}60;
     }}
     .tb-card-header {{
-        padding: 0.6rem 1rem;
-        font-family: 'Courier New', monospace;
-        font-weight: 800;
-        font-size: 0.95rem;
-        letter-spacing: 0.06em;
+        padding: 0.5rem 1rem;
+        font-family: JetBrains Mono, SF Mono, Fira Code, monospace;
+        font-weight: 700;
+        font-size: 0.85rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        color: #ffffff;
-        border-radius: 8px 8px 0 0;
-        background-color: #2e7d6e;
+        color: {TEXT_LIGHT};
+        border-bottom: 1px solid {BORDER};
+        background: {BG_DARK};
     }}
-    .tb-card-header-magenta {{
-        background: {MAGENTA};
-        color: #ffffff;
-        border-bottom: none;
-    }}
-    .tb-card-header-cyan {{
-        background: {CYAN};
-        color: #0a0a0a;
-        border-bottom: none;
-    }}
-    .tb-card-header-green {{
-        background: #2e7d6e;
-        color: #ffffff;
-        border-bottom: none;
-    }}
-    .tb-card-header-purple {{
-        background: {PURPLE};
-        color: #0a0a0a;
-        border-bottom: none;
-    }}
-    .tb-card-header-yellow {{
-        background: {YELLOW};
-        color: #0a0a0a;
-        border-bottom: none;
+    .tb-card-header-magenta {{ color: {MAGENTA}; }}
+    .tb-card-header-cyan {{ color: {CYAN}; }}
+    .tb-card-header-green {{ color: {GREEN}; }}
+    .tb-card-header-purple {{ color: {PURPLE}; }}
+    .tb-card-header-yellow {{ color: {YELLOW}; }}
+    .tb-card-body {{
+        padding: 0.8rem 1rem 1rem 1rem;
     }}
     .tb-card-footer {{
-        padding: 0.5rem 1rem 0.6rem 1rem;
-        display: flex;
-        justify-content: flex-start;
-        border-top: 1px solid {MAGENTA}20;
+        padding: 0.4rem 1rem;
+        border-top: 1px solid {BORDER};
     }}
     </style>""")
     _memphis_css
 
+    # DAW accent color map (matches uqEcoli channel strip colors)
+    _ACCENT = {
+        "green": GREEN,
+        "cyan": CYAN,
+        "magenta": MAGENTA,
+        "purple": PURPLE,
+        "yellow": YELLOW,
+        "red": RED,
+    }
+
     def card(title: str, icon: str, body: str, color: str = "green") -> str:
-        """Wrap HTML content in a Tensorboard-style card."""
+        """Wrap HTML content in a DAW-style panel (matches uqEcoli render_panel)."""
+        accent = _ACCENT.get(color, CYAN)
         return (
-            f'<div class="tb-card">'
-            f'<div class="tb-card-header tb-card-header-{color}">'
-            f"{icon} {title}</div>"
-            f'<div class="tb-card-body">{body}</div>'
+            f'<div style="background:{BG_CARD}; border:1px solid {BORDER}; border-left:3px solid {accent}; '
+            f'border-radius:8px; padding:0; overflow:hidden;">'
+            f'<div style="padding:10px 16px; border-bottom:1px solid {BORDER};">'
+            f'<span style="color:{accent}; font-family:JetBrains Mono, SF Mono, Fira Code, monospace; '
+            f'font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase;">'
+            f"{icon} {title}</span></div>"
+            f'<div style="padding:12px 16px;">{body}</div>'
             f"</div>"
         )
 
     def card_wrap(title: str, icon: str, *children, color: str = "green", action=None):
-        """Wrap marimo renderables in a card with a coloured header.
-
-        If *action* is provided (e.g. a run_button), it is rendered in a
-        footer row pinned to the bottom-left of the card.
-        """
+        """Wrap marimo renderables in a DAW-style panel card."""
+        accent = _ACCENT.get(color, CYAN)
         children_html = "".join(c.text if hasattr(c, "text") else str(c) for c in children)
         footer = ""
         if action is not None:
             action_html = action.text if hasattr(action, "text") else str(action)
-            footer = f'<div class="tb-card-footer">{action_html}</div>'
+            footer = f'<div style="padding:6px 16px; border-top:1px solid {BORDER};">{action_html}</div>'
         return mo.Html(
-            f'<div class="tb-card">'
-            f'<div class="tb-card-header tb-card-header-{color}">'
-            f"{icon} {title}"
-            f"</div>"
-            f'<div class="tb-card-body">{children_html}</div>'
+            f'<div style="background:{BG_CARD}; border:1px solid {BORDER}; border-left:3px solid {accent}; '
+            f'border-radius:8px; padding:0; overflow:hidden;">'
+            f'<div style="padding:10px 16px; border-bottom:1px solid {BORDER};">'
+            f'<span style="color:{accent}; font-family:JetBrains Mono, SF Mono, Fira Code, monospace; '
+            f'font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase;">'
+            f"{icon} {title}</span></div>"
+            f'<div style="padding:12px 16px;">{children_html}</div>'
             f"{footer}"
             f"</div>"
         )
@@ -324,7 +302,7 @@ def _(ICO_GEAR, mo):
     _base_url_options = {f"{u.name} ({u.value})": u.value for u in BaseUrl}
     base_url_dropdown = mo.ui.dropdown(
         options=_base_url_options,
-        value=f"{BaseUrl.LOCAL_8080.name} ({BaseUrl.LOCAL_8080.value})",
+        value=f"{BaseUrl.RKE_PROD.name} ({BaseUrl.RKE_PROD.value})",
         label=f"{ICO_GEAR.text} API base URL",
     )
     base_url_dropdown
@@ -349,57 +327,45 @@ def _():
 
 
 @app.cell
-def _(card_wrap, mo):
-    # ── Build inputs ──
-    repo_url_input = mo.ui.text(
-        value="https://github.com/CovertLabEcoli/vEcoli-private",
-        label="Repository URL",
-        full_width=True,
+def _(mo):
+    get_built_sim_id, set_built_sim_id = mo.state(0)
+    get_running_sim_id, set_running_sim_id = mo.state(0)
+    return (
+        get_built_sim_id,
+        get_running_sim_id,
+        set_built_sim_id,
+        set_running_sim_id,
+    )
+
+
+@app.cell
+def _(mo):
+    # ── Build inputs (embedded in simulators table panel) ──
+    repo_url_input = mo.ui.dropdown(
+        options={
+            "Public (CovertLab/vEcoli)": "https://github.com/CovertLab/vEcoli",
+            "Private (vEcoli-private)": "https://github.com/CovertLabEcoli/vEcoli-private",
+            "Fork (vivarium-collective/vEcoli)": "https://github.com/vivarium-collective/vEcoli",
+        },
+        value="Private (vEcoli-private)",
+        label="Repository",
     )
     branch_input = mo.ui.text(value="master", label="Branch")
     force_rebuild = mo.ui.checkbox(label="Force rebuild", value=False)
     build_button = mo.ui.run_button(label=f"{mo.icon('gravity-ui:function')} Build", kind="success")
-
-    # ── Status check ──
-    sim_status_id = mo.ui.number(label="Simulator ID", start=1, stop=99999, value=1)
     sim_status_button = mo.ui.run_button(label="Check Status")
 
-    # ── List ──
-    list_sims_button = mo.ui.run_button(label="\U0001f4cb List Versions")
-
-    _div = '<div style="border-top:1px solid rgba(255,255,255,0.08); margin:0.6rem 0;"></div>'
-
-    def _lbl(text: str) -> str:
-        return (
-            f'<div style="font-size:0.65rem; color:rgba(255,255,255,0.4); '
-            f'text-transform:uppercase; letter-spacing:0.12em; margin-bottom:0.3rem;">{text}</div>'
-        )
-
-    simulator_card = card_wrap(
-        "Simulator",
-        "\U0001f9ec",
-        mo.vstack([
-            mo.Html(_lbl("Build Simulator")),
-            mo.hstack([repo_url_input, branch_input, force_rebuild], justify="start", gap=1),
-            build_button,
-            mo.Html(_div + _lbl("Build Status")),
-            mo.hstack([sim_status_id, sim_status_button], justify="start", gap=1),
-            mo.Html(_div + _lbl("Versions")),
-            list_sims_button,
-        ]),
-        color="green",
-    )
-
-    simulator_card
+    build_form = mo.vstack([
+        mo.hstack([repo_url_input, branch_input, force_rebuild], justify="start", gap=1),
+        mo.hstack([build_button, sim_status_button], justify="start", gap=1),
+    ])
     return (
         branch_input,
         build_button,
+        build_form,
         force_rebuild,
-        list_sims_button,
         repo_url_input,
         sim_status_button,
-        sim_status_id,
-        simulator_card,
     )
 
 
@@ -415,13 +381,13 @@ def _(
     json,
     mo,
     repo_url_input,
+    set_built_sim_id,
     status_badge,
     time,
     traceback,
 ):
     # Reactive: only runs when build_button is clicked
     _sim_output = mo.Html("")
-    _sim_id_val = None
 
     if build_button.value:
         _svc = get_svc()
@@ -433,7 +399,7 @@ def _(
             )
             # Step 2: upload
             _uploaded = _svc.submit_upload_simulator(simulator=_latest, force=force_rebuild.value)
-            _sim_id_val = _uploaded.database_id
+            set_built_sim_id(_uploaded.database_id)
 
             # Step 3: poll build status
             _status = "pending"
@@ -474,120 +440,182 @@ def _(
 
 
 @app.cell
-def _(get_svc, list_sims_button, mo):
-    _sims_table = mo.Html("")
-    if list_sims_button.value:
-        _svc = get_svc()
+def _(mo):
+    get_selected_sim_id, set_selected_sim_id = mo.state(1)
+    return get_selected_sim_id, set_selected_sim_id
+
+
+@app.cell
+def _(build_form, get_svc, mo, set_selected_sim_id):
+    sims_table = mo.Html("")
+    _svc = get_svc()
+    try:
+        _sims = _svc.show_simulators()
+        _rows = [s.model_dump() for s in _sims]
+        if _rows:
+            _table = mo.ui.table(
+                data=_rows,
+                selection="single",
+                on_change=lambda rows: set_selected_sim_id(int(rows[0]["database_id"]) if rows else 1),
+            )
+        else:
+            _table = mo.Html("<em>No simulators found.</em>")
+    except Exception as e:
+        _table = mo.Html(f"<span class='memphis-status-failed'>Error: {e}</span>")
+
+    # + button expands build form inline
+    _plus_btn = (
+        '<details style="display:inline;"><summary style="display:inline-block; cursor:pointer; '
+        "background:#33ff99; color:#0d0d0d; border:none; border-radius:50%; "
+        "width:24px; height:24px; text-align:center; line-height:24px; "
+        'font-size:16px; font-weight:bold; list-style:none;">+</summary>'
+        f'<div style="margin-top:8px; padding:10px; border-top:1px solid #2a2a4a;">{build_form}</div>'
+        "</details>"
+    )
+
+    sims_table = mo.Html(
+        '<div style="background:#1a1a2e; border:1px solid #2a2a4a; border-left:3px solid #00f0ff; '
+        'border-radius:8px; padding:0; overflow:hidden;">'
+        '<div style="padding:10px 16px; border-bottom:1px solid #2a2a4a; '
+        'display:flex; justify-content:space-between; align-items:center;">'
+        '<span style="color:#00f0ff; font-family:JetBrains Mono, SF Mono, Fira Code, monospace; '
+        'font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase;">'
+        f"{mo.icon('gravity-ui:function')} Simulators</span>"
+        f"{_plus_btn}</div>"
+        f'<div style="padding:12px 16px;">{_table}</div>'
+        "</div>"
+    )
+    sims_table
+    return (sims_table,)
+
+
+@app.cell
+def _(get_selected_sim_id, get_svc):
+    """Discover configs and analysis modules when simulator selection changes."""
+    import json as _json
+
+    discovered_configs = {"api_simulation_default.json": "api_simulation_default.json"}
+    discovered_analysis_opts = {}
+
+    _sid = get_selected_sim_id()
+    if _sid and _sid > 0:
         try:
-            _sims = _svc.show_simulators()
-            _rows = [s.model_dump() for s in _sims]
-            if _rows:
-                _sims_table = mo.ui.table(
-                    data=_rows,
-                    label="Registered Simulators",
-                )
-            else:
-                _sims_table = mo.Html("<em>No simulators found.</em>")
-        except Exception as e:
-            _sims_table = mo.Html(f"<span class='memphis-status-failed'>Error: {e}</span>")
-    _sims_table
-    return
+            _discovery = get_svc().discover_repo(simulator_id=_sid)
+            if _discovery.config_filenames:
+                discovered_configs = {c: c for c in _discovery.config_filenames}
+            if _discovery.analysis_modules:
+                for _cat, _mods in _discovery.analysis_modules.items():
+                    for _m in _mods:
+                        discovered_analysis_opts[f"{_cat}/{_m}"] = _json.dumps({_cat: {_m: {}}})
+        except Exception:
+            pass
+    return discovered_analysis_opts, discovered_configs
 
 
 @app.cell
 def _(
     card,
+    get_built_sim_id,
     get_svc,
     json,
     mo,
     sim_status_button,
-    sim_status_id,
     status_badge,
     traceback,
 ):
     _build_status_output = mo.Html("")
     if sim_status_button.value:
-        _svc = get_svc()
-        try:
-            _hpcrun = _svc.submit_get_simulator_build_status_full(simulator_id=int(sim_status_id.value))
-            _s = _hpcrun.status.value if _hpcrun.status else "unknown"
-            _badge = status_badge(_s)
-            _details = json.dumps(_hpcrun.model_dump(), indent=2, default=str)
-            _err = (
-                f"<br><span class='memphis-status-failed'>Error: {_hpcrun.error_message}</span>"
-                if _hpcrun.error_message
-                else ""
-            )
+        _sid = get_built_sim_id()
+        if not _sid or _sid == 0:
             _build_status_output = mo.Html(
                 card(
-                    "Build Status",
-                    "\U0001f9ec",
-                    f"<strong>Status:</strong> {_badge.text}{_err}<br>"
-                    f"<pre style='font-size:0.75rem; max-height:200px; overflow:auto;'>{_details}</pre>",
-                    color="cyan",
+                    "Build Status", "\U0001f9ec", "<em>No simulator built yet — click Build first.</em>", color="yellow"
                 )
             )
-        except Exception:
-            _build_status_output = mo.Html(
-                card(
-                    "Error",
-                    "\u26a0\ufe0f",
-                    f"<span class='memphis-status-failed'>ERROR</span><br>"
-                    f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre>",
-                    color="magenta",
+        else:
+            _svc = get_svc()
+            try:
+                _hpcrun = _svc.submit_get_simulator_build_status_full(simulator_id=_sid)
+                _s = _hpcrun.status.value if _hpcrun.status else "unknown"
+                _badge = status_badge(_s)
+                _details = json.dumps(_hpcrun.model_dump(), indent=2, default=str)
+                _err = (
+                    f"<br><span class='memphis-status-failed'>Error: {_hpcrun.error_message}</span>"
+                    if _hpcrun.error_message
+                    else ""
                 )
-            )
+                _build_status_output = mo.Html(
+                    card(
+                        "Build Status",
+                        "\U0001f9ec",
+                        f"<strong>Status:</strong> {_badge.text}{_err}<br>"
+                        f"<pre style='font-size:0.75rem; max-height:200px; overflow:auto;'>{_details}</pre>",
+                        color="cyan",
+                    )
+                )
+            except Exception:
+                _build_status_output = mo.Html(
+                    card(
+                        "Error",
+                        "\u26a0\ufe0f",
+                        f"<span class='memphis-status-failed'>ERROR</span><br>"
+                        f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre>",
+                        color="magenta",
+                    )
+                )
     _build_status_output
     return
 
 
 @app.cell
-def _(card_wrap, mo):
+def _(
+    card_wrap,
+    discovered_analysis_opts,
+    discovered_configs,
+    get_selected_sim_id,
+    log_status,
+    mo,
+    sims_table,
+):
     # ── Run inputs ──
     exp_id_input = mo.ui.text(value="", label="Experiment ID", full_width=True)
-    sim_id_input = mo.ui.number(label="Simulator ID", start=1, stop=99999, value=1)
+    sim_id_input = mo.ui.number(label="Simulator ID", start=1, stop=99999, value=get_selected_sim_id())
+    _cfg = discovered_configs if discovered_configs else {"api_simulation_default.json": "api_simulation_default.json"}
     config_dropdown = mo.ui.dropdown(
-        options={
-            "Default": "api_simulation_default.json",
-            "CCAM": "api_simulation_default_ccam.json",
-            "AWS CDK": "api_simulation_default_aws_cdk.json",
-            "Violacein (w/ metabolism)": "api_test_violacein_with_metabolism.json",
-            "Violacein (no metabolism)": "api_test_violacein_no_metabolism.json",
-            "MEC Final": "api_final_mec.json",
-        },
-        value="Default",
-        label="Config",
+        options=_cfg,
+        value=list(_cfg.keys())[0],
+        label="Config (discovered)",
+    )
+    analysis_picker = (
+        mo.ui.multiselect(
+            options=discovered_analysis_opts,
+            label="Analysis modules (select to include)",
+        )
+        if discovered_analysis_opts
+        else None
     )
     gens_input = mo.ui.number(label="Generations", start=1, stop=40, step=1, value=1)
     seeds_input = mo.ui.number(label="Seeds", start=1, stop=100, step=1, value=1)
-    run_parca_checkbox = mo.ui.checkbox(label="Run ParCa", value=False)
+    run_parca_checkbox = mo.ui.checkbox(label="ParCa", value=False)
     description_input = mo.ui.text(value="", label="Description (optional)", full_width=True)
     observables_input = mo.ui.text(value="", label="Observables (comma-sep dot-paths, optional)", full_width=True)
     run_sim_button = mo.ui.run_button(label=f"{mo.icon('hugeicons:ai-dna')} Submit", kind="success")
 
-    # ── Status / Poll ──
-    poll_sim_id = mo.ui.number(label="Simulation ID", start=1, stop=99999, value=1)
-    poll_sim_button = mo.ui.run_button(label="Check Status")
-    poll_sim_poll = mo.ui.checkbox(label="Poll until done", value=False)
-
-    # ── Cancel ──
-    cancel_sim_id = mo.ui.number(label="Simulation ID to cancel", start=1, stop=99999, value=1)
+    # ── Actions (shared sim ID) ──
+    action_sim_id = mo.ui.number(label="Simulation ID", start=1, stop=99999, value=1)
+    poll_sim_button = mo.ui.run_button(label="Status")
     cancel_button = mo.ui.run_button(label="Cancel", kind="danger")
-
-    # ── Download ──
-    dl_sim_id = mo.ui.number(label="Simulation ID", start=1, stop=99999, value=1)
-    dl_dest = mo.ui.text(value="./debug", label="Destination", full_width=True)
+    dl_dest = mo.ui.text(value="./debug", label="Dest", full_width=False)
     dl_button = mo.ui.run_button(label="\U0001f4e6 Download", kind="success")
-
-    # ── List ──
-    list_workflows_button = mo.ui.run_button(label="\U0001f4cb List Simulations")
+    list_workflows_button = mo.ui.run_button(label="\U0001f4cb List")
 
     _div = '<div style="border-top:1px solid rgba(255,255,255,0.08); margin:0.6rem 0;"></div>'
 
     def _lbl(text: str) -> str:
         return (
-            f'<div style="font-size:0.65rem; color:rgba(255,255,255,0.4); '
-            f'text-transform:uppercase; letter-spacing:0.12em; margin-bottom:0.3rem;">{text}</div>'
+            f'<div style="color:#888; font-size:11px; text-transform:uppercase; '
+            f"letter-spacing:2px; margin-bottom:0.3rem; "
+            f'font-family:JetBrains Mono, SF Mono, Fira Code, monospace;">{text}</div>'
         )
 
     simulation_card = card_wrap(
@@ -597,38 +625,42 @@ def _(card_wrap, mo):
             mo.Html(_lbl("Submit Workflow")),
             mo.hstack([exp_id_input], justify="start"),
             mo.hstack(
-                [sim_id_input, config_dropdown, gens_input, seeds_input, run_parca_checkbox], justify="start", gap=1
+                [
+                    sims_table,
+                    mo.vstack(
+                        [log_status, config_dropdown, gens_input, seeds_input, run_parca_checkbox], justify="start"
+                    ),
+                ],
+                justify="start",
+                gap=1,
             ),
             description_input,
             observables_input,
+            analysis_picker if analysis_picker is not None else mo.Html(""),
             run_sim_button,
-            mo.Html(_div + _lbl("Status & Polling")),
-            mo.hstack([poll_sim_id, poll_sim_button, poll_sim_poll], justify="start", gap=1),
-            mo.Html(_div + _lbl("Download Outputs")),
-            mo.hstack([dl_sim_id, dl_dest, dl_button], justify="start", gap=1),
-            mo.Html(_div + _lbl("Cancel")),
-            mo.hstack([cancel_sim_id, cancel_button], justify="start", gap=1),
-            mo.Html(_div + _lbl("Browse")),
-            list_workflows_button,
+            mo.Html(_div + _lbl("Actions")),
+            mo.hstack(
+                [action_sim_id, poll_sim_button, dl_dest, dl_button, cancel_button, list_workflows_button],
+                justify="start",
+                gap=1,
+            ),
         ]),
         color="green",
     )
     simulation_card
     return (
+        action_sim_id,
+        analysis_picker,
         cancel_button,
-        cancel_sim_id,
         config_dropdown,
         description_input,
         dl_button,
         dl_dest,
-        dl_sim_id,
         exp_id_input,
         gens_input,
         list_workflows_button,
         observables_input,
         poll_sim_button,
-        poll_sim_id,
-        poll_sim_poll,
         run_parca_checkbox,
         run_sim_button,
         seeds_input,
@@ -641,6 +673,7 @@ def _(card_wrap, mo):
 def _(
     ICO_DNA_SM,
     ICO_ROCKET,
+    analysis_picker,
     card,
     config_dropdown,
     description_input,
@@ -653,6 +686,7 @@ def _(
     run_parca_checkbox,
     run_sim_button,
     seeds_input,
+    set_running_sim_id,
     sim_id_input,
     traceback,
 ):
@@ -670,6 +704,14 @@ def _(
                 )
                 _obs_raw = observables_input.value.strip()
                 _obs_list = [o.strip() for o in _obs_raw.split(",") if o.strip()] if _obs_raw else None
+                # Build analysis_options from picker selections
+                _ao_parsed = None
+                if analysis_picker is not None and hasattr(analysis_picker, "value") and analysis_picker.value:
+                    _ao_parsed = {}
+                    for _v in analysis_picker.value:
+                        _picked = json.loads(_v)
+                        for _cat, _mods in _picked.items():
+                            _ao_parsed.setdefault(_cat, {}).update(_mods)
                 _simulation = _svc.run_workflow(
                     experiment_id=_exp_id,
                     simulator_id=int(sim_id_input.value),
@@ -679,7 +721,9 @@ def _(
                     description=_desc,
                     run_parameter_calculator=run_parca_checkbox.value,
                     observables=_obs_list,
+                    analysis_options=_ao_parsed,
                 )
+                set_running_sim_id(_simulation.database_id)
                 _details = json.dumps(_simulation.model_dump(), indent=2, default=str)
                 _dna = ICO_DNA_SM.text
                 _rocket = ICO_ROCKET.text
@@ -704,19 +748,17 @@ def _(
                         color="magenta",
                     )
                 )
-    _run_output
-    return
+    run_output = _run_output
+    return (run_output,)
 
 
 @app.cell
 def _(
+    action_sim_id,
     card,
     get_svc,
-    json,
     mo,
     poll_sim_button,
-    poll_sim_id,
-    poll_sim_poll,
     status_badge,
     time,
     traceback,
@@ -724,12 +766,12 @@ def _(
     _poll_output = mo.Html("")
     if poll_sim_button.value:
         _svc = get_svc()
-        _sid = int(poll_sim_id.value)
+        _sid = int(action_sim_id.value)
         try:
             _run = _svc.get_workflow_status(simulation_id=_sid)
             _status = _run.status.value
 
-            if poll_sim_poll.value:
+            if False:  # polling removed — use CLI for long polls
                 while _status not in ("completed", "failed", "cancelled", "unknown"):
                     time.sleep(15)
                     _run = _svc.get_workflow_status(simulation_id=_sid)
@@ -741,19 +783,21 @@ def _(
                 if _run.error_message
                 else ""
             )
-            # Also fetch full simulation details
+            # Fetch workflow log (truncated — same as CLI `atlantis simulation status`)
             try:
-                _sim_detail = _svc.get_workflow(simulation_id=_sid)
-                _detail_json = json.dumps(_sim_detail.model_dump(), indent=2, default=str)
+                _log = _svc.get_workflow_log(simulation_id=_sid, truncate=True)
+                _log_html = (
+                    f"<pre style='font-size:0.7rem; max-height:300px; overflow:auto; "
+                    f"background:#0d1117; padding:0.5rem; border-radius:6px; color:#c9d1d9;'>{_log}</pre>"
+                )
             except Exception:
-                _detail_json = "(details not available)"
+                _log_html = "<em style='color:#666;'>Log not yet available</em>"
 
             _poll_output = mo.Html(
                 card(
                     f"Simulation {_sid}",
                     "\U0001f52c",
-                    f"<strong>Status:</strong> {_badge.text}{_err}<br>"
-                    f"<pre style='font-size:0.75rem; max-height:200px; overflow:auto;'>{_detail_json}</pre>",
+                    f"<strong>Status:</strong> {_badge.text}{_err}<br>{_log_html}",
                     color="cyan",
                 )
             )
@@ -769,6 +813,79 @@ def _(
             )
     _poll_output
     return
+
+
+@app.cell
+def _(mo):
+    status_refresh = mo.ui.refresh(default_interval="45s", label="Auto-refresh")
+    status_refresh
+    return (status_refresh,)
+
+
+@app.cell
+def _(
+    card,
+    get_running_sim_id,
+    get_svc,
+    mo,
+    set_running_sim_id,
+    status_badge,
+    status_refresh,
+    traceback,
+):
+    """Auto-refresh status for the most recently submitted simulation."""
+    _auto_status = mo.Html("")
+    _ = status_refresh.value  # subscribe to refresh ticks
+    _sid = get_running_sim_id()
+    if _sid and _sid > 0:
+        try:
+            _svc = get_svc()
+            _run = _svc.get_workflow_status(simulation_id=_sid)
+            _status = _run.status.value
+            _badge = status_badge(_status)
+            _err = (
+                f"<br><span class='memphis-status-failed'>Error: {_run.error_message}</span>"
+                if _run.error_message
+                else ""
+            )
+            try:
+                _log = _svc.get_workflow_log(simulation_id=_sid, truncate=True)
+                _log_html = (
+                    f"<pre style='font-size:0.7rem; max-height:300px; overflow:auto; "
+                    f"background:#0d1117; padding:0.5rem; border-radius:6px; color:#c9d1d9;'>{_log}</pre>"
+                )
+            except Exception:
+                _log_html = ""
+            _auto_status = mo.Html(
+                card(
+                    f"Simulation {_sid} (live)",
+                    "\U0001f4e1",
+                    f"<strong>Status:</strong> {_badge.text}{_err}<br>{_log_html}",
+                    color="cyan",
+                )
+            )
+            # Stop refreshing once terminal
+            if _status in ("completed", "failed", "cancelled"):
+                set_running_sim_id(0)
+        except Exception:
+            _auto_status = mo.Html(
+                card(
+                    "Status Error",
+                    "\u26a0\ufe0f",
+                    f"<pre style='font-size:0.75rem;'>{traceback.format_exc()}</pre>",
+                    color="magenta",
+                )
+            )
+    log_status = _auto_status
+    _auto_status
+    return (log_status,)
+
+
+@app.cell
+def _(log_status, mo, run_output, simulation_card):
+    _right_col = mo.vstack([log_status, run_output])
+    simulations_component = mo.hstack([simulation_card, _right_col], widths=[3, 2], align="start")
+    return (simulations_component,)
 
 
 @app.cell
@@ -791,8 +908,8 @@ def _(get_svc, list_workflows_button, mo):
 
 @app.cell
 def _(
+    action_sim_id,
     cancel_button,
-    cancel_sim_id,
     card,
     get_svc,
     json,
@@ -804,7 +921,7 @@ def _(
     if cancel_button.value:
         _svc = get_svc()
         try:
-            _result = _svc.cancel_workflow(simulation_id=int(cancel_sim_id.value))
+            _result = _svc.cancel_workflow(simulation_id=int(action_sim_id.value))
             _badge = status_badge(_result.status.value)
             _cancel_output = mo.Html(
                 card(
@@ -834,10 +951,10 @@ def _(
     ICO_DNA_SM,
     ICO_DOWN_ARROW,
     Path,
+    action_sim_id,
     card,
     dl_button,
     dl_dest,
-    dl_sim_id,
     get_svc,
     mo,
     traceback,
@@ -847,7 +964,7 @@ def _(
     _dl_output = mo.Html("")
     if dl_button.value:
         _svc = get_svc()
-        _sid = int(dl_sim_id.value)
+        _sid = int(action_sim_id.value)
         _dest = Path(dl_dest.value.strip() or f"simulation_id_{_sid}")
         try:
             _extracted = _asyncio.run(_svc.get_output_data(simulation_id=_sid, dest=_dest))
@@ -900,11 +1017,17 @@ def _(CYAN, ICO_DNA_SM, ICO_MICROBE, MAGENTA, mo):
 
 
 @app.cell
-def _(mo, simulation_card, simulator_card):
-    mo.ui.tabs({
-        f"{mo.icon('gravity-ui:function')} Simulator": simulator_card,
-        f"{mo.icon('healthicons:biomarker-24px')} Simulation": simulation_card,
-    })
+def _():
+    # mo.ui.tabs({
+    #     f"{mo.icon('gravity-ui:function')} Simulator": simulator_card,
+    #     f"{mo.icon('healthicons:biomarker-24px')} Simulation": simulation_card,
+    # })
+    return
+
+
+@app.cell
+def _(simulations_component):
+    simulations_component
     return
 
 
