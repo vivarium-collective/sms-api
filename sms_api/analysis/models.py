@@ -219,6 +219,11 @@ class ExperimentAnalysisRequest(BaseModel):
         config = AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)  # type: ignore[call-arg]
 
         # DuckDB filters go inside analysis_options (where vEcoli reads them).
+        # vEcoli's analysis.py iterates data filter keys with config[key] (not .get()),
+        # so all filter keys must be present even if None to avoid KeyError.
+        for key in ("variant", "generation", "agent_id"):
+            if not hasattr(options, key):
+                setattr(options, key, None)
         # generation_range is [start, end) (exclusive end, per Python range()).
         if self.generation_start is not None or self.generation_end is not None:
             start = self.generation_start if self.generation_start is not None else 0
