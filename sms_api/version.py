@@ -14,4 +14,6 @@
 #          repo-aware analysis_options defaults (cd1_* only for private vEcoli repo)
 # 0.7.5 — S3 streaming download (fix 504), README image, CLI trailing help, docs update
 # 0.7.6 — TUI/GUI feature parity, reactive simulator selection, repo dropdown, list sorting
-__version__ = "0.7.6"
+# 0.7.7 — fix analysis filters (generation_range/lineage_seed inside analysis_options),
+#          allow arbitrary public vEcoli branches, bump pytest for CVE fix
+__version__ = "0.7.7"
