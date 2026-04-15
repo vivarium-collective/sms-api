@@ -32,12 +32,6 @@ def verify_simulator_payload(simulator: Simulator) -> None:
                 raise ValueError(
                     f"{branch} is not an accepted branch for the {url} repo. Instead, use one of {accepted}"
                 )
-        case RepoUrl.VECOLI_PUBLIC_REPO_URL:
-            accepted = ACCEPTED_REPOS[RepoUrl.VECOLI_PUBLIC_REPO_URL]
-            if branch not in accepted:
-                raise ValueError(
-                    f"{branch} is not an accepted branch for the {url} repo. Instead, use one of {accepted}"
-                )
     return None
 
 

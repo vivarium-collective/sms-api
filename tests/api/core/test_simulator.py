@@ -103,6 +103,8 @@ def make_simulator(repo_url: str, branch: str) -> Simulator:
         (RepoUrl.VECOLI_FORK_REPO_URL, "master"),
         (RepoUrl.VECOLI_PUBLIC_REPO_URL, "master"),
         (RepoUrl.VECOLI_PUBLIC_REPO_URL, "ptools_viz"),
+        (RepoUrl.VECOLI_PUBLIC_REPO_URL, "multi-parca-aws"),
+        (RepoUrl.VECOLI_PUBLIC_REPO_URL, "feature-x"),
     ],
 )
 def test_verify_simulator_payload_valid(repo_url: str, branch: str) -> None:
@@ -119,11 +121,6 @@ def test_verify_simulator_payload_valid(repo_url: str, branch: str) -> None:
             RepoUrl.VECOLI_FORK_REPO_URL,
             "dev",
             ["messages", "ccam-nextflow", "master", "api-support"],
-        ),
-        (
-            RepoUrl.VECOLI_PUBLIC_REPO_URL,
-            "feature-x",
-            ["master", "ptools_viz"],
         ),
     ],
 )
@@ -142,8 +139,8 @@ def test_verify_simulator_payload_invalid_branch(repo_url: str, branch: str, exp
 
 def test_verify_simulator_payload_unmatched_repo_url() -> None:
     """
-    RepoUrl.VECOLI_PRIVATE_REPO_URL is not matched in the `match` statement,
-    so verification should silently pass.
+    RepoUrl.VECOLI_PRIVATE_REPO_URL and VECOLI_PUBLIC_REPO_URL are not matched
+    in the `match` statement, so verification should silently pass for any branch.
     """
     simulator = make_simulator(
         RepoUrl.VECOLI_PRIVATE_REPO_URL,
