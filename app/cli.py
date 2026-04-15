@@ -147,8 +147,16 @@ def launch_tui(
 @gui_cli.command(name="gui", help="Launch the interactive graphical user interface.")
 def launch_gui(
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+    mode: str = Option(
+        default="run", help="Launch the interactive graphical user interface mode in either run or edit mode."
+    ),
 ) -> None:
-    _ = subprocess.run(["uv", "run", "marimo", "edit", "app/gui.py", "--no-token"], capture_output=True, check=True)  # noqa: S603, S607
+    try:
+        proc = subprocess.Popen(["uv", "run", "marimo", mode, "app/gui.py", "--no-token"])
+        proc.wait()
+    except KeyboardInterrupt:
+        proc.terminate()
+        proc.wait(timeout=5)
 
 
 # -- Simulator commands --

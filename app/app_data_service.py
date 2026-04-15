@@ -131,7 +131,8 @@ class E2EDataService:
         return self.submit_get_workflow(simulation_id=simulation_id)
 
     def show_workflows(self) -> list[Simulation]:
-        return self.submit_list_workflows()
+        sims = self.submit_list_workflows()
+        return sorted(sims, key=lambda s: s.database_id)
 
     def show_simulators(self) -> list[SimulatorVersion]:
         return self.submit_list_simulators()

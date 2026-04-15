@@ -1,6 +1,6 @@
 [project]
 name = "sms_api"
-version = "0.7.5"
+version = "0.7.6"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
 requires-python = "==3.12.9"
@@ -265,3 +265,5 @@ source = ["sms_api", "client"]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
 "sms_api/simulation/simulation_service.py" = ["E501"]
+"app/gui.py" = ["B018", "F841"]  # Marimo notebook: bare expressions are cell outputs, unused vars are cell returns
+"app/cli.py" = ["S603", "S607"]  # CLI subprocess calls are intentional

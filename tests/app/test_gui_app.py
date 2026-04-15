@@ -66,12 +66,12 @@ class TestMarimoNotebookStructure:
         mod = _import_gui_app()
         assert hasattr(mod, "__generated_with")
 
-    def test_source_contains_memphis_css(self) -> None:
-        """The notebook source should contain Memphis design CSS."""
+    def test_source_contains_daw_css(self) -> None:
+        """The notebook source should contain DAW-inspired CSS."""
         source = GUI_APP_PATH.read_text()
         assert "memphis-banner" in source
         assert "memphis-title" in source
-        assert "#e91e90" in source  # Memphis magenta
+        assert "#1a1a2e" in source  # DAW panel bg
 
     def test_source_contains_all_eute_sections(self) -> None:
         """Verify all core EUTE workflow sections are present."""
@@ -272,12 +272,12 @@ class TestE2EDataServiceIntegration:
 class TestMemphisTheme:
     """Verify the Memphis design elements are properly defined in the notebook."""
 
-    def test_memphis_colors_defined(self) -> None:
-        """All Memphis palette colors should be present."""
+    def test_daw_colors_defined(self) -> None:
+        """All DAW palette colors should be present."""
         source = GUI_APP_PATH.read_text()
-        colors = ["#e91e90", "#00e5ff", "#ffe100", "#39ff14", "#ff3131", "#b388ff"]
+        colors = ["#ff3366", "#00f0ff", "#ffaa00", "#33ff99", "#ff3131", "#aa66ff"]
         for color in colors:
-            assert color in source, f"Memphis color {color} missing from gui_app.py"
+            assert color in source, f"DAW color {color} missing from gui_app.py"
 
     def test_memphis_banner_animation(self) -> None:
         """CSS animation for the banner strip should be defined."""
@@ -299,10 +299,11 @@ class TestMemphisTheme:
         assert "whole-cell simulation" in source  # Banner text
         assert "Rod-cell body" in source or "rod-cell" in source.lower() or "_banner" in source
 
-    def test_memphis_card_class(self) -> None:
-        """Memphis card styling class should be present."""
+    def test_daw_panel_styling(self) -> None:
+        """DAW panel styling should be present (inline styles)."""
         source = GUI_APP_PATH.read_text()
-        assert "memphis-card" in source
+        assert "#1a1a2e" in source  # panel bg
+        assert "#2a2a4a" in source  # border color
 
     def test_iconify_icons_used(self) -> None:
         """Thematic iconify icons should be sprinkled throughout the notebook."""

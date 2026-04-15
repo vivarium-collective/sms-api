@@ -202,6 +202,10 @@ class RunSimulationScreen(ModalScreen[dict[str, Any] | None]):
                     yield Input(value="3", id="run-seeds", type="integer")
             yield Input(placeholder="Description (optional)", id="run-desc")
             yield Input(placeholder="Observables (comma-sep dot-paths, optional)", id="run-observables")
+            yield Input(
+                placeholder='Analysis options JSON (e.g. {"multiseed": {"ptools_rna": {"n_tp": 10}}})',
+                id="run-analysis-opts",
+            )
             with Horizontal(classes="run-buttons"):
                 yield Button("Submit", variant="primary", id="run-submit")
                 yield Button("Cancel", id="run-cancel")
@@ -221,6 +225,14 @@ class RunSimulationScreen(ModalScreen[dict[str, Any] | None]):
         config_select = self.query_one("#run-config", Select)
         obs_raw = self.query_one("#run-observables", Input).value.strip()
         obs_list = [o.strip() for o in obs_raw.split(",") if o.strip()] if obs_raw else None
+        analysis_raw = self.query_one("#run-analysis-opts", Input).value.strip()
+        analysis_opts = None
+        if analysis_raw:
+            try:
+                analysis_opts = json.loads(analysis_raw)
+            except json.JSONDecodeError:
+                self.notify("Invalid JSON in analysis options", severity="error")
+                return
         self.dismiss({
             "experiment_id": exp_id,
             "simulator_id": int(sim_id),
@@ -229,6 +241,7 @@ class RunSimulationScreen(ModalScreen[dict[str, Any] | None]):
             "num_seeds": int(self.query_one("#run-seeds", Input).value or "3"),
             "description": self.query_one("#run-desc", Input).value.strip() or None,
             "observables": obs_list,
+            "analysis_options": analysis_opts,
         })
 
     def action_cancel(self) -> None:
@@ -492,9 +505,14 @@ class AtlantisTUI(App[None]):
                 # Domain action bars (shown/hidden based on nav selection)
                 with Horizontal(id="actions-simulations", classes="action-bar"):
                     yield Button("Run New", id="sim-run", variant="success")
+                    yield Button("Status", id="sim-status")
+                    yield Button("Log", id="sim-log")
                     yield Button("Get by ID", id="sim-get")
                     yield Button("Cancel", id="sim-cancel", variant="error")
                     yield Button("Download", id="sim-outputs")
+                    yield Button("Configs", id="sim-configs")
+                    yield Button("Analyses", id="sim-analyses-discover")
+                    yield Button("Run Analysis", id="sim-analysis")
                 with Horizontal(id="actions-simulators", classes="action-bar"):
                     yield Button("Build Latest", id="ver-latest", variant="success")
                     yield Button("Check Build", id="ver-status")
@@ -583,10 +601,20 @@ class AtlantisTUI(App[None]):
             self._ask_id_then("Simulation ID", self._do_sim_get)
         elif bid == "sim-run":
             self._do_sim_run()
+        elif bid == "sim-status":
+            self._ask_id_then("Simulation ID", self._do_sim_status)
+        elif bid == "sim-log":
+            self._ask_id_then("Simulation ID", self._do_sim_log)
         elif bid == "sim-cancel":
             self._ask_id_then("Simulation ID to cancel", self._do_sim_cancel)
         elif bid == "sim-outputs":
             self._ask_id_then("Simulation ID", self._do_sim_outputs)
+        elif bid == "sim-configs":
+            self._ask_id_then("Simulator ID", self._do_sim_configs)
+        elif bid == "sim-analyses-discover":
+            self._ask_id_then("Simulator ID", self._do_sim_analyses_discover)
+        elif bid == "sim-analysis":
+            self._ask_id_then("Simulation ID", self._do_sim_standalone_analysis)
         # ── Simulator actions ──
         elif bid == "ver-status":
             self._ask_id_then("Simulator ID", self._do_ver_status)
@@ -760,6 +788,59 @@ class AtlantisTUI(App[None]):
             dest_path.mkdir(parents=True, exist_ok=True)
             result = asyncio.run(self.svc.get_output_data(simulation_id=sid, dest=dest_path))
             self.write_log(f"[green]Saved to: {result}[/green]\n")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
+
+    @work(thread=True)
+    def _do_sim_log(self, sid: int) -> None:
+        self.write_log(f"[cyan]Fetching full log for simulation {sid}...[/]")
+        try:
+            log = self.svc.get_workflow_log(simulation_id=sid, truncate=False)
+            self.write_log(f"[dim]─── Simulation {sid} Log ───[/dim]\n{log}\n")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
+
+    @work(thread=True)
+    def _do_sim_configs(self, simulator_id: int) -> None:
+        self.write_log(f"[cyan]Discovering configs for simulator {simulator_id}...[/]")
+        try:
+            discovery = self.svc.discover_repo(simulator_id=simulator_id)
+            repo = f"{discovery.git_repo_url} @ {discovery.git_commit_hash}"
+            self.write_log(f"[bold]Config files[/bold] ({repo}):")
+            if discovery.config_filenames:
+                for name in discovery.config_filenames:
+                    self.write_log(f"  {name}")
+            else:
+                self.write_log("  [dim]No config files found (embedded default will be used)[/dim]")
+            self.write_log("")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
+
+    @work(thread=True)
+    def _do_sim_analyses_discover(self, simulator_id: int) -> None:
+        self.write_log(f"[cyan]Discovering analysis modules for simulator {simulator_id}...[/]")
+        try:
+            discovery = self.svc.discover_repo(simulator_id=simulator_id)
+            repo = f"{discovery.git_repo_url} @ {discovery.git_commit_hash}"
+            self.write_log(f"[bold]Analysis modules[/bold] ({repo}):")
+            if discovery.analysis_modules:
+                for category, modules in sorted(discovery.analysis_modules.items()):
+                    self.write_log(f"  [bold magenta]{category}:[/]")
+                    for mod in modules:
+                        self.write_log(f"    {mod}")
+            else:
+                self.write_log("  [dim]No analysis modules discovered[/dim]")
+            self.write_log("")
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]\n")
+
+    @work(thread=True)
+    def _do_sim_standalone_analysis(self, sid: int) -> None:
+        self.write_log(f"[cyan]Running standalone analysis on simulation {sid}...[/]")
+        try:
+            result = self.svc.run_analysis(simulation_id=sid)
+            self.write_log("[green]Analysis submitted![/green]")
+            self._show_json(result, title=f"Standalone Analysis — Simulation {sid}")
         except Exception as e:
             self.write_log(f"[red]Error: {e}[/red]\n")
 
