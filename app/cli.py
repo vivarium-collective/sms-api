@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -44,6 +45,101 @@ class ApiBaseUrl(StrEnumBase):
 
 
 API_BASE_URL = os.getenv("API_BASE_URL", ApiBaseUrl.LOCAL_8080)
+
+
+# -- Source-sync helpers --
+
+
+def _derive_source_basename(path: Path) -> str:
+    """
+    Convention: the basename of a source directory becomes its S3 subkey.
+
+    e.g. ``/home/user/code/ecoli-sources`` → ``ecoli-sources``.
+    Trailing slashes are ignored. A path is rejected if its basename is empty
+    (e.g. the user passed ``/``).
+    """
+    name = path.resolve().name
+    if not name:
+        raise typer.BadParameter(f"Cannot derive a basename from source path: {path}")
+    return name
+
+
+def sync_sources_to_s3(
+    sources: list[Path],
+    bucket: str,
+    prefix: str = "sources",
+    delete: bool = False,
+    console: "Console | None" = None,
+) -> list[tuple[str, str]]:
+    """
+    Sync each local directory in ``sources`` to
+    ``s3://{bucket}/{prefix}/{basename}/`` via the AWS CLI.
+
+    Validates that each path exists and contains ``data/manifest.tsv``
+    (the ecoli-sources convention) — prints a warning otherwise but still
+    syncs. Skips nothing; each directory is mirrored with parallel upload.
+
+    Returns a list of ``(basename, s3_uri)`` pairs matching the input order.
+    The first entry is intended to back ``ECOLI_SOURCES``; any subsequent
+    entries are overlay manifests for ``ECOLI_SOURCES_OVERLAYS``.
+
+    Raises:
+        typer.BadParameter: if a source does not exist or is not a directory.
+        RuntimeError: if the AWS CLI is not on PATH, or if a sync fails.
+    """
+    if not sources:
+        return []
+
+    if shutil.which("aws") is None:
+        raise RuntimeError(
+            "The AWS CLI (`aws`) was not found on PATH. "
+            "Install it (https://aws.amazon.com/cli/) and authenticate "
+            "with `aws configure` (or `aws configure sso`) before using --sources."
+        )
+
+    synced: list[tuple[str, str]] = []
+    for src in sources:
+        src_path = src.expanduser().resolve()
+        if not src_path.exists():
+            raise typer.BadParameter(f"--sources path does not exist: {src_path}")
+        if not src_path.is_dir():
+            raise typer.BadParameter(f"--sources path is not a directory: {src_path}")
+
+        basename = _derive_source_basename(src_path)
+        manifest_tsv = src_path / "data" / "manifest.tsv"
+        if not manifest_tsv.exists() and console is not None:
+            console.print(
+                f"[memphis.warning]Warning:[/] {src_path} has no "
+                f"``data/manifest.tsv``. Syncing anyway, but vEcoli's ingestion "
+                f"will not find a manifest here by convention."
+            )
+
+        s3_dst = f"s3://{bucket}/{prefix.strip('/')}/{basename}/"
+        cmd = ["aws", "s3", "sync", str(src_path), s3_dst]
+        if delete:
+            cmd.append("--delete")
+        # Exclude local venv + python caches so they don't bloat the sync.
+        cmd += [
+            "--exclude", ".venv/*",
+            "--exclude", "*/__pycache__/*",
+            "--exclude", ".git/*",
+            "--exclude", "*.pyc",
+        ]
+
+        if console is not None:
+            console.print(f"[memphis.info]Syncing[/]  {src_path}  →  {s3_dst}")
+
+        try:
+            subprocess.run(cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                f"`aws s3 sync` failed for {src_path} → {s3_dst} "
+                f"(exit code {e.returncode}). Check AWS credentials and bucket permissions."
+            ) from e
+
+        synced.append((basename, s3_dst))
+
+    return synced
 
 
 cli = typer.Typer(name="atlantis", help="SMS API CLI for managing vEcoli simulations, simulators, parca, and analyses.")
@@ -271,6 +367,27 @@ def simulation_run(
         " Keys are analysis categories (single, multiseed, multigeneration, etc.);"
         " values map module names to params. If omitted, defaults depend on the simulator repo.",
     ),
+    sources: list[Path] = Option(
+        default_factory=list,
+        help="Local data-source directories (ecoli-sources, ecoli-sources-vegas, "
+        "etc.) to sync to S3 before starting the workflow. Repeat for multiple "
+        "sources: `--sources ../ecoli-sources --sources ../ecoli-sources-vegas`. "
+        "Each directory is uploaded via `aws s3 sync` to "
+        "`s3://{bucket}/sources/{basename}/`. The first source is intended to "
+        "back ECOLI_SOURCES; any subsequent ones are overlay manifests "
+        "(ECOLI_SOURCES_OVERLAYS). Requires the AWS CLI on PATH with "
+        "credentials configured.",
+    ),
+    sources_prefix: str = Option(
+        default="sources",
+        help="S3 key prefix under the configured bucket where --sources "
+        "directories are synced. Default: 'sources'.",
+    ),
+    sources_delete: bool = Option(
+        default=False,
+        help="Pass --delete to `aws s3 sync`, removing S3 objects that no "
+        "longer exist locally. Off by default (safer for shared buckets).",
+    ),
     poll: bool = Option(default=False, help="Poll simulation status until completion."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
@@ -284,6 +401,57 @@ def simulation_run(
     observables_list = [o.strip() for o in observables.split(",") if o.strip()] if observables else None
     analysis_opts_parsed = _json.loads(analysis_options) if analysis_options else None
 
+    # Sync any --sources directories to S3 before submitting the workflow,
+    # then derive the env-var values to forward to the container.
+    ecoli_sources_uri: str | None = None
+    ecoli_sources_overlays: str | None = None
+    if sources:
+        from sms_api.config import get_settings
+
+        settings = get_settings()
+        if not settings.storage_s3_bucket:
+            console.print(
+                "[memphis.error]--sources requires STORAGE_S3_BUCKET to be "
+                "configured.[/] Set it in assets/dev/config/.dev_env or your "
+                "environment before re-running."
+            )
+            raise typer.Exit(1)
+
+        try:
+            synced = sync_sources_to_s3(
+                sources=sources,
+                bucket=settings.storage_s3_bucket,
+                prefix=sources_prefix,
+                delete=sources_delete,
+                console=console,
+            )
+        except (RuntimeError, typer.BadParameter) as e:
+            console.print(f"[memphis.error]Source sync failed:[/] {e}")
+            raise typer.Exit(1) from e
+
+        console.print()
+        console.print("[memphis.success]Synced sources:[/]")
+        for basename, s3_uri in synced:
+            console.print(f"  [memphis.info]{basename}[/]  →  {s3_uri}")
+
+        # First synced source backs ECOLI_SOURCES; the rest become
+        # overlay manifests joined by ';' (the URI-safe separator).
+        primary_basename, primary_uri = synced[0]
+        ecoli_sources_uri = primary_uri.rstrip("/")
+        overlay_manifest_uris = [
+            f"{uri.rstrip('/')}/data/manifest.tsv" for _, uri in synced[1:]
+        ]
+        if overlay_manifest_uris:
+            ecoli_sources_overlays = ";".join(overlay_manifest_uris)
+
+        console.print()
+        console.print(
+            "[memphis.dim]Forwarding to container as:[/]"
+            f"\n  ECOLI_SOURCES={ecoli_sources_uri}"
+            + (f"\n  ECOLI_SOURCES_OVERLAYS={ecoli_sources_overlays}" if ecoli_sources_overlays else "")
+        )
+        console.print()
+
     with console.status("[memphis.spinner]Submitting simulation..."):
         simulation = data_service.run_workflow(
             experiment_id=experiment_id,
@@ -295,6 +463,8 @@ def simulation_run(
             run_parameter_calculator=run_parca,
             observables=observables_list,
             analysis_options=analysis_opts_parsed,
+            ecoli_sources_uri=ecoli_sources_uri,
+            ecoli_sources_overlays=ecoli_sources_overlays,
         )
 
     console.print(f"[memphis.success]Simulation submitted![/]  ID: {simulation.database_id}")
