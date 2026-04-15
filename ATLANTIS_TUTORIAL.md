@@ -117,6 +117,9 @@ uv run atlantis simulation run my_experiment 11 \
 | `--poll` | off | Wait and display status updates until completion |
 | `--config-filename` | `api_simulation_default.json` | Simulation config file on HPC |
 | `--description` | auto-generated | Custom description for the run |
+| `--sources` | none | Local data-source directory to sync to S3 before the run. Repeatable. |
+| `--sources-prefix` | `sources` | S3 key prefix under the configured bucket. |
+| `--sources-delete` | off | Pass `--delete` to `aws s3 sync`. |
 
 **What happens under the hood:**
 
@@ -156,6 +159,40 @@ Or poll an already-running simulation:
 ```bash
 uv run atlantis simulation status 35 --poll
 ```
+
+#### Syncing custom data sources with `--sources`
+
+vEcoli's parca can consume RNA-seq datasets (and other curated inputs) from
+sibling data repos like `ecoli-sources` and private overlays like
+`ecoli-sources-vegas`. The `--sources` flag uploads local directories to S3
+and wires the resulting URIs into the simulation container as
+`ECOLI_SOURCES` / `ECOLI_SOURCES_OVERLAYS` environment variables — no manual
+config editing required.
+
+```bash
+uv run atlantis simulation run my_experiment 11 \
+  --config-filename configs/campaigns/pilot_expression_noise.json \
+  --sources ../ecoli-sources \
+  --sources ../ecoli-sources-vegas \
+  --run-parca --poll
+```
+
+What this does:
+
+1. For each `--sources <dir>`, runs `aws s3 sync <dir>
+   s3://{STORAGE_S3_BUCKET}/sources/<basename>/` (excluding `.venv`,
+   `__pycache__`, `.git`, `*.pyc`).
+2. The first source backs `ECOLI_SOURCES`; subsequent ones become `;`-joined
+   overlay manifest URIs in `ECOLI_SOURCES_OVERLAYS`.
+3. Both env vars are set on the Batch container, so configs that reference
+   `$ECOLI_SOURCES/data/manifest.tsv` resolve automatically.
+
+Requires the AWS CLI on `PATH` with credentials configured and
+`STORAGE_S3_BUCKET` set (e.g. in `assets/dev/config/.dev_env`).
+
+The broader sensitivity-campaign workflow (campaign specs, perturbation
+operators, cross-variant analyses) is documented in vEcoli's
+[`doc/sensitivity_campaigns.rst`](https://github.com/CovertLab/vEcoli/blob/multi-parca-aws/doc/sensitivity_campaigns.rst).
 
 ### Step 3: Download Results
 
