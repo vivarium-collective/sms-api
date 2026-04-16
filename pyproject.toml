@@ -67,7 +67,7 @@ Documentation = "https://vivarium-collective.github.io/sms-api/"
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
-    "pytest-cov>=4.0.0,<5",
+    "pytest-cov>=4.0.0,<8",
     "deptry>=0.16.2,<0.17",
     "mypy>=1.5.1,<1.20",
     "pre-commit>=3.4.0,<4",
