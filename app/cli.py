@@ -128,6 +128,24 @@ def cli_error_handler(fn: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
+def _slice_by_id(items: list[Any], n: int | None) -> list[Any]:
+    """Slice a list of model objects by database_id order.
+
+    Args:
+        items: List of pydantic models with a ``database_id`` attribute.
+        n: If positive, return the first N (lowest IDs). If negative, return
+           the last |N| (highest IDs). If None or 0, return all.
+    """
+    if not n or not items:
+        return items
+    has_id = hasattr(items[0], "database_id")
+    if has_id:
+        items = sorted(items, key=lambda x: x.database_id)
+    if n > 0:
+        return items[:n]
+    return items[n:]
+
+
 class CliType(StrEnumBase):
     SIMULATOR = "simulator"
     SIMULATION = "simulation"
@@ -322,13 +340,17 @@ def simulator_latest(
     display_json(uploaded.model_dump(), console)
 
 
-@simulator_cli.command("list", help="List all registered simulator versions.")
+@simulator_cli.command("list", help="List registered simulator versions.")
 def simulator_list(
+    n: int | None = Option(
+        default=None, help="Number of entries to show. Positive = first N, negative = last N (by ID)."
+    ),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     console = get_console()
     data_service = get_data_service(base_url=base_url)
     simulators = data_service.show_simulators()
+    simulators = _slice_by_id(simulators, n)
     for sim in simulators:
         display_json(sim.model_dump(), console)
 
@@ -462,13 +484,17 @@ def simulation_get(
     display_json(simulation.model_dump(), console)
 
 
-@simulation_cli.command("list", help="List all simulations.")
+@simulation_cli.command("list", help="List simulations.")
 def simulation_list(
+    n: int | None = Option(
+        default=None, help="Number of entries to show. Positive = first N, negative = last N (by ID)."
+    ),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     console = get_console()
     data_service = get_data_service(base_url=base_url)
     simulations = data_service.show_workflows()
+    simulations = _slice_by_id(simulations, n)
     for sim in simulations:
         display_json(sim.model_dump(), console)
 
@@ -607,13 +633,17 @@ def simulation_analysis(
 # -- Parca commands --
 
 
-@parca_cli.command("list", help="List all parca datasets.")
+@parca_cli.command("list", help="List parca datasets.")
 def parca_list(
+    n: int | None = Option(
+        default=None, help="Number of entries to show. Positive = first N, negative = last N (by ID)."
+    ),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     console = get_console()
     data_service = get_data_service(base_url=base_url)
     datasets = data_service.get_parca_datasets()
+    datasets = _slice_by_id(datasets, n)
     for ds in datasets:
         display_json(ds.model_dump(), console)
 
