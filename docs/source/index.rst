@@ -40,6 +40,7 @@ download results) in a different format:
    guides/end-to-end-workflow
    guides/choosing-a-client
    guides/cli-reference
+   guides/analysis-filtering
 
 .. toctree::
    :maxdepth: 2
