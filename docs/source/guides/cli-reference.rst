@@ -64,11 +64,21 @@ Fetch the latest commit, upload, and build a simulator image.
 simulator list
 ~~~~~~~~~~~~~~
 
-List all registered simulator versions.
+List registered simulator versions.
 
 .. code-block:: bash
 
    uv run atlantis simulator list
+   uv run atlantis simulator list --n 3     # first 3 (by ID)
+   uv run atlantis simulator list --n -1    # most recent
+
+.. list-table::
+   :widths: 30 70
+
+   * - Option
+     - Description
+   * - ``--n INTEGER``
+     - Number of entries. Positive = first N, negative = last N (by ID).
 
 simulator status
 ~~~~~~~~~~~~~~~~
@@ -174,11 +184,21 @@ Get a simulation by its database ID.
 simulation list
 ~~~~~~~~~~~~~~~
 
-List all simulations.
+List simulations.
 
 .. code-block:: bash
 
    uv run atlantis simulation list
+   uv run atlantis simulation list --n -1    # most recent simulation
+   uv run atlantis simulation list --n 5     # first 5 (by ID)
+
+.. list-table::
+   :widths: 30 70
+
+   * - Option
+     - Description
+   * - ``--n INTEGER``
+     - Number of entries. Positive = first N, negative = last N (by ID).
 
 simulation configs
 ~~~~~~~~~~~~~~~~~~
@@ -297,6 +317,15 @@ parca list
 .. code-block:: bash
 
    uv run atlantis parca list
+   uv run atlantis parca list --n -3    # last 3 parca datasets
+
+.. list-table::
+   :widths: 30 70
+
+   * - Option
+     - Description
+   * - ``--n INTEGER``
+     - Number of entries. Positive = first N, negative = last N (by ID).
 
 parca status
 ~~~~~~~~~~~~

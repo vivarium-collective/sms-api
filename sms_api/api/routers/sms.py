@@ -33,6 +33,22 @@ from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.models import AnalysisOptions, RepoDiscovery, Simulation, SimulationRun
 
+
+def _validate_simulation_config_filename(simulation_config_filename: str) -> None:
+    """Reject ``configs/`` prefix typos that would silently 404 on the server."""
+    if simulation_config_filename.startswith("configs/"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"simulation_config_filename {simulation_config_filename!r} starts "
+                "with 'configs/'. The server prepends 'configs/' itself; pass the "
+                "path relative to the repo's configs/ directory (e.g. "
+                "'campaigns/pilot_mixed.json' instead of "
+                "'configs/campaigns/pilot_mixed.json')."
+            ),
+        )
+
+
 ENV = get_settings()
 
 logger = logging.getLogger(__name__)
@@ -107,6 +123,7 @@ async def run_simulation_workflow(
     This endpoint reads the workflow configuration from the vEcoli repo on the HPC
     system and allows overriding specific parameters via query params.
     """
+    _validate_simulation_config_filename(simulation_config_filename)
     if experiment_id is None:
         experiment_id = get_experiment_id(simulator_id, simulation_config_filename)
     sim_service = get_simulation_service()

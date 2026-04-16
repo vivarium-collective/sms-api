@@ -251,10 +251,12 @@ class E2EDataService:
         try:
             simulators = self.client.get(url="/core/v1/simulator/versions")
             if simulators.status_code != 200:
-                raise httpx.HTTPError("Error!")  # noqa: TRY301
+                raise httpx.HTTPError(f"Server returned {simulators.status_code}: {simulators.text}")  # noqa: TRY301
             return [SimulatorVersion(**sim) for sim in simulators.json()["versions"]]
+        except httpx.HTTPError:
+            raise
         except Exception as e:
-            raise httpx.HTTPError("Could not load simulators") from e
+            raise httpx.HTTPError(f"Could not list simulators: {e}") from e
 
     def submit_get_simulator_build_status(self, simulator: SimulatorVersion) -> str:
         try:
@@ -262,10 +264,14 @@ class E2EDataService:
                 url="/core/v1/simulator/status", params={"simulator_id": simulator.database_id}
             )
             if status_update_response.status_code != 200:
-                raise httpx.HTTPError("Error!")  # noqa: TRY301
+                raise httpx.HTTPError(  # noqa: TRY301
+                    f"Server returned {status_update_response.status_code}: {status_update_response.text}"
+                )
             return status_update_response.json().get("status", "")  # type: ignore[no-any-return]
+        except httpx.HTTPError:
+            raise
         except Exception as e:
-            raise httpx.HTTPError(f"Could not fetch build status for simulator: {simulator.model_dump()}") from e
+            raise httpx.HTTPError(f"Could not fetch build status for simulator {simulator.database_id}: {e}") from e
 
     def submit_get_simulator_build_status_full(self, simulator_id: int) -> HpcRun:
         try:
@@ -284,10 +290,14 @@ class E2EDataService:
                 url="/core/v1/simulator/status", params={"simulator_id": simulator_id}
             )
             if status_update_response.status_code != 200:
-                raise httpx.HTTPError("Error!")  # noqa: TRY301
+                raise httpx.HTTPError(  # noqa: TRY301
+                    f"Server returned {status_update_response.status_code}: {status_update_response.text}"
+                )
             return status_update_response.json().get("status", "")  # type: ignore[no-any-return]
+        except httpx.HTTPError:
+            raise
         except Exception as e:
-            raise httpx.HTTPError(f"Could not fetch build status for simulator with id: {simulator_id}") from e
+            raise httpx.HTTPError(f"Could not fetch build status for simulator {simulator_id}: {e}") from e
 
     # -- Low-level HTTP methods: Simulation --
 
@@ -343,10 +353,14 @@ class E2EDataService:
         try:
             status_update_response = self.client.get(url=f"/api/v1/simulations/{simulation_id}/status")
             if status_update_response.status_code != 200:
-                raise httpx.HTTPError("Error!")  # noqa: TRY301
+                raise httpx.HTTPError(  # noqa: TRY301
+                    f"Server returned {status_update_response.status_code}: {status_update_response.text}"
+                )
             return SimulationRun(**status_update_response.json())
+        except httpx.HTTPError:
+            raise
         except Exception as e:
-            raise httpx.HTTPError(f"Could not load status for simulation {simulation_id}") from e
+            raise httpx.HTTPError(f"Could not load status for simulation {simulation_id}: {e}") from e
 
     def submit_cancel_workflow(self, simulation_id: int) -> SimulationRun:
         try:
@@ -363,28 +377,34 @@ class E2EDataService:
         try:
             data_response = self.client.post(url=f"/api/v1/simulations/{simulation_id}/data")
             if data_response.status_code != 200:
-                raise httpx.HTTPError("Error!")  # noqa: TRY301
+                raise httpx.HTTPError(f"Server returned {data_response.status_code}: {data_response.text}")  # noqa: TRY301
             return [TsvOutputFile(**output) for output in data_response.json()]
+        except httpx.HTTPError:
+            raise
         except Exception as e:
-            raise httpx.HTTPError("Could not load simulation data") from e
+            raise httpx.HTTPError(f"Could not load output data for simulation {simulation_id}: {e}") from e
 
     def submit_get_workflow(self, simulation_id: int) -> Simulation:
         try:
             simulation = self.client.get(url=f"/api/v1/simulations/{simulation_id}")
             if simulation.status_code != 200:
-                raise httpx.HTTPError("Error!")  # noqa: TRY301
+                raise httpx.HTTPError(f"Server returned {simulation.status_code}: {simulation.text}")  # noqa: TRY301
             return Simulation(**simulation.json())
+        except httpx.HTTPError:
+            raise
         except Exception as e:
-            raise httpx.HTTPError("Could not load simulation data") from e
+            raise httpx.HTTPError(f"Could not load simulation {simulation_id}: {e}") from e
 
     def submit_list_workflows(self) -> list[Simulation]:
         try:
             simulations = self.client.get(url="/api/v1/simulations")
             if simulations.status_code != 200:
-                raise httpx.HTTPError("Error!")  # noqa: TRY301
+                raise httpx.HTTPError(f"Server returned {simulations.status_code}: {simulations.text}")  # noqa: TRY301
             return [Simulation(**sim) for sim in simulations.json()]
+        except httpx.HTTPError:
+            raise
         except Exception as e:
-            raise httpx.HTTPError("Could not load simulation data") from e
+            raise httpx.HTTPError(f"Could not list simulations: {e}") from e
 
     def submit_get_workflow_log(self, simulation_id: int, truncate: bool = True) -> str:
         try:
@@ -393,10 +413,12 @@ class E2EDataService:
                 params={"truncate": str(truncate).lower()},
             )
             if structured_log.status_code != 200:
-                raise httpx.HTTPError("Error!")  # noqa: TRY301
+                raise httpx.HTTPError(f"Server returned {structured_log.status_code}: {structured_log.text}")  # noqa: TRY301
             return structured_log.text
+        except httpx.HTTPError:
+            raise
         except Exception as e:
-            raise httpx.HTTPError("Could not load simulation log") from e
+            raise httpx.HTTPError(f"Could not load log for simulation {simulation_id}: {e}") from e
 
     # -- Low-level HTTP methods: Parca --
 

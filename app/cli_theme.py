@@ -85,8 +85,18 @@ def get_console() -> Console:
 
 
 def display_json(content: dict[str, object] | list[object] | str, console: Console | None = None) -> None:
-    """Display JSON data using the 256-color-safe native Pygments theme."""
+    """Display JSON data using the 256-color-safe native Pygments theme.
+
+    When stdout is not a TTY (i.e. piped to jq, grep, etc.), outputs raw JSON
+    without ANSI codes so downstream tools can parse it.
+    """
     import json
+    import sys
+
+    if not sys.stdout.isatty():
+        raw = content if isinstance(content, str) else json.dumps(content, indent=2, default=str)
+        print(raw)
+        return
 
     from rich.syntax import Syntax
 

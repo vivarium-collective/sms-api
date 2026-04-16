@@ -385,12 +385,44 @@ class TestSimulationServiceK8s:
         assert "api.github.com/repos/test/repo" in call_url
         assert "test.json" in call_url
 
+    async def test_read_config_template_raises_on_404(
+        self,
+        simulation_service_k8s_mock: SimulationServiceK8s,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify read_config_template raises HTTPException(404) when config not found."""
+        from fastapi import HTTPException
+
+        from sms_api.simulation.models import SimulatorVersion
+
+        simulator = SimulatorVersion(
+            database_id=1,
+            git_commit_hash="6f7e5b9",
+            git_repo_url="https://github.com/CovertLab/vEcoli",
+            git_branch="master",
+        )
+
+        mock_response = AsyncMock()
+        mock_response.status_code = 404
+        mock_response.raise_for_status = MagicMock(side_effect=Exception("should not be called"))
+
+        mock_client = AsyncMock()
+        mock_client.get.return_value = mock_response
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        monkeypatch.setattr("sms_api.simulation.simulation_service_k8s.httpx.AsyncClient", lambda: mock_client)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await simulation_service_k8s_mock.read_config_template(simulator, "nonexistent.json")
+        assert exc_info.value.status_code == 404
+
     async def test_read_config_template_fallback_on_404(
         self,
         simulation_service_k8s_mock: SimulationServiceK8s,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Verify read_config_template returns embedded default when GitHub returns 404."""
+        """Verify read_config_template returns embedded default when allow_default_fallback=True."""
         from sms_api.simulation.models import SimulatorVersion
         from sms_api.simulation.simulation_service_k8s import _DEFAULT_CONFIG_TEMPLATE
 
@@ -412,13 +444,36 @@ class TestSimulationServiceK8s:
 
         monkeypatch.setattr("sms_api.simulation.simulation_service_k8s.httpx.AsyncClient", lambda: mock_client)
 
-        result = await simulation_service_k8s_mock.read_config_template(simulator, "api_simulation_default.json")
+        result = await simulation_service_k8s_mock.read_config_template(
+            simulator, "api_simulation_default.json", allow_default_fallback=True
+        )
 
         parsed = json.loads(result)
         assert parsed["experiment_id"] == "EXPERIMENT_ID_PLACEHOLDER"
         assert parsed["parca_options"]["cpus"] == 6
         assert "aws_cdk" in parsed
         assert parsed == _DEFAULT_CONFIG_TEMPLATE
+
+    async def test_read_config_template_rejects_configs_prefix(
+        self,
+        simulation_service_k8s_mock: SimulationServiceK8s,
+    ) -> None:
+        """Verify configs/ prefix in filename is rejected with a 400."""
+        from fastapi import HTTPException
+
+        from sms_api.simulation.models import SimulatorVersion
+
+        simulator = SimulatorVersion(
+            database_id=1,
+            git_commit_hash="6f7e5b9",
+            git_repo_url="https://github.com/CovertLab/vEcoli",
+            git_branch="master",
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await simulation_service_k8s_mock.read_config_template(simulator, "configs/campaigns/pilot_mixed.json")
+        assert exc_info.value.status_code == 400
+        assert "configs/" in str(exc_info.value.detail)
 
     async def test_build_command_generates_valid_script(
         self,

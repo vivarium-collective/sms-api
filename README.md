@@ -31,6 +31,10 @@ uv sync
 # Build a simulator (public vEcoli repo)
 uv run atlantis simulator latest --repo-url https://github.com/CovertLab/vEcoli --branch master
 
+# List resources (--n slices: positive = first N, negative = last N by ID)
+uv run atlantis simulation list --n -1       # most recent simulation
+uv run atlantis simulator list --n 3         # first 3 simulators
+
 # Discover available configs and analysis modules for your simulator
 uv run atlantis simulation configs 16
 uv run atlantis simulation analyses 16

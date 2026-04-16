@@ -56,7 +56,9 @@ class ConcreteSimulationService(SimulationService):
         raise NotImplementedError
 
     @override
-    async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
+    async def read_config_template(
+        self, simulator_version: SimulatorVersion, config_filename: str, allow_default_fallback: bool = False
+    ) -> str:
         raise NotImplementedError
 
     @override

@@ -16,4 +16,5 @@
 # 0.7.6 — TUI/GUI feature parity, reactive simulator selection, repo dropdown, list sorting
 # 0.7.7 — fix analysis filters (generation_range/lineage_seed inside analysis_options),
 #          allow arbitrary public vEcoli branches, bump pytest for CVE fix
-__version__ = "0.7.7"
+# 0.7.8 — explicit config validation (no silent fallback), diagnose_sim.py diagnostic tool
+__version__ = "0.7.8"

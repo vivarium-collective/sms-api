@@ -1,0 +1,48 @@
+name: Live Integration Tests
+
+# Manual-only trigger — never runs automatically.
+# These tests hit live infrastructure (RKE prod) and must only be run
+# when the target server is known to be healthy and the test payloads
+# are appropriate for the current data state.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "API base URL to test against"
+        required: true
+        default: "https://sms.cam.uchc.edu"
+        type: choice
+        options:
+          - "https://sms.cam.uchc.edu"
+          - "https://sms-dev.cam.uchc.edu"
+      experiment_id:
+        description: "Experiment ID for analysis tests"
+        required: true
+        default: "sim3-test-5062"
+
+jobs:
+  analysis-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Run analysis single test
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          EXPERIMENT_ID: ${{ inputs.experiment_id }}
+        run: |
+          # Substitute the base URL and experiment ID into the test scripts
+          sed -i "s|https://sms.cam.uchc.edu|${BASE_URL}|g" tests/clients/test_analyses_single.mjs
+          sed -i "s|sim3-test-5062|${EXPERIMENT_ID}|g" tests/clients/test_analyses_single.mjs
+          node tests/clients/test_analyses_single.mjs
+
+      - name: Run analysis compare test
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          EXPERIMENT_ID: ${{ inputs.experiment_id }}
+        run: |
+          sed -i "s|https://sms.cam.uchc.edu|${BASE_URL}|g" tests/clients/test_analyses_compare.mjs
+          sed -i "s|sim3-test-5062|${EXPERIMENT_ID}|g" tests/clients/test_analyses_compare.mjs
+          node tests/clients/test_analyses_compare.mjs
