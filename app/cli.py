@@ -1,24 +1,131 @@
 from __future__ import annotations
 
 import asyncio
+import functools
+import json as _json_mod
 import os
 import subprocess
+import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sms_api.common import StrEnumBase
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from rich.console import Console
 
     from sms_api.common.storage.file_service_s3 import FileServiceS3
 
+import httpx
 import typer
 from typer import Argument, Option
 
 from app.app_data_service import get_data_service
 from app.cli_theme import display_json, get_console, print_banner, status_border, status_style
 from app.tui import AtlantisTUI
+
+
+def _format_server_detail(body: str) -> str:
+    """Extract the 'detail' field from a JSON error body, or return the body as-is."""
+    try:
+        parsed = _json_mod.loads(body)
+        if isinstance(parsed, dict) and "detail" in parsed:
+            return str(parsed["detail"])
+    except (ValueError, TypeError):
+        pass
+    return body.strip()
+
+
+def _handle_cli_error(e: Exception, console: Console | None = None) -> None:
+    """Render a user-friendly error panel for common exception types."""
+    from rich.panel import Panel
+
+    if console is None:
+        console = get_console()
+
+    if isinstance(e, httpx.ConnectError | ConnectionError | OSError) or _is_connection_error(e):
+        console.print(
+            Panel(
+                "[memphis.error]Could not connect to the API server.[/]\n\n"
+                "Check that the server is running and the --base-url is correct.\n"
+                f"Detail: {e}",
+                title="Connection Error",
+                border_style="memphis.border.error",
+            )
+        )
+    elif isinstance(e, httpx.HTTPStatusError):
+        detail = _format_server_detail(e.response.text)
+        code = e.response.status_code
+        console.print(
+            Panel(
+                f"[memphis.error]Server returned {code}[/]\n\n{detail}",
+                title="API Error",
+                border_style="memphis.border.error",
+            )
+        )
+    elif isinstance(e, httpx.HTTPError):
+        msg = str(e)
+        # Extract JSON detail from messages like "Server returned 400: {"detail":"..."}"
+        json_start = msg.find("{")
+        if json_start >= 0:
+            prefix = msg[:json_start].strip().rstrip(":")
+            detail = _format_server_detail(msg[json_start:])
+            label = prefix if prefix else "HTTP Error"
+        else:
+            detail = msg
+            label = "HTTP Error"
+        console.print(
+            Panel(
+                f"[memphis.error]{label}[/]\n\n{detail}",
+                title="API Error",
+                border_style="memphis.border.error",
+            )
+        )
+    elif isinstance(e, _json_mod.JSONDecodeError):
+        console.print(
+            Panel(
+                f"[memphis.error]Invalid JSON input.[/]\n\n{e.msg}\n  at position {e.pos}",
+                title="Input Error",
+                border_style="memphis.border.error",
+            )
+        )
+    elif isinstance(e, KeyboardInterrupt):
+        console.print("\n[memphis.warning]Cancelled.[/]")
+    else:
+        console.print(
+            Panel(
+                f"[memphis.error]{type(e).__name__}[/]: {e}",
+                title="Error",
+                border_style="memphis.border.error",
+            )
+        )
+
+    if os.environ.get("ATLANTIS_DEBUG"):
+        console.print_exception(show_locals=True)
+
+
+def _is_connection_error(e: Exception) -> bool:
+    """Check if an exception is a connection-related error."""
+    err_str = str(e).lower()
+    return any(s in err_str for s in ("connect", "refused", "unreachable", "timed out", "no route"))
+
+
+def cli_error_handler(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Decorator that catches exceptions and renders user-friendly error messages."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return fn(*args, **kwargs)
+        except (SystemExit, KeyboardInterrupt):
+            raise
+        except Exception as e:
+            _handle_cli_error(e)
+            raise typer.Exit(1) from None
+
+    return wrapper
 
 
 class CliType(StrEnumBase):
@@ -67,14 +174,21 @@ cli.add_typer(tkapp_cli)
 
 
 def main() -> None:
-    import sys
-
     # Allow "help" as a trailing word at any nesting level:
     # e.g. "atlantis simulation run help" → "atlantis simulation run --help"
     if len(sys.argv) > 1 and sys.argv[-1] == "help":
         sys.argv[-1] = "--help"
 
-    cli()
+    try:
+        cli()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        get_console().print("\n[memphis.warning]Cancelled.[/]")
+        raise SystemExit(130) from None
+    except Exception as e:
+        _handle_cli_error(e)
+        raise SystemExit(1) from None
 
 
 # -- Info/Help --
