@@ -8,7 +8,7 @@ Two-phase execution model:
 import json
 import logging
 
-import boto3  # type: ignore[import-untyped]
+import boto3
 import httpx
 from fastapi import HTTPException
 from kubernetes import client as k8s_client
