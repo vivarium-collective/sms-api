@@ -5,7 +5,7 @@ namespace: sms-api-rke-dev
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.7.8
+    newTag: 0.7.9
   # ptools pinned to last-known-good tag — see Stanford-test kustomization
   # for rationale.  No sms-ptools:0.6.x image exists on ghcr.io because the
   # build-and-push GH Action's ptools step is broken.
