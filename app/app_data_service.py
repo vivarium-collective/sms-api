@@ -114,6 +114,8 @@ class E2EDataService:
         analysis_options: dict[str, object] | None = None,
         ecoli_sources_uri: str | None = None,
         ecoli_sources_overlays: str | None = None,
+        ecoli_sources_repo_url: str | None = None,
+        ecoli_sources_ref: str | None = None,
     ) -> Simulation:
         simulation = self.submit_run_workflow(
             params=params,
@@ -128,6 +130,8 @@ class E2EDataService:
             analysis_options=analysis_options,
             ecoli_sources_uri=ecoli_sources_uri,
             ecoli_sources_overlays=ecoli_sources_overlays,
+            ecoli_sources_repo_url=ecoli_sources_repo_url,
+            ecoli_sources_ref=ecoli_sources_ref,
         )
         return simulation
 
@@ -319,6 +323,8 @@ class E2EDataService:
         analysis_options: dict[str, object] | None = None,
         ecoli_sources_uri: str | None = None,
         ecoli_sources_overlays: str | None = None,
+        ecoli_sources_repo_url: str | None = None,
+        ecoli_sources_ref: str | None = None,
     ) -> Simulation:
         if params is not None:
             query_params = params
@@ -334,6 +340,8 @@ class E2EDataService:
                     "description": description,
                     "ecoli_sources_uri": ecoli_sources_uri,
                     "ecoli_sources_overlays": ecoli_sources_overlays,
+                    "ecoli_sources_repo_url": ecoli_sources_repo_url,
+                    "ecoli_sources_ref": ecoli_sources_ref,
                     "experiment_id": experiment_id,
                     "run_parca": run_parameter_calculator,
                 }.items()

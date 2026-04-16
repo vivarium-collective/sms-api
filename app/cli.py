@@ -475,6 +475,15 @@ def simulation_run(
         default=False,
         help="Pass --delete to `aws s3 sync` (removes S3 objects not present locally).",
     ),
+    sources_repo: str | None = Option(
+        default=None,
+        help="GitHub repo URL for ecoli-sources data (e.g. https://github.com/vivarium-collective/ecoli-sources). "
+        "The server downloads and syncs to S3 automatically — no local clone or AWS CLI needed.",
+    ),
+    sources_ref: str | None = Option(
+        default=None,
+        help="Git ref (branch/tag/commit) for --sources-repo. Defaults to 'main'.",
+    ),
     poll: bool = Option(default=False, help="Poll simulation status until completion."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
@@ -533,6 +542,8 @@ def simulation_run(
             analysis_options=analysis_opts_parsed,
             ecoli_sources_uri=ecoli_sources_uri,
             ecoli_sources_overlays=ecoli_sources_overlays,
+            ecoli_sources_repo_url=sources_repo,
+            ecoli_sources_ref=sources_ref,
         )
 
     console.print(f"[memphis.success]Simulation submitted![/]  ID: {simulation.database_id}")
