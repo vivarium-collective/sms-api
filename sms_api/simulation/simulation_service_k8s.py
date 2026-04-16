@@ -493,15 +493,40 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
         return JobId.k8s(job_name)
 
     @override
-    async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
+    async def read_config_template(
+        self,
+        simulator_version: SimulatorVersion,
+        config_filename: str,
+        allow_default_fallback: bool = False,
+    ) -> str:
         """Read a vEcoli config template from the GitHub repo via the Contents API.
 
-        Falls back to the embedded ``_DEFAULT_CONFIG_TEMPLATE`` when the
-        requested config file does not exist in the repo (e.g. the public
-        CovertLab/vEcoli repo does not ship ``api_simulation_default.json``).
+        Raises HTTPException(404) if the config file does not exist in the
+        repo at the requested commit. Set ``allow_default_fallback=True`` to
+        silently substitute the embedded ``_DEFAULT_CONFIG_TEMPLATE`` instead
+        — the legacy behavior, retained as an opt-in for tests and for the
+        rare case where the caller genuinely wants a synthetic default.
+
+        The default-fallback was previously the silent default and produced a
+        whole class of "my run did nothing useful" failures (custom configs
+        misnamed via path-prefix typos like ``configs/foo.json`` instead of
+        ``foo.json`` would 404 and silently downgrade to a vanilla 1-gen sim).
         """
+        from fastapi import HTTPException
+
         settings = get_settings()
         base = _github_api_url(simulator_version.git_repo_url)
+        # Reject obvious path-prefix mistakes that would yield ``contents/configs/configs/...``
+        if config_filename.startswith("configs/"):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"config_filename {config_filename!r} starts with 'configs/' — "
+                    "drop the prefix. The path is resolved relative to the repo's "
+                    "configs/ directory, so e.g. pass 'campaigns/pilot_mixed.json' "
+                    "instead of 'configs/campaigns/pilot_mixed.json'."
+                ),
+            )
         api_url = f"{base}/contents/configs/{config_filename}?ref={simulator_version.git_commit_hash}"
         headers: dict[str, str] = {"Accept": "application/vnd.github.v3.raw"}
         if settings.github_token:
@@ -509,13 +534,32 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
         async with httpx.AsyncClient() as client:
             response = await client.get(api_url, headers=headers)
             if response.status_code == 404:
-                logger.warning(
-                    "Config %s not found in %s@%s — using embedded default template",
+                if allow_default_fallback:
+                    logger.warning(
+                        "Config %s not found in %s@%s — using embedded default template "
+                        "(allow_default_fallback=True)",
+                        config_filename,
+                        simulator_version.git_repo_url,
+                        simulator_version.git_commit_hash,
+                    )
+                    return json.dumps(_DEFAULT_CONFIG_TEMPLATE)
+                logger.error(
+                    "Config %s not found in %s@%s (URL=%s)",
                     config_filename,
                     simulator_version.git_repo_url,
                     simulator_version.git_commit_hash,
+                    api_url,
                 )
-                return json.dumps(_DEFAULT_CONFIG_TEMPLATE)
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        f"Config file {config_filename!r} not found in "
+                        f"{simulator_version.git_repo_url} at commit "
+                        f"{simulator_version.git_commit_hash}. "
+                        f"Use GET /api/v1/simulations/discovery?simulator_id=... "
+                        f"to list available configs."
+                    ),
+                )
             response.raise_for_status()
             return response.text
 

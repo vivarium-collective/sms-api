@@ -459,8 +459,36 @@ class SimulationServiceHpc(SimulationService):
             return JobId.slurm(slurm_jobid)
 
     @override
-    async def read_config_template(self, simulator_version: SimulatorVersion, config_filename: str) -> str:
+    async def read_config_template(
+        self,
+        simulator_version: SimulatorVersion,
+        config_filename: str,
+        allow_default_fallback: bool = False,
+    ) -> str:
+        """Read a vEcoli config template from the HPC checkout via SSH.
+
+        Raises HTTPException(404) if the file does not exist; raises
+        HTTPException(409) if the file exists but lacks API placeholders
+        (vanilla vEcoli config) — pass ``allow_default_fallback=True`` to
+        substitute the embedded ``_DEFAULT_CONFIG_TEMPLATE`` for either case.
+
+        The default-fallback was previously silent and masked path-prefix
+        typos (``configs/foo.json`` instead of ``foo.json``), causing custom
+        campaign configs to silently downgrade to a vanilla 1-generation sim.
+        """
+        from fastapi import HTTPException
+
         from sms_api.simulation.simulation_service_k8s import _DEFAULT_CONFIG_TEMPLATE
+
+        if config_filename.startswith("configs/"):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"config_filename {config_filename!r} starts with 'configs/' — "
+                    "drop the prefix. Path is resolved relative to the repo's "
+                    "configs/ directory."
+                ),
+            )
 
         settings = get_settings()
         remote_config_path = (
@@ -473,22 +501,54 @@ class SimulationServiceHpc(SimulationService):
         async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
             returncode, stdout, stderr = await ssh.run_command(f"cat {remote_config_path}")
             if returncode != 0:
-                logger.warning(
-                    "Config %s not found at %s — using embedded default template",
+                if allow_default_fallback:
+                    logger.warning(
+                        "Config %s not found at %s — using embedded default template "
+                        "(allow_default_fallback=True)",
+                        config_filename,
+                        remote_config_path,
+                    )
+                    return json.dumps(_DEFAULT_CONFIG_TEMPLATE)
+                logger.error(
+                    "Config %s not found at %s (rc=%d, stderr=%s)",
                     config_filename,
                     remote_config_path,
+                    returncode,
+                    stderr.strip()[:200],
+                )
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        f"Config file {config_filename!r} not found at "
+                        f"{remote_config_path}. Verify the path is relative "
+                        f"to the repo's configs/ directory and the simulator's "
+                        f"checkout includes it."
+                    ),
+                )
+
+        if "EXPERIMENT_ID_PLACEHOLDER" not in stdout:
+            if allow_default_fallback:
+                logger.warning(
+                    "Config %s is a vanilla vEcoli config (no API placeholders) — "
+                    "using embedded default template (allow_default_fallback=True)",
+                    config_filename,
                 )
                 return json.dumps(_DEFAULT_CONFIG_TEMPLATE)
-
-        # If the config is a vanilla vEcoli config (no API placeholders), use
-        # the embedded template instead — vanilla configs have internal relative
-        # paths that don't work in the API pipeline.
-        if "EXPERIMENT_ID_PLACEHOLDER" not in stdout:
-            logger.warning(
-                "Config %s is a vanilla vEcoli config (no API placeholders) — using embedded default template",
+            logger.error(
+                "Config %s lacks EXPERIMENT_ID_PLACEHOLDER — caller likely intends "
+                "a custom config that bypasses placeholder substitution; not silently "
+                "switching to default template.",
                 config_filename,
             )
-            return json.dumps(_DEFAULT_CONFIG_TEMPLATE)
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Config {config_filename!r} is a vanilla vEcoli config "
+                    f"(no EXPERIMENT_ID_PLACEHOLDER) and cannot be used directly "
+                    f"by the API pipeline. Use a config with API placeholders, "
+                    f"or pass allow_default_fallback=True at the service layer."
+                ),
+            )
 
         return stdout
 

@@ -29,9 +29,53 @@ from sms_api.analysis.models import (
 from sms_api.api import request_examples
 from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_router_config
+from sms_api.common.simulator_defaults import AVAILABLE_CONFIG_FILENAMES
 from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.models import AnalysisOptions, RepoDiscovery, Simulation, SimulationRun
+
+
+def _validate_simulation_config_filename(
+    simulation_config_filename: str,
+    simulator_id: int | None = None,
+) -> None:
+    """
+    Reject obvious path-prefix typos and any config not on the accepted list.
+
+    Catches the ``configs/foo.json`` mistake (the path prefix is added on the
+    server side, so passing ``configs/`` doubles it and the GitHub Contents
+    API silently 404s) and any custom config filename that hasn't been added
+    to ``SimulationConfigPublic`` / ``SimulationConfigPrivate``.
+    """
+    if simulation_config_filename.startswith("configs/"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"simulation_config_filename {simulation_config_filename!r} starts "
+                "with 'configs/'. The server prepends 'configs/' itself; pass the "
+                "path relative to the repo's configs/ directory (e.g. "
+                "'campaigns/pilot_mixed.json' instead of "
+                "'configs/campaigns/pilot_mixed.json')."
+            ),
+        )
+    if simulation_config_filename not in AVAILABLE_CONFIG_FILENAMES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"simulation_config_filename {simulation_config_filename!r} is not "
+                f"in the accepted set. Allowed values: "
+                f"{sorted(v for v in AVAILABLE_CONFIG_FILENAMES if v)}. "
+                + (
+                    f"To add a new config: append it to SimulationConfigPublic / "
+                    f"SimulationConfigPrivate in sms_api/common/simulator_defaults.py "
+                    f"and redeploy."
+                    if simulator_id is None
+                    else
+                    f"Or use GET /api/v1/simulations/discovery?simulator_id={simulator_id} "
+                    f"to list configs that exist in this simulator's repo."
+                )
+            ),
+        )
 
 ENV = get_settings()
 
@@ -107,6 +151,7 @@ async def run_simulation_workflow(
     This endpoint reads the workflow configuration from the vEcoli repo on the HPC
     system and allows overriding specific parameters via query params.
     """
+    _validate_simulation_config_filename(simulation_config_filename, simulator_id=simulator_id)
     if experiment_id is None:
         experiment_id = get_experiment_id(simulator_id, simulation_config_filename)
     sim_service = get_simulation_service()
