@@ -85,7 +85,7 @@ dev = [
     "types-python-dateutil>=2.9.0.20251115",
 ]
 docs = [
-    "sphinx>=8.2.3,<9",
+    "sphinx>=8.2.3,<10",
     "sphinx-autodoc-typehints>=3.2.0,<4",
     "sphinx-rtd-theme>=3.0.2,<4",
     "myst-parser>=4.0.1,<5",
