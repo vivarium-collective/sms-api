@@ -54,6 +54,80 @@ DEFAULT_SIMDATA_PATH = get_settings().hpc_parca_base_path / "default" / "kb" / "
 ANALYSIS_CATEGORIES = {"single", "multiseed", "multigeneration", "multidaughter", "multivariant", "multiexperiment"}
 
 
+async def _sync_ecoli_sources_from_github(
+    repo_url: str,
+    ref: str,
+    settings: Any,
+) -> str:
+    """Download an ecoli-sources repo from GitHub and upload its contents to S3.
+
+    Returns the S3 URI to use as ECOLI_SOURCES on the simulation container.
+    """
+    import tempfile
+
+    import boto3
+    import httpx
+
+    # Derive org/repo from URL
+    # e.g. "https://github.com/vivarium-collective/ecoli-sources" -> "vivarium-collective/ecoli-sources"
+    parts = repo_url.rstrip("/").split("/")
+    if len(parts) < 2:
+        raise HTTPException(status_code=400, detail=f"Invalid ecoli_sources_repo_url: {repo_url}")
+    owner_repo = f"{parts[-2]}/{parts[-1]}"
+    repo_basename = parts[-1]
+
+    # Download tarball from GitHub
+    tarball_url = f"https://api.github.com/repos/{owner_repo}/tarball/{ref}"
+    headers: dict[str, str] = {"Accept": "application/vnd.github+json"}
+    if settings.github_token:
+        headers["Authorization"] = f"token {settings.github_token}"
+
+    logger.info("Downloading ecoli-sources from %s (ref=%s)", owner_repo, ref)
+    async with httpx.AsyncClient(follow_redirects=True, timeout=120) as client:
+        resp = await client.get(tarball_url, headers=headers)
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=resp.status_code,
+                detail=f"Failed to download ecoli-sources tarball from {tarball_url}: {resp.text[:300]}",
+            )
+
+    # Extract tarball to temp dir and upload to S3
+    bucket = settings.s3_work_bucket or settings.storage_s3_bucket
+    if not bucket:
+        raise HTTPException(status_code=500, detail="No S3 bucket configured for ecoli-sources sync")
+
+    s3_prefix = f"sources/{repo_basename}/{ref}"
+    s3 = boto3.client("s3", region_name=settings.storage_s3_region or settings.batch_region or "us-gov-west-1")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tar_bytes = io.BytesIO(resp.content)
+        with tarfile.open(fileobj=tar_bytes, mode="r:gz") as tar:
+            tar.extractall(tmpdir)  # noqa: S202
+
+        # GitHub tarballs have a top-level dir like "owner-repo-hash/"
+        extracted_dirs = os.listdir(tmpdir)
+        source_root = os.path.join(tmpdir, extracted_dirs[0]) if len(extracted_dirs) == 1 else tmpdir
+
+        # Upload all files to S3
+        upload_count = 0
+        for dirpath, _dirnames, filenames in os.walk(source_root):
+            # Skip .git, __pycache__, .venv
+            rel_dir = os.path.relpath(dirpath, source_root)
+            if any(skip in rel_dir.split(os.sep) for skip in (".git", "__pycache__", ".venv")):
+                continue
+            for filename in filenames:
+                if filename.endswith(".pyc"):
+                    continue
+                local_path = os.path.join(dirpath, filename)
+                s3_key = f"{s3_prefix}/{os.path.relpath(local_path, source_root)}"
+                s3.upload_file(local_path, bucket, s3_key)
+                upload_count += 1
+
+    s3_uri = f"s3://{bucket}/{s3_prefix}"
+    logger.info("Uploaded %d files from %s to %s", upload_count, owner_repo, s3_uri)
+    return s3_uri
+
+
 def _validate_analysis_options(analysis_options: AnalysisOptions, available_modules: dict[str, list[str]]) -> None:
     """Validate user-specified analysis modules against what exists in the repo.
 
@@ -195,6 +269,10 @@ async def run_simulation_workflow(  # noqa: C901
     run_parca: bool | None = None,
     observables: list[str] | None = None,
     analysis_options: AnalysisOptions | None = None,
+    ecoli_sources_uri: str | None = None,
+    ecoli_sources_overlays: str | None = None,
+    ecoli_sources_repo_url: str | None = None,
+    ecoli_sources_ref: str | None = None,
 ) -> Simulation:
     """
     Simplified workflow execution with just the essential parameters.
@@ -363,6 +441,24 @@ async def run_simulation_workflow(  # noqa: C901
     # The fork repo's workflow.py expects analysis_options.memory_gb
     if simulator.git_repo_url == RepoUrl.VECOLI_FORK_REPO_URL:
         config_data["analysis_options"].setdefault("memory_gb", 3)
+
+    # Server-side ecoli-sources sync: download GitHub repo tarball and upload to S3.
+    # This allows CLI users to pass --sources-repo without needing local AWS CLI.
+    if ecoli_sources_repo_url and ecoli_sources_uri is None:
+        ecoli_sources_uri = await _sync_ecoli_sources_from_github(
+            repo_url=ecoli_sources_repo_url,
+            ref=ecoli_sources_ref or "main",
+            settings=settings,
+        )
+
+    # Optional: data-source env var pointers for the simulation container.
+    # The K8s Job picks these up to set ECOLI_SOURCES / ECOLI_SOURCES_OVERLAYS,
+    # so configs referencing $ECOLI_SOURCES resolve to the synced S3 URI.
+    if ecoli_sources_uri is not None:
+        config_data["ecoli_sources_uri"] = ecoli_sources_uri
+    if ecoli_sources_overlays is not None:
+        config_data["ecoli_sources_overlays"] = ecoli_sources_overlays
+
     config = SimulationConfig(**config_data)
 
     # 5. Create placeholder parca dataset entry
