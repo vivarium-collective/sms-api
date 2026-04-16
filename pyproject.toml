@@ -1,6 +1,6 @@
 [project]
 name = "sms_api"
-version = "0.7.6"
+version = "0.7.7"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
 requires-python = "==3.12.9"
@@ -66,7 +66,7 @@ Documentation = "https://vivarium-collective.github.io/sms-api/"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.5,<9",
+    "pytest>=9.0.3",
     "pytest-cov>=4.0.0,<5",
     "deptry>=0.16.2,<0.17",
     "mypy>=1.5.1,<1.20",

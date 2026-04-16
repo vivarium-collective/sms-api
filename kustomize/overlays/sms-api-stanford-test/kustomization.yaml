@@ -7,7 +7,7 @@ namespace: sms-api-stanford-test
 
 images:
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.7.6
+    newTag: 0.7.7
   # ptools pinned to last-known-good tag — the build-and-push GH Action's
   # ptools step is currently broken (Dockerfile-nextflow issue), so there is
   # no sms-ptools:0.6.x image on ghcr.io.  0.5.9 is the tag the live Stanford
