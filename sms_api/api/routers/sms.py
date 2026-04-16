@@ -116,6 +116,16 @@ async def run_simulation_workflow(
         "Maps to engine_process_reports in the vEcoli config. "
         "If omitted, all outputs are emitted.",
     ),
+    ecoli_sources_uri: str | None = Query(
+        default=None,
+        description="S3 URI for the ECOLI_SOURCES env var on the simulation container. "
+        "Typically set by the CLI's --sources flag after syncing local data to S3.",
+    ),
+    ecoli_sources_overlays: str | None = Query(
+        default=None,
+        description="Semicolon-separated overlay manifest URIs for ECOLI_SOURCES_OVERLAYS. "
+        "Additional RNA-seq datasets layered on top of the primary ecoli_sources_uri.",
+    ),
     analysis_options: AnalysisOptions | None = None,
 ) -> Simulation:
     """Run a vEcoli simulation workflow with simplified parameters.
@@ -147,6 +157,8 @@ async def run_simulation_workflow(
             run_parca=run_parca,
             observables=observables,
             analysis_options=analysis_options,
+            ecoli_sources_uri=ecoli_sources_uri,
+            ecoli_sources_overlays=ecoli_sources_overlays,
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")

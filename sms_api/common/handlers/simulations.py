@@ -195,6 +195,8 @@ async def run_simulation_workflow(  # noqa: C901
     run_parca: bool | None = None,
     observables: list[str] | None = None,
     analysis_options: AnalysisOptions | None = None,
+    ecoli_sources_uri: str | None = None,
+    ecoli_sources_overlays: str | None = None,
 ) -> Simulation:
     """
     Simplified workflow execution with just the essential parameters.
@@ -363,6 +365,15 @@ async def run_simulation_workflow(  # noqa: C901
     # The fork repo's workflow.py expects analysis_options.memory_gb
     if simulator.git_repo_url == RepoUrl.VECOLI_FORK_REPO_URL:
         config_data["analysis_options"].setdefault("memory_gb", 3)
+
+    # Optional: data-source env var pointers for the simulation container.
+    # The K8s Job picks these up to set ECOLI_SOURCES / ECOLI_SOURCES_OVERLAYS,
+    # so configs referencing $ECOLI_SOURCES resolve to the synced S3 URI.
+    if ecoli_sources_uri is not None:
+        config_data["ecoli_sources_uri"] = ecoli_sources_uri
+    if ecoli_sources_overlays is not None:
+        config_data["ecoli_sources_overlays"] = ecoli_sources_overlays
+
     config = SimulationConfig(**config_data)
 
     # 5. Create placeholder parca dataset entry
