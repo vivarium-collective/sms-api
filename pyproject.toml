@@ -118,7 +118,7 @@ build-backend = "hatchling.build"
 [tool.mypy]
 files = ["sms_api", "tests", "app"]
 strict = true
-exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^app/gui\\.py$', '^app/tui\\.py$', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/simulation_data_service\\.py$", "^sms_api/data/.*", "^tests/data/.*"]
+exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^app/gui\\.py$', '^app/tui\\.py$', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/simulation_data_service\\.py$"]
 
 [[tool.mypy.overrides]]
 module = ["kubernetes.*", "textual", "textual.*"]
@@ -133,7 +133,7 @@ testpaths = ["tests"]
 addopts = "--cov-report=html"
 
 [tool.deptry]
-exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py", "sms_api/data/*", "tests/data/*"]
+exclude = [".venv/*", "home/*", "simulation_configs/*", "app/ui/explore_outputs.py"]
 ignore = ["DEP002", "DEP003", "DEP004", "DEP001"]
 
 [tool.ruff]
