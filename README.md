@@ -88,15 +88,3 @@ Three client applications connect to the server:
     │     ∿ whole-cell simulation platform ∿     │∿~~∿~∿~~∿
     ╰────────────────────────────────────────────╯
 ```
-
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200" width="100" height="200">
-  <style>
-    .sk { fill: none; stroke: #006600; stroke-width: 7; stroke-linecap: round; }
-  </style>
-  <path class="sk"
-    d="M 50 10
-       C 10 10, 10 100, 50 100
-       C 90 100, 90 190, 50 190"
-  />
-  <line class="sk" x1="50" y1="10" x2="50" y2="190" />
-</svg>
