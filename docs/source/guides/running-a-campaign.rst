@@ -223,11 +223,17 @@ Step 7 — Launch the workflow with custom sources
 .. code-block:: bash
 
    uv run atlantis simulation run pilot-expression-noise 23 \
-       --config-filename configs/campaigns/pilot_expression_noise.json \
+       --config-filename campaigns/pilot_expression_noise.json \
        --sources ../ecoli-sources \
        --sources ../ecoli-sources-vegas \
        --run-parca \
        --poll
+
+.. note::
+
+   ``--config-filename`` is relative to the repo's ``configs/`` directory —
+   the server prepends ``configs/`` itself and will reject values that
+   start with ``configs/``.
 
 What happens:
 
