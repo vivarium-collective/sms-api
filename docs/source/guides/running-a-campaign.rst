@@ -255,20 +255,64 @@ See :doc:`cli-reference` for the full option list, including
 Step 8 — Download results
 --------------------------
 
-When the run completes:
+There are two tiers of output retrieval: the CLI tarball (small, curated)
+and direct S3 sync (everything).
+
+Find your real experiment id
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The server decorates the ``experiment_id`` you passed at launch. The actual
+id on S3 is ``sim{simulator_id}-{your_id}-{4-char-uuid}``, e.g.
+``sim23-pilot-expression-noise-a3f2``. Retrieve it:
+
+.. code-block:: bash
+
+   uv run atlantis simulation get <SIM_ID>
+   # Look for the config.experiment_id field.
+
+Use this decorated id everywhere you hit S3 directly.
+
+Option A — CLI tarball (curated subset)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
    uv run atlantis simulation outputs <SIM_ID> --dest ./results
 
-You'll get a ``.tar.gz`` extracted to ``./results/<experiment_id>/``.
-Campaign-specific outputs:
+This packages, from the server-side output prefix:
+
+- every ``.tsv`` and ``.json`` under ``analyses/``
+- ``nextflow/workflow_config.json``
+
+and streams them as a tar.gz into ``./results/``. Everything else on S3
+(Parquet history, daughter_states, per-variant ``parca_*/kb``,
+``variant_sim_data/``, HTML plots) is excluded to keep the archive small
+and the response fast. If you only want the headline metric tables, this
+is the fastest path.
+
+Option B — Full S3 tree (``aws s3 sync``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For the HTML plots, Parquet history, daughter_states, or the ParCa
+pickles, sync the output prefix directly. The vEcoli Nextflow publish
+convention nests the id twice (``publishDir/{id}/``):
+
+.. code-block:: bash
+
+   EID=sim23-pilot-expression-noise-a3f2   # decorated id from `simulation get`
+   aws s3 sync \
+       "s3://$S3_WORK_BUCKET/vecoli-output/$EID/$EID/" \
+       "./results/$EID/"
+
+Layout you'll get:
 
 .. code-block:: text
 
-   results/pilot-expression-noise/
+   results/<EID>/
      parca_{0..N-1}/kb/                     # per-variant ParCa outputs
      variant_sim_data/
+     history/                               # Parquet, one shard per sim
+     daughter_states/
      analyses/
        variant={0..N-1}/
          plots/analysis=cd1_higher_order_properties/ ...
@@ -276,6 +320,7 @@ Campaign-specific outputs:
        plots/analysis=sensitivity_overview/
          sensitivity_overview.html          # 4-panel axis-vs-metric scatter
          sensitivity_overview.tsv           # per-variant metric table
+     nextflow/workflow_config.json
 
 The headline deliverable is ``sensitivity_overview.tsv`` —
 per-variant ``mass_drift_per_gen_fg`` is the primary "unhealthy sim"
@@ -290,8 +335,8 @@ outside the Nextflow analysis graph:
 
    cd ~/code/vEcoli
    uv run wholecell/io/multiparca_analysis.py \
-       --out_dir results/pilot-expression-noise \
-       -o results/pilot-expression-noise/reports/
+       --out_dir results/<EID> \
+       -o results/<EID>/reports/
 
 Troubleshooting
 ---------------
@@ -312,6 +357,23 @@ Troubleshooting
 - **Simulator build fails with "branch not allowed"**: your repo/branch
   isn't on the server-side accept list. Push to ``CovertLab/vEcoli`` or
   contact the admin.
+- **``simulation outputs`` returned only ``workflow_config.json``**:
+  the ``analyses/`` prefix on S3 has no ``.tsv``/``.json`` files — the
+  curated tarball excludes everything else. Two common causes:
+
+  - The workflow didn't reach the analysis step (failed upstream, or still
+    running). Check ``atlantis simulation status <id>`` and
+    ``atlantis simulation log <id>``.
+  - The analyses ran but only produced HTML plots (e.g. plotly figures
+    with no companion TSV). Use Option B (``aws s3 sync``) above instead —
+    HTMLs are on S3, they're just filtered out of the tarball.
+
+  To confirm what's actually on S3, list with the decorated id from
+  ``simulation get``:
+
+  .. code-block:: bash
+
+     aws s3 ls "s3://$S3_WORK_BUCKET/vecoli-output/<EID>/<EID>/" --recursive
 
 See also
 --------
