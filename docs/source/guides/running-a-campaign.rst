@@ -51,6 +51,42 @@ matches the sms-api bucket). The ``--sources`` flag shells out to
 ``aws s3 sync``, so whatever ``aws s3 ls s3://$STORAGE_S3_BUCKET/`` accepts
 will work here.
 
+Step 1b — Open a tunnel (GovCloud / internal-ALB deployments only)
+-------------------------------------------------------------------
+
+If you're targeting a public sms-api deployment (e.g. ``sms.cam.uchc.edu``,
+``sms-dev.cam.uchc.edu``), **skip this step** — atlantis hits the public URL
+directly.
+
+If you're targeting a GovCloud or test-VPC deployment (e.g. ``smscdk``,
+``smsvpctest``), the API lives behind an **internal** Application Load
+Balancer inside a private VPC — no public DNS. To reach it, open an SSM
+port-forward from your laptop, through the Batch submit-node EC2, to the
+ALB. The helper lives in this repo:
+
+.. code-block:: bash
+
+   # In a separate terminal, keep this running for the session
+   AWS_PROFILE=<your-sso-profile> AWS_DEFAULT_REGION=us-gov-west-1 \
+       ./scripts/sms-tunnel.sh -s smsvpctest
+
+Once the tunnel is up, the API is reachable locally:
+
+.. code-block:: bash
+
+   export API_BASE_URL=http://localhost:8080
+
+All subsequent ``atlantis ...`` commands in *this* shell will route through
+the tunnel. The same tunnel also exposes the Pathway Tools web UI at
+``http://localhost:8080/`` and the API docs at ``http://localhost:8080/docs``
+— they share the internal ALB.
+
+Prerequisites for the tunnel: AWS CLI v2 and the `Session Manager plugin
+<https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html>`_.
+Substitute a different ``-s`` value for other stacks (e.g. ``-s smscdk``
+for the main GovCloud deployment). Use ``-p <port>`` if 8080 is taken
+locally, and then set ``API_BASE_URL`` to match.
+
 Step 2 — Set up ecoli-sources siblings
 ---------------------------------------
 
@@ -210,28 +246,7 @@ ParCa). ``--poll`` prints status every 30 s; drop it for fire-and-forget.
 See :doc:`cli-reference` for the full option list, including
 ``--sources-prefix`` and ``--sources-delete``.
 
-Step 8 — Enable ptools analyses (optional)
--------------------------------------------
-
-The cluster hosts a ``ptools-proxy`` service that provides Pathway Tools
-lookups for three analysis modules: ``ptools_rna``, ``ptools_rxns``,
-``ptools_proteins``. They run automatically inside the workflow — no
-user-side invocation needed — but you have to opt in via
-``--analysis-options``:
-
-.. code-block:: bash
-
-   uv run atlantis simulation run pilot-expression-noise 23 \
-       --config-filename configs/campaigns/pilot_expression_noise.json \
-       --sources ../ecoli-sources --sources ../ecoli-sources-vegas \
-       --analysis-options '{"multiseed": {"ptools_rna": {"n_tp": 10}, "ptools_rxns": {"n_tp": 10}, "ptools_proteins": {"n_tp": 10}}}' \
-       --run-parca --poll
-
-If the target server doesn't have ptools-proxy deployed (e.g.
-``stanford-test``), these modules will fail — check with your admin or
-stick to cd1_* / sensitivity_overview analyses.
-
-Step 9 — Download results
+Step 8 — Download results
 --------------------------
 
 When the run completes:
@@ -282,9 +297,12 @@ Troubleshooting
   synced. Re-check ``ecoli-sources/data/manifest.tsv``.
 - **Parca fails with "duplicate dataset_id"**: a ``dataset_id`` is defined
   in both the primary and an overlay manifest. Rename one.
-- **Analysis hangs on ptools_\***: the cluster may not have ptools-proxy
-  deployed, or the service is unreachable. Drop the ``ptools_*`` keys from
-  ``--analysis-options``.
+- **``atlantis`` can't reach the API**: on a GovCloud/VPC deployment, the
+  SSM tunnel from Step 1b must be running in another terminal and
+  ``API_BASE_URL`` must point at ``http://localhost:<tunnel-port>``.
+- **SSM tunnel exits with "TargetNotConnected"**: the submit-node EC2 may
+  be stopped, or your SSO credentials have expired. Re-run
+  ``aws sso login --profile <profile>`` and retry.
 - **Simulator build fails with "branch not allowed"**: your repo/branch
   isn't on the server-side accept list. Push to ``CovertLab/vEcoli`` or
   contact the admin.
