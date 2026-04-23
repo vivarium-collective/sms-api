@@ -116,24 +116,6 @@ async def run_simulation_workflow(
         "Maps to engine_process_reports in the vEcoli config. "
         "If omitted, all outputs are emitted.",
     ),
-    ecoli_sources_uri: str | None = Query(
-        default=None,
-        description="S3 URI for the ECOLI_SOURCES env var on the simulation container. "
-        "Set automatically when ecoli_sources_repo_url is provided, or manually via the CLI's --sources flag.",
-    ),
-    ecoli_sources_overlays: str | None = Query(
-        default=None,
-        description="Semicolon-separated overlay manifest URIs for ECOLI_SOURCES_OVERLAYS.",
-    ),
-    ecoli_sources_repo_url: str | None = Query(
-        default=None,
-        description="GitHub repo URL for ecoli-sources data. The server downloads and syncs to S3 "
-        "automatically, then injects ECOLI_SOURCES on the container. No AWS CLI needed on the client.",
-    ),
-    ecoli_sources_ref: str | None = Query(
-        default=None,
-        description="Git ref (branch/tag/commit) for ecoli_sources_repo_url. Defaults to 'main'.",
-    ),
     analysis_options: AnalysisOptions | None = None,
 ) -> Simulation:
     """Run a vEcoli simulation workflow with simplified parameters.
@@ -165,10 +147,6 @@ async def run_simulation_workflow(
             run_parca=run_parca,
             observables=observables,
             analysis_options=analysis_options,
-            ecoli_sources_uri=ecoli_sources_uri,
-            ecoli_sources_overlays=ecoli_sources_overlays,
-            ecoli_sources_repo_url=ecoli_sources_repo_url,
-            ecoli_sources_ref=ecoli_sources_ref,
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")

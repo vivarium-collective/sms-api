@@ -4,7 +4,6 @@ import asyncio
 import functools
 import json as _json_mod
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -145,59 +144,6 @@ def _slice_by_id(items: list[Any], n: int | None) -> list[Any]:
     if n > 0:
         return items[:n]
     return items[n:]
-
-
-def sync_sources_to_s3(
-    sources: list[Path],
-    bucket: str,
-    prefix: str = "sources",
-    delete: bool = False,
-    console: Console | None = None,
-) -> list[tuple[str, str]]:
-    """Sync local data-source directories to S3 via the AWS CLI.
-
-    Returns a list of ``(basename, s3_uri)`` pairs. The first entry backs
-    ``ECOLI_SOURCES``; subsequent ones are overlay manifests.
-    """
-    if not sources:
-        return []
-    if shutil.which("aws") is None:
-        raise RuntimeError(
-            "The AWS CLI (`aws`) was not found on PATH. Install it and authenticate before using --sources."
-        )
-    synced: list[tuple[str, str]] = []
-    for src in sources:
-        src_path = src.expanduser().resolve()
-        if not src_path.exists():
-            raise typer.BadParameter(f"--sources path does not exist: {src_path}")
-        if not src_path.is_dir():
-            raise typer.BadParameter(f"--sources path is not a directory: {src_path}")
-        basename = src_path.name
-        if not basename:
-            raise typer.BadParameter(f"Cannot derive a basename from source path: {src_path}")
-        s3_dst = f"s3://{bucket}/{prefix.strip('/')}/{basename}/"
-        cmd = [
-            "aws",
-            "s3",
-            "sync",
-            str(src_path),
-            s3_dst,
-            "--exclude",
-            ".venv/*",
-            "--exclude",
-            "*/__pycache__/*",
-            "--exclude",
-            ".git/*",
-            "--exclude",
-            "*.pyc",
-        ]
-        if delete:
-            cmd.append("--delete")
-        if console is not None:
-            console.print(f"[memphis.info]Syncing[/]  {src_path}  →  {s3_dst}")
-        subprocess.run(cmd, check=True)
-        synced.append((basename, s3_dst))
-    return synced
 
 
 class CliType(StrEnumBase):
@@ -461,29 +407,6 @@ def simulation_run(
         " Keys are analysis categories (single, multiseed, multigeneration, etc.);"
         " values map module names to params. If omitted, defaults depend on the simulator repo.",
     ),
-    sources: list[Path] = Option(
-        default_factory=list,
-        help="Local data-source directories to sync to S3 before the workflow. "
-        "Repeat for multiple: --sources ../ecoli-sources --sources ../ecoli-sources-vegas. "
-        "Requires the AWS CLI on PATH with credentials configured.",
-    ),
-    sources_prefix: str = Option(
-        default="sources",
-        help="S3 key prefix under the configured bucket for --sources sync.",
-    ),
-    sources_delete: bool = Option(
-        default=False,
-        help="Pass --delete to `aws s3 sync` (removes S3 objects not present locally).",
-    ),
-    sources_repo: str | None = Option(
-        default=None,
-        help="GitHub repo URL for ecoli-sources data (e.g. https://github.com/vivarium-collective/ecoli-sources). "
-        "The server downloads and syncs to S3 automatically — no local clone or AWS CLI needed.",
-    ),
-    sources_ref: str | None = Option(
-        default=None,
-        help="Git ref (branch/tag/commit) for --sources-repo. Defaults to 'main'.",
-    ),
     poll: bool = Option(default=False, help="Poll simulation status until completion."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
@@ -497,38 +420,6 @@ def simulation_run(
     observables_list = [o.strip() for o in observables.split(",") if o.strip()] if observables else None
     analysis_opts_parsed = _json.loads(analysis_options) if analysis_options else None
 
-    # Sync --sources directories to S3 and derive env var values
-    ecoli_sources_uri: str | None = None
-    ecoli_sources_overlays: str | None = None
-    if sources:
-        from sms_api.config import get_settings
-
-        settings = get_settings()
-        if not settings.storage_s3_bucket:
-            console.print("[memphis.error]--sources requires STORAGE_S3_BUCKET to be configured.[/]")
-            raise typer.Exit(1)
-        synced = sync_sources_to_s3(
-            sources=sources,
-            bucket=settings.storage_s3_bucket,
-            prefix=sources_prefix,
-            delete=sources_delete,
-            console=console,
-        )
-        if synced:
-            _, primary_uri = synced[0]
-            ecoli_sources_uri = primary_uri.rstrip("/")
-            overlay_uris = [f"{uri.rstrip('/')}/data/manifest.tsv" for _, uri in synced[1:]]
-            if overlay_uris:
-                ecoli_sources_overlays = ";".join(overlay_uris)
-            console.print(
-                f"\n[memphis.dim]ECOLI_SOURCES={ecoli_sources_uri}[/]"
-                + (
-                    f"\n[memphis.dim]ECOLI_SOURCES_OVERLAYS={ecoli_sources_overlays}[/]"
-                    if ecoli_sources_overlays
-                    else ""
-                )
-            )
-
     with console.status("[memphis.spinner]Submitting simulation..."):
         simulation = data_service.run_workflow(
             experiment_id=experiment_id,
@@ -540,10 +431,6 @@ def simulation_run(
             run_parameter_calculator=run_parca,
             observables=observables_list,
             analysis_options=analysis_opts_parsed,
-            ecoli_sources_uri=ecoli_sources_uri,
-            ecoli_sources_overlays=ecoli_sources_overlays,
-            ecoli_sources_repo_url=sources_repo,
-            ecoli_sources_ref=sources_ref,
         )
 
     console.print(f"[memphis.success]Simulation submitted![/]  ID: {simulation.database_id}")

@@ -42,9 +42,6 @@ uv run atlantis simulation analyses 16
 # Run a simulation (1 generation, 1 seed)
 uv run atlantis simulation run my-experiment 16 --generations 1 --seeds 1 --poll
 
-# Sync local data sources to S3 and run with custom RNA-seq datasets
-uv run atlantis simulation run my-exp 16 --sources ../ecoli-sources --run-parca --poll
-
 # Check status (fast — shows log tail + status)
 uv run atlantis simulation status 37
 

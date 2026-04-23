@@ -1,7 +1,4 @@
 """
-DEACTIVATED: This template depends on sms_api.data.data_service (vecoli).
-See app/ui/explore.py for details.
-
 Template for new Marimo notebooks
 ================================================================================================================================================
 This template serves to be the starting point for all new Marimo UIs.
