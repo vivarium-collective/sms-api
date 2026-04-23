@@ -8,7 +8,7 @@ Two-phase execution model:
 import json
 import logging
 
-import boto3  # type: ignore[import-untyped]
+import boto3
 import httpx
 from fastapi import HTTPException
 from kubernetes import client as k8s_client
@@ -206,15 +206,19 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
         """Submit a DooD build job to AWS Batch. Returns the Batch job ID."""
         settings = get_settings()
         batch = boto3.client("batch", region_name=settings.batch_region)
+        env = [{"name": "IMAGE_TAG", "value": commit}]
+        if settings.ecoli_sources_repo_url:
+            env.append({"name": "ECOLI_SOURCES_REPO_URL", "value": settings.ecoli_sources_repo_url})
+        if settings.ecoli_sources_ref:
+            env.append({"name": "ECOLI_SOURCES_REF", "value": settings.ecoli_sources_ref})
+
         response = batch.submit_job(
             jobName=job_name,
             jobQueue=queue,
             jobDefinition=settings.build_job_definition,
             containerOverrides={
                 "command": command,
-                "environment": [
-                    {"name": "IMAGE_TAG", "value": commit},
-                ],
+                "environment": env,
             },
         )
         batch_job_id = response["jobId"]
@@ -358,6 +362,22 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
             " ; exit $NF_EXIT"
         )
 
+        # Build the container env. ECOLI_SOURCES / ECOLI_SOURCES_OVERLAYS are
+        # surfaced when the user passed --sources via the CLI, which syncs local
+        # dirs to S3 and forwards the resulting URIs through the API.
+        container_env = [
+            k8s_client.V1EnvVar(name="AWS_DEFAULT_REGION", value=settings.batch_region),
+            k8s_client.V1EnvVar(name="AWS_REGION", value=settings.batch_region),
+            k8s_client.V1EnvVar(name="AWS_STS_REGIONAL_ENDPOINTS", value="regional"),
+            k8s_client.V1EnvVar(name="USER", value="sms-api"),
+        ]
+        ecoli_sources_uri = config_data.get("ecoli_sources_uri")
+        ecoli_sources_overlays = config_data.get("ecoli_sources_overlays")
+        if ecoli_sources_uri:
+            container_env.append(k8s_client.V1EnvVar(name="ECOLI_SOURCES", value=ecoli_sources_uri))
+        if ecoli_sources_overlays:
+            container_env.append(k8s_client.V1EnvVar(name="ECOLI_SOURCES_OVERLAYS", value=ecoli_sources_overlays))
+
         # Single-container K8s Job using vecoli-submit image (vEcoli + Java + Nextflow)
         job = k8s_client.V1Job(
             metadata=k8s_client.V1ObjectMeta(
@@ -380,12 +400,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
                                 name="workflow",
                                 image=submit_image,
                                 command=["/bin/bash", "-c", command],
-                                env=[
-                                    k8s_client.V1EnvVar(name="AWS_DEFAULT_REGION", value=settings.batch_region),
-                                    k8s_client.V1EnvVar(name="AWS_REGION", value=settings.batch_region),
-                                    k8s_client.V1EnvVar(name="AWS_STS_REGIONAL_ENDPOINTS", value="regional"),
-                                    k8s_client.V1EnvVar(name="USER", value="sms-api"),
-                                ],
+                                env=container_env,
                                 volume_mounts=[
                                     k8s_client.V1VolumeMount(name="config", mount_path="/config"),
                                 ],

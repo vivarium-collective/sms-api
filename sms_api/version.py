@@ -17,4 +17,5 @@
 # 0.7.7 — fix analysis filters (generation_range/lineage_seed inside analysis_options),
 #          allow arbitrary public vEcoli branches, bump pytest for CVE fix
 # 0.7.8 — explicit config validation (no silent fallback), diagnose_sim.py diagnostic tool
-__version__ = "0.7.8"
+# 0.7.9 — ecoli-sources support (--sources flag), remove vecoli dep, dep bumps
+__version__ = "0.7.9"

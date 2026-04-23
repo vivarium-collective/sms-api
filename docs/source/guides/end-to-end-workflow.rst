@@ -148,6 +148,11 @@ Submit a simulation workflow using your simulator ID:
    * - ``--description``
      - auto-generated
      - Custom description for the run
+   * - ``--sources``
+     - none
+     - Local data-source directories to sync to S3 before the workflow.
+       Repeat for multiple. Injects ``ECOLI_SOURCES`` on the container.
+       Requires the AWS CLI with credentials configured.
 
 The pipeline
 ~~~~~~~~~~~~

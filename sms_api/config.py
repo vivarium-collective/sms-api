@@ -226,6 +226,11 @@ class Settings(BaseSettings):
     build_job_definition: str = ""  # Batch job definition for DooD builds
     build_git_secret_arn: str = ""  # Secrets Manager ARN for GitHub PAT (private repo clone)
 
+    # Optional: bake an ecoli-sources data repo into the simulator image at build time.
+    # Empty URL = skip; workflow relies on runtime ECOLI_SOURCES env var (e.g. s3:// URI).
+    ecoli_sources_repo_url: str = ""
+    ecoli_sources_ref: str = "main"
+
     # EC2 build machine (legacy, replaced by Batch DooD builds)
     build_node_host: str = ""
     build_node_user: str = ""
