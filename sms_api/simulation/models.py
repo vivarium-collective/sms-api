@@ -196,10 +196,6 @@ class SimulationConfig(BaseModel):
     experiment_id: str
     parca_options: ParcaOptions = ParcaOptions()
     analysis_options: AnalysisOptions = AnalysisOptions()
-    # Optional runtime env vars for the simulation container.
-    # Populated from endpoint params; surfaced as V1EnvVar entries on K8s Jobs.
-    ecoli_sources_uri: str | None = None
-    ecoli_sources_overlays: str | None = None
     # sim_data_path: str | None = None
     # suffix_time: bool = False
     generations: int = 1

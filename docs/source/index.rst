@@ -38,7 +38,6 @@ download results) in a different format:
    :caption: User Guide
 
    guides/end-to-end-workflow
-   guides/running-a-campaign
    guides/choosing-a-client
    guides/cli-reference
    guides/analysis-filtering

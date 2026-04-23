@@ -1,13 +1,4 @@
-# DEACTIVATED: This module previously provided a Marimo-based data exploration
-# UI that depended on the vecoli package (vEcoli Python library). The vecoli
-# dependency has been removed from the project. This file is retained for
-# reference but is not imported or executed by any active code path.
-#
-# To reactivate, install vecoli and restore the sms_api.data.data_service module.
-
-raise SystemExit("app/ui/explore.py is deactivated — see comment at top of file")
-
-import marimo  # noqa: E402
+import marimo
 
 __generated_with = "0.18.4"
 app = marimo.App(width="medium")

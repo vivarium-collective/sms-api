@@ -138,19 +138,6 @@ Submit a simulation workflow (parca -> simulation -> analysis).
        values map module names to params. Defaults depend on the simulator's
        repo — private vEcoli gets cd1_* modules, public gets none. Use
        ``simulation analyses SIMULATOR_ID`` to discover available modules.
-   * - ``--sources``
-     - none
-     - Local data-source directories to sync to S3 before the workflow.
-       Repeat for multiple sources. Each is uploaded via ``aws s3 sync``
-       and the resulting URIs are injected as ``ECOLI_SOURCES`` /
-       ``ECOLI_SOURCES_OVERLAYS`` on the simulation container. Requires
-       the AWS CLI on PATH with credentials configured.
-   * - ``--sources-prefix``
-     - ``sources``
-     - S3 key prefix under the configured bucket for ``--sources`` sync.
-   * - ``--sources-delete / --no-sources-delete``
-     - off
-     - Pass ``--delete`` to ``aws s3 sync`` (removes S3 objects not present locally).
    * - ``--poll / --no-poll``
      - off
      - Poll until completion
@@ -174,11 +161,6 @@ Submit a simulation workflow (parca -> simulation -> analysis).
    # Custom analysis modules
    uv run atlantis simulation run my-exp 11 \
      --analysis-options '{"multiseed": {"ptools_rna": {"n_tp": 10}, "ptools_rxns": {"n_tp": 10}}}'
-
-   # Sync local data sources to S3 before running (ecoli-sources workflow)
-   uv run atlantis simulation run my-exp 11 \
-     --sources ../ecoli-sources --sources ../ecoli-sources-vegas \
-     --run-parca --poll
 
    # Target a specific server
    uv run atlantis simulation run test1 11 --base-url https://sms.cam.uchc.edu
