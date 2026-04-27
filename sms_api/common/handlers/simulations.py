@@ -54,27 +54,126 @@ DEFAULT_SIMDATA_PATH = get_settings().hpc_parca_base_path / "default" / "kb" / "
 ANALYSIS_CATEGORIES = {"single", "multiseed", "multigeneration", "multidaughter", "multivariant", "multiexperiment"}
 
 
+# -- ecoli-sources server-side sync --
+
+# Only GitHub repos under these orgs are allowed for server-side source sync.
+_ALLOWED_SOURCE_ORGS = {"vivarium-collective", "CovertLab", "CovertLabEcoli"}
+
+# Required columns in data/manifest.tsv (ecoli-sources convention).
+_MANIFEST_REQUIRED_COLUMNS = {"dataset_id", "file_path"}
+
+# Safety limits
+_MAX_TARBALL_BYTES = 500 * 1024 * 1024  # 500 MB
+_MAX_FILE_COUNT = 10_000
+_SKIP_DIRS = {".git", "__pycache__", ".venv", "node_modules", ".tox"}
+_SKIP_EXTENSIONS = {".pyc", ".pyo", ".so", ".dylib", ".exe"}
+
+
+def _parse_github_owner_repo(repo_url: str) -> tuple[str, str, str]:
+    """Parse a GitHub URL into (owner, repo, owner/repo). Validates against allowed orgs."""
+    parts = repo_url.rstrip("/").rstrip(".git").split("/")
+    if len(parts) < 2 or "github.com" not in repo_url:
+        raise HTTPException(status_code=400, detail=f"Invalid GitHub repo URL: {repo_url}")
+    owner, repo = parts[-2], parts[-1]
+    if owner not in _ALLOWED_SOURCE_ORGS:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Source repo org '{owner}' is not in the allowed list: {sorted(_ALLOWED_SOURCE_ORGS)}. "
+            f"Only repos from trusted organizations can be synced server-side.",
+        )
+    return owner, repo, f"{owner}/{repo}"
+
+
+def _validate_manifest(source_root: str) -> None:
+    """Validate that data/manifest.tsv exists and has the required columns."""
+    import csv
+
+    manifest_path = os.path.join(source_root, "data", "manifest.tsv")
+    if not os.path.isfile(manifest_path):
+        raise HTTPException(
+            status_code=400,
+            detail="Source repo is missing data/manifest.tsv. "
+            "The ecoli-sources format requires a TSV manifest at data/manifest.tsv "
+            "with at least columns: dataset_id, file_path.",
+        )
+    with open(manifest_path) as f:
+        reader = csv.reader(f, delimiter="\t")
+        try:
+            header = next(reader)
+        except StopIteration:
+            raise HTTPException(status_code=400, detail="data/manifest.tsv is empty.") from None
+    header_set = {col.strip() for col in header}
+    missing = _MANIFEST_REQUIRED_COLUMNS - header_set
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"data/manifest.tsv is missing required columns: {sorted(missing)}. Found: {sorted(header_set)}.",
+        )
+
+
+def _safe_s3_key(prefix: str, relpath: str) -> str:
+    """Build an S3 key from a prefix and relative path, rejecting traversal attempts."""
+    # Normalize and reject any '..' components
+    normalized = os.path.normpath(relpath)
+    if ".." in normalized.split(os.sep):
+        raise HTTPException(status_code=400, detail=f"Path traversal detected in source file: {relpath}")
+    return f"{prefix}/{normalized}"
+
+
+def _upload_source_tree(s3: Any, bucket: str, s3_prefix: str, source_root: str) -> int:
+    """Walk source_root and upload files to S3, skipping unwanted dirs/extensions."""
+    upload_count = 0
+    for dirpath, _dirnames, filenames in os.walk(source_root):
+        rel_dir = os.path.relpath(dirpath, source_root)
+        if any(skip in rel_dir.split(os.sep) for skip in _SKIP_DIRS):
+            continue
+        for filename in filenames:
+            if any(filename.endswith(ext) for ext in _SKIP_EXTENSIONS):
+                continue
+            if upload_count >= _MAX_FILE_COUNT:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Source repo exceeds {_MAX_FILE_COUNT} files. Is this the right repo?",
+                )
+            local_path = os.path.join(dirpath, filename)
+            s3_key = _safe_s3_key(s3_prefix, os.path.relpath(local_path, source_root))
+            s3.upload_file(local_path, bucket, s3_key)
+            upload_count += 1
+    return upload_count
+
+
 async def _sync_ecoli_sources_from_github(
     repo_url: str,
     ref: str,
     settings: Any,
 ) -> str:
-    """Download an ecoli-sources repo from GitHub and upload its contents to S3.
+    """Download an ecoli-sources repo from GitHub and upload to S3.
 
-    Returns the S3 URI to use as ECOLI_SOURCES on the simulation container.
+    Validates:
+    - Repo org is in the allowed list
+    - Tarball size is within limits
+    - data/manifest.tsv exists with required columns
+    - No path traversal in uploaded keys
+    - File count within limits
+
+    Only available on K8s/Batch backend (stanford-test).
+    Returns the S3 URI to use as ECOLI_SOURCES.
     """
     import tempfile
 
     import boto3
     import httpx
 
-    # Derive org/repo from URL
-    # e.g. "https://github.com/vivarium-collective/ecoli-sources" -> "vivarium-collective/ecoli-sources"
-    parts = repo_url.rstrip("/").split("/")
-    if len(parts) < 2:
-        raise HTTPException(status_code=400, detail=f"Invalid ecoli_sources_repo_url: {repo_url}")
-    owner_repo = f"{parts[-2]}/{parts[-1]}"
-    repo_basename = parts[-1]
+    # Guard: only allowed on K8s/Batch backend
+    backend = get_job_backend()
+    if backend != ComputeBackend.BATCH:
+        raise HTTPException(
+            status_code=400,
+            detail="Server-side ecoli-sources sync is only available on the K8s/Batch backend (stanford-test). "
+            "Use --sources (local sync) for SLURM deployments.",
+        )
+
+    owner, repo_basename, owner_repo = _parse_github_owner_repo(repo_url)
 
     # Download tarball from GitHub
     tarball_url = f"https://api.github.com/repos/{owner_repo}/tarball/{ref}"
@@ -88,10 +187,17 @@ async def _sync_ecoli_sources_from_github(
         if resp.status_code != 200:
             raise HTTPException(
                 status_code=resp.status_code,
-                detail=f"Failed to download ecoli-sources tarball from {tarball_url}: {resp.text[:300]}",
+                detail=f"Failed to download tarball from {tarball_url}: HTTP {resp.status_code}",
             )
 
-    # Extract tarball to temp dir and upload to S3
+    # Validate tarball size
+    if len(resp.content) > _MAX_TARBALL_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Source repo tarball is {len(resp.content) / 1024 / 1024:.0f} MB, "
+            f"exceeds limit of {_MAX_TARBALL_BYTES / 1024 / 1024:.0f} MB.",
+        )
+
     bucket = settings.s3_work_bucket or settings.storage_s3_bucket
     if not bucket:
         raise HTTPException(status_code=500, detail="No S3 bucket configured for ecoli-sources sync")
@@ -102,26 +208,21 @@ async def _sync_ecoli_sources_from_github(
     with tempfile.TemporaryDirectory() as tmpdir:
         tar_bytes = io.BytesIO(resp.content)
         with tarfile.open(fileobj=tar_bytes, mode="r:gz") as tar:
+            # Safety: reject tar members with absolute paths or traversal
+            for member in tar.getmembers():
+                if member.name.startswith("/") or ".." in member.name.split("/"):
+                    raise HTTPException(status_code=400, detail=f"Unsafe path in tarball: {member.name}")
             tar.extractall(tmpdir)  # noqa: S202
 
         # GitHub tarballs have a top-level dir like "owner-repo-hash/"
         extracted_dirs = os.listdir(tmpdir)
         source_root = os.path.join(tmpdir, extracted_dirs[0]) if len(extracted_dirs) == 1 else tmpdir
 
-        # Upload all files to S3
-        upload_count = 0
-        for dirpath, _dirnames, filenames in os.walk(source_root):
-            # Skip .git, __pycache__, .venv
-            rel_dir = os.path.relpath(dirpath, source_root)
-            if any(skip in rel_dir.split(os.sep) for skip in (".git", "__pycache__", ".venv")):
-                continue
-            for filename in filenames:
-                if filename.endswith(".pyc"):
-                    continue
-                local_path = os.path.join(dirpath, filename)
-                s3_key = f"{s3_prefix}/{os.path.relpath(local_path, source_root)}"
-                s3.upload_file(local_path, bucket, s3_key)
-                upload_count += 1
+        # Validate manifest
+        _validate_manifest(source_root)
+
+        # Upload files to S3
+        upload_count = _upload_source_tree(s3, bucket, s3_prefix, source_root)
 
     s3_uri = f"s3://{bucket}/{s3_prefix}"
     logger.info("Uploaded %d files from %s to %s", upload_count, owner_repo, s3_uri)
