@@ -18,4 +18,5 @@
 #          allow arbitrary public vEcoli branches, bump pytest for CVE fix
 # 0.7.8 — explicit config validation (no silent fallback), diagnose_sim.py diagnostic tool
 # 0.7.9 — ecoli-sources support (--sources flag), remove vecoli dep, dep bumps
-__version__ = "0.7.9"
+# 0.8.0 — harden ecoli-sources sync (org allowlist, path traversal, size limits, manifest validation)
+__version__ = "0.8.0"
