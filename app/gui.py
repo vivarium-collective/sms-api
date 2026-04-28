@@ -573,7 +573,6 @@ def _(
     discovered_analysis_opts,
     discovered_configs,
     get_selected_sim_id,
-    log_status,
     mo,
     sims_table,
 ):
@@ -627,9 +626,7 @@ def _(
             mo.hstack(
                 [
                     sims_table,
-                    mo.vstack(
-                        [log_status, config_dropdown, gens_input, seeds_input, run_parca_checkbox], justify="start"
-                    ),
+                    mo.vstack([config_dropdown, gens_input, seeds_input, run_parca_checkbox], justify="start"),
                 ],
                 justify="start",
                 gap=1,
@@ -759,8 +756,8 @@ def _(
     get_svc,
     mo,
     poll_sim_button,
+    set_running_sim_id,
     status_badge,
-    time,
     traceback,
 ):
     _poll_output = mo.Html("")
@@ -770,20 +767,12 @@ def _(
         try:
             _run = _svc.get_workflow_status(simulation_id=_sid)
             _status = _run.status.value
-
-            if False:  # polling removed — use CLI for long polls
-                while _status not in ("completed", "failed", "cancelled", "unknown"):
-                    time.sleep(15)
-                    _run = _svc.get_workflow_status(simulation_id=_sid)
-                    _status = _run.status.value
-
             _badge = status_badge(_status)
             _err = (
                 f"<br><span class='memphis-status-failed'>Error: {_run.error_message}</span>"
                 if _run.error_message
                 else ""
             )
-            # Fetch workflow log (truncated — same as CLI `atlantis simulation status`)
             try:
                 _log = _svc.get_workflow_log(simulation_id=_sid, truncate=True)
                 _log_html = (
@@ -801,6 +790,9 @@ def _(
                     color="cyan",
                 )
             )
+            # Start auto-refresh for this sim if it's still running
+            if _status in ("running", "pending"):
+                set_running_sim_id(_sid)
         except Exception:
             _poll_output = mo.Html(
                 card(
@@ -817,8 +809,7 @@ def _(
 
 @app.cell
 def _(mo):
-    status_refresh = mo.ui.refresh(default_interval="45s", label="Auto-refresh")
-    status_refresh
+    status_refresh = mo.ui.refresh(default_interval="30s", label="Auto-refresh")
     return (status_refresh,)
 
 
@@ -882,8 +873,8 @@ def _(
 
 
 @app.cell
-def _(log_status, mo, run_output, simulation_card):
-    _right_col = mo.vstack([log_status, run_output])
+def _(log_status, mo, run_output, simulation_card, status_refresh):
+    _right_col = mo.vstack([status_refresh, log_status, run_output])
     simulations_component = mo.hstack([simulation_card, _right_col], widths=[3, 2], align="start")
     return (simulations_component,)
 
