@@ -251,7 +251,10 @@ class E2EDataService:
             uploaded_response = self.client.post(
                 url="/core/v1/simulator/upload", json=simulator.model_dump(), params=params
             )
+            uploaded_response.raise_for_status()
             return SimulatorVersion(**uploaded_response.json())
+        except httpx.HTTPStatusError as e:
+            raise httpx.HTTPError(f"Could not build the simulator: {e.response.status_code} — {e.response.text}") from e
         except Exception as e:
             raise httpx.HTTPError(f"Could not build the simulator: {simulator.model_dump()}") from e
 

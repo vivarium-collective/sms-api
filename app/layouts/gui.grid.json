@@ -1,9 +1,9 @@
 {
   "type": "grid",
   "data": {
-    "columns": 110,
-    "rowHeight": 20,
-    "maxWidth": 3200,
+    "columns": 100,
+    "rowHeight": 19,
+    "maxWidth": 3600,
     "bordered": true,
     "cells": [
       {
@@ -36,7 +36,7 @@
         "position": [
           1,
           0,
-          41,
+          51,
           2
         ]
       },
@@ -110,7 +110,7 @@
           0,
           10,
           100,
-          55
+          42
         ]
       },
       {

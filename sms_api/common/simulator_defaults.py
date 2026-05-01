@@ -31,12 +31,6 @@ class RepoUrl(StrEnumBase):
     VECOLI_PRIVATE_REPO_URL = "https://github.com/CovertLabEcoli/vEcoli-private"
 
 
-ACCEPTED_REPOS = {
-    RepoUrl.VECOLI_FORK_REPO_URL: ["messages", "ccam-nextflow", "master", "api-support"],
-    RepoUrl.VECOLI_PUBLIC_REPO_URL: ["master", "ptools_viz", "multi-parca-aws", "multi-parca-workflow"],
-    RepoUrl.VECOLI_PRIVATE_REPO_URL: ["api-analysis-patch", "master"],
-}
-
 PUBLIC_MODE = get_public_mode()
 
 SimulationConfigFilename: type[SimulationConfigPublic] | type[SimulationConfigPrivate] = (
