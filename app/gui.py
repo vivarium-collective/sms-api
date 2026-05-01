@@ -1,10 +1,7 @@
 import marimo
 
 __generated_with = "0.23.0"
-app = marimo.App(
-    width="medium",
-    layout_file="layouts/gui.grid.json",
-)
+app = marimo.App(width="medium", layout_file="layouts/gui.grid.json")
 
 
 @app.cell
