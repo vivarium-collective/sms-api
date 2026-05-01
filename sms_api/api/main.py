@@ -72,6 +72,7 @@ UI_NAMES = [
     # "biofactory",
     "configure",  # no dataservice needed; possible uses though!
     "explore",  # uses dataservice, with nfs
+    "gui",  # Atlantis EUTE GUI — full end-to-end workflow
     # "single_cell",  # uses /core router w/ generated client, no nfs
 ]
 
@@ -161,6 +162,7 @@ async def home(request: Request) -> templating._TemplateResponse:
         # ("Biofactory", "Create new strains"),
         ("Configure", "Invent and configure new Ecoli experiments"),
         ("Explore", "Introspect and explore simulation data"),
+        ("Gui", "Full end-to-end simulation workflow"),
         # ("Single Cell", "interactive"),
     ]
     return templates.TemplateResponse(

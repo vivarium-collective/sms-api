@@ -99,52 +99,29 @@ def make_simulator(repo_url: str, branch: str) -> Simulator:
     "repo_url,branch",
     [
         (RepoUrl.VECOLI_FORK_REPO_URL, "messages"),
-        (RepoUrl.VECOLI_FORK_REPO_URL, "ccam-nextflow"),
         (RepoUrl.VECOLI_FORK_REPO_URL, "master"),
+        (RepoUrl.VECOLI_FORK_REPO_URL, "composite"),
+        (RepoUrl.VECOLI_FORK_REPO_URL, "any-feature-branch"),
         (RepoUrl.VECOLI_PUBLIC_REPO_URL, "master"),
-        (RepoUrl.VECOLI_PUBLIC_REPO_URL, "ptools_viz"),
         (RepoUrl.VECOLI_PUBLIC_REPO_URL, "multi-parca-aws"),
         (RepoUrl.VECOLI_PUBLIC_REPO_URL, "feature-x"),
+        (RepoUrl.VECOLI_PRIVATE_REPO_URL, "master"),
+        (RepoUrl.VECOLI_PRIVATE_REPO_URL, "any-branch"),
     ],
 )
 def test_verify_simulator_payload_valid(repo_url: str, branch: str) -> None:
     simulator = make_simulator(repo_url, branch)
 
-    # Should not raise
+    # Should not raise — any branch is accepted for recognized repos
     verify_simulator_payload(simulator)
 
 
-@pytest.mark.parametrize(
-    "repo_url,branch,expected_branches",
-    [
-        (
-            RepoUrl.VECOLI_FORK_REPO_URL,
-            "dev",
-            ["messages", "ccam-nextflow", "master", "api-support"],
-        ),
-    ],
-)
-def test_verify_simulator_payload_invalid_branch(repo_url: str, branch: str, expected_branches: list[str]) -> None:
-    simulator = make_simulator(repo_url, branch)
-
-    with pytest.raises(ValueError) as excinfo:
-        verify_simulator_payload(simulator)
-
-    msg = str(excinfo.value)
-    assert branch in msg
-    assert str(repo_url) in msg
-    for b in expected_branches:
-        assert b in msg
-
-
-def test_verify_simulator_payload_unmatched_repo_url() -> None:
-    """
-    RepoUrl.VECOLI_PRIVATE_REPO_URL and VECOLI_PUBLIC_REPO_URL are not matched
-    in the `match` statement, so verification should silently pass for any branch.
-    """
+def test_verify_simulator_payload_unrecognized_repo_url() -> None:
+    """Unrecognized repo URLs should be rejected."""
     simulator = make_simulator(
-        RepoUrl.VECOLI_PRIVATE_REPO_URL,
-        "any-branch",
+        "https://github.com/random-org/random-repo",
+        "main",
     )
 
-    verify_simulator_payload(simulator)
+    with pytest.raises(ValueError, match="Unrecognized repo URL"):
+        verify_simulator_payload(simulator)

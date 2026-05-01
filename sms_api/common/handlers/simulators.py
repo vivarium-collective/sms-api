@@ -5,7 +5,7 @@ from fastapi import HTTPException
 
 from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.models import JobBackend, JobId, JobStatus
-from sms_api.common.simulator_defaults import ACCEPTED_REPOS, DEFAULT_BRANCH, DEFAULT_REPO, RepoUrl
+from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO, RepoUrl
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
@@ -19,19 +19,13 @@ from sms_api.simulation.simulation_service import SimulationService, SimulationS
 logger = logging.getLogger(__name__)
 
 # Re-export for backwards compatibility
-__all__ = ["ACCEPTED_REPOS", "DEFAULT_BRANCH", "DEFAULT_REPO", "RepoUrl"]
+__all__ = ["DEFAULT_BRANCH", "DEFAULT_REPO", "RepoUrl"]
 
 
 def verify_simulator_payload(simulator: Simulator) -> None:
-    branch = simulator.git_branch
     url = simulator.git_repo_url
-    match url:
-        case RepoUrl.VECOLI_FORK_REPO_URL:
-            accepted = ACCEPTED_REPOS[RepoUrl.VECOLI_FORK_REPO_URL]
-            if branch not in accepted:
-                raise ValueError(
-                    f"{branch} is not an accepted branch for the {url} repo. Instead, use one of {accepted}"
-                )
+    if url not in RepoUrl.values():
+        raise ValueError(f"Unrecognized repo URL: {url}. Accepted repos: {RepoUrl.values()}")
     return None
 
 

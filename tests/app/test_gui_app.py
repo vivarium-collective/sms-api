@@ -415,3 +415,52 @@ class TestEUTEParity:
         source = GUI_APP_PATH.read_text()
         assert "run_parca_checkbox" in source
         assert "run_parameter_calculator" in source
+
+
+# ── Auto-refresh tests ──────────────────────────────────────────────────────
+
+
+class TestAutoRefresh:
+    """Verify the GUI auto-refresh mechanism for simulation status."""
+
+    def test_refresh_widget_exists(self) -> None:
+        """A mo.ui.refresh widget should be defined for auto-polling."""
+        source = GUI_APP_PATH.read_text()
+        assert "mo.ui.refresh" in source
+        assert "status_refresh" in source
+
+    def test_refresh_interval_is_30s(self) -> None:
+        """Default auto-refresh interval should be 30 seconds."""
+        source = GUI_APP_PATH.read_text()
+        assert 'default_interval="30s"' in source
+
+    def test_refresh_subscribes_to_ticks(self) -> None:
+        """The auto-refresh cell must subscribe to status_refresh.value."""
+        source = GUI_APP_PATH.read_text()
+        assert "status_refresh.value" in source
+
+    def test_refresh_uses_running_sim_id(self) -> None:
+        """Auto-refresh should fetch status for get_running_sim_id()."""
+        source = GUI_APP_PATH.read_text()
+        assert "get_running_sim_id()" in source
+
+    def test_refresh_stops_on_terminal_status(self) -> None:
+        """Auto-refresh should stop when simulation reaches terminal state."""
+        source = GUI_APP_PATH.read_text()
+        assert "set_running_sim_id(0)" in source
+        assert '"completed"' in source or "'completed'" in source
+
+    def test_manual_poll_bridges_to_auto_refresh(self) -> None:
+        """Manual Status button should set running_sim_id for auto-refresh."""
+        source = GUI_APP_PATH.read_text()
+        assert "set_running_sim_id(_sid)" in source
+
+    def test_refresh_widget_in_right_column(self) -> None:
+        """The refresh widget should be in the right column layout."""
+        source = GUI_APP_PATH.read_text()
+        assert "status_refresh, log_status, run_output" in source
+
+    def test_refresh_fetches_workflow_log(self) -> None:
+        """Auto-refresh cell should also fetch the workflow log."""
+        source = GUI_APP_PATH.read_text()
+        assert "get_workflow_log" in source
