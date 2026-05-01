@@ -63,7 +63,7 @@ All three clients expose the same end-to-end workflow:
 |--------|--------|----------|
 | **CLI** | `uv run atlantis <command>` | Scripting, automation, quick commands |
 | **TUI** | `uv run atlantis tui` | Interactive terminal sessions, SSH |
-| **GUI** | `uv run atlantis gui` | Browser-based point-and-click |
+| **GUI** | `uv run atlantis gui` or [`/ws/Dashboard`](https://sms.cam.uchc.edu/ws/Dashboard) | Browser-based point-and-click |
 
 ## Architecture
 

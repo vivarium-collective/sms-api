@@ -57,7 +57,7 @@ Fetch the latest commit, upload, and build a simulator image.
    * - ``--repo-url TEXT``
      - Git repo URL. Defaults to the configured default.
    * - ``--branch TEXT``
-     - Git branch. Defaults to ``master``.
+     - Git branch. Any branch on the target repo is accepted. Defaults to ``master``.
    * - ``--force / --no-force``
      - Force rebuild even if a completed build exists.
 
