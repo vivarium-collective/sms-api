@@ -81,16 +81,21 @@ Web GUI (Marimo)
 ----------------
 
 The web GUI is a `Marimo <https://marimo.io/>`_ reactive notebook that
-opens in your browser:
+opens in your browser locally or is hosted on the deployed server:
 
 .. code-block:: bash
 
+   # Local
    uv run atlantis gui
+
+   # Hosted (no install required)
+   # https://sms.cam.uchc.edu/ws/Dashboard
 
 Features:
 
 - Tensorboard-style card layout with rounded edges and coloured headers
 - Interactive forms with live reactivity
+- Auto-refreshing simulation status (30s interval)
 - CSS-animated Memphis banner
 - Iconify icons throughout the interface
 - Status badges with colour-coded states
@@ -124,7 +129,7 @@ All three clients map to the same six workflow steps:
      - Check status
      - ``simulation status``
      - Simulations (auto-listed with status)
-     - Simulation card > Check Status
+     - Simulation card > Status (auto-refreshes every 30s)
    * - 6
      - Download results
      - ``simulation outputs``
