@@ -24,11 +24,19 @@ RUN rm -rf /var/lib/apt/lists/* && \
     && useradd -m -u $APP_UID -g $APP_GID appuser \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
 
-ADD assets/ptools/aic-export-vio.30.0.tar.gz /app/
-RUN mkdir -p /app/ptools && \
-    ./aic-export/pathway-tools/ptools/30.0/install/config-ptools /app/ptools
+RUN mkdir -p /app/ptools/ptools-local
+
+WORKDIR /app/ptools
+
+# primary archive
+ADD assets/ptools/aic-export-vio.30.0.tar.gz /app/ptools
+# patches (note path includes version number)
+ADD assets/ptools/ptools-local/ptools-init.dat /app/ptools/ptools-local
+ADD assets/ptools/patches/wc-get.lisp /app/ptools/aic-export/pathway-tools/ptools/30.0/patches
+RUN rm /app/ptools/aic-export/pathway-tools/ptools/30.0/patches/._wc-get.lisp
+# configuration script
+RUN /app/ptools/aic-export/pathway-tools/ptools/30.0/install/config-ptools /app/ptools
 
 VOLUME ["/app/scratch"]
 ENV SERVER_HOST_NAME=ptools.sms-api-eks.svc.cluster.local
@@ -39,4 +47,4 @@ EXPOSE 5008
 CMD bash -c "\
     Xvfb :1 -screen 0 1024x768x16 & \
     sleep 2 && \
-    /app/pathway-tools -www -www-server-hostname ${SERVER_HOST_NAME} -port 1555 -python"
+    /app/ptools/pathway-tools -www -www-server-hostname ${SERVER_HOST_NAME} -port 1555 -python"
