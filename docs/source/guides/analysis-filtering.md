@@ -28,9 +28,11 @@ There are two ways to filter:
    | `variant`      | `int`  | Restrict to a single variant index   |
 
 ```{important}
-Use the **`single`** analysis type when you need filtered results.
-`multiseed` aggregates across all seeds and generations by design and does not
-apply generation or seed filters to its output.
+Top-level filters (`generation_start`, `generation_end`, `seeds`) apply to **all**
+analysis domains — `single`, `multigeneration`, `multiseed`, etc.  They restrict
+which data rows vEcoli loads via its DuckDB filter **before** any analysis module
+runs, so aggregated analyses (e.g. `multigeneration`) will aggregate only the
+filtered subset.
 ```
 
 ## Examples
@@ -155,21 +157,36 @@ Run `ptools_rna` and `ptools_rxns` together with the same generation filter:
 }
 ```
 
-### Mixed analysis types
+### Filtered multigeneration aggregation
 
-Combine a filtered `single` analysis with an unfiltered `multiseed` analysis
-in one request. Top-level filters apply to all types, but only `single` reflects
-them in output:
+Aggregate data for generations 3 onward into a single multigeneration result.
+Useful when you want to skip early transient generations:
 
 ```json
 {
   "experiment_id": "sim3-test-5062",
+  "generation_start": 3,
+  "multigeneration": [
+    { "name": "ptools_rna", "n_tp": 8 }
+  ]
+}
+```
+
+### Mixed analysis types
+
+Combine a filtered `single` analysis with a filtered `multigeneration` analysis
+in one request. The top-level filters apply to both:
+
+```json
+{
+  "experiment_id": "sim3-test-5062",
+  "generation_start": 3,
   "seeds": [0],
   "single": [
     { "name": "ptools_rna", "n_tp": 8, "variant": 0 }
   ],
-  "multiseed": [
-    { "name": "ptools_rxns", "n_tp": 8, "variant": 0 }
+  "multigeneration": [
+    { "name": "ptools_rxns", "n_tp": 8 }
   ]
 }
 ```
@@ -177,9 +194,14 @@ them in output:
 ## Notes
 
 - **`single`** runs the analysis per seed/generation/agent combination individually.
-  Returns one TSV per combination. Use this when filtering.
-- **`multiseed`** aggregates across all seeds into a single result. Use this for the
-  default cross-seed summary when no filtering is needed.
+  Returns one TSV per combination with metadata indicating which seed/generation
+  produced each result.
+- **`multigeneration`** aggregates across all (filtered) generations into a single
+  result per module. Use `generation_start`/`generation_end` to restrict the range.
+- **`multiseed`** aggregates across all (filtered) seeds into a single result.
+  Use `seeds` to restrict which seeds are included.
 - All filter parameters are optional. Omit them entirely for the full dataset.
 - `generation_start` and `generation_end` are inclusive on both ends.
+- Each `single` result now includes `variant`, `lineage_seed`, and `generation`
+  metadata fields identifying which data partition produced it.
 - No breaking changes to existing API calls.

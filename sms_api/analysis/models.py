@@ -86,7 +86,8 @@ class PtoolsAnalysisConfig(BaseModel):
     Generation/seed filtering is handled at the request level
     (``ExperimentAnalysisRequest.generation_start/end/seeds``), not per-module,
     because vEcoli's ``build_duckdb_filter`` applies a single WHERE clause to
-    the entire dataset before any analysis module runs.
+    the entire dataset before any analysis module runs.  This applies to all
+    analysis domains including ``multigeneration`` and ``multiseed``.
     """
 
     name: str = PtoolsAnalysisType.REACTIONS.value
@@ -168,7 +169,11 @@ class ExperimentAnalysisRequest(BaseModel):
     Top-level ``generation_start``, ``generation_end``, and ``seeds`` apply
     globally to the DuckDB dataset filter in vEcoli's ``analysis.py``
     (``build_duckdb_filter``).  They restrict **which simulation data rows**
-    are fed to every analysis module in this request.
+    are fed to **every** analysis module in this request — including aggregated
+    types like ``multigeneration`` and ``multiseed``.
+
+    For example, setting ``generation_start=3`` with a ``multigeneration``
+    analysis will aggregate only generations 3 through N instead of the full range.
 
     Per-module params (``n_tp``, ``time_unit``, …) are set inside each
     ``PtoolsAnalysisConfig`` entry and only affect the module they belong to.
