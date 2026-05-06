@@ -104,17 +104,25 @@ class AnalysisServiceSlurm:
         config_data["analysis_options"].update(requested_analyses)
 
         # Propagate DuckDB filters into analysis_options (where vEcoli reads them).
-        # vEcoli's analysis.py iterates data filter keys with config[key] (not .get()),
-        # so all filter keys must be present even if None to avoid KeyError.
         opts = config_data["analysis_options"]
-        for key in ("variant", "generation", "agent_id"):
+        for key in ("variant", "agent_id"):
             opts.setdefault(key, None)
         if request.generation_start is not None or request.generation_end is not None:
             start = request.generation_start if request.generation_start is not None else 0
             end = (request.generation_end + 1) if request.generation_end is not None else 1000
             opts["generation_range"] = [start, end]
+            # Do NOT set generation=None alongside generation_range — vEcoli's
+            # build_duckdb_filter treats an explicit None as "no filter" and
+            # skips the range.  Remove it so the range takes effect.
+            opts.pop("generation", None)
+        else:
+            opts.setdefault("generation", None)
         if request.seeds is not None:
             opts["lineage_seed"] = request.seeds
+            # Same logic: remove scalar key so range/list takes precedence
+            opts.pop("lineage_seed_range", None)
+        else:
+            opts.setdefault("lineage_seed", None)
 
         analysis_config = AnalysisConfig(**config_data)
         return analysis_config
