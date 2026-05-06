@@ -28,11 +28,16 @@ There are two ways to filter:
    | `variant`      | `int`  | Restrict to a single variant index   |
 
 ```{important}
-Top-level filters (`generation_start`, `generation_end`, `seeds`) apply to **all**
-analysis domains — `single`, `multigeneration`, `multiseed`, etc.  They restrict
-which data rows vEcoli loads via its DuckDB filter **before** any analysis module
-runs, so aggregated analyses (e.g. `multigeneration`) will aggregate only the
-filtered subset.
+Top-level filters (`generation_start`, `generation_end`, `seeds`) are fully
+supported for **`single`** analyses, which return one result per
+seed/generation combination with metadata identifying each partition.
+
+For aggregated types (`multigeneration`, `multiseed`), the filters are passed
+to vEcoli but are **not currently applied** to the per-subset data query due
+to a known vEcoli limitation
+([CovertLab/vEcoli#XXX](https://github.com/CovertLab/vEcoli/issues)).
+Until this is fixed upstream, use `single` analyses with generation/seed
+filters and aggregate client-side if needed.
 ```
 
 ## Examples
@@ -157,36 +162,20 @@ Run `ptools_rna` and `ptools_rxns` together with the same generation filter:
 }
 ```
 
-### Filtered multigeneration aggregation
-
-Aggregate data for generations 3 onward into a single multigeneration result.
-Useful when you want to skip early transient generations:
-
-```json
-{
-  "experiment_id": "sim3-test-5062",
-  "generation_start": 3,
-  "multigeneration": [
-    { "name": "ptools_rna", "n_tp": 8 }
-  ]
-}
-```
-
 ### Mixed analysis types
 
-Combine a filtered `single` analysis with a filtered `multigeneration` analysis
-in one request. The top-level filters apply to both:
+Combine a filtered `single` analysis with an unfiltered `multiseed` analysis
+in one request:
 
 ```json
 {
   "experiment_id": "sim3-test-5062",
-  "generation_start": 3,
   "seeds": [0],
   "single": [
     { "name": "ptools_rna", "n_tp": 8, "variant": 0 }
   ],
-  "multigeneration": [
-    { "name": "ptools_rxns", "n_tp": 8 }
+  "multiseed": [
+    { "name": "ptools_rxns", "n_tp": 8, "variant": 0 }
   ]
 }
 ```
@@ -217,11 +206,11 @@ the `n_init_sims` value in the simulation config.
 
 - **`single`** runs the analysis per seed/generation/agent combination individually.
   Returns one TSV per combination with metadata indicating which seed/generation
-  produced each result.
-- **`multigeneration`** aggregates across all (filtered) generations into a single
-  result per module. Use `generation_start`/`generation_end` to restrict the range.
-- **`multiseed`** aggregates across all (filtered) seeds into a single result.
-  Use `seeds` to restrict which seeds are included.
+  produced each result. **Filters are fully supported.**
+- **`multigeneration`** and **`multiseed`** aggregate across generations or seeds
+  into a single result per module. Generation/seed filters are passed to vEcoli
+  but **not currently applied** to the per-subset data query (known vEcoli
+  limitation). Use `single` with filters and aggregate client-side as a workaround.
 - All filter parameters are optional. Omit them entirely for the full dataset.
 - `generation_start` and `generation_end` are inclusive on both ends.
 - No breaking changes to existing API calls.

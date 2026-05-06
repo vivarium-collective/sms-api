@@ -84,10 +84,10 @@ class PtoolsAnalysisConfig(BaseModel):
         with the completion of the analysis.
 
     Generation/seed filtering is handled at the request level
-    (``ExperimentAnalysisRequest.generation_start/end/seeds``), not per-module,
-    because vEcoli's ``build_duckdb_filter`` applies a single WHERE clause to
-    the entire dataset before any analysis module runs.  This applies to all
-    analysis domains including ``multigeneration`` and ``multiseed``.
+    (``ExperimentAnalysisRequest.generation_start/end/seeds``), not per-module.
+    Fully supported for ``single`` analyses.  Aggregated types
+    (``multigeneration``, ``multiseed``) do not currently respect these
+    filters due to a known vEcoli limitation.
     """
 
     name: str = PtoolsAnalysisType.REACTIONS.value
@@ -166,14 +166,14 @@ class AnalysisConfig(BaseModel):
 class ExperimentAnalysisRequest(BaseModel):
     """Request body for the ``POST /analyses`` (ptools) endpoint.
 
-    Top-level ``generation_start``, ``generation_end``, and ``seeds`` apply
-    globally to the DuckDB dataset filter in vEcoli's ``analysis.py``
-    (``build_duckdb_filter``).  They restrict **which simulation data rows**
-    are fed to **every** analysis module in this request — including aggregated
-    types like ``multigeneration`` and ``multiseed``.
+    Top-level ``generation_start``, ``generation_end``, and ``seeds`` are
+    fully supported for ``single`` analyses — they restrict which simulation
+    data rows are returned, with metadata identifying each partition.
 
-    For example, setting ``generation_start=3`` with a ``multigeneration``
-    analysis will aggregate only generations 3 through N instead of the full range.
+    For aggregated types (``multigeneration``, ``multiseed``), the filters are
+    passed to vEcoli but not currently applied to the per-subset data query
+    (known vEcoli limitation).  Use ``single`` with filters and aggregate
+    client-side as a workaround.
 
     Per-module params (``n_tp``, ``time_unit``, …) are set inside each
     ``PtoolsAnalysisConfig`` entry and only affect the module they belong to.
