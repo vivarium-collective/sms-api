@@ -4,6 +4,7 @@ import dataclasses
 import hashlib
 import json
 import logging
+import re
 import tempfile
 from pathlib import Path
 from textwrap import dedent
@@ -215,14 +216,43 @@ class AnalysisServiceSlurm:
         requested_filename = remote_path.remote_path.parts[-1]
         if not requested_filename.endswith(".tsv"):
             logger.info(f"wrong filename: {requested_filename}")
-        local = local_dir / requested_filename
 
+        # Parse partition metadata (variant, lineage_seed, generation) from directory path.
+        # vEcoli single analyses produce output at:
+        #   outdir/<domain>/variant[X]/lineage_seed[Y]/generation[Z]/<module>.tsv
+        metadata = parse_partition_metadata(remote_path.remote_path)
+        variant = metadata.get("variant")
+        lineage_seed = metadata.get("lineage_seed")
+        generation = metadata.get("generation")
+
+        # Use a unique local filename that includes partition info to prevent overwrites
+        # when multiple (seed, generation) combos produce files with the same module name.
+        local_name = requested_filename
+        parts = []
+        if variant is not None:
+            parts.append(f"v{variant}")
+        if lineage_seed is not None:
+            parts.append(f"s{lineage_seed}")
+        if generation is not None:
+            parts.append(f"g{generation}")
+        if parts:
+            stem = Path(requested_filename).stem
+            suffix = Path(requested_filename).suffix
+            local_name = f"{stem}_{'_'.join(parts)}{suffix}"
+
+        local = local_dir / local_name
         if not local.exists():
             async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 await ssh.scp_download(local_file=local, remote_path=remote_path)
 
         file_content = local.read_text()
-        output = TsvOutputFile(filename=requested_filename, content=file_content)
+        output = TsvOutputFile(
+            filename=requested_filename,
+            content=file_content,
+            variant=variant if variant is not None else 0,
+            lineage_seed=lineage_seed,
+            generation=generation,
+        )
         return output
 
     async def get_analysis_status(self, job_id: int, db_id: int, ssh: SSHSession) -> AnalysisRun:
@@ -348,3 +378,23 @@ def generate_slurm_script(
         ### optionally, remove uploaded fp
         rm -f \"$config_fp\"
     """)
+
+
+# Regex for vEcoli partition directory segments: key=value or key[value]
+_PARTITION_RE = re.compile(r"(variant|lineage_seed|generation|agent_id)[=\[](\d+)\]?")
+
+
+def parse_partition_metadata(path: Path) -> dict[str, int]:
+    """Extract variant/lineage_seed/generation/agent_id from vEcoli partition directory paths.
+
+    vEcoli analysis output paths look like:
+        .../single/variant[0]/lineage_seed[0]/generation[5]/ptools_rna.tsv
+    or sometimes:
+        .../variant=0/lineage_seed=0/generation=5/ptools_rna.tsv
+    """
+    metadata: dict[str, int] = {}
+    for part in path.parts:
+        m = _PARTITION_RE.match(part)
+        if m:
+            metadata[m.group(1)] = int(m.group(2))
+    return metadata
