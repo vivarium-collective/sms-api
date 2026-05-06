@@ -224,7 +224,9 @@ class ExperimentAnalysisRequest(BaseModel):
         config = AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)  # type: ignore[call-arg]
 
         # DuckDB filters go inside analysis_options (where vEcoli reads them).
-        for key in ("variant", "agent_id"):
+        # vEcoli's analysis.py does config[key] (not .get()), so all filter keys
+        # must be present even if None to avoid KeyError.
+        for key in ("variant", "generation", "agent_id"):
             if not hasattr(options, key):
                 setattr(options, key, None)
         # generation_range is [start, end) (exclusive end, per Python range()).
@@ -233,19 +235,8 @@ class ExperimentAnalysisRequest(BaseModel):
             # vEcoli's range() is exclusive on end, so +1 to include the end generation
             end = (self.generation_end + 1) if self.generation_end is not None else 1000
             options.generation_range = [start, end]  # type: ignore[attr-defined]
-            # Do NOT set generation=None alongside generation_range — vEcoli's
-            # build_duckdb_filter treats an explicit None as "no filter" and
-            # skips the range.
-            if hasattr(options, "generation"):
-                delattr(options, "generation")
-        else:
-            if not hasattr(options, "generation"):
-                options.generation = None  # type: ignore[attr-defined]
         if self.seeds is not None:
             options.lineage_seed = self.seeds  # type: ignore[attr-defined]
-        else:
-            if not hasattr(options, "lineage_seed"):
-                options.lineage_seed = None  # type: ignore[attr-defined]
 
         return config
 

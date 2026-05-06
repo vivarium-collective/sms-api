@@ -131,21 +131,8 @@ class TestAnalysisDataFiltering:
         )
         config = request.to_config(analysis_name="test-analysis", env=ENV)
         assert not hasattr(config.analysis_options, "generation_range")
-        # When no range is specified, scalar keys are set to None (vEcoli needs them)
+        # vEcoli requires these keys even when no filter is specified
         assert config.analysis_options.generation is None  # type: ignore[attr-defined]
-        assert config.analysis_options.lineage_seed is None  # type: ignore[attr-defined]
-
-    def test_generation_range_removes_scalar_generation(self) -> None:
-        """When generation_range is set, generation must NOT be present to avoid
-        vEcoli's build_duckdb_filter treating explicit None as 'no filter'."""
-        request = ExperimentAnalysisRequest(
-            experiment_id="test-exp",
-            generation_start=3,
-            multigeneration=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8)],
-        )
-        config = request.to_config(analysis_name="test-analysis", env=ENV)
-        assert config.analysis_options.generation_range == [3, 1000]  # type: ignore[attr-defined]
-        assert not hasattr(config.analysis_options, "generation")
 
     def test_request_serialization_roundtrip(self) -> None:
         request = ExperimentAnalysisRequest(
