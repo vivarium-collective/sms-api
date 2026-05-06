@@ -205,6 +205,7 @@ class CliType(StrEnumBase):
     SIMULATION = "simulation"
     PARCA = "parca"
     ANALYSIS = "analysis"
+    COMPOSE = "compose"
     DEMO = "demo"
     HELP = "help"
     TUI = "tui"
@@ -230,6 +231,7 @@ simulator_cli = typer.Typer(help="Manage simulator (vEcoli) versions and builds.
 simulation_cli = typer.Typer(help="Run and inspect simulation workflows.")
 parca_cli = typer.Typer(help="Inspect parca (parameter calculator) datasets and runs.")
 analysis_cli = typer.Typer(help="Inspect analysis jobs and outputs.")
+compose_cli = typer.Typer(help="Compose (process-bigraph) simulation commands.")
 demo_cli = typer.Typer(help="Demo and utility commands.")
 tui_cli = typer.Typer(help="TUI's command line interface.")
 gui_cli = typer.Typer(help="GUI's command line interface.")
@@ -239,6 +241,7 @@ cli.add_typer(simulator_cli, name="simulator")
 cli.add_typer(simulation_cli, name="simulation")
 cli.add_typer(parca_cli, name="parca")
 cli.add_typer(analysis_cli, name="analysis")
+cli.add_typer(compose_cli, name="compose")
 cli.add_typer(demo_cli, name="demo")
 cli.add_typer(tui_cli)
 cli.add_typer(gui_cli)
@@ -312,6 +315,7 @@ for _name, _sub in [
     ("simulation", simulation_cli),
     ("parca", parca_cli),
     ("analysis", analysis_cli),
+    ("compose", compose_cli),
     ("demo", demo_cli),
 ]:
     _register_subgroup_help(_sub, _name)
@@ -820,6 +824,185 @@ def analysis_plots(
     plots = data_service.get_analysis_plots(analysis_id=analysis_id)
     for plot in plots:
         display_json(plot.model_dump(), console)
+
+
+# -- Compose (process-bigraph) commands --
+
+
+@compose_cli.command("run", help="Submit a compose simulation (OMEX/PBG/SBML upload).")
+def compose_run(
+    file: Path = Argument(help="Path to OMEX, PBG, or SBML file."),
+    interval_time: float = Option(default=1.0, help="Simulation interval/duration."),
+    batch: bool = Option(default=False, help="Use batch submission mode."),
+    poll: bool = Option(default=False, help="Poll until job completes."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import time
+
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+
+    if not file.exists():
+        console.print(f"[memphis.error]File not found:[/] {file}")
+        raise typer.Exit(1)
+
+    with console.status("[memphis.spinner]Submitting compose simulation..."):
+        result = data_service.compose_run_simulation(file_path=file, interval_time=interval_time, batch=batch)
+    sim_id = result["simulation_database_id"]
+    sim_ver_id = result["simulator_database_id"]
+    console.print(f"[memphis.label]Simulation ID:[/] {sim_id}")
+    console.print(f"[memphis.label]Simulator ID:[/] {sim_ver_id}")
+    display_json(result, console)
+
+    if poll:
+        console.print("[memphis.info]Polling for completion...[/]")
+        poll_interval = 10
+        elapsed = 0
+        status = "running"
+        while status not in ("completed", "failed", "cancelled"):
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+            try:
+                status_data = data_service.compose_get_simulation_status(simulation_id=sim_id)
+                status = (status_data.get("status") or "unknown").lower()
+            except Exception:
+                status = "unknown"
+            console.print(f"  [{elapsed}s] status: [{status_style(status)}]{status}[/]")
+        console.print(
+            Panel(
+                f"[{status_style(status)}]{status.upper()}[/]",
+                title=f"Compose simulation {sim_id}",
+                border_style=status_border(status),
+            )
+        )
+
+
+@compose_cli.command("status", help="Get compose simulation job status.")
+def compose_status(
+    simulation_id: int = Argument(help="Compose simulation database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_get_simulation_status(simulation_id=simulation_id)
+    s = (result.get("status") or "unknown").lower()
+    console.print(
+        Panel(
+            f"[{status_style(s)}]{s.upper()}[/]",
+            title=f"Compose simulation {simulation_id}",
+            border_style=status_border(s),
+        )
+    )
+    display_json(result, console)
+
+
+@compose_cli.command("results", help="Download compose simulation results as a zip file.")
+def compose_results(
+    simulation_id: int = Argument(help="Compose simulation database ID."),
+    dest: str = Option(default="./compose_results", help="Local destination directory."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    dest_path = Path(dest)
+    with console.status("[memphis.spinner]Downloading compose results..."):
+        out_file = data_service.compose_get_simulation_results(simulation_id=simulation_id, dest=dest_path)
+    console.print(f"[memphis.success]Results saved to:[/] {out_file}")
+
+
+@compose_cli.command("simulators", help="List registered compose simulators.")
+def compose_simulators(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_list_simulators()
+    display_json(result, console)
+
+
+@compose_cli.command("processes", help="List registered process-bigraph processes.")
+def compose_processes(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_list_processes()
+    if not result:
+        console.print("[memphis.dim]No processes registered.[/]")
+    else:
+        display_json(list(result), console)
+
+
+@compose_cli.command("steps", help="List registered process-bigraph steps.")
+def compose_steps(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_list_steps()
+    if not result:
+        console.print("[memphis.dim]No steps registered.[/]")
+    else:
+        display_json(list(result), console)
+
+
+@compose_cli.command("build-status", help="Get compose container build status.")
+def compose_build_status(
+    simulator_id: int = Argument(help="Compose simulator database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_get_build_status(simulator_id=simulator_id)
+    s = (result.get("status") or "unknown").lower()
+    console.print(
+        Panel(
+            f"[{status_style(s)}]{s.upper()}[/]",
+            title=f"Build — compose simulator {simulator_id}",
+            border_style=status_border(s),
+        )
+    )
+    display_json(result, console)
+
+
+@compose_cli.command("copasi", help="Run a COPASI simulation from an SBML file.")
+def compose_copasi(
+    sbml: Path = Argument(help="Path to SBML file."),
+    start_time: float = Option(default=0.0, help="Simulation start time."),
+    duration: float = Option(default=10.0, help="Simulation duration."),
+    num_data_points: float = Option(default=100.0, help="Number of data points."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    with console.status("[memphis.spinner]Submitting COPASI simulation..."):
+        result = data_service.compose_run_copasi(
+            sbml_path=sbml, start_time=start_time, duration=duration, num_data_points=num_data_points
+        )
+    display_json(result, console)
+
+
+@compose_cli.command("tellurium", help="Run a Tellurium simulation from an SBML file.")
+def compose_tellurium(
+    sbml: Path = Argument(help="Path to SBML file."),
+    start_time: float = Option(default=0.0, help="Simulation start time."),
+    end_time: float = Option(default=10.0, help="Simulation end time."),
+    num_data_points: float = Option(default=100.0, help="Number of data points."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    with console.status("[memphis.spinner]Submitting Tellurium simulation..."):
+        result = data_service.compose_run_tellurium(
+            sbml_path=sbml, start_time=start_time, end_time=end_time, num_data_points=num_data_points
+        )
+    display_json(result, console)
 
 
 # -- Demo commands --
