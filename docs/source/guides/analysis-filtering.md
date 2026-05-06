@@ -1,6 +1,6 @@
 # Analysis Data Filtering
 
-*Available since v0.7.7*
+*Available since v0.7.7 — updated in v0.8.2 (metadata on results, all-domain filtering)*
 
 The `POST /api/v1/analyses` endpoint supports optional filtering parameters that let you
 restrict which generations and seeds are included in an analysis run. This is useful when
@@ -191,6 +191,28 @@ in one request. The top-level filters apply to both:
 }
 ```
 
+## Response format
+
+Each object in the response array contains:
+
+| Field          | Type         | Description                                           |
+|----------------|--------------|-------------------------------------------------------|
+| `filename`     | `string`     | Analysis module output filename (e.g. `ptools_rna.tsv`) |
+| `content`      | `string`     | Tab-separated output data                             |
+| `variant`      | `int`        | Variant index that produced this result               |
+| `lineage_seed` | `int \| null` | Seed that produced this result (present for `single`) |
+| `generation`   | `int \| null` | Generation that produced this result (present for `single`) |
+
+For `single` analyses, one object is returned per seed/generation combination,
+each with metadata identifying its partition. For aggregated types
+(`multiseed`, `multigeneration`), a single object per module is returned.
+
+## Discovering simulation seed counts
+
+The `GET /api/v1/simulations` response includes a `num_seeds` field on each
+simulation, indicating how many lineage seeds were used. This is derived from
+the `n_init_sims` value in the simulation config.
+
 ## Notes
 
 - **`single`** runs the analysis per seed/generation/agent combination individually.
@@ -202,6 +224,4 @@ in one request. The top-level filters apply to both:
   Use `seeds` to restrict which seeds are included.
 - All filter parameters are optional. Omit them entirely for the full dataset.
 - `generation_start` and `generation_end` are inclusive on both ends.
-- Each `single` result now includes `variant`, `lineage_seed`, and `generation`
-  metadata fields identifying which data partition produced it.
 - No breaking changes to existing API calls.
