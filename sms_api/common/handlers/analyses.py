@@ -6,6 +6,7 @@ NOTE: this module is essentially "analysis_handlers_hpc". TODO: abstract this in
 
 import json
 import logging
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from textwrap import dedent
@@ -105,15 +106,39 @@ async def handle_run_analysis_slurm(
             )
             results.append(output_i)
     else:
-        # Load cached results
+        # Load cached results — filenames use the pattern: module_vX_sY_gZ.tsv
         for fp in analysis_request_cache.iterdir():
             filename = fp.parts[-1]
             if filename.endswith(".tsv"):
                 file_content = fp.read_text()
-                output_i = TsvOutputFile(filename=filename, content=file_content)
+                metadata = _parse_cached_filename_metadata(filename)
+                output_i = TsvOutputFile(
+                    filename=filename,
+                    content=file_content,
+                    variant=metadata.get("variant", 0),
+                    lineage_seed=metadata.get("lineage_seed"),
+                    generation=metadata.get("generation"),
+                )
                 results.append(output_i)
 
     return results
+
+
+# Regex for cached filename metadata: module_vX_sY_gZ.tsv
+_CACHED_META_RE = re.compile(r"_v(\d+)(?:_s(\d+))?(?:_g(\d+))?(?:\.\w+)$")
+
+
+def _parse_cached_filename_metadata(filename: str) -> dict[str, int]:
+    """Parse variant/lineage_seed/generation from cached filenames like ptools_rna_v0_s0_g5.tsv."""
+    metadata: dict[str, int] = {}
+    m = _CACHED_META_RE.search(filename)
+    if m:
+        metadata["variant"] = int(m.group(1))
+        if m.group(2) is not None:
+            metadata["lineage_seed"] = int(m.group(2))
+        if m.group(3) is not None:
+            metadata["generation"] = int(m.group(3))
+    return metadata
 
 
 async def handle_get_analysis_status(

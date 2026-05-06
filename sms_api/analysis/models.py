@@ -84,9 +84,10 @@ class PtoolsAnalysisConfig(BaseModel):
         with the completion of the analysis.
 
     Generation/seed filtering is handled at the request level
-    (``ExperimentAnalysisRequest.generation_start/end/seeds``), not per-module,
-    because vEcoli's ``build_duckdb_filter`` applies a single WHERE clause to
-    the entire dataset before any analysis module runs.
+    (``ExperimentAnalysisRequest.generation_start/end/seeds``), not per-module.
+    Fully supported for ``single`` analyses.  Aggregated types
+    (``multigeneration``, ``multiseed``) do not currently respect these
+    filters due to a known vEcoli limitation.
     """
 
     name: str = PtoolsAnalysisType.REACTIONS.value
@@ -165,10 +166,14 @@ class AnalysisConfig(BaseModel):
 class ExperimentAnalysisRequest(BaseModel):
     """Request body for the ``POST /analyses`` (ptools) endpoint.
 
-    Top-level ``generation_start``, ``generation_end``, and ``seeds`` apply
-    globally to the DuckDB dataset filter in vEcoli's ``analysis.py``
-    (``build_duckdb_filter``).  They restrict **which simulation data rows**
-    are fed to every analysis module in this request.
+    Top-level ``generation_start``, ``generation_end``, and ``seeds`` are
+    fully supported for ``single`` analyses — they restrict which simulation
+    data rows are returned, with metadata identifying each partition.
+
+    For aggregated types (``multigeneration``, ``multiseed``), the filters are
+    passed to vEcoli but not currently applied to the per-subset data query
+    (known vEcoli limitation).  Use ``single`` with filters and aggregate
+    client-side as a workaround.
 
     Per-module params (``n_tp``, ``time_unit``, …) are set inside each
     ``PtoolsAnalysisConfig`` entry and only affect the module they belong to.
@@ -219,8 +224,8 @@ class ExperimentAnalysisRequest(BaseModel):
         config = AnalysisConfig(analysis_options=options, emitter_arg=emitter_arg)  # type: ignore[call-arg]
 
         # DuckDB filters go inside analysis_options (where vEcoli reads them).
-        # vEcoli's analysis.py iterates data filter keys with config[key] (not .get()),
-        # so all filter keys must be present even if None to avoid KeyError.
+        # vEcoli's analysis.py does config[key] (not .get()), so all filter keys
+        # must be present even if None to avoid KeyError.
         for key in ("variant", "generation", "agent_id"):
             if not hasattr(options, key):
                 setattr(options, key, None)

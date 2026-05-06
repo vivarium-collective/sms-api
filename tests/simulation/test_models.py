@@ -8,6 +8,7 @@ from sms_api.common.models import JobBackend
 from sms_api.simulation.models import (
     BaseModel,
     HpcRun,
+    Simulation,
     SimulationConfig,
     trim_attributes,
 )
@@ -84,3 +85,45 @@ def test_hpc_run_parses_legacy_slurmjobid() -> None:
     assert hr.job_id.value == "1881684"
     assert hr.job_id.backend is JobBackend.SLURM
     assert hr.status is not None and hr.status.value == "completed"
+
+
+class TestSimulationNumSeeds:
+    """Verify that Simulation.num_seeds is derived from config.n_init_sims."""
+
+    def test_num_seeds_from_config(self) -> None:
+        config = SimulationConfig(experiment_id="test", generations=5, n_init_sims=10)  # type: ignore[call-arg]
+        sim = Simulation(
+            database_id=1,
+            simulator_id=1,
+            parca_dataset_id=1,
+            config=config,
+            simulation_config_filename="test.json",
+            experiment_id="test",
+        )
+        assert sim.num_seeds == 10
+
+    def test_num_seeds_none_when_not_in_config(self) -> None:
+        config = SimulationConfig(experiment_id="test", generations=5)
+        sim = Simulation(
+            database_id=1,
+            simulator_id=1,
+            parca_dataset_id=1,
+            config=config,
+            simulation_config_filename="test.json",
+            experiment_id="test",
+        )
+        assert sim.num_seeds is None
+
+    def test_num_seeds_explicit_override(self) -> None:
+        config = SimulationConfig(experiment_id="test", generations=5, n_init_sims=3)  # type: ignore[call-arg]
+        sim = Simulation(
+            database_id=1,
+            simulator_id=1,
+            parca_dataset_id=1,
+            config=config,
+            simulation_config_filename="test.json",
+            experiment_id="test",
+            num_seeds=7,
+        )
+        # Explicit num_seeds takes precedence
+        assert sim.num_seeds == 7

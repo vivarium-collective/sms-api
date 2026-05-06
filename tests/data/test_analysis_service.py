@@ -1,6 +1,8 @@
+from pathlib import Path
+
 import pytest
 
-from sms_api.analysis.analysis_service import AnalysisServiceSlurm, RequestPayload
+from sms_api.analysis.analysis_service import AnalysisServiceSlurm, RequestPayload, parse_partition_metadata
 from sms_api.analysis.models import (
     AnalysisConfig,
     ExperimentAnalysisRequest,
@@ -122,14 +124,15 @@ class TestAnalysisDataFiltering:
         multiseed = config.analysis_options.multiseed  # type: ignore[attr-defined]
         assert multiseed["ptools_rxns"]["n_tp"] == 10
 
-    def test_request_no_filters_omits_keys(self) -> None:
+    def test_request_no_filters_omits_range_keys(self) -> None:
         request = ExperimentAnalysisRequest(
             experiment_id="test-exp",
             multiseed=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS, n_tp=8)],
         )
         config = request.to_config(analysis_name="test-analysis", env=ENV)
         assert not hasattr(config.analysis_options, "generation_range")
-        assert not hasattr(config.analysis_options, "lineage_seed")
+        # vEcoli requires these keys even when no filter is specified
+        assert config.analysis_options.generation is None  # type: ignore[attr-defined]
 
     def test_request_serialization_roundtrip(self) -> None:
         request = ExperimentAnalysisRequest(
@@ -144,3 +147,45 @@ class TestAnalysisDataFiltering:
         assert restored.generation_start == 3
         assert restored.generation_end == 8
         assert restored.seeds == [0, 1]
+
+    def test_multigeneration_with_generation_filter(self) -> None:
+        """Verify that generation filters are applied when using multigeneration domain."""
+        request = ExperimentAnalysisRequest(
+            experiment_id="test-exp",
+            generation_start=3,
+            generation_end=8,
+            multigeneration=[PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA, n_tp=8)],
+        )
+        config = request.to_config(analysis_name="test-analysis", env=ENV)
+        assert config.analysis_options.generation_range == [3, 9]  # type: ignore[attr-defined]
+        multigen = config.analysis_options.multigeneration  # type: ignore[attr-defined]
+        assert multigen["ptools_rna"]["n_tp"] == 8
+
+
+class TestParsePartitionMetadata:
+    """Tests for parsing vEcoli partition directory structure."""
+
+    def test_bracket_format(self) -> None:
+        path = Path("/analyses/out/single/variant[0]/lineage_seed[2]/generation[5]/ptools_rna.tsv")
+        result = parse_partition_metadata(path)
+        assert result == {"variant": 0, "lineage_seed": 2, "generation": 5}
+
+    def test_equals_format(self) -> None:
+        path = Path("/analyses/out/variant=0/lineage_seed=1/generation=3/ptools_rxns.tsv")
+        result = parse_partition_metadata(path)
+        assert result == {"variant": 0, "lineage_seed": 1, "generation": 3}
+
+    def test_partial_metadata(self) -> None:
+        path = Path("/analyses/out/multiseed/variant[0]/ptools_rna.tsv")
+        result = parse_partition_metadata(path)
+        assert result == {"variant": 0}
+
+    def test_no_metadata(self) -> None:
+        path = Path("/analyses/out/ptools_rna.tsv")
+        result = parse_partition_metadata(path)
+        assert result == {}
+
+    def test_agent_id_parsed(self) -> None:
+        path = Path("/out/single/variant[0]/lineage_seed[0]/generation[1]/agent_id[0]/ptools_rna.tsv")
+        result = parse_partition_metadata(path)
+        assert result == {"variant": 0, "lineage_seed": 0, "generation": 1, "agent_id": 0}
