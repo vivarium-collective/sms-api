@@ -381,3 +381,11 @@ class Simulation(BaseModel):
     experiment_id: str
     last_updated: str = Field(default=str(datetime.datetime.now()))
     job_id: str | None = None  # Backend-specific job ID (str(slurm_int) or k8s_job_name)
+    num_seeds: int | None = None  # Number of lineage seeds (derived from config.n_init_sims)
+
+    def model_post_init(self, context: Any, /) -> None:
+        # Surface num_seeds from the config JSONB (stored as n_init_sims by vEcoli)
+        if self.num_seeds is None:
+            n_init = getattr(self.config, "n_init_sims", None)
+            if n_init is not None:
+                self.num_seeds = int(n_init)
