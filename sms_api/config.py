@@ -236,6 +236,14 @@ class Settings(BaseSettings):
     build_node_user: str = ""
     build_node_key_path: str = ""
 
+    # --- Compose (process-bigraph) subsystem settings ---
+    compose_image_base_path: str = ""  # HPC path for compose singularity images
+    compose_sim_base_path: str = ""  # HPC path for compose simulation outputs
+    compose_containers_output_dir: str = "/output"  # Container-internal output dir
+    compose_nats_url: str = ""  # NATS server URL (optional)
+    compose_nats_worker_event_subject: str = "compose.worker.events"
+    compose_has_messaging: bool = False  # Enable NATS messaging
+
 
 class ComputeBackend(StrEnum):
     """Compute backend for simulation workloads."""

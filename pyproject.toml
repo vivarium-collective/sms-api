@@ -3,7 +3,7 @@ name = "sms_api"
 version = "0.9.0"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
-requires-python = ">=3.13,<4"
+requires-python = ">=3.13,<3.14"
 readme = "README.md"
 dependencies = [
     "uvicorn>=0.34.3,<0.47",

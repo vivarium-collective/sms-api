@@ -131,6 +131,15 @@ for api_name in APP_ROUTERS:
     except ImportError:
         logger.exception(f"Could not register the following api: {api_name}")
 
+# -- compose (process-bigraph) router -- #
+try:
+    from sms_api.api.routers.compose import router as compose_router
+
+    app.include_router(compose_router, prefix="/compose/v1")
+    logger.info("Compose router registered at /compose/v1")
+except ImportError:
+    logger.warning("Could not register compose router (compose deps may not be installed)")
+
 
 # -- set ui templates and marimo notebook apps -- #
 

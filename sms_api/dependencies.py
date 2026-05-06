@@ -295,9 +295,45 @@ async def init_standalone(enable_ssl: bool = True) -> None:
         set_job_scheduler(job_scheduler)
         logger.info("✓ JobScheduler initialized")
 
+        # Initialize compose (process-bigraph) subsystem
+        await _init_compose_subsystem(engine=get_postgres_engine())
+
     except Exception as e:
         logger.error(f"Failed to initialize standalone services: {e}", exc_info=True)
         raise
+
+
+async def _init_compose_subsystem(engine: AsyncEngine | None) -> None:
+    """Initialize the compose (process-bigraph) subsystem using the shared Postgres engine."""
+    try:
+        if engine is None:
+            logger.warning("Skipping compose subsystem init: no Postgres engine available")
+            return
+
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from sms_api.api.routers.compose import set_compose_services
+        from sms_api.compose.database_service import ComposeDatabaseService
+        from sms_api.compose.job_monitor import ComposeJobMonitor
+        from sms_api.compose.simulation_service import ComposeSimulationServiceHpc
+        from sms_api.compose.tables_orm import create_compose_db
+
+        logger.info("Initializing compose subsystem tables...")
+        await create_compose_db(engine)
+
+        session_maker = async_sessionmaker(engine, expire_on_commit=True)
+        compose_db = ComposeDatabaseService(session_maker)
+        compose_sim = ComposeSimulationServiceHpc()
+        compose_monitor = ComposeJobMonitor(nats_client=None, database_service=compose_db)
+
+        set_compose_services(db=compose_db, sim=compose_sim, monitor=compose_monitor)
+
+        # Start compose job monitor polling
+        await compose_monitor.start_polling(interval_seconds=30)
+
+        logger.info("✓ Compose subsystem initialized")
+    except Exception:
+        logger.warning("Compose subsystem initialization failed (non-fatal)", exc_info=True)
 
 
 async def shutdown_standalone() -> None:
