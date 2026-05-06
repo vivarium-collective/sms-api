@@ -84,12 +84,20 @@ class SimulatorDatabaseService(ABC):
 
     @abstractmethod
     async def insert_simulation(
-        self, sim_request: ComposeSimulationRequest, experiment_id: str, simulator_version: ComposeSimulatorVersion
+        self,
+        sim_request: ComposeSimulationRequest,
+        experiment_id: str,
+        simulator_version: ComposeSimulatorVersion,
+        document: str | None = None,
     ) -> ComposeSimulation:
         pass
 
     @abstractmethod
     async def get_simulations_experiment_id(self, simulation_id: int) -> str:
+        pass
+
+    @abstractmethod
+    async def get_simulation_document(self, simulation_id: int) -> str | None:
         pass
 
     @abstractmethod
@@ -168,10 +176,18 @@ class SimulatorORMExecutor(SimulatorDatabaseService):
 
     @override
     async def insert_simulation(
-        self, sim_request: ComposeSimulationRequest, experiment_id: str, simulator_version: ComposeSimulatorVersion
+        self,
+        sim_request: ComposeSimulationRequest,
+        experiment_id: str,
+        simulator_version: ComposeSimulatorVersion,
+        document: str | None = None,
     ) -> ComposeSimulation:
         async with self.async_session_maker() as session, session.begin():
-            orm = ORMComposeSimulation(experiment_id=experiment_id, simulator_id=simulator_version.database_id)
+            orm = ORMComposeSimulation(
+                experiment_id=experiment_id,
+                simulator_id=simulator_version.database_id,
+                document=document,
+            )
             session.add(orm)
             await session.flush()
             return ComposeSimulation(database_id=orm.id, sim_request=sim_request, simulator_version=simulator_version)
@@ -187,6 +203,18 @@ class SimulatorORMExecutor(SimulatorDatabaseService):
             if orm is None:
                 raise LookupError(f"Compose simulation {simulation_id} not found")
             return orm.experiment_id
+
+    @override
+    async def get_simulation_document(self, simulation_id: int) -> str | None:
+        async with self.async_session_maker() as session:
+            orm = (
+                (await session.execute(select(ORMComposeSimulation).where(ORMComposeSimulation.id == simulation_id)))
+                .scalars()
+                .first()
+            )
+            if orm is None:
+                raise LookupError(f"Compose simulation {simulation_id} not found")
+            return orm.document
 
     @override
     async def list_simulations(self) -> list[ComposeSubmittedSimulation]:

@@ -700,6 +700,11 @@ class E2EDataService:
         out_file.write_bytes(resp.content)
         return out_file
 
+    def compose_get_simulation_document(self, simulation_id: int) -> dict:  # type: ignore[type-arg]
+        resp = self.client.get(f"/compose/v1/simulation/{simulation_id}/document")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
     def compose_get_build_status(self, simulator_id: int) -> dict:  # type: ignore[type-arg]
         resp = self.client.get(f"/compose/v1/simulator/{simulator_id}/build/status")
         resp.raise_for_status()

@@ -1,6 +1,7 @@
 """Request handlers for the compose simulation subsystem."""
 
 import asyncio
+import json
 import logging
 import random
 import shutil
@@ -37,6 +38,39 @@ from sms_api.compose.simulation_service import ComposeSimulationService
 logger = logging.getLogger(__name__)
 
 
+def _extract_document_content(sim_request: ComposeSimulationRequest) -> str | None:
+    """Extract the document content from the uploaded file for persistence.
+
+    For OMEX archives: extracts the first .pbg file found inside the ZIP.
+    For standalone .pbg files: reads the JSON content directly.
+    For .sbml files: reads the XML content directly.
+    """
+    file_path = sim_request.request_file_path
+    if not file_path.exists():
+        return None
+
+    match sim_request.simulation_file_type:
+        case SimulationFileType.OMEX:
+            try:
+                with zipfile.ZipFile(file_path, "r") as zf:
+                    for name in zf.namelist():
+                        if name.endswith(".pbg"):
+                            return zf.read(name).decode("utf-8")
+                    # No .pbg found — try .sbml
+                    for name in zf.namelist():
+                        if name.endswith(".sbml"):
+                            return zf.read(name).decode("utf-8")
+                    # Fallback: return the file listing
+                    return json.dumps({"omex_contents": zf.namelist()})
+            except Exception:
+                logger.warning("Could not extract document from OMEX archive", exc_info=True)
+                return None
+        case SimulationFileType.PBG:
+            return file_path.read_text()
+        case SimulationFileType.SBML:
+            return file_path.read_text()
+
+
 async def get_compose_simulator_versions(db_service: ComposeDatabaseService) -> ComposeRegisteredSimulators:
     simulators = await db_service.get_simulator_db().list_simulators()
     return ComposeRegisteredSimulators(versions=simulators)
@@ -67,8 +101,15 @@ async def run_compose_simulation(
 
     random_string = "".join(random.choices(string.hexdigits, k=7))
     experiment_id = get_compose_experiment_id(simulator=simulator_version, random_str=random_string)
+
+    # Extract and persist the document content for later retrieval
+    document_content = _extract_document_content(simulation_request)
+
     simulation = await simulator_db.insert_simulation(
-        sim_request=simulation_request, experiment_id=experiment_id, simulator_version=simulator_version
+        sim_request=simulation_request,
+        experiment_id=experiment_id,
+        simulator_version=simulator_version,
+        document=document_content,
     )
 
     async def perform_job() -> None:

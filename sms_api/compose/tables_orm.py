@@ -141,6 +141,11 @@ class ORMComposeSimulation(ComposeBase):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
     experiment_id: Mapped[str] = mapped_column(nullable=False, unique=True)
     simulator_id: Mapped[int] = mapped_column(ForeignKey("compose_simulator.id"), nullable=False, index=True)
+    # The uploaded document content — PBG JSON or raw file bytes as a string.
+    # For OMEX archives, this stores the contained .pbg JSON (extracted at upload time).
+    # For standalone .pbg files, this stores the JSON directly.
+    # For .sbml files, this stores the SBML XML as a string.
+    document: Mapped[Optional[str]] = mapped_column(nullable=True)
 
 
 # ---------------------------------------------------------------------------

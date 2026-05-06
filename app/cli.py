@@ -914,6 +914,17 @@ def compose_results(
     console.print(f"[memphis.success]Results saved to:[/] {out_file}")
 
 
+@compose_cli.command("doc", help="Retrieve the process-bigraph document used for a compose simulation.")
+def compose_doc(
+    simulation_id: int = Argument(help="Compose simulation database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_get_simulation_document(simulation_id=simulation_id)
+    display_json(result, console)
+
+
 @compose_cli.command("simulators", help="List registered compose simulators.")
 def compose_simulators(
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),

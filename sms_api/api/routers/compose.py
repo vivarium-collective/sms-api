@@ -201,6 +201,32 @@ async def get_simulator_build_status(simulator_id: int) -> ComposeHpcRun:
     return hpc_run
 
 
+@router.get(
+    path="/simulation/{simulation_id}/document",
+    operation_id="compose-get-simulation-document",
+    tags=["Compose Results"],
+    summary="Retrieve the process-bigraph document used for a compose simulation",
+    responses={
+        200: {"content": {"application/json": {}}, "description": "PBG/SBML document content"},
+        404: {"description": "Simulation not found or no document stored"},
+    },
+)
+async def get_simulation_document(simulation_id: int) -> dict:  # type: ignore[type-arg]
+    """Return the process-bigraph document (PBG JSON, SBML XML, or OMEX manifest)
+    that was uploaded when this simulation was submitted."""
+    import json
+
+    db = _require_db()
+    doc = await db.get_simulator_db().get_simulation_document(simulation_id)
+    if doc is None:
+        raise HTTPException(404, f"No document stored for compose simulation {simulation_id}")
+    # Try to parse as JSON (PBG files are JSON); fall back to wrapping raw content
+    try:
+        return json.loads(doc)  # type: ignore[no-any-return]
+    except (json.JSONDecodeError, ValueError):
+        return {"format": "raw", "content": doc}
+
+
 # ---------------------------------------------------------------------------
 # Compute registry endpoints
 # ---------------------------------------------------------------------------
