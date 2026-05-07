@@ -14,6 +14,7 @@ from fastapi import BackgroundTasks, HTTPException
 from pbest.containerization.container_constructor import generate_container_def_file
 from pbest.utils.input_types import (
     ContainerizationEngine,
+    ContainerizationFileRepr,
     ContainerizationProgramArguments,
     ContainerizationTypes,
 )
@@ -36,6 +37,26 @@ from sms_api.compose.models import (
 from sms_api.compose.simulation_service import ComposeSimulationService
 
 logger = logging.getLogger(__name__)
+
+_MICROMAMBA_ENV = "/micromamba_env/runtime_env"
+
+
+def _inject_pip_deps(base_def: ContainerizationFileRepr, deps: list[str]) -> ContainerizationFileRepr:
+    """Append extra pip install commands to a generated singularity def.
+
+    Inserts the install lines just before the ``## Execute`` marker so they
+    run during the container build, after all other dependency installs.
+    """
+    marker = "## Execute"
+    install_lines = "\n".join(
+        f"micromamba run -p {_MICROMAMBA_ENV} pip install --ignore-requires-python '{dep}'" for dep in deps
+    )
+    text = base_def.representation
+    if marker in text:
+        text = text.replace(marker, f"{install_lines}\n\n{marker}")
+    else:
+        text = text.rstrip() + f"\n{install_lines}\n"
+    return ContainerizationFileRepr(representation=text)
 
 
 def _extract_document_content(sim_request: ComposeSimulationRequest) -> str | None:
@@ -83,6 +104,8 @@ async def run_compose_simulation(
     job_monitor: ComposeJobMonitor,
     pb_allow_list: PBAllowList,
     background_tasks: BackgroundTasks,
+    extra_pip_deps: list[str] | None = None,
+    override_command: str | None = None,
 ) -> ComposeSimulationExperiment:
     with tempfile.TemporaryDirectory(delete=False) as tmp_dir:
         singularity_rep = generate_container_def_file(
@@ -93,6 +116,8 @@ async def run_compose_simulation(
                 containerization_engine=ContainerizationEngine.APPTAINER,
             ),
         )
+        if extra_pip_deps:
+            singularity_rep = _inject_pip_deps(singularity_rep, extra_pip_deps)
 
     simulator_db = database_service.get_simulator_db()
     simulator_version = await simulator_db.get_simulator_by_def_hash(get_singularity_hash(singularity_rep))
@@ -119,6 +144,7 @@ async def run_compose_simulation(
             simulation_service=simulation_service,
             simulation=simulation,
             experiment_id=experiment_id,
+            override_command=override_command,
         )
 
     def remove_temp_dir() -> None:
@@ -165,6 +191,9 @@ async def run_compose_curated(
         )
 
 
+_V2ECOLI_GIT_URL = "git+https://github.com/vivarium-collective/v2ecoli.git"
+
+
 async def run_compose_v2ecoli(
     templated_pbif: str,
     duration: float,
@@ -172,6 +201,9 @@ async def run_compose_v2ecoli(
     db_service: ComposeDatabaseService,
     sim_service: ComposeSimulationService,
     job_monitor: ComposeJobMonitor,
+    cache_dir: str = "out/cache",
+    seed: int = 0,
+    features: list[str] | None = None,
 ) -> ComposeSimulationExperiment:
     """Run a v2ecoli simulation — no SBML upload needed, just PBG template + duration."""
     with tempfile.TemporaryDirectory(delete=False) as tmp_dir:
@@ -191,6 +223,13 @@ async def run_compose_v2ecoli(
             job_monitor=job_monitor,
             pb_allow_list=PBAllowList(allow_list=[]),
             background_tasks=background_tasks,
+            extra_pip_deps=[_V2ECOLI_GIT_URL],
+            override_command=json.dumps({
+                "mode": "v2ecoli",
+                "cache_dir": cache_dir,
+                "seed": seed,
+                "features": features or [],
+            }),
         )
 
 
@@ -200,6 +239,7 @@ async def _dispatch_compose_job(
     simulation_service: ComposeSimulationService,
     simulation: ComposeSimulation,
     experiment_id: str,
+    override_command: str | None = None,
 ) -> None:
     simulator_version = simulation.simulator_version
     hpc_db = database_service.get_hpc_db()
@@ -231,7 +271,9 @@ async def _dispatch_compose_job(
                 raise RuntimeError(f"Container build for simulator {simulator_version.database_id} timed out.")
         job_monitor.internal_unsubscribe(hpc_run.slurmjobid)
 
-    sim_slurmjobid = await simulation_service.submit_simulation_job(simulation=simulation, experiment_id=experiment_id)
+    sim_slurmjobid = await simulation_service.submit_simulation_job(
+        simulation=simulation, experiment_id=experiment_id, override_command=override_command
+    )
     correlation_id = get_compose_correlation_id(random_string=random_string, job_type=ComposeJobType.SIMULATION)
     await hpc_db.insert_hpcrun(
         slurmjobid=sim_slurmjobid,

@@ -353,7 +353,9 @@ async def run_v2ecoli(
     seed: int = Query(default=0, description="Random seed for stochastic processes."),
     interval: float = Query(default=1.0, description="Execution interval (timestep) in seconds."),
     features: str = Query(default="[]", description="JSON list of feature modules, e.g. '[\"ppgpp_regulation\"]'"),
-    cache_dir: str = Query(default="out/cache", description="Path to pre-computed ParCa cache inside container."),
+    cache_dir: str = Query(
+        default="/out/cache", description="Absolute path to pre-computed ParCa cache inside container."
+    ),
 ) -> ComposeSimulationExperiment:
     """Run a v2ecoli whole-cell E. coli simulation.
 
@@ -388,4 +390,7 @@ async def run_v2ecoli(
         db_service=_require_db(),
         sim_service=_require_sim(),
         job_monitor=_require_monitor(),
+        cache_dir=cache_dir,
+        seed=seed,
+        features=features_list,
     )

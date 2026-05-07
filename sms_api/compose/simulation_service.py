@@ -1,5 +1,6 @@
 """Compose simulation service — submits process-bigraph jobs to SLURM via sms-api SSH."""
 
+import json
 import logging
 import random
 import string
@@ -32,7 +33,9 @@ logger = logging.getLogger(__name__)
 
 class ComposeSimulationService(ABC):
     @abstractmethod
-    async def submit_simulation_job(self, simulation: ComposeSimulation, experiment_id: str) -> int:
+    async def submit_simulation_job(
+        self, simulation: ComposeSimulation, experiment_id: str, override_command: str | None = None
+    ) -> int:
         pass
 
     @abstractmethod
@@ -48,8 +51,64 @@ class ComposeSimulationServiceHpc(ComposeSimulationService):
     def __init__(self, env: Settings | None = None) -> None:
         self.env = env or get_settings()
 
+    def _build_run_command(
+        self,
+        override_command: str | None,
+        bind_clause: str,
+        singularity_container: Path,
+        slurm_job_name: str,
+        simulation: ComposeSimulation,
+    ) -> str:
+        """Build the singularity command for the sbatch script."""
+        if override_command:
+            params = json.loads(override_command)
+            if params.get("mode") == "v2ecoli":
+                python = "/micromamba_env/runtime_env/bin/python3.12"
+                mamba_env = "/micromamba_env/runtime_env"
+                return (
+                    f"CONDA_PREFIX={mamba_env} singularity exec \\\n"
+                    f"                    --compat \\\n"
+                    f"                    --env CONDA_PREFIX={mamba_env} \\\n"
+                    f"                    {bind_clause} \\\n"
+                    f"                    {singularity_container} \\\n"
+                    f"                    {python} /experiment/v2ecoli_run.py || true\n"
+                    f"test -f /experiment/output/final_state.json || "
+                    f'{{ echo "v2ecoli failed: no output produced"; exit 1; }}'
+                )
+        return (
+            f"singularity run \\\n"
+            f"                    --compat \\\n"
+            f"                    {bind_clause} \\\n"
+            f"                    {singularity_container} \\\n"
+            f"                    /experiment/{slurm_job_name}."
+            f"{simulation.sim_request.simulation_file_type.get_files_suffix()} \\\n"
+            f'                    -o "{self.env.compose_containers_output_dir}" \\\n'
+            f"                    -n {simulation.sim_request.end_time_point}"
+        )
+
+    @staticmethod
+    def _write_v2ecoli_script(params: dict, output_dir: str) -> str:
+        """Generate the Python script content for a v2ecoli direct invocation."""
+        cache_dir = params["cache_dir"]
+        seed = params["seed"]
+        features = params.get("features", [])
+        duration = params["duration"]
+        return (
+            f"import os, json\n"
+            f"from v2ecoli.composite import make_composite\n"
+            f"from v2ecoli.cache import save_json\n"
+            f"composite = make_composite(cache_dir='{cache_dir}', seed={seed}, features={features!r})\n"
+            f"composite.run({duration})\n"
+            f"outdir = '/experiment/output'\n"
+            f"os.makedirs(outdir, exist_ok=True)\n"
+            f"save_json(dict(composite.state), os.path.join(outdir, 'final_state.json'))\n"
+            f"print('v2ecoli simulation complete')\n"
+        )
+
     @override
-    async def submit_simulation_job(self, simulation: ComposeSimulation, experiment_id: str) -> int:
+    async def submit_simulation_job(
+        self, simulation: ComposeSimulation, experiment_id: str, override_command: str | None = None
+    ) -> int:
         if simulation.sim_request.request_file_path is None:
             raise RuntimeError("Simulation request file path is not available.")
 
@@ -61,6 +120,17 @@ class ComposeSimulationServiceHpc(ComposeSimulationService):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
+            qos_clause = f"#SBATCH --qos={self.env.slurm_qos}" if self.env.slurm_qos else ""
+            nodelist_clause = f"#SBATCH --nodelist={self.env.slurm_node_list}" if self.env.slurm_node_list else ""
+
+            bind_args = [f"--bind {experiment_path}:/experiment"]
+            if self.env.compose_cache_base_path:
+                bind_args.append(f"--bind {self.env.compose_cache_base_path}:/out/cache")
+            bind_clause = " \\\n                    ".join(bind_args)
+
+            run_cmd = self._build_run_command(
+                override_command, bind_clause, singularity_container, slurm_job_name, simulation
+            )
             script_content = dedent(f"""\
                 #!/bin/bash
                 #SBATCH --job-name={slurm_job_name}
@@ -68,19 +138,15 @@ class ComposeSimulationServiceHpc(ComposeSimulationService):
                 #SBATCH --cpus-per-task {"1" if simulation.sim_request.is_batch else "2"}
                 #SBATCH --mem={"1GB" if simulation.sim_request.is_batch else "8GB"}
                 #SBATCH --partition={self.env.slurm_partition}
+                {qos_clause}
+                {nodelist_clause}
                 #SBATCH --output={get_compose_slurm_log_file(slurm_job_name=slurm_job_name)}
 
                 set -e
 
-                mkdir {experiment_path}/output
+                mkdir -p {experiment_path}/output
                 echo "Simulation {slurm_job_name} running."
-                singularity run \\
-                    --compat \\
-                    --bind {experiment_path}:/experiment \\
-                    {singularity_container} \\
-                    /experiment/{slurm_job_name}.{simulation.sim_request.simulation_file_type.get_files_suffix()} \\
-                    -o "{self.env.compose_containers_output_dir}" \\
-                    -n {simulation.sim_request.end_time_point}
+                {run_cmd}
 
                 pushd {experiment_path}
                 cd output
@@ -92,11 +158,25 @@ class ComposeSimulationServiceHpc(ComposeSimulationService):
                 """)
             local_submit_file.write_text(script_content)
 
+            # For v2ecoli mode: write the Python runner script to a local file for upload
+            v2ecoli_script_file: Path | None = None
+            if override_command:
+                params = json.loads(override_command)
+                if params.get("mode") == "v2ecoli":
+                    params["duration"] = simulation.sim_request.end_time_point
+                    script_content_py = self._write_v2ecoli_script(params, self.env.compose_containers_output_dir)
+                    v2ecoli_script_file = Path(tmpdir) / "v2ecoli_run.py"
+                    v2ecoli_script_file.write_text(script_content_py)
+
             async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 await ssh.run_command(f"mkdir -p {experiment_path}")
                 # Upload the simulation input file (OMEX/PBG/SBML)
                 remote_input = HPCFilePath(remote_path=get_compose_sim_input_path(experiment_id=slurm_job_name))
                 await ssh.scp_upload(local_file=simulation.sim_request.request_file_path, remote_path=remote_input)
+                # Upload v2ecoli runner script if applicable
+                if v2ecoli_script_file is not None:
+                    remote_script = HPCFilePath(remote_path=experiment_path / "v2ecoli_run.py")
+                    await ssh.scp_upload(local_file=v2ecoli_script_file, remote_path=remote_script)
                 slurm_service = SlurmService()
                 remote_sbatch = HPCFilePath(remote_path=get_compose_slurm_submit_file(slurm_job_name=slurm_job_name))
                 slurm_jobid = await slurm_service.submit_job(
@@ -122,6 +202,8 @@ class ComposeSimulationServiceHpc(ComposeSimulationService):
             local_singularity_file.write_text(simulator_version.singularity_def.representation)
 
             local_submit_file = Path(tmpdir) / f"{slurm_job_name}.sbatch"
+            qos_clause = f"#SBATCH --qos={self.env.slurm_qos}" if self.env.slurm_qos else ""
+            nodelist_clause = f"#SBATCH --nodelist={self.env.slurm_node_list}" if self.env.slurm_node_list else ""
             script_content = dedent(f"""\
                 #!/bin/bash
                 #SBATCH --job-name={slurm_job_name}
@@ -129,6 +211,8 @@ class ComposeSimulationServiceHpc(ComposeSimulationService):
                 #SBATCH --cpus-per-task 1
                 #SBATCH --mem=4GB
                 #SBATCH --partition={self.env.slurm_partition}
+                {qos_clause}
+                {nodelist_clause}
                 #SBATCH --output={get_compose_slurm_log_file(slurm_job_name=slurm_job_name)}
 
                 set -e

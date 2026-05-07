@@ -988,7 +988,7 @@ def compose_ecoli(
     seed: int = Option(default=0, help="Random seed for stochastic processes."),
     interval: float = Option(default=1.0, help="Execution interval (timestep) in seconds."),
     features: str = Option(default="[]", help="JSON list of feature modules, e.g. '[\"ppgpp_regulation\"]'"),
-    cache_dir: str = Option(default="out/cache", help="ParCa cache path inside container."),
+    cache_dir: str = Option(default="/out/cache", help="Absolute path to ParCa cache inside container."),
     poll: bool = Option(default=False, help="Poll until job completes."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
