@@ -73,6 +73,7 @@ UI_NAMES = [
     "configure",  # no dataservice needed; possible uses though!
     "explore",  # uses dataservice, with nfs
     "dashboard",  # Atlantis EUTE dashboard — full end-to-end workflow
+    "composer",  # compose (process-bigraph) colony simulation builder
     # "single_cell",  # uses /core router w/ generated client, no nfs
 ]
 
@@ -131,6 +132,15 @@ for api_name in APP_ROUTERS:
     except ImportError:
         logger.exception(f"Could not register the following api: {api_name}")
 
+# -- compose (process-bigraph) router -- #
+try:
+    from sms_api.api.routers.compose import router as compose_router
+
+    app.include_router(compose_router, prefix="/compose/v1")
+    logger.info("Compose router registered at /compose/v1")
+except ImportError:
+    logger.warning("Could not register compose router (compose deps may not be installed)")
+
 
 # -- set ui templates and marimo notebook apps -- #
 
@@ -163,6 +173,7 @@ async def home(request: Request) -> templating._TemplateResponse:
         ("Configure", "Invent and configure new Ecoli experiments"),
         ("Explore", "Introspect and explore simulation data"),
         ("Dashboard", "Full end-to-end simulation workflow"),
+        ("Composer", "Build and run v2ecoli colony simulations via process-bigraph"),
         # ("Single Cell", "interactive"),
     ]
     return templates.TemplateResponse(

@@ -1,0 +1,273 @@
+"""Pydantic models for the compose (process-bigraph) simulation subsystem."""
+
+import datetime
+import enum
+import hashlib
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from enum import StrEnum
+from pathlib import Path
+from typing import Any
+
+from pbest.utils.input_types import ContainerizationFileRepr
+from pydantic import BaseModel as _BaseModel
+from pydantic import Field
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FlexData:
+    _data: dict[str, Any] = field(default_factory=dict)
+
+    def __init__(self, **kwargs: Any) -> None:
+        self._data = kwargs
+
+    def __getattr__(self, item: str) -> Any:
+        return self._data[item]
+
+    def __getitem__(self, item: str) -> Any:
+        return self._data[item]
+
+    def keys(self) -> Any:
+        return self._data.keys()
+
+    def dict(self) -> dict[str, Any]:
+        return self._data
+
+
+class Payload(FlexData):
+    pass
+
+
+class BaseModel(_BaseModel):
+    def as_payload(self) -> Payload:
+        serialized = json.loads(self.model_dump_json())
+        return Payload(**serialized)
+
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+
+
+class ComposeJobType(enum.Enum):
+    SIMULATION = "simulation"
+    BUILD_CONTAINER = "build_container"
+
+
+class PackageType(enum.Enum):
+    PYPI = "pypi"
+    CONDA = "conda"
+
+
+class BiGraphComputeType(enum.Enum):
+    PROCESS = "process"
+    STEP = "step"
+
+
+class ComposeJobStatus(StrEnum):
+    WAITING = "waiting"
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    PENDING = "pending"
+    CANCELLED = "cancelled"
+    OUT_OF_MEMORY = "out_of_memory"
+    SUSPENDED = "suspended"
+    TIMEOUT = "timeout"
+    UNKNOWN = "unknown"
+
+
+# ---------------------------------------------------------------------------
+# HPC job tracking
+# ---------------------------------------------------------------------------
+
+
+class ComposeHpcRun(BaseModel):
+    database_id: int
+    slurmjobid: int
+    correlation_id: str
+    job_type: ComposeJobType
+    sim_id: int | None
+    simulator_id: int | None
+    status: ComposeJobStatus | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    error_message: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# BiGraph compute registry
+# ---------------------------------------------------------------------------
+
+
+class BiGraphComputeOutline(BaseModel):
+    module: str
+    name: str
+    compute_type: BiGraphComputeType
+    inputs: str
+    outputs: str
+
+
+class BiGraphCompute(BiGraphComputeOutline):
+    database_id: int
+
+
+class BiGraphProcess(BiGraphCompute):
+    pass
+
+
+class BiGraphStep(BiGraphCompute):
+    pass
+
+
+class PackageOutline(BaseModel):
+    package_type: PackageType
+    name: str
+    compute: list[BiGraphComputeOutline]
+
+    @staticmethod
+    def from_pb_outline(pb_outline_json: dict[str, Any], name: str, package_type: PackageType) -> "PackageOutline":
+        compute: list[BiGraphComputeOutline] = []
+        if "processes" in pb_outline_json:
+            for process in pb_outline_json["processes"]:
+                compute.append(BiGraphComputeOutline(compute_type=BiGraphComputeType.PROCESS, **process))
+        if "steps" in pb_outline_json:
+            for step in pb_outline_json["steps"]:
+                compute.append(BiGraphComputeOutline(compute_type=BiGraphComputeType.STEP, **step))
+        return PackageOutline(package_type=package_type, name=name, compute=compute)
+
+
+class RegisteredPackage(BaseModel):
+    database_id: int
+    package_type: PackageType
+    name: str
+    processes: list[BiGraphProcess]
+    steps: list[BiGraphStep]
+
+
+# ---------------------------------------------------------------------------
+# Simulators (container-based)
+# ---------------------------------------------------------------------------
+
+
+class ComposeSimulator(BaseModel):
+    singularity_def: ContainerizationFileRepr
+    singularity_def_hash: str
+    packages: list[RegisteredPackage] | None
+
+
+class ComposeSimulatorVersion(ComposeSimulator):
+    database_id: int
+    created_at: datetime.datetime | None = None
+
+
+class ComposeRegisteredSimulators(BaseModel):
+    versions: list[ComposeSimulatorVersion]
+    timestamp: datetime.datetime | None = Field(default_factory=datetime.datetime.now)
+
+
+# ---------------------------------------------------------------------------
+# Simulation request / response
+# ---------------------------------------------------------------------------
+
+
+class SimulationFileType(enum.Enum):
+    OMEX = "omex"
+    PBG = "pbg"
+    SBML = "sbml"
+
+    def get_files_suffix(self) -> str:
+        return self.value
+
+    @staticmethod
+    def get_file_type(suffix: str) -> "SimulationFileType":
+        match suffix:
+            case ".omex":
+                return SimulationFileType.OMEX
+            case ".pbg":
+                return SimulationFileType.PBG
+            case ".sbml":
+                return SimulationFileType.SBML
+            case _:
+                raise ValueError(f"Unknown simulation file type: {suffix}")
+
+
+class ComposeSimulationRequest(BaseModel):
+    request_file_path: Path
+    simulation_file_type: SimulationFileType
+    end_time_point: float = 1.0
+    is_batch: bool
+
+
+class ComposeSimulationResults(BaseModel):
+    path_on_server: Path
+
+
+class ComposeSimulation(BaseModel):
+    database_id: int
+    sim_request: ComposeSimulationRequest
+    simulator_version: ComposeSimulatorVersion
+
+
+class ComposeSubmittedSimulation(BaseModel):
+    database_id: int
+    sim_content: ComposeSimulationResults
+    simulator_version: ComposeSimulatorVersion
+    hpc_run: ComposeHpcRun | None
+
+
+class PBAllowList(BaseModel):
+    allow_list: list[str]
+
+
+class ComposeSimulationExperiment(BaseModel):
+    simulation_database_id: int
+    simulator_database_id: int
+    last_updated: str = Field(default_factory=lambda: str(datetime.datetime.now()))
+    metadata: Mapping[str, str] = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Worker events (NATS)
+# ---------------------------------------------------------------------------
+
+
+class ComposeWorkerEvent(BaseModel):
+    database_id: int | None = None
+    created_at: str | None = None
+    hpcrun_id: int | None = None
+    correlation_id: str
+    sequence_number: int
+    mass: dict[str, float]
+    time: float
+
+    @classmethod
+    def from_message_payload(cls, payload: "ComposeWorkerEventMessagePayload") -> "ComposeWorkerEvent":
+        return cls(
+            correlation_id=payload.correlation_id,
+            sequence_number=payload.sequence_number,
+            mass=payload.mass,
+            time=payload.time,
+        )
+
+
+class ComposeWorkerEventMessagePayload(BaseModel):
+    correlation_id: str
+    sequence_number: int
+    time: float
+    mass: dict[str, float]
+
+
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
+
+
+def get_singularity_hash(singularity_def_rep: ContainerizationFileRepr) -> str:
+    return hashlib.md5(singularity_def_rep.representation.encode("utf-8")).hexdigest()  # noqa: S324

@@ -1,0 +1,18 @@
+{
+    "state": {
+        "time_course": {
+            "_type": "step",
+            "address": "local:pbsim_common.simulators.copasi_process.CopasiUTCStep",
+            "config": {
+                "model_source": "interesting.sbml",
+                "sim_start_time": {{ start_time }},
+                "time": {{ duration }},
+                "n_points": {{ num_data_points }},
+                "output_dir": "{{ output_dir }}"
+            },
+            "interval": 1.0,
+            "inputs": {},
+            "outputs": {}
+        }
+    }
+}

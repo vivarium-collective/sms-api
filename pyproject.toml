@@ -1,9 +1,9 @@
 [project]
 name = "sms_api"
-version = "0.8.2"
+version = "0.9.0"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
-requires-python = "==3.12.9"
+requires-python = ">=3.13,<3.14"
 readme = "README.md"
 dependencies = [
     "uvicorn>=0.34.3,<0.47",
@@ -55,6 +55,13 @@ dependencies = [
     "rich-pyfiglet>=1.0.0",
     "rich-pixels>=3.0.1",
     "pillow>=12.2.0",
+    # compose-api deps (process-bigraph ecosystem)
+    "nats-py>=2.10.0,<3",
+    "python-libsedml>=2.0.33",
+    "biosimulators-utils>=0.2.3",
+    "python-libsbml>=5.20.5",
+    "pbest==0.5.5",
+    "spython>=0.3.14",
 ]
 
 [project.scripts]
@@ -75,7 +82,7 @@ dev = [
     "types-requests>=2.32.0.20250602,<3",
     "types-pyyaml>=6.0.12.20250516,<7",
     "pytest-asyncio>=1.0.0,<2",
-    "testcontainers[postgres, redis]>=4.10.0,<5",
+    "testcontainers[nats, postgres, redis]>=4.10.0,<5",
     "types-tqdm>=4.67.0.20250516,<5",
     "openapi-python-client>=0.25.2,<0.29",
     "types-xmltodict>=0.14.0.20241009",
@@ -122,7 +129,7 @@ strict = true
 exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^app/gui\\.py$', '^app/tui\\.py$', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/simulation_data_service\\.py$"]
 
 [[tool.mypy.overrides]]
-module = ["kubernetes.*", "textual", "textual.*", "boto3", "boto3.*", "botocore.*"]
+module = ["kubernetes.*", "textual", "textual.*", "boto3", "boto3.*", "botocore.*", "pbest.*", "biosimulators_utils.*", "libsedml.*", "libsbml.*", "spython.*", "nats.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

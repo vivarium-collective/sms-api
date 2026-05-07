@@ -660,6 +660,99 @@ class E2EDataService:
             idx = (idx + 1) % len(spinner_chars)
             await asyncio.sleep(0.1)
 
+    # -- Compose (process-bigraph) --
+
+    def compose_list_simulators(self) -> dict:  # type: ignore[type-arg]
+        resp = self.client.get("/compose/v1/simulators")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_list_processes(self) -> list[dict]:  # type: ignore[type-arg]
+        resp = self.client.get("/compose/v1/processes")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_list_steps(self) -> list[dict]:  # type: ignore[type-arg]
+        resp = self.client.get("/compose/v1/steps")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_run_simulation(self, file_path: Path, interval_time: float = 1.0, batch: bool = False) -> dict:  # type: ignore[type-arg]
+        with open(file_path, "rb") as f:
+            resp = self.client.post(
+                "/compose/v1/simulation/run",
+                files={"uploaded_file": (file_path.name, f)},
+                params={"interval_time": interval_time, "batch_submission": batch},
+            )
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_get_simulation_status(self, simulation_id: int) -> dict:  # type: ignore[type-arg]
+        resp = self.client.get(f"/compose/v1/simulation/{simulation_id}/status")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_get_simulation_results(self, simulation_id: int, dest: Path) -> Path:
+        resp = self.client.get(f"/compose/v1/simulation/{simulation_id}/results")
+        resp.raise_for_status()
+        dest.mkdir(parents=True, exist_ok=True)
+        out_file = dest / f"compose_results_{simulation_id}.zip"
+        out_file.write_bytes(resp.content)
+        return out_file
+
+    def compose_get_simulation_document(self, simulation_id: int) -> dict:  # type: ignore[type-arg]
+        resp = self.client.get(f"/compose/v1/simulation/{simulation_id}/document")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_get_build_status(self, simulator_id: int) -> dict:  # type: ignore[type-arg]
+        resp = self.client.get(f"/compose/v1/simulator/{simulator_id}/build/status")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_run_v2ecoli(
+        self,
+        duration: float = 60.0,
+        seed: int = 0,
+        interval: float = 1.0,
+        features: str = "[]",
+        cache_dir: str = "out/cache",
+    ) -> dict:  # type: ignore[type-arg]
+        resp = self.client.post(
+            "/compose/v1/curated/ecoli",
+            params={
+                "duration": duration,
+                "seed": seed,
+                "interval": interval,
+                "features": features,
+                "cache_dir": cache_dir,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_run_copasi(self, sbml_path: Path, start_time: float, duration: float, num_data_points: float) -> dict:  # type: ignore[type-arg]
+        with open(sbml_path, "rb") as f:
+            resp = self.client.post(
+                "/compose/v1/curated/copasi",
+                files={"sbml": (sbml_path.name, f)},
+                params={"start_time": start_time, "duration": duration, "num_data_points": num_data_points},
+            )
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_run_tellurium(
+        self, sbml_path: Path, start_time: float, end_time: float, num_data_points: float
+    ) -> dict:  # type: ignore[type-arg]
+        with open(sbml_path, "rb") as f:
+            resp = self.client.post(
+                "/compose/v1/curated/tellurium",
+                files={"sbml": (sbml_path.name, f)},
+                params={"start_time": start_time, "end_time": end_time, "num_data_points": num_data_points},
+            )
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
 
 def get_data_service(base_url: BaseUrl | str | None = None, timeout: int | None = None) -> E2EDataService:
     return E2EDataService(

@@ -78,6 +78,13 @@ spec:
                 name: api
                 port:
                   number: 8000
+          - path: /compose
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000
           - path: /health
             pathType: Prefix
             backend:

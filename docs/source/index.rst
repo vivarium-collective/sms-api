@@ -5,9 +5,10 @@ Atlantis
    :width: 200px
    :align: right
 
-**Atlantis** is a platform for designing, running, and analyzing whole-cell
-simulations of *E. coli* using the
-`vEcoli <https://github.com/CovertLab/vEcoli>`_ model.
+**Atlantis** is a platform for designing, running, and analyzing biological
+simulations --- from whole-cell *E. coli* models to composable
+`process-bigraph <https://github.com/vivarium-collective/process-bigraph>`_
+workflows using COPASI, Tellurium, v2ecoli, and more.
 
 You interact with Atlantis through one of three client applications --- each
 exposes the same end-to-end workflow (build a simulator, run a simulation,
@@ -41,6 +42,8 @@ download results) in a different format:
    guides/running-a-campaign
    guides/choosing-a-client
    guides/cli-reference
+   guides/compose
+   guides/compose-tutorial
    guides/analysis-filtering
 
 .. toctree::

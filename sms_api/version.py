@@ -21,4 +21,5 @@
 # 0.8.0 — harden ecoli-sources sync (org allowlist, path traversal, size limits, manifest validation)
 # 0.8.1 — GUI auto-refresh, remove branch allowlist, mount GUI notebook, improve error messages
 # 0.8.2 — fix analysis output metadata (partition parsing), all-domain filtering, restore num_seeds
-__version__ = "0.8.2"
+# 0.9.0 — compose (process-bigraph) subsystem, Python 3.13, /compose/v1/ endpoints
+__version__ = "0.9.0"
