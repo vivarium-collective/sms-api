@@ -176,13 +176,36 @@ async def get_simulations_status_batch(ids: list[int] = Query()) -> list[Compose
     responses={200: {"content": {"application/zip": {}}, "description": "Results zip file"}},
 )
 async def get_results(simulation_id: int) -> FileResponse:
+    from sms_api.common.models import SSHTarget
+    from sms_api.common.storage.file_paths import HPCFilePath
     from sms_api.compose.hpc_utils import get_compose_sim_results_path
+    from sms_api.dependencies import get_ssh_session_service
 
     db = _require_db()
-    experiment_id = await db.get_simulator_db().get_simulations_experiment_id(simulation_id=simulation_id)
-    results_path = get_compose_sim_results_path(experiment_id)
-    # In a deployed environment, results are on a shared filesystem mount
-    return FileResponse(path=str(results_path), filename=f"{experiment_id}_results.zip", media_type="application/zip")
+    try:
+        experiment_id = await db.get_simulator_db().get_simulations_experiment_id(simulation_id=simulation_id)
+    except LookupError:
+        raise HTTPException(404, f"Compose simulation {simulation_id} not found")
+
+    remote_path = get_compose_sim_results_path(experiment_id)
+
+    # Download results from HPC via SCP to a local cache dir
+    cache_dir = Path("/app/.results_cache/compose")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    local_path = cache_dir / f"{experiment_id}_results.zip"
+
+    if not local_path.exists():
+        try:
+            async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
+                await ssh.scp_download(local_file=local_path, remote_path=HPCFilePath(remote_path=remote_path))
+        except Exception:
+            logger.exception("Failed to download compose results for simulation %s", simulation_id)
+            raise HTTPException(502, f"Failed to download results from HPC for simulation {simulation_id}")
+
+    if not local_path.exists():
+        raise HTTPException(404, f"Results not available for simulation {simulation_id}")
+
+    return FileResponse(path=str(local_path), filename=f"{experiment_id}_results.zip", media_type="application/zip")
 
 
 @router.get(

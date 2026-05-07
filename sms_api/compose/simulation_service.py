@@ -65,25 +65,28 @@ class ComposeSimulationServiceHpc(ComposeSimulationService):
             if params.get("mode") == "v2ecoli":
                 python = "/micromamba_env/runtime_env/bin/python3.12"
                 mamba_env = "/micromamba_env/runtime_env"
+                # Lines must be indented to match the dedent template (16 spaces)
+                indent = " " * 16
                 return (
                     f"CONDA_PREFIX={mamba_env} singularity exec \\\n"
-                    f"                    --compat \\\n"
-                    f"                    --env CONDA_PREFIX={mamba_env} \\\n"
-                    f"                    {bind_clause} \\\n"
-                    f"                    {singularity_container} \\\n"
-                    f"                    {python} /experiment/v2ecoli_run.py || true\n"
-                    f"test -f /experiment/output/final_state.json || "
+                    f"{indent}    --compat \\\n"
+                    f"{indent}    --env CONDA_PREFIX={mamba_env} \\\n"
+                    f"{indent}    {bind_clause} \\\n"
+                    f"{indent}    {singularity_container} \\\n"
+                    f"{indent}    {python} /experiment/v2ecoli_run.py || true\n"
+                    f"{indent}test -f /experiment/output/final_state.json || "
                     f'{{ echo "v2ecoli failed: no output produced"; exit 1; }}'
                 )
+        indent = " " * 16
         return (
             f"singularity run \\\n"
-            f"                    --compat \\\n"
-            f"                    {bind_clause} \\\n"
-            f"                    {singularity_container} \\\n"
-            f"                    /experiment/{slurm_job_name}."
+            f"{indent}    --compat \\\n"
+            f"{indent}    {bind_clause} \\\n"
+            f"{indent}    {singularity_container} \\\n"
+            f"{indent}    /experiment/{slurm_job_name}."
             f"{simulation.sim_request.simulation_file_type.get_files_suffix()} \\\n"
-            f'                    -o "{self.env.compose_containers_output_dir}" \\\n'
-            f"                    -n {simulation.sim_request.end_time_point}"
+            f'{indent}    -o "{self.env.compose_containers_output_dir}" \\\n'
+            f"{indent}    -n {simulation.sim_request.end_time_point}"
         )
 
     @staticmethod
