@@ -14,8 +14,8 @@ Top-Level
 
    atlantis [OPTIONS] COMMAND [ARGS]...
 
-Commands: ``simulator``, ``simulation``, ``parca``, ``analysis``, ``demo``,
-``tui``, ``gui``, ``help``.
+Commands: ``simulator``, ``simulation``, ``parca``, ``analysis``, ``compose``,
+``demo``, ``tui``, ``gui``, ``help``.
 
 Global option: ``--base-url`` selects the API server (default:
 ``http://localhost:8080``). Can also be set via the ``API_BASE_URL``
@@ -391,6 +391,67 @@ Launch the Marimo web GUI (opens in browser).
 .. code-block:: bash
 
    uv run atlantis gui [--base-url URL]
+
+compose
+-------
+
+Compose (process-bigraph) simulation commands. See :doc:`compose` for full
+documentation.
+
+compose run
+~~~~~~~~~~~
+
+Upload an OMEX, PBG, or SBML file and submit a compose simulation:
+
+.. code-block:: bash
+
+   uv run atlantis compose run mymodel.omex --poll --base-url URL
+
+compose ecoli
+~~~~~~~~~~~~~
+
+Run a v2ecoli whole-cell *E. coli* simulation (no file upload needed):
+
+.. code-block:: bash
+
+   uv run atlantis compose ecoli --duration 60 --seed 0 --poll --base-url URL
+
+compose copasi
+~~~~~~~~~~~~~~
+
+Run a COPASI simulation from an SBML file:
+
+.. code-block:: bash
+
+   uv run atlantis compose copasi model.sbml --duration 100 --num-data-points 200
+
+compose tellurium
+~~~~~~~~~~~~~~~~~
+
+Run a Tellurium simulation from an SBML file:
+
+.. code-block:: bash
+
+   uv run atlantis compose tellurium model.sbml --end-time 100 --num-data-points 200
+
+compose status / results / doc
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   uv run atlantis compose status <ID>
+   uv run atlantis compose results <ID> --dest ./output
+   uv run atlantis compose doc <ID>
+
+compose simulators / processes / steps / build-status
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   uv run atlantis compose simulators
+   uv run atlantis compose processes
+   uv run atlantis compose steps
+   uv run atlantis compose build-status <SIMULATOR_ID>
 
 demo
 ----
