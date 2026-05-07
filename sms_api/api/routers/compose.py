@@ -338,3 +338,54 @@ async def run_tellurium(
         sim_service=_require_sim(),
         job_monitor=_require_monitor(),
     )
+
+
+@router.post(
+    path="/curated/ecoli",
+    operation_id="compose-run-v2ecoli",
+    response_model=ComposeSimulationExperiment,
+    tags=["Compose Curated"],
+    summary="Run a v2ecoli whole-cell simulation via process-bigraph",
+)
+async def run_v2ecoli(
+    background_tasks: BackgroundTasks,
+    duration: float = Query(default=60.0, description="Simulation duration in seconds."),
+    seed: int = Query(default=0, description="Random seed for stochastic processes."),
+    interval: float = Query(default=1.0, description="Execution interval (timestep) in seconds."),
+    features: str = Query(default="[]", description="JSON list of feature modules, e.g. '[\"ppgpp_regulation\"]'"),
+    cache_dir: str = Query(default="out/cache", description="Path to pre-computed ParCa cache inside container."),
+) -> ComposeSimulationExperiment:
+    """Run a v2ecoli whole-cell E. coli simulation.
+
+    Unlike Copasi/Tellurium, v2ecoli does not require an SBML upload.
+    The biological model is pre-computed in the ParCa cache and the
+    55 biological processes are composed at runtime via process-bigraph.
+    """
+    import json as _json
+
+    from sms_api.compose.handlers import run_compose_v2ecoli
+    from sms_api.config import get_settings
+
+    # Parse features list
+    try:
+        features_list = _json.loads(features)
+    except (ValueError, TypeError):
+        raise HTTPException(400, f"Invalid features JSON: {features}")
+
+    with open(os.path.join(_TEMPLATES_DIR, "v2ecoli.jinja")) as f:
+        render = Template(f.read()).render(
+            cache_dir=cache_dir,
+            seed=seed,
+            interval=interval,
+            features=_json.dumps(features_list),
+            output_dir=get_settings().compose_containers_output_dir,
+        )
+
+    return await run_compose_v2ecoli(
+        templated_pbif=render,
+        duration=duration,
+        background_tasks=background_tasks,
+        db_service=_require_db(),
+        sim_service=_require_sim(),
+        job_monitor=_require_monitor(),
+    )

@@ -165,6 +165,35 @@ async def run_compose_curated(
         )
 
 
+async def run_compose_v2ecoli(
+    templated_pbif: str,
+    duration: float,
+    background_tasks: BackgroundTasks,
+    db_service: ComposeDatabaseService,
+    sim_service: ComposeSimulationService,
+    job_monitor: ComposeJobMonitor,
+) -> ComposeSimulationExperiment:
+    """Run a v2ecoli simulation — no SBML upload needed, just PBG template + duration."""
+    with tempfile.TemporaryDirectory(delete=False) as tmp_dir:
+        omex_path = Path(tmp_dir) / "input.omex"
+        with zipfile.ZipFile(omex_path, "w") as omex:
+            omex.writestr(data=templated_pbif, zinfo_or_arcname="v2ecoli.pbg")
+        simulation_request = ComposeSimulationRequest(
+            request_file_path=omex_path,
+            simulation_file_type=SimulationFileType.OMEX,
+            end_time_point=duration,
+            is_batch=False,
+        )
+        return await run_compose_simulation(
+            simulation_request=simulation_request,
+            database_service=db_service,
+            simulation_service=sim_service,
+            job_monitor=job_monitor,
+            pb_allow_list=PBAllowList(allow_list=[]),
+            background_tasks=background_tasks,
+        )
+
+
 async def _dispatch_compose_job(
     database_service: ComposeDatabaseService,
     job_monitor: ComposeJobMonitor,

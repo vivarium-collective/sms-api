@@ -1,0 +1,19 @@
+{
+    "state": {
+        "ecoli_simulation": {
+            "_type": "process",
+            "address": "local:v2ecoli.composite.make_composite",
+            "config": {
+                "cache_dir": "{{ cache_dir }}",
+                "seed": {{ seed }},
+                "features": {{ features }}
+            },
+            "interval": {{ interval }},
+            "inputs": {},
+            "outputs": {
+                "mass": ["mass"],
+                "volume": ["volume"]
+            }
+        }
+    }
+}

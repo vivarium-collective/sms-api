@@ -982,6 +982,55 @@ def compose_build_status(
     display_json(result, console)
 
 
+@compose_cli.command("ecoli", help="Run a v2ecoli whole-cell E. coli simulation via process-bigraph.")
+def compose_ecoli(
+    duration: float = Option(default=60.0, help="Simulation duration in seconds."),
+    seed: int = Option(default=0, help="Random seed for stochastic processes."),
+    interval: float = Option(default=1.0, help="Execution interval (timestep) in seconds."),
+    features: str = Option(default="[]", help="JSON list of feature modules, e.g. '[\"ppgpp_regulation\"]'"),
+    cache_dir: str = Option(default="out/cache", help="ParCa cache path inside container."),
+    poll: bool = Option(default=False, help="Poll until job completes."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import time
+
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+
+    with console.status("[memphis.spinner]Submitting v2ecoli simulation..."):
+        result = data_service.compose_run_v2ecoli(
+            duration=duration, seed=seed, interval=interval, features=features, cache_dir=cache_dir
+        )
+    sim_id = result["simulation_database_id"]
+    console.print(f"[memphis.label]Simulation ID:[/] {sim_id}")
+    console.print(f"[memphis.label]Simulator ID:[/] {result['simulator_database_id']}")
+    display_json(result, console)
+
+    if poll:
+        console.print("[memphis.info]Polling for completion...[/]")
+        poll_interval = 10
+        elapsed = 0
+        status = "running"
+        while status not in ("completed", "failed", "cancelled"):
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+            try:
+                status_data = data_service.compose_get_simulation_status(simulation_id=sim_id)
+                status = (status_data.get("status") or "unknown").lower()
+            except Exception:
+                status = "unknown"
+            console.print(f"  [{elapsed}s] status: [{status_style(status)}]{status}[/]")
+        console.print(
+            Panel(
+                f"[{status_style(status)}]{status.upper()}[/]",
+                title=f"v2ecoli simulation {sim_id}",
+                border_style=status_border(status),
+            )
+        )
+
+
 @compose_cli.command("copasi", help="Run a COPASI simulation from an SBML file.")
 def compose_copasi(
     sbml: Path = Argument(help="Path to SBML file."),

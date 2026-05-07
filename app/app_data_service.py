@@ -710,6 +710,27 @@ class E2EDataService:
         resp.raise_for_status()
         return resp.json()  # type: ignore[no-any-return]
 
+    def compose_run_v2ecoli(
+        self,
+        duration: float = 60.0,
+        seed: int = 0,
+        interval: float = 1.0,
+        features: str = "[]",
+        cache_dir: str = "out/cache",
+    ) -> dict:  # type: ignore[type-arg]
+        resp = self.client.post(
+            "/compose/v1/curated/ecoli",
+            params={
+                "duration": duration,
+                "seed": seed,
+                "interval": interval,
+                "features": features,
+                "cache_dir": cache_dir,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
     def compose_run_copasi(self, sbml_path: Path, start_time: float, duration: float, num_data_points: float) -> dict:  # type: ignore[type-arg]
         with open(sbml_path, "rb") as f:
             resp = self.client.post(
