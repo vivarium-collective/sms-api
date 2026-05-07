@@ -25,9 +25,6 @@ from sms_api.simulation.models import (
 from sms_api.simulation.simulation_service import SimulationServiceHpc
 from tests.api.ecoli.test_simulations import CORE_ROUTER
 from tests.fixtures.api_fixtures import (
-    SIMULATOR_BRANCH,
-    SIMULATOR_COMMIT,
-    SIMULATOR_URL,
     SimulatorRepoInfo,
 )
 
@@ -128,27 +125,33 @@ async def prepare_simulator(
 @pytest.mark.asyncio
 async def test_run_analysis(
     base_router: str,
-    analysis_request: ExperimentAnalysisRequest,
     database_service: DatabaseService,
     ssh_session_service: SSHSessionService,
     simulation_service_slurm: SimulationServiceHpc,
     logger: logging.Logger,
 ) -> None:
-    # Insert a simulator directly into the database (no HPC access needed)
-    latest_commit = await simulation_service_slurm.get_latest_commit_hash(
-        git_branch=SIMULATOR_BRANCH, git_repo_url=SIMULATOR_URL
-    )
-    assert latest_commit == SIMULATOR_COMMIT, (
-        f"The test fixture simulator commit is no longer the latest. "
-        f"Please update the SIMULATOR_COMMIT fixture in api_fixtures!"
-        f"Expected: {SIMULATOR_COMMIT}; Got: {latest_commit}"
+    # Use the public simulator commit that is known to be cloned on HPC (same as test_handle_run_analysis_slurm).
+    # The private vEcoli-private repo (SIMULATOR_COMMIT) may not be cloned on the test HPC node.
+    HPC_SIMULATOR_COMMIT = "203ab2a"
+    HPC_SIMULATOR_URL = "https://github.com/vivarium-collective/vEcoli"
+    HPC_SIMULATOR_BRANCH = "api-support"
+    HPC_EXPERIMENT_ID = "sim3-baseline-ca00"
+    N_TP = 22
+
+    from sms_api.analysis.models import PtoolsAnalysisConfig
+
+    analysis_request = ExperimentAnalysisRequest(
+        experiment_id=HPC_EXPERIMENT_ID,
+        multiseed=[
+            PtoolsAnalysisConfig(name="ptools_rna", n_tp=N_TP, variant=0),
+            PtoolsAnalysisConfig(name="ptools_rxns", n_tp=N_TP, variant=0),
+        ],
     )
 
-    simulator_repo_info = SimulatorRepoInfo(url=SIMULATOR_URL, branch=SIMULATOR_BRANCH, commit_hash=SIMULATOR_COMMIT)
     simulator = await handlers.simulators.upload_simulator(
-        commit_hash=simulator_repo_info.commit_hash,
-        git_repo_url=simulator_repo_info.url,
-        git_branch=simulator_repo_info.branch,
+        commit_hash=HPC_SIMULATOR_COMMIT,
+        git_repo_url=HPC_SIMULATOR_URL,
+        git_branch=HPC_SIMULATOR_BRANCH,
         simulation_service_slurm=simulation_service_slurm,
         database_service=database_service,
     )
@@ -161,9 +164,9 @@ async def test_run_analysis(
     parca_dataset = await database_service.insert_parca_dataset(parca_dataset_request=parca_request)
 
     # Insert simulation with matching experiment_id (required by /analyses endpoint)
-    sim_config = SimulationConfig(experiment_id=analysis_request.experiment_id)
+    sim_config = SimulationConfig(experiment_id=HPC_EXPERIMENT_ID)
     sim_request = SimulationRequest(
-        experiment_id=analysis_request.experiment_id,
+        experiment_id=HPC_EXPERIMENT_ID,
         simulation_config_filename="api_simulation_default_with_profile.json",
         simulator_id=simulator.database_id,
         parca_dataset_id=parca_dataset.database_id,
