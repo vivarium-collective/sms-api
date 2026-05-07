@@ -73,6 +73,7 @@ UI_NAMES = [
     "configure",  # no dataservice needed; possible uses though!
     "explore",  # uses dataservice, with nfs
     "dashboard",  # Atlantis EUTE dashboard — full end-to-end workflow
+    "composer",  # compose (process-bigraph) colony simulation builder
     # "single_cell",  # uses /core router w/ generated client, no nfs
 ]
 
@@ -172,6 +173,7 @@ async def home(request: Request) -> templating._TemplateResponse:
         ("Configure", "Invent and configure new Ecoli experiments"),
         ("Explore", "Introspect and explore simulation data"),
         ("Dashboard", "Full end-to-end simulation workflow"),
+        ("Composer", "Build and run v2ecoli colony simulations via process-bigraph"),
         # ("Single Cell", "interactive"),
     ]
     return templates.TemplateResponse(

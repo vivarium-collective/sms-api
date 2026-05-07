@@ -3,6 +3,15 @@
    For use with marimo: App(css_file="memphis.css")
    ============================================================ */
 
+/* ── Force dark mode ─────────────────────────────────────── */
+:root {
+    color-scheme: dark;
+}
+html, body {
+    background: #0d0d0d !important;
+    color: #e0e0e0 !important;
+}
+
 /* ── CSS custom properties ───────────────────────────────── */
 :root {
     --memphis-magenta:  #e91e90;
