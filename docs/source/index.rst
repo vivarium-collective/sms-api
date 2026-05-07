@@ -43,6 +43,7 @@ download results) in a different format:
    guides/choosing-a-client
    guides/cli-reference
    guides/compose
+   guides/compose-tutorial
    guides/analysis-filtering
 
 .. toctree::

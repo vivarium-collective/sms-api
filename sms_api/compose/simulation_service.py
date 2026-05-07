@@ -90,7 +90,7 @@ class ComposeSimulationServiceHpc(ComposeSimulationService):
         )
 
     @staticmethod
-    def _write_v2ecoli_script(params: dict, output_dir: str) -> str:
+    def _write_v2ecoli_script(params: dict[str, object], output_dir: str) -> str:
         """Generate the Python script content for a v2ecoli direct invocation."""
         cache_dir = params["cache_dir"]
         seed = params["seed"]
