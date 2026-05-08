@@ -1065,6 +1065,79 @@ def compose_tellurium(
     display_json(result, console)
 
 
+@compose_cli.command("biomodels-ids", help="List BioModels database identifiers.")
+def compose_biomodels_ids(
+    n: int = Option(default=20, help="Max number of identifiers to return."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    with console.status("[memphis.spinner]Fetching BioModels identifiers..."):
+        ids = data_service.compose_biomodels_identifiers(n=n)
+    console.print(ids)
+
+
+@compose_cli.command("biomodels-meta", help="Get metadata for a BioModels database entry.")
+def compose_biomodels_meta(
+    biomodel_id: str = Argument(help="BioModel ID (e.g. BIOMD0000000001)."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    with console.status(f"[memphis.spinner]Fetching metadata for {biomodel_id}..."):
+        result = data_service.compose_biomodels_metadata(biomodel_id=biomodel_id)
+    display_json(result, console)
+
+
+@compose_cli.command("biomodels-run", help="Run a BioModels database model via Copasi or Tellurium.")
+def compose_biomodels_run(
+    biomodel_id: str = Argument(help="BioModel ID (e.g. BIOMD0000000001)."),
+    simulator: str = Option(default="copasi", help="Simulator: copasi or tellurium."),
+    poll: bool = Option(default=False, help="Poll for job status until complete."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    with console.status(f"[memphis.spinner]Submitting {biomodel_id} via {simulator}..."):
+        result = data_service.compose_biomodels_run(biomodel_id=biomodel_id, simulator=simulator)
+    display_json(result, console)
+    if poll:
+        sim_id = result.get("simulation_database_id")
+        if sim_id is None:
+            console.print("[yellow]No simulation_database_id in response; cannot poll.[/yellow]")
+            return
+        import time
+
+        while True:
+            time.sleep(5)
+            with console.status(f"[memphis.spinner]Polling status for simulation {sim_id}..."):
+                status_data = data_service.compose_get_simulation_status(simulation_id=sim_id)
+            status = status_data.get("status", "unknown")
+            console.print(f"  Status: {status}")
+            if status in ("completed", "failed", "cancelled", "timeout"):
+                break
+        display_json(status_data, console)
+
+
+@compose_cli.command("biomodels-batch", help="Run a batch of BioModels database models.")
+def compose_biomodels_batch(
+    simulator: str = Option(default="copasi", help="Simulator: copasi or tellurium."),
+    n: int = Option(default=5, help="Number of models to run (ignored if --ids provided)."),
+    ids: str = Option(default="", help="Comma-separated BioModel IDs to run."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    model_ids = [i.strip() for i in ids.split(",") if i.strip()] if ids else None
+    with console.status("[memphis.spinner]Submitting BioModels batch..."):
+        result = data_service.compose_biomodels_batch(
+            simulator=simulator,
+            model_ids=model_ids,
+            n_models=n if model_ids is None else None,
+        )
+    display_json(result, console)
+
+
 # -- Demo commands --
 
 

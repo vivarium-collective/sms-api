@@ -269,5 +269,32 @@ class ComposeWorkerEventMessagePayload(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class BiomodelSimulator(str, enum.Enum):
+    COPASI = "copasi"
+    TELLURIUM = "tellurium"
+
+
+class BiomodelInfo(BaseModel):
+    biomodel_id: str
+    metadata: dict[str, Any]
+
+
+class BiomodelsRunRequest(BaseModel):
+    model_ids: list[str] | None = Field(
+        default=None, description="Specific BioModel IDs to run. Mutually exclusive with n_models."
+    )
+    n_models: int | None = Field(
+        default=None, ge=1, le=50, description="Run the first N BioModels. Ignored if model_ids is set."
+    )
+    simulator: BiomodelSimulator = Field(
+        default=BiomodelSimulator.COPASI, description="Simulator to use for each model."
+    )
+
+
+class BiomodelsRunResult(BaseModel):
+    submitted: list[ComposeSimulationExperiment]
+    failed: list[str] = Field(default_factory=list, description="BioModel IDs that failed to submit.")
+
+
 def get_singularity_hash(singularity_def_rep: ContainerizationFileRepr) -> str:
     return hashlib.md5(singularity_def_rep.representation.encode("utf-8")).hexdigest()  # noqa: S324

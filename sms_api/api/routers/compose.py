@@ -20,6 +20,10 @@ from sms_api.compose.models import (
     BiGraphComputeType,
     BiGraphProcess,
     BiGraphStep,
+    BiomodelInfo,
+    BiomodelSimulator,
+    BiomodelsRunRequest,
+    BiomodelsRunResult,
     ComposeHpcRun,
     ComposeJobType,
     ComposeRegisteredSimulators,
@@ -417,3 +421,165 @@ async def run_v2ecoli(
         seed=seed,
         features=features_list,
     )
+
+
+# ---------------------------------------------------------------------------
+# BioModels endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    path="/biomodels/identifiers",
+    operation_id="compose-list-biomodel-identifiers",
+    response_model=list[str],
+    tags=["Compose BioModels"],
+    summary="List BioModels database identifiers",
+)
+async def get_biomodels_identifiers(
+    n: int = Query(default=20, ge=1, le=500, description="Max number of identifiers to return."),
+) -> list[str]:
+    from sms_api.compose.biomodels_service import BiomodelsService
+
+    return BiomodelsService.get_identifiers(n=n)
+
+
+@router.get(
+    path="/biomodels/{biomodel_id}/metadata",
+    operation_id="compose-get-biomodel-metadata",
+    response_model=BiomodelInfo,
+    tags=["Compose BioModels"],
+    summary="Get metadata for a BioModels database entry",
+)
+async def get_biomodel_metadata(biomodel_id: str) -> BiomodelInfo:
+    from sms_api.compose.biomodels_service import BiomodelsService
+
+    try:
+        meta = BiomodelsService.get_metadata(biomodel_id)
+    except Exception as exc:
+        raise HTTPException(404, f"BioModel {biomodel_id} not found: {exc}")
+    return BiomodelInfo(biomodel_id=biomodel_id, metadata=meta)
+
+
+@router.post(
+    path="/biomodels/{biomodel_id}/run",
+    operation_id="compose-run-biomodel",
+    response_model=ComposeSimulationExperiment,
+    tags=["Compose BioModels"],
+    summary="Run a BioModels database model through Copasi or Tellurium",
+)
+async def run_biomodel(
+    biomodel_id: str,
+    background_tasks: BackgroundTasks,
+    simulator: BiomodelSimulator = Query(default=BiomodelSimulator.COPASI, description="Simulator to use."),
+) -> ComposeSimulationExperiment:
+    import tempfile
+
+    from sms_api.compose.biomodels_service import BiomodelsService
+    from sms_api.config import get_settings
+
+    stable_dir = Path(tempfile.mkdtemp(prefix=f"biomodel_{biomodel_id}_stable_"))
+    try:
+        result = BiomodelsService.load_biomodel(biomodel_id, stable_dir)
+    except Exception as exc:
+        raise HTTPException(400, f"Failed to load BioModel {biomodel_id}: {exc}")
+
+    utc = result.utc
+    sbml_path = Path(result.sbml_path)
+
+    if simulator is BiomodelSimulator.COPASI:
+        with open(os.path.join(_TEMPLATES_DIR, "copasi.jinja")) as f:
+            render = Template(f.read()).render(
+                start_time=utc.output_start_time,
+                duration=utc.duration,
+                num_data_points=utc.number_of_points,
+                output_dir=get_settings().compose_containers_output_dir,
+            )
+    else:
+        with open(os.path.join(_TEMPLATES_DIR, "tellurium.jinja")) as f:
+            render = Template(f.read()).render(
+                start_time=utc.output_start_time,
+                end_time=utc.output_end_time,
+                num_data_points=utc.number_of_points,
+                output_dir=get_settings().compose_containers_output_dir,
+            )
+
+    simulator_name = "Copasi" if simulator is BiomodelSimulator.COPASI else "Tellurium"
+    return await run_compose_curated(
+        templated_pbif=render,
+        simulator_name=simulator_name,
+        loaded_sbml=sbml_path,
+        background_tasks=background_tasks,
+        db_service=_require_db(),
+        sim_service=_require_sim(),
+        job_monitor=_require_monitor(),
+    )
+
+
+@router.post(
+    path="/biomodels/batch",
+    operation_id="compose-run-biomodels-batch",
+    response_model=BiomodelsRunResult,
+    tags=["Compose BioModels"],
+    summary="Run a batch of BioModels database models",
+)
+async def run_biomodels_batch(
+    request: BiomodelsRunRequest,
+    background_tasks: BackgroundTasks,
+) -> BiomodelsRunResult:
+    import tempfile
+
+    from sms_api.compose.biomodels_service import BiomodelsService
+    from sms_api.config import get_settings
+
+    ids = request.model_ids or BiomodelsService.get_identifiers(n=request.n_models or 10)
+
+    submitted: list[ComposeSimulationExperiment] = []
+    failed: list[str] = []
+
+    for biomodel_id in ids:
+        stable_dir = Path(tempfile.mkdtemp(prefix=f"biomodel_{biomodel_id}_stable_"))
+        try:
+            result = BiomodelsService.load_biomodel(biomodel_id, stable_dir)
+        except Exception:
+            logger.exception("Failed to load BioModel %s", biomodel_id)
+            failed.append(biomodel_id)
+            continue
+
+        utc = result.utc
+        sbml_path = Path(result.sbml_path)
+        sim = request.simulator
+
+        try:
+            if sim is BiomodelSimulator.COPASI:
+                with open(os.path.join(_TEMPLATES_DIR, "copasi.jinja")) as f:
+                    render = Template(f.read()).render(
+                        start_time=utc.output_start_time,
+                        duration=utc.duration,
+                        num_data_points=utc.number_of_points,
+                        output_dir=get_settings().compose_containers_output_dir,
+                    )
+            else:
+                with open(os.path.join(_TEMPLATES_DIR, "tellurium.jinja")) as f:
+                    render = Template(f.read()).render(
+                        start_time=utc.output_start_time,
+                        end_time=utc.output_end_time,
+                        num_data_points=utc.number_of_points,
+                        output_dir=get_settings().compose_containers_output_dir,
+                    )
+
+            simulator_name = "Copasi" if sim is BiomodelSimulator.COPASI else "Tellurium"
+            experiment = await run_compose_curated(
+                templated_pbif=render,
+                simulator_name=simulator_name,
+                loaded_sbml=sbml_path,
+                background_tasks=background_tasks,
+                db_service=_require_db(),
+                sim_service=_require_sim(),
+                job_monitor=_require_monitor(),
+            )
+            submitted.append(experiment)
+        except Exception:
+            logger.exception("Failed to submit BioModel %s", biomodel_id)
+            failed.append(biomodel_id)
+
+    return BiomodelsRunResult(submitted=submitted, failed=failed)
