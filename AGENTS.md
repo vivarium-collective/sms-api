@@ -104,8 +104,24 @@ Re-optimize config after large PRs: invoke `/bootstrapper` skill inside opencode
 
 ## Active plan files
 
-- `TODO_40.md` — BioModels integration via compose subsystem (academic api only)
+- `TODO_40.md` — ✅ BioModels integration via compose subsystem (academic api only) — **verified complete** (62 tests, `make check` clean, all 6 endpoints + 6 CLI commands + OpenAPI client regenerated)
+- `BIOMODELS_GUIDE.md` — user-facing CLI guide for BioModels owners (created alongside TODO_40 verification). Commands default to `https://sms.cam.uchc.edu` (sms-api-rke). Compose biomodels always routes through SLURM — compose has no Batch implementation.
 - `SECURITY_UPDATES.md` — CVE-2026-31431 "DirtyFrag" response for AWS GovCloud infra
+
+## Deploy loop (rke — academic API, biomodels target)
+
+```bash
+git push && gh workflow run build-and-push.yml --ref <branch> -f version=X.Y.Z
+# wait for build, then:
+kubectl kustomize kustomize/overlays/sms-api-rke | kubectl apply -f -
+kubectl rollout restart deployment/api -n sms-api-rke
+# verify on pod:
+kubectl get pods -n sms-api-rke
+kubectl logs -n sms-api-rke deployment/api --tail=50
+# test via CLI:
+uv run atlantis compose biomodels-ids
+uv run atlantis compose biomodels-meta BIOMD0000000001
+```
 
 ## Deploy loop (stanford-test)
 
