@@ -705,7 +705,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-05-08T15:31:54.188743'
+                  created_at: '2026-05-08T16:41:31.741224'
                 parca_config:
                   outdir: /projects/SMS/sms_api/prod/sims
       responses:
@@ -2266,7 +2266,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-05-08 15:31:54.007693'
+          default: '2026-05-08 16:41:31.566729'
         job_id:
           anyOf:
           - type: string
