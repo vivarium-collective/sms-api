@@ -12,7 +12,7 @@ from tests.docker_utils import SKIP_DOCKER_REASON, SKIP_DOCKER_TESTS
 
 
 @pytest.fixture(scope="module")
-def postgres_url() -> Generator[str, None, None]:
+def postgres_url() -> Generator[str]:
     if SKIP_DOCKER_TESTS:
         pytest.skip(SKIP_DOCKER_REASON)
     with PostgresContainer("postgres:15") as postgres:
@@ -21,7 +21,7 @@ def postgres_url() -> Generator[str, None, None]:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def async_postgres_engine(postgres_url: str) -> AsyncGenerator[AsyncEngine, None]:
+async def async_postgres_engine(postgres_url: str) -> AsyncGenerator[AsyncEngine]:
     engine = create_async_engine(postgres_url, echo=True)
     prev_engine: AsyncEngine | None = get_postgres_engine()
     try:
@@ -34,7 +34,7 @@ async def async_postgres_engine(postgres_url: str) -> AsyncGenerator[AsyncEngine
 
 
 @pytest_asyncio.fixture(scope="function")
-async def database_service(async_postgres_engine: AsyncEngine) -> AsyncGenerator[DatabaseService, None]:
+async def database_service(async_postgres_engine: AsyncEngine) -> AsyncGenerator[DatabaseService]:
     saved_database_service = get_database_service()
     database_service = DatabaseServiceSQL(async_engine=async_postgres_engine)
     set_database_service(database_service)

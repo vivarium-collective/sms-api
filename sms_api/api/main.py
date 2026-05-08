@@ -82,7 +82,7 @@ UI_NAMES = [
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     # configure and start standalone services (data, sim, db, etc)
     dev_mode = os.getenv("DEV_MODE", "0")
     start_standalone = partial(init_standalone)

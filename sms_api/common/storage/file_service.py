@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -17,7 +16,7 @@ class ListingItem(BaseModel):
 
 class FileService(ABC):
     @abstractmethod
-    async def download_file(self, s3_path: S3FilePath, file_path: Optional[Path] = None) -> tuple[S3FilePath, str]:
+    async def download_file(self, s3_path: S3FilePath, file_path: Path | None = None) -> tuple[S3FilePath, str]:
         pass
 
     @abstractmethod

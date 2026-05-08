@@ -3,9 +3,9 @@ import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import override
 
 import aiofiles
-from typing_extensions import override
 
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService, ListingItem

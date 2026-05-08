@@ -11,7 +11,6 @@ values are migrated to job_id_ext as strings.
 """
 
 from collections.abc import Sequence
-from typing import Union
 
 import sqlalchemy as sa
 
@@ -19,9 +18,9 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0f991fad32ba"
-down_revision: Union[str, Sequence[str], None] = "fb7621a73e24"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "fb7621a73e24"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

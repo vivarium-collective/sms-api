@@ -47,7 +47,7 @@ def mock_k8s_job_service() -> MagicMock:
 @pytest.fixture(scope="function")
 def simulation_service_k8s_mock(
     mock_k8s_job_service: MagicMock,
-) -> Generator[SimulationServiceK8s, None, None]:
+) -> Generator[SimulationServiceK8s]:
     """SimulationServiceK8s with mocked K8sJobService and SSH, injected as global singleton."""
     saved_simulation_service = get_simulation_service()
     saved_ssh_service = get_ssh_session_service_or_none(SSHTarget.BUILD)
@@ -68,7 +68,7 @@ def simulation_service_k8s_mock(
 
 
 @pytest.fixture(scope="function")
-def mock_file_service() -> Generator[MagicMock, None, None]:
+def mock_file_service() -> Generator[MagicMock]:
     """Mock FileService for S3 output retrieval tests, injected as global singleton."""
     saved_file_service = get_file_service()
 

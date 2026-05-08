@@ -4,13 +4,12 @@ import datetime
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 from pbest.utils.input_types import ContainerizationFileRepr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import InstrumentedAttribute
-from typing_extensions import override
 
 from sms_api.common.hpc.models import SlurmJob
 from sms_api.compose.models import (

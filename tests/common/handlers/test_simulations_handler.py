@@ -1,8 +1,8 @@
 import asyncio
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -73,7 +73,7 @@ class _FakeFileService(FileService):
         self.max_active = 0
         self._lock = asyncio.Lock()
 
-    async def download_file(self, s3_path: S3FilePath, file_path: Optional[Path] = None) -> tuple[S3FilePath, str]:
+    async def download_file(self, s3_path: S3FilePath, file_path: Path | None = None) -> tuple[S3FilePath, str]:
         async with self._lock:
             self._active += 1
             self.max_active = max(self.max_active, self._active)
@@ -98,7 +98,7 @@ class _FakeFileService(FileService):
         raise NotImplementedError
 
     async def get_modified_date(self, s3_path: S3FilePath) -> datetime:  # pragma: no cover
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
     async def get_listing(self, s3_path: S3FilePath) -> list[ListingItem]:
         prefix = str(s3_path.s3_path)
@@ -118,7 +118,7 @@ class _FakeFileService(FileService):
 
 def _make_listing(experiment_prefix: str, n_files: int) -> list[ListingItem]:
     """Build a fake S3 listing with ``n_files`` .tsv entries + one workflow_config.json."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     items: list[ListingItem] = []
     for i in range(n_files):
         items.append(

@@ -138,7 +138,7 @@ class MessagingServiceRedis(MessagingService):
                             except Exception:
                                 logger.exception(f"Error in message handler for channel '{channel}'")
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Timeout is expected, just continue to check stop_event
                     continue
                 except Exception:

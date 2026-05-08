@@ -25,7 +25,7 @@ class StrEnumBase(StrEnum):
 
     @classmethod
     def to_dict(cls) -> dict[str, str]:
-        return dict(zip(cls.keys(), cls.values()))
+        return dict(zip(cls.keys(), cls.values(), strict=False))
 
     @classmethod
     def to_list(cls, sort: bool = False) -> list[str]:

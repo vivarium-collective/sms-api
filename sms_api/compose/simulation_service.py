@@ -8,8 +8,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 from textwrap import dedent
-
-from typing_extensions import override
+from typing import override
 
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.models import SSHTarget

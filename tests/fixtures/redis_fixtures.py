@@ -9,7 +9,7 @@ from tests.docker_utils import SKIP_DOCKER_REASON, SKIP_DOCKER_TESTS
 
 
 @pytest_asyncio.fixture(scope="session")
-async def redis_container_host_and_port() -> AsyncGenerator[tuple[str, int], None]:
+async def redis_container_host_and_port() -> AsyncGenerator[tuple[str, int]]:
     if SKIP_DOCKER_TESTS:
         pytest.skip(SKIP_DOCKER_REASON)
     with RedisContainer() as redis_container:
@@ -20,7 +20,7 @@ async def redis_container_host_and_port() -> AsyncGenerator[tuple[str, int], Non
 @pytest_asyncio.fixture(scope="function")
 async def redis_subscriber_service(
     redis_container_host_and_port: tuple[str, int],
-) -> AsyncGenerator[MessagingServiceRedis, None]:
+) -> AsyncGenerator[MessagingServiceRedis]:
     service = MessagingServiceRedis()
     await service.connect(host=redis_container_host_and_port[0], port=redis_container_host_and_port[1])
     yield service
@@ -30,7 +30,7 @@ async def redis_subscriber_service(
 @pytest_asyncio.fixture(scope="function")
 async def redis_producer_service(
     redis_container_host_and_port: tuple[str, int],
-) -> AsyncGenerator[MessagingServiceRedis, None]:
+) -> AsyncGenerator[MessagingServiceRedis]:
     service = MessagingServiceRedis()
     await service.connect(host=redis_container_host_and_port[0], port=redis_container_host_and_port[1])
     yield service

@@ -1,7 +1,7 @@
 import datetime
 import enum
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import ForeignKey, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -85,17 +85,17 @@ class ORMHpcRun(Base):
 
     job_type: Mapped[JobTypeDB] = mapped_column(nullable=False)
     correlation_id: Mapped[str] = mapped_column(nullable=False, index=True)
-    job_id_ext: Mapped[Optional[str]] = mapped_column(nullable=True)  # Backend-specific job ID as string
+    job_id_ext: Mapped[str | None] = mapped_column(nullable=True)  # Backend-specific job ID as string
     job_backend: Mapped[str] = mapped_column(nullable=False, server_default="slurm")
-    start_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
-    end_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
+    start_time: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
+    end_time: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
     status: Mapped[JobStatusDB] = mapped_column(nullable=False)
-    error_message: Mapped[Optional[str]] = mapped_column(nullable=True)
-    jobref_simulation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("simulation.id"), nullable=True, index=True)
-    jobref_parca_dataset_id: Mapped[Optional[int]] = mapped_column(
+    error_message: Mapped[str | None] = mapped_column(nullable=True)
+    jobref_simulation_id: Mapped[int | None] = mapped_column(ForeignKey("simulation.id"), nullable=True, index=True)
+    jobref_parca_dataset_id: Mapped[int | None] = mapped_column(
         ForeignKey("parca_dataset.id"), nullable=True, index=True
     )
-    jobref_simulator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("simulator.id"), nullable=True, index=True)
+    jobref_simulator_id: Mapped[int | None] = mapped_column(ForeignKey("simulator.id"), nullable=True, index=True)
 
     def _build_job_id(self) -> JobId:
         """Construct a JobId from the ORM columns."""
@@ -129,7 +129,7 @@ class ORMParcaDataset(Base):
     simulator_id: Mapped[int] = mapped_column(ForeignKey("simulator.id"), nullable=False, index=True)
     parca_config: Mapped[dict[str, int | float | str | bool | None]] = mapped_column(JSONB, nullable=False)
     parca_config_hash: Mapped[str] = mapped_column(nullable=False)
-    remote_archive_path: Mapped[Optional[str]] = mapped_column(nullable=True)
+    remote_archive_path: Mapped[str | None] = mapped_column(nullable=True)
 
 
 class ORMSimulation(Base):
@@ -155,8 +155,8 @@ class ORMWorkerEvent(Base):
     correlation_id: Mapped[str] = mapped_column(nullable=False, index=True)
     sequence_number: Mapped[int] = mapped_column(nullable=False, index=True)
     mass: Mapped[dict[str, float]] = mapped_column(JSONB, nullable=False)
-    bulk: Mapped[Optional[list[int]]] = mapped_column(JSONB, nullable=True)
-    bulk_index: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    bulk: Mapped[list[int] | None] = mapped_column(JSONB, nullable=True)
+    bulk_index: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     time: Mapped[float] = mapped_column(nullable=True)
     hpcrun_id: Mapped[int] = mapped_column(ForeignKey("hpcrun.id"), nullable=False, index=True)
 
