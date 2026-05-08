@@ -30,7 +30,7 @@ temp_data_dir.mkdir(exist_ok=True)
 
 
 @pytest_asyncio.fixture(scope="function")
-async def temp_test_data_dir() -> AsyncGenerator[Path, None]:
+async def temp_test_data_dir() -> AsyncGenerator[Path]:
     """
     Provides a temporary directory for test data.
 
@@ -50,7 +50,7 @@ async def temp_test_data_dir() -> AsyncGenerator[Path, None]:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def file_service_local() -> AsyncGenerator[FileServiceLocal, None]:
+async def file_service_local() -> AsyncGenerator[FileServiceLocal]:
     """
     Local filesystem mock of FileService for testing.
 
@@ -76,7 +76,7 @@ async def file_service_local() -> AsyncGenerator[FileServiceLocal, None]:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def file_service_gcs() -> AsyncGenerator[FileServiceGCS, None]:
+async def file_service_gcs() -> AsyncGenerator[FileServiceGCS]:
     """
     Google Cloud Storage FileService for testing.
 
@@ -104,7 +104,7 @@ async def file_service_gcs() -> AsyncGenerator[FileServiceGCS, None]:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def file_service_s3() -> AsyncGenerator[FileServiceS3, None]:
+async def file_service_s3() -> AsyncGenerator[FileServiceS3]:
     """
     AWS S3 FileService for testing.
 
@@ -140,7 +140,7 @@ async def file_service_s3() -> AsyncGenerator[FileServiceS3, None]:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def file_service_qumulo() -> AsyncGenerator[FileServiceQumuloS3, None]:
+async def file_service_qumulo() -> AsyncGenerator[FileServiceQumuloS3]:
     """
     Qumulo S3-compatible FileService for testing.
 
@@ -206,7 +206,7 @@ async def file_service_qumulo_test_base_path() -> Path:
 
 
 @pytest_asyncio.fixture(scope="module")
-async def gcs_token() -> AsyncGenerator[Token, None]:
+async def gcs_token() -> AsyncGenerator[Token]:
     """
     GCS authentication token for module-level reuse.
 

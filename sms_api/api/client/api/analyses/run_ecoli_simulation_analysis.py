@@ -88,7 +88,20 @@ def sync_detailed(
     """Run an analysis
 
     Args:
-        body (ExperimentAnalysisRequest):
+        body (ExperimentAnalysisRequest): Request body for the ``POST /analyses`` (ptools)
+            endpoint.
+
+            Top-level ``generation_start``, ``generation_end``, and ``seeds`` are
+            fully supported for ``single`` analyses — they restrict which simulation
+            data rows are returned, with metadata identifying each partition.
+
+            For aggregated types (``multigeneration``, ``multiseed``), the filters are
+            passed to vEcoli but not currently applied to the per-subset data query
+            (known vEcoli limitation).  Use ``single`` with filters and aggregate
+            client-side as a workaround.
+
+            Per-module params (``n_tp``, ``time_unit``, …) are set inside each
+            ``PtoolsAnalysisConfig`` entry and only affect the module they belong to.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -117,7 +130,20 @@ def sync(
     """Run an analysis
 
     Args:
-        body (ExperimentAnalysisRequest):
+        body (ExperimentAnalysisRequest): Request body for the ``POST /analyses`` (ptools)
+            endpoint.
+
+            Top-level ``generation_start``, ``generation_end``, and ``seeds`` are
+            fully supported for ``single`` analyses — they restrict which simulation
+            data rows are returned, with metadata identifying each partition.
+
+            For aggregated types (``multigeneration``, ``multiseed``), the filters are
+            passed to vEcoli but not currently applied to the per-subset data query
+            (known vEcoli limitation).  Use ``single`` with filters and aggregate
+            client-side as a workaround.
+
+            Per-module params (``n_tp``, ``time_unit``, …) are set inside each
+            ``PtoolsAnalysisConfig`` entry and only affect the module they belong to.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -141,7 +167,20 @@ async def asyncio_detailed(
     """Run an analysis
 
     Args:
-        body (ExperimentAnalysisRequest):
+        body (ExperimentAnalysisRequest): Request body for the ``POST /analyses`` (ptools)
+            endpoint.
+
+            Top-level ``generation_start``, ``generation_end``, and ``seeds`` are
+            fully supported for ``single`` analyses — they restrict which simulation
+            data rows are returned, with metadata identifying each partition.
+
+            For aggregated types (``multigeneration``, ``multiseed``), the filters are
+            passed to vEcoli but not currently applied to the per-subset data query
+            (known vEcoli limitation).  Use ``single`` with filters and aggregate
+            client-side as a workaround.
+
+            Per-module params (``n_tp``, ``time_unit``, …) are set inside each
+            ``PtoolsAnalysisConfig`` entry and only affect the module they belong to.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -168,7 +207,20 @@ async def asyncio(
     """Run an analysis
 
     Args:
-        body (ExperimentAnalysisRequest):
+        body (ExperimentAnalysisRequest): Request body for the ``POST /analyses`` (ptools)
+            endpoint.
+
+            Top-level ``generation_start``, ``generation_end``, and ``seeds`` are
+            fully supported for ``single`` analyses — they restrict which simulation
+            data rows are returned, with metadata identifying each partition.
+
+            For aggregated types (``multigeneration``, ``multiseed``), the filters are
+            passed to vEcoli but not currently applied to the per-subset data query
+            (known vEcoli limitation).  Use ``single`` with filters and aggregate
+            client-side as a workaround.
+
+            Per-module params (``n_tp``, ``time_unit``, …) are set inside each
+            ``PtoolsAnalysisConfig`` entry and only affect the module they belong to.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

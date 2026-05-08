@@ -309,7 +309,7 @@ def trim_attributes(instance: BaseModel, cls: type[BaseModel]) -> None:
             attr = getattr(instance, attrname, None)
             if attr is None or attr == ["string"]:
                 delattr(instance, attrname)
-            if isinstance(attr, (list, dict)) and not len(attr):
+            if isinstance(attr, list | dict) and not len(attr):
                 delattr(instance, attrname)
 
 

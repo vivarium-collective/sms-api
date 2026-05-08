@@ -24,8 +24,9 @@ class Simulation:
         config (SimulationConfig):
         simulation_config_filename (str):
         experiment_id (str):
-        last_updated (Union[Unset, str]):  Default: '2026-03-31 23:33:56.358973'.
+        last_updated (Union[Unset, str]):  Default: '2026-05-08 16:41:31.566729'.
         job_id (Union[None, Unset, str]):
+        num_seeds (Union[None, Unset, int]):
     """
 
     database_id: int
@@ -34,8 +35,9 @@ class Simulation:
     config: "SimulationConfig"
     simulation_config_filename: str
     experiment_id: str
-    last_updated: Union[Unset, str] = "2026-03-31 23:33:56.358973"
+    last_updated: Union[Unset, str] = "2026-05-08 16:41:31.566729"
     job_id: Union[None, Unset, str] = UNSET
+    num_seeds: Union[None, Unset, int] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -59,6 +61,12 @@ class Simulation:
         else:
             job_id = self.job_id
 
+        num_seeds: Union[None, Unset, int]
+        if isinstance(self.num_seeds, Unset):
+            num_seeds = UNSET
+        else:
+            num_seeds = self.num_seeds
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
@@ -73,6 +81,8 @@ class Simulation:
             field_dict["last_updated"] = last_updated
         if job_id is not UNSET:
             field_dict["job_id"] = job_id
+        if num_seeds is not UNSET:
+            field_dict["num_seeds"] = num_seeds
 
         return field_dict
 
@@ -104,6 +114,15 @@ class Simulation:
 
         job_id = _parse_job_id(d.pop("job_id", UNSET))
 
+        def _parse_num_seeds(data: object) -> Union[None, Unset, int]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, int], data)
+
+        num_seeds = _parse_num_seeds(d.pop("num_seeds", UNSET))
+
         simulation = cls(
             database_id=database_id,
             simulator_id=simulator_id,
@@ -113,6 +132,7 @@ class Simulation:
             experiment_id=experiment_id,
             last_updated=last_updated,
             job_id=job_id,
+            num_seeds=num_seeds,
         )
 
         simulation.additional_properties = d

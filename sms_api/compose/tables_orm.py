@@ -7,7 +7,6 @@ the existing sms-api tables.
 import datetime
 import enum
 import logging
-from typing import Optional
 
 from pbest.utils.input_types import ContainerizationFileRepr
 from sqlalchemy import ForeignKey, UniqueConstraint, func
@@ -145,7 +144,7 @@ class ORMComposeSimulation(ComposeBase):
     # For OMEX archives, this stores the contained .pbg JSON (extracted at upload time).
     # For standalone .pbg files, this stores the JSON directly.
     # For .sbml files, this stores the SBML XML as a string.
-    document: Mapped[Optional[str]] = mapped_column(nullable=True)
+    document: Mapped[str | None] = mapped_column(nullable=True)
 
 
 # ---------------------------------------------------------------------------
@@ -162,13 +161,13 @@ class ORMComposeHpcRun(ComposeBase):
     job_type: Mapped[ComposeJobTypeDB] = mapped_column(nullable=False)
     correlation_id: Mapped[str] = mapped_column(nullable=False, index=True, unique=True)
     slurmjobid: Mapped[int] = mapped_column(nullable=True)
-    start_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
-    end_time: Mapped[Optional[datetime.datetime]] = mapped_column(nullable=True)
+    start_time: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
+    end_time: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
     status: Mapped[ComposeJobStatusDB] = mapped_column(nullable=False)
-    error_message: Mapped[Optional[str]] = mapped_column(nullable=True)
+    error_message: Mapped[str | None] = mapped_column(nullable=True)
 
-    simulation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("compose_simulation.id"), nullable=True, index=True)
-    simulator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("compose_simulator.id"), nullable=True, index=True)
+    simulation_id: Mapped[int | None] = mapped_column(ForeignKey("compose_simulation.id"), nullable=True, index=True)
+    simulator_id: Mapped[int | None] = mapped_column(ForeignKey("compose_simulator.id"), nullable=True, index=True)
 
     def to_hpc_run(self) -> ComposeHpcRun:
         if self.simulation_id is None and self.simulator_id is None:

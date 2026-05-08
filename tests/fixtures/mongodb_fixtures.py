@@ -23,7 +23,7 @@ def mongodb_container() -> MongoDbContainer:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def mongo_test_client(mongodb_container: MongoDbContainer) -> AsyncGenerator[AsyncMongoClient, None]:  # type: ignore [type-arg]
+async def mongo_test_client(mongodb_container: MongoDbContainer) -> AsyncGenerator[AsyncMongoClient]:  # type: ignore [type-arg]
     mongo_test_client: AsyncMongoClient = AsyncMongoClient(mongodb_container.get_connection_url())  # type: ignore [type-arg]
     yield mongo_test_client
     await mongo_test_client.close()

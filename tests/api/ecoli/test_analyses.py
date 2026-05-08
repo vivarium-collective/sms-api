@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import logging
 import time
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -121,7 +122,7 @@ async def prepare_simulator(
     return SimulatorVersion(**simulator_data)  # type: ignore[arg-type]
 
 
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_run_analysis(
     base_router: str,
@@ -193,7 +194,7 @@ async def test_run_analysis(
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_get_analysis(
     base_router: str,

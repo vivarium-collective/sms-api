@@ -2,11 +2,11 @@ import contextlib
 import datetime
 import logging
 from abc import ABC, abstractmethod
+from typing import override
 
 from sqlalchemy import Result, and_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import InstrumentedAttribute
-from typing_extensions import override
 
 from sms_api.analysis.models import AnalysisConfig, ExperimentAnalysisDTO
 from sms_api.common.hpc.job_service import JobStatusUpdate

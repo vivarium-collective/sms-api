@@ -170,14 +170,20 @@ def omics_analysis_config(n_tp: int) -> OmicsAnalysisModuleConfig:
     """
     time_window_spec = cast(dict[Literal["n_tp"], int], {"n_tp": n_tp})
     return OmicsAnalysisModuleConfig(
-        zip(OMICS_ANALYSIS_MODULE_NAMES, [time_window_spec for _ in range(len(OMICS_ANALYSIS_MODULE_NAMES))])
+        zip(
+            OMICS_ANALYSIS_MODULE_NAMES,
+            [time_window_spec for _ in range(len(OMICS_ANALYSIS_MODULE_NAMES))],
+            strict=False,
+        )
     )
 
 
 def analysis_options_omics(n_tp: int) -> AnalysisOptions:
     analysis_domains = ["single", "multigeneration", "multiseed"]
     return AnalysisOptions(
-        **dict(zip(analysis_domains, [omics_analysis_config(n_tp) for _ in range(len(analysis_domains))])),  # type: ignore[arg-type]
+        **dict(
+            zip(analysis_domains, [omics_analysis_config(n_tp) for _ in range(len(analysis_domains))], strict=False)
+        ),  # type: ignore[arg-type]
     )
 
 

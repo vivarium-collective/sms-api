@@ -3,12 +3,11 @@ import os
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, override
 
 import aioboto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
-from typing_extensions import override
 
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService, ListingItem
@@ -113,7 +112,7 @@ class FileServiceQumuloS3(FileService):
                 logger.warning(f"Error checking existence of {bucket}/{key}: {e}")
 
     @override
-    async def download_file(self, s3_path: S3FilePath, file_path: Optional[Path] = None) -> tuple[S3FilePath, str]:
+    async def download_file(self, s3_path: S3FilePath, file_path: Path | None = None) -> tuple[S3FilePath, str]:
         """
         Download a file from Qumulo S3 to local filesystem.
 

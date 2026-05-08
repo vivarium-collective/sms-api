@@ -17,6 +17,7 @@ Prerequisites:
 import asyncio
 import time
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -36,7 +37,7 @@ CONFIG_FILENAME = "api_simulation_default_with_profile.json"
 
 # Skip all tests if SSH not configured
 pytestmark = pytest.mark.skipif(
-    len(get_settings().slurm_submit_key_path) == 0,
+    not Path(get_settings().slurm_submit_key_path).exists(),
     reason="slurm ssh key file not supplied",
 )
 

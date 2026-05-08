@@ -1,9 +1,47 @@
+# ruff: noqa: E402  (os.environ must be set before any sms_api imports)
 import os
+import socket
 
 # Set mandatory config before any sms_api imports (module-level code in
 # simulator_defaults.py reads these at import time).
 os.environ.setdefault("COMPUTE_BACKEND", "slurm")
 os.environ.setdefault("PUBLIC_MODE", "false")
+
+
+def _hpc_reachable() -> bool:
+    """Return True only if the HPC SSH host is reachable (VPN is on)."""
+    try:
+        from sms_api.config import get_settings
+
+        host = get_settings().slurm_submit_host
+        if not host:
+            return False
+        with socket.create_connection((host, 22), timeout=3):
+            return True
+    except OSError:
+        return False
+
+
+_HPC_REACHABLE: bool = _hpc_reachable()
+
+
+def pytest_collection_modifyitems(items):  # type: ignore[no-untyped-def]
+    """Skip HPC-requiring tests when the SLURM host is not reachable (no VPN)."""
+    if _HPC_REACHABLE:
+        return
+    import pytest
+
+    skip = pytest.mark.skip(reason="HPC not reachable — VPN required (set VPN on to run these tests)")
+    for item in items:
+        if item.get_closest_marker("integration"):
+            item.add_marker(skip)
+            continue
+        for marker in item.iter_markers("skipif"):
+            reason = marker.kwargs.get("reason", "")
+            if "slurm" in reason.lower() or "ssh" in reason.lower() or "hpc" in reason.lower():
+                item.add_marker(skip)
+                break
+
 
 import pytest_asyncio  # noqa: F401
 

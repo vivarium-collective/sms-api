@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 @pytest_asyncio.fixture(scope="function")
 async def simulation_service_slurm(
     ssh_session_service: "SSHSessionService",  # Ensures SSH singleton is initialized first
-) -> AsyncGenerator[SimulationServiceHpc, None]:
+) -> AsyncGenerator[SimulationServiceHpc]:
     simulation_service = SimulationServiceHpc()
     saved_simulation_service = get_simulation_service()
     set_simulation_service(simulation_service)
@@ -43,7 +43,7 @@ def expected_build_job_id() -> JobId:
 
 
 @pytest.fixture(scope="function")
-def mock_ssh_session_service() -> Generator[MockSSHSessionService, None, None]:
+def mock_ssh_session_service() -> Generator[MockSSHSessionService]:
     """Fixture to provide a mock SSH session service for tests that don't need real SSH."""
     saved_ssh_service = get_ssh_session_service_or_none(SSHTarget.SLURM)
     mock_service = MockSSHSessionService()
@@ -58,7 +58,7 @@ def mock_ssh_session_service() -> Generator[MockSSHSessionService, None, None]:
 def simulation_service_mock_clone_and_build(
     expected_build_job_id: JobId,
     mock_ssh_session_service: MockSSHSessionService,
-) -> Generator[SimulationServiceMockCloneAndBuild, None, None]:
+) -> Generator[SimulationServiceMockCloneAndBuild]:
     """Fixture to provide a mock simulation service that clones a repository and submits a build job."""
     saved_simulation_service = get_simulation_service()
     simulation_service_mock_clone_and_build = SimulationServiceMockCloneAndBuild(
@@ -81,7 +81,7 @@ def expected_parca_database_id() -> int:
 def simulation_service_mock_parca(
     expected_build_job_id: JobId,
     mock_ssh_session_service: MockSSHSessionService,
-) -> Generator[SimulationServiceMockParca, None, None]:
+) -> Generator[SimulationServiceMockParca]:
     """Fixture to provide a mock simulation service that submits a parca job."""
     saved_simulation_service = get_simulation_service()
     simulation_service_mock_parca = SimulationServiceMockParca(expected_job_id=expected_build_job_id)

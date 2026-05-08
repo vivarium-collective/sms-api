@@ -86,7 +86,7 @@ async def latest_commit_hash(simulator_repo_info: SimulatorRepoInfo) -> str:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def in_memory_api_client() -> AsyncGenerator[Client, None]:
+async def in_memory_api_client() -> AsyncGenerator[Client]:
     transport = ASGITransport(app=app)
     async_client = httpx.AsyncClient(transport=transport, base_url="http://testserver")
     client = Client(base_url="http://testserver", raise_on_unexpected_status=True)
@@ -253,7 +253,7 @@ async def workflow_request_payload(
 
 
 @pytest_asyncio.fixture(scope="function")
-async def job_scheduler(database_service: DatabaseServiceSQL) -> AsyncGenerator[JobScheduler, None]:
+async def job_scheduler(database_service: DatabaseServiceSQL) -> AsyncGenerator[JobScheduler]:
     """Fixture that starts the JobScheduler for integration tests.
 
     The JobScheduler polls SLURM for job status updates and updates the database.

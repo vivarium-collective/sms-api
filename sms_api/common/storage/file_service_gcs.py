@@ -2,10 +2,9 @@ import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import override
 
 from gcloud.aio.auth import Token
-from typing_extensions import override
 
 from sms_api.common.storage.file_paths import S3FilePath
 from sms_api.common.storage.file_service import FileService, ListingItem
@@ -32,7 +31,7 @@ class FileServiceGCS(FileService):
         self.token = create_token()
 
     @override
-    async def download_file(self, s3_path: S3FilePath, file_path: Optional[Path] = None) -> tuple[S3FilePath, str]:
+    async def download_file(self, s3_path: S3FilePath, file_path: Path | None = None) -> tuple[S3FilePath, str]:
         logger.info(f"Downloading {s3_path} to {file_path}")
         if file_path is None:
             file_path = get_local_cache_dir() / ("temp_file_" + uuid.uuid4().hex)

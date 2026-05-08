@@ -31,6 +31,7 @@ async def data_fixture() -> dict[str, np.ndarray]:
                 )
                 for _ in range(len(cols))
             ],
+            strict=False,
         )
     )
 

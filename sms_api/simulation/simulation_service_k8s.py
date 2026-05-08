@@ -7,12 +7,12 @@ Two-phase execution model:
 
 import json
 import logging
+from typing import override
 
 import boto3
 import httpx
 from fastapi import HTTPException
 from kubernetes import client as k8s_client
-from typing_extensions import override
 
 from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.hpc.k8s_job_service import K8sJobService

@@ -44,6 +44,7 @@ download results) in a different format:
    guides/cli-reference
    guides/compose
    guides/compose-tutorial
+   guides/biomodels
    guides/analysis-filtering
 
 .. toctree::

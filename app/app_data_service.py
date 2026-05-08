@@ -741,6 +741,66 @@ class E2EDataService:
         resp.raise_for_status()
         return resp.json()  # type: ignore[no-any-return]
 
+    def compose_biomodels_identifiers(self, n: int = 20) -> list[str]:
+        resp = self.client.get("/compose/v1/biomodels/identifiers", params={"n": n})
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_biomodels_metadata(self, biomodel_id: str) -> dict:  # type: ignore[type-arg]
+        resp = self.client.get(f"/compose/v1/biomodels/{biomodel_id}/metadata")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_biomodels_run(self, biomodel_id: str, simulator: str = "copasi") -> dict:  # type: ignore[type-arg]
+        resp = self.client.post(
+            f"/compose/v1/biomodels/{biomodel_id}/run",
+            params={"simulator": simulator},
+        )
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_biomodels_batch(
+        self,
+        simulator: str = "copasi",
+        model_ids: list[str] | None = None,
+        n_models: int | None = None,
+    ) -> dict:  # type: ignore[type-arg]
+        payload: dict[str, object] = {"simulator": simulator}
+        if model_ids is not None:
+            payload["model_ids"] = model_ids
+        if n_models is not None:
+            payload["n_models"] = n_models
+        resp = self.client.post("/compose/v1/biomodels/batch", json=payload)
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_biomodels_audit(
+        self,
+        biomodel_id: str,
+        simulators: list[str] | None = None,
+    ) -> dict:  # type: ignore[type-arg]
+        params: dict[str, list[str]] = {}
+        if simulators is not None:
+            params["simulators"] = simulators
+        resp = self.client.post(f"/compose/v1/biomodels/{biomodel_id}/audit", params=params)
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_biomodels_regression(
+        self,
+        n_models: int = 10,
+        model_ids: list[str] | None = None,
+        simulators: list[str] | None = None,
+    ) -> dict:  # type: ignore[type-arg]
+        payload: dict[str, object] = {"n_models": n_models}
+        if model_ids is not None:
+            payload["model_ids"] = model_ids
+        if simulators is not None:
+            payload["simulators"] = simulators
+        resp = self.client.post("/compose/v1/biomodels/regression", json=payload)
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
     def compose_run_tellurium(
         self, sbml_path: Path, start_time: float, end_time: float, num_data_points: float
     ) -> dict:  # type: ignore[type-arg]

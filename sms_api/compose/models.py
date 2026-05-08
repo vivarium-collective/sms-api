@@ -269,5 +269,59 @@ class ComposeWorkerEventMessagePayload(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class BiomodelSimulator(str, enum.Enum):
+    COPASI = "copasi"
+    TELLURIUM = "tellurium"
+
+
+class BiomodelInfo(BaseModel):
+    biomodel_id: str
+    metadata: dict[str, Any]
+
+
+class BiomodelsRunRequest(BaseModel):
+    model_ids: list[str] | None = Field(
+        default=None, description="Specific BioModel IDs to run. Mutually exclusive with n_models."
+    )
+    n_models: int | None = Field(
+        default=None, ge=1, le=50, description="Run the first N BioModels. Ignored if model_ids is set."
+    )
+    simulator: BiomodelSimulator = Field(
+        default=BiomodelSimulator.COPASI, description="Simulator to use for each model."
+    )
+
+
+class BiomodelsRunResult(BaseModel):
+    submitted: list[ComposeSimulationExperiment]
+    failed: list[str] = Field(default_factory=list, description="BioModel IDs that failed to submit.")
+
+
+class BiomodelsAuditRequest(BaseModel):
+    biomodel_id: str
+    simulators: list[BiomodelSimulator] = Field(
+        default_factory=lambda: [BiomodelSimulator.COPASI, BiomodelSimulator.TELLURIUM]
+    )
+
+
+class BiomodelsAuditResult(BaseModel):
+    experiment: ComposeSimulationExperiment
+    simulators_used: list[BiomodelSimulator]
+
+
+class BiomodelsRegressionRequest(BaseModel):
+    n_models: int = Field(default=10, ge=1, le=1000, description="Number of models to run. Ignored if model_ids set.")
+    model_ids: list[str] | None = Field(default=None, description="Specific BioModel IDs to run. Overrides n_models.")
+    simulators: list[BiomodelSimulator] = Field(
+        default_factory=lambda: [BiomodelSimulator.COPASI, BiomodelSimulator.TELLURIUM],
+        description="Simulators to wire into each model's PB document.",
+    )
+
+
+class BiomodelsRegressionResult(BaseModel):
+    submitted: list[ComposeSimulationExperiment]
+    failed: list[str] = Field(default_factory=list, description="BioModel IDs that failed to submit.")
+    total_requested: int
+
+
 def get_singularity_hash(singularity_def_rep: ContainerizationFileRepr) -> str:
     return hashlib.md5(singularity_def_rep.representation.encode("utf-8")).hexdigest()  # noqa: S324

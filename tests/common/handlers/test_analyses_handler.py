@@ -1,5 +1,6 @@
 import io
 import logging
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -37,7 +38,7 @@ async def simulator_version() -> SimulatorVersion:
     })
 
 
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_handle_run_analysis_slurm(
     analysis_request: ExperimentAnalysisRequest,

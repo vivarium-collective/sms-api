@@ -95,7 +95,7 @@ class AnalysisServiceSlurm:
         # analysis_config.analysis_options.multiseed = {'ptools_rxns': {'n_tp': 10}, 'ptools_rna': {'n_tp': 10}, 'ptools_proteins': {'n_tp': 10}}  # noqa: E501
 
         domains = ["single", "multidaughter", "multigeneration", "multiseed"]
-        requested_analyses: dict[str, dict[str, Any]] = dict(zip(domains, [{} for _ in domains]))
+        requested_analyses: dict[str, dict[str, Any]] = dict(zip(domains, [{} for _ in domains], strict=False))
         for domain in requested_analyses:
             requested = getattr(request, domain)
             if requested is not None:

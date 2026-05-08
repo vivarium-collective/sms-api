@@ -7,9 +7,9 @@ import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 from textwrap import dedent
+from typing import override
 
 from fastapi import HTTPException
-from typing_extensions import override
 
 from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.hpc.models import SlurmJob

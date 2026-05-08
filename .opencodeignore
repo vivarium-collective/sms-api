@@ -1,0 +1,90 @@
+# .opencodeignore — context noise reduction for opencode local LLM
+# Keeps token usage low by excluding generated, binary, and non-code content.
+
+# Python runtime artifacts
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Auto-generated OpenAPI client (never edit manually — use make api_client)
+sms_api/api/client/
+
+# Lock file (297-package dependency tree — not useful as context)
+uv.lock
+
+# Alembic migration history (schema diffs, rarely needed for context)
+alembic/versions/
+
+# Documentation build output
+docs/build/
+docs/source/api/
+
+# Test artifacts and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Type checking cache
+.mypy_cache/
+.ruff_cache/
+
+# IDE and OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+*.orig
+
+# Deployment configs (kustomize overlays — large, rarely needed for coding)
+kustomize/
+
+# Debug and output artifacts
+artifacts/
+graphify-out/
+debug/
+*.log
+
+# Secrets and dev config (NEVER include in context)
+assets/dev/config/
+**/.dev_env
+**/.env
+**/.env.*
+**/secrets/
+
+# Large binary / media assets
+assets/simulations/
+app/assets/
+*.png
+*.jpg
+*.gif
+*.mp4
+*.wasm
+
+# Scratchpads and personal notes
+notes/
+scratchpads/
+SPICIFY.md
+PTOOLS.md
+DEBUG.md
+COMPOSER.md
+
+# Commit helper script (not code)
+commits.sh
+compose_cli_verification_report.html

@@ -23,7 +23,7 @@ def trim_attributes(instance: BaseModel, excluded: list[str] | None = None) -> N
         attr = getattr(instance, attrname)
         if attr is None and attrname not in excluded:
             delattr(instance, attrname)
-        if isinstance(attr, (list, dict)) and not len(attr):
+        if isinstance(attr, list | dict) and not len(attr):
             delattr(instance, attrname)
 
 
@@ -269,7 +269,7 @@ class SimulationConfig(BaseModel):
     #         attr = getattr(self, attrname)
     #         if (attr is None and attrname != "sim_data_path") or (attr == ["string"]):
     #             delattr(self, attrname)
-    #         if isinstance(attr, (list, dict)) and not len(attr):
+    #         if isinstance(attr, list | dict) and not len(attr):
     #             delattr(self, attrname)
 
 

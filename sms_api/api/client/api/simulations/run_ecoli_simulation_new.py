@@ -5,22 +5,30 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...models.analysis_options import AnalysisOptions
 from ...models.http_validation_error import HTTPValidationError
 from ...models.simulation import Simulation
-from ...models.simulation_config_private import SimulationConfigPrivate
 from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
+    body: Union["AnalysisOptions", None],
     simulator_id: int,
     experiment_id: Union[None, Unset, str] = UNSET,
-    simulation_config_filename: Union[Unset, SimulationConfigPrivate] = UNSET,
+    simulation_config_filename: Union[Unset, str] = "api_simulation_default.json",
     num_generations: Union[None, Unset, int] = UNSET,
     num_seeds: Union[None, Unset, int] = UNSET,
     description: Union[None, Unset, str] = UNSET,
     run_parca: Union[None, Unset, bool] = UNSET,
+    observables: Union[None, Unset, list[str]] = UNSET,
+    ecoli_sources_uri: Union[None, Unset, str] = UNSET,
+    ecoli_sources_overlays: Union[None, Unset, str] = UNSET,
+    ecoli_sources_repo_url: Union[None, Unset, str] = UNSET,
+    ecoli_sources_ref: Union[None, Unset, str] = UNSET,
 ) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
+
     params: dict[str, Any] = {}
 
     params["simulator_id"] = simulator_id
@@ -32,11 +40,7 @@ def _get_kwargs(
         json_experiment_id = experiment_id
     params["experiment_id"] = json_experiment_id
 
-    json_simulation_config_filename: Union[Unset, str] = UNSET
-    if not isinstance(simulation_config_filename, Unset):
-        json_simulation_config_filename = simulation_config_filename.value
-
-    params["simulation_config_filename"] = json_simulation_config_filename
+    params["simulation_config_filename"] = simulation_config_filename
 
     json_num_generations: Union[None, Unset, int]
     if isinstance(num_generations, Unset):
@@ -66,6 +70,44 @@ def _get_kwargs(
         json_run_parca = run_parca
     params["run_parca"] = json_run_parca
 
+    json_observables: Union[None, Unset, list[str]]
+    if isinstance(observables, Unset):
+        json_observables = UNSET
+    elif isinstance(observables, list):
+        json_observables = observables
+
+    else:
+        json_observables = observables
+    params["observables"] = json_observables
+
+    json_ecoli_sources_uri: Union[None, Unset, str]
+    if isinstance(ecoli_sources_uri, Unset):
+        json_ecoli_sources_uri = UNSET
+    else:
+        json_ecoli_sources_uri = ecoli_sources_uri
+    params["ecoli_sources_uri"] = json_ecoli_sources_uri
+
+    json_ecoli_sources_overlays: Union[None, Unset, str]
+    if isinstance(ecoli_sources_overlays, Unset):
+        json_ecoli_sources_overlays = UNSET
+    else:
+        json_ecoli_sources_overlays = ecoli_sources_overlays
+    params["ecoli_sources_overlays"] = json_ecoli_sources_overlays
+
+    json_ecoli_sources_repo_url: Union[None, Unset, str]
+    if isinstance(ecoli_sources_repo_url, Unset):
+        json_ecoli_sources_repo_url = UNSET
+    else:
+        json_ecoli_sources_repo_url = ecoli_sources_repo_url
+    params["ecoli_sources_repo_url"] = json_ecoli_sources_repo_url
+
+    json_ecoli_sources_ref: Union[None, Unset, str]
+    if isinstance(ecoli_sources_ref, Unset):
+        json_ecoli_sources_ref = UNSET
+    else:
+        json_ecoli_sources_ref = ecoli_sources_ref
+    params["ecoli_sources_ref"] = json_ecoli_sources_ref
+
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
     _kwargs: dict[str, Any] = {
@@ -74,6 +116,15 @@ def _get_kwargs(
         "params": params,
     }
 
+    _kwargs["json"]: Union[None, dict[str, Any]]
+    if isinstance(body, AnalysisOptions):
+        _kwargs["json"] = body.to_dict()
+    else:
+        _kwargs["json"] = body
+
+    headers["Content-Type"] = "application/json"
+
+    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -108,13 +159,19 @@ def _build_response(
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
+    body: Union["AnalysisOptions", None],
     simulator_id: int,
     experiment_id: Union[None, Unset, str] = UNSET,
-    simulation_config_filename: Union[Unset, SimulationConfigPrivate] = UNSET,
+    simulation_config_filename: Union[Unset, str] = "api_simulation_default.json",
     num_generations: Union[None, Unset, int] = UNSET,
     num_seeds: Union[None, Unset, int] = UNSET,
     description: Union[None, Unset, str] = UNSET,
     run_parca: Union[None, Unset, bool] = UNSET,
+    observables: Union[None, Unset, list[str]] = UNSET,
+    ecoli_sources_uri: Union[None, Unset, str] = UNSET,
+    ecoli_sources_overlays: Union[None, Unset, str] = UNSET,
+    ecoli_sources_repo_url: Union[None, Unset, str] = UNSET,
+    ecoli_sources_ref: Union[None, Unset, str] = UNSET,
 ) -> Response[Union[HTTPValidationError, Simulation]]:
     """[New] Launches a vEcoli simulation workflow with simple parameters
 
@@ -127,12 +184,28 @@ def sync_detailed(
         simulator_id (int): `database_id` of the simulator object returned by
             /core/v1/simulator/upload
         experiment_id (Union[None, Unset, str]): Unique experiment identifier
-        simulation_config_filename (Union[Unset, SimulationConfigPrivate]):
+        simulation_config_filename (Union[Unset, str]): Config filename in vEcoli/configs/. Use
+            GET /simulations/discovery to list available files. Default:
+            'api_simulation_default.json'.
         num_generations (Union[None, Unset, int]): Number of generations to simulate
         num_seeds (Union[None, Unset, int]): Number of initial seeds (lineages)
         description (Union[None, Unset, str]): Description of the simulation
         run_parca (Union[None, Unset, bool]): If true, run the simulation parameter calculator
             prior to running simulation (re-parameterizes simulation workflow).
+        observables (Union[None, Unset, list[str]]): Dot-separated vEcoli output paths to observe.
+            E.g. ['bulk', 'listeners.mass.cell_mass']. Maps to engine_process_reports in the vEcoli
+            config. If omitted, all outputs are emitted.
+        ecoli_sources_uri (Union[None, Unset, str]): S3 URI for the ECOLI_SOURCES env var on the
+            simulation container. Set automatically when ecoli_sources_repo_url is provided, or
+            manually via the CLI's --sources flag.
+        ecoli_sources_overlays (Union[None, Unset, str]): Semicolon-separated overlay manifest
+            URIs for ECOLI_SOURCES_OVERLAYS.
+        ecoli_sources_repo_url (Union[None, Unset, str]): GitHub repo URL for ecoli-sources data.
+            The server downloads and syncs to S3 automatically, then injects ECOLI_SOURCES on the
+            container. No AWS CLI needed on the client.
+        ecoli_sources_ref (Union[None, Unset, str]): Git ref (branch/tag/commit) for
+            ecoli_sources_repo_url. Defaults to 'main'.
+        body (Union['AnalysisOptions', None]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -143,6 +216,7 @@ def sync_detailed(
     """
 
     kwargs = _get_kwargs(
+        body=body,
         simulator_id=simulator_id,
         experiment_id=experiment_id,
         simulation_config_filename=simulation_config_filename,
@@ -150,6 +224,11 @@ def sync_detailed(
         num_seeds=num_seeds,
         description=description,
         run_parca=run_parca,
+        observables=observables,
+        ecoli_sources_uri=ecoli_sources_uri,
+        ecoli_sources_overlays=ecoli_sources_overlays,
+        ecoli_sources_repo_url=ecoli_sources_repo_url,
+        ecoli_sources_ref=ecoli_sources_ref,
     )
 
     response = client.get_httpx_client().request(
@@ -162,13 +241,19 @@ def sync_detailed(
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
+    body: Union["AnalysisOptions", None],
     simulator_id: int,
     experiment_id: Union[None, Unset, str] = UNSET,
-    simulation_config_filename: Union[Unset, SimulationConfigPrivate] = UNSET,
+    simulation_config_filename: Union[Unset, str] = "api_simulation_default.json",
     num_generations: Union[None, Unset, int] = UNSET,
     num_seeds: Union[None, Unset, int] = UNSET,
     description: Union[None, Unset, str] = UNSET,
     run_parca: Union[None, Unset, bool] = UNSET,
+    observables: Union[None, Unset, list[str]] = UNSET,
+    ecoli_sources_uri: Union[None, Unset, str] = UNSET,
+    ecoli_sources_overlays: Union[None, Unset, str] = UNSET,
+    ecoli_sources_repo_url: Union[None, Unset, str] = UNSET,
+    ecoli_sources_ref: Union[None, Unset, str] = UNSET,
 ) -> Optional[Union[HTTPValidationError, Simulation]]:
     """[New] Launches a vEcoli simulation workflow with simple parameters
 
@@ -181,12 +266,28 @@ def sync(
         simulator_id (int): `database_id` of the simulator object returned by
             /core/v1/simulator/upload
         experiment_id (Union[None, Unset, str]): Unique experiment identifier
-        simulation_config_filename (Union[Unset, SimulationConfigPrivate]):
+        simulation_config_filename (Union[Unset, str]): Config filename in vEcoli/configs/. Use
+            GET /simulations/discovery to list available files. Default:
+            'api_simulation_default.json'.
         num_generations (Union[None, Unset, int]): Number of generations to simulate
         num_seeds (Union[None, Unset, int]): Number of initial seeds (lineages)
         description (Union[None, Unset, str]): Description of the simulation
         run_parca (Union[None, Unset, bool]): If true, run the simulation parameter calculator
             prior to running simulation (re-parameterizes simulation workflow).
+        observables (Union[None, Unset, list[str]]): Dot-separated vEcoli output paths to observe.
+            E.g. ['bulk', 'listeners.mass.cell_mass']. Maps to engine_process_reports in the vEcoli
+            config. If omitted, all outputs are emitted.
+        ecoli_sources_uri (Union[None, Unset, str]): S3 URI for the ECOLI_SOURCES env var on the
+            simulation container. Set automatically when ecoli_sources_repo_url is provided, or
+            manually via the CLI's --sources flag.
+        ecoli_sources_overlays (Union[None, Unset, str]): Semicolon-separated overlay manifest
+            URIs for ECOLI_SOURCES_OVERLAYS.
+        ecoli_sources_repo_url (Union[None, Unset, str]): GitHub repo URL for ecoli-sources data.
+            The server downloads and syncs to S3 automatically, then injects ECOLI_SOURCES on the
+            container. No AWS CLI needed on the client.
+        ecoli_sources_ref (Union[None, Unset, str]): Git ref (branch/tag/commit) for
+            ecoli_sources_repo_url. Defaults to 'main'.
+        body (Union['AnalysisOptions', None]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -198,6 +299,7 @@ def sync(
 
     return sync_detailed(
         client=client,
+        body=body,
         simulator_id=simulator_id,
         experiment_id=experiment_id,
         simulation_config_filename=simulation_config_filename,
@@ -205,19 +307,30 @@ def sync(
         num_seeds=num_seeds,
         description=description,
         run_parca=run_parca,
+        observables=observables,
+        ecoli_sources_uri=ecoli_sources_uri,
+        ecoli_sources_overlays=ecoli_sources_overlays,
+        ecoli_sources_repo_url=ecoli_sources_repo_url,
+        ecoli_sources_ref=ecoli_sources_ref,
     ).parsed
 
 
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
+    body: Union["AnalysisOptions", None],
     simulator_id: int,
     experiment_id: Union[None, Unset, str] = UNSET,
-    simulation_config_filename: Union[Unset, SimulationConfigPrivate] = UNSET,
+    simulation_config_filename: Union[Unset, str] = "api_simulation_default.json",
     num_generations: Union[None, Unset, int] = UNSET,
     num_seeds: Union[None, Unset, int] = UNSET,
     description: Union[None, Unset, str] = UNSET,
     run_parca: Union[None, Unset, bool] = UNSET,
+    observables: Union[None, Unset, list[str]] = UNSET,
+    ecoli_sources_uri: Union[None, Unset, str] = UNSET,
+    ecoli_sources_overlays: Union[None, Unset, str] = UNSET,
+    ecoli_sources_repo_url: Union[None, Unset, str] = UNSET,
+    ecoli_sources_ref: Union[None, Unset, str] = UNSET,
 ) -> Response[Union[HTTPValidationError, Simulation]]:
     """[New] Launches a vEcoli simulation workflow with simple parameters
 
@@ -230,12 +343,28 @@ async def asyncio_detailed(
         simulator_id (int): `database_id` of the simulator object returned by
             /core/v1/simulator/upload
         experiment_id (Union[None, Unset, str]): Unique experiment identifier
-        simulation_config_filename (Union[Unset, SimulationConfigPrivate]):
+        simulation_config_filename (Union[Unset, str]): Config filename in vEcoli/configs/. Use
+            GET /simulations/discovery to list available files. Default:
+            'api_simulation_default.json'.
         num_generations (Union[None, Unset, int]): Number of generations to simulate
         num_seeds (Union[None, Unset, int]): Number of initial seeds (lineages)
         description (Union[None, Unset, str]): Description of the simulation
         run_parca (Union[None, Unset, bool]): If true, run the simulation parameter calculator
             prior to running simulation (re-parameterizes simulation workflow).
+        observables (Union[None, Unset, list[str]]): Dot-separated vEcoli output paths to observe.
+            E.g. ['bulk', 'listeners.mass.cell_mass']. Maps to engine_process_reports in the vEcoli
+            config. If omitted, all outputs are emitted.
+        ecoli_sources_uri (Union[None, Unset, str]): S3 URI for the ECOLI_SOURCES env var on the
+            simulation container. Set automatically when ecoli_sources_repo_url is provided, or
+            manually via the CLI's --sources flag.
+        ecoli_sources_overlays (Union[None, Unset, str]): Semicolon-separated overlay manifest
+            URIs for ECOLI_SOURCES_OVERLAYS.
+        ecoli_sources_repo_url (Union[None, Unset, str]): GitHub repo URL for ecoli-sources data.
+            The server downloads and syncs to S3 automatically, then injects ECOLI_SOURCES on the
+            container. No AWS CLI needed on the client.
+        ecoli_sources_ref (Union[None, Unset, str]): Git ref (branch/tag/commit) for
+            ecoli_sources_repo_url. Defaults to 'main'.
+        body (Union['AnalysisOptions', None]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -246,6 +375,7 @@ async def asyncio_detailed(
     """
 
     kwargs = _get_kwargs(
+        body=body,
         simulator_id=simulator_id,
         experiment_id=experiment_id,
         simulation_config_filename=simulation_config_filename,
@@ -253,6 +383,11 @@ async def asyncio_detailed(
         num_seeds=num_seeds,
         description=description,
         run_parca=run_parca,
+        observables=observables,
+        ecoli_sources_uri=ecoli_sources_uri,
+        ecoli_sources_overlays=ecoli_sources_overlays,
+        ecoli_sources_repo_url=ecoli_sources_repo_url,
+        ecoli_sources_ref=ecoli_sources_ref,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -263,13 +398,19 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
+    body: Union["AnalysisOptions", None],
     simulator_id: int,
     experiment_id: Union[None, Unset, str] = UNSET,
-    simulation_config_filename: Union[Unset, SimulationConfigPrivate] = UNSET,
+    simulation_config_filename: Union[Unset, str] = "api_simulation_default.json",
     num_generations: Union[None, Unset, int] = UNSET,
     num_seeds: Union[None, Unset, int] = UNSET,
     description: Union[None, Unset, str] = UNSET,
     run_parca: Union[None, Unset, bool] = UNSET,
+    observables: Union[None, Unset, list[str]] = UNSET,
+    ecoli_sources_uri: Union[None, Unset, str] = UNSET,
+    ecoli_sources_overlays: Union[None, Unset, str] = UNSET,
+    ecoli_sources_repo_url: Union[None, Unset, str] = UNSET,
+    ecoli_sources_ref: Union[None, Unset, str] = UNSET,
 ) -> Optional[Union[HTTPValidationError, Simulation]]:
     """[New] Launches a vEcoli simulation workflow with simple parameters
 
@@ -282,12 +423,28 @@ async def asyncio(
         simulator_id (int): `database_id` of the simulator object returned by
             /core/v1/simulator/upload
         experiment_id (Union[None, Unset, str]): Unique experiment identifier
-        simulation_config_filename (Union[Unset, SimulationConfigPrivate]):
+        simulation_config_filename (Union[Unset, str]): Config filename in vEcoli/configs/. Use
+            GET /simulations/discovery to list available files. Default:
+            'api_simulation_default.json'.
         num_generations (Union[None, Unset, int]): Number of generations to simulate
         num_seeds (Union[None, Unset, int]): Number of initial seeds (lineages)
         description (Union[None, Unset, str]): Description of the simulation
         run_parca (Union[None, Unset, bool]): If true, run the simulation parameter calculator
             prior to running simulation (re-parameterizes simulation workflow).
+        observables (Union[None, Unset, list[str]]): Dot-separated vEcoli output paths to observe.
+            E.g. ['bulk', 'listeners.mass.cell_mass']. Maps to engine_process_reports in the vEcoli
+            config. If omitted, all outputs are emitted.
+        ecoli_sources_uri (Union[None, Unset, str]): S3 URI for the ECOLI_SOURCES env var on the
+            simulation container. Set automatically when ecoli_sources_repo_url is provided, or
+            manually via the CLI's --sources flag.
+        ecoli_sources_overlays (Union[None, Unset, str]): Semicolon-separated overlay manifest
+            URIs for ECOLI_SOURCES_OVERLAYS.
+        ecoli_sources_repo_url (Union[None, Unset, str]): GitHub repo URL for ecoli-sources data.
+            The server downloads and syncs to S3 automatically, then injects ECOLI_SOURCES on the
+            container. No AWS CLI needed on the client.
+        ecoli_sources_ref (Union[None, Unset, str]): Git ref (branch/tag/commit) for
+            ecoli_sources_repo_url. Defaults to 'main'.
+        body (Union['AnalysisOptions', None]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -300,6 +457,7 @@ async def asyncio(
     return (
         await asyncio_detailed(
             client=client,
+            body=body,
             simulator_id=simulator_id,
             experiment_id=experiment_id,
             simulation_config_filename=simulation_config_filename,
@@ -307,5 +465,10 @@ async def asyncio(
             num_seeds=num_seeds,
             description=description,
             run_parca=run_parca,
+            observables=observables,
+            ecoli_sources_uri=ecoli_sources_uri,
+            ecoli_sources_overlays=ecoli_sources_overlays,
+            ecoli_sources_repo_url=ecoli_sources_repo_url,
+            ecoli_sources_ref=ecoli_sources_ref,
         )
     ).parsed

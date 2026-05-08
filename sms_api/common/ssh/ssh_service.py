@@ -64,7 +64,7 @@ class SSHSession:
 
     def _is_connection_error(self, exc: Exception) -> bool:
         """Check if exception indicates a lost connection."""
-        if isinstance(exc, (asyncssh.misc.ChannelOpenError, asyncssh.misc.ConnectionLost, OSError)):
+        if isinstance(exc, asyncssh.misc.ChannelOpenError | asyncssh.misc.ConnectionLost | OSError):
             return True
         exc_str = str(exc).lower()
         return "connection closed" in exc_str or "connection lost" in exc_str

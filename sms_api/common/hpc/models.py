@@ -2,7 +2,7 @@ import logging
 import pprint
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,11 +19,11 @@ class SlurmJob(BaseModel):
     account: str  #                      %a          account     Account
     user_name: str  #                    %u          user        UserId
     job_state: str  #                    %T          state       JobState
-    start_time: Optional[str] = None  #              start       StartTime
-    end_time: Optional[str] = None  #                end         EndTime
-    elapsed: Optional[str] = None  #                 elapsed     RunTime
-    exit_code: Optional[str] = None  #               exitcode    ExitCode
-    reason: Optional[str] = None  #                              Reason (scontrol only)
+    start_time: str | None = None  #              start       StartTime
+    end_time: str | None = None  #                end         EndTime
+    elapsed: str | None = None  #                 elapsed     RunTime
+    exit_code: str | None = None  #               exitcode    ExitCode
+    reason: str | None = None  #                              Reason (scontrol only)
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -192,7 +192,7 @@ class NextflowDateTime(BaseModel):
     month: str
     month_value: int = Field(alias="monthValue")
     year: int
-    offset: Optional[dict[str, Any]] = None
+    offset: dict[str, Any] | None = None
 
     def to_datetime(self) -> datetime:
         """Convert to Python datetime."""
@@ -226,7 +226,7 @@ class NextflowFusion(BaseModel):
     """Nextflow Fusion configuration."""
 
     enabled: bool = False
-    version: Optional[str] = None
+    version: str | None = None
 
 
 class NextflowProcessStats(BaseModel):
@@ -236,8 +236,8 @@ class NextflowProcessStats(BaseModel):
 
     index: int
     name: str
-    hash: Optional[str] = None
-    task_name: Optional[str] = Field(default=None, alias="taskName")
+    hash: str | None = None
+    task_name: str | None = Field(default=None, alias="taskName")
     pending: int = 0
     submitted: int = 0
     running: int = 0
@@ -295,22 +295,22 @@ class NextflowManifest(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    author: Optional[str] = None
+    author: str | None = None
     contributors: list[Any] = Field(default_factory=list)
-    default_branch: Optional[str] = Field(default=None, alias="defaultBranch")
-    description: Optional[str] = None
-    docs_url: Optional[str] = Field(default=None, alias="docsUrl")
-    doi: Optional[str] = None
-    gitmodules: Optional[str] = None
-    home_page: Optional[str] = Field(default=None, alias="homePage")
-    icon: Optional[str] = None
-    license: Optional[str] = None
+    default_branch: str | None = Field(default=None, alias="defaultBranch")
+    description: str | None = None
+    docs_url: str | None = Field(default=None, alias="docsUrl")
+    doi: str | None = None
+    gitmodules: str | None = None
+    home_page: str | None = Field(default=None, alias="homePage")
+    icon: str | None = None
+    license: str | None = None
     main_script: str = Field(default="main.nf", alias="mainScript")
-    name: Optional[str] = None
-    nextflow_version: Optional[str] = Field(default=None, alias="nextflowVersion")
-    organization: Optional[str] = None
+    name: str | None = None
+    nextflow_version: str | None = Field(default=None, alias="nextflowVersion")
+    organization: str | None = None
     recurse_submodules: bool = Field(default=False, alias="recurseSubmodules")
-    version: Optional[str] = None
+    version: str | None = None
 
 
 class NextflowWorkflow(BaseModel):
@@ -322,12 +322,12 @@ class NextflowWorkflow(BaseModel):
     script_id: str = Field(alias="scriptId")
     script_file: str = Field(alias="scriptFile")
     script_name: str = Field(alias="scriptName")
-    repository: Optional[str] = None
-    commit_id: Optional[str] = Field(default=None, alias="commitId")
-    revision: Optional[str] = None
-    start: Optional[NextflowDateTime] = None
-    complete: Optional[NextflowDateTime] = None
-    duration: Optional[int] = None
+    repository: str | None = None
+    commit_id: str | None = Field(default=None, alias="commitId")
+    revision: str | None = None
+    start: NextflowDateTime | None = None
+    complete: NextflowDateTime | None = None
+    duration: int | None = None
     container: dict[str, Any] = Field(default_factory=dict)
     command_line: str = Field(alias="commandLine")
     nextflow: NextflowVersion
@@ -339,15 +339,15 @@ class NextflowWorkflow(BaseModel):
     work_dir: str = Field(alias="workDir")
     home_dir: str = Field(alias="homeDir")
     user_name: str = Field(alias="userName")
-    exit_status: Optional[int] = Field(default=None, alias="exitStatus")
-    error_message: Optional[str] = Field(default=None, alias="errorMessage")
-    error_report: Optional[str] = Field(default=None, alias="errorReport")
+    exit_status: int | None = Field(default=None, alias="exitStatus")
+    error_message: str | None = Field(default=None, alias="errorMessage")
+    error_report: str | None = Field(default=None, alias="errorReport")
     profile: str
     session_id: str = Field(alias="sessionId")
     resume: bool = False
     stub_run: bool = Field(default=False, alias="stubRun")
     preview: bool = False
-    container_engine: Optional[str] = Field(default=None, alias="containerEngine")
+    container_engine: str | None = Field(default=None, alias="containerEngine")
     wave: NextflowWave = Field(default_factory=NextflowWave)
     fusion: NextflowFusion = Field(default_factory=NextflowFusion)
     config_files: list[str] = Field(default_factory=list, alias="configFiles")
@@ -376,39 +376,39 @@ class NextflowTrace(BaseModel):
     submit: int
     start: int
     process: str
-    tag: Optional[str] = None
+    tag: str | None = None
     module: list[str] = Field(default_factory=list)
-    container: Optional[str] = None
+    container: str | None = None
     attempt: int = 1
     script: str
-    scratch: Optional[str] = None
+    scratch: str | None = None
     workdir: str
-    queue: Optional[str] = None
+    queue: str | None = None
     cpus: int = 1
-    memory: Optional[int] = None
-    disk: Optional[int] = None
-    time: Optional[int] = None
-    env: Optional[str] = None
-    native_id: Optional[int] = None
-    error_action: Optional[str] = None
-    complete: Optional[int] = None
-    duration: Optional[int] = None
-    realtime: Optional[int] = None
-    percent_cpu: Optional[float] = Field(default=None, alias="%cpu")
-    cpu_model: Optional[str] = None
-    rchar: Optional[int] = None
-    wchar: Optional[int] = None
-    syscr: Optional[int] = None
-    syscw: Optional[int] = None
-    read_bytes: Optional[int] = None
-    write_bytes: Optional[int] = None
-    percent_mem: Optional[float] = Field(default=None, alias="%mem")
-    vmem: Optional[int] = None
-    rss: Optional[int] = None
-    peak_vmem: Optional[int] = None
-    peak_rss: Optional[int] = None
-    vol_ctxt: Optional[int] = None
-    inv_ctxt: Optional[int] = None
+    memory: int | None = None
+    disk: int | None = None
+    time: int | None = None
+    env: str | None = None
+    native_id: int | None = None
+    error_action: str | None = None
+    complete: int | None = None
+    duration: int | None = None
+    realtime: int | None = None
+    percent_cpu: float | None = Field(default=None, alias="%cpu")
+    cpu_model: str | None = None
+    rchar: int | None = None
+    wchar: int | None = None
+    syscr: int | None = None
+    syscw: int | None = None
+    read_bytes: int | None = None
+    write_bytes: int | None = None
+    percent_mem: float | None = Field(default=None, alias="%mem")
+    vmem: int | None = None
+    rss: int | None = None
+    peak_vmem: int | None = None
+    peak_rss: int | None = None
+    vol_ctxt: int | None = None
+    inv_ctxt: int | None = None
 
     def is_completed(self) -> bool:
         """Check if the task has completed (successfully or failed)."""
@@ -444,7 +444,7 @@ class NextflowTraceEvent(BaseModel):
     trace: NextflowTrace
 
 
-NextflowEvent = Union[NextflowMetadataEvent, NextflowTraceEvent]
+NextflowEvent = NextflowMetadataEvent | NextflowTraceEvent
 
 
 def parse_nextflow_event(data: dict[str, Any]) -> NextflowEvent:
