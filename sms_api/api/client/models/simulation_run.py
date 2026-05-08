@@ -1,10 +1,11 @@
 from collections.abc import Mapping
-from typing import Any, TypeVar
+from typing import Any, TypeVar, Union, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 from ..models.job_status import JobStatus
+from ..types import UNSET, Unset
 
 T = TypeVar("T", bound="SimulationRun")
 
@@ -15,10 +16,12 @@ class SimulationRun:
     Attributes:
         id (int):
         status (JobStatus): Shared job status enum for simulations, analyses, and other HPC jobs.
+        error_message (Union[None, Unset, str]):
     """
 
     id: int
     status: JobStatus
+    error_message: Union[None, Unset, str] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -26,12 +29,20 @@ class SimulationRun:
 
         status = self.status.value
 
+        error_message: Union[None, Unset, str]
+        if isinstance(self.error_message, Unset):
+            error_message = UNSET
+        else:
+            error_message = self.error_message
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
             "id": id,
             "status": status,
         })
+        if error_message is not UNSET:
+            field_dict["error_message"] = error_message
 
         return field_dict
 
@@ -42,9 +53,19 @@ class SimulationRun:
 
         status = JobStatus(d.pop("status"))
 
+        def _parse_error_message(data: object) -> Union[None, Unset, str]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, str], data)
+
+        error_message = _parse_error_message(d.pop("error_message", UNSET))
+
         simulation_run = cls(
             id=id,
             status=status,
+            error_message=error_message,
         )
 
         simulation_run.additional_properties = d

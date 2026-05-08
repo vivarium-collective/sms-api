@@ -16,18 +16,37 @@ T = TypeVar("T", bound="ExperimentAnalysisRequest")
 
 @_attrs_define
 class ExperimentAnalysisRequest:
-    """
-    Attributes:
-        experiment_id (str):
-        single (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
-        multidaughter (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
-        multigeneration (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
-        multiseed (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
-        multivariant (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
-        multiexperiment (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
+    """Request body for the ``POST /analyses`` (ptools) endpoint.
+
+    Top-level ``generation_start``, ``generation_end``, and ``seeds`` are
+    fully supported for ``single`` analyses — they restrict which simulation
+    data rows are returned, with metadata identifying each partition.
+
+    For aggregated types (``multigeneration``, ``multiseed``), the filters are
+    passed to vEcoli but not currently applied to the per-subset data query
+    (known vEcoli limitation).  Use ``single`` with filters and aggregate
+    client-side as a workaround.
+
+    Per-module params (``n_tp``, ``time_unit``, …) are set inside each
+    ``PtoolsAnalysisConfig`` entry and only affect the module they belong to.
+
+        Attributes:
+            experiment_id (str):
+            generation_start (Union[None, Unset, int]):
+            generation_end (Union[None, Unset, int]):
+            seeds (Union[None, Unset, list[int]]):
+            single (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
+            multidaughter (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
+            multigeneration (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
+            multiseed (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
+            multivariant (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
+            multiexperiment (Union[None, Unset, list[Union['AnalysisModuleConfig', 'PtoolsAnalysisConfig']]]):
     """
 
     experiment_id: str
+    generation_start: Union[None, Unset, int] = UNSET
+    generation_end: Union[None, Unset, int] = UNSET
+    seeds: Union[None, Unset, list[int]] = UNSET
     single: Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]] = UNSET
     multidaughter: Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]] = UNSET
     multigeneration: Union[None, Unset, list[Union["AnalysisModuleConfig", "PtoolsAnalysisConfig"]]] = UNSET
@@ -40,6 +59,27 @@ class ExperimentAnalysisRequest:
         from ..models.analysis_module_config import AnalysisModuleConfig
 
         experiment_id = self.experiment_id
+
+        generation_start: Union[None, Unset, int]
+        if isinstance(self.generation_start, Unset):
+            generation_start = UNSET
+        else:
+            generation_start = self.generation_start
+
+        generation_end: Union[None, Unset, int]
+        if isinstance(self.generation_end, Unset):
+            generation_end = UNSET
+        else:
+            generation_end = self.generation_end
+
+        seeds: Union[None, Unset, list[int]]
+        if isinstance(self.seeds, Unset):
+            seeds = UNSET
+        elif isinstance(self.seeds, list):
+            seeds = self.seeds
+
+        else:
+            seeds = self.seeds
 
         single: Union[None, Unset, list[dict[str, Any]]]
         if isinstance(self.single, Unset):
@@ -148,6 +188,12 @@ class ExperimentAnalysisRequest:
         field_dict.update({
             "experiment_id": experiment_id,
         })
+        if generation_start is not UNSET:
+            field_dict["generation_start"] = generation_start
+        if generation_end is not UNSET:
+            field_dict["generation_end"] = generation_end
+        if seeds is not UNSET:
+            field_dict["seeds"] = seeds
         if single is not UNSET:
             field_dict["single"] = single
         if multidaughter is not UNSET:
@@ -170,6 +216,41 @@ class ExperimentAnalysisRequest:
 
         d = dict(src_dict)
         experiment_id = d.pop("experiment_id")
+
+        def _parse_generation_start(data: object) -> Union[None, Unset, int]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, int], data)
+
+        generation_start = _parse_generation_start(d.pop("generation_start", UNSET))
+
+        def _parse_generation_end(data: object) -> Union[None, Unset, int]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, int], data)
+
+        generation_end = _parse_generation_end(d.pop("generation_end", UNSET))
+
+        def _parse_seeds(data: object) -> Union[None, Unset, list[int]]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, list):
+                    raise TypeError()
+                seeds_type_0 = cast(list[int], data)
+
+                return seeds_type_0
+            except:  # noqa: E722
+                pass
+            return cast(Union[None, Unset, list[int]], data)
+
+        seeds = _parse_seeds(d.pop("seeds", UNSET))
 
         def _parse_single(
             data: object,
@@ -425,6 +506,9 @@ class ExperimentAnalysisRequest:
 
         experiment_analysis_request = cls(
             experiment_id=experiment_id,
+            generation_start=generation_start,
+            generation_end=generation_end,
+            seeds=seeds,
             single=single,
             multidaughter=multidaughter,
             multigeneration=multigeneration,

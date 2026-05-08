@@ -81,7 +81,7 @@ async def insert_job(database_service: DatabaseServiceSQL, slurmjobid: int) -> t
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_messaging(
     redis_subscriber_service: MessagingServiceRedis,
@@ -121,7 +121,7 @@ async def test_messaging(
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_job_scheduler(
     redis_subscriber_service: MessagingServiceRedis,
@@ -192,7 +192,7 @@ async def test_job_scheduler(
 @pytest.mark.integration
 @pytest.mark.skipif(
     is_ci_environment()
-    or len(get_settings().slurm_submit_key_path) == 0
+    or not Path(get_settings().slurm_submit_key_path).exists()
     or (len(get_settings().storage_s3_bucket) == 0 and len(get_settings().storage_qumulo_endpoint_url) == 0),
     reason="Skipped in CI/CD or missing slurm ssh key or storage backend configuration",
 )

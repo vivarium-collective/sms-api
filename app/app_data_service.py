@@ -774,6 +774,33 @@ class E2EDataService:
         resp.raise_for_status()
         return resp.json()  # type: ignore[no-any-return]
 
+    def compose_biomodels_audit(
+        self,
+        biomodel_id: str,
+        simulators: list[str] | None = None,
+    ) -> dict:  # type: ignore[type-arg]
+        params: dict[str, list[str]] = {}
+        if simulators is not None:
+            params["simulators"] = simulators
+        resp = self.client.post(f"/compose/v1/biomodels/{biomodel_id}/audit", params=params)
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_biomodels_regression(
+        self,
+        n_models: int = 10,
+        model_ids: list[str] | None = None,
+        simulators: list[str] | None = None,
+    ) -> dict:  # type: ignore[type-arg]
+        payload: dict[str, object] = {"n_models": n_models}
+        if model_ids is not None:
+            payload["model_ids"] = model_ids
+        if simulators is not None:
+            payload["simulators"] = simulators
+        resp = self.client.post("/compose/v1/biomodels/regression", json=payload)
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
     def compose_run_tellurium(
         self, sbml_path: Path, start_time: float, end_time: float, num_data_points: float
     ) -> dict:  # type: ignore[type-arg]

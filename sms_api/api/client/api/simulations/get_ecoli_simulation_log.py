@@ -6,15 +6,24 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.http_validation_error import HTTPValidationError
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     id: int,
+    *,
+    truncate: Union[Unset, bool] = True,
 ) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+
+    params["truncate"] = truncate
+
+    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
+
     _kwargs: dict[str, Any] = {
         "method": "get",
         "url": f"/api/v1/simulations/{id}/log",
+        "params": params,
     }
 
     return _kwargs
@@ -51,11 +60,14 @@ def sync_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
+    truncate: Union[Unset, bool] = True,
 ) -> Response[Union[Any, HTTPValidationError]]:
     """Get the structured output of a given simulation workflow log.
 
     Args:
         id (int):
+        truncate (Union[Unset, bool]): If true, return only the Nextflow header + final status
+            block (separated by '... truncated ...'). Set to false for the full log. Default: True.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -67,6 +79,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         id=id,
+        truncate=truncate,
     )
 
     response = client.get_httpx_client().request(
@@ -80,11 +93,14 @@ def sync(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
+    truncate: Union[Unset, bool] = True,
 ) -> Optional[Union[Any, HTTPValidationError]]:
     """Get the structured output of a given simulation workflow log.
 
     Args:
         id (int):
+        truncate (Union[Unset, bool]): If true, return only the Nextflow header + final status
+            block (separated by '... truncated ...'). Set to false for the full log. Default: True.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -97,6 +113,7 @@ def sync(
     return sync_detailed(
         id=id,
         client=client,
+        truncate=truncate,
     ).parsed
 
 
@@ -104,11 +121,14 @@ async def asyncio_detailed(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
+    truncate: Union[Unset, bool] = True,
 ) -> Response[Union[Any, HTTPValidationError]]:
     """Get the structured output of a given simulation workflow log.
 
     Args:
         id (int):
+        truncate (Union[Unset, bool]): If true, return only the Nextflow header + final status
+            block (separated by '... truncated ...'). Set to false for the full log. Default: True.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -120,6 +140,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         id=id,
+        truncate=truncate,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -131,11 +152,14 @@ async def asyncio(
     id: int,
     *,
     client: Union[AuthenticatedClient, Client],
+    truncate: Union[Unset, bool] = True,
 ) -> Optional[Union[Any, HTTPValidationError]]:
     """Get the structured output of a given simulation workflow log.
 
     Args:
         id (int):
+        truncate (Union[Unset, bool]): If true, return only the Nextflow header + final status
+            block (separated by '... truncated ...'). Set to false for the full log. Default: True.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -149,5 +173,6 @@ async def asyncio(
         await asyncio_detailed(
             id=id,
             client=client,
+            truncate=truncate,
         )
     ).parsed

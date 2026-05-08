@@ -15,11 +15,19 @@ T = TypeVar("T", bound="PtoolsAnalysisConfig")
 
 @_attrs_define
 class PtoolsAnalysisConfig:
-    """:param name: (str) Analysis module type name...
-        (One of ["ptools_rxns", "ptools_rna", "ptools_proteins"]). Defaults to "ptools_rxns".
-    :param n_tp: (int) Number of timepoints/columns to use in the tsv
-    :param files: (list[OutputFileMetadata]) Specification of files requested to be returned
+    """Configuration for a single ptools analysis module.
+
+    :param name: Analysis module type name
+        (one of ``"ptools_rxns"``, ``"ptools_rna"``, ``"ptools_proteins"``).
+    :param n_tp: Number of timepoints/columns in the output TSV.
+    :param files: Specification of files requested to be returned
         with the completion of the analysis.
+
+    Generation/seed filtering is handled at the request level
+    (``ExperimentAnalysisRequest.generation_start/end/seeds``), not per-module.
+    Fully supported for ``single`` analyses.  Aggregated types
+    (``multigeneration``, ``multiseed``) do not currently respect these
+    filters due to a known vEcoli limitation.
 
         Attributes:
             name (Union[Unset, str]):  Default: 'ptools_rxns'.

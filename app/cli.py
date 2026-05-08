@@ -1138,6 +1138,64 @@ def compose_biomodels_batch(
     display_json(result, console)
 
 
+@compose_cli.command("biomodels-audit", help="Run a BioModel on multiple simulators for cross-validation.")
+def compose_biomodels_audit(
+    biomodel_id: str = Argument(help="BioModel ID (e.g. BIOMD0000000001)."),
+    simulators: str = Option(default="copasi,tellurium", help="Comma-separated simulators to use."),
+    poll: bool = Option(default=False, help="Poll for job status until complete."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    sim_list = [s.strip() for s in simulators.split(",") if s.strip()]
+    with console.status(f"[memphis.spinner]Submitting audit for {biomodel_id} ({', '.join(sim_list)})..."):
+        result = data_service.compose_biomodels_audit(biomodel_id=biomodel_id, simulators=sim_list)
+    display_json(result, console)
+    if poll:
+        experiment = result.get("experiment", result)
+        sim_id = experiment.get("simulation_database_id") if isinstance(experiment, dict) else None
+        if sim_id is None:
+            console.print("[yellow]No simulation_database_id in response; cannot poll.[/yellow]")
+            return
+        import time
+
+        while True:
+            time.sleep(5)
+            with console.status(f"[memphis.spinner]Polling audit simulation {sim_id}..."):
+                status_data = data_service.compose_get_simulation_status(simulation_id=sim_id)
+            status = status_data.get("status", "unknown")
+            console.print(f"  Status: {status}")
+            if status in ("completed", "failed", "cancelled", "timeout"):
+                break
+        display_json(status_data, console)
+
+
+@compose_cli.command("biomodels-regression", help="Run a BioModels regression suite.")
+def compose_biomodels_regression(
+    n: int = Option(default=10, help="Number of models to run (ignored if --ids provided)."),
+    ids: str = Option(default="", help="Comma-separated BioModel IDs to run."),
+    simulators: str = Option(default="copasi,tellurium", help="Comma-separated simulators to wire into each model."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    model_ids = [i.strip() for i in ids.split(",") if i.strip()] if ids else None
+    sim_list = [s.strip() for s in simulators.split(",") if s.strip()]
+    with console.status("[memphis.spinner]Submitting BioModels regression suite..."):
+        result = data_service.compose_biomodels_regression(
+            n_models=n,
+            model_ids=model_ids,
+            simulators=sim_list,
+        )
+    submitted = result.get("submitted", [])
+    failed = result.get("failed", [])
+    total = result.get("total_requested", n)
+    console.print(f"[bold]Regression complete:[/bold] {len(submitted)}/{total} submitted, {len(failed)} failed")
+    if failed:
+        console.print(f"[yellow]Failed IDs:[/yellow] {', '.join(failed)}")
+    display_json(result, console)
+
+
 # -- Demo commands --
 
 

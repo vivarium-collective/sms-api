@@ -200,7 +200,7 @@ async def api_client() -> AsyncGenerator[httpx.AsyncClient]:
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    len(get_settings().slurm_submit_key_path) == 0,
+    not Path(get_settings().slurm_submit_key_path).exists(),
     reason="slurm ssh key file not supplied",
 )
 @pytest.mark.skipif(

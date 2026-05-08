@@ -3,6 +3,7 @@ import random
 import string
 import time
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -23,7 +24,7 @@ from tests.fixtures.api_fixtures import SimulatorRepoInfo
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_simulate(
     simulation_service_slurm: SimulationServiceHpc,

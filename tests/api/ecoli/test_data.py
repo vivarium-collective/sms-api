@@ -89,7 +89,7 @@ async def validate_archive_streaming_response(
 
 
 @pytest.mark.skipif(
-    len(get_settings().slurm_submit_key_path) == 0,
+    not Path(get_settings().slurm_submit_key_path).exists(),
     reason="slurm ssh key file not supplied",
 )
 @pytest.mark.skipif(
@@ -131,7 +131,7 @@ async def test_get_simulation_data(
 
 
 @pytest.mark.skipif(
-    len(get_settings().slurm_submit_key_path) == 0,
+    not Path(get_settings().slurm_submit_key_path).exists(),
     reason="slurm ssh key file not supplied",
 )
 @pytest.mark.skipif(
@@ -198,7 +198,7 @@ async def test_archive_streaming_response(
 
 
 @pytest.mark.skipif(
-    len(get_settings().slurm_submit_key_path) == 0,
+    not Path(get_settings().slurm_submit_key_path).exists(),
     reason="slurm ssh key file not supplied",
 )
 @pytest.mark.asyncio
@@ -240,7 +240,7 @@ async def test_archive_contents_match_source(
 
 
 @pytest.mark.skipif(
-    len(get_settings().slurm_submit_key_path) == 0,
+    not Path(get_settings().slurm_submit_key_path).exists(),
     reason="slurm ssh key file not supplied",
 )
 @pytest.mark.skipif(
@@ -267,7 +267,7 @@ async def test_archive_empty_directory(
 
 
 @pytest.mark.skipif(
-    len(get_settings().slurm_submit_key_path) == 0,
+    not Path(get_settings().slurm_submit_key_path).exists(),
     reason="slurm ssh key file not supplied",
 )
 @pytest.mark.asyncio
@@ -280,7 +280,7 @@ async def test_archive_nonexistent_simulation(fastapi_app: FastAPI, base_router:
 
 
 @pytest.mark.skipif(
-    len(get_settings().slurm_submit_key_path) == 0,
+    not Path(get_settings().slurm_submit_key_path).exists(),
     reason="slurm ssh key file not supplied",
 )
 @pytest.mark.skipif(
@@ -313,7 +313,7 @@ async def test_archive_large_file_streaming(
 
 
 @pytest.mark.skipif(
-    len(get_settings().slurm_submit_key_path) == 0,
+    not Path(get_settings().slurm_submit_key_path).exists(),
     reason="slurm ssh key file not supplied",
 )
 @pytest.mark.skipif(

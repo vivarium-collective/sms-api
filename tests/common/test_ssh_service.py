@@ -10,7 +10,7 @@ from sms_api.config import get_settings
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_ssh_session_service_run_command() -> None:
     """Integration test: SSHSessionService can run commands via session context manager."""
@@ -29,7 +29,7 @@ async def test_ssh_session_service_run_command() -> None:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_ssh_session_service_scp_upload_download() -> None:
     """Integration test: SSHSessionService can upload and download files."""
@@ -62,7 +62,7 @@ async def test_ssh_session_service_scp_upload_download() -> None:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_ssh_session_service_wait_closed_false() -> None:
     """Integration test: SSHSessionService works with wait_closed=False."""

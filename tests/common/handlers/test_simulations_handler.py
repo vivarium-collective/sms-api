@@ -23,7 +23,7 @@ from sms_api.dependencies import get_file_service, set_file_service
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_get_available_omics_output_paths(
     ssh_session_service: SSHSessionService, analysis_outdir: HPCFilePath
@@ -34,7 +34,7 @@ async def test_get_available_omics_output_paths(
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_fetch_simulation_omics_outputs(
     ssh_session_service: SSHSessionService, analysis_outdir: HPCFilePath

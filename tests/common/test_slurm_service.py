@@ -108,7 +108,7 @@ def test_slurm_job_from_scontrol_output_cancelled_with_reason() -> None:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_query_squeue(slurm_service: SlurmService) -> None:
     async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
@@ -123,7 +123,7 @@ async def test_slurm_job_query_squeue(slurm_service: SlurmService) -> None:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_query_sacct(slurm_service: SlurmService) -> None:
     async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
@@ -138,7 +138,7 @@ async def test_slurm_job_query_sacct(slurm_service: SlurmService) -> None:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_query_scontrol(slurm_service: SlurmService) -> None:
     """Test scontrol-based job query (alternative to sacct when accounting is disabled)."""
@@ -160,7 +160,7 @@ async def test_slurm_job_query_scontrol(slurm_service: SlurmService) -> None:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_slurm_job_submit(slurm_service: SlurmService, slurm_template_hello_1s: str) -> None:
     settings = get_settings()
@@ -334,7 +334,7 @@ async def _run_nextflow_workflow_test(
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_nextflow_workflow_local_executor(
     slurm_service: SlurmService,
@@ -370,7 +370,7 @@ async def test_nextflow_workflow_local_executor(
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(len(get_settings().slurm_submit_key_path) == 0, reason="slurm ssh key file not supplied")
+@pytest.mark.skipif(not Path(get_settings().slurm_submit_key_path).exists(), reason="slurm ssh key file not supplied")
 @pytest.mark.asyncio
 async def test_nextflow_workflow_slurm_executor(
     slurm_service: SlurmService,
