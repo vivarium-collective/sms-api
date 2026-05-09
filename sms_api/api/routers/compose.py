@@ -35,6 +35,9 @@ from sms_api.compose.models import (
     PBAllowList,
     ProcessInitializeRequest,
     ProcessInstance,
+    ProcessInstanceRecord,
+    ProcessInstanceStatus,
+    ProcessUpdateRecord,
     ProcessUpdateRequest,
     SimulationFileType,
 )
@@ -724,6 +727,7 @@ async def initialize_process(process_name: str, request: ProcessInitializeReques
         process_id = _init(process_name, request.config)
     except KeyError as exc:
         raise HTTPException(404, str(exc))
+    await _require_db().get_process_registry_db().insert_process_instance(process_id, process_name, request.config)
     return ProcessInstance(process_id=process_id, process_name=process_name)
 
 
@@ -767,9 +771,15 @@ async def update_process(process_name: str, process_id: str, request: ProcessUpd
     from sms_api.compose.process_runtime import update_process as _update
 
     try:
-        return _update(process_id, request.state, request.interval)
+        result = _update(process_id, request.state, request.interval)
     except KeyError as exc:
         raise HTTPException(404, str(exc))
+    await (
+        _require_db()
+        .get_process_registry_db()
+        .insert_process_update(process_id, request.state, request.interval, result)
+    )
+    return result
 
 
 @router.post(
@@ -784,4 +794,37 @@ async def end_process(process_name: str, process_id: str) -> None:
     try:
         _end(process_id)
     except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    await _require_db().get_process_registry_db().end_process_instance(process_id)
+
+
+# ---------------------------------------------------------------------------
+# Process registry read-only endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    path="/process/instances",
+    operation_id="compose-list-process-instances",
+    response_model=list[ProcessInstanceRecord],
+    tags=["Compose Runtime"],
+    summary="List all process registry instances (optionally filtered by status)",
+)
+async def list_process_instances(
+    status: ProcessInstanceStatus | None = None,
+) -> list[ProcessInstanceRecord]:
+    return await _require_db().get_process_registry_db().list_process_instances(status=status)
+
+
+@router.get(
+    path="/process/instances/{process_id}/history",
+    operation_id="compose-get-process-instance-history",
+    response_model=list[ProcessUpdateRecord],
+    tags=["Compose Runtime"],
+    summary="List all update records for a process instance",
+)
+async def get_process_instance_history(process_id: str) -> list[ProcessUpdateRecord]:
+    try:
+        return await _require_db().get_process_registry_db().list_process_updates(process_id)
+    except LookupError as exc:
         raise HTTPException(404, str(exc))
