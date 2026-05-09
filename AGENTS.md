@@ -133,3 +133,10 @@ kubectl rollout restart deployment/api -n sms-api-stanford-test
 # tunnel: AWS_PROFILE=stanford-sso AWS_DEFAULT_REGION=us-gov-west-1 ../sms-cdk/scripts/ptools-proxy.sh -s smsvpctest
 # verify on pod, then test via atlantis CLI
 ```
+
+## Whenever the user refers to "RP" or release protocol:
+
+the real RP is: createNewBranch and Commits then push -> bump version and push -> use gh action for building (as we have been doing) on
+that given branch and bumped version (only api build needs to succeed) -> apply bumped version in kustomize/ overlays for the given namespace (Ask me which) -> once rollout is complete, manually verify and test functionality from pr using
+the atlantis cli and reiterate with commiting fixes and updating PR description until we can truthfully say the pr worfks and nothing else existing was broken -> update docs for new content as needed (docs/, readthedocs) and commit/push to
+the given PR -> once PR checks pass, let me know and I will manually merge during which you should stand by for my orders -> upon merge, create a new release as per the protocol we have been using.
