@@ -93,15 +93,26 @@ class TestProcessRuntime:
 @pytest.fixture()
 def compose_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """TestClient with compose router mounted, compose services mocked."""
+    from unittest.mock import AsyncMock, MagicMock
+
     monkeypatch.setenv("COMPUTE_BACKEND", "slurm")
     monkeypatch.setenv("PUBLIC_MODE", "true")
 
     from fastapi import FastAPI
 
-    from sms_api.api.routers.compose import router
+    from sms_api.api.routers import compose as compose_module
+
+    # Inject a mock DB so that mutating process runtime handlers don't 500.
+    registry_db = MagicMock()
+    registry_db.insert_process_instance = AsyncMock(return_value=None)
+    registry_db.end_process_instance = AsyncMock(return_value=None)
+    registry_db.insert_process_update = AsyncMock(return_value=None)
+    mock_db = MagicMock()
+    mock_db.get_process_registry_db.return_value = registry_db
+    monkeypatch.setattr(compose_module, "_compose_db_service", mock_db)
 
     app = FastAPI()
-    app.include_router(router, prefix="/compose/v1")
+    app.include_router(compose_module.router, prefix="/compose/v1")
     return TestClient(app)
 
 
