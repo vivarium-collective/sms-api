@@ -56,6 +56,7 @@ dependencies = [
     "rich-pixels>=3.0.1",
     "pillow>=12.2.0",
     # compose-api deps (process-bigraph ecosystem)
+    "process-bigraph>=1.0.5",
     "nats-py>=2.10.0,<3",
     "python-libsedml>=2.0.33",
     "biosimulators-utils>=0.2.3",
