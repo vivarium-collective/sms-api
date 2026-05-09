@@ -801,6 +801,50 @@ class E2EDataService:
         resp.raise_for_status()
         return resp.json()  # type: ignore[no-any-return]
 
+    # ------------------------------------------------------------------
+    # Rest-process runtime methods
+    # ------------------------------------------------------------------
+
+    def compose_list_types(self) -> list[str]:
+        resp = self.client.get("/compose/v1/types")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_get_config_schema(self, process_name: str) -> dict:  # type: ignore[type-arg]
+        resp = self.client.get(f"/compose/v1/process/{process_name}/config-schema")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_initialize_process(self, process_name: str, config: dict | None = None) -> dict:  # type: ignore[type-arg]
+        resp = self.client.post(
+            f"/compose/v1/process/{process_name}/initialize",
+            json={"config": config or {}},
+        )
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_get_process_inputs(self, process_name: str, process_id: str) -> dict:  # type: ignore[type-arg]
+        resp = self.client.get(f"/compose/v1/process/{process_name}/inputs/{process_id}")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_get_process_outputs(self, process_name: str, process_id: str) -> dict:  # type: ignore[type-arg]
+        resp = self.client.get(f"/compose/v1/process/{process_name}/outputs/{process_id}")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_update_process(self, process_name: str, process_id: str, state: dict, interval: float) -> object:  # type: ignore[type-arg]
+        resp = self.client.post(
+            f"/compose/v1/process/{process_name}/update/{process_id}",
+            json={"state": state, "interval": interval},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def compose_end_process(self, process_name: str, process_id: str) -> None:
+        resp = self.client.post(f"/compose/v1/process/{process_name}/end/{process_id}")
+        resp.raise_for_status()
+
     def compose_run_tellurium(
         self, sbml_path: Path, start_time: float, end_time: float, num_data_points: float
     ) -> dict:  # type: ignore[type-arg]

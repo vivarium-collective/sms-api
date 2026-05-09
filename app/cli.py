@@ -1196,6 +1196,111 @@ def compose_biomodels_regression(
     display_json(result, console)
 
 
+# ---------------------------------------------------------------------------
+# Rest-process runtime commands
+# ---------------------------------------------------------------------------
+
+
+@compose_cli.command("list-types", help="List all registered bigraph-schema types.")
+def compose_list_types(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    types = data_service.compose_list_types()
+    display_json(str(types), console)
+
+
+@compose_cli.command("config-schema", help="Get config schema for a registered process or step.")
+def compose_config_schema(
+    process_name: str = Argument(help="Registered process/step name."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_get_config_schema(process_name=process_name)
+    display_json(result, console)
+
+
+@compose_cli.command("init", help="Instantiate a process with a config; returns a UUID instance ID.")
+def compose_init(
+    process_name: str = Argument(help="Registered process/step name."),
+    config: str = Option(default="{}", help="JSON config dict matching the process config_schema."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import json
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    try:
+        config_dict = json.loads(config)
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]Invalid JSON config:[/red] {exc}")
+        raise SystemExit(1)
+    result = data_service.compose_initialize_process(process_name=process_name, config=config_dict)
+    console.print(f"[bold]Process ID:[/bold] {result.get('process_id')}")
+    display_json(result, console)
+
+
+@compose_cli.command("inputs", help="Get inputs schema for an active process instance.")
+def compose_inputs(
+    process_name: str = Argument(help="Process name."),
+    process_id: str = Argument(help="UUID returned by 'atlantis compose init'."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_get_process_inputs(process_name=process_name, process_id=process_id)
+    display_json(result, console)
+
+
+@compose_cli.command("outputs", help="Get outputs schema for an active process instance.")
+def compose_outputs(
+    process_name: str = Argument(help="Process name."),
+    process_id: str = Argument(help="UUID returned by 'atlantis compose init'."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_get_process_outputs(process_name=process_name, process_id=process_id)
+    display_json(result, console)
+
+
+@compose_cli.command("update", help="Run one update step on an active process instance.")
+def compose_update(
+    process_name: str = Argument(help="Process name."),
+    process_id: str = Argument(help="UUID returned by 'atlantis compose init'."),
+    state: str = Option(default="{}", help="JSON state dict to pass to process.update()."),
+    interval: float = Option(default=1.0, help="Time interval for this update step."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import json
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    try:
+        state_dict = json.loads(state)
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]Invalid JSON state:[/red] {exc}")
+        raise SystemExit(1)
+    update_result = data_service.compose_update_process(
+        process_name=process_name, process_id=process_id, state=state_dict, interval=interval
+    )
+    display_json(str(update_result), console)
+
+
+@compose_cli.command("end", help="Terminate an active process instance and release memory.")
+def compose_end(
+    process_name: str = Argument(help="Process name."),
+    process_id: str = Argument(help="UUID returned by 'atlantis compose init'."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    data_service.compose_end_process(process_name=process_name, process_id=process_id)
+    console.print(f"[green]Process {process_id} terminated.[/green]")
+
+
 # -- Demo commands --
 
 

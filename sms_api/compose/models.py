@@ -325,3 +325,22 @@ class BiomodelsRegressionResult(BaseModel):
 
 def get_singularity_hash(singularity_def_rep: ContainerizationFileRepr) -> str:
     return hashlib.md5(singularity_def_rep.representation.encode("utf-8")).hexdigest()  # noqa: S324
+
+
+# ---------------------------------------------------------------------------
+# Rest-process runtime models
+# ---------------------------------------------------------------------------
+
+
+class ProcessInitializeRequest(BaseModel):
+    config: dict[str, Any] = Field(default_factory=dict, description="Config dict matching the process config_schema.")
+
+
+class ProcessInstance(BaseModel):
+    process_id: str = Field(description="UUID of the instantiated process.")
+    process_name: str = Field(description="Name of the process class that was instantiated.")
+
+
+class ProcessUpdateRequest(BaseModel):
+    state: dict[str, Any] = Field(default_factory=dict, description="Current state to pass to process.update().")
+    interval: float = Field(default=1.0, ge=0.0, description="Time interval for this update step.")

@@ -33,6 +33,9 @@ from sms_api.compose.models import (
     ComposeSimulationExperiment,
     ComposeSimulationRequest,
     PBAllowList,
+    ProcessInitializeRequest,
+    ProcessInstance,
+    ProcessUpdateRequest,
     SimulationFileType,
 )
 from sms_api.compose.simulation_service import ComposeSimulationService
@@ -673,3 +676,112 @@ async def run_biomodels_regression(
             failed.append(biomodel_id)
 
     return BiomodelsRegressionResult(submitted=submitted, failed=failed, total_requested=total_requested)
+
+
+# ---------------------------------------------------------------------------
+# Rest-process runtime endpoints
+# Mirrors the paradigm from github.com/vivarium-collective/rest-process.
+# Stateful process instances are keyed by UUID; ephemeral within a pod session.
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    path="/types",
+    operation_id="compose-list-types",
+    response_model=list[str],
+    tags=["Compose Runtime"],
+    summary="List all registered bigraph-schema types",
+)
+async def list_types() -> list[str]:
+    from sms_api.compose.process_runtime import list_types as _list_types
+
+    return _list_types()
+
+
+@router.get(
+    path="/process/{process_name}/config-schema",
+    operation_id="compose-get-process-config-schema",
+    tags=["Compose Runtime"],
+    summary="Get config schema for a registered process or step",
+)
+async def get_process_config_schema(process_name: str) -> dict:  # type: ignore[type-arg]
+    from sms_api.compose.process_runtime import get_config_schema
+
+    return get_config_schema(process_name)
+
+
+@router.post(
+    path="/process/{process_name}/initialize",
+    operation_id="compose-initialize-process",
+    response_model=ProcessInstance,
+    tags=["Compose Runtime"],
+    summary="Instantiate a process with a config; returns a UUID instance ID",
+)
+async def initialize_process(process_name: str, request: ProcessInitializeRequest) -> ProcessInstance:
+    from sms_api.compose.process_runtime import initialize_process as _init
+
+    try:
+        process_id = _init(process_name, request.config)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    return ProcessInstance(process_id=process_id, process_name=process_name)
+
+
+@router.get(
+    path="/process/{process_name}/inputs/{process_id}",
+    operation_id="compose-get-process-inputs",
+    tags=["Compose Runtime"],
+    summary="Get inputs schema for an active process instance",
+)
+async def get_process_inputs(process_name: str, process_id: str) -> dict:  # type: ignore[type-arg]
+    from sms_api.compose.process_runtime import get_inputs
+
+    try:
+        return get_inputs(process_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.get(
+    path="/process/{process_name}/outputs/{process_id}",
+    operation_id="compose-get-process-outputs",
+    tags=["Compose Runtime"],
+    summary="Get outputs schema for an active process instance",
+)
+async def get_process_outputs(process_name: str, process_id: str) -> dict:  # type: ignore[type-arg]
+    from sms_api.compose.process_runtime import get_outputs
+
+    try:
+        return get_outputs(process_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.post(
+    path="/process/{process_name}/update/{process_id}",
+    operation_id="compose-update-process",
+    tags=["Compose Runtime"],
+    summary="Run one update step on an active process instance",
+)
+async def update_process(process_name: str, process_id: str, request: ProcessUpdateRequest) -> object:
+    from sms_api.compose.process_runtime import update_process as _update
+
+    try:
+        return _update(process_id, request.state, request.interval)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.post(
+    path="/process/{process_name}/end/{process_id}",
+    operation_id="compose-end-process",
+    tags=["Compose Runtime"],
+    summary="Terminate an active process instance and release memory",
+)
+async def end_process(process_name: str, process_id: str) -> None:
+    from sms_api.compose.process_runtime import end_process as _end
+
+    try:
+        _end(process_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))

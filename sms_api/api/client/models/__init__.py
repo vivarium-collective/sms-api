@@ -20,6 +20,15 @@ from .body_compose_run_copasi import BodyComposeRunCopasi
 from .body_compose_run_simulation import BodyComposeRunSimulation
 from .body_compose_run_tellurium import BodyComposeRunTellurium
 from .check_health_health_get_response_check_health_health_get import CheckHealthHealthGetResponseCheckHealthHealthGet
+from .compose_get_process_config_schema_response_compose_get_process_config_schema import (
+    ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema,
+)
+from .compose_get_process_inputs_response_compose_get_process_inputs import (
+    ComposeGetProcessInputsResponseComposeGetProcessInputs,
+)
+from .compose_get_process_outputs_response_compose_get_process_outputs import (
+    ComposeGetProcessOutputsResponseComposeGetProcessOutputs,
+)
 from .compose_get_simulation_document_response_compose_get_simulation_document import (
     ComposeGetSimulationDocumentResponseComposeGetSimulationDocument,
 )
@@ -43,6 +52,11 @@ from .package_type import PackageType
 from .parca_dataset import ParcaDataset
 from .parca_dataset_request import ParcaDatasetRequest
 from .parca_options import ParcaOptions
+from .process_initialize_request import ProcessInitializeRequest
+from .process_initialize_request_config import ProcessInitializeRequestConfig
+from .process_instance import ProcessInstance
+from .process_update_request import ProcessUpdateRequest
+from .process_update_request_state import ProcessUpdateRequestState
 from .ptools_analysis_config import PtoolsAnalysisConfig
 from .registered_package import RegisteredPackage
 from .registered_simulators import RegisteredSimulators
@@ -82,6 +96,9 @@ __all__ = (
     "BodyComposeRunSimulation",
     "BodyComposeRunTellurium",
     "CheckHealthHealthGetResponseCheckHealthHealthGet",
+    "ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema",
+    "ComposeGetProcessInputsResponseComposeGetProcessInputs",
+    "ComposeGetProcessOutputsResponseComposeGetProcessOutputs",
     "ComposeGetSimulationDocumentResponseComposeGetSimulationDocument",
     "ComposeHpcRun",
     "ComposeJobStatus",
@@ -103,6 +120,11 @@ __all__ = (
     "ParcaDataset",
     "ParcaDatasetRequest",
     "ParcaOptions",
+    "ProcessInitializeRequest",
+    "ProcessInitializeRequestConfig",
+    "ProcessInstance",
+    "ProcessUpdateRequest",
+    "ProcessUpdateRequestState",
     "PtoolsAnalysisConfig",
     "RegisteredPackage",
     "RegisteredSimulators",
