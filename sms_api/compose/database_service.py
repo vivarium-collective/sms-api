@@ -25,6 +25,9 @@ from sms_api.compose.models import (
     ComposeSubmittedSimulation,
     ComposeWorkerEvent,
     PackageOutline,
+    ProcessInstanceRecord,
+    ProcessInstanceStatus,
+    ProcessUpdateRecord,
     RegisteredPackage,
     get_singularity_hash,
 )
@@ -39,7 +42,10 @@ from sms_api.compose.tables_orm import (
     ORMComposeSimulator,
     ORMComposeSimulatorToPackage,
     ORMComposeWorkerEvent,
+    ORMProcessInstance,
+    ORMProcessUpdate,
     PackageTypeDB,
+    ProcessInstanceStatusDB,
 )
 
 logger = logging.getLogger(__name__)
@@ -482,6 +488,133 @@ class PackageORMExecutor(PackageDatabaseService):
 
 
 # ---------------------------------------------------------------------------
+# Process registry database service
+# ---------------------------------------------------------------------------
+
+
+class ProcessRegistryDatabaseService(ABC):
+    @abstractmethod
+    async def insert_process_instance(
+        self, process_id: str, process_name: str, config: dict[str, Any]
+    ) -> ProcessInstanceRecord:
+        pass
+
+    @abstractmethod
+    async def get_process_instance(self, process_id: str) -> ProcessInstanceRecord | None:
+        pass
+
+    @abstractmethod
+    async def end_process_instance(self, process_id: str) -> ProcessInstanceRecord:
+        pass
+
+    @abstractmethod
+    async def list_process_instances(self, status: ProcessInstanceStatus | None = None) -> list[ProcessInstanceRecord]:
+        pass
+
+    @abstractmethod
+    async def insert_process_update(
+        self, process_id: str, state: dict[str, Any], interval: float, result: Any
+    ) -> ProcessUpdateRecord:
+        pass
+
+    @abstractmethod
+    async def list_process_updates(self, process_id: str) -> list[ProcessUpdateRecord]:
+        pass
+
+
+class ProcessRegistryORMExecutor(ProcessRegistryDatabaseService):
+    async_session_maker: async_sessionmaker[AsyncSession]
+
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
+        self.async_session_maker = session_maker
+
+    @override
+    async def insert_process_instance(
+        self, process_id: str, process_name: str, config: dict[str, Any]
+    ) -> ProcessInstanceRecord:
+        async with self.async_session_maker() as session, session.begin():
+            orm = ORMProcessInstance(
+                process_id=process_id,
+                process_name=process_name,
+                config=config,
+                status=ProcessInstanceStatusDB.ACTIVE,
+            )
+            session.add(orm)
+            await session.flush()
+            return orm.to_process_instance_record()
+
+    @override
+    async def get_process_instance(self, process_id: str) -> ProcessInstanceRecord | None:
+        async with self.async_session_maker() as session:
+            orm = (
+                (await session.execute(select(ORMProcessInstance).where(ORMProcessInstance.process_id == process_id)))
+                .scalars()
+                .first()
+            )
+            return orm.to_process_instance_record() if orm else None
+
+    @override
+    async def end_process_instance(self, process_id: str) -> ProcessInstanceRecord:
+        async with self.async_session_maker() as session, session.begin():
+            orm = (
+                (await session.execute(select(ORMProcessInstance).where(ORMProcessInstance.process_id == process_id)))
+                .scalars()
+                .first()
+            )
+            if orm is None:
+                raise LookupError(f"Process instance '{process_id}' not found")
+            orm.status = ProcessInstanceStatusDB.ENDED
+            orm.ended_at = datetime.datetime.now()
+            await session.flush()
+            return orm.to_process_instance_record()
+
+    @override
+    async def list_process_instances(self, status: ProcessInstanceStatus | None = None) -> list[ProcessInstanceRecord]:
+        async with self.async_session_maker() as session:
+            stmt = select(ORMProcessInstance)
+            if status is not None:
+                stmt = stmt.where(ORMProcessInstance.status == ProcessInstanceStatusDB(status.value))
+            result = await session.execute(stmt)
+            return [orm.to_process_instance_record() for orm in result.scalars().all()]
+
+    @override
+    async def insert_process_update(
+        self, process_id: str, state: dict[str, Any], interval: float, result: Any
+    ) -> ProcessUpdateRecord:
+        async with self.async_session_maker() as session, session.begin():
+            instance_id = (
+                await session.execute(select(ORMProcessInstance.id).where(ORMProcessInstance.process_id == process_id))
+            ).scalar_one_or_none()
+            if instance_id is None:
+                raise LookupError(f"Process instance '{process_id}' not found")
+            result_dict = result if isinstance(result, dict) else None
+            orm = ORMProcessUpdate(
+                process_instance_id=instance_id,
+                state=state,
+                interval=interval,
+                result=result_dict,
+            )
+            session.add(orm)
+            await session.flush()
+            return orm.to_process_update_record()
+
+    @override
+    async def list_process_updates(self, process_id: str) -> list[ProcessUpdateRecord]:
+        async with self.async_session_maker() as session:
+            instance_id = (
+                await session.execute(select(ORMProcessInstance.id).where(ORMProcessInstance.process_id == process_id))
+            ).scalar_one_or_none()
+            if instance_id is None:
+                raise LookupError(f"Process instance '{process_id}' not found")
+            result = await session.execute(
+                select(ORMProcessUpdate)
+                .where(ORMProcessUpdate.process_instance_id == instance_id)
+                .order_by(ORMProcessUpdate.called_at)
+            )
+            return [orm.to_process_update_record() for orm in result.scalars().all()]
+
+
+# ---------------------------------------------------------------------------
 # Facade
 # ---------------------------------------------------------------------------
 
@@ -492,11 +625,13 @@ class ComposeDatabaseService:
     simulator_db: SimulatorDatabaseService
     hpc_db: HPCDatabaseService
     package_db: PackageDatabaseService
+    process_registry_db: ProcessRegistryDatabaseService
 
     def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
         self.simulator_db = SimulatorORMExecutor(session_maker)
         self.hpc_db = HPCORMExecutor(session_maker)
         self.package_db = PackageORMExecutor(session_maker)
+        self.process_registry_db = ProcessRegistryORMExecutor(session_maker)
 
     def get_simulator_db(self) -> SimulatorDatabaseService:
         return self.simulator_db
@@ -506,3 +641,6 @@ class ComposeDatabaseService:
 
     def get_package_db(self) -> PackageDatabaseService:
         return self.package_db
+
+    def get_process_registry_db(self) -> ProcessRegistryDatabaseService:
+        return self.process_registry_db

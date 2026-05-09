@@ -9,7 +9,7 @@ import enum
 import logging
 
 from pbest.utils.input_types import ContainerizationFileRepr
-from sqlalchemy import ForeignKey, UniqueConstraint, func
+from sqlalchemy import JSON, ForeignKey, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -25,10 +25,16 @@ from sms_api.compose.models import (
     ComposeSimulatorVersion,
     ComposeWorkerEvent,
     PackageType,
+    ProcessInstanceRecord,
+    ProcessInstanceStatus,
+    ProcessUpdateRecord,
     RegisteredPackage,
 )
 
 logger = logging.getLogger(__name__)
+
+# Portable JSONB: renders as JSONB on PostgreSQL, falls back to JSON on SQLite.
+_JSONB = JSONB().with_variant(JSON(), "sqlite")
 
 COMPOSE_PACKAGE_TABLE = "compose_packages"
 
@@ -297,6 +303,65 @@ class ORMComposeAllowList(ComposeBase):
     package_name: Mapped[str] = mapped_column(nullable=False, index=True)
     package_type: Mapped[PackageTypeDB] = mapped_column(nullable=False)
     package_version: Mapped[str] = mapped_column(nullable=False)
+
+
+# ---------------------------------------------------------------------------
+# Process registry tables
+# ---------------------------------------------------------------------------
+
+
+class ProcessInstanceStatusDB(enum.Enum):
+    ACTIVE = "active"
+    ENDED = "ended"
+
+    def to_process_instance_status(self) -> ProcessInstanceStatus:
+        return ProcessInstanceStatus(self.value)
+
+
+class ORMProcessInstance(ComposeBase):
+    __tablename__ = "compose_process_instance"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    ended_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
+    process_id: Mapped[str] = mapped_column(nullable=False, unique=True, index=True)
+    process_name: Mapped[str] = mapped_column(nullable=False, index=True)
+    config: Mapped[dict[str, object]] = mapped_column(_JSONB, nullable=False)
+    status: Mapped[ProcessInstanceStatusDB] = mapped_column(nullable=False)
+
+    def to_process_instance_record(self) -> ProcessInstanceRecord:
+        return ProcessInstanceRecord(
+            database_id=self.id,
+            process_id=self.process_id,
+            process_name=self.process_name,
+            config=dict(self.config),
+            status=self.status.to_process_instance_status(),
+            created_at=str(self.created_at),
+            ended_at=str(self.ended_at) if self.ended_at is not None else None,
+        )
+
+
+class ORMProcessUpdate(ComposeBase):
+    __tablename__ = "compose_process_update"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    called_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    process_instance_id: Mapped[int] = mapped_column(
+        ForeignKey("compose_process_instance.id"), nullable=False, index=True
+    )
+    interval: Mapped[float] = mapped_column(nullable=False)
+    state: Mapped[dict[str, object]] = mapped_column(_JSONB, nullable=False)
+    result: Mapped[dict[str, object] | None] = mapped_column(_JSONB, nullable=True)
+
+    def to_process_update_record(self) -> ProcessUpdateRecord:
+        return ProcessUpdateRecord(
+            database_id=self.id,
+            process_instance_id=self.process_instance_id,
+            interval=self.interval,
+            state=dict(self.state),
+            result=dict(self.result) if self.result is not None else None,
+            called_at=str(self.called_at),
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -344,3 +344,32 @@ class ProcessInstance(BaseModel):
 class ProcessUpdateRequest(BaseModel):
     state: dict[str, Any] = Field(default_factory=dict, description="Current state to pass to process.update().")
     interval: float = Field(default=1.0, ge=0.0, description="Time interval for this update step.")
+
+
+# ---------------------------------------------------------------------------
+# Process registry persistence models
+# ---------------------------------------------------------------------------
+
+
+class ProcessInstanceStatus(str, enum.Enum):
+    ACTIVE = "active"
+    ENDED = "ended"
+
+
+class ProcessInstanceRecord(BaseModel):
+    database_id: int
+    process_id: str
+    process_name: str
+    config: dict[str, Any]
+    status: ProcessInstanceStatus
+    created_at: str
+    ended_at: str | None = None
+
+
+class ProcessUpdateRecord(BaseModel):
+    database_id: int
+    process_instance_id: int
+    interval: float
+    state: dict[str, Any]
+    result: dict[str, Any] | None
+    called_at: str
