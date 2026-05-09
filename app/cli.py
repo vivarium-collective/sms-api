@@ -1301,6 +1301,22 @@ def compose_end(
     console.print(f"[green]Process {process_id} terminated.[/green]")
 
 
+@compose_cli.command("sandbox", help="Launch the PBG live sandbox Marimo app (interactive demo against the live API).")
+def compose_sandbox(
+    mode: str = Option(default="run", help="Marimo launch mode: 'run' (app) or 'edit' (notebook)."),
+) -> None:
+    console = get_console()
+    console.print("[bold]Launching PBG Live Sandbox...[/bold] [dim]app/ui/pbg_sandbox.py[/dim]")
+    proc: subprocess.Popen[bytes] | None = None
+    try:
+        proc = subprocess.Popen(["uv", "run", "marimo", mode, "app/ui/pbg_sandbox.py", "--no-token"])
+        proc.wait()
+    except KeyboardInterrupt:
+        if proc is not None:
+            proc.terminate()
+            proc.wait(timeout=5)
+
+
 # -- Demo commands --
 
 

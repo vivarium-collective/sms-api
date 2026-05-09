@@ -8,6 +8,16 @@ framework. It supports multiple simulation engines --- including **v2ecoli**
 (whole-cell *E. coli*), **COPASI**, **Tellurium**, and **ReaDDy** --- through a
 unified API and CLI.
 
+```{note}
+**process-bigraph team quickstart** — if you're here to see how sms-api integrates
+`process-bigraph`, `pbsim_common`, and BioModels, jump straight to the
+[PBG Live Sandbox](#pbg-live-sandbox) section. One command launches an interactive
+demo against the live API — no local process-bigraph install needed:
+
+    pip install sms-api
+    atlantis compose sandbox
+```
+
 ## Overview
 
 Compose simulations use a different architecture from the vEcoli batch workflow:
@@ -263,6 +273,10 @@ uv run atlantis compose simulators              # List container defs
 uv run atlantis compose processes               # List registered processes
 uv run atlantis compose steps                   # List registered steps
 uv run atlantis compose build-status <SIM_ID>   # Container build status
+
+# Interactive sandbox
+uv run atlantis compose sandbox                 # PBG live sandbox (app mode)
+uv run atlantis compose sandbox --mode edit     # PBG live sandbox (notebook mode)
 ```
 
 ## Process-Bigraph Document Format
@@ -360,6 +374,142 @@ Output saved to /experiment/output/
     v
 Client downloads results.zip
 ```
+
+## PBG Live Sandbox
+
+*Available since v0.9.3*
+
+The **PBG Live Sandbox** (`atlantis compose sandbox`) is a self-contained,
+fully interactive Marimo app that lets you explore and operate the Atlantis
+compose subsystem — the live deployment of the
+[process-bigraph](https://github.com/vivarium-collective/process-bigraph)
+ecosystem on UCONN CCAM HPC — directly from your browser.
+
+**No local `process-bigraph` installation required.** Every operation
+calls the live Atlantis API at `https://sms.cam.uchc.edu` and no authentication
+is needed for the compose endpoints.
+
+### Prerequisites
+
+Install the Atlantis CLI (the only dependency needed to run the sandbox):
+
+```bash
+pip install sms-api        # from PyPI
+# or, from source:
+git clone https://github.com/vivarium-collective/sms-api && cd sms-api && uv sync
+```
+
+### Launch
+
+```bash
+# App mode (recommended for demos)
+uv run atlantis compose sandbox
+
+# Notebook/edit mode (see and modify the source cells)
+uv run atlantis compose sandbox --mode edit
+
+# Or directly via Marimo (if sms-api is installed from source)
+uv run marimo run app/ui/pbg_sandbox.py
+```
+
+Your browser opens automatically. All five tabs are live and operational.
+
+### What the sandbox demonstrates
+
+The sandbox maps directly onto the process-bigraph concepts you already know:
+
+#### ⚗️ Process Runtime tab
+
+This is the core demo. It mirrors the stateful instance lifecycle from
+[rest-process](https://github.com/vivarium-collective/rest-process) — exposed
+as REST endpoints on the Atlantis API.
+
+The **link_registry** is populated by `allocate_core()` on the API pod. The 11
+registered processes (from `pbsim_common` and `process_bigraph`) are all
+addressable by name:
+
+| Process | Package | Requires SBML | Config fields |
+|---------|---------|--------------|---------------|
+| `MSEComparison` | `pbsim_common` | no | `ignore_nans`, `columns_of_interest` |
+| `ComparisonTool` | `pbsim_common` | no | `ignore_nans`, `columns_of_interest` |
+| `CopasiUTCStep` | `pbsim_common` | yes | `model_source`, `time`, `n_points`, `output_dir` |
+| `CopasiUTCProcess` | `pbsim_common` | yes | `model_source`, `time`, `intervals` |
+| `CopasiSteadyStateStep` | `pbsim_common` | yes | `model_source`, `time` |
+| `TelluriumUTCStep` | `pbsim_common` | yes | `model_source`, `time`, `n_points`, `output_dir` |
+| `TelluriumSteadyStateStep` | `pbsim_common` | yes | `model_source` |
+| `TelluriumStep` | `pbsim_common` | no | *(none)* |
+| `Step` | `process_bigraph` | no | *(none)* |
+| `Process` | `process_bigraph` | no | *(none)* |
+| `edge` | `bigraph_schema` | no | *(none)* |
+
+**Step-by-step walkthrough:**
+
+1. Select **`MSEComparison`** from the dropdown (no SBML file needed)
+2. The config editor pre-fills with the live `config_schema` from the API:
+   `{"ignore_nans": false, "columns_of_interest": []}`
+3. Click **Initialize →** — the API calls
+   `POST /compose/v1/process/MSEComparison/initialize` and returns a UUID
+4. The sandbox immediately fetches and displays the live `inputs` and `outputs`
+   schemas for your instance:
+   - inputs: `{"results": "numeric_results"}`
+   - outputs: `{"comparison_result": "map[map[map[float]]]"}`
+5. Click **End Process** — calls `POST /compose/v1/process/MSEComparison/end/{id}`
+   and the instance is released from memory
+
+The underlying REST calls map to these `rest-process` equivalents:
+
+| Sandbox button | REST endpoint | `rest-process` equivalent |
+|---------------|--------------|--------------------------|
+| Initialize → | `POST /compose/v1/process/{name}/initialize` | `POST /process/{name}` |
+| *(auto on init)* | `GET /compose/v1/process/{name}/inputs/{id}` | `GET /process/{name}/inputs/{id}` |
+| *(auto on init)* | `GET /compose/v1/process/{name}/outputs/{id}` | `GET /process/{name}/outputs/{id}` |
+| End Process | `POST /compose/v1/process/{name}/end/{id}` | `DELETE /process/{name}/{id}` |
+
+SBML-backed processes (`CopasiUTCStep`, `TelluriumUTCStep`, etc.) require a
+`model_source` path to a valid SBML file on the HPC filesystem. Use the
+BioModels tab (below) to dispatch those via the full EBI fetch → SBML →
+SLURM pipeline.
+
+#### 🧬 BioModels tab
+
+Demonstrates the EBI BioModels integration:
+
+1. Click **Fetch IDs from EBI** to retrieve model identifiers (e.g.,
+   `BIOMD0000000001 … BIOMD0000000005`)
+2. Enter a model ID and click **Get Metadata** to see the SBML file list,
+   description, and format from the EBI BioModels REST API (fetched server-side)
+3. Select a simulator (`copasi` or `tellurium`) and click **Submit Run → SLURM**
+   to dispatch a full simulation:
+   - The API fetches the SBML from EBI
+   - Extracts the `UniformTimeCourse` from the SED-ML
+   - Builds a process-bigraph document (`CopasiUTCStep` or `TelluriumUTCStep`)
+   - Dispatches a SLURM job on UCONN CCAM HPC
+   - Returns a simulation ID for polling
+
+#### 🦠 v2ecoli tab
+
+Submits a whole-cell *E. coli* simulation:
+
+1. Set **Duration** (seconds of biological time), **Seed**, and **Interval**
+2. Click **Submit v2ecoli → SLURM** — calls
+   `POST /compose/v1/curated/ecoli?duration=10&seed=0&interval=1.0`
+3. The API builds a process-bigraph `Composite` document wiring **~55
+   biological processes** (transcription, translation, metabolism,
+   replication, …) and dispatches it to SLURM via Singularity
+4. Returns a simulation ID — poll status with
+   `atlantis compose status <id> --base-url https://sms.cam.uchc.edu`
+
+#### 📋 Registry tab
+
+Displays the full registry as a live table — all 11 link_registry entries with
+their package origin, SBML requirement, and config field names. This is the
+ground-truth view of what `allocate_core()` discovers on the deployed API pod.
+
+#### 🔷 Types tab
+
+Fetches all 42 bigraph-schema primitive types live from
+`GET /compose/v1/types` (the same types used in all `config_schema`,
+`inputs`, and `outputs` definitions across the system).
 
 ## Notes
 
