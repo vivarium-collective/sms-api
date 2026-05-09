@@ -252,6 +252,33 @@ All compose endpoints are mounted at `/compose/v1/`.
 | `GET` | `/steps` | List registered process-bigraph steps |
 | `GET` | `/simulator/{id}/build/status` | Container build status |
 
+### Process runtime (rest-process mirror)
+
+Stateful, UUID-keyed process lifecycle — mirrors the
+[rest-process](https://github.com/vivarium-collective/rest-process) server paradigm.
+Every class registered in `allocate_core()`'s `link_registry` is addressable by name.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/types` | List all bigraph-schema type names |
+| `GET` | `/process/{name}/config-schema` | Config schema for a registered process or step |
+| `POST` | `/process/{name}/initialize` | Instantiate a process; returns `{"process_id": "<uuid>"}` |
+| `GET` | `/process/{name}/inputs/{id}` | Inputs schema for an active instance |
+| `GET` | `/process/{name}/outputs/{id}` | Outputs schema for an active instance |
+| `POST` | `/process/{name}/update/{id}` | Run one update step; body: `{"state": {}, "interval": 1.0}` |
+| `POST` | `/process/{name}/end/{id}` | Terminate an instance and release its memory |
+
+### Process registry (audit + observability)
+
+Every `initialize`, `update`, and `end` call is persisted to PostgreSQL
+(`compose_process_instance` / `compose_process_update` tables). These read-only
+endpoints expose the full history.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/process/instances` | List all process instances; optional `?status=active\|ended` |
+| `GET` | `/process/instances/{id}/history` | List all update records for a process instance |
+
 ## CLI Command Reference
 
 All compose commands live under `atlantis compose`:
@@ -273,6 +300,15 @@ uv run atlantis compose simulators              # List container defs
 uv run atlantis compose processes               # List registered processes
 uv run atlantis compose steps                   # List registered steps
 uv run atlantis compose build-status <SIM_ID>   # Container build status
+
+# Process runtime (rest-process mirror)
+uv run atlantis compose list-types              # All bigraph-schema type names
+uv run atlantis compose config-schema <NAME>    # Config schema for a process/step
+uv run atlantis compose init <NAME>             # Instantiate; prints UUID
+uv run atlantis compose inputs <NAME> <ID>      # Inputs schema for active instance
+uv run atlantis compose outputs <NAME> <ID>     # Outputs schema for active instance
+uv run atlantis compose update <NAME> <ID>      # Run one update step
+uv run atlantis compose end <NAME> <ID>         # Terminate instance
 
 # Interactive sandbox
 uv run atlantis compose sandbox                 # PBG live sandbox (app mode)

@@ -297,11 +297,11 @@ pre .hl { background: rgba(99,102,241,0.15); display: block; margin: 0 -16px; pa
     <div class="metric"><div class="value">11</div><div class="label">Link Registry</div></div>
     <div class="metric"><div class="value">42</div><div class="label">Bigraph Types</div></div>
     <div class="metric"><div class="value">3</div><div class="label">Curated Simulators</div></div>
-    <div class="metric"><div class="value">7</div><div class="label">Runtime Endpoints</div></div>
+    <div class="metric"><div class="value">9</div><div class="label">Runtime Endpoints</div></div>
     <div class="metric"><div class="value">6</div><div class="label">BioModels Endpoints</div></div>
-    <div class="metric"><div class="value">18</div><div class="label">Runtime Tests</div></div>
+    <div class="metric"><div class="value">37</div><div class="label">Runtime Tests</div></div>
     <div class="metric"><div class="value">0</div><div class="label">Mypy Errors</div></div>
-    <div class="metric"><div class="value">3</div><div class="label">PRs Merged</div></div>
+    <div class="metric"><div class="value">119</div><div class="label">Compose Tests</div></div>
   </div>
 
   <!-- CONTRIBUTION 1: REST-PROCESS RUNTIME -->
@@ -668,13 +668,23 @@ uv run atlantis compose results &lt;simulation_id&gt; --dest ./ecoli_out --base-
           <td><code>uv run pytest tests/compose/test_process_runtime.py -v</code></td>
         </tr>
         <tr>
+          <td>Process runtime route tests (10)</td>
+          <td><span class="pill pill-green">10/10 PASS</span></td>
+          <td><code>uv run pytest tests/compose/test_process_runtime_routes.py -v</code></td>
+        </tr>
+        <tr>
+          <td>Process registry DB tests (10)</td>
+          <td><span class="pill pill-green">10/10 PASS</span></td>
+          <td><code>uv run pytest tests/compose/test_process_registry_db.py -v</code></td>
+        </tr>
+        <tr>
           <td>BioModels tests (42)</td>
           <td><span class="pill pill-green">42/42 PASS</span></td>
           <td><code>uv run pytest tests/compose/test_biomodel_documents.py tests/compose/test_biomodels_service.py tests/compose/test_biomodels_routes.py tests/compose/test_biomodels_cli.py -v</code></td>
         </tr>
         <tr>
           <td>Full compose test suite</td>
-          <td><span class="pill pill-green">60+ PASS</span></td>
+          <td><span class="pill pill-green">119 PASS</span></td>
           <td><code>uv run pytest tests/compose/ -v</code></td>
         </tr>
         <tr>
@@ -726,16 +736,24 @@ uv run atlantis compose results &lt;simulation_id&gt; --dest ./ecoli_out --base-
     </details>
 
     <details class="accordion">
-      <summary>Process instances are ephemeral (in-memory)</summary>
+      <summary>Process instances are ephemeral (in-memory) — audit trail now implemented</summary>
       <div class="accordion-body">
         <p style="font-size:13px;color:var(--text-dim);">
           Instances live in the API pod's Python process. Pod restart or new replica = lost instances.
           Callers receive 404 on stale UUIDs.
         </p>
+        <p style="font-size:13px;color:var(--success);margin-top:8px;">
+          <strong>Implemented (this PR):</strong> Every <code>initialize</code>, <code>update</code>,
+          and <code>end</code> call is now mirrored to PostgreSQL
+          (<code>compose_process_instance</code> / <code>compose_process_update</code>). Full audit
+          trail + cross-pod observability via
+          <code>GET /compose/v1/process/instances</code> and
+          <code>GET /compose/v1/process/instances/{id}/history</code>.
+        </p>
         <p style="font-size:13px;color:var(--text-dim);margin-top:8px;">
-          <strong>Planned:</strong> Redis-backed instance config store using the existing
-          <code>MessagingService</code> in <code>sms_api/dependencies.py</code>.
-          Process re-instantiation on miss (<code>GET /inputs/{id}</code> triggers reload from Redis).
+          <strong>Still planned (Phase 2):</strong> Cross-pod session recovery — on pod startup,
+          query <code>compose_process_instance</code> for <code>status=active</code> rows and
+          re-instantiate from stored config, making the runtime survive rolling deploys.
         </p>
       </div>
     </details>

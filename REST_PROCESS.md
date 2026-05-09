@@ -139,12 +139,12 @@ def update_process(process_id: str, state: dict, interval: float):
 
 ### Verified & Reproducible Tests
 
-**Unit tests** (`tests/compose/test_process_runtime.py`):
+**Unit tests** (`tests/compose/test_process_runtime.py` + `test_process_runtime_routes.py`):
 
 ```bash
 # Run from repo root
-uv run pytest tests/compose/test_process_runtime.py -v
-# 18 passed in ~1.3s
+uv run pytest tests/compose/test_process_runtime.py tests/compose/test_process_runtime_routes.py -v
+# 37 passed in ~1.5s
 ```
 
 **HTTP roundtrip — quickstart:**
@@ -193,6 +193,52 @@ atlantis compose end Grow $PID --base-url $BASE
 ```
 
 > **Note on simulator steps (CopasiUTCStep, TelluriumUTCStep):** These require `model_source` (a valid SBML file path) in their config. They are not suitable for the arbitrary REST update loop — their intended invocation path is through the BioModels pipeline (Contribution 2) which handles SBML fetch, PBG document construction, and SLURM dispatch. The REST runtime is most useful for lightweight processes (`Grow`, `Divide`, `GillespieEvent`, `MSEComparison`, custom process classes).
+
+---
+
+## Contribution 4 — Database-Backed Process Registry
+
+### Purpose
+
+Every `initialize`, `update`, and `end` call on a process instance is now mirrored to PostgreSQL. This adds a full audit trail (who initialized what, with what config, when it ended) and cross-pod observability (query DB to see all active instances). The in-memory `_instances` store remains the source of truth for live state; the DB layer is additive.
+
+### What Changed
+
+| File | Change |
+|---|---|
+| `sms_api/compose/tables_orm.py` | **Extended.** `ORMProcessInstance` (`compose_process_instance`), `ORMProcessUpdate` (`compose_process_update`) |
+| `sms_api/compose/models.py` | **Extended.** `ProcessInstanceStatus`, `ProcessInstanceRecord`, `ProcessUpdateRecord` |
+| `sms_api/compose/database_service.py` | **Extended.** `ProcessRegistryDatabaseService` ABC + `ProcessRegistryORMExecutor`; facade extended with `process_registry_db` |
+| `sms_api/api/routers/compose.py` | **Extended.** 3 mutating handlers updated + 2 new read-only endpoints |
+| `tests/compose/test_process_registry_db.py` | **New.** 10 SQLite in-memory DB service tests |
+| `tests/compose/test_process_runtime_routes.py` | **New.** 10 TestClient route mirror tests |
+
+### New API Endpoints
+
+```
+GET /compose/v1/process/instances                    — list all instances (?status=active|ended)
+GET /compose/v1/process/instances/{process_id}/history — list update records for a process
+```
+
+### DB Schema
+
+```
+compose_process_instance
+  id, created_at, ended_at, process_id (UUID), process_name, config (JSONB), status
+
+compose_process_update
+  id, called_at, process_instance_id (FK), interval, state (JSONB), result (JSONB)
+```
+
+### Tests
+
+```bash
+uv run pytest tests/compose/test_process_registry_db.py -v
+# 10 passed — SQLite in-memory, no mocks for DB layer
+
+uv run pytest tests/compose/test_process_runtime_routes.py -v
+# 10 passed — TestClient + mocked process_runtime + mocked DB
+```
 
 ---
 
@@ -437,6 +483,8 @@ default 1  ode_config  parallel  rest  step  process  interface  bridge  composi
 |---|---|---|
 | `make check` (ruff + mypy + deptry) | PASS | `make check` |
 | Unit tests — process_runtime | 18/18 PASS | `uv run pytest tests/compose/test_process_runtime.py -v` |
+| Unit tests — process_runtime routes | 10/10 PASS | `uv run pytest tests/compose/test_process_runtime_routes.py -v` |
+| Unit tests — process registry DB | 10/10 PASS | `uv run pytest tests/compose/test_process_registry_db.py -v` |
 | Unit tests — BioModels | 42/42 PASS | `uv run pytest tests/compose/test_biomodel_documents.py tests/compose/test_biomodels_service.py tests/compose/test_biomodels_routes.py tests/compose/test_biomodels_cli.py -v` |
 | Live: `biomodels-ids` on RKE v0.9.2 | PASS | `atlantis compose biomodels-ids --base-url https://sms.cam.uchc.edu` |
 | Live: `biomodels-meta` on RKE v0.9.2 | PASS | `atlantis compose biomodels-meta BIOMD0000000001 ...` |
@@ -447,7 +495,7 @@ default 1  ode_config  parallel  rest  step  process  interface  bridge  composi
 
 ```bash
 uv run pytest tests/compose/ -v
-# Expected: 60+ passed
+# 119 passed
 ```
 
 ---
@@ -460,11 +508,13 @@ uv run pytest tests/compose/ -v
 
 **Planned:** A future endpoint `POST /compose/v1/process/{name}/initialize-with-file` that accepts multipart SBML upload + config, enabling full REST lifecycle for simulator steps.
 
-### 2. Instance Persistence
+### 2. Instance Persistence — Audit Trail Implemented, Live Recovery Future
 
 Process instances live in the API pod's memory. A pod restart or new replica silently loses all active instances. Callers receive `404` on stale process IDs.
 
-**Planned:** Redis-backed instance store (process config + UUID → Redis key with TTL) using the existing `MessagingService` infrastructure in `sms_api/dependencies.py`.
+**Implemented (this PR):** Every `initialize`, `update`, and `end` call is now mirrored to PostgreSQL (`compose_process_instance` / `compose_process_update`). This gives a full audit trail and cross-pod observability via `GET /compose/v1/process/instances`.
+
+**Still planned (Phase 2):** Cross-pod session recovery — on pod startup, query `compose_process_instance` for `status=active` records, re-instantiate from stored config, repopulate `_instances`. This makes the stateful runtime survive rolling deploys.
 
 ### 3. BioModels-run Result Poll — Awaiting SLURM Completion
 
