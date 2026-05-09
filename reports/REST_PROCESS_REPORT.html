@@ -286,20 +286,20 @@ pre .hl { background: rgba(99,102,241,0.15); display: block; margin: 0 -16px; pa
     </p>
     <div class="meta-row">
       <span><span class="dot-green"></span> v0.9.3 deployed to sms-api-rke</span>
-      <span><span class="dot-blue"></span> 60+ tests passing</span>
-      <span><span class="dot-blue"></span> make check clean</span>
-      <span><span class="dot-yellow"></span> SLURM E2E running</span>
+      <span><span class="dot-green"></span> 60+ tests passing</span>
+      <span><span class="dot-green"></span> make check clean</span>
+      <span><span class="dot-green"></span> E2E verified on sms-api-rke</span>
     </div>
   </div>
 
   <!-- METRICS -->
   <div class="metrics">
-    <div class="metric"><div class="value">75</div><div class="label">Registered Processes</div></div>
+    <div class="metric"><div class="value">11</div><div class="label">Link Registry</div></div>
     <div class="metric"><div class="value">42</div><div class="label">Bigraph Types</div></div>
-    <div class="metric"><div class="value">7</div><div class="label">New Runtime Endpoints</div></div>
+    <div class="metric"><div class="value">3</div><div class="label">Curated Simulators</div></div>
+    <div class="metric"><div class="value">7</div><div class="label">Runtime Endpoints</div></div>
     <div class="metric"><div class="value">6</div><div class="label">BioModels Endpoints</div></div>
     <div class="metric"><div class="value">18</div><div class="label">Runtime Tests</div></div>
-    <div class="metric"><div class="value">42</div><div class="label">BioModels Tests</div></div>
     <div class="metric"><div class="value">0</div><div class="label">Mypy Errors</div></div>
     <div class="metric"><div class="value">3</div><div class="label">PRs Merged</div></div>
   </div>
@@ -329,7 +329,7 @@ pre .hl { background: rgba(99,102,241,0.15); display: block; margin: 0 -16px; pa
       <table>
         <thead><tr><th>Method</th><th>Path</th><th>Description</th><th>CLI</th></tr></thead>
         <tbody>
-          <tr><td><code>GET</code></td><td><code>/compose/v1/types</code></td><td>List all 42 bigraph-schema types</td><td><code>atlantis compose list-types</code></td></tr>
+          <tr><td><code>GET</code></td><td><code>/compose/v1/types</code></td><td>List 42 bigraph-schema types (live: confirmed)</td><td><code>atlantis compose list-types</code></td></tr>
           <tr><td><code>GET</code></td><td><code>/compose/v1/process/{name}/config-schema</code></td><td>Get config_schema for any registered process/step</td><td><code>atlantis compose config-schema &lt;name&gt;</code></td></tr>
           <tr><td><code>POST</code></td><td><code>/compose/v1/process/{name}/initialize</code></td><td>Instantiate with config → returns UUID</td><td><code>atlantis compose init &lt;name&gt; --config '{...}'</code></td></tr>
           <tr><td><code>GET</code></td><td><code>/compose/v1/process/{name}/inputs/{id}</code></td><td>Inputs schema for active instance</td><td><code>atlantis compose inputs &lt;name&gt; &lt;id&gt;</code></td></tr>
@@ -378,36 +378,34 @@ _instances: dict[str, Any] = {}
 
     <div id="t-quickstart" class="tab-content">
 <pre><span class="cm">#!/usr/bin/env python3
-# Full lifecycle using the Grow process (no SBML needed)</span>
+# Full lifecycle using MSEComparison — no SBML required, E2E verified on sms-api-rke v0.9.3</span>
 <span class="kw">import</span> httpx
 
 BASE = <span class="str">"https://sms.cam.uchc.edu"</span>
 
-<span class="cm"># 1. Inspect config schema</span>
-r = httpx.<span class="fn">get</span>(f<span class="str">"{BASE}/compose/v1/process/Grow/config-schema"</span>)
-<span class="fn">print</span>(r.<span class="fn">json</span>())  <span class="cm"># {"rate": "float"}</span>
+<span class="cm"># 1. Inspect config schema (live: returns {"ignore_nans":"boolean","columns_of_interest":"list[string]"})</span>
+r = httpx.<span class="fn">get</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/config-schema"</span>)
+<span class="fn">print</span>(r.<span class="fn">json</span>())
 
-<span class="cm"># 2. Instantiate</span>
-r = httpx.<span class="fn">post</span>(f<span class="str">"{BASE}/compose/v1/process/Grow/initialize"</span>,
-               json={<span class="str">"config"</span>: {<span class="str">"rate"</span>: 0.1}})
-pid = r.<span class="fn">json</span>()[<span class="str">"process_id"</span>]
+<span class="cm"># 2. Instantiate → UUID</span>
+r = httpx.<span class="fn">post</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/initialize"</span>,
+               json={<span class="str">"config"</span>: {<span class="str">"ignore_nans"</span>: <span class="kw">False</span>, <span class="str">"columns_of_interest"</span>: []}})
+pid = r.<span class="fn">json</span>()[<span class="str">"process_id"</span>]  <span class="cm"># e.g. "ea1ce7c5-a220-45b9-a6c3-b1f11439ec99"</span>
 
-<span class="cm"># 3. Inspect I/O schema</span>
-<span class="fn">print</span>(httpx.<span class="fn">get</span>(f<span class="str">"{BASE}/compose/v1/process/Grow/inputs/{pid}"</span>).<span class="fn">json</span>())
-<span class="cm"># → {"mass": "float"}</span>
-<span class="fn">print</span>(httpx.<span class="fn">get</span>(f<span class="str">"{BASE}/compose/v1/process/Grow/outputs/{pid}"</span>).<span class="fn">json</span>())
-<span class="cm"># → {"mass_delta": "float"}</span>
+<span class="cm"># 3. Inspect I/O schema (live confirmed)</span>
+<span class="fn">print</span>(httpx.<span class="fn">get</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/inputs/{pid}"</span>).<span class="fn">json</span>())
+<span class="cm"># → {"results": "numeric_results"}</span>
+<span class="fn">print</span>(httpx.<span class="fn">get</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/outputs/{pid}"</span>).<span class="fn">json</span>())
+<span class="cm"># → {"comparison_result": "map[map[map[float]]]"}</span>
 
-<span class="cm"># 4. Drive with updates</span>
-<span class="kw">for</span> t <span class="kw">in</span> <span class="fn">range</span>(5):
-    r = httpx.<span class="fn">post</span>(f<span class="str">"{BASE}/compose/v1/process/Grow/update/{pid}"</span>,
-                   json={<span class="str">"state"</span>: {<span class="str">"mass"</span>: 1.0 + t * 0.1}, <span class="str">"interval"</span>: 1.0})
-    <span class="fn">print</span>(f<span class="str">"t={t}: mass_delta={r.json()['mass_delta']:.4f}"</span>)
+<span class="cm"># 4. Drive with an update step</span>
+r = httpx.<span class="fn">post</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/update/{pid}"</span>,
+               json={<span class="str">"state"</span>: {}, <span class="str">"interval"</span>: 1.0})
 
-<span class="cm"># 5. Terminate</span>
-httpx.<span class="fn">post</span>(f<span class="str">"{BASE}/compose/v1/process/Grow/end/{pid}"</span>)</pre>
+<span class="cm"># 5. Terminate — instance released from memory</span>
+httpx.<span class="fn">post</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/end/{pid}"</span>)</pre>
       <p style="margin-top:12px;font-size:12px;color:var(--text-dim)">
-        CLI equivalent: <code>atlantis compose init Grow --config '{"rate":0.1}' --base-url https://sms.cam.uchc.edu</code>
+        CLI: <code>atlantis compose init MSEComparison --config '{"ignore_nans":false,"columns_of_interest":[]}' --base-url https://sms.cam.uchc.edu</code>
       </p>
     </div>
   </div>
@@ -416,14 +414,17 @@ httpx.<span class="fn">post</span>(f<span class="str">"{BASE}/compose/v1/process
   <div class="section">
     <h2>Live Registry Explorer <span class="badge badge-extended">INTERACTIVE</span></h2>
     <p class="section-desc">
-      All 75 processes discovered by <code>allocate_core()</code> on the API pod. Click any entry to see its
-      <code>config_schema</code>, known inputs, and outputs. Data is from the actual installed
-      <code>pbsim_common</code> + <code>process_bigraph</code> packages.
+      All entries exposed through the sms-api <code>/compose/v1/</code> subsystem.
+      The <strong>link_registry</strong> (11 entries) are addressable via
+      <code>POST /compose/v1/process/{name}/initialize</code>.
+      <strong>v2ecoli</strong> is a curated process-bigraph Composite of ~55 biological
+      processes dispatched via <code>POST /compose/v1/curated/ecoli</code>.
+      Config schemas are fetched live from the API.
     </p>
     <input class="search-box" id="proc-search" placeholder="Filter processes..." oninput="filterProcesses()">
     <div class="explorer-layout">
       <div class="explorer-sidebar">
-        <h3>Registered (<span id="proc-count">75</span>)</h3>
+        <h3>Registered (<span id="proc-count">12</span>)</h3>
         <div class="process-list" id="proc-list"></div>
       </div>
       <div class="explorer-detail" id="proc-detail">
@@ -709,11 +710,13 @@ uv run atlantis compose results &lt;simulation_id&gt; --dest ./ecoli_out --base-
       <summary>Simulator steps require SBML in REST update loop</summary>
       <div class="accordion-body">
         <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">
-          <code>CopasiUTCStep</code> and <code>TelluriumUTCStep</code> require <code>model_source</code>
-          (a valid SBML file path) at instantiation. The <code>init → update → end</code> REST lifecycle
-          works for lightweight processes (<code>Grow</code>, <code>GillespieEvent</code>, <code>MSEComparison</code>).
-          For BioSim simulators, the correct path is <code>biomodels-run</code> / <code>curated/copasi</code>,
-          which handle SBML fetch + SLURM dispatch.
+          <code>CopasiUTCStep</code>, <code>CopasiUTCProcess</code>, <code>CopasiSteadyStateStep</code>,
+          <code>TelluriumUTCStep</code>, and <code>TelluriumSteadyStateStep</code> require
+          <code>model_source</code> (a valid SBML file path on the HPC filesystem) at instantiation.
+          The <code>init → update → end</code> REST lifecycle is fully operational for
+          <code>MSEComparison</code> and <code>ComparisonTool</code> (no SBML needed — E2E verified).
+          For simulator-backed runs, the correct path is <code>POST /compose/v1/biomodels/{id}/run</code>
+          or <code>POST /compose/v1/curated/copasi</code>, which handle SBML fetch + SLURM dispatch.
         </p>
         <p style="font-size:13px;color:var(--text-dim);">
           <strong>Planned:</strong> <code>POST /compose/v1/process/{name}/initialize-with-file</code>
@@ -773,45 +776,59 @@ uv run atlantis compose results 20 --dest ./biomodels_out --base-url https://sms
 // ────────────────────────────────────────────────
 // Process registry data (from allocate_core() on API pod)
 // ────────────────────────────────────────────────
+// All data sourced from live GET /compose/v1/process/{name}/config-schema on sms-api-rke v0.9.3
+// inputs/outputs confirmed via initialize → GET inputs/outputs → end lifecycle on live API
 const PROCESSES = [
-  { name: "CopasiUTCStep", module: "pbsim_common.simulators.copasi_process", schema: {model_source:"string",time:"float",n_points:"integer",output_dir:"string"}, inputs:{species_concentrations:"map[float]",species_counts:"map[float]"}, outputs:{result:"map[float]"} },
-  { name: "TelluriumUTCStep", module: "pbsim_common.simulators.tellurium_process", schema: {model_source:"string",time:"float",n_points:"integer",output_dir:"string"}, inputs:{species_concentrations:"map[float]"}, outputs:{result:"map[float]"} },
-  { name: "CopasiUTCProcess", module: "pbsim_common.simulators.copasi_process", schema: {model_source:"string",time:"float",n_points:"integer"}, inputs:{}, outputs:{} },
-  { name: "CopasiSteadyStateStep", module: "pbsim_common.simulators.copasi_process", schema: {model_source:"string"}, inputs:{}, outputs:{} },
-  { name: "TelluriumSteadyStateStep", module: "pbsim_common.simulators.tellurium_process", schema: {model_source:"string"}, inputs:{}, outputs:{} },
-  { name: "TelluriumStep", module: "pbsim_common.simulators.tellurium_process", schema: {model_source:"string",time:"float",n_points:"integer"}, inputs:{}, outputs:{} },
-  { name: "MSEComparison", module: "pbsim_common.comparison", schema: {ignore_nans:"boolean",columns_of_interest:"list[string]"}, inputs:{}, outputs:{} },
-  { name: "ComparisonTool", module: "pbsim_common.comparison", schema: {}, inputs:{}, outputs:{} },
-  { name: "StatsTool", module: "pbsim_common.stats", schema: {}, inputs:{}, outputs:{} },
-  { name: "SumOfSquaresTool", module: "pbsim_common.stats", schema: {}, inputs:{}, outputs:{} },
-  { name: "Composite", module: "process_bigraph.composite", schema: {composition:"schema",state:"tree[any]",interface:"schema",bridge:"schema"}, inputs:{}, outputs:{} },
-  { name: "Step", module: "process_bigraph.composite", schema: {}, inputs:{}, outputs:{} },
-  { name: "Process", module: "process_bigraph.composite", schema: {}, inputs:{}, outputs:{} },
-  { name: "Open", module: "process_bigraph.composite", schema: {}, inputs:{}, outputs:{} },
-  { name: "ProcessEnsemble", module: "process_bigraph.composite", schema: {}, inputs:{}, outputs:{} },
-  { name: "RestProcess", module: "process_bigraph.protocols.rest", schema: {}, inputs:{}, outputs:{} },
-  { name: "ParallelProcess", module: "process_bigraph.protocols.parallel", schema: {}, inputs:{}, outputs:{} },
-  { name: "Grow", module: "process_bigraph.processes.growth_division", schema: {rate:"float"}, inputs:{mass:"float"}, outputs:{mass_delta:"float"} },
-  { name: "Divide", module: "process_bigraph.processes.growth_division", schema: {}, inputs:{}, outputs:{} },
-  { name: "GillespieEvent", module: "process_bigraph.experiments.minimal_gillespie", schema: {kdeg:"float",ktsc:"float"}, inputs:{}, outputs:{} },
-  { name: "GillespieInterval", module: "process_bigraph.experiments.minimal_gillespie", schema: {}, inputs:{}, outputs:{} },
-  { name: "GillespieSimulation", module: "process_bigraph.experiments.minimal_gillespie", schema: {}, inputs:{}, outputs:{} },
-  { name: "ODE", module: "process_bigraph.processes.parameter_scan", schema: {}, inputs:{}, outputs:{} },
-  { name: "ParameterScan", module: "process_bigraph.processes.parameter_scan", schema: {}, inputs:{}, outputs:{} },
-  { name: "RunProcess", module: "process_bigraph.processes.parameter_scan", schema: {}, inputs:{}, outputs:{} },
-  { name: "ToySystem", module: "process_bigraph.processes.parameter_scan", schema: {}, inputs:{}, outputs:{} },
-  { name: "Emitter", module: "process_bigraph.emitter", schema: {}, inputs:{}, outputs:{} },
-  { name: "ConsoleEmitter", module: "process_bigraph.emitter", schema: {}, inputs:{}, outputs:{} },
-  { name: "RAMEmitter", module: "process_bigraph.emitter", schema: {}, inputs:{}, outputs:{} },
-  { name: "JSONEmitter", module: "process_bigraph.emitter", schema: {path:"string"}, inputs:{}, outputs:{} },
-  { name: "AboveProcess", module: "process_bigraph.processes.examples", schema: {}, inputs:{}, outputs:{} },
-  { name: "BelowProcess", module: "process_bigraph.processes.examples", schema: {}, inputs:{}, outputs:{} },
-  { name: "IncreaseProcess", module: "process_bigraph.processes.examples", schema: {}, inputs:{}, outputs:{} },
-  { name: "IncreaseRate", module: "process_bigraph.processes.examples", schema: {}, inputs:{}, outputs:{} },
-  { name: "OperatorStep", module: "process_bigraph.processes.examples", schema: {}, inputs:{}, outputs:{} },
-  { name: "SimpleCompartment", module: "process_bigraph.processes.examples", schema: {}, inputs:{}, outputs:{} },
-  { name: "WriteCounts", module: "process_bigraph.processes.examples", schema: {}, inputs:{}, outputs:{} },
-  { name: "edge", module: "bigraph_schema", schema: {}, inputs:{}, outputs:{} },
+  // ── link_registry (POST /compose/v1/process/{name}/initialize) ──────────────
+  { name: "MSEComparison", module: "pbsim_common.comparison", category: "link_registry",
+    schema: {ignore_nans:"boolean", columns_of_interest:"list[string]"},
+    inputs: {results:"numeric_results"}, outputs: {comparison_result:"map[map[map[float]]]"},
+    note: "No SBML required — fully instantiatable. E2E verified." },
+  { name: "ComparisonTool", module: "pbsim_common.comparison", category: "link_registry",
+    schema: {ignore_nans:"boolean", columns_of_interest:"list[string]"},
+    inputs: {results:"numeric_results"}, outputs: {comparison_result:"map[map[map[float]]]"},
+    note: "No SBML required — fully instantiatable." },
+  { name: "CopasiUTCStep", module: "pbsim_common.simulators.copasi_process", category: "link_registry",
+    schema: {model_source:"string", time:"float", n_points:"integer", output_dir:"string"},
+    inputs: {}, outputs: {},
+    note: "Requires SBML model_source path on HPC filesystem. Used by biomodels-run." },
+  { name: "CopasiUTCProcess", module: "pbsim_common.simulators.copasi_process", category: "link_registry",
+    schema: {model_source:"string", time:"float", intervals:"integer"},
+    inputs: {}, outputs: {},
+    note: "Requires SBML model_source path on HPC filesystem." },
+  { name: "CopasiSteadyStateStep", module: "pbsim_common.simulators.copasi_process", category: "link_registry",
+    schema: {model_source:"string", time:"float"},
+    inputs: {}, outputs: {},
+    note: "Requires SBML model_source path on HPC filesystem." },
+  { name: "TelluriumUTCStep", module: "pbsim_common.simulators.tellurium_process", category: "link_registry",
+    schema: {model_source:"string", time:"float", n_points:"integer", output_dir:"string"},
+    inputs: {}, outputs: {},
+    note: "Requires SBML model_source path on HPC filesystem. Used by biomodels-run." },
+  { name: "TelluriumSteadyStateStep", module: "pbsim_common.simulators.tellurium_process", category: "link_registry",
+    schema: {model_source:"string"},
+    inputs: {}, outputs: {},
+    note: "Requires SBML model_source path on HPC filesystem." },
+  { name: "TelluriumStep", module: "pbsim_common.simulators.tellurium_process", category: "link_registry",
+    schema: {},
+    inputs: {}, outputs: {},
+    note: "Empty config schema." },
+  { name: "Step", module: "process_bigraph.composite", category: "link_registry",
+    schema: {},
+    inputs: {}, outputs: {},
+    note: "Base Step class. Empty config schema." },
+  { name: "Process", module: "process_bigraph.composite", category: "link_registry",
+    schema: {},
+    inputs: {}, outputs: {},
+    note: "Base Process class. Empty config schema." },
+  { name: "edge", module: "bigraph_schema", category: "link_registry",
+    schema: {},
+    inputs: {}, outputs: {},
+    note: "Bigraph-schema edge type." },
+  // ── curated composites (separate endpoints) ──────────────────────────────────
+  { name: "v2ecoli", module: "v2ecoli.library.compose", category: "curated",
+    schema: {duration:"float (seconds)", seed:"integer", interval:"float (seconds)", features:"list[string]"},
+    inputs: {}, outputs: {},
+    note: "~55 biological processes composed via process_bigraph.Composite. Runs in Singularity on SLURM. Access: POST /compose/v1/curated/ecoli?duration=60&seed=0&interval=1.0" },
 ];
 
 let filteredProcesses = [...PROCESSES];
@@ -822,9 +839,10 @@ function renderList() {
   const count = document.getElementById('proc-count');
   count.textContent = filteredProcesses.length;
   list.innerHTML = filteredProcesses.map((p, i) => {
-    const pkg = p.module.startsWith('pbsim') ? 'pill-purple' :
-                p.module.startsWith('bigraph') ? 'pill-yellow' : '';
-    return `<div class="process-item ${selectedIdx === i ? 'active' : ''}" onclick="selectProcess(${i})">${p.name}</div>`;
+    const tag = p.category === 'curated'
+      ? `<span style="float:right;font-size:9px;padding:1px 5px;border-radius:8px;background:rgba(6,182,212,0.2);color:#06b6d4;border:1px solid rgba(6,182,212,0.3)">curated</span>`
+      : '';
+    return `<div class="process-item ${selectedIdx === i ? 'active' : ''}" onclick="selectProcess(${i})">${p.name}${tag}</div>`;
   }).join('');
 }
 
@@ -848,24 +866,28 @@ function selectProcess(i) {
     ? '<span class="schema-empty">—</span>'
     : outputKeys.map(k => `<div class="schema-row"><span class="schema-key">${k}</span><span class="schema-type">${p.outputs[k]}</span></div>`).join('');
 
-  const pkgBadge = p.module.startsWith('pbsim') ? 'badge-v092' :
+  const pkgBadge = p.category === 'curated' ? 'badge-v090' :
+                   p.module.startsWith('pbsim') ? 'badge-v092' :
                    p.module.startsWith('bigraph') ? 'badge-warn' : 'badge-extended';
+  const catLabel = p.category === 'curated' ? 'curated composite' : 'link_registry';
+  const endpoint = p.category === 'curated'
+    ? `POST /compose/v1/curated/ecoli?duration=60&amp;seed=0&amp;interval=1.0`
+    : `GET /compose/v1/process/${p.name}/config-schema\nPOST /compose/v1/process/${p.name}/initialize  body: ${JSON.stringify({config: p.schema})}`;
+  const noteHtml = p.note ? `<div style="margin-top:12px;font-size:12px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;">${p.note}</div>` : '';
 
   document.getElementById('proc-detail').innerHTML = `
     <h3>${p.name}</h3>
-    <div class="origin"><code>${p.module}.${p.name}</code> &nbsp;<span class="badge ${pkgBadge}">${p.module.split('.')[0]}</span></div>
-    <div style="font-size:12px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">config_schema</div>
+    <div class="origin"><code>${p.module}</code> &nbsp;<span class="badge ${pkgBadge}">${catLabel}</span></div>
+    <div style="font-size:12px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">config_schema <span style="font-size:10px;font-weight:400;color:var(--text-dim)">(from live API)</span></div>
     <div class="schema-grid">${schemaHtml}</div>
     <div style="font-size:12px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 8px;">inputs</div>
     <div class="schema-grid">${inputHtml}</div>
     <div style="font-size:12px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 8px;">outputs</div>
     <div class="schema-grid">${outputHtml}</div>
     <div style="margin-top:16px;">
-      <code style="font-size:11px;display:block;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;">
-GET /compose/v1/process/${p.name}/config-schema<br>
-POST /compose/v1/process/${p.name}/initialize  body: ${JSON.stringify({config: p.schema})}
-      </code>
+      <code style="font-size:11px;display:block;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;white-space:pre;">${endpoint}</code>
     </div>
+    ${noteHtml}
   `;
 }
 
