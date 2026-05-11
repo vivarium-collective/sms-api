@@ -440,6 +440,15 @@ HTTP/2 multiplexer. We hit this once in `E2EDataService.submit_stream_output_dat
 second `GET /simulations/{id}` call). Rule of thumb: inside an
 `async with client.stream(...)` block, don't make additional HTTP calls.
 
+## VPN Requirements
+
+**ALWAYS prompt the user to check VPN state before the following operations:**
+
+- **VPN ON required:** Applying kustomize overlays (`kubectl kustomize ... | kubectl apply -f -`), `kubectl rollout restart/status`, any `kubectl` commands targeting RKE namespaces (`sms-api-rke`, `sms-api-rke-dev`), SSH-based HPC operations, and integration tests that require SLURM access.
+- **VPN OFF required:** Manual E2E testing and verification via the Atlantis CLI (`uv run atlantis ...`) against the Stanford deployment (uses `ptools-proxy.sh` tunnel which requires direct internet access to AWS GovCloud).
+
+Never assume VPN state — always ask before proceeding with either category.
+
 # PRIORITY
 
 Implement that which is laid out in ./PLAN_EXECUTION.md, if not already done.
