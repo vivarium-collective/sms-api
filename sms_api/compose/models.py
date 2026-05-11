@@ -389,6 +389,23 @@ class WrapperStatus(StrEnum):
     FAILED = "failed"
 
 
+class PbgPortSchema(BaseModel):
+    """A single port definition for a PBG Process/Step."""
+
+    name: str = Field(..., description="Port name, e.g. 'substrate'")
+    schema_expr: str = Field(..., description="Bigraph-schema type expression, e.g. 'float' or 'map[string,float]'")
+    description: str | None = Field(default=None, description="Human-readable description of the port")
+
+
+class PbgConfigParam(BaseModel):
+    """A single config parameter for a PBG Process/Step."""
+
+    name: str = Field(..., description="Parameter name, e.g. 'rate'")
+    type: str = Field(default="float", description="Bigraph-schema type, e.g. 'float' or 'string'")
+    default: str | float | int | bool | None = Field(default=None, description="Default value")
+    description: str | None = Field(default=None, description="Human-readable description")
+
+
 class PbgWrapperCreateRequest(BaseModel):
     source_repo_url: str = Field(
         ..., description="GitHub URL of the simulator to wrap, e.g. https://github.com/vivarium-collective/mem3dg"
@@ -398,6 +415,31 @@ class PbgWrapperCreateRequest(BaseModel):
         default=None, description="Override the derived tool name (default: inferred from repo name)"
     )
     extra_instructions: str | None = Field(default=None, description="Optional extra context for the wrapper agent")
+    # LLM-free scaffold fields — used when use_agent=False or no API key is configured.
+    process_type: str = Field(
+        default="Process",
+        description="'Process' (time-stepped) or 'Step' (event-driven/stateless)",
+    )
+    input_ports: list[PbgPortSchema] = Field(
+        default_factory=list,
+        description="Input port definitions for the scaffold path (unused when use_agent=True)",
+    )
+    output_ports: list[PbgPortSchema] = Field(
+        default_factory=list,
+        description="Output port definitions for the scaffold path (unused when use_agent=True)",
+    )
+    config_params: list[PbgConfigParam] = Field(
+        default_factory=list,
+        description="Config parameter definitions for the scaffold path (unused when use_agent=True)",
+    )
+    use_agent: bool = Field(
+        default=True,
+        description=(
+            "When True (default), invoke the Claude API pbg-expert agent to generate the wrapper. "
+            "When False (or when COMPOSE_PBG_ANTHROPIC_API_KEY is not configured), fall back to "
+            "deterministic template-based scaffolding using the port/config definitions above."
+        ),
+    )
 
 
 class PbgWrapperRecord(BaseModel):

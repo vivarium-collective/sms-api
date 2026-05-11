@@ -1,4 +1,4 @@
-"""Tests for WrapperGenerationService utilities and derive_tool_name helper (Phases 2, 3 & 4)."""
+"""Tests for WrapperGenerationService utilities and derive_tool_name helper (Phases 2, 3, 3b & 4)."""
 
 from __future__ import annotations
 
@@ -564,3 +564,285 @@ async def test_handle_wrapper_build_complete_noop_when_not_building() -> None:
     await monitor._handle_wrapper_build_complete(simulator_id=5)
 
     wrapper_db.update_wrapper_status.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# _to_tool_slug / _to_class_name helpers (Phase 3b)
+# ---------------------------------------------------------------------------
+
+
+class TestScaffoldHelpers:
+    def test_to_tool_slug_simple(self) -> None:
+        assert WrapperGenerationService._to_tool_slug("mem3dg") == "mem3dg"
+
+    def test_to_tool_slug_hyphen(self) -> None:
+        assert WrapperGenerationService._to_tool_slug("my-tool") == "my_tool"
+
+    def test_to_tool_slug_multi_hyphen(self) -> None:
+        assert WrapperGenerationService._to_tool_slug("my-cool-tool") == "my_cool_tool"
+
+    def test_to_class_name_simple(self) -> None:
+        assert WrapperGenerationService._to_class_name("mem3dg") == "Mem3dg"
+
+    def test_to_class_name_hyphen(self) -> None:
+        assert WrapperGenerationService._to_class_name("my-tool") == "MyTool"
+
+    def test_to_class_name_multi_hyphen(self) -> None:
+        assert WrapperGenerationService._to_class_name("my-cool-tool") == "MyCoolTool"
+
+    def test_render_ports_dict_empty(self) -> None:
+        result = WrapperGenerationService._render_ports_dict([])
+        assert "TODO" in result
+
+    def test_render_ports_dict_single(self) -> None:
+        from sms_api.compose.models import PbgPortSchema
+
+        ports = [PbgPortSchema(name="substrate", schema_expr="float")]
+        result = WrapperGenerationService._render_ports_dict(ports)
+        assert '"substrate": "float"' in result
+
+    def test_render_ports_dict_multiple(self) -> None:
+        from sms_api.compose.models import PbgPortSchema
+
+        ports = [
+            PbgPortSchema(name="a", schema_expr="float"),
+            PbgPortSchema(name="b", schema_expr="map[string,float]"),
+        ]
+        result = WrapperGenerationService._render_ports_dict(ports)
+        assert '"a": "float"' in result
+        assert '"b": "map[string,float]"' in result
+
+    def test_render_config_schema_empty(self) -> None:
+        result = WrapperGenerationService._render_config_schema([])
+        assert "TODO" in result
+
+    def test_render_config_schema_float_param(self) -> None:
+        from sms_api.compose.models import PbgConfigParam
+
+        params = [PbgConfigParam(name="rate", type="float", default=0.1)]
+        result = WrapperGenerationService._render_config_schema(params)
+        assert '"rate"' in result
+        assert '"float"' in result
+        assert "0.1" in result
+
+
+# ---------------------------------------------------------------------------
+# _scaffold_wrapper — generated file content (Phase 3b)
+# ---------------------------------------------------------------------------
+
+
+class TestScaffoldWrapper:
+    def _make_svc(self) -> WrapperGenerationService:
+        return WrapperGenerationService(db=MagicMock(), file_service=None)
+
+    def test_creates_pyproject_toml(self) -> None:
+        from sms_api.compose.models import PbgPortSchema
+
+        svc = self._make_svc()
+        with tempfile.TemporaryDirectory() as workdir:
+            workspace = Path(workdir)
+            svc._scaffold_wrapper(
+                workspace=workspace,
+                tool_name="mem3dg",
+                source_repo_url="https://github.com/vivarium-collective/mem3dg",
+                source_ref="main",
+                process_type="Process",
+                input_ports=[PbgPortSchema(name="substrate", schema_expr="float")],
+                output_ports=[PbgPortSchema(name="product", schema_expr="float")],
+                config_params=[],
+            )
+            pyproject = workspace / "pbg-mem3dg" / "pyproject.toml"
+            assert pyproject.exists()
+            content = pyproject.read_text()
+            assert 'name = "pbg-mem3dg"' in content
+            assert "process-bigraph" in content
+
+    def test_creates_processes_py_with_ports(self) -> None:
+        from sms_api.compose.models import PbgPortSchema
+
+        svc = self._make_svc()
+        with tempfile.TemporaryDirectory() as workdir:
+            workspace = Path(workdir)
+            svc._scaffold_wrapper(
+                workspace=workspace,
+                tool_name="cobra",
+                source_repo_url="https://github.com/org/cobra",
+                source_ref="main",
+                process_type="Process",
+                input_ports=[PbgPortSchema(name="concentrations", schema_expr="map[string,float]")],
+                output_ports=[PbgPortSchema(name="fluxes", schema_expr="map[string,float]")],
+                config_params=[],
+            )
+            processes_py = workspace / "pbg-cobra" / "pbg_cobra" / "processes.py"
+            assert processes_py.exists()
+            content = processes_py.read_text()
+            assert "CobraProcess" in content
+            assert '"concentrations": "map[string,float]"' in content
+            assert '"fluxes": "map[string,float]"' in content
+
+    def test_creates_step_type(self) -> None:
+        svc = self._make_svc()
+        with tempfile.TemporaryDirectory() as workdir:
+            workspace = Path(workdir)
+            svc._scaffold_wrapper(
+                workspace=workspace,
+                tool_name="my-tool",
+                source_repo_url="https://github.com/org/my-tool",
+                source_ref="main",
+                process_type="Step",
+                input_ports=[],
+                output_ports=[],
+                config_params=[],
+            )
+            processes_py = workspace / "pbg-my-tool" / "pbg_my_tool" / "processes.py"
+            content = processes_py.read_text()
+            assert "MyToolStep(Step)" in content
+            assert "from process_bigraph import Step" in content
+
+    def test_creates_init_py_with_exports(self) -> None:
+        svc = self._make_svc()
+        with tempfile.TemporaryDirectory() as workdir:
+            workspace = Path(workdir)
+            svc._scaffold_wrapper(
+                workspace=workspace,
+                tool_name="tellurium",
+                source_repo_url="https://github.com/org/tellurium",
+                source_ref="main",
+                process_type="Process",
+                input_ports=[],
+                output_ports=[],
+                config_params=[],
+            )
+            init_py = workspace / "pbg-tellurium" / "pbg_tellurium" / "__init__.py"
+            content = init_py.read_text()
+            assert "TelluriumProcess" in content
+            assert "__all__" in content
+
+    def test_creates_tests_directory(self) -> None:
+        svc = self._make_svc()
+        with tempfile.TemporaryDirectory() as workdir:
+            workspace = Path(workdir)
+            svc._scaffold_wrapper(
+                workspace=workspace,
+                tool_name="mem3dg",
+                source_repo_url="https://github.com/org/mem3dg",
+                source_ref="main",
+                process_type="Process",
+                input_ports=[],
+                output_ports=[],
+                config_params=[],
+            )
+            test_file = workspace / "pbg-mem3dg" / "tests" / "test_processes.py"
+            assert test_file.exists()
+            content = test_file.read_text()
+            assert "Mem3dgProcess" in content
+            assert "def test_mem3dg_instantiation" in content
+
+    def test_creates_readme(self) -> None:
+        svc = self._make_svc()
+        with tempfile.TemporaryDirectory() as workdir:
+            workspace = Path(workdir)
+            svc._scaffold_wrapper(
+                workspace=workspace,
+                tool_name="cobra",
+                source_repo_url="https://github.com/org/cobra",
+                source_ref="v1.0",
+                process_type="Process",
+                input_ports=[],
+                output_ports=[],
+                config_params=[],
+            )
+            readme = workspace / "pbg-cobra" / "README.md"
+            assert readme.exists()
+            content = readme.read_text(encoding="utf-8")
+            assert "pbg-cobra" in content
+            assert "v1.0" in content
+
+    def test_config_params_rendered_in_processes_py(self) -> None:
+        from sms_api.compose.models import PbgConfigParam
+
+        svc = self._make_svc()
+        with tempfile.TemporaryDirectory() as workdir:
+            workspace = Path(workdir)
+            svc._scaffold_wrapper(
+                workspace=workspace,
+                tool_name="mem3dg",
+                source_repo_url="https://github.com/org/mem3dg",
+                source_ref="main",
+                process_type="Process",
+                input_ports=[],
+                output_ports=[],
+                config_params=[PbgConfigParam(name="rate", type="float", default=0.5)],
+            )
+            processes_py = workspace / "pbg-mem3dg" / "pbg_mem3dg" / "processes.py"
+            content = processes_py.read_text()
+            assert '"rate"' in content
+            assert "0.5" in content
+
+
+# ---------------------------------------------------------------------------
+# generate_wrapper — scaffold path selected when no API key (Phase 3b)
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateWrapperScaffoldPath:
+    @pytest.mark.asyncio
+    async def test_scaffold_path_when_use_agent_false(self) -> None:
+        """generate_wrapper uses scaffold when use_agent=False regardless of API key."""
+        from sms_api.compose.models import PbgPortSchema
+
+        db_mock = MagicMock()
+        wrapper_db = AsyncMock()
+        wrapper_db.update_wrapper_status = AsyncMock()
+        db_mock.get_wrapper_db = MagicMock(return_value=wrapper_db)
+
+        file_mock = AsyncMock()
+        file_mock.upload_file = AsyncMock(return_value=None)
+
+        svc = WrapperGenerationService(db=db_mock, file_service=file_mock, sim_service=None)
+
+        with patch("sms_api.config.get_settings") as mock_settings:
+            mock_settings.return_value.compose_pbg_anthropic_api_key = "sk-has-key"
+            mock_settings.return_value.compose_pbg_wrappers_storage_prefix = "pbg-wrappers"
+            await svc.generate_wrapper(
+                wrapper_id=1,
+                source_repo_url="https://github.com/org/mem3dg",
+                tool_name="mem3dg",
+                source_ref="main",
+                use_agent=False,
+                input_ports=[PbgPortSchema(name="substrate", schema_expr="float")],
+                output_ports=[PbgPortSchema(name="product", schema_expr="float")],
+                config_params=[],
+            )
+
+        # Should have called update_wrapper_status (at least STORING + READY)
+        assert wrapper_db.update_wrapper_status.await_count >= 1
+        # upload_file should have been called (tarball stored)
+        file_mock.upload_file.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_scaffold_path_when_no_api_key(self) -> None:
+        """generate_wrapper falls back to scaffold when no API key configured."""
+        db_mock = MagicMock()
+        wrapper_db = AsyncMock()
+        wrapper_db.update_wrapper_status = AsyncMock()
+        db_mock.get_wrapper_db = MagicMock(return_value=wrapper_db)
+
+        file_mock = AsyncMock()
+        file_mock.upload_file = AsyncMock(return_value=None)
+
+        svc = WrapperGenerationService(db=db_mock, file_service=file_mock, sim_service=None)
+
+        with patch("sms_api.config.get_settings") as mock_settings:
+            mock_settings.return_value.compose_pbg_anthropic_api_key = ""  # no key
+            mock_settings.return_value.compose_pbg_wrappers_storage_prefix = "pbg-wrappers"
+            await svc.generate_wrapper(
+                wrapper_id=2,
+                source_repo_url="https://github.com/org/cobra",
+                tool_name="cobra",
+                source_ref="main",
+                use_agent=True,  # desired, but no key → falls back
+            )
+
+        # Scaffold path ran successfully (STORING + READY transitions)
+        assert wrapper_db.update_wrapper_status.await_count >= 1

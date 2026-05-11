@@ -526,7 +526,8 @@ class WrapperGenerationService:
 
                 [tool.pytest.ini_options]
                 testpaths = ["tests"]
-            """)
+            """),
+            encoding="utf-8",
         )
 
         # ---- .gitignore ----
@@ -541,7 +542,8 @@ class WrapperGenerationService:
                 .pytest_cache/
                 output/
                 .idea/
-            """)
+            """),
+            encoding="utf-8",
         )
 
         # ---- pbg_<slug>/__init__.py ----
@@ -552,14 +554,16 @@ class WrapperGenerationService:
                 from .processes import {class_name}{base_class}
 
                 __all__ = ["{class_name}{base_class}"]
-            """)
+            """),
+            encoding="utf-8",
         )
 
         # ---- pbg_<slug>/types.py ----
         (pkg_dir / "types.py").write_text(
             textwrap.dedent(f"""\
                 \"\"\"Custom bigraph-schema types for pbg-{tool_name}. Empty by default.\"\"\"
-            """)
+            """),
+            encoding="utf-8",
         )
 
         # ---- pbg_<slug>/processes.py ----
@@ -619,7 +623,8 @@ class WrapperGenerationService:
             + update_sig
             + "\n"
             + update_body
-            + "\n"
+            + "\n",
+            encoding="utf-8",
         )
 
         # ---- pbg_<slug>/composites.py ----
@@ -648,11 +653,12 @@ class WrapperGenerationService:
                     }}
 
                     return Composite({{"state": document}}, core=core)
-            """)
+            """),
+            encoding="utf-8",
         )
 
         # ---- tests/__init__.py ----
-        (repo_dir / "tests" / "__init__.py").write_text("")
+        (repo_dir / "tests" / "__init__.py").write_text("", encoding="utf-8")
 
         # ---- tests/test_processes.py ----
         (repo_dir / "tests" / "test_processes.py").write_text(
@@ -682,7 +688,8 @@ class WrapperGenerationService:
                 def test_{slug}_outputs():
                     proc = _make_proc()
                     assert isinstance(proc.outputs(), dict)
-            """)
+            """),
+            encoding="utf-8",
         )
 
         # ---- README.md ----
@@ -754,7 +761,8 @@ class WrapperGenerationService:
 
                 This wrapper was scaffolded automatically by the sms-api. The `update()` method
                 body is a stub — fill it in to integrate the wrapped tool's simulation step.
-            """)
+            """),
+            encoding="utf-8",
         )
 
         logger.info(

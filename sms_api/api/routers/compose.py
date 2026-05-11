@@ -885,6 +885,11 @@ async def create_wrapper(
         tool_name=tool_name,
         source_ref=request.source_ref,
         extra_instructions=request.extra_instructions,
+        process_type=request.process_type,
+        input_ports=request.input_ports,
+        output_ports=request.output_ports,
+        config_params=request.config_params,
+        use_agent=request.use_agent,
     )
     return record
 
