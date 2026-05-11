@@ -9,8 +9,10 @@ from your browser — no local process-bigraph installation required.
 ## Launch
 
 ```bash
-# Install Atlantis (if not already)
-pip install sms-api
+# Install Atlantis (if not already — one-time setup)
+git clone https://github.com/vivarium-collective/sms-api.git
+cd sms-api
+uv sync
 
 # Launch sandbox in app mode (recommended for demos)
 uv run atlantis compose sandbox
@@ -89,10 +91,12 @@ Fetches all 42 bigraph-schema primitive types live from
 
 ## Prerequisites
 
-Only the Atlantis CLI is needed:
+Only the Atlantis CLI is needed. Install from source:
 
 ```bash
-pip install sms-api
+git clone https://github.com/vivarium-collective/sms-api.git
+cd sms-api
+uv sync
 ```
 
 No local process-bigraph, pbsim-common, or v2ecoli installation required.
