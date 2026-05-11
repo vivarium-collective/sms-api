@@ -42,10 +42,18 @@ download results) in a different format:
    guides/running-a-campaign
    guides/choosing-a-client
    guides/cli-reference
-   guides/compose
-   guides/compose-tutorial
-   guides/biomodels
    guides/analysis-filtering
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Compose Subsystem
+
+   guides/compose/overview
+   guides/compose/v2ecoli
+   guides/compose/rest-process
+   guides/compose/biomodels
+   guides/compose/sandbox
+   guides/compose/wrappers
 
 .. toctree::
    :maxdepth: 2
