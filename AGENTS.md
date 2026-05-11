@@ -37,7 +37,10 @@ uv run pytest -s -m <marker>
 - **Entrypoints**: `sms_api/api/main.py` (FastAPI server), `app/cli.py` (Typer CLI, entry `atlantis`), `app/tui.py` (Textual TUI), `app/gui.py` (Marimo GUI)
 - **All three clients** implement the same EUTE workflow calling REST endpoints. Prefer CLI for testing (`uv run atlantis <command>`).
 - **Backend dispatch**: `sms_api/config.py` — `compute_backend` setting. SLURM for `sms-api-rke*`, Batch for `sms-api-stanford*`.
-- **Services wired** in `sms_api/dependencies.py` via global singletons (SSH, DB, file, messaging, simulation).
+- **Services wired** in `sms_api/dependencies.py` via global singletons (SSH, DB, file, messaging, simulation, compose).
+- **Compose subsystem** (`sms_api/compose/`): process-bigraph simulation ecosystem with BioModels integration (6 endpoints), compose simulations, curated simulations, and PBG wrapper management. Registered conditionally — only on SLURM deployments (no Batch/GovCloud). Key services: `ComposeSimulationService`, `ComposeDatabaseService`, `wrapper_service.py`, `process_runtime.py`.
+- **BioModels endpoints**: `GET /compose/v1/biomodels/identifiers`, `GET /compose/v1/biomodels/{id}/metadata`, `POST /compose/v1/biomodels/{id}/run`, `POST /compose/v1/biomodels/batch`, `POST /compose/v1/biomodels/{id}/audit`, `POST /compose/v1/biomodels/regression`. Each has a matching CLI command under `atlantis compose biomodels-*`.
+- **Planning docs**: `PBG.md` (pbg-superpowers integration plan for programmatic PBG wrapper creation), `BIGRAPH_LOOM.md` (bigraph-loom visual GUI integration plan with SSE streaming and animated canvas). Both are integration plans — NOT yet implemented.
 
 ## Testing quirks
 
@@ -107,6 +110,8 @@ Re-optimize config after large PRs: invoke `/bootstrapper` skill inside opencode
 - `TODO_40.md` — ✅ BioModels integration via compose subsystem (academic api only) — **verified complete** (62 tests, `make check` clean, all 6 endpoints + 6 CLI commands + OpenAPI client regenerated)
 - `BIOMODELS_GUIDE.md` — user-facing CLI guide for BioModels owners (created alongside TODO_40 verification). Commands default to `https://sms.cam.uchc.edu` (sms-api-rke). Compose biomodels always routes through SLURM — compose has no Batch implementation.
 - `SECURITY_UPDATES.md` — CVE-2026-31431 "DirtyFrag" response for AWS GovCloud infra
+- `PBG.md` — 📋 Integration plan for pbg-superpowers (programmatic PBG wrapper generation). 5 new endpoints, 7 phases, 6 risks. **NOT yet implemented.**
+- `BIGRAPH_LOOM.md` — 📋 Integration plan for bigraph-loom (React Flow visual GUI for process-bigraph). Sub-app mount, 20 endpoints, SSE streaming, animated canvas, 107-item GAPS checklist. **NOT yet implemented.**
 
 ## Deploy loop (rke — academic API, biomodels target)
 

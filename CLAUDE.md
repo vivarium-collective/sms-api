@@ -21,7 +21,7 @@ SMS API (Simulating Microbial Systems API, also known as Atlantis API) is a Fast
 ```
 sms_api/
 ├── api/           # FastAPI routes and generated OpenAPI client
-│   ├── routers/   # Route handlers: gateway, core, antibiotics, biofactory, inference, variants
+│   ├── routers/   # Route handlers: gateway, core, antibiotics, biofactory, inference, variants, compose
 │   ├── client/    # Auto-generated OpenAPI client (do NOT edit manually)
 │   └── spec/      # Generated OpenAPI spec
 ├── analysis/      # Analysis job orchestration (post-simulation)
@@ -31,10 +31,22 @@ sms_api/
 │   ├── storage/   # File path abstractions (HPCFilePath), FileService (GCS, S3, Qumulo)
 │   ├── gateway/   # Gateway I/O and models
 │   └── messaging/ # MessagingService (Redis-backed)
+├── compose/       # Process-bigraph compose subsystem
+│   ├── biomodel_documents.py   # PB document factory for BioModels
+│   ├── biomodels_service.py    # EBI fetch, SED-ML parse
+│   ├── handlers.py             # run_compose_simulation, run_compose_curated
+│   ├── simulation_service.py   # ComposeSimulationService
+│   ├── models.py               # All compose Pydantic models
+│   ├── database_service.py     # ComposeDatabaseService
+│   ├── tables_orm.py           # Compose ORM tables
+│   ├── wrapper_service.py      # PBG wrapper service
+│   ├── process_runtime.py      # Process runtime helpers
+│   ├── hpc_utils.py            # HPC file path utilities for compose
+│   └── job_monitor.py          # Compose job polling
 ├── data/          # Data services and BioCyc integration
 ├── simulation/    # Simulation service, database service, job scheduler, models, ORM tables
 ├── config.py      # Settings via pydantic-settings
-└── dependencies.py # Dependency injection (SSH, DB, file, messaging, simulation services)
+└── dependencies.py # Dependency injection (SSH, DB, file, messaging, simulation, compose services)
 
 tests/
 ├── integration/   # HPC workflow tests (require SSH access)
@@ -62,6 +74,42 @@ API requests hit FastAPI routers (`sms_api/api/routers/`) which depend on servic
 - **SSHSessionService** (`common/ssh/ssh_service.py`): asyncssh connection pooling. Session reuse is critical for polling loops.
 - **FileService** (`common/storage/`): Abstraction over GCS, S3, and Qumulo S3 storage backends.
 - **JobScheduler** (`simulation/job_scheduler.py`): Coordinates multi-step HPC workflows.
+
+### Compose Subsystem (process-bigraph)
+
+The `sms_api/compose/` module implements a process-bigraph simulation ecosystem with two major subsystems:
+
+**BioModels Integration (6 endpoints):**
+- `GET /compose/v1/biomodels/identifiers` — List available BioModels from EBI
+- `GET /compose/v1/biomodels/{id}/metadata` — Fetch model metadata + SED-ML
+- `POST /compose/v1/biomodels/{id}/run` — Run a BioModel as a compose simulation
+- `POST /compose/v1/biomodels/batch` — Batch run multiple BioModels
+- `POST /compose/v1/biomodels/{id}/audit` — Audit a BioModel against schema
+- `POST /compose/v1/biomodels/regression` — Regression test suite
+
+**CLI commands:** `atlantis compose biomodels-ids/meta/run/batch/audit/regression`
+
+**Compose Simulations:**
+- `POST /compose/v1/simulations` — Run a process-bigraph simulation (SLURM)
+- `GET /compose/v1/simulations/{id}/status` — Poll simulation status
+- `GET /compose/v1/simulations/{id}/data` — Get simulation results
+
+**Compose Curated Simulations:**
+- `POST /compose/v1/simulations/curated` — Run from curated model catalog
+- `GET /compose/v1/simulations/curated` — List curated models
+- `GET /compose/v1/simulations/curated/{name}` — Get curated model details
+
+**Key compose services:**
+- `ComposeSimulationService` — Orchestrates compose simulation HPC workflow
+- `ComposeDatabaseService` — SQLAlchemy async ORM for compose metadata (tables in `tables_orm.py`)
+- `process_runtime.py` — Process runtime helpers for bigraph execution
+- `hpc_utils.py` — HPC file path utilities for compose job configs
+- `job_monitor.py` — Compose-specific job polling and status tracking
+- `wrapper_service.py` — PBG wrapper generation and management
+
+**Conditional registration:** The compose router is registered in `main.py` only on **SLURM deployments** (`sms-api-rke*`). Compose has no Batch/GovCloud implementation.
+
+**BioModels data flow:** EBI fetch → SED-ML parse → process-bigraph document → compose simulation → SLURM job → results.
 
 ### Compute Backend Dispatch
 
@@ -203,7 +251,7 @@ async with get_ssh_session_service().session() as ssh:
 
 - **Linting/Formatting**: ruff (line length 120). Pre-commit runs ruff lint + ruff format.
 - **Type checking**: mypy with strict mode. Excludes: `sms_api/api/client/`, `app/ui/`, `notes/`, `scratchpads/`.
-- **Python**: 3.12.9 (pinned exact).
+- **Python**: 3.13 (pinned exact). `.python-version` = `3.13`, `requires-python = ">=3.13,<3.14"`.
 - **Package manager**: uv with hatchling build backend.
 
 
@@ -394,4 +442,4 @@ second `GET /simulations/{id}` call). Rule of thumb: inside an
 
 # PRIORITY
 
-Implement that which is laid out in ./PLAN.md, if not already done.
+Implement that which is laid out in ./PLAN_EXECUTION.md, if not already done.

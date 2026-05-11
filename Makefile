@@ -341,3 +341,9 @@ e2e:
 .PHONY: tui
 tui:
 	@${VENV} app/tui/agent_app.py
+
+.PHONY: initial-commit
+initial-commit:
+	@./commits.sh; \
+  	git push origin $(branch); \
+  	gh workflow run build-and-push.yml --ref feat/rest-process-integration -f version=$(version)
