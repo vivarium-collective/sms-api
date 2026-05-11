@@ -158,6 +158,63 @@ class IdInputScreen(ModalScreen[int | None]):
         self.dismiss(None)
 
 
+class StrInputScreen(ModalScreen[str | None]):
+    """Modal that prompts for a free-form string value."""
+
+    BINDINGS = [("escape", "cancel", "Cancel")]
+    CSS = """
+    StrInputScreen {
+        align: center middle;
+    }
+    #str-modal-container {
+        width: 60;
+        height: auto;
+        max-height: 12;
+        border: thick ansi_cyan;
+        padding: 1 2;
+    }
+    #str-modal-container Input {
+        margin-top: 1;
+    }
+    #str-modal-container .modal-buttons {
+        margin-top: 1;
+        height: 3;
+    }
+    """
+
+    def __init__(self, prompt: str = "Enter value", placeholder: str = "") -> None:
+        super().__init__()
+        self.prompt = prompt
+        self._placeholder = placeholder
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="str-modal-container"):
+            yield Label(self.prompt)
+            yield Input(placeholder=self._placeholder, id="str-modal-input")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("OK", variant="primary", id="str-modal-ok")
+                yield Button("Cancel", id="str-modal-cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "str-modal-ok":
+            self._submit()
+        else:
+            self.dismiss(None)
+
+    def on_input_submitted(self, _event: Input.Submitted) -> None:
+        self._submit()
+
+    def _submit(self) -> None:
+        val = self.query_one("#str-modal-input", Input).value.strip()
+        if val:
+            self.dismiss(val)
+        else:
+            self.notify("Please enter a value", severity="error")
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class RunSimulationScreen(ModalScreen[dict[str, Any] | None]):
     """Modal form for submitting a new simulation."""
 
@@ -494,6 +551,9 @@ class AtlantisTUI(App[None]):
                 yield Button("Simulators", id="nav-simulators", variant="primary")
                 yield Button("Analyses", id="nav-analyses", variant="primary")
 
+                yield Label("COMPOSE", classes="nav-section-label")
+                yield Button("Wrappers", id="nav-compose-wrappers", variant="primary")
+
                 yield Label("UTILITIES", classes="nav-section-label")
                 yield Button("Browse Files", id="browse-files")
                 yield Button("Demo S3", id="demo-s3", variant="warning")
@@ -521,6 +581,10 @@ class AtlantisTUI(App[None]):
                     yield Button("Status", id="ana-status")
                     yield Button("View Log", id="ana-log")
                     yield Button("Plots", id="ana-plots")
+                with Horizontal(id="actions-compose-wrappers", classes="action-bar"):
+                    yield Button("List", id="wrap-list", variant="primary")
+                    yield Button("Create", id="wrap-create", variant="success")
+                    yield Button("Status", id="wrap-status")
 
                 yield RichLog(id="result-log", highlight=True, markup=True, wrap=True)
 
@@ -535,7 +599,7 @@ class AtlantisTUI(App[None]):
         self._animate_banner()
         self.set_interval(0.1, self._animate_banner)
         # Hide all action bars initially
-        for domain in ("simulations", "simulators", "analyses"):
+        for domain in ("simulations", "simulators", "analyses", "compose-wrappers"):
             self.query_one(f"#actions-{domain}").display = False
         self.write_log("[dim]Simulating Microbial Systems — Interactive Terminal[/dim]")
         self.write_log(f"[dim]Server: {self.base_url.name} ({self.base_url.value})[/dim]")
@@ -545,7 +609,7 @@ class AtlantisTUI(App[None]):
     def _show_domain(self, domain: str) -> None:
         """Show the action bar for *domain* and hide the others."""
         self._active_domain = domain
-        for d in ("simulations", "simulators", "analyses"):
+        for d in ("simulations", "simulators", "analyses", "compose-wrappers"):
             self.query_one(f"#actions-{d}").display = d == domain
 
     def _animate_banner(self) -> None:
@@ -596,6 +660,9 @@ class AtlantisTUI(App[None]):
         elif bid == "nav-analyses":
             self._show_domain("analyses")
             self._do_ana_list()
+        elif bid == "nav-compose-wrappers":
+            self._show_domain("compose-wrappers")
+            self._do_wrap_list()
         # ── Simulation actions ──
         elif bid == "sim-get":
             self._ask_id_then("Simulation ID", self._do_sim_get)
@@ -629,6 +696,13 @@ class AtlantisTUI(App[None]):
             self._ask_id_then("Analysis ID", self._do_ana_log)
         elif bid == "ana-plots":
             self._ask_id_then("Analysis ID", self._do_ana_plots)
+        # ── Compose wrapper actions ──
+        elif bid == "wrap-list":
+            self._do_wrap_list()
+        elif bid == "wrap-create":
+            self._ask_str_then("GitHub URL of simulator to wrap", "https://github.com/...", self._do_wrap_create)
+        elif bid == "wrap-status":
+            self._ask_id_then("Wrapper ID", self._do_wrap_status)
         # ── Utilities ──
         elif bid == "demo-s3":
             self._do_demo_s3()
@@ -680,6 +754,56 @@ class AtlantisTUI(App[None]):
                 callback(result)
 
         self.push_screen(IdInputScreen(prompt), _on_dismiss)
+
+    def _ask_str_then(self, prompt: str, placeholder: str, callback: Any) -> None:
+        def _on_dismiss(result: str | None) -> None:
+            if result is not None:
+                callback(result)
+
+        self.push_screen(StrInputScreen(prompt, placeholder), _on_dismiss)
+
+    # ── Compose Wrappers ──────────────────────────────────────────────────
+
+    @work(thread=True)
+    def _do_wrap_list(self) -> None:
+        self._clear_log()
+        self.write_log("[bold cyan]Loading pbg wrappers...[/]")
+        try:
+            wrappers = self.svc.compose_list_wrappers()
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]")
+            return
+        if not wrappers:
+            self.write_log("[dim]No wrappers found.[/dim]")
+            return
+        cols = ["id", "tool_name", "status", "source_ref", "simulator_id"]
+        rows = [[str(w.get(c, "")) for c in cols] for w in wrappers]
+        self.app.call_from_thread(self._populate_table, cols, rows)
+        self.write_log(f"[green]{len(wrappers)} wrapper(s) loaded.[/green]")
+
+    @work(thread=True)
+    def _do_wrap_create(self, repo_url: str) -> None:
+        self.write_log(f"[bold cyan]Submitting wrapper generation for:[/] {repo_url}")
+        try:
+            result = self.svc.compose_create_wrapper(source_repo_url=repo_url)
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]")
+            return
+        wrapper_id = result.get("wrapper_id")
+        self.write_log(f"[green]Wrapper job created — ID:[/] {wrapper_id}")
+        self.write_log(_json_markup(result))
+
+    @work(thread=True)
+    def _do_wrap_status(self, wrapper_id: int) -> None:
+        try:
+            result = self.svc.compose_get_wrapper_status(wrapper_id=wrapper_id)
+        except Exception as e:
+            self.write_log(f"[red]Error: {e}[/red]")
+            return
+        s = (result.get("status") or "unknown").lower()
+        color = {"available": "green", "failed": "red", "building": "yellow"}.get(s, "cyan")
+        self.write_log(f"Wrapper {wrapper_id}: [{color}]{s.upper()}[/{color}]")
+        self.write_log(_json_markup(result))
 
     # ── Simulations ───────────────────────────────────────────────────────
 
