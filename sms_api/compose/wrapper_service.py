@@ -2,6 +2,7 @@
 
 Phase 2: config keys, bundling utilities, FileService storage, SKILL.md resolution.
 Phase 3: agent integration (Anthropic API with pbg-expert SKILL.md as system prompt).
+Phase 3b: deterministic scaffold path (no LLM required — uses explicit port/config definitions).
 Phase 4: container build dispatch (reuse compose SLURM build pipeline).
 """
 
@@ -11,11 +12,12 @@ import asyncio
 import logging
 import tarfile
 import tempfile
+import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sms_api.common.storage.file_paths import S3FilePath
-from sms_api.compose.models import WrapperStatus
+from sms_api.compose.models import PbgConfigParam, PbgPortSchema, WrapperStatus
 
 if TYPE_CHECKING:
     from sms_api.common.storage.file_service import FileService
@@ -424,6 +426,347 @@ class WrapperGenerationService:
         return candidates[0]
 
     # ------------------------------------------------------------------
+    # Deterministic scaffold path (Phase 3b — no LLM required)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _to_tool_slug(tool_name: str) -> str:
+        """Convert a hyphenated tool name to a Python-importable slug.
+
+        Examples:
+            "mem3dg"    → "mem3dg"
+            "my-tool"   → "my_tool"
+        """
+        return tool_name.replace("-", "_")
+
+    @staticmethod
+    def _to_class_name(tool_name: str) -> str:
+        """Convert a hyphenated tool name to a CamelCase class name.
+
+        Examples:
+            "mem3dg"    → "Mem3dg"
+            "my-tool"   → "MyTool"
+        """
+        return "".join(part.capitalize() for part in tool_name.replace("-", "_").split("_"))
+
+    @staticmethod
+    def _render_ports_dict(ports: list[PbgPortSchema], indent: int = 8) -> str:
+        """Render a list of PbgPortSchema entries as a Python dict literal body."""
+        if not ports:
+            return " " * indent + "# TODO: define ports\n"
+        pad = " " * indent
+        lines = [f'{pad}"{p.name}": "{p.schema_expr}",' for p in ports]
+        return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def _render_config_schema(params: list[PbgConfigParam], indent: int = 8) -> str:
+        """Render a list of PbgConfigParam entries as a Python dict literal body."""
+        if not params:
+            return " " * indent + "# TODO: define config\n"
+        pad = " " * indent
+        lines: list[str] = []
+        for p in params:
+            default_repr = repr(p.default) if p.default is not None else repr(0.0 if p.type == "float" else "")
+            lines.append(f'{pad}"{p.name}": {{"_type": "{p.type}", "_default": {default_repr}}},')
+        return "\n".join(lines) + "\n"
+
+    def _scaffold_wrapper(
+        self,
+        workspace: Path,
+        tool_name: str,
+        source_repo_url: str,
+        source_ref: str,
+        process_type: str,
+        input_ports: list[PbgPortSchema],
+        output_ports: list[PbgPortSchema],
+        config_params: list[PbgConfigParam],
+    ) -> None:
+        """Generate a complete pip-installable pbg-<tool> wrapper package deterministically.
+
+        No LLM is required. Creates the full package structure inside
+        ``workspace/pbg-<tool>/`` using string templates and the port/config
+        definitions provided by the caller.
+
+        Args:
+            workspace: Temp directory to write the package into.
+            tool_name: Clean hyphenated tool name (e.g. ``"mem3dg"``).
+            source_repo_url: URL of the wrapped tool's source repo (informational).
+            source_ref: Git ref of the source (informational).
+            process_type: ``"Process"`` or ``"Step"``.
+            input_ports: List of input port definitions.
+            output_ports: List of output port definitions.
+            config_params: List of config parameter definitions.
+        """
+        slug = self._to_tool_slug(tool_name)
+        class_name = self._to_class_name(tool_name)
+        base_class = "Process" if process_type == "Process" else "Step"
+        pkg_dir = workspace / f"pbg-{tool_name}" / f"pbg_{slug}"
+        repo_dir = workspace / f"pbg-{tool_name}"
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "tests").mkdir(exist_ok=True)
+
+        # ---- pyproject.toml ----
+        (repo_dir / "pyproject.toml").write_text(
+            textwrap.dedent(f"""\
+                [project]
+                name = "pbg-{tool_name}"
+                version = "0.1.0"
+                requires-python = ">=3.11"
+                dependencies = [
+                    "bigraph-schema",
+                    "process-bigraph",
+                ]
+
+                [build-system]
+                requires = ["hatchling"]
+                build-backend = "hatchling.build"
+
+                [tool.hatch.build.targets.wheel]
+                packages = ["pbg_{slug}"]
+
+                [tool.pytest.ini_options]
+                testpaths = ["tests"]
+            """)
+        )
+
+        # ---- .gitignore ----
+        (repo_dir / ".gitignore").write_text(
+            textwrap.dedent("""\
+                .venv/
+                __pycache__/
+                *.egg-info/
+                dist/
+                build/
+                *.pyc
+                .pytest_cache/
+                output/
+                .idea/
+            """)
+        )
+
+        # ---- pbg_<slug>/__init__.py ----
+        (pkg_dir / "__init__.py").write_text(
+            textwrap.dedent(f"""\
+                \"\"\"pbg-{tool_name}: process-bigraph wrapper for {class_name}.\"\"\"
+
+                from .processes import {class_name}{base_class}
+
+                __all__ = ["{class_name}{base_class}"]
+            """)
+        )
+
+        # ---- pbg_<slug>/types.py ----
+        (pkg_dir / "types.py").write_text(
+            textwrap.dedent(f"""\
+                \"\"\"Custom bigraph-schema types for pbg-{tool_name}. Empty by default.\"\"\"
+            """)
+        )
+
+        # ---- pbg_<slug>/processes.py ----
+        update_body = (
+            "        # TODO: call the wrapped tool here\n        return {}"
+            if base_class == "Step"
+            else "        # TODO: call the wrapped tool for `interval` seconds and return deltas\n        return {}"
+        )
+        if base_class == "Step":
+            update_sig = "    def update(self, state):"
+        else:
+            update_sig = "    def update(self, state, interval):"
+        input_ports_body = self._render_ports_dict(input_ports, indent=8)
+        output_ports_body = self._render_ports_dict(output_ports, indent=8)
+        config_schema_body = self._render_config_schema(config_params, indent=8)
+
+        (pkg_dir / "processes.py").write_text(
+            textwrap.dedent(f"""\
+                \"\"\"{class_name} process-bigraph wrapper.
+
+                Source: {source_repo_url}  (ref: {source_ref})
+
+                This file was generated by the sms-api deterministic scaffold.
+                Fill in the `update()` method body to integrate the wrapped tool.
+                \"\"\"
+
+                from process_bigraph import {base_class}
+
+
+                class {class_name}{base_class}({base_class}):
+                    \"\"\"{"Time-stepped" if base_class == "Process" else "Stateless"} wrapper for {class_name}.\"\"\"
+
+                    config_schema = {{
+            """)
+            + config_schema_body
+            + textwrap.dedent("""\
+                    }
+
+                    def inputs(self):
+                        return {
+            """)
+            + input_ports_body
+            + textwrap.dedent("""\
+                        }
+
+                    def outputs(self):
+                        return {
+            """)
+            + output_ports_body
+            + textwrap.dedent("""\
+                        }
+
+                    def initial_state(self):
+                        return {}
+
+            """)
+            + update_sig
+            + "\n"
+            + update_body
+            + "\n"
+        )
+
+        # ---- pbg_<slug>/composites.py ----
+        (pkg_dir / "composites.py").write_text(
+            textwrap.dedent(f"""\
+                \"\"\"Composite factory functions for pbg-{tool_name}.\"\"\"
+                from process_bigraph import Composite, allocate_core
+
+                from pbg_{slug} import {class_name}{base_class}
+
+
+                def make_{slug}_composite(config=None, duration=100.0):
+                    core = allocate_core()
+                    core.register_link("{class_name}{base_class}", {class_name}{base_class})
+
+                    document = {{
+                        "process": {{
+                            "_type": "{"process" if base_class == "Process" else "step"}",
+                            "address": "local:{class_name}{base_class}",
+                            "config": config or {{}},
+                            {"'interval': 1.0," if base_class == "Process" else ""}
+                            "inputs": {{}},   # TODO: wire to stores
+                            "outputs": {{}},  # TODO: wire to stores
+                        }},
+                        "stores": {{}},
+                    }}
+
+                    return Composite({{"state": document}}, core=core)
+            """)
+        )
+
+        # ---- tests/__init__.py ----
+        (repo_dir / "tests" / "__init__.py").write_text("")
+
+        # ---- tests/test_processes.py ----
+        (repo_dir / "tests" / "test_processes.py").write_text(
+            textwrap.dedent(f"""\
+                \"\"\"Tests for pbg-{tool_name} processes.\"\"\"
+                from process_bigraph import allocate_core
+
+                from pbg_{slug} import {class_name}{base_class}
+
+
+                def _make_proc():
+                    core = allocate_core()
+                    core.register_link("{class_name}{base_class}", {class_name}{base_class})
+                    return {class_name}{base_class}(config={{}}, core=core)
+
+
+                def test_{slug}_instantiation():
+                    proc = _make_proc()
+                    assert proc is not None
+
+
+                def test_{slug}_inputs():
+                    proc = _make_proc()
+                    assert isinstance(proc.inputs(), dict)
+
+
+                def test_{slug}_outputs():
+                    proc = _make_proc()
+                    assert isinstance(proc.outputs(), dict)
+            """)
+        )
+
+        # ---- README.md ----
+        _inp_lines = (
+            "".join(
+                f"- `{p.name}`: `{p.schema_expr}`{f' — {p.description}' if p.description else ''}\n"
+                for p in input_ports
+            )
+            or "- *(none defined yet)*"
+        )
+        _out_lines = (
+            "".join(
+                f"- `{p.name}`: `{p.schema_expr}`{f' — {p.description}' if p.description else ''}\n"
+                for p in output_ports
+            )
+            or "- *(none defined yet)*"
+        )
+        _cfg_lines = (
+            "".join(
+                f"- `{p.name}` (`{p.type}`, default `{p.default}`){f': {p.description}' if p.description else ''}\n"
+                for p in config_params
+            )
+            or "- *(none defined yet)*"
+        )
+        (repo_dir / "README.md").write_text(
+            textwrap.dedent(f"""\
+                # pbg-{tool_name}
+
+                Process-bigraph wrapper for **{class_name}**.
+
+                - Source: [{source_repo_url}]({source_repo_url}) (ref: `{source_ref}`)
+                - Process type: `{base_class}`
+
+                ## Installation
+
+                ```bash
+                pip install -e .
+                ```
+
+                Once installed via `pip install -e .`, processes register automatically
+                via `bigraph_schema.package.discover` — no manual `register_link()` calls needed.
+
+                ## Quick Start
+
+                ```python
+                from process_bigraph import allocate_core
+                from pbg_{slug} import {class_name}{base_class}
+
+                core = allocate_core()
+                proc = {class_name}{base_class}(config={{}}, core=core)
+                result = proc.{
+                "update(proc.initial_state(), interval=1.0)"
+                if base_class == "Process"
+                else "update(proc.initial_state())"
+            }
+                print(result)
+                ```
+
+                ## Ports
+
+                ### Inputs
+                {_inp_lines}
+                ### Outputs
+                {_out_lines}
+                ## Config Parameters
+                {_cfg_lines}
+
+                ## Notes
+
+                This wrapper was scaffolded automatically by the sms-api. The `update()` method
+                body is a stub — fill it in to integrate the wrapped tool's simulation step.
+            """)
+        )
+
+        logger.info(
+            "Scaffolded wrapper for tool '%s' at %s (%d input ports, %d output ports, %d config params)",
+            tool_name,
+            repo_dir,
+            len(input_ports),
+            len(output_ports),
+            len(config_params),
+        )
+
+    # ------------------------------------------------------------------
     # Main orchestration
     # ------------------------------------------------------------------
 
@@ -434,25 +777,53 @@ class WrapperGenerationService:
         tool_name: str,
         source_ref: str = "main",
         extra_instructions: str | None = None,
+        process_type: str = "Process",
+        input_ports: list[PbgPortSchema] | None = None,
+        output_ports: list[PbgPortSchema] | None = None,
+        config_params: list[PbgConfigParam] | None = None,
+        use_agent: bool = True,
     ) -> None:
         """Full wrapper generation pipeline (background task).
 
-        Phase 3: agent generates code → bundle → store → READY.
-        Phase 4: container build dispatched (READY → BUILDING; BUILDING → AVAILABLE via job monitor).
+        Two code paths:
+        - **Agent path** (default): calls the Claude API pbg-expert agent to analyse the source
+          repo and generate the wrapper files. Requires ``COMPOSE_PBG_ANTHROPIC_API_KEY``.
+        - **Scaffold path**: deterministically generates a complete, pip-installable wrapper
+          package from the ``input_ports``/``output_ports``/``config_params`` provided in the
+          request. No API key or LLM required.
+
+        ``use_agent=False`` OR a missing API key forces the scaffold path.
         """
+        from sms_api.config import get_settings
+
+        _use_agent = use_agent and bool(get_settings().compose_pbg_anthropic_api_key)
+
         wrapper_db = self._db.get_wrapper_db()
         try:
             with tempfile.TemporaryDirectory() as _tmpdir:
                 workspace = Path(_tmpdir)
 
-                # 1. Run pbg-expert agent — writes pbg-<tool>/ into workspace.
-                await self._run_pbg_expert_agent(
-                    workspace=workspace,
-                    source_repo_url=source_repo_url,
-                    tool_name=tool_name,
-                    source_ref=source_ref,
-                    extra_instructions=extra_instructions,
-                )
+                if _use_agent:
+                    # Agent path — writes pbg-<tool>/ into workspace.
+                    await self._run_pbg_expert_agent(
+                        workspace=workspace,
+                        source_repo_url=source_repo_url,
+                        tool_name=tool_name,
+                        source_ref=source_ref,
+                        extra_instructions=extra_instructions,
+                    )
+                else:
+                    # Scaffold path — no LLM required.
+                    self._scaffold_wrapper(
+                        workspace=workspace,
+                        tool_name=tool_name,
+                        source_repo_url=source_repo_url,
+                        source_ref=source_ref,
+                        process_type=process_type,
+                        input_ports=input_ports or [],
+                        output_ports=output_ports or [],
+                        config_params=config_params or [],
+                    )
 
                 # 2. Locate generated repo dir (first pbg-* subdirectory).
                 repo_dir = self._locate_repo_dir(workspace)
