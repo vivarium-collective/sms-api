@@ -34,8 +34,7 @@ seed/generation combination with metadata identifying each partition.
 
 For aggregated types (`multigeneration`, `multiseed`), the filters are passed
 to vEcoli but are **not currently applied** to the per-subset data query due
-to a known vEcoli limitation
-([CovertLab/vEcoli#XXX](https://github.com/CovertLab/vEcoli/issues)).
+to a known upstream vEcoli limitation.
 Until this is fixed upstream, use `single` analyses with generation/seed
 filters and aggregate client-side if needed.
 ```
