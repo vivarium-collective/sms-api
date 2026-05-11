@@ -64,6 +64,7 @@ dependencies = [
     "pbest==0.5.5",
     "spython>=0.3.14",
     "biomodels>=0.3.2",
+    "anthropic>=0.40.0",
 ]
 
 [project.scripts]
