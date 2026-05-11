@@ -373,3 +373,40 @@ class ProcessUpdateRecord(BaseModel):
     state: dict[str, Any]
     result: dict[str, Any] | None
     called_at: str
+
+
+# ---------------------------------------------------------------------------
+# PBG Wrapper models
+# ---------------------------------------------------------------------------
+
+
+class WrapperStatus(StrEnum):
+    GENERATING = "generating"
+    STORING = "storing"
+    READY = "ready"
+    BUILDING = "building"
+    AVAILABLE = "available"
+    FAILED = "failed"
+
+
+class PbgWrapperCreateRequest(BaseModel):
+    source_repo_url: str = Field(
+        ..., description="GitHub URL of the simulator to wrap, e.g. https://github.com/vivarium-collective/mem3dg"
+    )
+    source_ref: str = Field(default="main", description="Git branch/tag/commit to target")
+    tool_name: str | None = Field(
+        default=None, description="Override the derived tool name (default: inferred from repo name)"
+    )
+    extra_instructions: str | None = Field(default=None, description="Optional extra context for the wrapper agent")
+
+
+class PbgWrapperRecord(BaseModel):
+    wrapper_id: int
+    tool_name: str
+    source_repo_url: str
+    source_ref: str
+    status: WrapperStatus
+    simulator_id: int | None = None
+    storage_uri: str | None = None
+    error_message: str | None = None
+    created_at: str

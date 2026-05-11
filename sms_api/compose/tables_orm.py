@@ -9,7 +9,7 @@ import enum
 import logging
 
 from pbest.utils.input_types import ContainerizationFileRepr
-from sqlalchemy import JSON, ForeignKey, UniqueConstraint, func
+from sqlalchemy import JSON, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -25,10 +25,12 @@ from sms_api.compose.models import (
     ComposeSimulatorVersion,
     ComposeWorkerEvent,
     PackageType,
+    PbgWrapperRecord,
     ProcessInstanceRecord,
     ProcessInstanceStatus,
     ProcessUpdateRecord,
     RegisteredPackage,
+    WrapperStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -361,6 +363,50 @@ class ORMProcessUpdate(ComposeBase):
             state=dict(self.state),
             result=dict(self.result) if self.result is not None else None,
             called_at=str(self.called_at),
+        )
+
+
+# ---------------------------------------------------------------------------
+# PBG Wrapper table
+# ---------------------------------------------------------------------------
+
+
+class WrapperStatusDB(enum.Enum):
+    GENERATING = "generating"
+    STORING = "storing"
+    READY = "ready"
+    BUILDING = "building"
+    AVAILABLE = "available"
+    FAILED = "failed"
+
+    def to_wrapper_status(self) -> WrapperStatus:
+        return WrapperStatus(self.value)
+
+
+class ORMPbgWrapper(ComposeBase):
+    __tablename__ = "compose_pbg_wrapper"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    tool_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    source_repo_url: Mapped[str] = mapped_column(String, nullable=False)
+    source_ref: Mapped[str] = mapped_column(String, nullable=False, default="main")
+    storage_uri: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[WrapperStatusDB] = mapped_column(nullable=False)
+    simulator_id: Mapped[int | None] = mapped_column(ForeignKey("compose_simulator.id"), nullable=True, index=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    def to_wrapper_record(self) -> PbgWrapperRecord:
+        return PbgWrapperRecord(
+            wrapper_id=self.id,
+            tool_name=self.tool_name,
+            source_repo_url=self.source_repo_url,
+            source_ref=self.source_ref,
+            status=self.status.to_wrapper_status(),
+            simulator_id=self.simulator_id,
+            storage_uri=self.storage_uri,
+            error_message=self.error_message,
+            created_at=str(self.created_at),
         )
 
 

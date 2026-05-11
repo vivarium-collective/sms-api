@@ -33,6 +33,8 @@ from sms_api.compose.models import (
     ComposeSimulationExperiment,
     ComposeSimulationRequest,
     PBAllowList,
+    PbgWrapperCreateRequest,
+    PbgWrapperRecord,
     ProcessInitializeRequest,
     ProcessInstance,
     ProcessInstanceRecord,
@@ -40,8 +42,10 @@ from sms_api.compose.models import (
     ProcessUpdateRecord,
     ProcessUpdateRequest,
     SimulationFileType,
+    WrapperStatus,
 )
 from sms_api.compose.simulation_service import ComposeSimulationService
+from sms_api.compose.wrapper_service import WrapperGenerationService, derive_tool_name
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +58,7 @@ router = APIRouter()
 _compose_db_service: ComposeDatabaseService | None = None
 _compose_sim_service: ComposeSimulationService | None = None
 _compose_job_monitor: ComposeJobMonitor | None = None
+_wrapper_service: WrapperGenerationService | None = None
 
 COMPOSE_ALLOW_LIST = [
     "pypi::git+https://github.com/biosimulators/bspil-basico.git@initial_work",
@@ -73,11 +78,19 @@ def set_compose_services(
     db: ComposeDatabaseService,
     sim: ComposeSimulationService,
     monitor: ComposeJobMonitor,
+    wrapper_service: WrapperGenerationService | None = None,
 ) -> None:
-    global _compose_db_service, _compose_sim_service, _compose_job_monitor
+    global _compose_db_service, _compose_sim_service, _compose_job_monitor, _wrapper_service
     _compose_db_service = db
     _compose_sim_service = sim
     _compose_job_monitor = monitor
+    _wrapper_service = wrapper_service
+
+
+def _require_wrapper_service() -> WrapperGenerationService:
+    if _wrapper_service is None:
+        raise HTTPException(500, "Wrapper generation service not initialized")
+    return _wrapper_service
 
 
 def _require_db() -> ComposeDatabaseService:
@@ -828,3 +841,76 @@ async def get_process_instance_history(process_id: str) -> list[ProcessUpdateRec
         return await _require_db().get_process_registry_db().list_process_updates(process_id)
     except LookupError as exc:
         raise HTTPException(404, str(exc))
+
+
+# ---------------------------------------------------------------------------
+# PBG Wrapper generation endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    path="/wrappers",
+    operation_id="compose-create-wrapper",
+    response_model=PbgWrapperRecord,
+    tags=["Compose Wrappers"],
+    summary="Generate a pbg-<tool> wrapper for an arbitrary simulator repo",
+)
+async def create_wrapper(
+    request: PbgWrapperCreateRequest,
+    background_tasks: BackgroundTasks,
+) -> PbgWrapperRecord:
+    """Submit a simulator's GitHub URL to generate a process-bigraph wrapper package.
+
+    Returns immediately with a ``wrapper_id``. The wrapper is generated
+    asynchronously — poll ``GET /compose/v1/wrappers/{wrapper_id}/status``
+    until ``status == 'available'``.
+
+    Once available the new processes appear in ``GET /compose/v1/processes``
+    and can be referenced in ``POST /compose/v1/simulation/run`` documents.
+    """
+    tool_name = request.tool_name or derive_tool_name(request.source_repo_url)
+    record = (
+        await _require_db()
+        .get_wrapper_db()
+        .insert_wrapper(
+            tool_name=tool_name,
+            source_repo_url=request.source_repo_url,
+            source_ref=request.source_ref,
+        )
+    )
+    background_tasks.add_task(
+        _require_wrapper_service().generate_wrapper,
+        wrapper_id=record.wrapper_id,
+        source_repo_url=request.source_repo_url,
+        tool_name=tool_name,
+        source_ref=request.source_ref,
+        extra_instructions=request.extra_instructions,
+    )
+    return record
+
+
+@router.get(
+    path="/wrappers/{wrapper_id}/status",
+    operation_id="compose-get-wrapper-status",
+    response_model=PbgWrapperRecord,
+    tags=["Compose Wrappers"],
+    summary="Poll the status of a pbg-wrapper generation job",
+)
+async def get_wrapper_status(wrapper_id: int) -> PbgWrapperRecord:
+    wrapper = await _require_db().get_wrapper_db().get_wrapper(wrapper_id)
+    if wrapper is None:
+        raise HTTPException(404, f"Wrapper {wrapper_id} not found")
+    return wrapper
+
+
+@router.get(
+    path="/wrappers",
+    operation_id="compose-list-wrappers",
+    response_model=list[PbgWrapperRecord],
+    tags=["Compose Wrappers"],
+    summary="List all generated pbg-* wrappers",
+)
+async def list_wrappers(
+    status: WrapperStatus | None = None,
+) -> list[PbgWrapperRecord]:
+    return await _require_db().get_wrapper_db().list_wrappers(status=status)
