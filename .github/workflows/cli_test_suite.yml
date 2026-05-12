@@ -1,0 +1,200 @@
+name: Atlantis CLI Test Suite
+
+# End-to-end test suite for the Atlantis CLI (app.cli) — the primary
+# end-user interface to sms-api. Every command in the CLI surface is
+# exercised against the production base URL (sms.cam.uchc.edu).
+#
+# Why a separate workflow instead of folding into main.yml:
+#   • These tests hit a *live* deployment and have wall-time characteristics
+#     that don't belong on every PR push.
+#   • The HTML report is the deliverable — it's the human-facing evidence
+#     that the CLI works as advertised.
+#   • End-user-facing only: zero secrets required.
+#
+# All tests are non-destructive: help text, read-only API listings, and
+# error-path probes. Nothing submits a simulation or builds a container.
+
+on:
+  schedule:
+    - cron: '15 6 * * *'   # 06:15 UTC daily (offset from the 4h ci.yml cron)
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "API base URL to target"
+        default: "https://sms.cam.uchc.edu"
+        type: choice
+        options:
+          - "https://sms.cam.uchc.edu"
+          - "https://sms-dev.cam.uchc.edu"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "cli-test-suite"
+  cancel-in-progress: false
+
+env:
+  BASE_URL: ${{ inputs.base_url || 'https://sms.cam.uchc.edu' }}
+
+jobs:
+  run-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      total: ${{ steps.summarize.outputs.total }}
+      passed: ${{ steps.summarize.outputs.passed }}
+      failed: ${{ steps.summarize.outputs.failed }}
+      overall: ${{ steps.summarize.outputs.overall }}
+      deployed_version: ${{ steps.summarize.outputs.deployed_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python + uv
+        uses: ./.github/actions/setup-python-env
+
+      - name: Confirm atlantis CLI is installable
+        run: |
+          uv run atlantis --help | head -20
+          echo "── atlantis CLI installed and responding"
+
+      - name: Run CLI test suite
+        id: suite
+        run: |
+          set -o pipefail
+          uv run python .github/scripts/run_cli_tests.py \
+            --base-url "$BASE_URL" \
+            --out cli-test-results.json | tee suite.log
+        # Don't fail the whole job on test failures — the report job needs to
+        # render even when some tests failed.
+        continue-on-error: true
+
+      - name: Summarize results
+        id: summarize
+        if: always()
+        run: |
+          if [ ! -f cli-test-results.json ]; then
+            {
+              echo "total=0"
+              echo "passed=0"
+              echo "failed=0"
+              echo "overall=FAIL"
+              echo "deployed_version=unknown"
+            } >> "$GITHUB_OUTPUT"
+            echo "::warning::cli-test-results.json was not produced — runner crashed before writing"
+            exit 0
+          fi
+
+          TOTAL=$(jq '.summary.total' cli-test-results.json)
+          PASSED=$(jq '.summary.passed' cli-test-results.json)
+          FAILED=$(jq '.summary.failed' cli-test-results.json)
+          OVERALL=$(jq -r '.summary.overall' cli-test-results.json)
+          VERSION=$(jq -r '.summary.deployed_version' cli-test-results.json)
+
+          {
+            echo "total=$TOTAL"
+            echo "passed=$PASSED"
+            echo "failed=$FAILED"
+            echo "overall=$OVERALL"
+            echo "deployed_version=$VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "── suite summary ──"
+          echo "  total=$TOTAL  passed=$PASSED  failed=$FAILED"
+          echo "  overall=$OVERALL  deployed=$VERSION"
+
+      - name: Upload raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-test-results
+          path: cli-test-results.json
+          retention-days: 30
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-test-log
+          path: suite.log
+          retention-days: 30
+
+  generate-report:
+    needs: [run-suite]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download raw results
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-test-results
+          path: .
+
+      - name: Render report
+        env:
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          TRIGGER: ${{ github.event_name }}
+        run: |
+          mkdir -p reports/cli
+          if [ -f cli-test-results.json ]; then
+            python3 .github/scripts/render_cli_test_report.py cli-test-results.json \
+              > reports/cli/index.html
+          else
+            # Emit a minimal failure page so the Pages deploy still has content.
+            cat > reports/cli/index.html <<'HTML'
+          <!DOCTYPE html><html><head><title>Atlantis CLI Suite — failed to produce results</title></head>
+          <body style="background:#0d0d0d;color:#e0e0e0;font-family:monospace;padding:2rem;">
+            <h1 style="color:#ff3366;">CLI test runner crashed before writing results.</h1>
+            <p>See the workflow run log for details.</p>
+          </body></html>
+          HTML
+          fi
+          echo "── reports/cli/index.html written ($(wc -c < reports/cli/index.html) bytes)"
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-test-report
+          path: reports/cli/index.html
+          retention-days: 30
+
+  deploy-report:
+    needs: [generate-report]
+    if: always() && needs.generate-report.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-test-report
+          path: reports/cli
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './reports'
+
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
