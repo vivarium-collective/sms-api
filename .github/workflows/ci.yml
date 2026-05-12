@@ -7,7 +7,7 @@ name: Continuous Health Monitor
 
 on:
   schedule:
-    - cron: '0 */4 * * *'
+    - cron: '0 4 * * *'   # 04:00 UTC nightly
   workflow_dispatch:
     inputs:
       target:

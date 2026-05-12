@@ -16,7 +16,7 @@ name: Atlantis CLI Test Suite
 
 on:
   schedule:
-    - cron: '15 6 * * *'   # 06:15 UTC daily (offset from the 4h ci.yml cron)
+    - cron: '15 6 * * *'   # 06:15 UTC nightly (offset from ci.yml's 04:00 cron)
   workflow_dispatch:
     inputs:
       base_url:
