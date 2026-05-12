@@ -17,6 +17,7 @@ The default per-test timeout is 900 seconds (15 minutes).
 from __future__ import annotations
 
 import os
+from typing import Any
 
 import httpx
 import pytest
@@ -26,7 +27,7 @@ ENDPOINT = f"{PROD_BASE_URL}/api/v1/analyses"
 TIMEOUT_SECONDS = 900  # 15 min — SLURM job may queue briefly
 
 
-def _post_analysis(body: dict) -> httpx.Response:
+def _post_analysis(body: dict[str, Any]) -> httpx.Response:
     with httpx.Client(timeout=TIMEOUT_SECONDS) as client:
         return client.post(ENDPOINT, json=body)
 
