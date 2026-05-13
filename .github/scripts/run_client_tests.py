@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Atlantis CLI comprehensive test runner.
+"""sms-api client comprehensive test runner.
 
 Invokes every read-only and metadata Atlantis CLI command against a live
-SMS-API base URL (default: prod). Captures exit code, stdout/stderr excerpts,
+sms-api base URL (default: prod). Captures exit code, stdout/stderr excerpts,
 and wall time for each test. Writes a JSON results file consumed by
-`render_cli_test_report.py`.
+`render_client_test_report.py`.
+
+This first revision covers the Atlantis CLI dimension only. Subsequent
+commits in PR #129 extend it to also cover the ptools dev HTTP path
+(scripts/test_analyses.mjs) and the hosted marimo apps (app/ui/).
 
 Tests are intentionally **non-destructive** — no simulation submissions,
-no analyses POSTs, no container builds. The suite exercises the CLI surface
-itself plus the read-only API endpoints it talks to.
+no analyses POSTs that fire fresh HPC jobs, no container builds. The suite
+exercises the client surface and the read-only API endpoints it talks to.
 """
 
 from __future__ import annotations
@@ -338,12 +342,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--base-url",
-        default=os.environ.get("CLI_TEST_BASE_URL", "https://sms.cam.uchc.edu"),
-        help="API base URL the CLI should target.",
+        default=os.environ.get("CLIENT_TEST_BASE_URL", os.environ.get("CLI_TEST_BASE_URL", "https://sms.cam.uchc.edu")),
+        help="API base URL the clients should target.",
     )
     parser.add_argument(
         "--out",
-        default="cli-test-results.json",
+        default="client-test-results.json",
         help="Path to write the JSON results file.",
     )
     args = parser.parse_args()
@@ -382,7 +386,8 @@ def main() -> int:
     for r in results:
         cat = summary.by_category.setdefault(r.category, {"total": 0, "passed": 0, "failed": 0})
         cat["total"] += 1
-        cat[r.status.lower()] = cat.get(r.status.lower(), 0) + 1
+        bucket = "passed" if r.status == "PASS" else "failed"
+        cat[bucket] += 1
 
     if summary.total > 0 and summary.failed == 0:
         summary.overall = "PASS"
