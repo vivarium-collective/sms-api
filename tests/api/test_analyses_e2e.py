@@ -1,7 +1,7 @@
 """E2E tests for POST /api/v1/analyses against the live production API.
 
 Verifies that ptools_rna single analysis requests complete successfully
-for experiments sim3-test-677a and sim3-test-45c5 (Suzanne's experiments).
+for representative experiment IDs.
 
 Prerequisites:
 - VPN must be OFF (sms.cam.uchc.edu is externally reachable)
@@ -17,6 +17,7 @@ The default per-test timeout is 900 seconds (15 minutes).
 from __future__ import annotations
 
 import os
+from typing import Any
 
 import httpx
 import pytest
@@ -26,7 +27,7 @@ ENDPOINT = f"{PROD_BASE_URL}/api/v1/analyses"
 TIMEOUT_SECONDS = 900  # 15 min — SLURM job may queue briefly
 
 
-def _post_analysis(body: dict) -> httpx.Response:
+def _post_analysis(body: dict[str, Any]) -> httpx.Response:
     with httpx.Client(timeout=TIMEOUT_SECONDS) as client:
         return client.post(ENDPOINT, json=body)
 
@@ -58,10 +59,10 @@ def _assert_valid_results(response: httpx.Response, experiment_id: str) -> None:
     reason="SKIP_ANALYSES_E2E is set",
 )
 def test_ptools_rna_sim3_test_677a() -> None:
-    """ptools_rna single analysis on sim3-test-677a (Suzanne experiment 1)."""
+    """ptools_rna single analysis on sim3-test-677a."""
     body = {
         "experiment_id": "sim3-test-677a",
-        "single": [{"name": "ptools_rna", "n_tp": 13}],
+        "single": [{"name": "ptools_rna", "n_tp": 16}],
     }
     print(f"\nPOST {ENDPOINT}")
     print(f"Body: {body}")
@@ -74,10 +75,10 @@ def test_ptools_rna_sim3_test_677a() -> None:
     reason="SKIP_ANALYSES_E2E is set",
 )
 def test_ptools_rna_sim3_test_45c5() -> None:
-    """ptools_rna single analysis on sim3-test-45c5 (Suzanne experiment 2)."""
+    """ptools_rna single analysis on sim3-test-45c5."""
     body = {
         "experiment_id": "sim3-test-45c5",
-        "single": [{"name": "ptools_rna", "n_tp": 13}],
+        "single": [{"name": "ptools_rna", "n_tp": 16}],
     }
     print(f"\nPOST {ENDPOINT}")
     print(f"Body: {body}")
