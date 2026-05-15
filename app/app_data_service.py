@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import httpx
 from httpx import AsyncClient
@@ -863,6 +864,49 @@ class E2EDataService:
                 "extra_instructions": extra_instructions,
             },
         )
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    # ------------------------------------------------------------------
+    # Package registry methods (todo:57 Part B)
+    # ------------------------------------------------------------------
+
+    def compose_list_packages(self) -> list[dict[str, Any]]:
+        resp = self.client.get("/compose/v1/packages")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_get_package(self, package_id: int) -> dict[str, Any]:
+        resp = self.client.get(f"/compose/v1/packages/{package_id}")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_audit_package(self, target: str, ref: str | None = None, run_install: bool = False) -> dict[str, Any]:
+        resp = self.client.post(
+            "/compose/v1/packages/audit",
+            json={"target": target, "ref": ref, "run_install": run_install},
+        )
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_register_package(
+        self,
+        kind: str,
+        url: str | None = None,
+        ref: str | None = None,
+        path: str | None = None,
+        outline: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"kind": kind}
+        if url is not None:
+            body["url"] = url
+        if ref is not None:
+            body["ref"] = ref
+        if path is not None:
+            body["path"] = path
+        if outline is not None:
+            body["outline"] = outline
+        resp = self.client.post("/compose/v1/packages", json=body)
         resp.raise_for_status()
         return resp.json()  # type: ignore[no-any-return]
 

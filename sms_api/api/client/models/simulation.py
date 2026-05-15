@@ -24,7 +24,7 @@ class Simulation:
         config (SimulationConfig):
         simulation_config_filename (str):
         experiment_id (str):
-        last_updated (Union[Unset, str]):  Default: '2026-05-08 21:03:48.647392'.
+        last_updated (Union[Unset, str]):  Default: '2026-05-15 13:45:55.542497'.
         job_id (Union[None, Unset, str]):
         num_seeds (Union[None, Unset, int]):
     """
@@ -35,7 +35,7 @@ class Simulation:
     config: "SimulationConfig"
     simulation_config_filename: str
     experiment_id: str
-    last_updated: Union[Unset, str] = "2026-05-08 21:03:48.647392"
+    last_updated: Union[Unset, str] = "2026-05-15 13:45:55.542497"
     job_id: Union[None, Unset, str] = UNSET
     num_seeds: Union[None, Unset, int] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)

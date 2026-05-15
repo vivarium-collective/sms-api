@@ -20,7 +20,10 @@ T = TypeVar("T", bound="ComposeSimulatorVersion")
 class ComposeSimulatorVersion:
     """
     Attributes:
-        singularity_def (ContainerizationFileRepr):
+        singularity_def (ContainerizationFileRepr): Wraps a rendered container-definition file as text.
+
+            A separate model rather than a bare ``str`` so it round-trips cleanly
+            through Pydantic-backed DB persistence and the OpenAPI surface.
         singularity_def_hash (str):
         packages (Union[None, list['RegisteredPackage']]):
         database_id (int):

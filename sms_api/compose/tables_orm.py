@@ -8,12 +8,12 @@ import datetime
 import enum
 import logging
 
-from pbest.utils.input_types import ContainerizationFileRepr
 from sqlalchemy import JSON, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from sms_api.compose.containerization import ContainerizationFileRepr
 from sms_api.compose.models import (
     BiGraphCompute,
     BiGraphComputeType,

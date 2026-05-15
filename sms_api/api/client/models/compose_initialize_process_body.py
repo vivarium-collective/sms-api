@@ -4,12 +4,12 @@ from typing import Any, TypeVar
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-T = TypeVar("T", bound="ProcessUpdateRequestState")
+T = TypeVar("T", bound="ComposeInitializeProcessBody")
 
 
 @_attrs_define
-class ProcessUpdateRequestState:
-    """Current state to pass to process.update()."""
+class ComposeInitializeProcessBody:
+    """ """
 
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -22,10 +22,10 @@ class ProcessUpdateRequestState:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        process_update_request_state = cls()
+        compose_initialize_process_body = cls()
 
-        process_update_request_state.additional_properties = d
-        return process_update_request_state
+        compose_initialize_process_body.additional_properties = d
+        return compose_initialize_process_body
 
     @property
     def additional_keys(self) -> list[str]:

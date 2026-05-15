@@ -5,19 +5,14 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.compose_get_process_config_schema_response_compose_get_process_config_schema import (
-    ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema,
-)
-from ...models.http_validation_error import HTTPValidationError
+from ...models.package_listing import PackageListing
 from ...types import Response
 
 
-def _get_kwargs(
-    process_name: str,
-) -> dict[str, Any]:
+def _get_kwargs() -> dict[str, Any]:
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": f"/compose/v1/process/{process_name}/config-schema",
+        "url": "/compose/v1/packages",
     }
 
     return _kwargs
@@ -25,15 +20,16 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema, HTTPValidationError]]:
+) -> Optional[list["PackageListing"]]:
     if response.status_code == 200:
-        response_200 = ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema.from_dict(response.json())
+        response_200 = []
+        _response_200 = response.json()
+        for response_200_item_data in _response_200:
+            response_200_item = PackageListing.from_dict(response_200_item_data)
+
+            response_200.append(response_200_item)
 
         return response_200
-    if response.status_code == 422:
-        response_422 = HTTPValidationError.from_dict(response.json())
-
-        return response_422
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
@@ -42,7 +38,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema, HTTPValidationError]]:
+) -> Response[list["PackageListing"]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -52,26 +48,20 @@ def _build_response(
 
 
 def sync_detailed(
-    process_name: str,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema, HTTPValidationError]]:
-    """Get config schema for a registered process or step
-
-    Args:
-        process_name (str):
+) -> Response[list["PackageListing"]]:
+    """List all registered packages
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema, HTTPValidationError]]
+        Response[list['PackageListing']]
     """
 
-    kwargs = _get_kwargs(
-        process_name=process_name,
-    )
+    kwargs = _get_kwargs()
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -81,50 +71,39 @@ def sync_detailed(
 
 
 def sync(
-    process_name: str,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema, HTTPValidationError]]:
-    """Get config schema for a registered process or step
-
-    Args:
-        process_name (str):
+) -> Optional[list["PackageListing"]]:
+    """List all registered packages
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema, HTTPValidationError]
+        list['PackageListing']
     """
 
     return sync_detailed(
-        process_name=process_name,
         client=client,
     ).parsed
 
 
 async def asyncio_detailed(
-    process_name: str,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema, HTTPValidationError]]:
-    """Get config schema for a registered process or step
-
-    Args:
-        process_name (str):
+) -> Response[list["PackageListing"]]:
+    """List all registered packages
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema, HTTPValidationError]]
+        Response[list['PackageListing']]
     """
 
-    kwargs = _get_kwargs(
-        process_name=process_name,
-    )
+    kwargs = _get_kwargs()
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
@@ -132,26 +111,21 @@ async def asyncio_detailed(
 
 
 async def asyncio(
-    process_name: str,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema, HTTPValidationError]]:
-    """Get config schema for a registered process or step
-
-    Args:
-        process_name (str):
+) -> Optional[list["PackageListing"]]:
+    """List all registered packages
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema, HTTPValidationError]
+        list['PackageListing']
     """
 
     return (
         await asyncio_detailed(
-            process_name=process_name,
             client=client,
         )
     ).parsed

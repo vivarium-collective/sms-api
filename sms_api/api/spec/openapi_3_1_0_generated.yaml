@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.9.2
+  version: 0.9.5
 paths:
   /api/v1/simulations/discovery:
     get:
@@ -705,7 +705,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-05-08T21:03:48.816918'
+                  created_at: '2026-05-15T14:44:42.715578'
                 parca_config:
                   outdir: /projects/SMS/sms_api/prod/sims
       responses:
@@ -757,6 +757,224 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HpcRun'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/import-types:
+    get:
+      summary: Processrouter.Get Import Types
+      operationId: ProcessRouter_get_import_types_compose_v1_import_types_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /compose/v1/type-packages:
+    get:
+      summary: Processrouter.Get Type Packages
+      operationId: ProcessRouter_get_type_packages_compose_v1_type_packages_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /compose/v1/list-types:
+    get:
+      summary: Processrouter.Get List Types
+      operationId: ProcessRouter_get_list_types_compose_v1_list_types_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /compose/v1/list-processes:
+    get:
+      summary: Processrouter.Get List Processes
+      operationId: ProcessRouter_get_list_processes_compose_v1_list_processes_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /compose/v1/process/{process}/config-schema:
+    get:
+      summary: Processrouter.Get Config Schema
+      operationId: ProcessRouter_get_config_schema_compose_v1_process__process__config_schema_get
+      parameters:
+      - name: process
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process}/initialize:
+    post:
+      summary: Processrouter.Post Initialize
+      operationId: ProcessRouter_post_initialize_compose_v1_process__process__initialize_post
+      parameters:
+      - name: process
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              title: Config
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process}/inputs/{process_id}:
+    get:
+      summary: Processrouter.Get Inputs
+      operationId: ProcessRouter_get_inputs_compose_v1_process__process__inputs__process_id__get
+      parameters:
+      - name: process
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process}/outputs/{process_id}:
+    get:
+      summary: Processrouter.Get Outputs
+      operationId: ProcessRouter_get_outputs_compose_v1_process__process__outputs__process_id__get
+      parameters:
+      - name: process
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process}/update/{process_id}:
+    post:
+      summary: Processrouter.Post Update
+      operationId: ProcessRouter_post_update_compose_v1_process__process__update__process_id__post
+      parameters:
+      - name: process
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              title: Data
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process}/end/{process_id}:
+    post:
+      summary: Processrouter.Post End
+      operationId: ProcessRouter_post_end_compose_v1_process__process__end__process_id__post
+      parameters:
+      - name: process
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -957,28 +1175,366 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ComposeRegisteredSimulators'
+  /compose/v1/types:
+    get:
+      tags:
+      - Compose Compute
+      summary: List all registered bigraph-schema types
+      operationId: compose-list-types
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  type: string
+                type: array
+                title: Response Compose-List-Types
   /compose/v1/processes:
     get:
       tags:
       - Compose Compute
       summary: List registered process-bigraph processes
       operationId: compose-list-processes
+      parameters:
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+          description: '''core'' from live link_registry, ''db'' from package_db lineage,
+            or ''union'' for both'
+          default: core
+          title: Source
+        description: '''core'' from live link_registry, ''db'' from package_db lineage,
+          or ''union'' for both'
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                items:
-                  $ref: '#/components/schemas/BiGraphProcess'
                 type: array
+                items:
+                  type: object
+                  additionalProperties: true
                 title: Response Compose-List-Processes
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /compose/v1/steps:
     get:
       tags:
       - Compose Compute
       summary: List registered process-bigraph steps
       operationId: compose-list-steps
+      parameters:
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+          description: '''core'' from live link_registry, ''db'' from package_db lineage,
+            or ''union'' for both'
+          default: core
+          title: Source
+        description: '''core'' from live link_registry, ''db'' from package_db lineage,
+          or ''union'' for both'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response Compose-List-Steps
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process_name}/config-schema:
+    get:
+      tags:
+      - Compose Compute
+      summary: Get config schema for a registered process or step
+      operationId: compose-get-config-schema
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Compose-Get-Config-Schema
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process_name}/initialize:
+    post:
+      tags:
+      - Compose Compute
+      summary: Instantiate a process with a config; returns a UUID instance ID
+      operationId: compose-initialize-process
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              default: {}
+              title: Body
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+                title: Response Compose-Initialize-Process
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process_name}/inputs/{process_id}:
+    get:
+      tags:
+      - Compose Compute
+      summary: Get inputs schema for an active process instance
+      operationId: compose-get-process-inputs
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Compose-Get-Process-Inputs
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process_name}/outputs/{process_id}:
+    get:
+      tags:
+      - Compose Compute
+      summary: Get outputs schema for an active process instance
+      operationId: compose-get-process-outputs
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Compose-Get-Process-Outputs
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process_name}/update/{process_id}:
+    post:
+      tags:
+      - Compose Compute
+      summary: Run one update step on an active process instance
+      operationId: compose-update-process
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              default: {}
+              title: Body
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Compose-Update-Process
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process_name}/end/{process_id}:
+    post:
+      tags:
+      - Compose Compute
+      summary: Terminate an active process instance and release memory
+      operationId: compose-end-process
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+                title: Response Compose-End-Process
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/instances:
+    get:
+      tags:
+      - Compose Runtime
+      summary: List all process registry instances (optionally filtered by status)
+      operationId: compose-list-process-instances
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/ProcessInstanceStatus'
+          - type: 'null'
+          title: Status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcessInstanceRecord'
+                title: Response Compose-List-Process-Instances
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/instances/{process_id}/history:
+    get:
+      tags:
+      - Compose Runtime
+      summary: List all update records for a process instance
+      operationId: compose-get-process-instance-history
+      parameters:
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcessUpdateRecord'
+                title: Response Compose-Get-Process-Instance-History
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/packages:
+    get:
+      tags:
+      - Compose Compute
+      summary: List all registered packages
+      operationId: compose-list-packages
       responses:
         '200':
           description: Successful Response
@@ -986,9 +1542,84 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: '#/components/schemas/BiGraphStep'
+                  $ref: '#/components/schemas/PackageListing'
                 type: array
-                title: Response Compose-List-Steps
+                title: Response Compose-List-Packages
+    post:
+      tags:
+      - Compose Compute
+      summary: Register a package from a repo URL, local path, or inline outline
+      operationId: compose-register-package
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PackageRegistrationRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisteredPackage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/packages/{package_id}:
+    get:
+      tags:
+      - Compose Compute
+      summary: Get a single registered package by ID
+      operationId: compose-get-package
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisteredPackage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/packages/audit:
+    post:
+      tags:
+      - Compose Compute
+      summary: Dry-run audit of a package repo without registering
+      operationId: compose-audit-package
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PackageAuditRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackageAuditResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /compose/v1/curated/copasi:
     post:
       tags:
@@ -1333,213 +1964,87 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /compose/v1/types:
-    get:
+  /compose/v1/wrappers:
+    post:
       tags:
-      - Compose Runtime
-      summary: List all registered bigraph-schema types
-      operationId: compose-list-types
+      - Compose Wrappers
+      summary: Generate a pbg-<tool> wrapper for an arbitrary simulator repo
+      description: "Submit a simulator's GitHub URL to generate a process-bigraph\
+        \ wrapper package.\n\nReturns immediately with a ``wrapper_id``. The wrapper\
+        \ is generated\nasynchronously \u2014 poll ``GET /compose/v1/wrappers/{wrapper_id}/status``\n\
+        until ``status == 'available'``.\n\nOnce available the new processes appear\
+        \ in ``GET /compose/v1/processes``\nand can be referenced in ``POST /compose/v1/simulation/run``\
+        \ documents."
+      operationId: compose-create-wrapper
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PbgWrapperCreateRequest'
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                items:
-                  type: string
+                $ref: '#/components/schemas/PbgWrapperRecord'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Compose Wrappers
+      summary: List all generated pbg-* wrappers
+      operationId: compose-list-wrappers
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/WrapperStatus'
+          - type: 'null'
+          title: Status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
                 type: array
-                title: Response Compose-List-Types
-  /compose/v1/process/{process_name}/config-schema:
+                items:
+                  $ref: '#/components/schemas/PbgWrapperRecord'
+                title: Response Compose-List-Wrappers
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/wrappers/{wrapper_id}/status:
     get:
       tags:
-      - Compose Runtime
-      summary: Get config schema for a registered process or step
-      operationId: compose-get-process-config-schema
+      - Compose Wrappers
+      summary: Poll the status of a pbg-wrapper generation job
+      operationId: compose-get-wrapper-status
       parameters:
-      - name: process_name
+      - name: wrapper_id
         in: path
         required: true
         schema:
-          type: string
-          title: Process Name
+          type: integer
+          title: Wrapper Id
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
-                title: Response Compose-Get-Process-Config-Schema
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /compose/v1/process/{process_name}/initialize:
-    post:
-      tags:
-      - Compose Runtime
-      summary: Instantiate a process with a config; returns a UUID instance ID
-      operationId: compose-initialize-process
-      parameters:
-      - name: process_name
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Process Name
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProcessInitializeRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProcessInstance'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /compose/v1/process/{process_name}/inputs/{process_id}:
-    get:
-      tags:
-      - Compose Runtime
-      summary: Get inputs schema for an active process instance
-      operationId: compose-get-process-inputs
-      parameters:
-      - name: process_name
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Process Name
-      - name: process_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Process Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-                title: Response Compose-Get-Process-Inputs
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /compose/v1/process/{process_name}/outputs/{process_id}:
-    get:
-      tags:
-      - Compose Runtime
-      summary: Get outputs schema for an active process instance
-      operationId: compose-get-process-outputs
-      parameters:
-      - name: process_name
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Process Name
-      - name: process_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Process Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-                title: Response Compose-Get-Process-Outputs
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /compose/v1/process/{process_name}/update/{process_id}:
-    post:
-      tags:
-      - Compose Runtime
-      summary: Run one update step on an active process instance
-      operationId: compose-update-process
-      parameters:
-      - name: process_name
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Process Name
-      - name: process_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Process Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProcessUpdateRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                title: Response Compose-Update-Process
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /compose/v1/process/{process_name}/end/{process_id}:
-    post:
-      tags:
-      - Compose Runtime
-      summary: Terminate an active process instance and release memory
-      operationId: compose-end-process
-      parameters:
-      - name: process_name
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Process Name
-      - name: process_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Process Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
+                $ref: '#/components/schemas/PbgWrapperRecord'
         '422':
           description: Validation Error
           content:
@@ -1670,6 +2175,47 @@ components:
       - id
       - status
       title: AnalysisRun
+    AuditCheckResult:
+      properties:
+        name:
+          type: string
+          title: Name
+        status:
+          type: string
+          title: Status
+        detail:
+          type: string
+          title: Detail
+          default: ''
+      type: object
+      required:
+      - name
+      - status
+      title: AuditCheckResult
+    BiGraphComputeOutline:
+      properties:
+        module:
+          type: string
+          title: Module
+        name:
+          type: string
+          title: Name
+        compute_type:
+          $ref: '#/components/schemas/BiGraphComputeType'
+        inputs:
+          type: string
+          title: Inputs
+        outputs:
+          type: string
+          title: Outputs
+      type: object
+      required:
+      - module
+      - name
+      - compute_type
+      - inputs
+      - outputs
+      title: BiGraphComputeOutline
     BiGraphComputeType:
       type: string
       enum:
@@ -2032,6 +2578,12 @@ components:
       required:
       - representation
       title: ContainerizationFileRepr
+      description: 'Wraps a rendered container-definition file as text.
+
+
+        A separate model rather than a bare ``str`` so it round-trips cleanly
+
+        through Pydantic-backed DB persistence and the OpenAPI surface.'
     ExperimentAnalysisDTO:
       properties:
         database_id:
@@ -2286,6 +2838,132 @@ components:
       required:
       - filename
       title: OutputFileMetadata
+    PackageAuditRequest:
+      properties:
+        target:
+          type: string
+          title: Target
+          description: Git repo URL or local filesystem path
+        ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ref
+          description: Git branch/tag/commit (optional)
+        run_install:
+          type: boolean
+          title: Run Install
+          description: Run pip install smoke test
+          default: false
+      type: object
+      required:
+      - target
+      title: PackageAuditRequest
+    PackageAuditResult:
+      properties:
+        target:
+          type: string
+          title: Target
+        checks:
+          items:
+            $ref: '#/components/schemas/AuditCheckResult'
+          type: array
+          title: Checks
+        fixes:
+          items:
+            type: string
+          type: array
+          title: Fixes
+        summary:
+          type: string
+          title: Summary
+          default: ''
+      type: object
+      required:
+      - target
+      - checks
+      - fixes
+      title: PackageAuditResult
+    PackageListing:
+      properties:
+        id:
+          type: integer
+          title: Id
+        name:
+          type: string
+          title: Name
+        package_type:
+          $ref: '#/components/schemas/PackageType'
+        num_processes:
+          type: integer
+          title: Num Processes
+        num_steps:
+          type: integer
+          title: Num Steps
+        created_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created At
+      type: object
+      required:
+      - id
+      - name
+      - package_type
+      - num_processes
+      - num_steps
+      title: PackageListing
+    PackageOutline:
+      properties:
+        package_type:
+          $ref: '#/components/schemas/PackageType'
+        name:
+          type: string
+          title: Name
+        compute:
+          items:
+            $ref: '#/components/schemas/BiGraphComputeOutline'
+          type: array
+          title: Compute
+      type: object
+      required:
+      - package_type
+      - name
+      - compute
+      title: PackageOutline
+    PackageRegistrationRequest:
+      properties:
+        kind:
+          type: string
+          title: Kind
+          description: '''repo_url'', ''local_path'', or ''outline'''
+        url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Url
+          description: Git repo URL (required when kind='repo_url')
+        ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ref
+          description: Git branch/tag/commit (optional)
+        path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Path
+          description: Local path (required when kind='local_path')
+        outline:
+          anyOf:
+          - $ref: '#/components/schemas/PackageOutline'
+          - type: 'null'
+          description: Inline outline (required when kind='outline')
+      type: object
+      required:
+      - kind
+      title: PackageRegistrationRequest
     PackageType:
       type: string
       enum:
@@ -2332,45 +3010,236 @@ components:
       additionalProperties: true
       type: object
       title: ParcaOptions
-    ProcessInitializeRequest:
+    PbgConfigParam:
       properties:
+        name:
+          type: string
+          title: Name
+          description: Parameter name, e.g. 'rate'
+        type:
+          type: string
+          title: Type
+          description: Bigraph-schema type, e.g. 'float' or 'string'
+          default: float
+        default:
+          anyOf:
+          - type: string
+          - type: number
+          - type: integer
+          - type: boolean
+          - type: 'null'
+          title: Default
+          description: Default value
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+          description: Human-readable description
+      type: object
+      required:
+      - name
+      title: PbgConfigParam
+      description: A single config parameter for a PBG Process/Step.
+    PbgPortSchema:
+      properties:
+        name:
+          type: string
+          title: Name
+          description: Port name, e.g. 'substrate'
+        schema_expr:
+          type: string
+          title: Schema Expr
+          description: Bigraph-schema type expression, e.g. 'float' or 'map[string,float]'
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+          description: Human-readable description of the port
+      type: object
+      required:
+      - name
+      - schema_expr
+      title: PbgPortSchema
+      description: A single port definition for a PBG Process/Step.
+    PbgWrapperCreateRequest:
+      properties:
+        source_repo_url:
+          type: string
+          title: Source Repo Url
+          description: GitHub URL of the simulator to wrap, e.g. https://github.com/vivarium-collective/mem3dg
+        source_ref:
+          type: string
+          title: Source Ref
+          description: Git branch/tag/commit to target
+          default: main
+        tool_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tool Name
+          description: 'Override the derived tool name (default: inferred from repo
+            name)'
+        extra_instructions:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Extra Instructions
+          description: Optional extra context for the wrapper agent
+        process_type:
+          type: string
+          title: Process Type
+          description: '''Process'' (time-stepped) or ''Step'' (event-driven/stateless)'
+          default: Process
+        input_ports:
+          items:
+            $ref: '#/components/schemas/PbgPortSchema'
+          type: array
+          title: Input Ports
+          description: Input port definitions for the scaffold path (unused when use_agent=True)
+        output_ports:
+          items:
+            $ref: '#/components/schemas/PbgPortSchema'
+          type: array
+          title: Output Ports
+          description: Output port definitions for the scaffold path (unused when
+            use_agent=True)
+        config_params:
+          items:
+            $ref: '#/components/schemas/PbgConfigParam'
+          type: array
+          title: Config Params
+          description: Config parameter definitions for the scaffold path (unused
+            when use_agent=True)
+        use_agent:
+          type: boolean
+          title: Use Agent
+          description: When True (default), invoke the Claude API pbg-expert agent
+            to generate the wrapper. When False (or when COMPOSE_PBG_ANTHROPIC_API_KEY
+            is not configured), fall back to deterministic template-based scaffolding
+            using the port/config definitions above.
+          default: true
+      type: object
+      required:
+      - source_repo_url
+      title: PbgWrapperCreateRequest
+    PbgWrapperRecord:
+      properties:
+        wrapper_id:
+          type: integer
+          title: Wrapper Id
+        tool_name:
+          type: string
+          title: Tool Name
+        source_repo_url:
+          type: string
+          title: Source Repo Url
+        source_ref:
+          type: string
+          title: Source Ref
+        status:
+          $ref: '#/components/schemas/WrapperStatus'
+        simulator_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Simulator Id
+        storage_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Storage Uri
+        error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Message
+        created_at:
+          type: string
+          title: Created At
+      type: object
+      required:
+      - wrapper_id
+      - tool_name
+      - source_repo_url
+      - source_ref
+      - status
+      - created_at
+      title: PbgWrapperRecord
+    ProcessInstanceRecord:
+      properties:
+        database_id:
+          type: integer
+          title: Database Id
+        process_id:
+          type: string
+          title: Process Id
+        process_name:
+          type: string
+          title: Process Name
         config:
           additionalProperties: true
           type: object
           title: Config
-          description: Config dict matching the process config_schema.
-      type: object
-      title: ProcessInitializeRequest
-    ProcessInstance:
-      properties:
-        process_id:
+        status:
+          $ref: '#/components/schemas/ProcessInstanceStatus'
+        created_at:
           type: string
-          title: Process Id
-          description: UUID of the instantiated process.
-        process_name:
-          type: string
-          title: Process Name
-          description: Name of the process class that was instantiated.
+          title: Created At
+        ended_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ended At
       type: object
       required:
+      - database_id
       - process_id
       - process_name
-      title: ProcessInstance
-    ProcessUpdateRequest:
+      - config
+      - status
+      - created_at
+      title: ProcessInstanceRecord
+    ProcessInstanceStatus:
+      type: string
+      enum:
+      - active
+      - ended
+      title: ProcessInstanceStatus
+    ProcessUpdateRecord:
       properties:
+        database_id:
+          type: integer
+          title: Database Id
+        process_instance_id:
+          type: integer
+          title: Process Instance Id
+        interval:
+          type: number
+          title: Interval
         state:
           additionalProperties: true
           type: object
           title: State
-          description: Current state to pass to process.update().
-        interval:
-          type: number
-          minimum: 0.0
-          title: Interval
-          description: Time interval for this update step.
-          default: 1.0
+        result:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Result
+        called_at:
+          type: string
+          title: Called At
       type: object
-      title: ProcessUpdateRequest
+      required:
+      - database_id
+      - process_instance_id
+      - interval
+      - state
+      - result
+      - called_at
+      title: ProcessUpdateRecord
     PtoolsAnalysisConfig:
       properties:
         name:
@@ -2518,7 +3387,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-05-08 21:03:48.647392'
+          default: '2026-05-15 14:44:42.525026'
         job_id:
           anyOf:
           - type: string
@@ -2701,3 +3570,13 @@ components:
       - msg
       - type
       title: ValidationError
+    WrapperStatus:
+      type: string
+      enum:
+      - generating
+      - storing
+      - ready
+      - building
+      - available
+      - failed
+      title: WrapperStatus

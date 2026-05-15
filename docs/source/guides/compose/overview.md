@@ -18,6 +18,7 @@ database, SLURM cluster, and Singularity container infrastructure.
 | Stateful process runtime | `atlantis compose init/update/end` | [REST-Process](rest-process.md) |
 | Interactive live sandbox | `atlantis compose sandbox` | [Sandbox](sandbox.md) |
 | PBG wrapper generation | `atlantis compose wrapper-create` | [Wrappers](wrappers.md) |
+| Package registry | `atlantis compose packages/package-get/package-audit/package-register` | [Registry](registry.md) |
 
 ## Architecture
 

@@ -27,4 +27,9 @@
 #          add Phase 3b scaffold, CVE deps bump (Mako/python-multipart/urllib3), analyses reliability
 #          (poll_status hang fix, CANCELLED migration, SLURM node pinning removed, silent SSH failure fix),
 #          qualification_test.sh fix, PTOOLS_VERIFICATION docs + CI workflow
-__version__ = "0.9.4"
+# 0.9.5 — package registry (todo:57): /compose/v1/processes and /steps now read live core.link_registry
+#          via pbg_superpowers.core_introspection by default (with ?source=core|db|union); new POST
+#          /compose/v1/packages, /packages/from-repo, /packages/from-path, /packages/audit endpoints
+#          gated by pbg_superpowers.package_audit; new atlantis compose packages / package-get /
+#          package-audit / package-register CLI commands; new pbg-superpowers>=0.8.1 runtime dep.
+__version__ = "0.9.5"

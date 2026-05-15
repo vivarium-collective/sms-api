@@ -133,11 +133,22 @@ for api_name in APP_ROUTERS:
         logger.exception(f"Could not register the following api: {api_name}")
 
 # -- compose (process-bigraph) router -- #
+# Two routers under /compose/v1/:
+#   1) Upstream process-bigraph rest-process surface (canonical lifecycle:
+#      /list-types, /list-processes, /import-types, /type-packages,
+#      /process/{name}/config-schema, /process/{name}/initialize, .../inputs,
+#      .../outputs, .../update, .../end). Mounted FIRST so it wins on shared paths.
+#   2) sms-api compose router (simulations, simulators, biomodels, wrappers,
+#      curated, build-status — everything sms-api adds on top of pure rest-process).
 try:
+    from process_bigraph import allocate_core
+    from process_bigraph.server.rest import make_router as make_upstream_router
+
     from sms_api.api.routers.compose import router as compose_router
 
+    app.include_router(make_upstream_router(allocate_core()), prefix="/compose/v1")
     app.include_router(compose_router, prefix="/compose/v1")
-    logger.info("Compose router registered at /compose/v1")
+    logger.info("Compose routers registered at /compose/v1 (upstream rest-process + sms-api)")
 except ImportError:
     logger.warning("Could not register compose router (compose deps may not be installed)")
 

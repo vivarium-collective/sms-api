@@ -237,6 +237,10 @@ class TestHelpSmoke:
             ["compose", "biomodels-batch", "--help"],
             ["compose", "biomodels-audit", "--help"],
             ["compose", "biomodels-regression", "--help"],
+            ["compose", "packages", "--help"],
+            ["compose", "package-get", "--help"],
+            ["compose", "package-audit", "--help"],
+            ["compose", "package-register", "--help"],
         ],
     )
     def test_command_help_exits_zero(self, args: list[str]) -> None:
@@ -337,6 +341,14 @@ class TestRequiredArgs:
 
     def test_compose_biomodels_audit_requires_id(self) -> None:
         result = runner.invoke(cli, ["compose", "biomodels-audit"])
+        assert result.exit_code != 0
+
+    def test_compose_package_get_requires_id(self) -> None:
+        result = runner.invoke(cli, ["compose", "package-get"])
+        assert result.exit_code != 0
+
+    def test_compose_package_audit_requires_target(self) -> None:
+        result = runner.invoke(cli, ["compose", "package-audit"])
         assert result.exit_code != 0
 
 
@@ -1224,4 +1236,245 @@ class TestErrorHandling:
                 cli,
                 ["simulation", "run", "myexp", "42", "--analysis-options", "not-valid-json{{{"],
             )
+        assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Package commands
+# ---------------------------------------------------------------------------
+
+
+_PACKAGE_LISTING: dict[str, object] = {
+    "id": 1,
+    "name": "pbg-test-pkg",
+    "package_type": "pypi",
+    "num_processes": 2,
+    "num_steps": 1,
+}
+
+_PACKAGE_FULL: dict[str, object] = {
+    "database_id": 1,
+    "package_type": "pypi",
+    "name": "pbg-test-pkg",
+    "processes": [
+        {"name": "TestProcess", "module": "test.module", "compute_type": "process", "inputs": "{}", "outputs": "{}"},
+    ],
+    "steps": [],
+}
+
+_AUDIT_RESULT: dict[str, object] = {
+    "target": "/mock/test-repo",
+    "checks": [
+        {"name": "pyproject.toml", "status": "PASS", "detail": "found"},
+        {"name": "bigraph-schema dep", "status": "PASS", "detail": "bigraph-schema>=0.0.60"},
+        {"name": "process-bigraph dep", "status": "PASS", "detail": "process-bigraph>=0.0.66"},
+    ],
+    "fixes": [],
+    "summary": "All 3 checks passed.",
+}
+
+
+def _mock_pkg_svc(**overrides: object) -> MagicMock:
+    svc = MagicMock()
+    svc.compose_list_packages.return_value = [_PACKAGE_LISTING]
+    svc.compose_get_package.return_value = _PACKAGE_FULL
+    svc.compose_audit_package.return_value = _AUDIT_RESULT
+    svc.compose_register_package.return_value = _PACKAGE_FULL
+    for attr, val in overrides.items():
+        setattr(svc, attr, val)
+    return svc
+
+
+class TestComposePackages:
+    def test_exits_zero(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "packages"])
+        assert result.exit_code == 0, result.output
+
+    def test_calls_list_packages(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            runner.invoke(cli, ["compose", "packages"])
+        svc.compose_list_packages.assert_called_once()
+
+    def test_prints_package_name(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "packages"])
+        assert "pbg-test-pkg" in result.output
+
+    def test_empty_list_prints_no_packages_message(self) -> None:
+        svc = _mock_pkg_svc()
+        svc.compose_list_packages.return_value = []
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "packages"])
+        assert result.exit_code == 0
+        assert "No packages registered" in result.output
+
+    def test_service_error_exits_nonzero(self) -> None:
+        svc = _mock_pkg_svc()
+        svc.compose_list_packages.side_effect = RuntimeError("db error")
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "packages"])
+        assert result.exit_code != 0
+
+
+class TestComposePackageGet:
+    def test_exits_zero(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-get", "1"])
+        assert result.exit_code == 0, result.output
+
+    def test_calls_get_package(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            runner.invoke(cli, ["compose", "package-get", "42"])
+        svc.compose_get_package.assert_called_once_with(package_id=42)
+
+    def test_prints_package_data(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-get", "1"])
+        assert "pbg-test-pkg" in result.output
+
+    def test_service_error_exits_nonzero(self) -> None:
+        svc = _mock_pkg_svc()
+        svc.compose_get_package.side_effect = RuntimeError("not found")
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-get", "999"])
+        assert result.exit_code != 0
+
+
+class TestComposePackageAudit:
+    def test_exits_zero(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-audit", "/mock/test-repo"])
+        assert result.exit_code == 0, result.output
+
+    def test_calls_audit_package(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            runner.invoke(cli, ["compose", "package-audit", "/mock/test-repo"])
+        svc.compose_audit_package.assert_called_once_with(target="/mock/test-repo", ref=None, run_install=False)
+
+    def test_passes_ref_option(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            runner.invoke(cli, ["compose", "package-audit", "/mock/test-repo", "--ref", "main"])
+        svc.compose_audit_package.assert_called_once_with(target="/mock/test-repo", ref="main", run_install=False)
+
+    def test_passes_install_option(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            runner.invoke(cli, ["compose", "package-audit", "/mock/test-repo", "--install"])
+        svc.compose_audit_package.assert_called_once_with(target="/mock/test-repo", ref=None, run_install=True)
+
+    def test_prints_checks(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-audit", "/mock/test-repo"])
+        assert "PASS" in result.output
+        assert "pyproject.toml" in result.output
+
+    def test_service_error_exits_nonzero(self) -> None:
+        svc = _mock_pkg_svc()
+        svc.compose_audit_package.side_effect = RuntimeError("path not found")
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-audit", "/nonexistent"])
+        assert result.exit_code != 0
+
+
+class TestComposePackageRegister:
+    def test_exits_zero_with_target(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-register", "/mock/test-repo", "--no-audit"])
+        assert result.exit_code == 0, result.output
+
+    def test_calls_register_local_path(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            runner.invoke(cli, ["compose", "package-register", "/mock/test-repo", "--no-audit"])
+        svc.compose_register_package.assert_called_once_with(kind="local_path", path="/mock/test-repo")
+
+    def test_audit_then_register(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-register", "/mock/test-repo"])
+        assert result.exit_code == 0, result.output
+        svc.compose_audit_package.assert_called_once_with(target="/mock/test-repo", ref=None)
+        svc.compose_register_package.assert_called_once_with(kind="local_path", path="/mock/test-repo")
+
+    def test_audit_fails_aborts_register(self) -> None:
+        svc = _mock_pkg_svc()
+        svc.compose_audit_package.return_value = {
+            "target": "/mock/fail-repo",
+            "checks": [{"name": "pyproject.toml", "status": "FAIL", "detail": "missing"}],
+            "fixes": ["Create pyproject.toml"],
+            "summary": "1 check failed.",
+        }
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-register", "/mock/fail-repo"])
+        assert result.exit_code == 0  # CLI handles audit failure gracefully
+        assert "FAIL" in result.output
+        assert "Aborting" in result.output
+        svc.compose_register_package.assert_not_called()
+
+    def test_repo_url_registers_as_url(self) -> None:
+        svc = _mock_pkg_svc()
+        svc.compose_audit_package.return_value = _AUDIT_RESULT
+        with patch("app.cli.get_data_service", return_value=svc):
+            runner.invoke(
+                cli,
+                ["compose", "package-register", "https://github.com/vivarium-collective/pbg-test", "--no-audit"],
+            )
+        svc.compose_register_package.assert_called_once_with(
+            kind="repo_url", url="https://github.com/vivarium-collective/pbg-test", ref=None
+        )
+
+    def test_register_with_ref(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            runner.invoke(
+                cli,
+                ["compose", "package-register", "/mock/test-repo", "--no-audit", "--ref", "develop"],
+            )
+        svc.compose_register_package.assert_called_once_with(kind="local_path", path="/mock/test-repo")
+
+    def test_register_from_file(self) -> None:
+        import json
+        import tempfile
+        from pathlib import Path
+
+        svc = _mock_pkg_svc()
+        outline = {"package_type": "pypi", "name": "file-pkg", "compute": []}
+        import tempfile
+        tmp = Path(tempfile.mktemp(suffix=".json"))  # noqa: S306
+        tmp.write_text(json.dumps(outline))
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-register", "--from-file", str(tmp)])
+        assert result.exit_code == 0, result.output
+        svc.compose_register_package.assert_called_once_with(kind="outline", outline=outline)
+        tmp.unlink()
+
+    def test_no_target_no_file_prints_error(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-register"])
+        assert result.exit_code != 0
+
+    def test_prints_success_message(self) -> None:
+        svc = _mock_pkg_svc()
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-register", "/mock/test-repo", "--no-audit"])
+        assert "registered successfully" in result.output.lower()
+
+    def test_service_error_exits_nonzero(self) -> None:
+        svc = _mock_pkg_svc()
+        svc.compose_register_package.side_effect = RuntimeError("duplicate name")
+        with patch("app.cli.get_data_service", return_value=svc):
+            result = runner.invoke(cli, ["compose", "package-register", "/mock/test-repo", "--no-audit"])
         assert result.exit_code != 0

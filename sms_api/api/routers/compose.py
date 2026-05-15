@@ -2,13 +2,16 @@
 
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile
 from jinja2 import Template
 from starlette.responses import FileResponse
 
+from sms_api.common.gateway.utils import get_router_config
 from sms_api.compose.database_service import ComposeDatabaseService
 from sms_api.compose.handlers import (
     get_compose_simulator_versions,
@@ -17,9 +20,7 @@ from sms_api.compose.handlers import (
 )
 from sms_api.compose.job_monitor import ComposeJobMonitor
 from sms_api.compose.models import (
-    BiGraphComputeType,
-    BiGraphProcess,
-    BiGraphStep,
+    AuditCheckResult,
     BiomodelInfo,
     BiomodelsAuditResult,
     BiomodelSimulator,
@@ -32,15 +33,19 @@ from sms_api.compose.models import (
     ComposeRegisteredSimulators,
     ComposeSimulationExperiment,
     ComposeSimulationRequest,
+    PackageAuditRequest,
+    PackageAuditResult,
+    PackageListing,
+    PackageOutline,
+    PackageRegistrationRequest,
+    PackageType,
     PBAllowList,
     PbgWrapperCreateRequest,
     PbgWrapperRecord,
-    ProcessInitializeRequest,
-    ProcessInstance,
     ProcessInstanceRecord,
     ProcessInstanceStatus,
     ProcessUpdateRecord,
-    ProcessUpdateRequest,
+    RegisteredPackage,
     SimulationFileType,
     WrapperStatus,
 )
@@ -49,6 +54,7 @@ from sms_api.compose.wrapper_service import WrapperGenerationService, derive_too
 
 logger = logging.getLogger(__name__)
 
+config = get_router_config(prefix="core", version_major=False)
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
@@ -293,27 +299,453 @@ async def list_simulators() -> ComposeRegisteredSimulators:
 
 
 @router.get(
+    path="/types",
+    operation_id="compose-list-types",
+    response_model=list[str],
+    tags=["Compose Compute"],
+    summary="List all registered bigraph-schema types",
+)
+async def list_types() -> list[str]:
+    from sms_api.compose.process_runtime import list_types as _list_types
+
+    return _list_types()
+
+
+@router.get(
     path="/processes",
     operation_id="compose-list-processes",
-    response_model=list[BiGraphProcess],
+    response_model=list[dict[str, Any]],
     tags=["Compose Compute"],
     summary="List registered process-bigraph processes",
 )
-async def list_processes() -> list[BiGraphProcess]:
-    result: list[BiGraphProcess] = await _require_db().get_package_db().list_all_computes(BiGraphComputeType.PROCESS)
-    return result
+async def list_compose_processes(
+    source: str = Query(
+        default="core",
+        description="'core' from live link_registry, 'db' from package_db lineage, or 'union' for both",
+    ),
+) -> list[dict[str, Any]]:
+    from sms_api.compose.process_runtime import introspect_core
+
+    core_processes, core_steps = introspect_core()
+    core_items = {(p.name, p.module) for p in core_processes}
+
+    db_processes: list[dict[str, Any]] = []
+    db_names: set[tuple[str, str]] = set()
+
+    if source in ("db", "union"):
+        db = _require_db()
+        packages = await db.get_package_db().list_all_packages()
+        for pkg in packages:
+            for proc in pkg.processes:
+                key = (proc.name, proc.module)
+                if key not in db_names:
+                    db_names.add(key)
+                    db_processes.append(proc.model_dump())
+
+    if source == "core":
+        return [p.model_dump() for p in core_processes]
+    elif source == "db":
+        return db_processes
+    else:
+        # union — core first, then db items not already in core
+        seen = set(core_items)
+        result = [p.model_dump() for p in core_processes]
+        for item in db_processes:
+            key = (item["name"], item["module"])
+            if key not in seen:
+                seen.add(key)
+                result.append(item)
+        return result
 
 
 @router.get(
     path="/steps",
     operation_id="compose-list-steps",
-    response_model=list[BiGraphStep],
+    response_model=list[dict[str, Any]],
     tags=["Compose Compute"],
     summary="List registered process-bigraph steps",
 )
-async def list_steps() -> list[BiGraphStep]:
-    result: list[BiGraphStep] = await _require_db().get_package_db().list_all_computes(BiGraphComputeType.STEP)
+async def list_compose_steps(
+    source: str = Query(
+        default="core",
+        description="'core' from live link_registry, 'db' from package_db lineage, or 'union' for both",
+    ),
+) -> list[dict[str, Any]]:
+    from sms_api.compose.process_runtime import introspect_core
+
+    core_processes, core_steps = introspect_core()
+    core_items = {(s.name, s.module) for s in core_steps}
+
+    db_steps: list[dict[str, Any]] = []
+    db_names: set[tuple[str, str]] = set()
+
+    if source in ("db", "union"):
+        db = _require_db()
+        packages = await db.get_package_db().list_all_packages()
+        for pkg in packages:
+            for step in pkg.steps:
+                key = (step.name, step.module)
+                if key not in db_names:
+                    db_names.add(key)
+                    db_steps.append(step.model_dump())
+
+    if source == "core":
+        return [s.model_dump() for s in core_steps]
+    elif source == "db":
+        return db_steps
+    else:
+        seen = set(core_items)
+        result = [s.model_dump() for s in core_steps]
+        for item in db_steps:
+            key = (item["name"], item["module"])
+            if key not in seen:
+                seen.add(key)
+                result.append(item)
+        return result
+
+
+# ---------------------------------------------------------------------------
+# Process lifecycle endpoints (rest-process runtime)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    path="/process/{process_name}/config-schema",
+    operation_id="compose-get-config-schema",
+    tags=["Compose Compute"],
+    summary="Get config schema for a registered process or step",
+)
+async def get_process_config_schema(process_name: str) -> dict[str, Any]:
+    from sms_api.compose.process_runtime import get_config_schema
+
+    return get_config_schema(process_name)
+
+
+@router.post(
+    path="/process/{process_name}/initialize",
+    operation_id="compose-initialize-process",
+    tags=["Compose Compute"],
+    summary="Instantiate a process with a config; returns a UUID instance ID",
+)
+async def initialize_process_endpoint(
+    process_name: str,
+    body: dict[str, Any] = {},  # noqa: B006
+) -> dict[str, str]:
+    from sms_api.compose.process_runtime import initialize_process
+
+    config = body.get("config", {})
+    try:
+        process_id = initialize_process(process_name, config)
+    except KeyError:
+        raise HTTPException(404, f"Process '{process_name}' not found")
+    db = _require_db()
+    await db.get_process_registry_db().insert_process_instance(process_id, process_name, config)
+    return {"process_id": process_id}
+
+
+@router.get(
+    path="/process/{process_name}/inputs/{process_id}",
+    operation_id="compose-get-process-inputs",
+    tags=["Compose Compute"],
+    summary="Get inputs schema for an active process instance",
+)
+async def get_process_inputs(process_name: str, process_id: str) -> dict[str, Any]:
+    from sms_api.compose.process_runtime import get_inputs
+
+    try:
+        return get_inputs(process_id)
+    except KeyError:
+        raise HTTPException(404, f"Process instance '{process_id}' not found")
+
+
+@router.get(
+    path="/process/{process_name}/outputs/{process_id}",
+    operation_id="compose-get-process-outputs",
+    tags=["Compose Compute"],
+    summary="Get outputs schema for an active process instance",
+)
+async def get_process_outputs(process_name: str, process_id: str) -> dict[str, Any]:
+    from sms_api.compose.process_runtime import get_outputs
+
+    try:
+        return get_outputs(process_id)
+    except KeyError:
+        raise HTTPException(404, f"Process instance '{process_id}' not found")
+
+
+@router.post(
+    path="/process/{process_name}/update/{process_id}",
+    operation_id="compose-update-process",
+    tags=["Compose Compute"],
+    summary="Run one update step on an active process instance",
+)
+async def update_process_endpoint(
+    process_name: str,
+    process_id: str,
+    body: dict[str, Any] = {},  # noqa: B006
+) -> Any:
+    from sms_api.compose.process_runtime import update_process
+
+    state = body.get("state", {})
+    interval = body.get("interval", 1.0)
+    try:
+        result = update_process(process_id, state, interval)
+    except KeyError:
+        raise HTTPException(404, f"Process instance '{process_id}' not found")
+    db = _require_db()
+    await db.get_process_registry_db().insert_process_update(process_id, state, interval, result)
     return result
+
+
+@router.post(
+    path="/process/{process_name}/end/{process_id}",
+    operation_id="compose-end-process",
+    tags=["Compose Compute"],
+    summary="Terminate an active process instance and release memory",
+)
+async def end_process_endpoint(process_name: str, process_id: str) -> dict[str, str]:
+    from sms_api.compose.process_runtime import end_process
+
+    try:
+        end_process(process_id)
+    except KeyError:
+        raise HTTPException(404, f"Process instance '{process_id}' not found")
+    db = _require_db()
+    await db.get_process_registry_db().end_process_instance(process_id)
+    return {"status": "ended"}
+
+
+# ---------------------------------------------------------------------------
+# Process registry read-only endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    path="/process/instances",
+    operation_id="compose-list-process-instances",
+    response_model=list[ProcessInstanceRecord],
+    tags=["Compose Runtime"],
+    summary="List all process registry instances (optionally filtered by status)",
+)
+async def list_process_instances(
+    status: ProcessInstanceStatus | None = None,
+) -> list[ProcessInstanceRecord]:
+    return await _require_db().get_process_registry_db().list_process_instances(status=status)
+
+
+@router.get(
+    path="/process/instances/{process_id}/history",
+    operation_id="compose-get-process-instance-history",
+    response_model=list[ProcessUpdateRecord],
+    tags=["Compose Runtime"],
+    summary="List all update records for a process instance",
+)
+async def get_process_instance_history(process_id: str) -> list[ProcessUpdateRecord]:
+    try:
+        return await _require_db().get_process_registry_db().list_process_updates(process_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Package registry endpoints (todo:57 Part B)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    path="/packages",
+    operation_id="compose-list-packages",
+    response_model=list[PackageListing],
+    tags=["Compose Compute"],
+    summary="List all registered packages",
+)
+async def list_packages() -> list[PackageListing]:
+    db = _require_db()
+    packages = await db.get_package_db().list_all_packages()
+    return [
+        PackageListing(
+            id=p.database_id,
+            name=p.name,
+            package_type=PackageType(p.package_type.value),
+            num_processes=len(p.processes),
+            num_steps=len(p.steps),
+        )
+        for p in packages
+    ]
+
+
+@router.get(
+    path="/packages/{package_id}",
+    operation_id="compose-get-package",
+    response_model=RegisteredPackage,
+    tags=["Compose Compute"],
+    summary="Get a single registered package by ID",
+)
+async def get_package(package_id: int) -> RegisteredPackage:
+    pkg = await _require_db().get_package_db().get_package(package_id)
+    if pkg is None:
+        raise HTTPException(404, f"Package {package_id} not found")
+    return pkg
+
+
+@router.post(
+    path="/packages/audit",
+    operation_id="compose-audit-package",
+    response_model=PackageAuditResult,
+    tags=["Compose Compute"],
+    summary="Dry-run audit of a package repo without registering",
+)
+async def audit_package(request: PackageAuditRequest) -> PackageAuditResult:
+    from sms_api.compose.package_audit import AuditReport, audit_repo, clone_repo, render_report
+
+    target_path: Path
+    if request.target.startswith(("http://", "https://", "git@")):
+        target_path = clone_repo(request.target, ref=request.ref)
+    else:
+        target_path = Path(request.target).expanduser().resolve()
+        if not target_path.exists():
+            raise HTTPException(404, f"Path not found: {request.target}")
+
+    report: AuditReport = audit_repo(target_path, run_install=request.run_install)
+    return PackageAuditResult(
+        target=report.target,
+        checks=[AuditCheckResult(name=c.name, status=c.status, detail=c.detail) for c in report.checks],
+        fixes=report.fixes,
+        summary=render_report(report),
+    )
+
+
+async def _handle_register_repo_url(
+    request: PackageRegistrationRequest,
+    pkg_db: Any,
+) -> RegisteredPackage:
+    from sms_api.compose.package_audit import AuditReport, audit_repo, clone_repo
+
+    _url = request.url
+    if _url is None:
+        raise HTTPException(400, "url required when kind='repo_url'")
+    repo_path = clone_repo(_url, ref=request.ref)
+    report: AuditReport = audit_repo(repo_path, run_install=False)
+    _raise_if_audit_failed(report, _url)
+    outline = _build_outline_from_audit(report, repo_path)
+    await _raise_if_package_exists(pkg_db, outline.name)
+    return await pkg_db.insert_package(outline)  # type: ignore[no-any-return]
+
+
+async def _handle_register_local_path(
+    request: PackageRegistrationRequest,
+    pkg_db: Any,
+) -> RegisteredPackage:
+    from sms_api.compose.package_audit import AuditReport, audit_repo
+
+    _path = request.path
+    if _path is None:
+        raise HTTPException(400, "path required when kind='local_path'")
+    repo_path = Path(_path).expanduser().resolve()
+    if not repo_path.exists():
+        raise HTTPException(404, f"Path not found: {request.path}")
+    report: AuditReport = audit_repo(repo_path, run_install=False)
+    _raise_if_audit_failed(report, _path)
+    outline = _build_outline_from_audit(report, repo_path)
+    await _raise_if_package_exists(pkg_db, outline.name)
+    return await pkg_db.insert_package(outline)  # type: ignore[no-any-return]
+
+
+async def _handle_register_outline(
+    request: PackageRegistrationRequest,
+    pkg_db: Any,
+) -> RegisteredPackage:
+    if not request.outline:
+        raise HTTPException(400, "outline required when kind='outline'")
+    await _raise_if_package_exists(pkg_db, request.outline.name)
+    return await pkg_db.insert_package(request.outline)  # type: ignore[no-any-return]
+
+
+def _raise_if_audit_failed(report: Any, label: str) -> None:
+    failed = [c for c in report.checks if c.status == "FAIL"]
+    if failed:
+        raise HTTPException(
+            400,
+            f"Audit FAILED for {label}: {[c.name for c in failed]}",
+        )
+
+
+async def _raise_if_package_exists(pkg_db: Any, name: str) -> None:
+    existing = await pkg_db.get_package_by_name(name)
+    if existing is not None:
+        raise HTTPException(
+            409,
+            f"Package '{name}' already registered (id={existing.database_id})",
+        )
+
+
+@router.post(
+    path="/packages",
+    operation_id="compose-register-package",
+    response_model=RegisteredPackage,
+    tags=["Compose Compute"],
+    summary="Register a package from a repo URL, local path, or inline outline",
+)
+async def register_package(request: PackageRegistrationRequest) -> RegisteredPackage:
+    db = _require_db()
+    pkg_db = db.get_package_db()
+
+    match request.kind:
+        case "repo_url":
+            if not request.url:
+                raise HTTPException(400, "url required when kind='repo_url'")
+            return await _handle_register_repo_url(request, pkg_db)
+        case "local_path":
+            if not request.path:
+                raise HTTPException(400, "path required when kind='local_path'")
+            return await _handle_register_local_path(request, pkg_db)
+        case "outline":
+            return await _handle_register_outline(request, pkg_db)
+        case _:
+            raise HTTPException(
+                400,
+                f"Unknown kind: {request.kind}. Use 'repo_url', 'local_path', or 'outline'.",
+            )
+
+
+def _build_outline_from_audit(report: Any, repo_path: Path) -> PackageOutline:
+    import tomllib
+
+    pyproject_path = repo_path / "pyproject.toml"
+    pyproject = tomllib.loads(pyproject_path.read_text())
+    project = pyproject.get("project") or {}
+    name = project.get("name", repo_path.name)
+    package_dirs = []
+    for child in repo_path.iterdir():
+        if child.is_dir() and not child.name.startswith(".") and not child.name.startswith("_"):
+            init = child / "__init__.py"
+            if init.exists():
+                package_dirs.append(child)
+    from sms_api.compose.models import BiGraphComputeOutline, BiGraphComputeType
+
+    outlines: list[BiGraphComputeOutline] = []
+    for pkg_dir in package_dirs:
+        for py in pkg_dir.rglob("*.py"):
+            try:
+                text = py.read_text()
+            except (UnicodeDecodeError, OSError):
+                continue
+            for cls_m in re.finditer(r"class\s+(\w+)\s*\(\s*(?:[\w.]+\.)?(Process|Step)\s*\)", text):
+                compute_type = BiGraphComputeType.PROCESS if cls_m.group(2) == "Process" else BiGraphComputeType.STEP
+                outlines.append(
+                    BiGraphComputeOutline(
+                        module=f"{pkg_dir.name}.{py.stem}",
+                        name=cls_m.group(1),
+                        compute_type=compute_type,
+                        inputs="{}",
+                        outputs="{}",
+                    )
+                )
+    return PackageOutline(
+        package_type=PackageType.PYPI,
+        name=name,
+        compute=outlines,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -692,155 +1124,6 @@ async def run_biomodels_regression(
             failed.append(biomodel_id)
 
     return BiomodelsRegressionResult(submitted=submitted, failed=failed, total_requested=total_requested)
-
-
-# ---------------------------------------------------------------------------
-# Rest-process runtime endpoints
-# Mirrors the paradigm from github.com/vivarium-collective/rest-process.
-# Stateful process instances are keyed by UUID; ephemeral within a pod session.
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    path="/types",
-    operation_id="compose-list-types",
-    response_model=list[str],
-    tags=["Compose Runtime"],
-    summary="List all registered bigraph-schema types",
-)
-async def list_types() -> list[str]:
-    from sms_api.compose.process_runtime import list_types as _list_types
-
-    return _list_types()
-
-
-@router.get(
-    path="/process/{process_name}/config-schema",
-    operation_id="compose-get-process-config-schema",
-    tags=["Compose Runtime"],
-    summary="Get config schema for a registered process or step",
-)
-async def get_process_config_schema(process_name: str) -> dict:  # type: ignore[type-arg]
-    from sms_api.compose.process_runtime import get_config_schema
-
-    return get_config_schema(process_name)
-
-
-@router.post(
-    path="/process/{process_name}/initialize",
-    operation_id="compose-initialize-process",
-    response_model=ProcessInstance,
-    tags=["Compose Runtime"],
-    summary="Instantiate a process with a config; returns a UUID instance ID",
-)
-async def initialize_process(process_name: str, request: ProcessInitializeRequest) -> ProcessInstance:
-    from sms_api.compose.process_runtime import initialize_process as _init
-
-    try:
-        process_id = _init(process_name, request.config)
-    except KeyError as exc:
-        raise HTTPException(404, str(exc))
-    await _require_db().get_process_registry_db().insert_process_instance(process_id, process_name, request.config)
-    return ProcessInstance(process_id=process_id, process_name=process_name)
-
-
-@router.get(
-    path="/process/{process_name}/inputs/{process_id}",
-    operation_id="compose-get-process-inputs",
-    tags=["Compose Runtime"],
-    summary="Get inputs schema for an active process instance",
-)
-async def get_process_inputs(process_name: str, process_id: str) -> dict:  # type: ignore[type-arg]
-    from sms_api.compose.process_runtime import get_inputs
-
-    try:
-        return get_inputs(process_id)
-    except KeyError as exc:
-        raise HTTPException(404, str(exc))
-
-
-@router.get(
-    path="/process/{process_name}/outputs/{process_id}",
-    operation_id="compose-get-process-outputs",
-    tags=["Compose Runtime"],
-    summary="Get outputs schema for an active process instance",
-)
-async def get_process_outputs(process_name: str, process_id: str) -> dict:  # type: ignore[type-arg]
-    from sms_api.compose.process_runtime import get_outputs
-
-    try:
-        return get_outputs(process_id)
-    except KeyError as exc:
-        raise HTTPException(404, str(exc))
-
-
-@router.post(
-    path="/process/{process_name}/update/{process_id}",
-    operation_id="compose-update-process",
-    tags=["Compose Runtime"],
-    summary="Run one update step on an active process instance",
-)
-async def update_process(process_name: str, process_id: str, request: ProcessUpdateRequest) -> object:
-    from sms_api.compose.process_runtime import update_process as _update
-
-    try:
-        result = _update(process_id, request.state, request.interval)
-    except KeyError as exc:
-        raise HTTPException(404, str(exc))
-    await (
-        _require_db()
-        .get_process_registry_db()
-        .insert_process_update(process_id, request.state, request.interval, result)
-    )
-    return result
-
-
-@router.post(
-    path="/process/{process_name}/end/{process_id}",
-    operation_id="compose-end-process",
-    tags=["Compose Runtime"],
-    summary="Terminate an active process instance and release memory",
-)
-async def end_process(process_name: str, process_id: str) -> None:
-    from sms_api.compose.process_runtime import end_process as _end
-
-    try:
-        _end(process_id)
-    except KeyError as exc:
-        raise HTTPException(404, str(exc))
-    await _require_db().get_process_registry_db().end_process_instance(process_id)
-
-
-# ---------------------------------------------------------------------------
-# Process registry read-only endpoints
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    path="/process/instances",
-    operation_id="compose-list-process-instances",
-    response_model=list[ProcessInstanceRecord],
-    tags=["Compose Runtime"],
-    summary="List all process registry instances (optionally filtered by status)",
-)
-async def list_process_instances(
-    status: ProcessInstanceStatus | None = None,
-) -> list[ProcessInstanceRecord]:
-    return await _require_db().get_process_registry_db().list_process_instances(status=status)
-
-
-@router.get(
-    path="/process/instances/{process_id}/history",
-    operation_id="compose-get-process-instance-history",
-    response_model=list[ProcessUpdateRecord],
-    tags=["Compose Runtime"],
-    summary="List all update records for a process instance",
-)
-async def get_process_instance_history(process_id: str) -> list[ProcessUpdateRecord]:
-    try:
-        return await _require_db().get_process_registry_db().list_process_updates(process_id)
-    except LookupError as exc:
-        raise HTTPException(404, str(exc))
 
 
 # ---------------------------------------------------------------------------

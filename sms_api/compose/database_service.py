@@ -6,12 +6,12 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, override
 
-from pbest.utils.input_types import ContainerizationFileRepr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import InstrumentedAttribute
 
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.compose.containerization import ContainerizationFileRepr
 from sms_api.compose.models import (
     BiGraphComputeType,
     BiGraphProcess,
@@ -432,6 +432,18 @@ class PackageDatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def list_all_packages(self) -> list[RegisteredPackage]:
+        pass
+
+    @abstractmethod
+    async def get_package(self, package_id: int) -> RegisteredPackage | None:
+        pass
+
+    @abstractmethod
+    async def get_package_by_name(self, name: str) -> RegisteredPackage | None:
+        pass
+
+    @abstractmethod
     async def list_all_computes(self, compute_type: BiGraphComputeType | None = None) -> Any:
         pass
 
@@ -443,18 +455,18 @@ class PackageORMExecutor(PackageDatabaseService):
         self.async_session_maker = session_maker
 
     @override
-    async def insert_package(self, package: PackageOutline) -> RegisteredPackage:
+    async def insert_package(self, package_outline: PackageOutline) -> RegisteredPackage:
         async with self.async_session_maker() as session, session.begin():
             orm_pkg = ORMComposePackage(
-                package_type=PackageTypeDB.from_package_type(package.package_type),
-                name=package.name,
+                package_type=PackageTypeDB.from_package_type(package_outline.package_type),
+                name=package_outline.name,
             )
             session.add(orm_pkg)
             await session.flush()
 
             processes: list[BiGraphProcess] = []
             steps: list[BiGraphStep] = []
-            for compute in package.compute:
+            for compute in package_outline.compute:
                 orm_compute = ORMComposeBiGraphCompute(
                     module=compute.module,
                     name=compute.name,
@@ -470,6 +482,72 @@ class PackageORMExecutor(PackageDatabaseService):
                 else:
                     steps.append(orm_compute.to_bigraph_step())
 
+            return orm_pkg.to_bigraph_package(processes, steps)
+
+    @override
+    async def list_all_packages(self) -> list[RegisteredPackage]:
+        async with self.async_session_maker() as session:
+            result = await session.execute(select(ORMComposePackage))
+            packages: list[RegisteredPackage] = []
+            for orm_pkg in result.scalars().all():
+                computes = (
+                    (
+                        await session.execute(
+                            select(ORMComposeBiGraphCompute).where(ORMComposeBiGraphCompute.package_ref == orm_pkg.id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                processes = [c.to_bigraph_process() for c in computes if c.compute_type == BiGraphComputeTypeDB.PROCESS]
+                steps = [c.to_bigraph_step() for c in computes if c.compute_type == BiGraphComputeTypeDB.STEP]
+                packages.append(orm_pkg.to_bigraph_package(processes, steps))
+            return packages
+
+    @override
+    async def get_package(self, package_id: int) -> RegisteredPackage | None:
+        async with self.async_session_maker() as session:
+            orm_pkg = (
+                (await session.execute(select(ORMComposePackage).where(ORMComposePackage.id == package_id)))
+                .scalars()
+                .first()
+            )
+            if orm_pkg is None:
+                return None
+            computes = (
+                (
+                    await session.execute(
+                        select(ORMComposeBiGraphCompute).where(ORMComposeBiGraphCompute.package_ref == orm_pkg.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            processes = [c.to_bigraph_process() for c in computes if c.compute_type == BiGraphComputeTypeDB.PROCESS]
+            steps = [c.to_bigraph_step() for c in computes if c.compute_type == BiGraphComputeTypeDB.STEP]
+            return orm_pkg.to_bigraph_package(processes, steps)
+
+    @override
+    async def get_package_by_name(self, name: str) -> RegisteredPackage | None:
+        async with self.async_session_maker() as session:
+            orm_pkg = (
+                (await session.execute(select(ORMComposePackage).where(ORMComposePackage.name == name)))
+                .scalars()
+                .first()
+            )
+            if orm_pkg is None:
+                return None
+            computes = (
+                (
+                    await session.execute(
+                        select(ORMComposeBiGraphCompute).where(ORMComposeBiGraphCompute.package_ref == orm_pkg.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            processes = [c.to_bigraph_process() for c in computes if c.compute_type == BiGraphComputeTypeDB.PROCESS]
+            steps = [c.to_bigraph_step() for c in computes if c.compute_type == BiGraphComputeTypeDB.STEP]
             return orm_pkg.to_bigraph_package(processes, steps)
 
     @override

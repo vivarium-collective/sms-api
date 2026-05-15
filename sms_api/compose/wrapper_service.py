@@ -353,10 +353,9 @@ class WrapperGenerationService:
         import random
         import string
 
-        from pbest.utils.input_types import ContainerizationFileRepr
-
         from sms_api.common.models import SSHTarget
         from sms_api.common.storage.file_paths import HPCFilePath
+        from sms_api.compose.containerization import ContainerizationFileRepr
         from sms_api.compose.models import get_singularity_hash
         from sms_api.config import get_settings
         from sms_api.dependencies import get_ssh_session_service

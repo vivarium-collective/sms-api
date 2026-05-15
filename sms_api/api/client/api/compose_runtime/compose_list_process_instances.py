@@ -6,36 +6,48 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.http_validation_error import HTTPValidationError
-from ...models.process_update_request import ProcessUpdateRequest
-from ...types import Response
+from ...models.process_instance_record import ProcessInstanceRecord
+from ...models.process_instance_status import ProcessInstanceStatus
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
-    process_name: str,
-    process_id: str,
     *,
-    body: ProcessUpdateRequest,
+    status: Union[None, ProcessInstanceStatus, Unset] = UNSET,
 ) -> dict[str, Any]:
-    headers: dict[str, Any] = {}
+    params: dict[str, Any] = {}
+
+    json_status: Union[None, Unset, str]
+    if isinstance(status, Unset):
+        json_status = UNSET
+    elif isinstance(status, ProcessInstanceStatus):
+        json_status = status.value
+    else:
+        json_status = status
+    params["status"] = json_status
+
+    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
     _kwargs: dict[str, Any] = {
-        "method": "post",
-        "url": f"/compose/v1/process/{process_name}/update/{process_id}",
+        "method": "get",
+        "url": "/compose/v1/process/instances",
+        "params": params,
     }
 
-    _kwargs["json"] = body.to_dict()
-
-    headers["Content-Type"] = "application/json"
-
-    _kwargs["headers"] = headers
     return _kwargs
 
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[Any, HTTPValidationError]]:
+) -> Optional[Union[HTTPValidationError, list["ProcessInstanceRecord"]]]:
     if response.status_code == 200:
-        response_200 = response.json()
+        response_200 = []
+        _response_200 = response.json()
+        for response_200_item_data in _response_200:
+            response_200_item = ProcessInstanceRecord.from_dict(response_200_item_data)
+
+            response_200.append(response_200_item)
+
         return response_200
     if response.status_code == 422:
         response_422 = HTTPValidationError.from_dict(response.json())
@@ -49,7 +61,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[Any, HTTPValidationError]]:
+) -> Response[Union[HTTPValidationError, list["ProcessInstanceRecord"]]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -59,31 +71,25 @@ def _build_response(
 
 
 def sync_detailed(
-    process_name: str,
-    process_id: str,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: ProcessUpdateRequest,
-) -> Response[Union[Any, HTTPValidationError]]:
-    """Run one update step on an active process instance
+    status: Union[None, ProcessInstanceStatus, Unset] = UNSET,
+) -> Response[Union[HTTPValidationError, list["ProcessInstanceRecord"]]]:
+    """List all process registry instances (optionally filtered by status)
 
     Args:
-        process_name (str):
-        process_id (str):
-        body (ProcessUpdateRequest):
+        status (Union[None, ProcessInstanceStatus, Unset]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[Any, HTTPValidationError]]
+        Response[Union[HTTPValidationError, list['ProcessInstanceRecord']]]
     """
 
     kwargs = _get_kwargs(
-        process_name=process_name,
-        process_id=process_id,
-        body=body,
+        status=status,
     )
 
     response = client.get_httpx_client().request(
@@ -94,61 +100,49 @@ def sync_detailed(
 
 
 def sync(
-    process_name: str,
-    process_id: str,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: ProcessUpdateRequest,
-) -> Optional[Union[Any, HTTPValidationError]]:
-    """Run one update step on an active process instance
+    status: Union[None, ProcessInstanceStatus, Unset] = UNSET,
+) -> Optional[Union[HTTPValidationError, list["ProcessInstanceRecord"]]]:
+    """List all process registry instances (optionally filtered by status)
 
     Args:
-        process_name (str):
-        process_id (str):
-        body (ProcessUpdateRequest):
+        status (Union[None, ProcessInstanceStatus, Unset]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[Any, HTTPValidationError]
+        Union[HTTPValidationError, list['ProcessInstanceRecord']]
     """
 
     return sync_detailed(
-        process_name=process_name,
-        process_id=process_id,
         client=client,
-        body=body,
+        status=status,
     ).parsed
 
 
 async def asyncio_detailed(
-    process_name: str,
-    process_id: str,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: ProcessUpdateRequest,
-) -> Response[Union[Any, HTTPValidationError]]:
-    """Run one update step on an active process instance
+    status: Union[None, ProcessInstanceStatus, Unset] = UNSET,
+) -> Response[Union[HTTPValidationError, list["ProcessInstanceRecord"]]]:
+    """List all process registry instances (optionally filtered by status)
 
     Args:
-        process_name (str):
-        process_id (str):
-        body (ProcessUpdateRequest):
+        status (Union[None, ProcessInstanceStatus, Unset]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[Any, HTTPValidationError]]
+        Response[Union[HTTPValidationError, list['ProcessInstanceRecord']]]
     """
 
     kwargs = _get_kwargs(
-        process_name=process_name,
-        process_id=process_id,
-        body=body,
+        status=status,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -157,32 +151,26 @@ async def asyncio_detailed(
 
 
 async def asyncio(
-    process_name: str,
-    process_id: str,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: ProcessUpdateRequest,
-) -> Optional[Union[Any, HTTPValidationError]]:
-    """Run one update step on an active process instance
+    status: Union[None, ProcessInstanceStatus, Unset] = UNSET,
+) -> Optional[Union[HTTPValidationError, list["ProcessInstanceRecord"]]]:
+    """List all process registry instances (optionally filtered by status)
 
     Args:
-        process_name (str):
-        process_id (str):
-        body (ProcessUpdateRequest):
+        status (Union[None, ProcessInstanceStatus, Unset]):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[Any, HTTPValidationError]
+        Union[HTTPValidationError, list['ProcessInstanceRecord']]
     """
 
     return (
         await asyncio_detailed(
-            process_name=process_name,
-            process_id=process_id,
             client=client,
-            body=body,
+            status=status,
         )
     ).parsed

@@ -8,11 +8,14 @@ IDs as ephemeral within a session.
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
 from bigraph_schema import Edge
-from process_bigraph import allocate_core
+from process_bigraph import Process, Step, allocate_core
+
+from sms_api.compose.models import BiGraphComputeType, BiGraphProcess, BiGraphStep
 
 # ---------------------------------------------------------------------------
 # Core singleton (lazy-initialised once on first use)
@@ -95,6 +98,54 @@ def end_process(process_id: str) -> None:
     if process_id not in _instances:
         raise KeyError(f"Process instance '{process_id}' not found")
     del _instances[process_id]
+
+
+# ---------------------------------------------------------------------------
+# Introspection helper — core.link_registry → typed pydantic objects
+# ---------------------------------------------------------------------------
+
+
+def introspect_core() -> tuple[list[BiGraphProcess], list[BiGraphStep]]:
+    """Query the live core.link_registry and split entries into Process vs Step.
+
+    Returns (processes, steps) as typed pydantic objects with module path,
+    class name, compute type, and config_schema serialised to JSON.
+    """
+    core = get_core()
+    processes: list[BiGraphProcess] = []
+    steps: list[BiGraphStep] = []
+
+    for name, cls in core.link_registry.items():
+        if not isinstance(cls, type):
+            continue
+        module = getattr(cls, "__module__", "") or ""
+        config_schema = getattr(cls, "config_schema", {})
+        schema_json = json.dumps(config_schema) if isinstance(config_schema, dict) else "{}"
+
+        if issubclass(cls, Process):
+            processes.append(
+                BiGraphProcess(
+                    database_id=0,
+                    module=module,
+                    name=name,
+                    compute_type=BiGraphComputeType.PROCESS,
+                    inputs=schema_json,
+                    outputs=schema_json,
+                )
+            )
+        elif issubclass(cls, Step):
+            steps.append(
+                BiGraphStep(
+                    database_id=0,
+                    module=module,
+                    name=name,
+                    compute_type=BiGraphComputeType.STEP,
+                    inputs=schema_json,
+                    outputs=schema_json,
+                )
+            )
+
+    return processes, steps
 
 
 # ---------------------------------------------------------------------------

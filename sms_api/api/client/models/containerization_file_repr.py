@@ -9,9 +9,13 @@ T = TypeVar("T", bound="ContainerizationFileRepr")
 
 @_attrs_define
 class ContainerizationFileRepr:
-    """
-    Attributes:
-        representation (str):
+    """Wraps a rendered container-definition file as text.
+
+    A separate model rather than a bare ``str`` so it round-trips cleanly
+    through Pydantic-backed DB persistence and the OpenAPI surface.
+
+        Attributes:
+            representation (str):
     """
 
     representation: str

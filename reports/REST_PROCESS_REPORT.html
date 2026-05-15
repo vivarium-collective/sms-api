@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Process-Bigraph Integration Report — sms-api v0.9.3</title>
+<title>Process-Bigraph Integration Report — sms-api v0.9.5</title>
 <style>
 :root {
   --bg: #0f0f1a;
@@ -285,7 +285,7 @@ pre .hl { background: rgba(99,102,241,0.15); display: block; margin: 0 -16px; pa
       <code>pbsim_common</code>, and <code>v2ecoli</code> integration into the Atlantis platform.
     </p>
     <div class="meta-row">
-      <span><span class="dot-green"></span> v0.9.3 deployed to sms-api-rke</span>
+      <span><span class="dot-green"></span> v0.9.5 deployed to sms-api-rke</span>
       <span><span class="dot-green"></span> 60+ tests passing</span>
       <span><span class="dot-green"></span> make check clean</span>
       <span><span class="dot-green"></span> E2E verified on sms-api-rke</span>
@@ -308,7 +308,7 @@ pre .hl { background: rgba(99,102,241,0.15); display: block; margin: 0 -16px; pa
   <div class="section">
     <h2>
       Contribution 1 — Stateful Process Runtime
-      <span class="badge badge-new">NEW &bull; v0.9.3</span>
+      <span class="badge badge-new">NEW &bull; v0.9.5</span>
     </h2>
     <p class="section-desc">
       Mirrors the <code>../rest-process</code> server paradigm inside <code>sms-api</code>'s
@@ -378,7 +378,7 @@ _instances: dict[str, Any] = {}
 
     <div id="t-quickstart" class="tab-content">
 <pre><span class="cm">#!/usr/bin/env python3
-# Full lifecycle using MSEComparison — no SBML required, E2E verified on sms-api-rke v0.9.3</span>
+# Full lifecycle using MSEComparison — no SBML required, E2E verified on sms-api-rke v0.9.5</span>
 <span class="kw">import</span> httpx
 
 BASE = <span class="str">"https://sms.cam.uchc.edu"</span>
@@ -785,7 +785,7 @@ uv run atlantis compose results 20 --dest ./biomodels_out --base-url https://sms
   </div>
 
   <div class="footer">
-    sms-api v0.9.3 &bull; feat/rest-process-integration &bull; Generated 2026-05-08
+    sms-api v0.9.5 &bull; feat/rest-process-integration &bull; Generated 2026-05-15
     &bull; <a href="https://sms.cam.uchc.edu/docs" style="color:var(--accent-light)">sms.cam.uchc.edu/docs</a>
   </div>
 </div>
@@ -794,7 +794,7 @@ uv run atlantis compose results 20 --dest ./biomodels_out --base-url https://sms
 // ────────────────────────────────────────────────
 // Process registry data (from allocate_core() on API pod)
 // ────────────────────────────────────────────────
-// All data sourced from live GET /compose/v1/process/{name}/config-schema on sms-api-rke v0.9.3
+// All data sourced from live GET /compose/v1/process/{name}/config-schema on sms-api-rke v0.9.5
 // inputs/outputs confirmed via initialize → GET inputs/outputs → end lifecycle on live API
 const PROCESSES = [
   // ── link_registry (POST /compose/v1/process/{name}/initialize) ──────────────

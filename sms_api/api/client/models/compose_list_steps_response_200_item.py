@@ -4,11 +4,11 @@ from typing import Any, TypeVar
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-T = TypeVar("T", bound="ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema")
+T = TypeVar("T", bound="ComposeListStepsResponse200Item")
 
 
 @_attrs_define
-class ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema:
+class ComposeListStepsResponse200Item:
     """ """
 
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -22,10 +22,10 @@ class ComposeGetProcessConfigSchemaResponseComposeGetProcessConfigSchema:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        compose_get_process_config_schema_response_compose_get_process_config_schema = cls()
+        compose_list_steps_response_200_item = cls()
 
-        compose_get_process_config_schema_response_compose_get_process_config_schema.additional_properties = d
-        return compose_get_process_config_schema_response_compose_get_process_config_schema
+        compose_list_steps_response_200_item.additional_properties = d
+        return compose_list_steps_response_200_item
 
     @property
     def additional_keys(self) -> list[str]:

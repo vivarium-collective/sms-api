@@ -5,14 +5,25 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.bi_graph_step import BiGraphStep
-from ...types import Response
+from ...models.compose_list_steps_response_200_item import ComposeListStepsResponse200Item
+from ...models.http_validation_error import HTTPValidationError
+from ...types import UNSET, Response, Unset
 
 
-def _get_kwargs() -> dict[str, Any]:
+def _get_kwargs(
+    *,
+    source: Union[Unset, str] = "core",
+) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+
+    params["source"] = source
+
+    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
+
     _kwargs: dict[str, Any] = {
         "method": "get",
         "url": "/compose/v1/steps",
+        "params": params,
     }
 
     return _kwargs
@@ -20,16 +31,20 @@ def _get_kwargs() -> dict[str, Any]:
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[list["BiGraphStep"]]:
+) -> Optional[Union[HTTPValidationError, list["ComposeListStepsResponse200Item"]]]:
     if response.status_code == 200:
         response_200 = []
         _response_200 = response.json()
         for response_200_item_data in _response_200:
-            response_200_item = BiGraphStep.from_dict(response_200_item_data)
+            response_200_item = ComposeListStepsResponse200Item.from_dict(response_200_item_data)
 
             response_200.append(response_200_item)
 
         return response_200
+    if response.status_code == 422:
+        response_422 = HTTPValidationError.from_dict(response.json())
+
+        return response_422
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
@@ -38,7 +53,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[list["BiGraphStep"]]:
+) -> Response[Union[HTTPValidationError, list["ComposeListStepsResponse200Item"]]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -50,18 +65,25 @@ def _build_response(
 def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[list["BiGraphStep"]]:
+    source: Union[Unset, str] = "core",
+) -> Response[Union[HTTPValidationError, list["ComposeListStepsResponse200Item"]]]:
     """List registered process-bigraph steps
+
+    Args:
+        source (Union[Unset, str]): 'core' from live link_registry, 'db' from package_db lineage,
+            or 'union' for both Default: 'core'.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[list['BiGraphStep']]
+        Response[Union[HTTPValidationError, list['ComposeListStepsResponse200Item']]]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        source=source,
+    )
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -73,37 +95,50 @@ def sync_detailed(
 def sync(
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[list["BiGraphStep"]]:
+    source: Union[Unset, str] = "core",
+) -> Optional[Union[HTTPValidationError, list["ComposeListStepsResponse200Item"]]]:
     """List registered process-bigraph steps
+
+    Args:
+        source (Union[Unset, str]): 'core' from live link_registry, 'db' from package_db lineage,
+            or 'union' for both Default: 'core'.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        list['BiGraphStep']
+        Union[HTTPValidationError, list['ComposeListStepsResponse200Item']]
     """
 
     return sync_detailed(
         client=client,
+        source=source,
     ).parsed
 
 
 async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[list["BiGraphStep"]]:
+    source: Union[Unset, str] = "core",
+) -> Response[Union[HTTPValidationError, list["ComposeListStepsResponse200Item"]]]:
     """List registered process-bigraph steps
+
+    Args:
+        source (Union[Unset, str]): 'core' from live link_registry, 'db' from package_db lineage,
+            or 'union' for both Default: 'core'.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[list['BiGraphStep']]
+        Response[Union[HTTPValidationError, list['ComposeListStepsResponse200Item']]]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        source=source,
+    )
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
@@ -113,19 +148,25 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[list["BiGraphStep"]]:
+    source: Union[Unset, str] = "core",
+) -> Optional[Union[HTTPValidationError, list["ComposeListStepsResponse200Item"]]]:
     """List registered process-bigraph steps
+
+    Args:
+        source (Union[Unset, str]): 'core' from live link_registry, 'db' from package_db lineage,
+            or 'union' for both Default: 'core'.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        list['BiGraphStep']
+        Union[HTTPValidationError, list['ComposeListStepsResponse200Item']]
     """
 
     return (
         await asyncio_detailed(
             client=client,
+            source=source,
         )
     ).parsed

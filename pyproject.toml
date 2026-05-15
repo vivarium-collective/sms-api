@@ -1,6 +1,6 @@
 [project]
 name = "sms_api"
-version = "0.9.4"
+version = "0.9.5"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
 requires-python = ">=3.13,<3.14"
@@ -55,16 +55,20 @@ dependencies = [
     "rich-pyfiglet>=1.0.0",
     "rich-pixels>=3.0.1",
     "pillow>=12.2.0",
-    # compose-api deps (process-bigraph ecosystem)
-    "process-bigraph>=1.0.5",
+    # compose subsystem deps — process-bigraph-native (todo:56)
+    # The [server-rest] extra pulls fastapi-utils, uvicorn, fire, typing-inspect, giving us
+    # `process_bigraph.server.rest.make_router(core)` for mounting the canonical rest-process
+    # surface at /compose/v1/. pbest was dropped (was only used for singularity-def rendering,
+    # which is now done by sms_api/compose/containerization.py + a Jinja2 template).
+    "process-bigraph[server-rest]>=1.4.12,<2",
     "nats-py>=2.10.0,<3",
     "python-libsedml>=2.0.33",
     "biosimulators-utils>=0.2.3",
     "python-libsbml>=5.20.5",
-    "pbest==0.5.5",
     "spython>=0.3.14",
     "biomodels>=0.3.2",
     "anthropic>=0.40.0",
+    # Package audit logic mirrored from pbg-superpowers.package_audit (not installable as pip dep).
 ]
 
 [project.scripts]
@@ -137,7 +141,7 @@ strict = true
 exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^app/gui\\.py$', '^app/tui\\.py$', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/simulation_data_service\\.py$"]
 
 [[tool.mypy.overrides]]
-module = ["kubernetes.*", "textual", "textual.*", "boto3", "boto3.*", "botocore.*", "pbest.*", "biosimulators_utils.*", "libsedml.*", "libsbml.*", "spython.*", "nats.*", "biomodels", "biomodels.*", "process_bigraph", "process_bigraph.*", "bigraph_schema", "bigraph_schema.*"]
+module = ["kubernetes.*", "textual", "textual.*", "boto3", "boto3.*", "botocore.*", "biosimulators_utils.*", "libsedml.*", "libsbml.*", "spython.*", "nats.*", "biomodels", "biomodels.*", "process_bigraph", "process_bigraph.*", "bigraph_schema", "bigraph_schema.*", "fastapi_utils.*", "typing_inspect.*", "fire.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

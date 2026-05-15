@@ -1197,6 +1197,108 @@ def compose_biomodels_regression(
 
 
 # ---------------------------------------------------------------------------
+# Package registry commands (todo:57 Part B)
+# ---------------------------------------------------------------------------
+
+
+@compose_cli.command("packages", help="List all registered packages.")
+@cli_error_handler
+def compose_packages(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_list_packages()
+    if not result:
+        console.print("[memphis.dim]No packages registered.[/]")
+    else:
+        display_json(list(result), console)
+
+
+@compose_cli.command("package-get", help="Show a single registered package by ID.")
+@cli_error_handler
+def compose_package_get(
+    package_id: int = Argument(help="Package database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_get_package(package_id=package_id)
+    display_json(result, console)
+
+
+@compose_cli.command("package-audit", help="Dry-run audit of a package repo without registering.")
+@cli_error_handler
+def compose_package_audit(
+    target: str = Argument(help="Git repo URL or local filesystem path."),
+    ref: str | None = Option(default=None, help="Git branch/tag/commit (optional)."),
+    install: bool = Option(default=False, help="Run pip install smoke test."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_audit_package(target=target, ref=ref, run_install=install)
+    console.print(f"[bold]Audit:[/bold] {result.get('target')}")
+    for check in result.get("checks", []):
+        status = check.get("status", "?")
+        color = "green" if status == "PASS" else "yellow" if status == "WARN" else "red"
+        detail = check.get("detail", "")
+        console.print(f"  [{color}]{status:5s}[/{color}] {check.get('name', '?')}")
+        if detail:
+            console.print(f"         {detail}")
+    if result.get("fixes"):
+        console.print("\n[bold]Recommended fixes:[/bold]")
+        for fix in result.get("fixes", []):
+            console.print(f"  - {fix}")
+
+
+@compose_cli.command("package-register", help="Register a package from a repo URL, local path, or inline outline.")
+@cli_error_handler
+def compose_package_register(
+    target: str | None = Argument(default=None, help="Git repo URL or filesystem path."),
+    ref: str | None = Option(default=None, help="Git branch/tag/commit (optional)."),
+    no_audit: bool = Option(default=False, help="Skip audit and register directly."),
+    from_file: str | None = Option(default=None, help="Path to JSON outline file (inline-outline mode)."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import json
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+
+    if from_file:
+        with open(from_file) as f:
+            outline = json.load(f)
+        result = data_service.compose_register_package(kind="outline", outline=outline)
+        console.print("[green]Package registered successfully.[/green]")
+        display_json(result, console)
+        return
+
+    if not target:
+        console.print("[red]Either --from-file or a target URL/path is required.[/red]")
+        raise SystemExit(1)
+
+    if not no_audit:
+        audit = data_service.compose_audit_package(target=target, ref=ref)
+        failed = [c for c in audit.get("checks", []) if c.get("status") == "FAIL"]
+        if failed:
+            console.print("[red]Audit FAILED. Aborting registration.[/red]")
+            for c in failed:
+                console.print(f"  FAIL: {c.get('name', '?')} — {c.get('detail', '')}")
+            console.print("\n[yellow]Use --no-audit to register anyway, or fix the issues and retry.[/yellow]")
+            return
+        console.print("[green]Audit PASSED. Registering...[/green]")
+
+    if target.startswith(("http://", "https://", "git@")):
+        result = data_service.compose_register_package(kind="repo_url", url=target, ref=ref)
+    else:
+        result = data_service.compose_register_package(kind="local_path", path=target)
+
+    console.print("[green]Package registered successfully.[/green]")
+    display_json(result, console)
+
+
+# ---------------------------------------------------------------------------
 # Rest-process runtime commands
 # ---------------------------------------------------------------------------
 

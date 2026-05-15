@@ -10,9 +10,10 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pbest.utils.input_types import ContainerizationFileRepr
 from pydantic import BaseModel as _BaseModel
 from pydantic import Field
+
+from sms_api.compose.containerization import ContainerizationFileRepr
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -262,6 +263,47 @@ class ComposeWorkerEventMessagePayload(BaseModel):
     sequence_number: int
     time: float
     mass: dict[str, float]
+
+
+# ---------------------------------------------------------------------------
+# Package registration models (todo:57)
+# ---------------------------------------------------------------------------
+
+
+class PackageRegistrationRequest(BaseModel):
+    kind: str = Field(description="'repo_url', 'local_path', or 'outline'")
+    url: str | None = Field(default=None, description="Git repo URL (required when kind='repo_url')")
+    ref: str | None = Field(default=None, description="Git branch/tag/commit (optional)")
+    path: str | None = Field(default=None, description="Local path (required when kind='local_path')")
+    outline: PackageOutline | None = Field(default=None, description="Inline outline (required when kind='outline')")
+
+
+class PackageAuditRequest(BaseModel):
+    target: str = Field(description="Git repo URL or local filesystem path")
+    ref: str | None = Field(default=None, description="Git branch/tag/commit (optional)")
+    run_install: bool = Field(default=False, description="Run pip install smoke test")
+
+
+class AuditCheckResult(BaseModel):
+    name: str
+    status: str
+    detail: str = ""
+
+
+class PackageAuditResult(BaseModel):
+    target: str
+    checks: list[AuditCheckResult]
+    fixes: list[str]
+    summary: str = ""
+
+
+class PackageListing(BaseModel):
+    id: int
+    name: str
+    package_type: PackageType
+    num_processes: int
+    num_steps: int
+    created_at: str | None = None
 
 
 # ---------------------------------------------------------------------------

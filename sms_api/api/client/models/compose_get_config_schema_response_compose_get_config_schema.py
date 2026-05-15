@@ -4,12 +4,12 @@ from typing import Any, TypeVar
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-T = TypeVar("T", bound="ProcessInitializeRequestConfig")
+T = TypeVar("T", bound="ComposeGetConfigSchemaResponseComposeGetConfigSchema")
 
 
 @_attrs_define
-class ProcessInitializeRequestConfig:
-    """Config dict matching the process config_schema."""
+class ComposeGetConfigSchemaResponseComposeGetConfigSchema:
+    """ """
 
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -22,10 +22,10 @@ class ProcessInitializeRequestConfig:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        process_initialize_request_config = cls()
+        compose_get_config_schema_response_compose_get_config_schema = cls()
 
-        process_initialize_request_config.additional_properties = d
-        return process_initialize_request_config
+        compose_get_config_schema_response_compose_get_config_schema.additional_properties = d
+        return compose_get_config_schema_response_compose_get_config_schema
 
     @property
     def additional_keys(self) -> list[str]:

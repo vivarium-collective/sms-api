@@ -84,6 +84,35 @@ class TestProcessRuntime:
         core2 = get_core()
         assert core1 is core2
 
+    def test_introspect_core_returns_typed_objects(self) -> None:
+        from sms_api.compose.models import BiGraphProcess, BiGraphStep
+        from sms_api.compose.process_runtime import introspect_core
+
+        processes, steps = introspect_core()
+        assert isinstance(processes, list)
+        assert isinstance(steps, list)
+        assert len(processes) > 0
+        assert len(steps) > 0
+        # Check types
+        for proc in processes:
+            assert isinstance(proc, BiGraphProcess)
+            assert proc.name
+            assert proc.module
+        for step in steps:
+            assert isinstance(step, BiGraphStep)
+            assert step.name
+            assert step.module
+
+    def test_introspect_core_includes_process_and_step(self) -> None:
+        from sms_api.compose.process_runtime import introspect_core
+
+        processes, steps = introspect_core()
+        # Process class and Step class themselves should be in the results
+        proc_names = {p.name for p in processes}
+        step_names = {s.name for s in steps}
+        assert "Process" in proc_names or "process_bigraph.composite.Process" in proc_names
+        assert "Step" in step_names or "process_bigraph.composite.Step" in step_names
+
 
 # ---------------------------------------------------------------------------
 # REST endpoint tests
@@ -195,3 +224,39 @@ class TestProcessRuntimeRoutes:
             json={"state": {}, "interval": 1.0},
         )
         assert resp.status_code == 404
+
+    # ------------------------------------------------------------------
+    # todo:57 Part A — /processes and /steps endpoints
+    # ------------------------------------------------------------------
+
+    def test_list_processes_core_source(self, compose_client: TestClient) -> None:
+        resp = compose_client.get("/compose/v1/processes?source=core")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) > 0
+        # Each entry should have name, module, compute_type
+        for entry in data:
+            assert "name" in entry
+            assert "module" in entry
+            assert "compute_type" in entry
+
+    def test_list_steps_core_source(self, compose_client: TestClient) -> None:
+        resp = compose_client.get("/compose/v1/steps?source=core")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) > 0
+        for entry in data:
+            assert "name" in entry
+            assert "module" in entry
+            assert "compute_type" in entry
+            # Steps should have compute_type == "step"
+            assert entry["compute_type"] == "step"
+
+    def test_list_processes_default_source(self, compose_client: TestClient) -> None:
+        resp = compose_client.get("/compose/v1/processes")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) > 0
