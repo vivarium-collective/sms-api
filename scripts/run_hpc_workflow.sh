@@ -3,10 +3,9 @@
 #SBATCH --time=30:00
 #SBATCH --cpus-per-task 2
 #SBATCH --mem=8GB
-#SBATCH --partition=vivarium
-#SBATCH --qos=vivarium
+#SBATCH --partition=vcell
+#SBATCH --qos=vcell-services
 #SBATCH --output=/home/FCAM/svc_vivarium/prod/htclogs/sms-colony-test.out
-#SBATCH --nodelist=mantis-039
 
 set -e
 env
