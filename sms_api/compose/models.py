@@ -325,3 +325,130 @@ class BiomodelsRegressionResult(BaseModel):
 
 def get_singularity_hash(singularity_def_rep: ContainerizationFileRepr) -> str:
     return hashlib.md5(singularity_def_rep.representation.encode("utf-8")).hexdigest()  # noqa: S324
+
+
+# ---------------------------------------------------------------------------
+# Rest-process runtime models
+# ---------------------------------------------------------------------------
+
+
+class ProcessInitializeRequest(BaseModel):
+    config: dict[str, Any] = Field(default_factory=dict, description="Config dict matching the process config_schema.")
+
+
+class ProcessInstance(BaseModel):
+    process_id: str = Field(description="UUID of the instantiated process.")
+    process_name: str = Field(description="Name of the process class that was instantiated.")
+
+
+class ProcessUpdateRequest(BaseModel):
+    state: dict[str, Any] = Field(default_factory=dict, description="Current state to pass to process.update().")
+    interval: float = Field(default=1.0, ge=0.0, description="Time interval for this update step.")
+
+
+# ---------------------------------------------------------------------------
+# Process registry persistence models
+# ---------------------------------------------------------------------------
+
+
+class ProcessInstanceStatus(str, enum.Enum):
+    ACTIVE = "active"
+    ENDED = "ended"
+
+
+class ProcessInstanceRecord(BaseModel):
+    database_id: int
+    process_id: str
+    process_name: str
+    config: dict[str, Any]
+    status: ProcessInstanceStatus
+    created_at: str
+    ended_at: str | None = None
+
+
+class ProcessUpdateRecord(BaseModel):
+    database_id: int
+    process_instance_id: int
+    interval: float
+    state: dict[str, Any]
+    result: dict[str, Any] | None
+    called_at: str
+
+
+# ---------------------------------------------------------------------------
+# PBG Wrapper models
+# ---------------------------------------------------------------------------
+
+
+class WrapperStatus(StrEnum):
+    GENERATING = "generating"
+    STORING = "storing"
+    READY = "ready"
+    BUILDING = "building"
+    AVAILABLE = "available"
+    FAILED = "failed"
+
+
+class PbgPortSchema(BaseModel):
+    """A single port definition for a PBG Process/Step."""
+
+    name: str = Field(..., description="Port name, e.g. 'substrate'")
+    schema_expr: str = Field(..., description="Bigraph-schema type expression, e.g. 'float' or 'map[string,float]'")
+    description: str | None = Field(default=None, description="Human-readable description of the port")
+
+
+class PbgConfigParam(BaseModel):
+    """A single config parameter for a PBG Process/Step."""
+
+    name: str = Field(..., description="Parameter name, e.g. 'rate'")
+    type: str = Field(default="float", description="Bigraph-schema type, e.g. 'float' or 'string'")
+    default: str | float | int | bool | None = Field(default=None, description="Default value")
+    description: str | None = Field(default=None, description="Human-readable description")
+
+
+class PbgWrapperCreateRequest(BaseModel):
+    source_repo_url: str = Field(
+        ..., description="GitHub URL of the simulator to wrap, e.g. https://github.com/vivarium-collective/mem3dg"
+    )
+    source_ref: str = Field(default="main", description="Git branch/tag/commit to target")
+    tool_name: str | None = Field(
+        default=None, description="Override the derived tool name (default: inferred from repo name)"
+    )
+    extra_instructions: str | None = Field(default=None, description="Optional extra context for the wrapper agent")
+    # LLM-free scaffold fields — used when use_agent=False or no API key is configured.
+    process_type: str = Field(
+        default="Process",
+        description="'Process' (time-stepped) or 'Step' (event-driven/stateless)",
+    )
+    input_ports: list[PbgPortSchema] = Field(
+        default_factory=list,
+        description="Input port definitions for the scaffold path (unused when use_agent=True)",
+    )
+    output_ports: list[PbgPortSchema] = Field(
+        default_factory=list,
+        description="Output port definitions for the scaffold path (unused when use_agent=True)",
+    )
+    config_params: list[PbgConfigParam] = Field(
+        default_factory=list,
+        description="Config parameter definitions for the scaffold path (unused when use_agent=True)",
+    )
+    use_agent: bool = Field(
+        default=True,
+        description=(
+            "When True (default), invoke the Claude API pbg-expert agent to generate the wrapper. "
+            "When False (or when COMPOSE_PBG_ANTHROPIC_API_KEY is not configured), fall back to "
+            "deterministic template-based scaffolding using the port/config definitions above."
+        ),
+    )
+
+
+class PbgWrapperRecord(BaseModel):
+    wrapper_id: int
+    tool_name: str
+    source_repo_url: str
+    source_ref: str
+    status: WrapperStatus
+    simulator_id: int | None = None
+    storage_uri: str | None = None
+    error_message: str | None = None
+    created_at: str

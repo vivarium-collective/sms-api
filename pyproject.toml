@@ -1,6 +1,6 @@
 [project]
 name = "sms_api"
-version = "0.9.2"
+version = "0.9.4"
 description = "This is the api server for Vivarium simulation services."
 authors = [{ name = "Alex Patrie", email = "alexanderpatrie@gmail.com" }, { name = "Jim Schaff", email = "jschaff@gmail.com" }]
 requires-python = ">=3.13,<3.14"
@@ -56,6 +56,7 @@ dependencies = [
     "rich-pixels>=3.0.1",
     "pillow>=12.2.0",
     # compose-api deps (process-bigraph ecosystem)
+    "process-bigraph>=1.0.5",
     "nats-py>=2.10.0,<3",
     "python-libsedml>=2.0.33",
     "biosimulators-utils>=0.2.3",
@@ -63,6 +64,7 @@ dependencies = [
     "pbest==0.5.5",
     "spython>=0.3.14",
     "biomodels>=0.3.2",
+    "anthropic>=0.40.0",
 ]
 
 [project.scripts]
@@ -91,6 +93,7 @@ dev = [
     "ipdb>=0.13.13",
     "types-aiofiles>=25.1.0.20251011",
     "types-python-dateutil>=2.9.0.20251115",
+    "aiosqlite>=0.22.1",
 ]
 docs = [
     "sphinx>=8.2.3,<10",
@@ -134,7 +137,7 @@ strict = true
 exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^app/gui\\.py$', '^app/tui\\.py$', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/simulation_data_service\\.py$"]
 
 [[tool.mypy.overrides]]
-module = ["kubernetes.*", "textual", "textual.*", "boto3", "boto3.*", "botocore.*", "pbest.*", "biosimulators_utils.*", "libsedml.*", "libsbml.*", "spython.*", "nats.*", "biomodels", "biomodels.*"]
+module = ["kubernetes.*", "textual", "textual.*", "boto3", "boto3.*", "botocore.*", "pbest.*", "biosimulators_utils.*", "libsedml.*", "libsbml.*", "spython.*", "nats.*", "biomodels", "biomodels.*", "process_bigraph", "process_bigraph.*", "bigraph_schema", "bigraph_schema.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

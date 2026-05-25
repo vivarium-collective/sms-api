@@ -33,9 +33,19 @@ from sms_api.compose.models import (
     ComposeSimulationExperiment,
     ComposeSimulationRequest,
     PBAllowList,
+    PbgWrapperCreateRequest,
+    PbgWrapperRecord,
+    ProcessInitializeRequest,
+    ProcessInstance,
+    ProcessInstanceRecord,
+    ProcessInstanceStatus,
+    ProcessUpdateRecord,
+    ProcessUpdateRequest,
     SimulationFileType,
+    WrapperStatus,
 )
 from sms_api.compose.simulation_service import ComposeSimulationService
+from sms_api.compose.wrapper_service import WrapperGenerationService, derive_tool_name
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +58,7 @@ router = APIRouter()
 _compose_db_service: ComposeDatabaseService | None = None
 _compose_sim_service: ComposeSimulationService | None = None
 _compose_job_monitor: ComposeJobMonitor | None = None
+_wrapper_service: WrapperGenerationService | None = None
 
 COMPOSE_ALLOW_LIST = [
     "pypi::git+https://github.com/biosimulators/bspil-basico.git@initial_work",
@@ -67,11 +78,19 @@ def set_compose_services(
     db: ComposeDatabaseService,
     sim: ComposeSimulationService,
     monitor: ComposeJobMonitor,
+    wrapper_service: WrapperGenerationService | None = None,
 ) -> None:
-    global _compose_db_service, _compose_sim_service, _compose_job_monitor
+    global _compose_db_service, _compose_sim_service, _compose_job_monitor, _wrapper_service
     _compose_db_service = db
     _compose_sim_service = sim
     _compose_job_monitor = monitor
+    _wrapper_service = wrapper_service
+
+
+def _require_wrapper_service() -> WrapperGenerationService:
+    if _wrapper_service is None:
+        raise HTTPException(500, "Wrapper generation service not initialized")
+    return _wrapper_service
 
 
 def _require_db() -> ComposeDatabaseService:
@@ -673,3 +692,230 @@ async def run_biomodels_regression(
             failed.append(biomodel_id)
 
     return BiomodelsRegressionResult(submitted=submitted, failed=failed, total_requested=total_requested)
+
+
+# ---------------------------------------------------------------------------
+# Rest-process runtime endpoints
+# Mirrors the paradigm from github.com/vivarium-collective/rest-process.
+# Stateful process instances are keyed by UUID; ephemeral within a pod session.
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    path="/types",
+    operation_id="compose-list-types",
+    response_model=list[str],
+    tags=["Compose Runtime"],
+    summary="List all registered bigraph-schema types",
+)
+async def list_types() -> list[str]:
+    from sms_api.compose.process_runtime import list_types as _list_types
+
+    return _list_types()
+
+
+@router.get(
+    path="/process/{process_name}/config-schema",
+    operation_id="compose-get-process-config-schema",
+    tags=["Compose Runtime"],
+    summary="Get config schema for a registered process or step",
+)
+async def get_process_config_schema(process_name: str) -> dict:  # type: ignore[type-arg]
+    from sms_api.compose.process_runtime import get_config_schema
+
+    return get_config_schema(process_name)
+
+
+@router.post(
+    path="/process/{process_name}/initialize",
+    operation_id="compose-initialize-process",
+    response_model=ProcessInstance,
+    tags=["Compose Runtime"],
+    summary="Instantiate a process with a config; returns a UUID instance ID",
+)
+async def initialize_process(process_name: str, request: ProcessInitializeRequest) -> ProcessInstance:
+    from sms_api.compose.process_runtime import initialize_process as _init
+
+    try:
+        process_id = _init(process_name, request.config)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    await _require_db().get_process_registry_db().insert_process_instance(process_id, process_name, request.config)
+    return ProcessInstance(process_id=process_id, process_name=process_name)
+
+
+@router.get(
+    path="/process/{process_name}/inputs/{process_id}",
+    operation_id="compose-get-process-inputs",
+    tags=["Compose Runtime"],
+    summary="Get inputs schema for an active process instance",
+)
+async def get_process_inputs(process_name: str, process_id: str) -> dict:  # type: ignore[type-arg]
+    from sms_api.compose.process_runtime import get_inputs
+
+    try:
+        return get_inputs(process_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.get(
+    path="/process/{process_name}/outputs/{process_id}",
+    operation_id="compose-get-process-outputs",
+    tags=["Compose Runtime"],
+    summary="Get outputs schema for an active process instance",
+)
+async def get_process_outputs(process_name: str, process_id: str) -> dict:  # type: ignore[type-arg]
+    from sms_api.compose.process_runtime import get_outputs
+
+    try:
+        return get_outputs(process_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.post(
+    path="/process/{process_name}/update/{process_id}",
+    operation_id="compose-update-process",
+    tags=["Compose Runtime"],
+    summary="Run one update step on an active process instance",
+)
+async def update_process(process_name: str, process_id: str, request: ProcessUpdateRequest) -> object:
+    from sms_api.compose.process_runtime import update_process as _update
+
+    try:
+        result = _update(process_id, request.state, request.interval)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    await (
+        _require_db()
+        .get_process_registry_db()
+        .insert_process_update(process_id, request.state, request.interval, result)
+    )
+    return result
+
+
+@router.post(
+    path="/process/{process_name}/end/{process_id}",
+    operation_id="compose-end-process",
+    tags=["Compose Runtime"],
+    summary="Terminate an active process instance and release memory",
+)
+async def end_process(process_name: str, process_id: str) -> None:
+    from sms_api.compose.process_runtime import end_process as _end
+
+    try:
+        _end(process_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    await _require_db().get_process_registry_db().end_process_instance(process_id)
+
+
+# ---------------------------------------------------------------------------
+# Process registry read-only endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    path="/process/instances",
+    operation_id="compose-list-process-instances",
+    response_model=list[ProcessInstanceRecord],
+    tags=["Compose Runtime"],
+    summary="List all process registry instances (optionally filtered by status)",
+)
+async def list_process_instances(
+    status: ProcessInstanceStatus | None = None,
+) -> list[ProcessInstanceRecord]:
+    return await _require_db().get_process_registry_db().list_process_instances(status=status)
+
+
+@router.get(
+    path="/process/instances/{process_id}/history",
+    operation_id="compose-get-process-instance-history",
+    response_model=list[ProcessUpdateRecord],
+    tags=["Compose Runtime"],
+    summary="List all update records for a process instance",
+)
+async def get_process_instance_history(process_id: str) -> list[ProcessUpdateRecord]:
+    try:
+        return await _require_db().get_process_registry_db().list_process_updates(process_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+
+# ---------------------------------------------------------------------------
+# PBG Wrapper generation endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    path="/wrappers",
+    operation_id="compose-create-wrapper",
+    response_model=PbgWrapperRecord,
+    tags=["Compose Wrappers"],
+    summary="Generate a pbg-<tool> wrapper for an arbitrary simulator repo",
+)
+async def create_wrapper(
+    request: PbgWrapperCreateRequest,
+    background_tasks: BackgroundTasks,
+) -> PbgWrapperRecord:
+    """Submit a simulator's GitHub URL to generate a process-bigraph wrapper package.
+
+    Returns immediately with a ``wrapper_id``. The wrapper is generated
+    asynchronously — poll ``GET /compose/v1/wrappers/{wrapper_id}/status``
+    until ``status == 'available'``.
+
+    Once available the new processes appear in ``GET /compose/v1/processes``
+    and can be referenced in ``POST /compose/v1/simulation/run`` documents.
+    """
+    tool_name = request.tool_name or derive_tool_name(request.source_repo_url)
+    record = (
+        await _require_db()
+        .get_wrapper_db()
+        .insert_wrapper(
+            tool_name=tool_name,
+            source_repo_url=request.source_repo_url,
+            source_ref=request.source_ref,
+        )
+    )
+    background_tasks.add_task(
+        _require_wrapper_service().generate_wrapper,
+        wrapper_id=record.wrapper_id,
+        source_repo_url=request.source_repo_url,
+        tool_name=tool_name,
+        source_ref=request.source_ref,
+        extra_instructions=request.extra_instructions,
+        process_type=request.process_type,
+        input_ports=request.input_ports,
+        output_ports=request.output_ports,
+        config_params=request.config_params,
+        use_agent=request.use_agent,
+    )
+    return record
+
+
+@router.get(
+    path="/wrappers/{wrapper_id}/status",
+    operation_id="compose-get-wrapper-status",
+    response_model=PbgWrapperRecord,
+    tags=["Compose Wrappers"],
+    summary="Poll the status of a pbg-wrapper generation job",
+)
+async def get_wrapper_status(wrapper_id: int) -> PbgWrapperRecord:
+    wrapper = await _require_db().get_wrapper_db().get_wrapper(wrapper_id)
+    if wrapper is None:
+        raise HTTPException(404, f"Wrapper {wrapper_id} not found")
+    return wrapper
+
+
+@router.get(
+    path="/wrappers",
+    operation_id="compose-list-wrappers",
+    response_model=list[PbgWrapperRecord],
+    tags=["Compose Wrappers"],
+    summary="List all generated pbg-* wrappers",
+)
+async def list_wrappers(
+    status: WrapperStatus | None = None,
+) -> list[PbgWrapperRecord]:
+    return await _require_db().get_wrapper_db().list_wrappers(status=status)

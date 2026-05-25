@@ -4,7 +4,7 @@ Installation
 Prerequisites
 -------------
 
-- **Python 3.12** (pinned to 3.12.9)
+- **Python 3.13**
 - `uv <https://docs.astral.sh/uv/>`_ package manager
 - **Git**
 

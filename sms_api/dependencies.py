@@ -317,6 +317,7 @@ async def _init_compose_subsystem(engine: AsyncEngine | None) -> None:
         from sms_api.compose.job_monitor import ComposeJobMonitor
         from sms_api.compose.simulation_service import ComposeSimulationServiceHpc
         from sms_api.compose.tables_orm import create_compose_db
+        from sms_api.compose.wrapper_service import WrapperGenerationService
 
         logger.info("Initializing compose subsystem tables...")
         await create_compose_db(engine)
@@ -325,8 +326,9 @@ async def _init_compose_subsystem(engine: AsyncEngine | None) -> None:
         compose_db = ComposeDatabaseService(session_maker)
         compose_sim = ComposeSimulationServiceHpc()
         compose_monitor = ComposeJobMonitor(nats_client=None, database_service=compose_db)
+        wrapper_svc = WrapperGenerationService(db=compose_db, file_service=get_file_service(), sim_service=compose_sim)
 
-        set_compose_services(db=compose_db, sim=compose_sim, monitor=compose_monitor)
+        set_compose_services(db=compose_db, sim=compose_sim, monitor=compose_monitor, wrapper_service=wrapper_svc)
 
         # Start compose job monitor polling
         await compose_monitor.start_polling(interval_seconds=30)

@@ -165,13 +165,37 @@ class AnalysisServiceSlurm:
         if identifier is None:
             raise ValueError("There is no job id yet associated with this record.")
 
+        _TERMINAL = {"completed", "failed", "cancelled"}
+        # scontrol drops completed jobs from its memory after a short window.
+        # After the initial grace period (GRACE_POLLS), consecutive UNKNOWN returns
+        # mean the job finished and left scontrol — treat it as completed.
+        _GRACE_POLLS = 2
+        _MAX_CONSECUTIVE_UNKNOWN = 3
+
+        consecutive_unknown = 0
+        total_polls = 0
+
         await asyncio.sleep(3)
         run = await self.get_analysis_status(job_id=identifier, db_id=db_id, ssh=ssh)
-        while run.status.lower() not in ["completed", "failed"]:
+        total_polls += 1
+
+        while run.status.lower() not in _TERMINAL:
+            if run.status.lower() == "unknown" and total_polls > _GRACE_POLLS:
+                consecutive_unknown += 1
+                if consecutive_unknown >= _MAX_CONSECUTIVE_UNKNOWN:
+                    logger.info(
+                        f"Job {identifier} returned UNKNOWN for {consecutive_unknown} consecutive polls "
+                        "after grace period — job has left scontrol window, treating as completed."
+                    )
+                    run = AnalysisRun(id=db_id, status=JobStatus.COMPLETED, job_id=identifier)
+                    break
+            else:
+                consecutive_unknown = 0
             await asyncio.sleep(3)
             run = await self.get_analysis_status(job_id=identifier, db_id=db_id, ssh=ssh)
+            total_polls += 1
+
         if run.status.lower() == "failed":
-            # Fetch the job log for error details
             error_log = await self._fetch_job_log(job_name=dto.job_name, ssh=ssh)
             run.error_log = error_log
             raise AnalysisJobFailedException(run=run)

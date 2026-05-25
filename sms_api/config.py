@@ -245,6 +245,14 @@ class Settings(BaseSettings):
     compose_nats_worker_event_subject: str = "compose.worker.events"
     compose_has_messaging: bool = False  # Enable NATS messaging
 
+    # --- PBG Wrapper generation settings ---
+    # Storage key prefix for wrapper tarballs (appended to the configured storage bucket)
+    compose_pbg_wrappers_storage_prefix: str = "pbg-wrappers"
+    # Anthropic API key for the pbg-expert agent (read from env: COMPOSE_PBG_ANTHROPIC_API_KEY)
+    compose_pbg_anthropic_api_key: str = ""
+    # Absolute path to the pbg-expert SKILL.md; if empty, resolves to the sibling pbg-superpowers repo (dev default)
+    compose_pbg_expert_skill_path: str = ""
+
 
 class ComputeBackend(StrEnum):
     """Compute backend for simulation workloads."""

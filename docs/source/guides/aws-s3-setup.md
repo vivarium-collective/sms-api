@@ -44,7 +44,7 @@ aws sts get-caller-identity
 export AWS_REGION="us-east-1"
 export BUCKET_NAME="sms-api-storage-$(date +%Y%m%d)"
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-export SSO_ROLE_ARN="arn:aws:sts::${ACCOUNT_ID}:assumed-role/AWSReservedSSO_AdministratorAccess_0623eedd7adb8854/jcschaff_sso"
+export SSO_ROLE_ARN="arn:aws:sts::${ACCOUNT_ID}:assumed-role/<YOUR_SSO_PERMISSION_SET>/<YOUR_SSO_USERNAME>"
 
 # Create bucket
 aws s3api create-bucket \

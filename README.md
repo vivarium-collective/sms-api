@@ -8,6 +8,7 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/vivarium-collective/sms-api)](https://img.shields.io/github/commit-activity/m/vivarium-collective/sms-api)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![Documentation](https://img.shields.io/badge/documentation-online-blue.svg)](https://sms-api.readthedocs.io/en/latest/)
+[![Process-Bigraph Report](https://img.shields.io/badge/PBG%20Integration-Report-6366f1)](https://vivarium-collective.github.io/sms-api/REST_PROCESS_REPORT.html)
 
 <p align="center">
   <img src="https://github.com/vivarium-collective/sms-api/blob/main/docs/source/_static/wholecellecoli.png?raw=true" width="400" />

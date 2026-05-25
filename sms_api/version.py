@@ -23,4 +23,8 @@
 # 0.8.2 — fix analysis output metadata (partition parsing), all-domain filtering, restore num_seeds
 # 0.9.0 — compose (process-bigraph) subsystem, Python 3.13, /compose/v1/ endpoints
 # 0.9.1 — fix test_run_analysis to use HPC-available simulator (203ab2a), graceful GitHub cred skip
-__version__ = "0.9.2"
+# 0.9.4 — fix broken 0.9.3 compose router import (PbgConfigParam/PbgPortSchema missing from models.py);
+#          add Phase 3b scaffold, CVE deps bump (Mako/python-multipart/urllib3), analyses reliability
+#          (poll_status hang fix, CANCELLED migration, SLURM node pinning removed, silent SSH failure fix),
+#          qualification_test.sh fix, PTOOLS_VERIFICATION docs + CI workflow
+__version__ = "0.9.4"

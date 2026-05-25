@@ -1196,6 +1196,208 @@ def compose_biomodels_regression(
     display_json(result, console)
 
 
+# ---------------------------------------------------------------------------
+# Rest-process runtime commands
+# ---------------------------------------------------------------------------
+
+
+@compose_cli.command("list-types", help="List all registered bigraph-schema types.")
+def compose_list_types(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    types = data_service.compose_list_types()
+    display_json(str(types), console)
+
+
+@compose_cli.command("config-schema", help="Get config schema for a registered process or step.")
+def compose_config_schema(
+    process_name: str = Argument(help="Registered process/step name."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_get_config_schema(process_name=process_name)
+    display_json(result, console)
+
+
+@compose_cli.command("init", help="Instantiate a process with a config; returns a UUID instance ID.")
+def compose_init(
+    process_name: str = Argument(help="Registered process/step name."),
+    config: str = Option(default="{}", help="JSON config dict matching the process config_schema."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import json
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    try:
+        config_dict = json.loads(config)
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]Invalid JSON config:[/red] {exc}")
+        raise SystemExit(1)
+    result = data_service.compose_initialize_process(process_name=process_name, config=config_dict)
+    console.print(f"[bold]Process ID:[/bold] {result.get('process_id')}")
+    display_json(result, console)
+
+
+@compose_cli.command("inputs", help="Get inputs schema for an active process instance.")
+def compose_inputs(
+    process_name: str = Argument(help="Process name."),
+    process_id: str = Argument(help="UUID returned by 'atlantis compose init'."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_get_process_inputs(process_name=process_name, process_id=process_id)
+    display_json(result, console)
+
+
+@compose_cli.command("outputs", help="Get outputs schema for an active process instance.")
+def compose_outputs(
+    process_name: str = Argument(help="Process name."),
+    process_id: str = Argument(help="UUID returned by 'atlantis compose init'."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_get_process_outputs(process_name=process_name, process_id=process_id)
+    display_json(result, console)
+
+
+@compose_cli.command("update", help="Run one update step on an active process instance.")
+def compose_update(
+    process_name: str = Argument(help="Process name."),
+    process_id: str = Argument(help="UUID returned by 'atlantis compose init'."),
+    state: str = Option(default="{}", help="JSON state dict to pass to process.update()."),
+    interval: float = Option(default=1.0, help="Time interval for this update step."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import json
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    try:
+        state_dict = json.loads(state)
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]Invalid JSON state:[/red] {exc}")
+        raise SystemExit(1)
+    update_result = data_service.compose_update_process(
+        process_name=process_name, process_id=process_id, state=state_dict, interval=interval
+    )
+    display_json(str(update_result), console)
+
+
+@compose_cli.command("end", help="Terminate an active process instance and release memory.")
+def compose_end(
+    process_name: str = Argument(help="Process name."),
+    process_id: str = Argument(help="UUID returned by 'atlantis compose init'."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    data_service.compose_end_process(process_name=process_name, process_id=process_id)
+    console.print(f"[green]Process {process_id} terminated.[/green]")
+
+
+@compose_cli.command("wrapper-create", help="Generate a pbg-<tool> wrapper for a simulator GitHub repo.")
+@cli_error_handler
+def compose_wrapper_create(
+    repo_url: str = Argument(help="GitHub URL of the simulator to wrap."),
+    tool_name: str | None = Option(default=None, help="Override the inferred tool name."),
+    ref: str = Option(default="main", help="Git branch/tag/commit to target."),
+    instructions: str | None = Option(default=None, help="Extra instructions for the wrapper agent."),
+    poll: bool = Option(default=False, help="Poll until wrapper is available."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import time
+
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    with console.status("[memphis.spinner]Submitting wrapper generation..."):
+        result = data_service.compose_create_wrapper(
+            source_repo_url=repo_url,
+            tool_name=tool_name,
+            source_ref=ref,
+            extra_instructions=instructions,
+        )
+    wrapper_id = result.get("wrapper_id")
+    console.print(f"[memphis.label]Wrapper ID:[/] {wrapper_id}")
+    display_json(result, console)
+    if poll and wrapper_id is not None:
+        console.print("[memphis.info]Polling for wrapper completion...[/]")
+        terminal_states = {"available", "failed"}
+        s = "generating"
+        while s not in terminal_states:
+            time.sleep(10)
+            status_data = data_service.compose_get_wrapper_status(wrapper_id=wrapper_id)
+            s = (status_data.get("status") or "unknown").lower()
+            console.print(f"  Status: [{status_style(s)}]{s}[/]")
+        console.print(
+            Panel(
+                f"[{status_style(s)}]{s.upper()}[/]",
+                title=f"Wrapper {wrapper_id}",
+                border_style=status_border(s),
+            )
+        )
+
+
+@compose_cli.command("wrapper-status", help="Poll the status of a pbg-wrapper generation job.")
+@cli_error_handler
+def compose_wrapper_status(
+    wrapper_id: int = Argument(help="Wrapper ID returned by 'wrapper-create'."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    from rich.panel import Panel
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_get_wrapper_status(wrapper_id=wrapper_id)
+    s = (result.get("status") or "unknown").lower()
+    console.print(
+        Panel(
+            f"[{status_style(s)}]{s.upper()}[/]",
+            title=f"Wrapper {wrapper_id}",
+            border_style=status_border(s),
+        )
+    )
+    display_json(result, console)
+
+
+@compose_cli.command("wrapper-list", help="List all generated pbg-* wrappers.")
+@cli_error_handler
+def compose_wrapper_list(
+    status: str | None = Option(default=None, help="Filter by status (e.g. available, generating, failed)."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    results = data_service.compose_list_wrappers(status=status)
+    if not results:
+        console.print("[memphis.dim]No wrappers found.[/]")
+    else:
+        display_json(results, console)  # type: ignore[arg-type]
+
+
+@compose_cli.command("sandbox", help="Launch the PBG live sandbox Marimo app (interactive demo against the live API).")
+def compose_sandbox(
+    mode: str = Option(default="run", help="Marimo launch mode: 'run' (app) or 'edit' (notebook)."),
+) -> None:
+    console = get_console()
+    console.print("[bold]Launching PBG Live Sandbox...[/bold] [dim]app/ui/pbg_sandbox.py[/dim]")
+    proc: subprocess.Popen[bytes] | None = None
+    try:
+        proc = subprocess.Popen(["uv", "run", "marimo", mode, "app/ui/pbg_sandbox.py", "--no-token"])
+        proc.wait()
+    except KeyboardInterrupt:
+        if proc is not None:
+            proc.terminate()
+            proc.wait(timeout=5)
+
+
 # -- Demo commands --
 
 

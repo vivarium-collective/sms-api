@@ -10,7 +10,14 @@ from async_lru import alru_cache
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.models import SSHTarget
 from sms_api.compose.database_service import ComposeDatabaseService
-from sms_api.compose.models import ComposeHpcRun, ComposeJobStatus, ComposeWorkerEvent, ComposeWorkerEventMessagePayload
+from sms_api.compose.models import (
+    ComposeHpcRun,
+    ComposeJobStatus,
+    ComposeJobType,
+    ComposeWorkerEvent,
+    ComposeWorkerEventMessagePayload,
+    WrapperStatus,
+)
 from sms_api.config import get_settings
 from sms_api.dependencies import get_ssh_session_service
 
@@ -99,6 +106,13 @@ class ComposeJobMonitor:
                     await self.database_service.get_hpc_db().update_hpcrun_status(
                         hpcrun_id=hpc_run.database_id, new_slurm_job=slurm_job
                     )
+                    # Transition wrapper to AVAILABLE when its build job completes.
+                    if (
+                        new_status == ComposeJobStatus.COMPLETED
+                        and hpc_run.job_type == ComposeJobType.BUILD_CONTAINER
+                        and hpc_run.simulator_id is not None
+                    ):
+                        await self._handle_wrapper_build_complete(hpc_run.simulator_id)
             except ValueError:
                 logger.exception(f"Error updating ComposeHpcRun {hpc_run.database_id}")
 
@@ -110,6 +124,27 @@ class ComposeJobMonitor:
 
     def internal_unsubscribe(self, job_id: int) -> None:
         self.internal_listeners.pop(job_id, None)
+
+    async def _handle_wrapper_build_complete(self, simulator_id: int) -> None:
+        """Transition a wrapper record to AVAILABLE when its SLURM build job completes."""
+        try:
+            wrapper = await self.database_service.get_wrapper_db().get_wrapper_by_simulator_id(simulator_id)
+            if wrapper is not None and wrapper.status == WrapperStatus.BUILDING:
+                await self.database_service.get_wrapper_db().update_wrapper_status(
+                    wrapper_id=wrapper.wrapper_id,
+                    status=WrapperStatus.AVAILABLE,
+                )
+                logger.info(
+                    "Wrapper %d for simulator %d is now AVAILABLE",
+                    wrapper.wrapper_id,
+                    simulator_id,
+                )
+        except Exception:
+            logger.warning(
+                "Failed to transition wrapper to AVAILABLE for simulator %d",
+                simulator_id,
+                exc_info=True,
+            )
 
     async def close(self) -> None:
         await self.stop_polling()

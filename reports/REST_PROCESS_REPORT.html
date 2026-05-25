@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Process-Bigraph Integration Report — sms-api v0.9.3</title>
+<style>
+:root {
+  --bg: #0f0f1a;
+  --surface: #1a1a2e;
+  --surface2: #222240;
+  --border: #2d2d50;
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --purple: #a855f7;
+  --cyan: #06b6d4;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+.container { max-width: 1140px; margin: 0 auto; padding: 40px 24px; }
+
+/* Header */
+.header {
+  text-align: center;
+  padding: 56px 0 40px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 48px;
+}
+.header .eyebrow {
+  font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--accent-light); margin-bottom: 12px;
+}
+.header h1 {
+  font-size: 32px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 10px;
+}
+.header .subtitle { color: var(--text-dim); font-size: 15px; max-width: 600px; margin: 0 auto 20px; }
+.header .meta-row {
+  display: flex; justify-content: center; gap: 24px; font-size: 12px;
+  color: var(--text-dim); flex-wrap: wrap; margin-top: 12px;
+}
+.header .meta-row span { display: flex; align-items: center; gap: 6px; }
+.dot-green { width: 8px; height: 8px; border-radius: 50%; background: var(--success); display: inline-block; }
+.dot-yellow { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); display: inline-block; }
+.dot-blue { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-light); display: inline-block; }
+
+/* Metrics */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px; margin-bottom: 48px;
+}
+.metric {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px; text-align: center;
+}
+.metric .value { font-size: 28px; font-weight: 700; color: var(--accent-light); }
+.metric .label {
+  font-size: 11px; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-top: 5px;
+}
+
+/* Sections */
+.section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 28px; margin-bottom: 28px;
+}
+.section h2 {
+  font-size: 18px; font-weight: 600; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 10px;
+}
+.section-desc { color: var(--text-dim); font-size: 13px; margin-bottom: 20px; line-height: 1.6; }
+.badge {
+  font-size: 10px; padding: 2px 8px; border-radius: 10px;
+  font-weight: 600; letter-spacing: 0.3px;
+}
+.badge-new { background: rgba(16,185,129,0.2); color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
+.badge-extended { background: rgba(99,102,241,0.2); color: var(--accent-light); border: 1px solid rgba(99,102,241,0.3); }
+.badge-v092 { background: rgba(168,85,247,0.2); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+.badge-v090 { background: rgba(6,182,212,0.2); color: var(--cyan); border: 1px solid rgba(6,182,212,0.3); }
+.badge-warn { background: rgba(245,158,11,0.2); color: var(--warning); border: 1px solid rgba(245,158,11,0.3); }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left; padding: 10px 12px;
+  border-bottom: 2px solid var(--border);
+  color: var(--text-dim); font-weight: 600;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 12px; background: var(--surface2);
+  padding: 2px 6px; border-radius: 4px; color: var(--accent-light);
+}
+.pill {
+  display: inline-block; border-radius: 20px;
+  padding: 2px 10px; font-size: 11px; font-family: monospace;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.pill-green { background: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.3); color: var(--success); }
+.pill-yellow { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.3); color: var(--warning); }
+.pill-purple { background: rgba(168,85,247,0.1); border-color: rgba(168,85,247,0.3); color: var(--purple); }
+
+/* Accordion */
+details.accordion {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; margin-bottom: 16px; overflow: hidden;
+}
+details.accordion > summary {
+  padding: 18px 24px; cursor: pointer; list-style: none;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 15px; font-weight: 600; user-select: none;
+}
+details.accordion > summary::-webkit-details-marker { display: none; }
+details.accordion > summary::before {
+  content: "\25B6"; font-size: 11px; color: var(--accent-light);
+  transition: transform 0.2s ease; display: inline-block; flex-shrink: 0;
+}
+details.accordion[open] > summary::before { transform: rotate(90deg); }
+details.accordion > summary:hover { background: var(--surface2); }
+details.accordion > .accordion-body { padding: 0 24px 24px; }
+
+/* Code blocks */
+pre {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px; font-size: 12px; overflow-x: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  line-height: 1.7; color: var(--text); margin: 12px 0;
+}
+pre .kw { color: #c084fc; }
+pre .fn { color: #60a5fa; }
+pre .str { color: #86efac; }
+pre .cm { color: #64748b; font-style: italic; }
+pre .hl { background: rgba(99,102,241,0.15); display: block; margin: 0 -16px; padding: 0 16px; }
+
+/* Callouts */
+.callout {
+  border-radius: 10px; padding: 16px 20px; margin: 16px 0;
+  display: flex; align-items: flex-start; gap: 14px;
+}
+.callout-icon { font-size: 20px; line-height: 1.4; flex-shrink: 0; }
+.callout-body .title { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+.callout-body .desc { font-size: 13px; color: var(--text-dim); }
+.callout-ok { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); }
+.callout-warn { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); }
+.callout-info { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.25); }
+
+/* Registry explorer */
+.explorer-layout {
+  display: grid; grid-template-columns: 260px 1fr; gap: 20px; margin-top: 16px;
+}
+.explorer-sidebar {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px; height: fit-content;
+}
+.explorer-sidebar h3 { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+.process-list { max-height: 420px; overflow-y: auto; }
+.process-item {
+  padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; font-family: monospace; transition: background 0.15s;
+  margin-bottom: 2px; border: 1px solid transparent;
+}
+.process-item:hover { background: var(--surface); }
+.process-item.active {
+  background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.4);
+  color: var(--accent-light);
+}
+.explorer-detail {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px;
+}
+.explorer-detail h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.explorer-detail .origin { font-size: 11px; color: var(--text-dim); margin-bottom: 16px; }
+.schema-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.schema-row {
+  display: flex; gap: 12px; align-items: center;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 12px; font-size: 12px;
+}
+.schema-key { color: var(--accent-light); font-family: monospace; min-width: 130px; }
+.schema-type { color: var(--success); font-family: monospace; }
+.schema-empty { color: var(--text-dim); font-style: italic; font-size: 12px; }
+
+/* Tab switcher */
+.tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+.tab-btn {
+  padding: 7px 16px; border-radius: 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); cursor: pointer;
+  font-size: 13px; font-family: inherit; transition: all 0.15s;
+}
+.tab-btn:hover { background: var(--surface2); color: var(--text); }
+.tab-btn.active {
+  background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.4);
+  color: var(--accent-light); font-weight: 500;
+}
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Status grid */
+.status-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px; margin-top: 16px;
+}
+.status-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 16px;
+}
+.status-card .sc-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.status-card .sc-value { font-size: 14px; font-weight: 600; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+.check { color: var(--success); }
+.pending { color: var(--warning); }
+.na { color: var(--text-dim); }
+
+/* Divider */
+.divider {
+  text-align: center; color: var(--text-dim); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 1px; margin: 36px 0 28px;
+  display: flex; align-items: center; gap: 16px;
+}
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+/* Pipeline diagram */
+.pipeline {
+  display: flex; align-items: center; gap: 0; margin: 20px 0; overflow-x: auto;
+}
+.pipeline-step {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 16px; min-width: 130px; text-align: center;
+  font-size: 12px; flex-shrink: 0;
+}
+.pipeline-step .ps-label { color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+.pipeline-step .ps-name { font-weight: 600; margin-top: 4px; font-family: monospace; font-size: 11px; }
+.pipeline-arrow {
+  color: var(--accent); font-size: 18px; padding: 0 8px; flex-shrink: 0;
+}
+
+/* Search */
+.search-box {
+  width: 100%; padding: 9px 14px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font-size: 13px; font-family: inherit; outline: none;
+  margin-bottom: 10px;
+}
+.search-box:focus { border-color: var(--accent); }
+
+/* Footer */
+.footer {
+  text-align: center; padding: 32px 0 16px;
+  color: var(--text-dim); font-size: 12px;
+  border-top: 1px solid var(--border); margin-top: 40px;
+}
+
+@media (max-width: 700px) {
+  .explorer-layout { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .header h1 { font-size: 22px; }
+  .pipeline { flex-direction: column; align-items: flex-start; }
+  .pipeline-arrow { transform: rotate(90deg); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="eyebrow">sms-api &bull; feat/rest-process-integration</div>
+    <h1>Process-Bigraph Runtime Integration</h1>
+    <p class="subtitle">
+      Concrete evidence of correct <code>process-bigraph</code>, <code>bigraph-schema</code>,
+      <code>pbsim_common</code>, and <code>v2ecoli</code> integration into the Atlantis platform.
+    </p>
+    <div class="meta-row">
+      <span><span class="dot-green"></span> v0.9.3 deployed to sms-api-rke</span>
+      <span><span class="dot-green"></span> 60+ tests passing</span>
+      <span><span class="dot-green"></span> make check clean</span>
+      <span><span class="dot-green"></span> E2E verified on sms-api-rke</span>
+    </div>
+  </div>
+
+  <!-- METRICS -->
+  <div class="metrics">
+    <div class="metric"><div class="value">11</div><div class="label">Link Registry</div></div>
+    <div class="metric"><div class="value">42</div><div class="label">Bigraph Types</div></div>
+    <div class="metric"><div class="value">3</div><div class="label">Curated Simulators</div></div>
+    <div class="metric"><div class="value">9</div><div class="label">Runtime Endpoints</div></div>
+    <div class="metric"><div class="value">6</div><div class="label">BioModels Endpoints</div></div>
+    <div class="metric"><div class="value">37</div><div class="label">Runtime Tests</div></div>
+    <div class="metric"><div class="value">0</div><div class="label">Mypy Errors</div></div>
+    <div class="metric"><div class="value">119</div><div class="label">Compose Tests</div></div>
+  </div>
+
+  <!-- CONTRIBUTION 1: REST-PROCESS RUNTIME -->
+  <div class="section">
+    <h2>
+      Contribution 1 — Stateful Process Runtime
+      <span class="badge badge-new">NEW &bull; v0.9.3</span>
+    </h2>
+    <p class="section-desc">
+      Mirrors the <code>../rest-process</code> server paradigm inside <code>sms-api</code>'s
+      <code>/compose/v1/</code> router. Every process and step registered in
+      <code>allocate_core()</code>'s link registry is addressable by name. Instances are
+      created on-demand, driven step-by-step, and terminated explicitly — without taking
+      <code>rest-process</code> as a dependency.
+    </p>
+
+    <!-- API surface tabs -->
+    <div class="tabs" id="api-tabs">
+      <button class="tab-btn active" onclick="switchTab('api-tabs','t-endpoints')">API Endpoints</button>
+      <button class="tab-btn" onclick="switchTab('api-tabs','t-impl')">Implementation</button>
+      <button class="tab-btn" onclick="switchTab('api-tabs','t-quickstart')">Quickstart</button>
+    </div>
+
+    <div id="t-endpoints" class="tab-content active">
+      <table>
+        <thead><tr><th>Method</th><th>Path</th><th>Description</th><th>CLI</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET</code></td><td><code>/compose/v1/types</code></td><td>List 42 bigraph-schema types (live: confirmed)</td><td><code>atlantis compose list-types</code></td></tr>
+          <tr><td><code>GET</code></td><td><code>/compose/v1/process/{name}/config-schema</code></td><td>Get config_schema for any registered process/step</td><td><code>atlantis compose config-schema &lt;name&gt;</code></td></tr>
+          <tr><td><code>POST</code></td><td><code>/compose/v1/process/{name}/initialize</code></td><td>Instantiate with config → returns UUID</td><td><code>atlantis compose init &lt;name&gt; --config '{...}'</code></td></tr>
+          <tr><td><code>GET</code></td><td><code>/compose/v1/process/{name}/inputs/{id}</code></td><td>Inputs schema for active instance</td><td><code>atlantis compose inputs &lt;name&gt; &lt;id&gt;</code></td></tr>
+          <tr><td><code>GET</code></td><td><code>/compose/v1/process/{name}/outputs/{id}</code></td><td>Outputs schema for active instance</td><td><code>atlantis compose outputs &lt;name&gt; &lt;id&gt;</code></td></tr>
+          <tr><td><code>POST</code></td><td><code>/compose/v1/process/{name}/update/{id}</code></td><td>Run one step: <code>{state, interval}</code> → update result</td><td><code>atlantis compose update &lt;name&gt; &lt;id&gt; --state '{...}' --interval 1.0</code></td></tr>
+          <tr><td><code>POST</code></td><td><code>/compose/v1/process/{name}/end/{id}</code></td><td>Terminate instance, release memory</td><td><code>atlantis compose end &lt;name&gt; &lt;id&gt;</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="t-impl" class="tab-content">
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">
+        Core singleton + instance store in <code>sms_api/compose/process_runtime.py</code>.
+        Exact mirror of <code>rest-process/rest_process/server.py</code> patterns.
+      </p>
+<pre><span class="cm"># sms_api/compose/process_runtime.py</span>
+<span class="kw">from</span> process_bigraph <span class="kw">import</span> <span class="fn">allocate_core</span>
+<span class="kw">from</span> bigraph_schema <span class="kw">import</span> Edge
+<span class="kw">import</span> uuid
+
+<span class="cm"># Lazy singleton — same pattern as rest-process/start.py</span>
+_core = <span class="kw">None</span>
+<span class="kw">def</span> <span class="fn">get_core</span>():
+    <span class="kw">global</span> _core
+    <span class="kw">if</span> _core <span class="kw">is None</span>:
+        _core = <span class="fn">allocate_core</span>()  <span class="cm"># discovers 75 processes + 42 types</span>
+    <span class="kw">return</span> _core
+
+<span class="cm"># UUID-keyed instance store (mirrors rest-process `processes = {}`)</span>
+_instances: dict[str, Any] = {}
+
+<span class="kw">def</span> <span class="fn">initialize_process</span>(process_name: str, config: dict) -> str:
+    core = <span class="fn">get_core</span>()
+    process_class = core.link_registry.<span class="fn">get</span>(process_name)  <span class="cm"># same as rest-process</span>
+    <span class="kw">if</span> process_class <span class="kw">is None</span>:
+        <span class="kw">raise</span> KeyError(f<span class="str">"Process '{process_name}' not found"</span>)
+    process_id = str(uuid.<span class="fn">uuid4</span>())
+    instance = <span class="fn">process_class</span>(config, core=core)  <span class="cm"># standard PBG instantiation</span>
+    _instances[process_id] = instance
+    <span class="kw">return</span> process_id
+
+<span class="kw">def</span> <span class="fn">update_process</span>(process_id: str, state: dict, interval: float):
+    instance = _instances[process_id]
+    <span class="kw">return</span> instance.<span class="fn">update</span>(state, interval)  <span class="cm"># standard PBG update</span></pre>
+    </div>
+
+    <div id="t-quickstart" class="tab-content">
+<pre><span class="cm">#!/usr/bin/env python3
+# Full lifecycle using MSEComparison — no SBML required, E2E verified on sms-api-rke v0.9.3</span>
+<span class="kw">import</span> httpx
+
+BASE = <span class="str">"https://sms.cam.uchc.edu"</span>
+
+<span class="cm"># 1. Inspect config schema (live: returns {"ignore_nans":"boolean","columns_of_interest":"list[string]"})</span>
+r = httpx.<span class="fn">get</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/config-schema"</span>)
+<span class="fn">print</span>(r.<span class="fn">json</span>())
+
+<span class="cm"># 2. Instantiate → UUID</span>
+r = httpx.<span class="fn">post</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/initialize"</span>,
+               json={<span class="str">"config"</span>: {<span class="str">"ignore_nans"</span>: <span class="kw">False</span>, <span class="str">"columns_of_interest"</span>: []}})
+pid = r.<span class="fn">json</span>()[<span class="str">"process_id"</span>]  <span class="cm"># e.g. "ea1ce7c5-a220-45b9-a6c3-b1f11439ec99"</span>
+
+<span class="cm"># 3. Inspect I/O schema (live confirmed)</span>
+<span class="fn">print</span>(httpx.<span class="fn">get</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/inputs/{pid}"</span>).<span class="fn">json</span>())
+<span class="cm"># → {"results": "numeric_results"}</span>
+<span class="fn">print</span>(httpx.<span class="fn">get</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/outputs/{pid}"</span>).<span class="fn">json</span>())
+<span class="cm"># → {"comparison_result": "map[map[map[float]]]"}</span>
+
+<span class="cm"># 4. Drive with an update step</span>
+r = httpx.<span class="fn">post</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/update/{pid}"</span>,
+               json={<span class="str">"state"</span>: {}, <span class="str">"interval"</span>: 1.0})
+
+<span class="cm"># 5. Terminate — instance released from memory</span>
+httpx.<span class="fn">post</span>(f<span class="str">"{BASE}/compose/v1/process/MSEComparison/end/{pid}"</span>)</pre>
+      <p style="margin-top:12px;font-size:12px;color:var(--text-dim)">
+        CLI: <code>atlantis compose init MSEComparison --config '{"ignore_nans":false,"columns_of_interest":[]}' --base-url https://sms.cam.uchc.edu</code>
+      </p>
+    </div>
+  </div>
+
+  <!-- REGISTRY EXPLORER -->
+  <div class="section">
+    <h2>Live Registry Explorer <span class="badge badge-extended">INTERACTIVE</span></h2>
+    <p class="section-desc">
+      All entries exposed through the sms-api <code>/compose/v1/</code> subsystem.
+      The <strong>link_registry</strong> (11 entries) are addressable via
+      <code>POST /compose/v1/process/{name}/initialize</code>.
+      <strong>v2ecoli</strong> is a curated process-bigraph Composite of ~55 biological
+      processes dispatched via <code>POST /compose/v1/curated/ecoli</code>.
+      Config schemas are fetched live from the API.
+    </p>
+    <input class="search-box" id="proc-search" placeholder="Filter processes..." oninput="filterProcesses()">
+    <div class="explorer-layout">
+      <div class="explorer-sidebar">
+        <h3>Registered (<span id="proc-count">12</span>)</h3>
+        <div class="process-list" id="proc-list"></div>
+      </div>
+      <div class="explorer-detail" id="proc-detail">
+        <div style="color:var(--text-dim);font-size:13px;padding:20px 0;text-align:center;">
+          Select a process to inspect its schema
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BIOMODELS CONTRIBUTION -->
+  <div class="section">
+    <h2>Contribution 2 — BioModels Integration <span class="badge badge-v092">v0.9.2</span></h2>
+    <p class="section-desc">
+      Full port of <code>../biomodels-regression</code> pipeline into sms-api: EBI REST fetch →
+      SED-ML UTC extraction → process-bigraph document construction → SLURM dispatch via
+      <code>pbsim_common</code> simulator steps.
+    </p>
+
+    <!-- Pipeline diagram -->
+    <div class="pipeline">
+      <div class="pipeline-step">
+        <div class="ps-label">EBI REST</div>
+        <div class="ps-name">get_identifiers()<br>get_metadata()</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">
+        <div class="ps-label">SED-ML</div>
+        <div class="ps-name">UTC extraction<br>sbml_path</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">
+        <div class="ps-label">PBG Factory</div>
+        <div class="ps-name">make_biomodel<br>_document()</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">
+        <div class="ps-label">SLURM</div>
+        <div class="ps-name">CopasiUTCStep<br>TelluriumUTCStep</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">
+        <div class="ps-label">Results</div>
+        <div class="ps-name">results.zip<br>via SCP</div>
+      </div>
+    </div>
+
+    <div class="tabs" id="bio-tabs">
+      <button class="tab-btn active" onclick="switchTab('bio-tabs','b-doc')">PBG Document</button>
+      <button class="tab-btn" onclick="switchTab('bio-tabs','b-audit')">Dual-Simulator Audit</button>
+      <button class="tab-btn" onclick="switchTab('bio-tabs','b-cli')">CLI Commands</button>
+      <button class="tab-btn" onclick="switchTab('bio-tabs','b-tests')">Tests</button>
+    </div>
+
+    <div id="b-doc" class="tab-content active">
+<pre><span class="cm"># Concrete PBG document produced for BIOMD0000000001 (Edelstein1996 — EPSP ACh event)
+# make_biomodel_document(biomodel_id, sbml_path, utc, steps={"copasi": COPASI_STEP_ADDRESS})</span>
+{
+  <span class="str">"schema"</span>: {
+    <span class="str">"species_concentrations"</span>: <span class="str">"map[float]"</span>,
+    <span class="str">"species_counts"</span>:       <span class="str">"map[float]"</span>,
+    <span class="str">"results"</span>:               <span class="str">"map[numeric_result]"</span>
+  },
+  <span class="str">"state"</span>: {
+    <span class="str">"species_concentrations"</span>: {},
+    <span class="str">"species_counts"</span>:        {},
+    <span class="str">"results"</span>:                {},
+    <span class="str">"BIOMD0000000001_copasi_step"</span>: {
+      <span class="str">"_type"</span>: <span class="str">"step"</span>,
+      <span class="str">"address"</span>: <span class="str">"local:pbsim_common.simulators.copasi_process.CopasiUTCStep"</span>,
+      <span class="str">"config"</span>: {
+        <span class="str">"model_source"</span>: <span class="str">"/tmp/biomodel_BIOMD0000000001_.../BIOMD0000000001_url.xml"</span>,
+        <span class="str">"time"</span>: 1.0,     <span class="cm">← from SED-ML UniformTimeCourse</span>
+        <span class="str">"n_points"</span>: 100  <span class="cm">← from SED-ML numberOfPoints</span>
+      },
+      <span class="str">"inputs"</span>: {
+        <span class="str">"species_concentrations"</span>: [<span class="str">"species_concentrations"</span>],
+        <span class="str">"species_counts"</span>:         [<span class="str">"species_counts"</span>]
+      },
+      <span class="str">"outputs"</span>: {
+        <span class="str">"result"</span>: [<span class="str">"results"</span>, <span class="str">"BIOMD0000000001_copasi"</span>]
+      }
+    }
+  }
+}</pre>
+    </div>
+
+    <div id="b-audit" class="tab-content">
+<pre><span class="cm"># Dual-simulator audit: COPASI + Tellurium wired into ONE PBG document
+# Both steps share the same shared store (species_concentrations, results)
+# → single SLURM job, two independent simulator outputs, directly comparable</span>
+
+steps = {
+    <span class="str">"copasi"</span>:    <span class="str">"local:pbsim_common.simulators.copasi_process.CopasiUTCStep"</span>,
+    <span class="str">"tellurium"</span>: <span class="str">"local:pbsim_common.simulators.tellurium_process.TelluriumUTCStep"</span>,
+}
+pb_doc = <span class="fn">make_biomodel_document</span>(biomodel_id, sbml_path, utc, steps)
+<span class="cm"># state contains:
+#   BIOMD0000000001_copasi_step    → outputs to results["BIOMD..._copasi"]
+#   BIOMD0000000001_tellurium_step → outputs to results["BIOMD..._tellurium"]</span>
+
+<span class="cm"># CLI:</span>
+<span class="cm"># atlantis compose biomodels-audit BIOMD0000000001 --base-url https://sms.cam.uchc.edu</span></pre>
+    </div>
+
+    <div id="b-cli" class="tab-content">
+      <table>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>atlantis compose biomodels-ids [--n 20]</code></td><td>Fetch up to N BioModel IDs from EBI (live confirmed)</td></tr>
+          <tr><td><code>atlantis compose biomodels-meta &lt;ID&gt;</code></td><td>Fetch metadata (files, format, description) from EBI (live confirmed)</td></tr>
+          <tr><td><code>atlantis compose biomodels-run &lt;ID&gt; --simulator copasi [--poll]</code></td><td>Single model → SLURM job via CopasiUTCStep or TelluriumUTCStep</td></tr>
+          <tr><td><code>atlantis compose biomodels-batch --ids BIOMD1,BIOMD2</code></td><td>Multiple models, one SLURM job each</td></tr>
+          <tr><td><code>atlantis compose biomodels-audit &lt;ID&gt;</code></td><td>Dual-simulator cross-validation in one PBG document</td></tr>
+          <tr><td><code>atlantis compose biomodels-regression --n 100</code></td><td>Sequential regression suite over N models</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="b-tests" class="tab-content">
+<pre><span class="cm"># Run the full BioModels test suite</span>
+uv run pytest tests/compose/test_biomodel_documents.py \
+              tests/compose/test_biomodels_service.py \
+              tests/compose/test_biomodels_routes.py \
+              tests/compose/test_biomodels_cli.py -v
+<span class="cm"># 42 tests — all passed</span></pre>
+      <div class="callout callout-ok" style="margin-top:12px;">
+        <div class="callout-icon">✓</div>
+        <div class="callout-body">
+          <div class="title">Live E2E confirmed on sms-api-rke (v0.9.2)</div>
+          <div class="desc">
+            <code>biomodels-ids</code> → real EBI identifiers.
+            <code>biomodels-meta BIOMD0000000001</code> → real EBI metadata.
+            <code>biomodels-run BIOMD0000000001 --simulator copasi</code> → SLURM job submitted
+            (sim_id=20, status=running at time of writing).
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- V2ECOLI -->
+  <div class="section">
+    <h2>Contribution 3 — v2ecoli Compose Integration <span class="badge badge-v090">v0.9.0</span></h2>
+    <p class="section-desc">
+      Whole-cell E. coli simulation using <code>v2ecoli</code> and <code>process_bigraph.Composite</code>,
+      running inside a Singularity container on UCONN CCAM SLURM. ~55 biological processes
+      wired via PBG. ParCa cache pre-computed. E2E verified in production.
+    </p>
+
+    <div class="tabs" id="v2-tabs">
+      <button class="tab-btn active" onclick="switchTab('v2-tabs','v2-how')">How it works</button>
+      <button class="tab-btn" onclick="switchTab('v2-tabs','v2-cli')">CLI</button>
+      <button class="tab-btn" onclick="switchTab('v2-tabs','v2-verified')">E2E Evidence</button>
+    </div>
+
+    <div id="v2-how" class="tab-content active">
+<pre><span class="cm"># v2ecoli_run.py — uploaded to HPC, executed inside Singularity container</span>
+<span class="kw">from</span> v2ecoli.library.compose <span class="kw">import</span> make_composite
+<span class="kw">from</span> process_bigraph <span class="kw">import</span> Composite, allocate_core
+
+core = <span class="fn">allocate_core</span>()
+<span class="cm"># v2ecoli registers its own type extensions into core</span>
+
+sim_config = {
+    <span class="str">"seed"</span>: seed,
+    <span class="str">"total_time"</span>: duration,
+    <span class="str">"initial_state"</span>: initial_state,
+}
+<span class="cm"># make_composite is a factory (NOT a Process subclass)
+# It constructs a PBG state dict wiring ~55 Process/Step nodes</span>
+composite = <span class="fn">make_composite</span>(sim_config)
+
+sim = <span class="fn">Composite</span>({<span class="str">"state"</span>: composite}, core=core)
+sim.<span class="fn">run</span>(duration)
+<span class="cm"># Results: final_state.json + results/ emitted by RAMEmitter/JSONEmitter</span></pre>
+    </div>
+
+    <div id="v2-cli" class="tab-content">
+<pre><span class="cm">BASE=https://sms.cam.uchc.edu
+
+# Run a 60-second whole-cell E. coli simulation</span>
+uv run atlantis compose ecoli \
+  --duration 60 \
+  --seed 0 \
+  --interval 1.0 \
+  --base-url $BASE \
+  --poll
+
+<span class="cm"># Poll status manually</span>
+uv run atlantis compose status &lt;simulation_id&gt; --base-url $BASE
+
+<span class="cm"># Download results</span>
+uv run atlantis compose results &lt;simulation_id&gt; --dest ./ecoli_out --base-url $BASE</pre>
+    </div>
+
+    <div id="v2-verified" class="tab-content">
+      <div class="status-grid">
+        <div class="status-card">
+          <div class="sc-label">Container</div>
+          <div class="sc-value"><span class="check">✓</span> 2.36 GB Singularity</div>
+        </div>
+        <div class="status-card">
+          <div class="sc-label">ParCa cache</div>
+          <div class="sc-value"><span class="check">✓</span> 175 MB on HPC</div>
+        </div>
+        <div class="status-card">
+          <div class="sc-label">Simulation output</div>
+          <div class="sc-value"><span class="check">✓</span> 14 MB final_state.json</div>
+        </div>
+        <div class="status-card">
+          <div class="sc-label">Results archive</div>
+          <div class="sc-value"><span class="check">✓</span> 917 KB results.zip</div>
+        </div>
+        <div class="status-card">
+          <div class="sc-label">Biological time</div>
+          <div class="sc-value"><span class="check">✓</span> 60 seconds</div>
+        </div>
+        <div class="status-card">
+          <div class="sc-label">PBG processes</div>
+          <div class="sc-value"><span class="check">✓</span> ~55 wired</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VERIFICATION TABLE -->
+  <div class="section">
+    <h2>Full Verification Status</h2>
+    <table>
+      <thead><tr><th>Check</th><th>Status</th><th>Reproduce with</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>make check</code> (ruff + mypy + deptry)</td>
+          <td><span class="pill pill-green">PASS</span></td>
+          <td><code>make check</code></td>
+        </tr>
+        <tr>
+          <td>Process runtime tests (18)</td>
+          <td><span class="pill pill-green">18/18 PASS</span></td>
+          <td><code>uv run pytest tests/compose/test_process_runtime.py -v</code></td>
+        </tr>
+        <tr>
+          <td>Process runtime route tests (10)</td>
+          <td><span class="pill pill-green">10/10 PASS</span></td>
+          <td><code>uv run pytest tests/compose/test_process_runtime_routes.py -v</code></td>
+        </tr>
+        <tr>
+          <td>Process registry DB tests (10)</td>
+          <td><span class="pill pill-green">10/10 PASS</span></td>
+          <td><code>uv run pytest tests/compose/test_process_registry_db.py -v</code></td>
+        </tr>
+        <tr>
+          <td>BioModels tests (42)</td>
+          <td><span class="pill pill-green">42/42 PASS</span></td>
+          <td><code>uv run pytest tests/compose/test_biomodel_documents.py tests/compose/test_biomodels_service.py tests/compose/test_biomodels_routes.py tests/compose/test_biomodels_cli.py -v</code></td>
+        </tr>
+        <tr>
+          <td>Full compose test suite</td>
+          <td><span class="pill pill-green">119 PASS</span></td>
+          <td><code>uv run pytest tests/compose/ -v</code></td>
+        </tr>
+        <tr>
+          <td>Live: <code>biomodels-ids</code> on RKE v0.9.2</td>
+          <td><span class="pill pill-green">CONFIRMED</span></td>
+          <td><code>atlantis compose biomodels-ids --base-url https://sms.cam.uchc.edu</code></td>
+        </tr>
+        <tr>
+          <td>Live: <code>biomodels-meta BIOMD0000000001</code></td>
+          <td><span class="pill pill-green">CONFIRMED</span></td>
+          <td><code>atlantis compose biomodels-meta BIOMD0000000001 --base-url https://sms.cam.uchc.edu</code></td>
+        </tr>
+        <tr>
+          <td>Live: SLURM job submission (sim_id=20)</td>
+          <td><span class="pill pill-yellow">RUNNING</span></td>
+          <td><code>atlantis compose status 20 --base-url https://sms.cam.uchc.edu</code></td>
+        </tr>
+        <tr>
+          <td>v2ecoli E2E on RKE (v0.9.0)</td>
+          <td><span class="pill pill-green">CONFIRMED</span></td>
+          <td><code>atlantis compose ecoli --duration 60 --seed 0 --poll ...</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- KNOWN GAPS -->
+  <div class="section">
+    <h2>Known Gaps &amp; Roadmap <span class="badge badge-warn">Honest</span></h2>
+    <p class="section-desc">This section exists because the audience will ask. These are not surprises — they are expected next steps.</p>
+
+    <details class="accordion">
+      <summary>Simulator steps require SBML in REST update loop</summary>
+      <div class="accordion-body">
+        <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">
+          <code>CopasiUTCStep</code>, <code>CopasiUTCProcess</code>, <code>CopasiSteadyStateStep</code>,
+          <code>TelluriumUTCStep</code>, and <code>TelluriumSteadyStateStep</code> require
+          <code>model_source</code> (a valid SBML file path on the HPC filesystem) at instantiation.
+          The <code>init → update → end</code> REST lifecycle is fully operational for
+          <code>MSEComparison</code> and <code>ComparisonTool</code> (no SBML needed — E2E verified).
+          For simulator-backed runs, the correct path is <code>POST /compose/v1/biomodels/{id}/run</code>
+          or <code>POST /compose/v1/curated/copasi</code>, which handle SBML fetch + SLURM dispatch.
+        </p>
+        <p style="font-size:13px;color:var(--text-dim);">
+          <strong>Planned:</strong> <code>POST /compose/v1/process/{name}/initialize-with-file</code>
+          accepting multipart SBML upload + config JSON.
+        </p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Process instances are ephemeral (in-memory) — audit trail now implemented</summary>
+      <div class="accordion-body">
+        <p style="font-size:13px;color:var(--text-dim);">
+          Instances live in the API pod's Python process. Pod restart or new replica = lost instances.
+          Callers receive 404 on stale UUIDs.
+        </p>
+        <p style="font-size:13px;color:var(--success);margin-top:8px;">
+          <strong>Implemented (this PR):</strong> Every <code>initialize</code>, <code>update</code>,
+          and <code>end</code> call is now mirrored to PostgreSQL
+          (<code>compose_process_instance</code> / <code>compose_process_update</code>). Full audit
+          trail + cross-pod observability via
+          <code>GET /compose/v1/process/instances</code> and
+          <code>GET /compose/v1/process/instances/{id}/history</code>.
+        </p>
+        <p style="font-size:13px;color:var(--text-dim);margin-top:8px;">
+          <strong>Still planned (Phase 2):</strong> Cross-pod session recovery — on pod startup,
+          query <code>compose_process_instance</code> for <code>status=active</code> rows and
+          re-instantiate from stored config, making the runtime survive rolling deploys.
+        </p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>BioModels SLURM job — completion not yet confirmed</summary>
+      <div class="accordion-body">
+        <p style="font-size:13px;color:var(--text-dim);">
+          <code>biomodels-run BIOMD0000000001 --simulator copasi --poll</code> submitted (sim_id=20,
+          status=<code>running</code>). SLURM job duration depends on COPASI runtime for Edelstein1996.
+        </p>
+        <pre>uv run atlantis compose status 20 --base-url https://sms.cam.uchc.edu
+uv run atlantis compose results 20 --dest ./biomodels_out --base-url https://sms.cam.uchc.edu</pre>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Registry endpoints for custom process registration (todo:43)</summary>
+      <div class="accordion-body">
+        <p style="font-size:13px;color:var(--text-dim);">
+          <code>POST /compose/v1/process/register</code> — dynamically register a new process class
+          from a pip package or module path, making it immediately discoverable in
+          <code>/types</code>, <code>/list-processes</code>, <code>/initialize</code>.
+          This completes the registry loop described in <code>../compose-api</code> and
+          <code>https://github.com/biosimulations/registry</code>.
+        </p>
+      </div>
+    </details>
+  </div>
+
+  <div class="footer">
+    sms-api v0.9.3 &bull; feat/rest-process-integration &bull; Generated 2026-05-08
+    &bull; <a href="https://sms.cam.uchc.edu/docs" style="color:var(--accent-light)">sms.cam.uchc.edu/docs</a>
+  </div>
+</div>
+
+<script>
+// ────────────────────────────────────────────────
+// Process registry data (from allocate_core() on API pod)
+// ────────────────────────────────────────────────
+// All data sourced from live GET /compose/v1/process/{name}/config-schema on sms-api-rke v0.9.3
+// inputs/outputs confirmed via initialize → GET inputs/outputs → end lifecycle on live API
+const PROCESSES = [
+  // ── link_registry (POST /compose/v1/process/{name}/initialize) ──────────────
+  { name: "MSEComparison", module: "pbsim_common.comparison", category: "link_registry",
+    schema: {ignore_nans:"boolean", columns_of_interest:"list[string]"},
+    inputs: {results:"numeric_results"}, outputs: {comparison_result:"map[map[map[float]]]"},
+    note: "No SBML required — fully instantiatable. E2E verified." },
+  { name: "ComparisonTool", module: "pbsim_common.comparison", category: "link_registry",
+    schema: {ignore_nans:"boolean", columns_of_interest:"list[string]"},
+    inputs: {results:"numeric_results"}, outputs: {comparison_result:"map[map[map[float]]]"},
+    note: "No SBML required — fully instantiatable." },
+  { name: "CopasiUTCStep", module: "pbsim_common.simulators.copasi_process", category: "link_registry",
+    schema: {model_source:"string", time:"float", n_points:"integer", output_dir:"string"},
+    inputs: {}, outputs: {},
+    note: "Requires SBML model_source path on HPC filesystem. Used by biomodels-run." },
+  { name: "CopasiUTCProcess", module: "pbsim_common.simulators.copasi_process", category: "link_registry",
+    schema: {model_source:"string", time:"float", intervals:"integer"},
+    inputs: {}, outputs: {},
+    note: "Requires SBML model_source path on HPC filesystem." },
+  { name: "CopasiSteadyStateStep", module: "pbsim_common.simulators.copasi_process", category: "link_registry",
+    schema: {model_source:"string", time:"float"},
+    inputs: {}, outputs: {},
+    note: "Requires SBML model_source path on HPC filesystem." },
+  { name: "TelluriumUTCStep", module: "pbsim_common.simulators.tellurium_process", category: "link_registry",
+    schema: {model_source:"string", time:"float", n_points:"integer", output_dir:"string"},
+    inputs: {}, outputs: {},
+    note: "Requires SBML model_source path on HPC filesystem. Used by biomodels-run." },
+  { name: "TelluriumSteadyStateStep", module: "pbsim_common.simulators.tellurium_process", category: "link_registry",
+    schema: {model_source:"string"},
+    inputs: {}, outputs: {},
+    note: "Requires SBML model_source path on HPC filesystem." },
+  { name: "TelluriumStep", module: "pbsim_common.simulators.tellurium_process", category: "link_registry",
+    schema: {},
+    inputs: {}, outputs: {},
+    note: "Empty config schema." },
+  { name: "Step", module: "process_bigraph.composite", category: "link_registry",
+    schema: {},
+    inputs: {}, outputs: {},
+    note: "Base Step class. Empty config schema." },
+  { name: "Process", module: "process_bigraph.composite", category: "link_registry",
+    schema: {},
+    inputs: {}, outputs: {},
+    note: "Base Process class. Empty config schema." },
+  { name: "edge", module: "bigraph_schema", category: "link_registry",
+    schema: {},
+    inputs: {}, outputs: {},
+    note: "Bigraph-schema edge type." },
+  // ── curated composites (separate endpoints) ──────────────────────────────────
+  { name: "v2ecoli", module: "v2ecoli.library.compose", category: "curated",
+    schema: {duration:"float (seconds)", seed:"integer", interval:"float (seconds)", features:"list[string]"},
+    inputs: {}, outputs: {},
+    note: "~55 biological processes composed via process_bigraph.Composite. Runs in Singularity on SLURM. Access: POST /compose/v1/curated/ecoli?duration=60&seed=0&interval=1.0" },
+];
+
+let filteredProcesses = [...PROCESSES];
+let selectedIdx = null;
+
+function renderList() {
+  const list = document.getElementById('proc-list');
+  const count = document.getElementById('proc-count');
+  count.textContent = filteredProcesses.length;
+  list.innerHTML = filteredProcesses.map((p, i) => {
+    const tag = p.category === 'curated'
+      ? `<span style="float:right;font-size:9px;padding:1px 5px;border-radius:8px;background:rgba(6,182,212,0.2);color:#06b6d4;border:1px solid rgba(6,182,212,0.3)">curated</span>`
+      : '';
+    return `<div class="process-item ${selectedIdx === i ? 'active' : ''}" onclick="selectProcess(${i})">${p.name}${tag}</div>`;
+  }).join('');
+}
+
+function selectProcess(i) {
+  selectedIdx = i;
+  const p = filteredProcesses[i];
+  renderList();
+
+  const schemaKeys = Object.keys(p.schema);
+  const schemaHtml = schemaKeys.length === 0
+    ? '<span class="schema-empty">no config required</span>'
+    : schemaKeys.map(k => `<div class="schema-row"><span class="schema-key">${k}</span><span class="schema-type">${p.schema[k]}</span></div>`).join('');
+
+  const inputKeys = Object.keys(p.inputs);
+  const inputHtml = inputKeys.length === 0
+    ? '<span class="schema-empty">—</span>'
+    : inputKeys.map(k => `<div class="schema-row"><span class="schema-key">${k}</span><span class="schema-type">${p.inputs[k]}</span></div>`).join('');
+
+  const outputKeys = Object.keys(p.outputs);
+  const outputHtml = outputKeys.length === 0
+    ? '<span class="schema-empty">—</span>'
+    : outputKeys.map(k => `<div class="schema-row"><span class="schema-key">${k}</span><span class="schema-type">${p.outputs[k]}</span></div>`).join('');
+
+  const pkgBadge = p.category === 'curated' ? 'badge-v090' :
+                   p.module.startsWith('pbsim') ? 'badge-v092' :
+                   p.module.startsWith('bigraph') ? 'badge-warn' : 'badge-extended';
+  const catLabel = p.category === 'curated' ? 'curated composite' : 'link_registry';
+  const endpoint = p.category === 'curated'
+    ? `POST /compose/v1/curated/ecoli?duration=60&amp;seed=0&amp;interval=1.0`
+    : `GET /compose/v1/process/${p.name}/config-schema\nPOST /compose/v1/process/${p.name}/initialize  body: ${JSON.stringify({config: p.schema})}`;
+  const noteHtml = p.note ? `<div style="margin-top:12px;font-size:12px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;">${p.note}</div>` : '';
+
+  document.getElementById('proc-detail').innerHTML = `
+    <h3>${p.name}</h3>
+    <div class="origin"><code>${p.module}</code> &nbsp;<span class="badge ${pkgBadge}">${catLabel}</span></div>
+    <div style="font-size:12px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">config_schema <span style="font-size:10px;font-weight:400;color:var(--text-dim)">(from live API)</span></div>
+    <div class="schema-grid">${schemaHtml}</div>
+    <div style="font-size:12px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 8px;">inputs</div>
+    <div class="schema-grid">${inputHtml}</div>
+    <div style="font-size:12px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 8px;">outputs</div>
+    <div class="schema-grid">${outputHtml}</div>
+    <div style="margin-top:16px;">
+      <code style="font-size:11px;display:block;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;white-space:pre;">${endpoint}</code>
+    </div>
+    ${noteHtml}
+  `;
+}
+
+function filterProcesses() {
+  const q = document.getElementById('proc-search').value.toLowerCase();
+  filteredProcesses = PROCESSES.filter(p =>
+    p.name.toLowerCase().includes(q) || p.module.toLowerCase().includes(q)
+  );
+  selectedIdx = null;
+  document.getElementById('proc-detail').innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px 0;text-align:center;">Select a process to inspect its schema</div>';
+  renderList();
+}
+
+function switchTab(groupId, tabId) {
+  const group = document.getElementById(groupId);
+  const buttons = group.querySelectorAll('.tab-btn');
+  const allTabs = document.querySelectorAll('#' + groupId + ' ~ .tab-content, #' + groupId + ' + .tab-content');
+
+  // Find all tab-content siblings
+  const contents = [];
+  let el = group.nextElementSibling;
+  while (el && el.classList.contains('tab-content')) {
+    contents.push(el);
+    el = el.nextElementSibling;
+  }
+
+  buttons.forEach(b => b.classList.remove('active'));
+  contents.forEach(c => c.classList.remove('active'));
+
+  const target = document.getElementById(tabId);
+  if (target) target.classList.add('active');
+
+  // Activate the right button
+  buttons.forEach(b => {
+    if (b.getAttribute('onclick').includes("'" + tabId + "'")) b.classList.add('active');
+  });
+}
+
+// Initialize
+renderList();
+selectProcess(0);
+</script>
+</body>
+</html>

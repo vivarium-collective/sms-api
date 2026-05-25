@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.9.1
+  version: 0.9.2
 paths:
   /api/v1/simulations/discovery:
     get:
@@ -705,7 +705,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-05-08T16:41:31.741224'
+                  created_at: '2026-05-08T21:03:48.816918'
                 parca_config:
                   outdir: /projects/SMS/sms_api/prod/sims
       responses:
@@ -1327,6 +1327,219 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BiomodelsRegressionResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/types:
+    get:
+      tags:
+      - Compose Runtime
+      summary: List all registered bigraph-schema types
+      operationId: compose-list-types
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  type: string
+                type: array
+                title: Response Compose-List-Types
+  /compose/v1/process/{process_name}/config-schema:
+    get:
+      tags:
+      - Compose Runtime
+      summary: Get config schema for a registered process or step
+      operationId: compose-get-process-config-schema
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Compose-Get-Process-Config-Schema
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process_name}/initialize:
+    post:
+      tags:
+      - Compose Runtime
+      summary: Instantiate a process with a config; returns a UUID instance ID
+      operationId: compose-initialize-process
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessInitializeRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessInstance'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process_name}/inputs/{process_id}:
+    get:
+      tags:
+      - Compose Runtime
+      summary: Get inputs schema for an active process instance
+      operationId: compose-get-process-inputs
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Compose-Get-Process-Inputs
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process_name}/outputs/{process_id}:
+    get:
+      tags:
+      - Compose Runtime
+      summary: Get outputs schema for an active process instance
+      operationId: compose-get-process-outputs
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Compose-Get-Process-Outputs
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process_name}/update/{process_id}:
+    post:
+      tags:
+      - Compose Runtime
+      summary: Run one update step on an active process instance
+      operationId: compose-update-process
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                title: Response Compose-Update-Process
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /compose/v1/process/{process_name}/end/{process_id}:
+    post:
+      tags:
+      - Compose Runtime
+      summary: Terminate an active process instance and release memory
+      operationId: compose-end-process
+      parameters:
+      - name: process_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Name
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Process Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -2119,6 +2332,45 @@ components:
       additionalProperties: true
       type: object
       title: ParcaOptions
+    ProcessInitializeRequest:
+      properties:
+        config:
+          additionalProperties: true
+          type: object
+          title: Config
+          description: Config dict matching the process config_schema.
+      type: object
+      title: ProcessInitializeRequest
+    ProcessInstance:
+      properties:
+        process_id:
+          type: string
+          title: Process Id
+          description: UUID of the instantiated process.
+        process_name:
+          type: string
+          title: Process Name
+          description: Name of the process class that was instantiated.
+      type: object
+      required:
+      - process_id
+      - process_name
+      title: ProcessInstance
+    ProcessUpdateRequest:
+      properties:
+        state:
+          additionalProperties: true
+          type: object
+          title: State
+          description: Current state to pass to process.update().
+        interval:
+          type: number
+          minimum: 0.0
+          title: Interval
+          description: Time interval for this update step.
+          default: 1.0
+      type: object
+      title: ProcessUpdateRequest
     PtoolsAnalysisConfig:
       properties:
         name:
@@ -2266,7 +2518,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-05-08 16:41:31.566729'
+          default: '2026-05-08 21:03:48.647392'
         job_id:
           anyOf:
           - type: string
