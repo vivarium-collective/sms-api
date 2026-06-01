@@ -9,18 +9,31 @@ from ...models.experiment_analysis_request import ExperimentAnalysisRequest
 from ...models.http_validation_error import HTTPValidationError
 from ...models.output_file_metadata import OutputFileMetadata
 from ...models.tsv_output_file import TsvOutputFile
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
     body: ExperimentAnalysisRequest,
+    stream: Union[None, Unset, str] = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+
+    params: dict[str, Any] = {}
+
+    json_stream: Union[None, Unset, str]
+    if isinstance(stream, Unset):
+        json_stream = UNSET
+    else:
+        json_stream = stream
+    params["stream"] = json_stream
+
+    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
     _kwargs: dict[str, Any] = {
         "method": "post",
         "url": "/api/v1/analyses",
+        "params": params,
     }
 
     _kwargs["json"] = body.to_dict()
@@ -84,10 +97,16 @@ def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     body: ExperimentAnalysisRequest,
+    stream: Union[None, Unset, str] = UNSET,
 ) -> Response[Union[HTTPValidationError, list[Union["OutputFileMetadata", "TsvOutputFile"]]]]:
     """Run an analysis
 
     Args:
+        stream (Union[None, Unset, str]): Set to 'heartbeat' to receive whitespace heartbeats on
+            the response body while the SLURM job runs. Keeps the connection alive across ingress /
+            SSH / ALB idle-timeouts. Response body is still a valid JSON document (leading whitespace
+            is tolerated by standard JSON parsers). On failure the body is a JSON object (not an
+            array); clients should branch on response shape.
         body (ExperimentAnalysisRequest): Request body for the ``POST /analyses`` (ptools)
             endpoint.
 
@@ -113,6 +132,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        stream=stream,
     )
 
     response = client.get_httpx_client().request(
@@ -126,10 +146,16 @@ def sync(
     *,
     client: Union[AuthenticatedClient, Client],
     body: ExperimentAnalysisRequest,
+    stream: Union[None, Unset, str] = UNSET,
 ) -> Optional[Union[HTTPValidationError, list[Union["OutputFileMetadata", "TsvOutputFile"]]]]:
     """Run an analysis
 
     Args:
+        stream (Union[None, Unset, str]): Set to 'heartbeat' to receive whitespace heartbeats on
+            the response body while the SLURM job runs. Keeps the connection alive across ingress /
+            SSH / ALB idle-timeouts. Response body is still a valid JSON document (leading whitespace
+            is tolerated by standard JSON parsers). On failure the body is a JSON object (not an
+            array); clients should branch on response shape.
         body (ExperimentAnalysisRequest): Request body for the ``POST /analyses`` (ptools)
             endpoint.
 
@@ -156,6 +182,7 @@ def sync(
     return sync_detailed(
         client=client,
         body=body,
+        stream=stream,
     ).parsed
 
 
@@ -163,10 +190,16 @@ async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     body: ExperimentAnalysisRequest,
+    stream: Union[None, Unset, str] = UNSET,
 ) -> Response[Union[HTTPValidationError, list[Union["OutputFileMetadata", "TsvOutputFile"]]]]:
     """Run an analysis
 
     Args:
+        stream (Union[None, Unset, str]): Set to 'heartbeat' to receive whitespace heartbeats on
+            the response body while the SLURM job runs. Keeps the connection alive across ingress /
+            SSH / ALB idle-timeouts. Response body is still a valid JSON document (leading whitespace
+            is tolerated by standard JSON parsers). On failure the body is a JSON object (not an
+            array); clients should branch on response shape.
         body (ExperimentAnalysisRequest): Request body for the ``POST /analyses`` (ptools)
             endpoint.
 
@@ -192,6 +225,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        stream=stream,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -203,10 +237,16 @@ async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
     body: ExperimentAnalysisRequest,
+    stream: Union[None, Unset, str] = UNSET,
 ) -> Optional[Union[HTTPValidationError, list[Union["OutputFileMetadata", "TsvOutputFile"]]]]:
     """Run an analysis
 
     Args:
+        stream (Union[None, Unset, str]): Set to 'heartbeat' to receive whitespace heartbeats on
+            the response body while the SLURM job runs. Keeps the connection alive across ingress /
+            SSH / ALB idle-timeouts. Response body is still a valid JSON document (leading whitespace
+            is tolerated by standard JSON parsers). On failure the body is a JSON object (not an
+            array); clients should branch on response shape.
         body (ExperimentAnalysisRequest): Request body for the ``POST /analyses`` (ptools)
             endpoint.
 
@@ -234,5 +274,6 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             body=body,
+            stream=stream,
         )
     ).parsed

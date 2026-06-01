@@ -27,9 +27,25 @@
 #          add Phase 3b scaffold, CVE deps bump (Mako/python-multipart/urllib3), analyses reliability
 #          (poll_status hang fix, CANCELLED migration, SLURM node pinning removed, silent SSH failure fix),
 #          qualification_test.sh fix, PTOOLS_VERIFICATION docs + CI workflow
-# 0.9.5 — package registry (todo:57): /compose/v1/processes and /steps now read live core.link_registry
-#          via pbg_superpowers.core_introspection by default (with ?source=core|db|union); new POST
-#          /compose/v1/packages, /packages/from-repo, /packages/from-path, /packages/audit endpoints
-#          gated by pbg_superpowers.package_audit; new atlantis compose packages / package-get /
-#          package-audit / package-register CLI commands; new pbg-superpowers>=0.8.1 runtime dep.
+# 0.9.5 — process-bigraph-native compose subsystem.
+#          ARCHITECTURE (todo:56):
+#            - Dropped pbest==0.5.5 dependency (was hard-pinning process-bigraph==1.0.5)
+#            - Bumped to process-bigraph[server-rest]>=1.4.12,<2 (pulls fastapi-utils, uvicorn, fire, typing-inspect)
+#            - New sms_api/compose/containerization.py (in-tree singularity .def renderer, replaces pbest's)
+#            - Container %runscript now invokes `python -m process_bigraph.run` (upstream entrypoint)
+#            - Upstream process_bigraph.server.rest.make_router(core) mounted at /compose/v1/ (10 routes)
+#            - New sms_api/compose/bundle_utils.py wraps process_bigraph.bundle.save_bundle/load_bundle
+#              for large composite docs (numpy arrays externalized to Parquet)
+#            - DB persistence layer (ProcessRegistryDatabaseService + ORM) KEPT — fundamental to sms-api
+#              production-grade architecture; layered on top of upstream's in-memory state
+#          PACKAGE REGISTRY (todo:57):
+#            - GET /compose/v1/processes and /steps now read live core.link_registry via
+#              introspect_core() helper (with ?source=core|db|union query param)
+#            - POST /compose/v1/packages (discriminated union: repo_url|local_path|outline),
+#              GET /packages, GET /packages/{id}, POST /packages/audit endpoints
+#            - sms_api/compose/package_audit.py (in-tree, mirrored from pbg-superpowers — NOT a dep)
+#            - atlantis compose packages / package-get / package-audit / package-register CLI
+#          UPSTREAM-PARITY CLI (todo:56 Phase 12):
+#            - atlantis compose list-processes / list-types / import-types / type-packages
+#              mirror upstream router paths
 __version__ = "0.9.5"

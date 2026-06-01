@@ -38,8 +38,9 @@ uv run pytest -s -m <marker>
 - **All three clients** implement the same EUTE workflow calling REST endpoints. Prefer CLI for testing (`uv run atlantis <command>`).
 - **Backend dispatch**: `sms_api/config.py` — `compute_backend` setting. SLURM for `sms-api-rke*`, Batch for `sms-api-stanford*`.
 - **Services wired** in `sms_api/dependencies.py` via global singletons (SSH, DB, file, messaging, simulation, compose).
-- **Compose subsystem** (`sms_api/compose/`): process-bigraph simulation ecosystem with BioModels integration (6 endpoints), compose simulations, curated simulations, and PBG wrapper management. Registered conditionally — only on SLURM deployments (no Batch/GovCloud). Key services: `ComposeSimulationService`, `ComposeDatabaseService`, `wrapper_service.py`, `process_runtime.py`.
+- **Compose subsystem** (`sms_api/compose/`): process-bigraph-native simulation ecosystem. pbest replaced by in-tree `containerization.py`. Upstream `process_bigraph.server.rest.make_router(core)` mounted at `/compose/v1/`. BioModels integration (6 endpoints), package registry (4 endpoints, todo:57), compose/curated simulations, PBG wrapper management. 230+ compose tests. Registered conditionally — only on SLURM deployments (no Batch/GovCloud). Key services: `ComposeSimulationService`, `ComposeDatabaseService`, `wrapper_service.py`, `process_runtime.py`, `containerization.py`, `package_audit.py`, `bundle_utils.py`.
 - **BioModels endpoints**: `GET /compose/v1/biomodels/identifiers`, `GET /compose/v1/biomodels/{id}/metadata`, `POST /compose/v1/biomodels/{id}/run`, `POST /compose/v1/biomodels/batch`, `POST /compose/v1/biomodels/{id}/audit`, `POST /compose/v1/biomodels/regression`. Each has a matching CLI command under `atlantis compose biomodels-*`.
+- **Package Registry endpoints (todo:57)**: `POST /compose/v1/packages/audit`, `POST /compose/v1/packages`, `GET /compose/v1/packages`, `GET /compose/v1/packages/{id}`. CLI: `atlantis compose packages/package-get/package-audit/package-register`. `GET /compose/v1/processes?source=core|db|union` and `/steps?source=core|db|union` for typed introspection.
 - **Planning docs**: `PBG.md` (pbg-superpowers integration plan for programmatic PBG wrapper creation), `BIGRAPH_LOOM.md` (bigraph-loom visual GUI integration plan with SSE streaming and animated canvas). Both are integration plans — NOT yet implemented.
 
 ## Testing quirks
@@ -72,6 +73,7 @@ uv run pytest -s -m <marker>
 - **No second HTTP call inside `async with client.stream(...)`**: The kubectl port-forward HTTP/2 mux will RST the second connection.
 - **Stanford-test ingress.yaml is dead code**: Real ALB config is in CDK stack on `aws-batch-manual` branch.
 - **Alembic migrations** live in `alembic/versions/` for DB schema changes.
+- **Commit-message heredocs must use `git commit -F - <<'EOF'`, not `"$(cat <<'EOF' ... EOF)"`**: Bash tokenizes inside `$(...)` so a single apostrophe in the message body (possessives, contractions) raises `unexpected EOF while looking for matching '`. The `'EOF'` delimiter does NOT save you. See CLAUDE.md §"Commit Message Heredocs" for the safe pattern.
 
 ## Deployment naming conventions
 

@@ -36,7 +36,7 @@ async def sqlite_engine() -> AsyncGenerator[AsyncEngine]:
 
 
 @pytest.fixture()
-def client(sqlite_engine: AsyncEngine) -> TestClient:
+def client(sqlite_engine: AsyncEngine) -> TestClient:  # type: ignore[misc]
     from sms_api.api.routers import compose as compose_module
     from sms_api.compose.database_service import ComposeDatabaseService
 

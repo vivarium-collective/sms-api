@@ -77,7 +77,7 @@ API requests hit FastAPI routers (`sms_api/api/routers/`) which depend on servic
 
 ### Compose Subsystem (process-bigraph)
 
-The `sms_api/compose/` module implements a process-bigraph simulation ecosystem with two major subsystems:
+`pbest==0.5.5` was dropped (hard-pinned `process-bigraph==1.0.5`). In-tree `containerization.py` (Jinja2) replaces it. `process-bigraph[server-rest]>=1.4.12,<2` provides `make_router(core)` mounted upstream at `/compose/v1/` alongside the sms-api compose router. 230+ compose tests passing.
 
 **BioModels Integration (6 endpoints):**
 - `GET /compose/v1/biomodels/identifiers` — List available BioModels from EBI
@@ -87,7 +87,16 @@ The `sms_api/compose/` module implements a process-bigraph simulation ecosystem 
 - `POST /compose/v1/biomodels/{id}/audit` — Audit a BioModel against schema
 - `POST /compose/v1/biomodels/regression` — Regression test suite
 
-**CLI commands:** `atlantis compose biomodels-ids/meta/run/batch/audit/regression`
+**Process Runtime (upstream make_router + sms-api enrichments):**
+- `/process/{name}/config-schema`, `/initialize`, `/inputs/{id}`, `/outputs/{id}`, `/update/{id}`, `/end/{id}` (canonical lifecycle)
+- `/processes?source=core|db|union` and `/steps?source=core|db|union` — typed introspection with package lineage
+- `/list-types`, `/list-processes`, `/import-types`, `/type-packages` (upstream flat endpoints)
+
+**Package Registry (todo:57, 4 endpoints):**
+- `POST /compose/v1/packages/audit` — Dry-run audit of a repo/path before registering
+- `POST /compose/v1/packages` — Register (discriminated union: repo_url, local_path, outline)
+- `GET /compose/v1/packages` — List registered packages
+- `GET /compose/v1/packages/{id}` — Single package with compute outlines
 
 **Compose Simulations:**
 - `POST /compose/v1/simulations` — Run a process-bigraph simulation (SLURM)
@@ -101,11 +110,15 @@ The `sms_api/compose/` module implements a process-bigraph simulation ecosystem 
 
 **Key compose services:**
 - `ComposeSimulationService` — Orchestrates compose simulation HPC workflow
-- `ComposeDatabaseService` — SQLAlchemy async ORM for compose metadata (tables in `tables_orm.py`)
-- `process_runtime.py` — Process runtime helpers for bigraph execution
+- `ComposeDatabaseService` — SQLAlchemy async ORM for compose metadata (tables in `tables_orm.py`; includes `PackagesDatabaseService` for package lineage)
+- `process_runtime.py` — Process runtime helpers (including `introspect_core()` for live registry introspection)
+- `containerization.py` — In-tree Singularity def renderer (replaces pbest)
+- `package_audit.py` — Standalone audit module for pbg-* package compliance
 - `hpc_utils.py` — HPC file path utilities for compose job configs
 - `job_monitor.py` — Compose-specific job polling and status tracking
 - `wrapper_service.py` — PBG wrapper generation and management
+
+**CLI commands:** `atlantis compose run/status/results/doc/simulators/processes/steps/list-types/list-processes/import-types/type-packages/packages/package-get/package-audit/package-register/build-status/ecoli/copasi/tellurium/biomodels-*`
 
 **Conditional registration:** The compose router is registered in `main.py` only on **SLURM deployments** (`sms-api-rke*`). Compose has no Batch/GovCloud implementation.
 
@@ -253,6 +266,45 @@ async with get_ssh_session_service().session() as ssh:
 - **Type checking**: mypy with strict mode. Excludes: `sms_api/api/client/`, `app/ui/`, `notes/`, `scratchpads/`.
 - **Python**: 3.13 (pinned exact). `.python-version` = `3.13`, `requires-python = ">=3.13,<3.14"`.
 - **Package manager**: uv with hatchling build backend.
+
+
+## Commit Message Heredocs — Use `git commit -F -`, NOT `"$(cat <<'EOF' ... EOF)"`
+
+The pattern `git commit -m "$(cat <<'EOF' ... EOF)"` (the default style
+shown in many tool-use guides, including Claude Code's built-in commit
+instructions) **silently breaks** the moment a commit-message body
+contains a single apostrophe. Bash tokenizes the contents of `$(...)`
+*before* the heredoc body is treated as opaque, so an unbalanced `'`
+inside the body raises:
+
+```
+unexpected EOF while looking for matching `''
+syntax error: unexpected end of file
+```
+
+Quoting the delimiter as `<<'EOF'` does **not** fix this — the heredoc
+body still gets re-scanned for quote balance because of the surrounding
+`$(...)` context. Project commit messages routinely use possessives
+("subsystem's", "user's") and contractions ("doesn't", "won't"), so
+this fails in practice.
+
+**Always use the stdin form in this repo:**
+
+```bash
+git commit -F - <<'EOF'
+feat(scope): subject line
+
+Body text with apostrophes, "quotes", $variables, and `backticks`
+all preserved literally — no shell tokenization at all.
+
+Co-Authored-By: ...
+EOF
+```
+
+`-F -` reads the commit message directly from stdin, so there is no
+`$(...)` wrapper and the quoted-delimiter heredoc body is truly
+literal. This applies equally to `commits.sh` (which the user runs
+manually) and to ad-hoc `git commit` calls.
 
 
 ## Release Protocol

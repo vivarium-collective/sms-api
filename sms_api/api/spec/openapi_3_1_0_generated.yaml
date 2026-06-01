@@ -438,6 +438,27 @@ paths:
       - Analyses
       summary: Run an analysis
       operationId: run-ecoli-simulation-analysis
+      parameters:
+      - name: stream
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Set to 'heartbeat' to receive whitespace heartbeats on the
+            response body while the SLURM job runs. Keeps the connection alive across
+            ingress / SSH / ALB idle-timeouts. Response body is still a valid JSON
+            document (leading whitespace is tolerated by standard JSON parsers). On
+            failure the body is a JSON object (not an array); clients should branch
+            on response shape.
+          title: Stream
+        description: Set to 'heartbeat' to receive whitespace heartbeats on the response
+          body while the SLURM job runs. Keeps the connection alive across ingress
+          / SSH / ALB idle-timeouts. Response body is still a valid JSON document
+          (leading whitespace is tolerated by standard JSON parsers). On failure the
+          body is a JSON object (not an array); clients should branch on response
+          shape.
       requestBody:
         content:
           application/json:
@@ -455,11 +476,11 @@ paths:
           content:
             application/json:
               schema:
+                type: array
                 items:
                   anyOf:
                   - $ref: '#/components/schemas/TsvOutputFile'
                   - $ref: '#/components/schemas/OutputFileMetadata'
-                type: array
                 title: Response Run-Ecoli-Simulation-Analysis
         '422':
           description: Validation Error
@@ -705,7 +726,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-05-15T14:44:42.715578'
+                  created_at: '2026-06-01T12:11:36.655869'
                 parca_config:
                   outdir: /projects/SMS/sms_api/prod/sims
       responses:
@@ -3387,7 +3408,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-05-15 14:44:42.525026'
+          default: '2026-06-01 12:11:36.495436'
         job_id:
           anyOf:
           - type: string

@@ -1451,7 +1451,6 @@ class TestComposePackageRegister:
 
         svc = _mock_pkg_svc()
         outline = {"package_type": "pypi", "name": "file-pkg", "compute": []}
-        import tempfile
         tmp = Path(tempfile.mktemp(suffix=".json"))  # noqa: S306
         tmp.write_text(json.dumps(outline))
         with patch("app.cli.get_data_service", return_value=svc):
