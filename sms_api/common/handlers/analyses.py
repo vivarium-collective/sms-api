@@ -13,13 +13,20 @@ from textwrap import dedent
 
 from starlette.requests import Request
 
-from sms_api.analysis.analysis_service import AnalysisServiceSlurm, RequestPayload
+from sms_api.analysis.analysis_service import (
+    AnalysisServiceSlurm,
+    RequestPayload,
+    ptools_aggregation_mode,
+    reaggregate_ptools_columns,
+)
 from sms_api.analysis.models import (
+    PTOOLS_CANONICAL_N_TP,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
     OutputFile,
     OutputFileMetadata,
+    PtoolsAnalysisConfig,
     TsvOutputFile,
 )
 from sms_api.common.models import SSHTarget
@@ -60,10 +67,14 @@ async def handle_run_analysis_slurm(
     db_service: DatabaseService,
     _request: Request | None = None,
 ) -> Sequence[OutputFileMetadata | TsvOutputFile]:
-    # 1. check if hashed/cached payload exists
+    # 1. check if hashed/cached payload exists.
+    # Path B1: RequestPayload.hash() strips n_tp from every ptools module, so
+    # re-requests with a different n_tp hit the cache from the SLURM run that
+    # produced the canonical (n_tp=PTOOLS_CANONICAL_N_TP) artifact.
     payload_hash = RequestPayload(data=request.model_dump()).hash()
     analysis_request_cache = Path(analysis_service.env.cache_dir) / payload_hash
     analysis_name: str = get_data_id(scope="analysis")
+    target_n_tp_by_module = _collect_target_n_tp(request)
 
     results: list[TsvOutputFile] = []
     # 2. if cache doesn't exist or is empty, run an analysis
@@ -102,16 +113,28 @@ async def handle_run_analysis_slurm(
         # download available
         for remote_path in available_paths:
             output_i: TsvOutputFile = await analysis_service.download_analysis_output(
-                local_dir=analysis_request_cache, remote_path=remote_path
+                local_dir=analysis_request_cache,
+                remote_path=remote_path,
+                target_n_tp_by_module=target_n_tp_by_module,
             )
             results.append(output_i)
     else:
-        # Load cached results — filenames use the pattern: module_vX_sY_gZ.tsv
+        # Load cached results — filenames use the pattern: module_vX_sY_gZ.tsv.
+        # Cached files are at canonical resolution; re-aggregate per requested n_tp.
         for fp in analysis_request_cache.iterdir():
             filename = fp.parts[-1]
             if filename.endswith(".tsv"):
                 file_content = fp.read_text()
                 metadata = _parse_cached_filename_metadata(filename)
+                module_name = _module_name_from_cached_filename(filename)
+                target_n_tp = target_n_tp_by_module.get(module_name)
+                if target_n_tp is not None and target_n_tp != PTOOLS_CANONICAL_N_TP:
+                    file_content = reaggregate_ptools_columns(
+                        csv_text=file_content,
+                        target_n_tp=target_n_tp,
+                        source_n_tp=PTOOLS_CANONICAL_N_TP,
+                        mode=ptools_aggregation_mode(module_name),
+                    )
                 output_i = TsvOutputFile(
                     filename=filename,
                     content=file_content,
@@ -122,6 +145,35 @@ async def handle_run_analysis_slurm(
                 results.append(output_i)
 
     return results
+
+
+_PTOOLS_DOMAINS = ("single", "multidaughter", "multigeneration", "multiseed")
+
+
+def _collect_target_n_tp(request: ExperimentAnalysisRequest) -> dict[str, int]:
+    """Build a ``{module_name: requested_n_tp}`` map across all ptools domains in the request.
+
+    If the same module name appears in multiple domains with different n_tp values,
+    the last one wins. In practice, ptools requests stick to one domain per module.
+    """
+    target: dict[str, int] = {}
+    for domain in _PTOOLS_DOMAINS:
+        modules = getattr(request, domain, None)
+        if not modules:
+            continue
+        for module in modules:
+            if isinstance(module, PtoolsAnalysisConfig):
+                target[module.name] = module.n_tp
+    return target
+
+
+def _module_name_from_cached_filename(filename: str) -> str:
+    """Strip the partition suffix (_vX_sY_gZ) and the file extension to recover the module name."""
+    stem = Path(filename).stem
+    return _CACHED_PARTITION_SUFFIX_RE.sub("", stem)
+
+
+_CACHED_PARTITION_SUFFIX_RE = re.compile(r"_v\d+(?:_s\d+)?(?:_g\d+)?$")
 
 
 # Regex for cached filename metadata: module_vX_sY_gZ.tsv
