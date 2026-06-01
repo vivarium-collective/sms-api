@@ -84,8 +84,7 @@ class ComposeSimulationServiceHpc(ComposeSimulationService):
             f"{indent}    {singularity_container} \\\n"
             f"{indent}    /experiment/{slurm_job_name}."
             f"{simulation.sim_request.simulation_file_type.get_files_suffix()} \\\n"
-            f'{indent}    -o "{self.env.compose_containers_output_dir}" \\\n'
-            f"{indent}    -n {simulation.sim_request.end_time_point}"
+            f"{indent}    {simulation.sim_request.end_time_point}"
         )
 
     @staticmethod

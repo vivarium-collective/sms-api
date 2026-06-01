@@ -1313,6 +1313,45 @@ def compose_list_types(
     display_json(str(types), console)
 
 
+@compose_cli.command("list-processes", help="List process-bigraph processes (upstream link_registry).")
+def compose_list_upstream_processes(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_list_upstream_processes()
+    if not result:
+        console.print("[memphis.dim]No processes registered.[/]")
+    else:
+        display_json(list(result), console)
+
+
+@compose_cli.command("import-types", help="List importable types from all registered packages (upstream).")
+def compose_import_types(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_import_types()
+    if not result:
+        console.print("[memphis.dim]No importable types (stub endpoint — returns empty).[/]")
+    else:
+        display_json(list(result), console)
+
+
+@compose_cli.command("type-packages", help="List packages that provide types (upstream).")
+def compose_type_packages(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    result = data_service.compose_type_packages()
+    if not result:
+        console.print("[memphis.dim]No type packages (stub endpoint — returns empty).[/]")
+    else:
+        display_json(list(result), console)
+
+
 @compose_cli.command("config-schema", help="Get config schema for a registered process or step.")
 def compose_config_schema(
     process_name: str = Argument(help="Registered process/step name."),

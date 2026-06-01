@@ -811,6 +811,26 @@ class E2EDataService:
         resp.raise_for_status()
         return resp.json()  # type: ignore[no-any-return]
 
+    def compose_list_upstream_processes(self) -> list[str]:
+        """Upstream ``/compose/v1/list-processes`` — flat names from link_registry."""
+        resp = self.client.get("/compose/v1/list-processes")
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def compose_import_types(self) -> list[str]:
+        """Upstream ``/compose/v1/import-types`` — stub (returns null)."""
+        resp = self.client.get("/compose/v1/import-types")
+        resp.raise_for_status()
+        result = resp.json()
+        return result if isinstance(result, list) else []
+
+    def compose_type_packages(self) -> list[str]:
+        """Upstream ``/compose/v1/type-packages`` — stub (returns null)."""
+        resp = self.client.get("/compose/v1/type-packages")
+        resp.raise_for_status()
+        result = resp.json()
+        return result if isinstance(result, list) else []
+
     def compose_get_config_schema(self, process_name: str) -> dict:  # type: ignore[type-arg]
         resp = self.client.get(f"/compose/v1/process/{process_name}/config-schema")
         resp.raise_for_status()

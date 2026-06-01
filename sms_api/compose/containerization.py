@@ -77,18 +77,10 @@ apt update
 apt upgrade -y
 apt install -y git curl
 
-mkdir /runtime
-mkdir -p /runtime
-cd /runtime
-git clone --branch 0.5.5 https://github.com/biosimulations/pbest.git /runtime
-uv pip compile pyproject.toml -o requirements.txt
-# RUN uv pip sync --system --directory /runtime requirements.txt
-
 ## Additional Execution tools (ex. Conda)
 mkdir -p /usr/local/bin
 cd /usr/local/bin
 curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba --strip-components=1
-mkdir -p /
 cd /
 mkdir /micromamba_env
 micromamba create -p /micromamba_env/runtime_env python=3.12
@@ -99,9 +91,9 @@ micromamba run -p /micromamba_env/runtime_env python3 -m pip install 'python-cop
 'tellurium==2.2.11.1' 'numpy' 'matplotlib' 'scipy' 'pb_multiscale_actin==1.3.1'
 micromamba install -c conda-forge -p /micromamba_env/runtime_env readdy=2.0.13 python=3.12 --yes
 
-
-micromamba run -p /micromamba_env/runtime_env pip install -r /runtime/requirements.txt
-micromamba run -p /micromamba_env/runtime_env pip install /runtime
+## process-bigraph-native runtime (replaces pbest)
+micromamba run -p /micromamba_env/runtime_env python3 -m pip install \
+    'process-bigraph[server-rest]>=1.4.12,<2' 'bigraph-schema'
 
 micromamba run -p /micromamba_env/runtime_env pip install --ignore-requires-python \
 'git+https://github.com/vivarium-collective/v2ecoli.git'
@@ -109,10 +101,14 @@ micromamba run -p /micromamba_env/runtime_env pip install --ignore-requires-pyth
 ## Execute
 %runscript
 cd /
-exec micromamba run -p /micromamba_env/runtime_env python3 /runtime/pbest/main.py "$@"
+mkdir -p /experiment/output
+exec micromamba run -p /micromamba_env/runtime_env python3 -m process_bigraph.run \
+    --document "$1" --time "$2" > /experiment/output/results.json
 %startscript
 cd /
-exec micromamba run -p /micromamba_env/runtime_env python3 /runtime/pbest/main.py "$@"
+mkdir -p /experiment/output
+exec micromamba run -p /micromamba_env/runtime_env python3 -m process_bigraph.run \
+    --document "$1" --time "$2" > /experiment/output/results.json
 """
 
 
