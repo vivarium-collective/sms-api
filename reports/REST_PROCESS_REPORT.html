@@ -297,11 +297,92 @@ pre .hl { background: rgba(99,102,241,0.15); display: block; margin: 0 -16px; pa
     <div class="metric"><div class="value">11</div><div class="label">Link Registry</div></div>
     <div class="metric"><div class="value">42</div><div class="label">Bigraph Types</div></div>
     <div class="metric"><div class="value">3</div><div class="label">Curated Simulators</div></div>
-    <div class="metric"><div class="value">9</div><div class="label">Runtime Endpoints</div></div>
+    <div class="metric"><div class="value">10</div><div class="label">Upstream Routes</div></div>
     <div class="metric"><div class="value">6</div><div class="label">BioModels Endpoints</div></div>
-    <div class="metric"><div class="value">37</div><div class="label">Runtime Tests</div></div>
+    <div class="metric"><div class="value">4</div><div class="label">Package Endpoints</div></div>
+    <div class="metric"><div class="value">230</div><div class="label">Compose Tests</div></div>
     <div class="metric"><div class="value">0</div><div class="label">Mypy Errors</div></div>
-    <div class="metric"><div class="value">119</div><div class="label">Compose Tests</div></div>
+    <div class="metric"><div class="value">0</div><div class="label">pbest Imports</div></div>
+  </div>
+
+  <!-- FOUNDATION: ARCHITECTURAL SHIFT TO PROCESS-BIGRAPH-NATIVE -->
+  <div class="section">
+    <h2>
+      Foundation — Architectural shift to process-bigraph-native
+      <span class="badge badge-new">NEW &bull; v0.9.5</span>
+    </h2>
+    <p class="section-desc">
+      v0.9.5 re-bases the sms-api compose subsystem on upstream
+      <code>process-bigraph</code> v1.4.12+ and <code>bigraph-schema</code>, dropping the
+      hand-mirrored <code>compose-api</code> patterns and the
+      <code>pbest==0.5.5</code> dependency that pinned everything to
+      <code>process-bigraph==1.0.5</code>. The sms-api compose subsystem now
+      uses upstream's canonical surface wherever shapes align, with sms-api
+      layering production-grade DB persistence and HPC dispatch on top.
+    </p>
+
+    <table>
+      <thead><tr><th>Shift</th><th>Before (≤ v0.9.4)</th><th>After (v0.9.5)</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Container build</strong></td>
+          <td><code>pbest.containerization.generate_container_def_file</code></td>
+          <td>In-tree <code>sms_api/compose/containerization.py</code> (128 LOC, Jinja2). <code>%runscript</code> invokes <code>python -m process_bigraph.run</code>.</td>
+          <td>6 import sites updated</td>
+        </tr>
+        <tr>
+          <td><strong>Rest-process surface</strong></td>
+          <td>Hand-rolled lifecycle endpoints mirroring <code>../rest-process</code></td>
+          <td>Upstream <code>process_bigraph.server.rest.make_router(core)</code> mounted at <code>/compose/v1/</code> — 10 canonical routes from upstream itself.</td>
+          <td><code>sms_api/api/main.py:149</code></td>
+        </tr>
+        <tr>
+          <td><strong>Large-doc storage</strong></td>
+          <td>Ad-hoc JSON serialization</td>
+          <td><code>sms_api/compose/bundle_utils.py</code> wrapping <code>process_bigraph.bundle</code> (Parquet externalization for large numpy arrays — 2.9 GB JSON typically → 50-80 MB bundle).</td>
+          <td>New module (106 LOC)</td>
+        </tr>
+        <tr>
+          <td><strong>In-container entrypoint</strong></td>
+          <td>Custom pbest <code>main.py</code> runner</td>
+          <td><code>python -m process_bigraph.run --document &lt;path&gt; --time &lt;t&gt;</code> — the upstream canonical "load + run a composite document" entrypoint.</td>
+          <td>SBatch templates + container runscript</td>
+        </tr>
+        <tr>
+          <td><strong>Upstream-parity CLI</strong></td>
+          <td>Custom <code>compose processes</code>/<code>compose steps</code> only</td>
+          <td>Added <code>atlantis compose list-processes</code>, <code>list-types</code>, <code>import-types</code>, <code>type-packages</code> — exactly mirroring upstream router paths.</td>
+          <td><code>app/cli.py</code> + <code>app/app_data_service.py</code></td>
+        </tr>
+        <tr>
+          <td><strong>process-bigraph version</strong></td>
+          <td><code>==1.0.5</code> (hard-pinned by pbest)</td>
+          <td><code>[server-rest]&gt;=1.4.12,&lt;2</code> — pulls fastapi-utils, uvicorn, fire, typing-inspect for the upstream router.</td>
+          <td><code>pyproject.toml</code></td>
+        </tr>
+        <tr>
+          <td><strong>pbest dependency</strong></td>
+          <td>Required (containerization only)</td>
+          <td><strong>Removed entirely.</strong> Net dep delta: removed pbest + tellurium + tornado + twine + webcolors (still in per-simulator container images, just not in API pod venv).</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>DB persistence layer</strong></td>
+          <td><code>ProcessRegistryDatabaseService</code>, <code>ORMProcessInstance</code>, <code>ORMProcessUpdate</code></td>
+          <td><strong>Kept exactly as-is</strong> — DB integration is fundamental to sms-api's production-grade architecture. In-memory upstream router state + sms-api DB lineage table coexist.</td>
+          <td>Unchanged</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top: 24px;">Process-bigraph imports now live in the API pod</h3>
+    <pre><span class="cm"># Available in the API pod venv at runtime — verified live on sms-api-rke v0.9.5:</span>
+<span class="kw">from</span> <span class="mod">process_bigraph</span> <span class="kw">import</span> allocate_core, Composite, Process, Step
+<span class="kw">from</span> <span class="mod">process_bigraph.server.rest</span> <span class="kw">import</span> make_router, start_server
+<span class="kw">from</span> <span class="mod">process_bigraph.run</span> <span class="kw">import</span> run <span class="cm"># in-container entrypoint</span>
+<span class="kw">from</span> <span class="mod">process_bigraph.bundle</span> <span class="kw">import</span> save_bundle, load_bundle
+<span class="kw">from</span> <span class="mod">process_bigraph.protocols.rest</span> <span class="kw">import</span> RestProcess, RestProtocol <span class="cm"># client-side</span>
+<span class="kw">from</span> <span class="mod">bigraph_schema.package.discover</span> <span class="kw">import</span> discover_packages <span class="cm"># auto-registration</span></pre>
   </div>
 
   <!-- CONTRIBUTION 1: REST-PROCESS RUNTIME -->
@@ -651,6 +732,92 @@ uv run atlantis compose results &lt;simulation_id&gt; --dest ./ecoli_out --base-
     </div>
   </div>
 
+  <!-- CONTRIBUTION 4: PACKAGE REGISTRY -->
+  <div class="section">
+    <h2>
+      Contribution 4 — Package Registry
+      <span class="badge badge-new">NEW &bull; v0.9.5</span>
+    </h2>
+    <p class="section-desc">
+      The <strong>package registry</strong> subsystem lets users register <code>pbg-&lt;tool&gt;</code>
+      packages and other process-bigraph compatible Python packages in the sms-api database.
+      Once registered, the package's Process and Step classes appear via
+      <code>/compose/v1/processes?source=db</code> and <code>/compose/v1/steps?source=db</code>.
+      Combined with the auto-discovery from <code>introspect_core()</code> (Contribution 1),
+      this gives users full visibility into what processes/steps are available &mdash; both from
+      pip-installed packages and manually registered lineage.
+    </p>
+
+    <div class="tabs" id="pkg-tabs">
+      <button class="tab-btn active" onclick="switchTab('pkg-tabs','pkg-endpoints')">API Endpoints</button>
+      <button class="tab-btn" onclick="switchTab('pkg-tabs','pkg-cli')">CLI Commands</button>
+      <button class="tab-btn" onclick="switchTab('pkg-tabs','pkg-audit')">Audit Flow</button>
+    </div>
+
+    <div id="pkg-endpoints" class="tab-content active">
+      <table>
+        <thead><tr><th>Method</th><th>Path</th><th>Description</th><th>CLI</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>POST</code></td>
+            <td><code>/compose/v1/packages/audit</code></td>
+            <td>Dry-run audit of a repo URL or local path &mdash; checks pyproject.toml, deps, AST-detected Process/Step subclasses</td>
+            <td><code>atlantis compose package-audit</code></td>
+          </tr>
+          <tr>
+            <td><code>POST</code></td>
+            <td><code>/compose/v1/packages</code></td>
+            <td>Register a package (discriminated union: <code>repo_url</code>, <code>local_path</code>, or inline <code>outline</code>). Runs audit first &mdash; rejects 400 on any FAIL check</td>
+            <td><code>atlantis compose package-register</code></td>
+          </tr>
+          <tr>
+            <td><code>GET</code></td>
+            <td><code>/compose/v1/packages</code></td>
+            <td>List all registered packages (id, name, type, process/step count, created_at)</td>
+            <td><code>atlantis compose packages</code></td>
+          </tr>
+          <tr>
+            <td><code>GET</code></td>
+            <td><code>/compose/v1/packages/{id}</code></td>
+            <td>Single package lookup with full compute outlines</td>
+            <td><code>atlantis compose package-get &lt;id&gt;</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="pkg-cli" class="tab-content">
+      <table>
+        <thead><tr><th>Command</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>atlantis compose packages</code></td><td>List all registered packages (table: id, name, type, processes, steps)</td></tr>
+          <tr><td><code>atlantis compose package-get &lt;id&gt;</code></td><td>Show single package details with compute outline</td></tr>
+          <tr><td><code>atlantis compose package-audit &lt;target&gt; [--ref] [--install]</code></td><td>Dry-run audit: clone repo (if URL), check pyproject.toml, detect subclasses, optionally pip install</td></tr>
+          <tr><td><code>atlantis compose package-register &lt;target&gt; [--ref] [--from-file] [--no-audit]</code></td><td>Register a package by repo URL, local path, or inline JSON outline</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="pkg-audit" class="tab-content">
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">
+        The audit pipeline checks 4 categories. Each returns <code>PASS</code>, <code>WARN</code>, or <code>FAIL</code>:
+      </p>
+      <table>
+        <thead><tr><th>Check</th><th>What it verifies</th></tr></thead>
+        <tbody>
+          <tr><td><code>pyproject.toml</code></td><td>File exists, valid TOML, has <code>[project]</code> section with <code>name</code></td></tr>
+          <tr><td><code>bigraph-schema dep</code></td><td>Has <code>bigraph-schema</code> in <code>[project.dependencies]</code> or <code>[project.optional-dependencies]</code></td></tr>
+          <tr><td><code>process-bigraph dep</code></td><td>Has <code>process-bigraph</code> in <code>[project.dependencies]</code> or <code>[project.optional-dependencies]</code></td></tr>
+          <tr><td><code>Process/Step subclasses</code></td><td>AST scan of <code>src/</code> detects at least one <code>Process</code> or <code>Step</code> subclass (optional &mdash; WARN if none found)</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:13px;color:var(--text-dim);margin-top:12px;">
+        <strong>Test coverage:</strong> 36 package-specific tests (DB, routes, handler unit, CLI integration) +
+        27 CLI package tests &mdash; all passing.
+      </p>
+    </div>
+  </div>
+
   <!-- VERIFICATION TABLE -->
   <div class="section">
     <h2>Full Verification Status</h2>
@@ -673,9 +840,19 @@ uv run atlantis compose results &lt;simulation_id&gt; --dest ./ecoli_out --base-
           <td><code>uv run pytest tests/compose/test_process_runtime_routes.py -v</code></td>
         </tr>
         <tr>
-          <td>Process registry DB tests (10)</td>
-          <td><span class="pill pill-green">10/10 PASS</span></td>
-          <td><code>uv run pytest tests/compose/test_process_registry_db.py -v</code></td>
+          <td>Package registry DB tests (9)</td>
+          <td><span class="pill pill-green">9/9 PASS</span></td>
+          <td><code>uv run pytest tests/compose/test_packages_db.py -v</code></td>
+        </tr>
+        <tr>
+          <td>Package registry route tests (9)</td>
+          <td><span class="pill pill-green">9/9 PASS</span></td>
+          <td><code>uv run pytest tests/compose/test_package_routes.py -v</code></td>
+        </tr>
+        <tr>
+          <td>Package register handler tests (18)</td>
+          <td><span class="pill pill-green">18/18 PASS</span></td>
+          <td><code>uv run pytest tests/compose/test_register_pbg_package.py -v</code></td>
         </tr>
         <tr>
           <td>BioModels tests (42)</td>
@@ -684,7 +861,7 @@ uv run atlantis compose results &lt;simulation_id&gt; --dest ./ecoli_out --base-
         </tr>
         <tr>
           <td>Full compose test suite</td>
-          <td><span class="pill pill-green">119 PASS</span></td>
+          <td><span class="pill pill-green">230 PASS</span></td>
           <td><code>uv run pytest tests/compose/ -v</code></td>
         </tr>
         <tr>

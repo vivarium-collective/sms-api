@@ -147,7 +147,8 @@ def audit_repo(repo_path: Path, run_install: bool = True) -> AuditReport:  # noq
             venv = Path(tmp) / "venv"
             r = subprocess.run(  # noqa: S603
                 ["uv", "venv", str(venv), "--python", sys.executable],  # noqa: S607
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )
             if r.returncode != 0:
                 report.add("pip install -e .", "WARN", "could not create ephemeral venv; skipped")
@@ -155,7 +156,9 @@ def audit_repo(repo_path: Path, run_install: bool = True) -> AuditReport:  # noq
                 try:
                     r = subprocess.run(  # noqa: S603
                         ["uv", "pip", "install", "--python", str(venv / "bin" / "python"), "-e", str(repo_path)],  # noqa: S607
-                        capture_output=True, text=True, timeout=180,
+                        capture_output=True,
+                        text=True,
+                        timeout=180,
                     )
                 except subprocess.TimeoutExpired:
                     report.add("pip install -e .", "FAIL", "install timed out after 180s")
