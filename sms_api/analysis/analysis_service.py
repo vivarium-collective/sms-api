@@ -1,7 +1,9 @@
 # ================================= new implementation ================================================= #
 import asyncio
+import copy
 import dataclasses
 import hashlib
+import io
 import json
 import logging
 import re
@@ -13,11 +15,13 @@ from typing import Any
 import pandas as pd
 
 from sms_api.analysis.models import (
+    PTOOLS_CANONICAL_N_TP,
     AnalysisConfig,
     AnalysisJobFailedException,
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
+    PtoolsAnalysisType,
     TsvOutputFile,
 )
 from sms_api.common.hpc.slurm_service import SlurmService
@@ -42,7 +46,7 @@ class RequestPayload:
     data: dict[str, Any]
 
     def hash(self) -> str:
-        normalized = normalize_json(self.data)
+        normalized = normalize_json(_strip_request_n_tp(self.data))
         b_rep = json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         return hashlib.sha256(b_rep).hexdigest()
 
@@ -55,6 +59,118 @@ def normalize_json(obj: Any) -> Any:
         return [normalize_json(x) for x in obj]
     else:
         return obj
+
+
+_PTOOLS_DOMAINS = ("single", "multidaughter", "multigeneration", "multiseed")
+
+# Path B1: aggregation mode used when re-binning adjacent time columns at
+# response time. vEcoli (api-support branch) computes each column as the
+# AVG of values whose ``time`` falls in that uniform-width bin, so coarsening
+# is mean-of-means. Sim time is uniform, so this is exact within float
+# rounding; see PTOOLS_LATENCY_MITIGATION.md §"Cons (B1)" for the row-uniformity
+# caveat.
+_PTOOLS_AGGREGATION_MODE: dict[str, str] = {
+    PtoolsAnalysisType.REACTIONS.value: "mean",
+    PtoolsAnalysisType.RNA.value: "mean",
+    PtoolsAnalysisType.PROTEINS.value: "mean",
+}
+_PTOOLS_MODULE_NAMES = frozenset(_PTOOLS_AGGREGATION_MODE)
+
+
+def reaggregate_ptools_columns(
+    csv_text: str,
+    target_n_tp: int,
+    source_n_tp: int = PTOOLS_CANONICAL_N_TP,
+    mode: str = "mean",
+    separator: str = "\t",
+) -> str:
+    """Coarsen a ptools TSV from ``source_n_tp`` time bins to ``target_n_tp``.
+
+    Path B1 — see PTOOLS_LATENCY_MITIGATION.md. The TSV's first column is the
+    feature/index column (rows are gene/protein/reaction ids). All remaining
+    columns are time-bin values. ``target_n_tp`` must divide ``source_n_tp``.
+
+    Each output column is the mean (or sum) of ``source_n_tp // target_n_tp``
+    contiguous source columns. The output column name is the source column
+    name of the first source column in the group, preserving vEcoli's
+    "bin-start time" naming convention.
+    """
+    if target_n_tp <= 0:
+        raise ValueError(f"target_n_tp must be positive, got {target_n_tp}")
+    if source_n_tp % target_n_tp != 0:
+        raise ValueError(
+            f"target_n_tp ({target_n_tp}) must divide source_n_tp ({source_n_tp}); only divisors are supported."
+        )
+    if target_n_tp == source_n_tp:
+        return csv_text
+    if mode not in ("mean", "sum"):
+        raise ValueError(f"mode must be 'mean' or 'sum', got {mode!r}")
+
+    df = pd.read_csv(io.StringIO(csv_text), sep=separator)
+    if df.shape[1] < 2:
+        return csv_text
+    index_col = df.columns[0]
+    time_cols = list(df.columns[1:])
+    if len(time_cols) != source_n_tp:
+        # Defensive: the TSV doesn't have the expected number of columns. Skip
+        # re-aggregation rather than mangle the response. The caller will see
+        # the canonical-resolution file and can decide what to do.
+        logger.warning(
+            "reaggregate_ptools_columns: expected %d time columns, found %d; returning canonical TSV unchanged.",
+            source_n_tp,
+            len(time_cols),
+        )
+        return csv_text
+
+    group_size = source_n_tp // target_n_tp
+    groups = [time_cols[i * group_size : (i + 1) * group_size] for i in range(target_n_tp)]
+    new_cols: dict[str, Any] = {str(index_col): df[index_col]}
+    for group in groups:
+        new_name = str(group[0])
+        block = df[group]
+        if mode == "mean":
+            new_cols[new_name] = block.mean(axis=1)
+        else:
+            new_cols[new_name] = block.sum(axis=1)
+    out_df = pd.DataFrame(new_cols)
+    return out_df.to_csv(sep=separator, index=False)
+
+
+def ptools_aggregation_mode(module_name: str) -> str:
+    """Return the per-module re-aggregation mode (mean/sum). Defaults to mean."""
+    return _PTOOLS_AGGREGATION_MODE.get(module_name, "mean")
+
+
+def _force_canonical_n_tp(requested_analyses: dict[str, dict[str, Any]]) -> None:
+    """Rewrite every ptools module's ``n_tp`` to ``PTOOLS_CANONICAL_N_TP`` in-place.
+
+    Path B1 — the user's requested ``n_tp`` is applied at response time by
+    re-aggregating adjacent time columns, so SLURM always runs at the canonical
+    resolution and the cache key (which excludes ``n_tp``) maps a single SLURM
+    artifact to many ``n_tp`` requests.
+    """
+    for module_options in requested_analyses.values():
+        for module_name, module_params in list(module_options.items()):
+            if module_name in _PTOOLS_MODULE_NAMES and isinstance(module_params, dict):
+                module_params["n_tp"] = PTOOLS_CANONICAL_N_TP
+
+
+def _strip_request_n_tp(data: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of ``data`` with ``n_tp`` removed from every ptools module config.
+
+    Path B1: the cache key must be independent of ``n_tp`` so that re-parameterizing
+    the timepoint count does not trigger a fresh SLURM job. The actual ``n_tp`` is
+    applied at response-assembly time via column re-aggregation.
+    """
+    cleaned = copy.deepcopy(data)
+    for domain in _PTOOLS_DOMAINS:
+        modules = cleaned.get(domain)
+        if not isinstance(modules, list):
+            continue
+        for mod in modules:
+            if isinstance(mod, dict):
+                mod.pop("n_tp", None)
+    return cleaned
 
 
 class AnalysisServiceSlurm:
@@ -101,6 +217,7 @@ class AnalysisServiceSlurm:
             if requested is not None:
                 for module_config in requested:
                     requested_analyses[domain].update(module_config.to_dict())
+        _force_canonical_n_tp(requested_analyses)
         config_data["analysis_options"].update(requested_analyses)
 
         # Propagate DuckDB filters into analysis_options (where vEcoli reads them).
@@ -208,7 +325,12 @@ class AnalysisServiceSlurm:
                 paths.append(HPCFilePath(remote_path=Path(fp)))
         return paths
 
-    async def download_analysis_output(self, local_dir: Path, remote_path: HPCFilePath) -> TsvOutputFile:
+    async def download_analysis_output(
+        self,
+        local_dir: Path,
+        remote_path: HPCFilePath,
+        target_n_tp_by_module: dict[str, int] | None = None,
+    ) -> TsvOutputFile:
         requested_filename = remote_path.remote_path.parts[-1]
         if not requested_filename.endswith(".tsv"):
             logger.info(f"wrong filename: {requested_filename}")
@@ -241,7 +363,19 @@ class AnalysisServiceSlurm:
             async with get_ssh_session_service(SSHTarget.SLURM).session() as ssh:
                 await ssh.scp_download(local_file=local, remote_path=remote_path)
 
+        # The cached file is always at the canonical n_tp resolution. If the
+        # caller asked for a different (divisor) n_tp for this module, coarsen
+        # the columns here. See PTOOLS_LATENCY_MITIGATION.md §"Corrected Path B (B1)".
         file_content = local.read_text()
+        module_name = Path(requested_filename).stem
+        target_n_tp = (target_n_tp_by_module or {}).get(module_name)
+        if target_n_tp is not None and target_n_tp != PTOOLS_CANONICAL_N_TP:
+            file_content = reaggregate_ptools_columns(
+                csv_text=file_content,
+                target_n_tp=target_n_tp,
+                source_n_tp=PTOOLS_CANONICAL_N_TP,
+                mode=ptools_aggregation_mode(module_name),
+            )
         output = TsvOutputFile(
             filename=requested_filename,
             content=file_content,

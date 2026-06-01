@@ -29,6 +29,7 @@ from sms_api.analysis.models import (
 from sms_api.api import request_examples
 from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_router_config
+from sms_api.common.streaming import stream_json_with_heartbeats
 from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.models import AnalysisOptions, RepoDiscovery, Simulation, SimulationRun
@@ -386,6 +387,16 @@ async def get_simulation_data(
 async def run_analysis(
     _request: Request,
     request: ExperimentAnalysisRequest = request_examples.analysis_ptools,
+    stream: str | None = Query(
+        default=None,
+        description=(
+            "Set to 'heartbeat' to receive whitespace heartbeats on the response body "
+            "while the SLURM job runs. Keeps the connection alive across ingress / SSH "
+            "/ ALB idle-timeouts. Response body is still a valid JSON document (leading "
+            "whitespace is tolerated by standard JSON parsers). On failure the body is a "
+            "JSON object (not an array); clients should branch on response shape."
+        ),
+    ),
 ) -> Sequence[TsvOutputFile | OutputFileMetadata]:
     if get_job_backend() != ComputeBackend.SLURM:
         raise HTTPException(
@@ -405,6 +416,20 @@ async def run_analysis(
     simulator = await db_service.get_simulator(simulation.simulator_id)
     if simulator is None:
         raise HTTPException(status_code=404, detail=f"Simulator with id {simulation.simulator_id} not found")
+
+    if stream == "heartbeat":
+        work = handlers.analyses.handle_run_analysis(
+            request=request,
+            simulator=simulator,
+            analysis_service=analysis_service,
+            logger=logger,
+            _request=_request,
+            db_service=db_service,
+        )
+        return StreamingResponse(  # type: ignore[return-value]
+            stream_json_with_heartbeats(work),
+            media_type="application/json",
+        )
 
     try:
         return await handlers.analyses.handle_run_analysis(

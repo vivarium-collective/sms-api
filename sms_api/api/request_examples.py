@@ -35,8 +35,15 @@ DEFAULT_NUM_GENERATIONS = 4
 
 
 def get_test_ptools() -> ExperimentAnalysisRequest:
+    from sms_api.analysis.models import PTOOLS_SUPPORTED_N_TP
+
     def rand_ntp(start: int = 3, stop: int = 22) -> int:
-        return random.randint(start, stop)
+        # n_tp must be a divisor of PTOOLS_CANONICAL_N_TP (Path B1). Pick from
+        # the supported set, restricted to the requested range when possible.
+        candidates = [n for n in PTOOLS_SUPPORTED_N_TP if start <= n <= stop]
+        if not candidates:
+            candidates = list(PTOOLS_SUPPORTED_N_TP)
+        return random.choice(candidates)
 
     return ExperimentAnalysisRequest(
         experiment_id="sms_multigeneration",

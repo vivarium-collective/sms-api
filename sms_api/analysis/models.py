@@ -3,13 +3,23 @@ import pathlib
 import random
 from typing import Any, ParamSpec, TypeVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from sms_api.common import StrEnumBase
 from sms_api.common.models import DataId, JobStatus
 from sms_api.config import Settings, get_settings
 
 MAX_ANALYSIS_CPUS = 3
+
+# Path B1 — n_tp is decoupled from the SLURM job. We always run vEcoli at a
+# canonical n_tp and re-aggregate adjacent time columns at response time. The
+# canonical value is chosen for divisor density: 120 has 16 divisors, giving the
+# stakeholder a wide menu without re-running the SLURM job per request.
+# Background: PTOOLS_LATENCY_MITIGATION.md §"Corrected Path B (B1)".
+PTOOLS_CANONICAL_N_TP = 120
+PTOOLS_SUPPORTED_N_TP: tuple[int, ...] = tuple(
+    n for n in range(1, PTOOLS_CANONICAL_N_TP + 1) if PTOOLS_CANONICAL_N_TP % n == 0
+)
 
 
 ### -- analyses -- ###
@@ -97,6 +107,17 @@ class PtoolsAnalysisConfig(BaseModel):
     lineage_seed: int | None = None
     agent_id: int | None = None
     files: list[OutputFileMetadata] | None = None
+
+    @field_validator("n_tp")
+    @classmethod
+    def _validate_n_tp(cls, v: int) -> int:
+        if v not in PTOOLS_SUPPORTED_N_TP:
+            raise ValueError(
+                f"n_tp must be a divisor of {PTOOLS_CANONICAL_N_TP} "
+                f"(supported values: {list(PTOOLS_SUPPORTED_N_TP)}). "
+                f"Got n_tp={v}."
+            )
+        return v
 
     def model_post_init(self, context: Any, /) -> None:
         self.name = self.name or PtoolsAnalysisType.REACTIONS
