@@ -4,6 +4,7 @@ import numpy as np
 from fastapi import APIRouter
 
 from sms_api.analysis.models import (
+    PTOOLS_SUPPORTED_N_TP,
     AnalysisDomain,
     ExperimentAnalysisRequest,
     PtoolsAnalysisConfig,
@@ -58,11 +59,16 @@ def generate_analysis_request(
     requested: dict[str, list[PtoolsAnalysisConfig] | str] = dict(
         zip(req_configs, [r for r in req_configs], strict=False)
     )
+    # Path B1: n_tp must be a divisor of PTOOLS_CANONICAL_N_TP. Pick from the
+    # supported set instead of generating arbitrary integers.
+    upper = n_tp_max or 10
+    supported_in_range = [n for n in PTOOLS_SUPPORTED_N_TP if 2 <= n <= upper] or list(PTOOLS_SUPPORTED_N_TP)
     for conf_domain in requested:
         configs = list(
             map(
                 lambda a_type: PtoolsAnalysisConfig(
-                    name=a_type, n_tp=np.random.randint(2, n_tp_max or 10) if n_tp is None else n_tp
+                    name=a_type,
+                    n_tp=int(np.random.choice(supported_in_range)) if n_tp is None else n_tp,
                 ),
                 PtoolsAnalysisType.to_list(),
             )

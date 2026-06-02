@@ -23,4 +23,4 @@
 # 0.8.2 — fix analysis output metadata (partition parsing), all-domain filtering, restore num_seeds
 # 0.9.0 — compose (process-bigraph) subsystem, Python 3.13, /compose/v1/ endpoints
 # 0.9.1 — fix test_run_analysis to use HPC-available simulator (203ab2a), graceful GitHub cred skip
-__version__ = "0.9.2"
+__version__ = "0.10.0-rc1"
