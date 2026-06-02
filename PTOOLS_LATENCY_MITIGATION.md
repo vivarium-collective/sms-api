@@ -377,6 +377,21 @@ D on once the canonical artifact format has stabilized.
 
 ### Path E — Honest async: 202 + status URL + cache-by-hash (no polling, server pushes via SSE)
 
+> **2026-06-02 — Implemented (single-connection variant).** Rather than the
+> two-call `202 + Location: /events` form, Path E is exposed on the existing
+> `POST /api/v1/analyses` endpoint via `?stream=sse`. The response is
+> `Content-Type: text/event-stream` and emits structured progress events
+> (`status` with `phase` ∈ {`received`, `cache-hit`, `dispatched`,
+> `running`, `downloading`}, then `result` with the inline
+> `TsvOutputFile[]` payload, then `end`). On failure an `error` event is
+> emitted before `end`. Buffering is disabled via `Cache-Control: no-cache`
+> + `X-Accel-Buffering: no` (defeats nginx + intermediate response
+> buffering). The final `result` carries inline TSV bytes (no signed URL
+> yet — that's Path G; on RKE there's no object store today). Tests:
+> `tests/data/test_ptools_path_e.py`,
+> `tests/common/test_streaming.py::test_format_sse_event_*`.
+
+
 **What it is:** Don't pretend the call is synchronous. Have
 `POST /api/v1/analyses` return immediately with `202 Accepted` + a
 `Location: /api/v1/analyses/{job_id}/events` SSE endpoint. The frontend
@@ -554,13 +569,22 @@ identical to Path C from the frontend's perspective.
   in-process in-flight map.
 
 ### Phase 3 — Defense in depth (optional, weeks-to-months)
-- **Path C (eliminate SLURM from the request path).** Once Phase 2 is
-  stable and we've decided ptools is a permanent product surface, port
-  the analysis modules in-tree and run them inside the api pod
-  (or a worker pod). Requires sim history to be readable from the api
-  pod on RKE — either S3 mirroring or HPC mount.
-- **Path G (pre-signed URLs).** Only if response sizes start hurting api
-  pod bandwidth.
+- **Path E (SSE).** **Implemented 2026-06-02** — see Path E §3 box above.
+  Single-connection variant on `?stream=sse`. Structured progress events
+  for UIs that want a progress indicator; same blocking-call semantics
+  for clients that don't opt in.
+- **Path C (eliminate SLURM from the request path).** **Deferred.**
+  Requires either an S3 mirror of completed sim outputs from RKE, or an
+  HPC mount inside the api pod (complex). Revisit once Phases 1–2 +
+  Path E are deployed and we have data on what the actual remaining
+  request-latency hotspots are.
+- **Path G (pre-signed URLs).** **Deferred.** No object-store backend on
+  RKE today, and current response sizes don't saturate the api pod's
+  bandwidth. The model surface (`TsvOutputFile.download_url` field) can
+  be added later without an SSE-side protocol change.
+- **Path H (persistent SLURM "ptools service").** **Deferred.** Needs an
+  ops conversation with CCAM about 7-day job pinning under the
+  `vcell-services` QoS before we can prototype.
 
 ### What about the stakeholder's "one blocking call" demand?
 - Phase 1 makes the existing blocking call **reliable** (heartbeats).

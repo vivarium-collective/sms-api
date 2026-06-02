@@ -29,7 +29,7 @@ from sms_api.analysis.models import (
 from sms_api.api import request_examples
 from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_router_config
-from sms_api.common.streaming import stream_json_with_heartbeats
+from sms_api.common.streaming import SSE_RESPONSE_HEADERS, stream_json_with_heartbeats
 from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.models import AnalysisOptions, RepoDiscovery, Simulation, SimulationRun
@@ -390,11 +390,16 @@ async def run_analysis(
     stream: str | None = Query(
         default=None,
         description=(
-            "Set to 'heartbeat' to receive whitespace heartbeats on the response body "
-            "while the SLURM job runs. Keeps the connection alive across ingress / SSH "
-            "/ ALB idle-timeouts. Response body is still a valid JSON document (leading "
-            "whitespace is tolerated by standard JSON parsers). On failure the body is a "
-            "JSON object (not an array); clients should branch on response shape."
+            "Streaming response mode.\n\n"
+            "* ``heartbeat`` (Path F) — keeps the existing JSON response, prepending "
+            "  whitespace heartbeats every few seconds while the SLURM job runs. The "
+            "  response body is still a valid JSON document (leading whitespace is "
+            "  tolerated by standard JSON parsers). On failure the body is a JSON "
+            "  object (not an array); clients branch on response shape.\n"
+            "* ``sse`` (Path E) — Server-Sent Events. ``Content-Type: text/event-stream`` "
+            "  with structured progress events: ``status`` (phase transitions), "
+            "  ``result`` (final inline ``TsvOutputFile[]``), ``end``. On failure the "
+            "  ``error`` event is emitted before ``end``."
         ),
     ),
 ) -> Sequence[TsvOutputFile | OutputFileMetadata]:
@@ -429,6 +434,19 @@ async def run_analysis(
         return StreamingResponse(  # type: ignore[return-value]
             stream_json_with_heartbeats(work),
             media_type="application/json",
+        )
+
+    if stream == "sse":
+        return StreamingResponse(  # type: ignore[return-value]
+            handlers.analyses.handle_run_analysis_sse(
+                request=request,
+                simulator=simulator,
+                analysis_service=analysis_service,
+                logger=logger,
+                db_service=db_service,
+            ),
+            media_type="text/event-stream",
+            headers=SSE_RESPONSE_HEADERS,
         )
 
     try:
