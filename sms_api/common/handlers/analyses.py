@@ -4,6 +4,7 @@ Simulation analysis handler for SMS API simulation experiment outputs.
 NOTE: this module is essentially "analysis_handlers_hpc". TODO: abstract this into interface
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -16,8 +17,11 @@ from starlette.requests import Request
 from sms_api.analysis.analysis_service import (
     AnalysisServiceSlurm,
     RequestPayload,
+    build_canonical_ptools_request,
+    canonical_ptools_cache_dir,
     ptools_aggregation_mode,
     reaggregate_ptools_columns,
+    should_eagerly_materialize_ptools,
 )
 from sms_api.analysis.models import (
     PTOOLS_CANONICAL_N_TP,
@@ -191,6 +195,72 @@ def _parse_cached_filename_metadata(filename: str) -> dict[str, int]:
         if m.group(3) is not None:
             metadata["generation"] = int(m.group(3))
     return metadata
+
+
+# Tracks in-flight Path-D background tasks to avoid double-dispatching when
+# get_simulation_status() is polled rapidly across the completion transition.
+# Keyed by experiment_id; entry is removed when the materialization task ends.
+_inflight_materialize_tasks: dict[str, asyncio.Task[object]] = {}
+
+
+def schedule_canonical_ptools_materialization(
+    experiment_id: str,
+    simulator: SimulatorVersion,
+    analysis_service: AnalysisServiceSlurm,
+    db_service: DatabaseService,
+    parent_logger: logging.Logger,
+) -> asyncio.Task[object] | None:
+    """Path D — fire-and-forget pre-warm of the canonical ptools cache.
+
+    Called at the moment a simulation transitions to COMPLETED. Returns:
+      * ``None`` if the deployment/simulator combo is not eligible (non-RKE, non-fork).
+      * ``None`` if the canonical cache for this experiment is already populated.
+      * ``None`` if a materialization for this experiment is already in flight.
+      * Otherwise, the scheduled ``asyncio.Task`` (returned mainly for tests).
+
+    The task runs ``handle_run_analysis_slurm`` against a canonical-resolution
+    request; that handler dispatches SLURM, polls, and downloads outputs into
+    the analysis cache directory. By the time a user-facing
+    ``POST /api/v1/analyses`` request lands, the cache is already populated and
+    the response is served without dispatching a fresh job.
+    """
+    if not should_eagerly_materialize_ptools(simulator, analysis_service.env):
+        return None
+
+    cache_dir = canonical_ptools_cache_dir(env=analysis_service.env, experiment_id=experiment_id)
+    if cache_dir.exists() and any(cache_dir.iterdir()):
+        return None
+
+    if experiment_id in _inflight_materialize_tasks:
+        return None
+
+    request = build_canonical_ptools_request(experiment_id=experiment_id)
+    coro = handle_run_analysis_slurm(
+        request=request,
+        simulator=simulator,
+        analysis_service=analysis_service,
+        logger=parent_logger,
+        db_service=db_service,
+        _request=None,
+    )
+    task: asyncio.Task[object] = asyncio.create_task(coro, name=f"ptools-materialize-{experiment_id}")
+    _inflight_materialize_tasks[experiment_id] = task
+
+    def _on_done(t: asyncio.Task[object], *, _eid: str = experiment_id) -> None:
+        _inflight_materialize_tasks.pop(_eid, None)
+        exc = t.exception() if not t.cancelled() else None
+        if exc is not None:
+            parent_logger.warning(
+                "Path D ptools materialization failed for experiment %s: %s: %s",
+                _eid,
+                type(exc).__name__,
+                exc,
+            )
+        else:
+            parent_logger.info("Path D ptools materialization completed for experiment %s", _eid)
+
+    task.add_done_callback(_on_done)
+    return task
 
 
 async def handle_get_analysis_status(

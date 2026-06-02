@@ -21,6 +21,7 @@ from sms_api.analysis.models import (
     AnalysisRun,
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
+    PtoolsAnalysisConfig,
     PtoolsAnalysisType,
     TsvOutputFile,
 )
@@ -32,6 +33,7 @@ from sms_api.common.utils import capture_slurm_script
 from sms_api.config import Settings
 from sms_api.dependencies import get_ssh_session_service
 from sms_api.simulation.hpc_utils import get_slurm_submit_file, get_slurmjob_name
+from sms_api.simulation.models import SimulatorVersion
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -153,6 +155,52 @@ def _force_canonical_n_tp(requested_analyses: dict[str, dict[str, Any]]) -> None
         for module_name, module_params in list(module_options.items()):
             if module_name in _PTOOLS_MODULE_NAMES and isinstance(module_params, dict):
                 module_params["n_tp"] = PTOOLS_CANONICAL_N_TP
+
+
+_FORK_BRANCH = "api-support"
+_RKE_NAMESPACES = frozenset({"sms-api-rke", "sms-api-rke-dev"})
+
+
+def is_fork_simulator(simulator: SimulatorVersion) -> bool:
+    """True iff the simulator points at the vEcoli fork that hosts ptools (~/sms/vecoli_fork, api-support branch)."""
+    return simulator.git_branch == _FORK_BRANCH
+
+
+def should_eagerly_materialize_ptools(simulator: SimulatorVersion, settings: Settings) -> bool:
+    """Path D gate. Only RKE deployments running the fork simulator pre-warm the ptools cache.
+
+    Other deployments (Stanford / K8s) don't host ptools; other simulators (mainline vEcoli)
+    don't expose the ptools_{rxns,rna,proteins} analysis modules.
+    """
+    return settings.deployment_namespace in _RKE_NAMESPACES and is_fork_simulator(simulator)
+
+
+def build_canonical_ptools_request(experiment_id: str) -> ExperimentAnalysisRequest:
+    """Build the request that materializes all three ptools modules at canonical resolution.
+
+    Path D — invoked at simulation completion. ``n_tp`` is set to ``PTOOLS_CANONICAL_N_TP``
+    explicitly for honesty; ``_force_canonical_n_tp`` would coerce it anyway.
+    """
+    return ExperimentAnalysisRequest(
+        experiment_id=experiment_id,
+        single=[
+            PtoolsAnalysisConfig(name=PtoolsAnalysisType.REACTIONS.value, n_tp=PTOOLS_CANONICAL_N_TP),
+            PtoolsAnalysisConfig(name=PtoolsAnalysisType.RNA.value, n_tp=PTOOLS_CANONICAL_N_TP),
+            PtoolsAnalysisConfig(name=PtoolsAnalysisType.PROTEINS.value, n_tp=PTOOLS_CANONICAL_N_TP),
+        ],
+    )
+
+
+def canonical_ptools_cache_dir(env: Settings, experiment_id: str) -> Path:
+    """Return the on-disk cache directory the canonical Path-D request will populate.
+
+    The cache key is the same hash the user-facing handler computes
+    (``RequestPayload(request.model_dump()).hash()``), so a Path-D pre-warm and a
+    later user request collide on the same directory — that's the idempotency mechanism.
+    """
+    request = build_canonical_ptools_request(experiment_id=experiment_id)
+    payload_hash = RequestPayload(data=request.model_dump()).hash()
+    return Path(env.cache_dir) / payload_hash
 
 
 def _strip_request_n_tp(data: dict[str, Any]) -> dict[str, Any]:

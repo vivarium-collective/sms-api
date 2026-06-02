@@ -691,7 +691,49 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
         )
         await db_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, update=update)
 
+        # Path D — only on the transition into COMPLETED, fire a background pre-warm of the
+        # canonical ptools cache so the ptools frontend's first POST /analyses is sub-second.
+        # See PTOOLS_LATENCY_MITIGATION.md §"Path D". Gated on RKE + fork simulator inside the
+        # scheduler; safe to call unconditionally.
+        if hpc_run.status != JobStatus.COMPLETED and job_status_info.status == JobStatus.COMPLETED:
+            await _schedule_post_completion_ptools_materialize(
+                simulation=sim_record,
+                db_service=db_service,
+            )
+
     return SimulationRun(id=int(id), status=job_status_info.status, error_message=job_status_info.error_message)
+
+
+async def _schedule_post_completion_ptools_materialize(
+    simulation: Simulation,
+    db_service: DatabaseService,
+) -> None:
+    """Path D dispatcher hook. Resolves the simulator and asks the analysis layer to schedule
+    a canonical ptools materialization if the deployment is RKE-on-fork. All errors are
+    swallowed and logged — Path D is best-effort and must not break the status endpoint."""
+    try:
+        from sms_api.analysis.analysis_service import AnalysisServiceSlurm
+        from sms_api.common.handlers.analyses import schedule_canonical_ptools_materialization
+        from sms_api.config import get_settings
+
+        simulator = await db_service.get_simulator(simulator_id=simulation.simulator_id)
+        if simulator is None:
+            return
+        analysis_service = AnalysisServiceSlurm(env=get_settings())
+        schedule_canonical_ptools_materialization(
+            experiment_id=simulation.experiment_id,
+            simulator=simulator,
+            analysis_service=analysis_service,
+            db_service=db_service,
+            parent_logger=logger,
+        )
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning(
+            "Path D post-completion scheduling failed for simulation %s: %s: %s",
+            simulation.database_id,
+            type(exc).__name__,
+            exc,
+        )
 
 
 async def cancel_simulation(

@@ -328,6 +328,19 @@ Recommend as the second wave once Path B is in production.
 
 ### Path D — Materialize the canonical artifact eagerly as part of the simulation workflow
 
+> **2026-06-02 — Implemented.** `schedule_canonical_ptools_materialization`
+> in `sms_api/common/handlers/analyses.py` is fired from
+> `get_simulation_status` (`sms_api/common/handlers/simulations.py`) on the
+> transition into `JobStatus.COMPLETED`. Gated to RKE deployments
+> (`sms-api-rke`, `sms-api-rke-dev`) **and** the fork simulator (vEcoli
+> `api-support` branch, `~/sms/vecoli_fork`) via
+> `should_eagerly_materialize_ptools`. The scheduler is fire-and-forget
+> (`asyncio.create_task`), idempotent against the on-disk cache directory,
+> and guarded by an in-process in-flight map so rapid status polls across
+> the transition don't double-dispatch. Failures are logged, never raised
+> from the status endpoint. Tests: `tests/data/test_ptools_path_d.py`.
+
+
 **What it is:** Don't wait for the frontend's first `POST /analyses` to
 trigger the canonical SLURM job (Path B). Instead, run it automatically as
 the last step of every simulation workflow, so the cache is **already
@@ -536,6 +549,9 @@ identical to Path C from the frontend's perspective.
 - **Path D (eagerly materialize canonical artifact at simulation
   completion).** Layered on top of Path B; removes the only remaining
   slow case (cold cache for first frontend request).
+  **Implemented 2026-06-02** — see Path D §3 box above. Gated to
+  RKE + fork simulator; idempotent against the on-disk cache and an
+  in-process in-flight map.
 
 ### Phase 3 — Defense in depth (optional, weeks-to-months)
 - **Path C (eliminate SLURM from the request path).** Once Phase 2 is
