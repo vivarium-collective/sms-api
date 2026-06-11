@@ -168,6 +168,12 @@ def _init_simulation_service(job_backend: str, settings: Settings) -> None:
         k8s_job_service = K8sJobService(namespace=settings.k8s_job_namespace)
         set_simulation_service(SimulationServiceK8s(k8s_job_service=k8s_job_service))
         logger.info("✓ Simulation service initialized (K8s)")
+    elif job_backend == ComputeBackend.RAY:
+        from sms_api.simulation.simulation_service_ray import SimulationServiceRay
+
+        logger.info("Initializing simulation service (Ray on AWS Batch MNP)...")
+        set_simulation_service(SimulationServiceRay())
+        logger.info("✓ Simulation service initialized (Ray)")
     else:
         logger.info("Initializing simulation service (HPC/SLURM)...")
         set_simulation_service(SimulationServiceHpc())

@@ -498,6 +498,18 @@ async def run_simulation_workflow(  # noqa: C901
             # Set local path for cached simData — the K8s job command will download
             # from S3 to this path before workflow.py runs (vEcoli only accepts local paths)
             config_data["sim_data_path"] = "/tmp/simData.cPickle"  # noqa: S108
+    elif get_job_backend() == ComputeBackend.RAY:
+        # Ray backend: the v2ecoli ensemble runs from CLI args on a transient Ray
+        # cluster (not Nextflow), so the Nextflow/AWS config blocks are unused.
+        # Keep experiment_id / generations / n_init_sims (→ --n-seeds); record the
+        # S3 results prefix (xarray zarr + summary) for output retrieval.
+        config_data.pop("aws_cdk", None)
+        config_data.pop("ccam", None)
+        config_data.pop("aws", None)
+        config_data["emitter"] = "xarray"
+        config_data["emitter_arg"] = {
+            "out_uri": f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{unique_experiment_id}"
+        }
     else:
         # SLURM path: replace K8s-specific sections with SLURM equivalents.
         # The ccam Nextflow profile only exists in the fork (api-support branch)
@@ -995,6 +1007,18 @@ async def get_simulation_outputs(
 
     # Dispatch based on backend
     hpc_run = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
+    if hpc_run and hpc_run.job_id.backend == JobBackend.RAY:
+        # Ray backend: stream the xarray/zarr ensemble outputs (seed_NN/store.zarr +
+        # summary.json) directly from S3. FILE mode falls back to streaming.
+        archive_name = f"{experiment_id}.tar.gz"
+        return StreamingResponse(
+            _stream_s3_tar_gz_ray(experiment_id),
+            media_type="application/gzip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{archive_name}"',
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
     if hpc_run and hpc_run.job_id.backend in (JobBackend.K8S, JobBackend.LOCAL):
         # K8s/S3 path: stream directly from S3 into tar.gz response (no disk cache).
         # This avoids ALB 504 timeouts on large simulations by sending bytes immediately.
@@ -1164,6 +1188,40 @@ async def _stream_s3_tar_gz(experiment_id: str, chunk_size: int = 64 * 1024) -> 
     download_keys = [item.Key for item in analyses_listing if item.Key.endswith(_ACCEPTED_ANALYSES_EXTENSIONS)]
     download_keys.append(f"{experiment_prefix}/{_WORKFLOW_CONFIG_KEY}")
     logger.info(f"Streaming {len(download_keys)} files from S3 for experiment {experiment_id}")
+
+    file_entries = await _fetch_s3_file_entries(experiment_id, download_keys, experiment_prefix)
+
+    read_fd, write_fd = os.pipe()
+    read_file = os.fdopen(read_fd, "rb")
+    write_file = os.fdopen(write_fd, "wb")
+    loop = asyncio.get_event_loop()
+
+    tar_future = loop.run_in_executor(None, _write_tar_entries, write_file, file_entries)
+
+    async for chunk in _gzip_pipe_stream(read_file, loop, chunk_size):
+        yield chunk
+
+    await tar_future
+
+
+async def _stream_s3_tar_gz_ray(experiment_id: str, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
+    """Stream a Ray ensemble's S3 outputs (zarr stores + summaries) into a tar.gz.
+
+    The Ray entrypoint syncs the whole ``.pbg/runs/phase0-xarray`` tree to
+    ``s3://{bucket}/{s3_output_prefix}/{experiment_id}/`` — seed_NN/store.zarr
+    (many small chunk objects) plus per-seed and ensemble summary.json. Unlike
+    the Nextflow layout, we stream every object under the prefix as-is.
+    """
+    settings = get_settings()
+    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}"
+
+    file_service = get_file_service()
+    if file_service is None:
+        raise RuntimeError("File service is not initialized")
+
+    listing = await file_service.get_listing(S3FilePath(s3_path=Path(experiment_prefix)))
+    download_keys = [item.Key for item in listing]
+    logger.info(f"Streaming {len(download_keys)} Ray output objects from S3 for experiment {experiment_id}")
 
     file_entries = await _fetch_s3_file_entries(experiment_id, download_keys, experiment_prefix)
 

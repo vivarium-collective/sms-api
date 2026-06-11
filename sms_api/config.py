@@ -231,6 +231,20 @@ class Settings(BaseSettings):
     ecoli_sources_repo_url: str = ""
     ecoli_sources_ref: str = "main"
 
+    # --- Ray-on-Batch backend settings ---
+    # Used when compute_backend is "ray": a single AWS Batch multi-node-parallel (MNP)
+    # job forms a transient Ray cluster and runs the v2ecoli ensemble on the head.
+    # Provisioned by sms-cdk lib/ray-batch-stack.ts (the <prefix>-ray-mnp queue/job-def).
+    ray_mnp_queue: str = ""  # Batch MNP job queue (e.g. "smscdk-ray-mnp")
+    ray_mnp_job_definition: str = ""  # Batch MNP job definition (e.g. "smscdk-ray-mnp")
+    ray_num_nodes: int = 3  # MNP node count for the simulation job (1 head + N-1 workers)
+    ray_image_tag: str = "ray"  # ECR tag of the prebuilt Ray image (built via sms-cdk build-ray-image.sh)
+    ray_parca_mode: str = "full"  # v2ecoli-parca --mode (fast for debug, full for production)
+    ray_parca_cpus: int = 8  # v2ecoli-parca --cpus
+    ray_n_steps: int = 600  # default sim steps per seed (run_phase0_xarray_ensemble --n-steps)
+    ray_chunk: int = 60  # default xarray emitter flush interval (--chunk)
+    ray_log_s3_prefix: str = ""  # s3:// prefix for Ray session logs + report.json (RayLogS3Prefix stack output)
+
     # EC2 build machine (legacy, replaced by Batch DooD builds)
     build_node_host: str = ""
     build_node_user: str = ""
@@ -251,6 +265,7 @@ class ComputeBackend(StrEnum):
 
     SLURM = "slurm"  # SLURM via SSH to a login node (UCONN CCAM)
     BATCH = "batch"  # AWS Batch via Nextflow (Stanford)
+    RAY = "ray"  # AWS Batch multi-node-parallel transient Ray cluster (Stanford, v2ecoli)
 
 
 def get_job_backend() -> ComputeBackend:
@@ -260,7 +275,7 @@ def get_job_backend() -> ComputeBackend:
     """
     value = get_settings().compute_backend
     if not value:
-        raise ValueError("COMPUTE_BACKEND must be set explicitly to 'slurm' or 'batch'")
+        raise ValueError("COMPUTE_BACKEND must be set explicitly to 'slurm', 'batch', or 'ray'")
     return ComputeBackend(value)
 
 

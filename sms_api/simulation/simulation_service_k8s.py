@@ -10,8 +10,6 @@ import logging
 from typing import override
 
 import boto3
-import httpx
-from fastapi import HTTPException
 from kubernetes import client as k8s_client
 
 from sms_api.common.hpc.job_service import JobStatusInfo
@@ -21,66 +19,16 @@ from sms_api.common.models import JobBackend, JobId
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.config import get_settings
 from sms_api.simulation.database_service import DatabaseService
+from sms_api.simulation.github_repo import (
+    _DEFAULT_CONFIG_TEMPLATE,  # noqa: F401  re-exported for back-compat (SimulationServiceHpc, tests)
+    fetch_config_template,
+    fetch_latest_commit_hash,
+    fetch_repo_discovery,
+)
 from sms_api.simulation.models import ParcaDataset, RepoDiscovery, Simulation, Simulator, SimulatorVersion
 from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)
-
-# Embedded config template used when the target vEcoli repo does not ship
-# an api_simulation_default.json (e.g. the public CovertLab/vEcoli repo).
-# Mirrors vEcoli-private/configs/api_simulation_default.json with the same
-# placeholders that the handler's replacement logic expects.
-_DEFAULT_CONFIG_TEMPLATE: dict[str, object] = {
-    "experiment_id": "EXPERIMENT_ID_PLACEHOLDER",
-    "parca_options": {
-        "cpus": 6,
-        "outdir": "HPC_SIM_BASE_PATH_PLACEHOLDER",
-        "operons": True,
-        "ribosome_fitting": True,
-        "remove_rrna_operons": False,
-        "remove_rrff": False,
-        "stable_rrna": False,
-        "new_genes": "off",
-        "debug_parca": False,
-        "save_intermediates": False,
-        "intermediates_directory": "",
-        "variable_elongation_transcription": True,
-        "variable_elongation_translation": False,
-    },
-    "sim_data_path": None,
-    "suffix_time": False,
-    "generations": 8,
-    "n_init_sims": 3,
-    "max_duration": 10800.0,
-    "initial_global_time": 0.0,
-    "time_step": 1.0,
-    "single_daughters": True,
-    "emitter": "parquet",
-    "emitter_arg": {"out_dir": "HPC_SIM_BASE_PATH_PLACEHOLDER"},
-    "analysis_options": {"multiseed": {}},
-    "aws_cdk": {
-        "build_image": False,
-        "container_image": "SIMULATOR_IMAGE_PATH_PLACEHOLDER",
-    },
-}
-
-
-def _github_api_url(repo_url: str) -> str:
-    """Convert a GitHub HTTPS URL to the API equivalent.
-
-    https://github.com/org/repo -> https://api.github.com/repos/org/repo
-    """
-    api_url = repo_url.replace("https://github.com/", "https://api.github.com/repos/")
-    if api_url.endswith(".git"):
-        api_url = api_url[:-4]
-    return api_url
-
-
-def _github_headers(token: str | None = None) -> dict[str, str]:
-    headers: dict[str, str] = {"Accept": "application/vnd.github.v3+json"}
-    if token:
-        headers["Authorization"] = f"token {token}"
-    return headers
 
 
 class SimulationServiceK8s(SimulationService):
@@ -103,14 +51,7 @@ class SimulationServiceK8s(SimulationService):
         git_branch: str = DEFAULT_BRANCH,
     ) -> str:
         """Get the latest commit hash from GitHub API (no SSH needed)."""
-        settings = get_settings()
-        api_url = f"{_github_api_url(git_repo_url)}/commits/{git_branch}"
-        headers = _github_headers(settings.github_token)
-        async with httpx.AsyncClient() as client:
-            response = await client.get(api_url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            return str(data["sha"])[:7]
+        return await fetch_latest_commit_hash(git_repo_url, git_branch, get_settings().github_token)
 
     @override
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> JobId:
@@ -521,93 +462,14 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
         repo at the requested commit. Set ``allow_default_fallback=True`` to
         silently substitute the embedded ``_DEFAULT_CONFIG_TEMPLATE`` instead.
         """
-        if config_filename.startswith("configs/"):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"config_filename {config_filename!r} starts with 'configs/' — "
-                    "drop the prefix. The path is resolved relative to the repo's "
-                    "configs/ directory, so e.g. pass 'campaigns/pilot_mixed.json' "
-                    "instead of 'configs/campaigns/pilot_mixed.json'."
-                ),
-            )
-
-        settings = get_settings()
-        base = _github_api_url(simulator_version.git_repo_url)
-        api_url = f"{base}/contents/configs/{config_filename}?ref={simulator_version.git_commit_hash}"
-        headers: dict[str, str] = {"Accept": "application/vnd.github.v3.raw"}
-        if settings.github_token:
-            headers["Authorization"] = f"token {settings.github_token}"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(api_url, headers=headers)
-            if response.status_code == 404:
-                if allow_default_fallback:
-                    logger.warning(
-                        "Config %s not found in %s@%s — using embedded default template (allow_default_fallback=True)",
-                        config_filename,
-                        simulator_version.git_repo_url,
-                        simulator_version.git_commit_hash,
-                    )
-                    return json.dumps(_DEFAULT_CONFIG_TEMPLATE)
-                logger.error(
-                    "Config %s not found in %s@%s (URL=%s)",
-                    config_filename,
-                    simulator_version.git_repo_url,
-                    simulator_version.git_commit_hash,
-                    api_url,
-                )
-                raise HTTPException(
-                    status_code=404,
-                    detail=(
-                        f"Config file {config_filename!r} not found in "
-                        f"{simulator_version.git_repo_url} at commit "
-                        f"{simulator_version.git_commit_hash}. "
-                        f"Use GET /api/v1/simulations/discovery?simulator_id=... "
-                        f"to list available configs."
-                    ),
-                )
-            response.raise_for_status()
-            return response.text
+        return await fetch_config_template(
+            simulator_version, config_filename, get_settings().github_token, allow_default_fallback
+        )
 
     @override
     async def discover_repo_contents(self, simulator_version: SimulatorVersion) -> RepoDiscovery:
         """Discover available configs and analysis modules via GitHub Contents API."""
-        settings = get_settings()
-        base = _github_api_url(simulator_version.git_repo_url)
-        headers = _github_headers(settings.github_token)
-        ref = simulator_version.git_commit_hash
-        categories = ["single", "multiseed", "multigeneration", "multidaughter", "multivariant"]
-
-        async with httpx.AsyncClient() as client:
-            # List config files
-            config_filenames: list[str] = []
-            resp = await client.get(f"{base}/contents/configs?ref={ref}", headers=headers)
-            if resp.status_code == 200:
-                for item in resp.json():
-                    name = item.get("name", "")
-                    if name.endswith(".json"):
-                        config_filenames.append(name)
-
-            # List analysis modules per category
-            analysis_modules: dict[str, list[str]] = {}
-            for category in categories:
-                resp = await client.get(f"{base}/contents/ecoli/analysis/{category}?ref={ref}", headers=headers)
-                if resp.status_code == 200:
-                    modules = [
-                        item["name"].removesuffix(".py")
-                        for item in resp.json()
-                        if item.get("name", "").endswith(".py") and not item["name"].startswith("__")
-                    ]
-                    if modules:
-                        analysis_modules[category] = sorted(modules)
-
-        return RepoDiscovery(
-            simulator_id=simulator_version.database_id,
-            git_repo_url=simulator_version.git_repo_url,
-            git_commit_hash=simulator_version.git_commit_hash,
-            config_filenames=sorted(config_filenames),
-            analysis_modules=analysis_modules,
-        )
+        return await fetch_repo_discovery(simulator_version, get_settings().github_token)
 
     @override
     async def get_job_status(self, job_id: JobId) -> JobStatusInfo | None:

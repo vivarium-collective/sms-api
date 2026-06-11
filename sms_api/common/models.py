@@ -46,6 +46,7 @@ class JobBackend(StrEnumBase):
     SLURM = "slurm"
     K8S = "k8s"
     LOCAL = "local"  # In-process async task (e.g. SSH build on submit node)
+    RAY = "ray"  # AWS Batch multi-node-parallel job running a transient Ray cluster
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,11 @@ class JobId:
     @classmethod
     def local(cls, task_id: str) -> "JobId":
         return cls(value=task_id, backend=JobBackend.LOCAL)
+
+    @classmethod
+    def ray(cls, batch_job_id: str) -> "JobId":
+        """Tag an AWS Batch (multi-node-parallel Ray) job id."""
+        return cls(value=batch_job_id, backend=JobBackend.RAY)
 
     @property
     def as_slurm_int(self) -> int:
@@ -112,6 +118,16 @@ class JobStatus(StrEnumBase):
         base_state = slurm_state.split()[0].upper() if slurm_state else ""
         return _SLURM_STATE_MAP.get(base_state, cls.UNKNOWN)
 
+    @classmethod
+    def from_batch_state(cls, batch_state: str) -> "JobStatus":
+        """Parse an AWS Batch job status string to JobStatus enum.
+
+        AWS Batch job states: SUBMITTED, PENDING, RUNNABLE, STARTING, RUNNING,
+        SUCCEEDED, FAILED. See:
+        https://docs.aws.amazon.com/batch/latest/userguide/job_states.html
+        """
+        return _BATCH_STATE_MAP.get(batch_state.strip().upper() if batch_state else "", cls.UNKNOWN)
+
 
 # Map SLURM job states to JobStatus (defined after enum class)
 # See: https://slurm.schedmd.com/squeue.html#SECTION_JOB-STATE-CODES
@@ -137,6 +153,19 @@ _SLURM_STATE_MAP: dict[str, JobStatus] = {
     "BOOT_FAIL": JobStatus.FAILED,
     "DEADLINE": JobStatus.FAILED,
     "REVOKED": JobStatus.FAILED,
+}
+
+
+# Map AWS Batch job states to JobStatus.
+# See: https://docs.aws.amazon.com/batch/latest/userguide/job_states.html
+_BATCH_STATE_MAP: dict[str, JobStatus] = {
+    "SUBMITTED": JobStatus.QUEUED,
+    "PENDING": JobStatus.QUEUED,  # waiting on a dependency
+    "RUNNABLE": JobStatus.QUEUED,
+    "STARTING": JobStatus.PENDING,  # container being placed/started
+    "RUNNING": JobStatus.RUNNING,
+    "SUCCEEDED": JobStatus.COMPLETED,
+    "FAILED": JobStatus.FAILED,
 }
 
 

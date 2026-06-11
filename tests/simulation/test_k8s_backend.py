@@ -375,7 +375,7 @@ class TestSimulationServiceK8s:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        monkeypatch.setattr("sms_api.simulation.simulation_service_k8s.httpx.AsyncClient", lambda: mock_client)
+        monkeypatch.setattr("sms_api.simulation.github_repo.httpx.AsyncClient", lambda: mock_client)
 
         result = await simulation_service_k8s_mock.read_config_template(simulator, "test.json")
 
@@ -411,7 +411,7 @@ class TestSimulationServiceK8s:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        monkeypatch.setattr("sms_api.simulation.simulation_service_k8s.httpx.AsyncClient", lambda: mock_client)
+        monkeypatch.setattr("sms_api.simulation.github_repo.httpx.AsyncClient", lambda: mock_client)
 
         with pytest.raises(HTTPException) as exc_info:
             await simulation_service_k8s_mock.read_config_template(simulator, "nonexistent.json")
@@ -442,7 +442,7 @@ class TestSimulationServiceK8s:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        monkeypatch.setattr("sms_api.simulation.simulation_service_k8s.httpx.AsyncClient", lambda: mock_client)
+        monkeypatch.setattr("sms_api.simulation.github_repo.httpx.AsyncClient", lambda: mock_client)
 
         result = await simulation_service_k8s_mock.read_config_template(
             simulator, "api_simulation_default.json", allow_default_fallback=True
