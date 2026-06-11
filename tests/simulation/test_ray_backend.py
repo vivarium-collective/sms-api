@@ -39,10 +39,19 @@ def _ray_settings() -> MagicMock:
     )
 
 
+def _overrides(call: Any) -> list[dict[str, Any]]:
+    return list(call.kwargs["nodeOverrides"]["nodePropertyOverrides"])
+
+
+def _env_at(call: Any, index: int) -> dict[str, str]:
+    """Env dict for the override at `index` (0 = head/`0:0`, 1 = workers/`1:`)."""
+    ov = _overrides(call)[index]
+    return {e["name"]: e["value"] for e in ov["containerOverrides"]["environment"]}
+
+
 def _env_of(call: Any) -> dict[str, str]:
-    """Extract the node-0 environment dict from a submit_job call's nodeOverrides."""
-    node0 = call.kwargs["nodeOverrides"]["nodePropertyOverrides"][0]
-    return {e["name"]: e["value"] for e in node0["containerOverrides"]["environment"]}
+    """Head (node 0) environment dict."""
+    return _env_at(call, 0)
 
 
 class TestJobIdRay:
@@ -121,7 +130,9 @@ class TestSimulationServiceRaySubmit:
         parca_env, sim_env = _env_of(parca_call), _env_of(sim_call)
 
         # ParCa: 1 node, parca command, captures the cache to S3, no dependency.
+        # A 1-node job has only the head override (no worker `1:` range).
         assert parca_call.kwargs["nodeOverrides"]["numNodes"] == 1
+        assert len(_overrides(parca_call)) == 1
         assert "v2ecoli-parca" in parca_env["RAY_JOB_CMD"]
         assert parca_env["RAY_OUT_DIR"] == PARCA_CACHE_DIR
         assert "dependsOn" not in parca_call.kwargs
@@ -138,6 +149,21 @@ class TestSimulationServiceRaySubmit:
         # Cache hand-off: sim stages exactly what parca produced.
         assert sim_env["RAY_STAGE_S3"] == parca_env["RAY_OUT_S3"]
         assert sim_env["RAY_STAGE_DIR"] == PARCA_CACHE_DIR
+
+        # Multi-node env targeting: workers (`1:`) must ALSO get the staging + output
+        # knobs (they need the cache to run seeds and must ship their own zarr), but
+        # NOT RAY_JOB_CMD (only the head runs the driver).
+        sim_overrides = _overrides(sim_call)
+        assert len(sim_overrides) == 2
+        assert sim_overrides[0]["targetNodes"] == "0:0"
+        assert sim_overrides[1]["targetNodes"] == "1:"
+        worker_env = _env_at(sim_call, 1)
+        assert "RAY_JOB_CMD" not in worker_env
+        assert "RAY_REPORT_PATH" not in worker_env
+        assert worker_env["RAY_STAGE_S3"] == sim_env["RAY_STAGE_S3"]
+        assert worker_env["RAY_STAGE_DIR"] == PARCA_CACHE_DIR
+        assert worker_env["RAY_OUT_S3"] == sim_env["RAY_OUT_S3"]
+        assert worker_env["RAY_OUT_DIR"] == SIM_OUT_DIR
 
         # Queue/job-def come from settings.
         assert sim_call.kwargs["jobQueue"] == "smscdk-ray-mnp"

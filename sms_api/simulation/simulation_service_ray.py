@@ -89,30 +89,46 @@ class SimulationServiceRay(SimulationService):
         stage_dir: str | None = None,
         depends_on: list[str] | None = None,
     ) -> str:
-        """Submit a Ray MNP job; set the head (node 0) env via nodePropertyOverrides.
+        """Submit a Ray MNP job via boto3, mirroring sms-cdk scripts/ray_batch_submit.sh.
 
-        Mirrors sms-cdk scripts/ray_batch_submit.sh: numNodes + a node-0
-        override carrying RAY_JOB_CMD and the per-submission S3 staging knobs.
-        Returns the AWS Batch job id.
+        Env targeting matters: the entrypoint runs ``stage_inputs`` and the periodic
+        output sync on EVERY node, so the staging/output/log knobs must reach all
+        nodes — the workers need the ParCa cache to run seeds and must ship their own
+        zarr to S3. Only ``RAY_JOB_CMD`` (the driver) and ``RAY_REPORT_PATH`` are
+        head-only. So the shared env goes on node 0 (``0:0``) and, when there are
+        workers, also on the worker range (``1:``). Returns the AWS Batch job id.
         """
         settings = get_settings()
-        node0_env: list[dict[str, str]] = [
-            {"name": "RAY_JOB_CMD", "value": ray_job_cmd},
+        # Per-node knobs every node acts on (stage cache in, sync results out, ship logs).
+        shared_env: list[dict[str, str]] = [
             {"name": "RAY_OUT_DIR", "value": out_dir},
             {"name": "RAY_OUT_S3", "value": out_s3},
-            {"name": "RAY_REPORT_PATH", "value": REPORT_PATH},
         ]
         if stage_s3 and stage_dir:
-            node0_env.append({"name": "RAY_STAGE_S3", "value": stage_s3})
-            node0_env.append({"name": "RAY_STAGE_DIR", "value": stage_dir})
+            shared_env.append({"name": "RAY_STAGE_S3", "value": stage_s3})
+            shared_env.append({"name": "RAY_STAGE_DIR", "value": stage_dir})
         if settings.ray_log_s3_prefix:
-            node0_env.append({"name": "RAY_LOG_S3_PREFIX", "value": settings.ray_log_s3_prefix})
+            shared_env.append({"name": "RAY_LOG_S3_PREFIX", "value": settings.ray_log_s3_prefix})
+
+        # The head additionally runs the workload (RAY_JOB_CMD) and writes the report.
+        head_env: list[dict[str, str]] = [
+            {"name": "RAY_JOB_CMD", "value": ray_job_cmd},
+            {"name": "RAY_REPORT_PATH", "value": REPORT_PATH},
+            *shared_env,
+        ]
+
+        node_property_overrides: list[dict[str, Any]] = [
+            {"targetNodes": "0:0", "containerOverrides": {"environment": head_env}},
+        ]
+        if num_nodes > 1:
+            # `1:` targets every worker node (a `1:` range is invalid for a 1-node job).
+            node_property_overrides.append(
+                {"targetNodes": "1:", "containerOverrides": {"environment": list(shared_env)}}
+            )
 
         node_overrides: dict[str, Any] = {
             "numNodes": num_nodes,
-            "nodePropertyOverrides": [
-                {"targetNodes": "0:0", "containerOverrides": {"environment": node0_env}},
-            ],
+            "nodePropertyOverrides": node_property_overrides,
         }
         kwargs: dict[str, Any] = {
             "jobName": job_name,
