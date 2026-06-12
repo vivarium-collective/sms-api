@@ -19,6 +19,7 @@ from sms_api.simulation.database_service import DatabaseService, DatabaseService
 from sms_api.simulation.tables_orm import create_db
 
 if TYPE_CHECKING:
+    from sms_api.common.models import JobId
     from sms_api.simulation.job_scheduler import JobScheduler
     from sms_api.simulation.simulation_service import SimulationService
 
@@ -80,6 +81,9 @@ def get_database_service() -> DatabaseService | None:
 # ------- simulation service (standalone or pytest) ------
 
 global_simulation_service: "SimulationService | None" = None
+# Per-backend registry so ONE deployment can serve multiple backends (e.g. vecoli on Batch
+# AND v2ecoli on Ray). `global_simulation_service` remains the DEFAULT (COMPUTE_BACKEND).
+global_simulation_services: "dict[ComputeBackend, SimulationService]" = {}
 
 
 def set_simulation_service(simulation_service: "SimulationService | None") -> None:
@@ -87,8 +91,48 @@ def set_simulation_service(simulation_service: "SimulationService | None") -> No
     global_simulation_service = simulation_service
 
 
+def set_simulation_service_registry(registry: "dict[ComputeBackend, SimulationService]") -> None:
+    global global_simulation_services
+    global_simulation_services = registry
+
+
 def get_simulation_service() -> "SimulationService | None":
+    """The default backend's service (COMPUTE_BACKEND). Prefer the *_for_* helpers below."""
     global global_simulation_service
+    return global_simulation_service
+
+
+def get_simulation_service_for_backend(backend: "ComputeBackend") -> "SimulationService | None":
+    """The service for a specific backend, or the default if that backend isn't configured."""
+    return global_simulation_services.get(backend, global_simulation_service)
+
+
+def get_simulation_service_for_repo(repo_url: str) -> "SimulationService | None":
+    """Resolve the service from a simulator's repo (v2ecoli→Ray, vEcoli→Batch); default otherwise."""
+    from sms_api.config import compute_backend_for_repo
+
+    backend = compute_backend_for_repo(repo_url)
+    if backend is not None and backend in global_simulation_services:
+        return global_simulation_services[backend]
+    return global_simulation_service
+
+
+def get_simulation_service_for_job(job_id: "JobId") -> "SimulationService | None":
+    """Resolve the service that owns a run, by its JobId.backend.
+
+    LOCAL (image-build) jobs and unknown backends fall back to the default service — safe
+    because every service shares ONE LocalTaskService, so any can resolve a LOCAL job.
+    """
+    from sms_api.common.models import JobBackend
+
+    mapping = {
+        JobBackend.SLURM: ComputeBackend.SLURM,
+        JobBackend.K8S: ComputeBackend.BATCH,
+        JobBackend.RAY: ComputeBackend.RAY,
+    }
+    backend = mapping.get(job_id.backend)
+    if backend is not None and backend in global_simulation_services:
+        return global_simulation_services[backend]
     return global_simulation_service
 
 
@@ -157,21 +201,55 @@ def get_async_engine(url: str, enable_ssl: bool = True, **engine_params: Any) ->
 
 
 def _init_simulation_service(job_backend: str, settings: Settings) -> None:
-    """Initialize the simulation service based on the job backend."""
+    """Build the per-backend service registry and set the deployment default.
+
+    One deployment can serve multiple backends (e.g. vecoli→Batch AND v2ecoli→Ray): every
+    backend whose settings are configured is built (sharing ONE LocalTaskService so LOCAL
+    build jobs are resolvable by any), and ``job_backend`` (COMPUTE_BACKEND) is the default.
+    """
+    from sms_api.common.hpc.local_task_service import LocalTaskService
     from sms_api.simulation.simulation_service import SimulationServiceHpc
 
-    if job_backend == ComputeBackend.BATCH:
+    default_backend = ComputeBackend(job_backend)
+    shared_local = LocalTaskService()
+    registry: dict[ComputeBackend, SimulationService] = {}
+
+    # AWS Batch + Nextflow (K8s) — built when a K8s namespace is configured.
+    if settings.k8s_job_namespace:
         from sms_api.common.hpc.k8s_job_service import K8sJobService
         from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
 
-        logger.info("Initializing simulation service (K8s + AWS Batch)...")
         k8s_job_service = K8sJobService(namespace=settings.k8s_job_namespace)
-        set_simulation_service(SimulationServiceK8s(k8s_job_service=k8s_job_service))
-        logger.info("✓ Simulation service initialized (K8s)")
-    else:
-        logger.info("Initializing simulation service (HPC/SLURM)...")
-        set_simulation_service(SimulationServiceHpc())
-        logger.info("✓ Simulation service initialized (SLURM)")
+        registry[ComputeBackend.BATCH] = SimulationServiceK8s(
+            k8s_job_service=k8s_job_service, local_task_service=shared_local
+        )
+        logger.info("✓ Backend registered: batch (K8s + AWS Batch)")
+
+    # Ray on AWS Batch MNP — built when the MNP queue is configured.
+    if settings.ray_mnp_queue:
+        from sms_api.simulation.simulation_service_ray import SimulationServiceRay
+
+        registry[ComputeBackend.RAY] = SimulationServiceRay(local_task_service=shared_local)
+        logger.info("✓ Backend registered: ray (AWS Batch MNP)")
+
+    # SLURM has no separate enable flag — build it when it's the deployment default.
+    if default_backend == ComputeBackend.SLURM:
+        registry[ComputeBackend.SLURM] = SimulationServiceHpc()
+        logger.info("✓ Backend registered: slurm (HPC)")
+
+    if default_backend not in registry:
+        raise RuntimeError(
+            f"COMPUTE_BACKEND={default_backend.value} but its settings are not configured "
+            f"(configured backends: {sorted(b.value for b in registry)})"
+        )
+
+    set_simulation_service_registry(registry)
+    set_simulation_service(registry[default_backend])
+    logger.info(
+        "✓ Simulation services initialized: default=%s, available=%s",
+        default_backend.value,
+        sorted(b.value for b in registry),
+    )
 
 
 def _init_ssh_service(job_backend: str, settings: Settings) -> None:
@@ -350,6 +428,7 @@ async def shutdown_standalone() -> None:
         await file_service.close()
 
     set_simulation_service(None)
+    set_simulation_service_registry({})
     set_database_service(None)
     set_file_service(None)
     set_ssh_session_service(None, name=SSHTarget.SLURM)

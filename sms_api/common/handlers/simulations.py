@@ -22,8 +22,15 @@ from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.models import JobBackend, JobStatus, SSHTarget
 from sms_api.common.simulator_defaults import DEFAULT_OBSERVABLES, RepoUrl
 from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
-from sms_api.config import ComputeBackend, get_job_backend, get_settings
-from sms_api.dependencies import get_database_service, get_file_service, get_simulation_service, get_ssh_session_service
+from sms_api.config import ComputeBackend, compute_backend_for_repo, get_job_backend, get_settings
+from sms_api.dependencies import (
+    get_database_service,
+    get_file_service,
+    get_simulation_service,
+    get_simulation_service_for_job,
+    get_simulation_service_for_repo,
+    get_ssh_session_service,
+)
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import (
@@ -403,19 +410,21 @@ async def run_simulation_workflow(  # noqa: C901
 
     settings = get_settings()
 
-    # Batch backend requires parca to run: vEcoli's workflow.py resolves
-    # sim_data_path with os.path.abspath which mangles S3 URIs, and then
-    # passes the local kb_dir into Nextflow channels where Batch task
-    # containers can't access it.  Until vEcoli supports cloud-native
-    # sim_data_path, parca must run as part of the workflow on Batch.
-    if not run_parca and get_job_backend() == ComputeBackend.BATCH:
-        logger.warning("Forcing run_parca=True: --no-run-parca is not supported on the Batch backend")
-        run_parca = True
-
-    # 1. Get the simulator (must exist)
+    # 1. Get the simulator (must exist) and resolve its backend FROM THE REPO so one
+    # deployment can serve both vecoli (Batch/Nextflow) and v2ecoli (Ray). `backend` drives
+    # the config branches below; `service` is the backend's SimulationService.
     simulator = await database_service.get_simulator(simulator_id)
     if simulator is None:
         raise ValueError(f"Simulator with id {simulator_id} not found")
+    backend = compute_backend_for_repo(simulator.git_repo_url) or get_job_backend()
+    service = get_simulation_service_for_repo(simulator.git_repo_url) or simulation_service
+
+    # Batch backend requires parca to run: vEcoli's workflow.py resolves sim_data_path with
+    # os.path.abspath which mangles S3 URIs and passes the local kb_dir into Nextflow
+    # channels Batch task containers can't reach. Force parca on Batch.
+    if not run_parca and backend == ComputeBackend.BATCH:
+        logger.warning("Forcing run_parca=True: --no-run-parca is not supported on the Batch backend")
+        run_parca = True
 
     # Verify simulator build is complete before submitting simulation
     await _verify_build_complete(database_service, simulator_id)
@@ -423,7 +432,7 @@ async def run_simulation_workflow(  # noqa: C901
     # 1b. Validate analysis_options against what exists in the repo (if user specified them)
     if analysis_options is not None:
         try:
-            discovery = await simulation_service.discover_repo_contents(simulator)
+            discovery = await service.discover_repo_contents(simulator)
             if discovery.analysis_modules:
                 _validate_analysis_options(analysis_options, discovery.analysis_modules)
         except HTTPException:
@@ -432,8 +441,8 @@ async def run_simulation_workflow(  # noqa: C901
             # Discovery failure should not block the workflow — log and continue
             logger.warning("Could not validate analysis_options against repo (discovery failed), proceeding anyway")
 
-    # 2. Read the config template via the simulation service (SSH for SLURM, GitHub API for K8s)
-    config_str = await simulation_service.read_config_template(
+    # 2. Read the config template via the resolved service (SSH for SLURM, GitHub API for K8s/Ray)
+    config_str = await service.read_config_template(
         simulator_version=simulator, config_filename=simulation_config_filename
     )
 
@@ -476,7 +485,7 @@ async def run_simulation_workflow(  # noqa: C901
     effective_observables = observables if observables else DEFAULT_OBSERVABLES
     config_data["engine_process_reports"] = [obs.split(".") for obs in effective_observables]
     # For Batch backend, override HPC paths with AWS equivalents
-    if get_job_backend() == ComputeBackend.BATCH:
+    if backend == ComputeBackend.BATCH:
         s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{unique_experiment_id}"
         config_data["emitter_arg"] = {"out_uri": s3_output}
         config_data.pop("aws_cdk", None)
@@ -498,6 +507,18 @@ async def run_simulation_workflow(  # noqa: C901
             # Set local path for cached simData — the K8s job command will download
             # from S3 to this path before workflow.py runs (vEcoli only accepts local paths)
             config_data["sim_data_path"] = "/tmp/simData.cPickle"  # noqa: S108
+    elif backend == ComputeBackend.RAY:
+        # Ray backend: the v2ecoli ensemble runs from CLI args on a transient Ray
+        # cluster (not Nextflow), so the Nextflow/AWS config blocks are unused.
+        # Keep experiment_id / generations / n_init_sims (→ --n-seeds); record the
+        # S3 results prefix (xarray zarr + summary) for output retrieval.
+        config_data.pop("aws_cdk", None)
+        config_data.pop("ccam", None)
+        config_data.pop("aws", None)
+        config_data["emitter"] = "xarray"
+        config_data["emitter_arg"] = {
+            "out_uri": f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{unique_experiment_id}"
+        }
     else:
         # SLURM path: replace K8s-specific sections with SLURM equivalents.
         # The ccam Nextflow profile only exists in the fork (api-support branch)
@@ -581,14 +602,14 @@ async def run_simulation_workflow(  # noqa: C901
     export_baseline_config(request)
     simulation = await database_service.insert_simulation(sim_request=request)
 
-    # 7. Generate correlation ID and submit job
+    # 7. Generate correlation ID and submit job (via the per-simulator backend service)
     random_string_7_hex = "".join(random.choices(string.hexdigits, k=7))
     correlation_id = get_correlation_id(
         ecoli_simulation=simulation,
         random_string=random_string_7_hex,
         simulator=simulator,
     )
-    job_id = await simulation_service.submit_ecoli_simulation_job(
+    job_id = await service.submit_ecoli_simulation_job(
         ecoli_simulation=simulation, database_service=database_service, correlation_id=correlation_id
     )
 
@@ -611,7 +632,8 @@ async def run_parca(
     parca_config: ParcaOptions | None = None,
 ) -> ParcaDataset:
     if not simulation_service_slurm:
-        simulation_service_slurm = get_simulation_service()
+        # Route to the simulator's backend (v2ecoli→Ray, vEcoli→Batch), default otherwise.
+        simulation_service_slurm = get_simulation_service_for_repo(simulator.git_repo_url)
     if simulation_service_slurm is None:
         logger.exception("Simulation service is not initialized")
         raise HTTPException(status_code=404, detail="Simulation service is not initialized")
@@ -671,7 +693,8 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
     if hpc_run is None:
         raise RuntimeError(f"No HPC run found for simulation {id}")
 
-    simulation_service = get_simulation_service()
+    # Route to the service that owns this run (by the run's backend), not the global default.
+    simulation_service = get_simulation_service_for_job(hpc_run.job_id)
     if simulation_service is None:
         raise RuntimeError("Simulation service is not initialized")
 
@@ -708,8 +731,10 @@ async def cancel_simulation(
     if hpc_run.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
         return SimulationRun(id=simulation_id, status=hpc_run.status)
 
-    # Cancel the backend job
-    await simulation_service.cancel_job(hpc_run.job_id)
+    # Cancel via the service that owns this run (by its backend), not necessarily the
+    # injected default.
+    service = get_simulation_service_for_job(hpc_run.job_id) or simulation_service
+    await service.cancel_job(hpc_run.job_id)
 
     # Update the database record
     update = JobStatusUpdate(
@@ -995,6 +1020,18 @@ async def get_simulation_outputs(
 
     # Dispatch based on backend
     hpc_run = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
+    if hpc_run and hpc_run.job_id.backend == JobBackend.RAY:
+        # Ray backend: stream the xarray/zarr ensemble outputs (seed_NN/store.zarr +
+        # summary.json) directly from S3. FILE mode falls back to streaming.
+        archive_name = f"{experiment_id}.tar.gz"
+        return StreamingResponse(
+            _stream_s3_tar_gz_ray(experiment_id),
+            media_type="application/gzip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{archive_name}"',
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
     if hpc_run and hpc_run.job_id.backend in (JobBackend.K8S, JobBackend.LOCAL):
         # K8s/S3 path: stream directly from S3 into tar.gz response (no disk cache).
         # This avoids ALB 504 timeouts on large simulations by sending bytes immediately.
@@ -1164,6 +1201,40 @@ async def _stream_s3_tar_gz(experiment_id: str, chunk_size: int = 64 * 1024) -> 
     download_keys = [item.Key for item in analyses_listing if item.Key.endswith(_ACCEPTED_ANALYSES_EXTENSIONS)]
     download_keys.append(f"{experiment_prefix}/{_WORKFLOW_CONFIG_KEY}")
     logger.info(f"Streaming {len(download_keys)} files from S3 for experiment {experiment_id}")
+
+    file_entries = await _fetch_s3_file_entries(experiment_id, download_keys, experiment_prefix)
+
+    read_fd, write_fd = os.pipe()
+    read_file = os.fdopen(read_fd, "rb")
+    write_file = os.fdopen(write_fd, "wb")
+    loop = asyncio.get_event_loop()
+
+    tar_future = loop.run_in_executor(None, _write_tar_entries, write_file, file_entries)
+
+    async for chunk in _gzip_pipe_stream(read_file, loop, chunk_size):
+        yield chunk
+
+    await tar_future
+
+
+async def _stream_s3_tar_gz_ray(experiment_id: str, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
+    """Stream a Ray ensemble's S3 outputs (zarr stores + summaries) into a tar.gz.
+
+    The Ray entrypoint syncs the whole ``.pbg/runs/phase0-xarray`` tree to
+    ``s3://{bucket}/{s3_output_prefix}/{experiment_id}/`` — seed_NN/store.zarr
+    (many small chunk objects) plus per-seed and ensemble summary.json. Unlike
+    the Nextflow layout, we stream every object under the prefix as-is.
+    """
+    settings = get_settings()
+    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}"
+
+    file_service = get_file_service()
+    if file_service is None:
+        raise RuntimeError("File service is not initialized")
+
+    listing = await file_service.get_listing(S3FilePath(s3_path=Path(experiment_prefix)))
+    download_keys = [item.Key for item in listing]
+    logger.info(f"Streaming {len(download_keys)} Ray output objects from S3 for experiment {experiment_id}")
 
     file_entries = await _fetch_s3_file_entries(experiment_id, download_keys, experiment_prefix)
 

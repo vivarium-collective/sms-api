@@ -231,6 +231,20 @@ class Settings(BaseSettings):
     ecoli_sources_repo_url: str = ""
     ecoli_sources_ref: str = "main"
 
+    # --- Ray-on-Batch backend settings ---
+    # Used when compute_backend is "ray": a single AWS Batch multi-node-parallel (MNP)
+    # job forms a transient Ray cluster and runs the v2ecoli ensemble on the head.
+    # Provisioned by sms-cdk lib/ray-batch-stack.ts (the <prefix>-ray-mnp queue/job-def).
+    ray_mnp_queue: str = ""  # Batch MNP job queue (e.g. "smscdk-ray-mnp")
+    ray_mnp_job_definition: str = ""  # Batch MNP job definition (e.g. "smscdk-ray-mnp")
+    ray_num_nodes: int = 3  # MNP node count for the simulation job (1 head + N-1 workers)
+    ray_ecr_repository: str = "v2ecoli"  # ECR repo for the workload-owned Ray image (built by submit_build_image_job)
+    ray_parca_mode: str = "full"  # v2ecoli-parca --mode (fast for debug, full for production)
+    ray_parca_cpus: int = 8  # v2ecoli-parca --cpus
+    ray_n_steps: int = 600  # default sim steps per seed (run_phase0_xarray_ensemble --n-steps)
+    ray_chunk: int = 60  # default xarray emitter flush interval (--chunk)
+    ray_log_s3_prefix: str = ""  # s3:// prefix for Ray session logs + report.json (RayLogS3Prefix stack output)
+
     # EC2 build machine (legacy, replaced by Batch DooD builds)
     build_node_host: str = ""
     build_node_user: str = ""
@@ -251,17 +265,35 @@ class ComputeBackend(StrEnum):
 
     SLURM = "slurm"  # SLURM via SSH to a login node (UCONN CCAM)
     BATCH = "batch"  # AWS Batch via Nextflow (Stanford)
+    RAY = "ray"  # AWS Batch multi-node-parallel transient Ray cluster (Stanford, v2ecoli)
 
 
 def get_job_backend() -> ComputeBackend:
-    """Return the compute backend for the current deployment.
+    """Return the DEFAULT compute backend for the current deployment.
 
-    Raises ValueError if COMPUTE_BACKEND is not set or invalid.
+    This is the fallback when a simulator's repo doesn't map to a specific backend
+    (see ``compute_backend_for_repo``). Raises ValueError if COMPUTE_BACKEND is unset/invalid.
     """
     value = get_settings().compute_backend
     if not value:
-        raise ValueError("COMPUTE_BACKEND must be set explicitly to 'slurm' or 'batch'")
+        raise ValueError("COMPUTE_BACKEND must be set explicitly to 'slurm', 'batch', or 'ray'")
     return ComputeBackend(value)
+
+
+def compute_backend_for_repo(repo_url: str) -> ComputeBackend | None:
+    """Map a simulator repo to its compute backend, so one deployment can serve both.
+
+    v2ecoli (vivarium-collective/v2ecoli) runs on Ray; the vEcoli repos (CovertLab/vEcoli,
+    the fork, the private repo) run on AWS Batch + Nextflow. Returns None for an unknown
+    repo, in which case callers fall back to ``get_job_backend()`` (the deployment default).
+    Note ``v2ecoli`` does not contain the ``vecoli`` substring, so the checks are independent.
+    """
+    url = repo_url.lower()
+    if "v2ecoli" in url:
+        return ComputeBackend.RAY
+    if "vecoli" in url:
+        return ComputeBackend.BATCH
+    return None
 
 
 def get_public_mode() -> bool:

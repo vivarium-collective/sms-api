@@ -474,7 +474,7 @@ class SimulationServiceHpc(SimulationService):
         config_filename: str,
         allow_default_fallback: bool = False,
     ) -> str:
-        from sms_api.simulation.simulation_service_k8s import _DEFAULT_CONFIG_TEMPLATE
+        from sms_api.simulation.github_repo import _DEFAULT_CONFIG_TEMPLATE
 
         if config_filename.startswith("configs/"):
             raise HTTPException(

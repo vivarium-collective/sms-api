@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.models import JobBackend, JobId, JobStatus
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO, RepoUrl
-from sms_api.dependencies import get_database_service, get_simulation_service
+from sms_api.dependencies import get_database_service, get_simulation_service_for_repo
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import (
     JobType,
@@ -33,8 +33,7 @@ async def get_latest_simulator(
     git_repo_url: str,
     git_branch: str,
 ) -> Simulator:
-    "https://github.com/vivarium-collective/vEcoli"
-    hpc_service = get_simulation_service()
+    hpc_service = get_simulation_service_for_repo(git_repo_url)
     if hpc_service is None:
         logger.error("HPC service is not initialized")
         raise HTTPException(status_code=500, detail="HPC service is not initialized")
@@ -107,7 +106,9 @@ async def upload_simulator(  # noqa: C901
     force: bool = False,
 ) -> SimulatorVersion:
     if not simulation_service_slurm:
-        simulation_service_slurm = get_simulation_service()
+        # Route the build to the simulator's backend (v2ecoli→Ray builds v2ecoli:<sha>,
+        # vEcoli→Batch builds vecoli:{commit}); default otherwise.
+        simulation_service_slurm = get_simulation_service_for_repo(git_repo_url)
     if simulation_service_slurm is None:
         logger.exception("Simulation service is not initialized")
         raise RuntimeError("Simulation service is not initialized")
@@ -155,13 +156,14 @@ async def upload_simulator(  # noqa: C901
             correlation_id="N/A",
         )
 
-        # For LOCAL builds, register a done-callback to propagate final status to DB
+        # For LOCAL builds (K8s AND Ray both submit the DooD build as a LOCAL task),
+        # register a done-callback to propagate the final status to the DB. Both services
+        # expose the LocalTaskService as `_local`, so resolve it generically.
         if build_job_id.backend == JobBackend.LOCAL:
-            from sms_api.simulation.simulation_service_k8s import SimulationServiceK8s
-
-            if isinstance(simulation_service_slurm, SimulationServiceK8s):
+            local_svc = getattr(simulation_service_slurm, "_local", None)
+            if local_svc is not None:
                 _register_build_done_callback(
-                    simulation_service_slurm._local._tasks,
+                    local_svc._tasks,
                     build_job_id.value,
                     database_service,
                     hpc_run.database_id,
