@@ -54,9 +54,7 @@ def _fake_batch(submit_ids: list[str]) -> MagicMock:
     base_node_props = {
         "numNodes": 4,
         "mainNode": 0,
-        "nodeRangeProperties": [
-            {"targetNodes": "0:", "container": {"image": "111.dkr.ecr.x/vecoli:ray", "vcpus": 16}}
-        ],
+        "nodeRangeProperties": [{"targetNodes": "0:", "container": {"image": "111.dkr.ecr.x/vecoli:ray", "vcpus": 16}}],
     }
 
     def _describe(**kwargs: Any) -> dict[str, Any]:
@@ -216,9 +214,7 @@ class TestSimulationServiceRaySubmit:
 class TestSimulationServiceRayStatusCancel:
     async def test_get_job_status_running(self) -> None:
         mock_batch = MagicMock()
-        mock_batch.describe_jobs.return_value = {
-            "jobs": [{"jobId": "sim-456", "status": "RUNNING", "startedAt": 111}]
-        }
+        mock_batch.describe_jobs.return_value = {"jobs": [{"jobId": "sim-456", "status": "RUNNING", "startedAt": 111}]}
         service = SimulationServiceRay()
         with (
             patch("sms_api.simulation.simulation_service_ray.get_settings", _ray_settings),

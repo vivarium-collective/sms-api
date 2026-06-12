@@ -177,9 +177,10 @@ class SimulationServiceRay(SimulationService):
         ]
         if num_nodes > 1:
             # `1:` targets every worker node (a `1:` range is invalid for a 1-node job).
-            node_property_overrides.append(
-                {"targetNodes": "1:", "containerOverrides": {"environment": list(shared_env)}}
-            )
+            node_property_overrides.append({
+                "targetNodes": "1:",
+                "containerOverrides": {"environment": list(shared_env)},
+            })
 
         node_overrides: dict[str, Any] = {
             "numNodes": num_nodes,

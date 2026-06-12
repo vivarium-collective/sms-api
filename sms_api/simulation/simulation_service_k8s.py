@@ -20,7 +20,6 @@ from sms_api.config import get_settings
 from sms_api.simulation import batch_build
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.github_repo import (
-    _DEFAULT_CONFIG_TEMPLATE,  # noqa: F401  re-exported for back-compat (SimulationServiceHpc, tests)
     fetch_config_template,
     fetch_latest_commit_hash,
     fetch_repo_discovery,

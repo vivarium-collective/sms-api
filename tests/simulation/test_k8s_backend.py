@@ -423,8 +423,8 @@ class TestSimulationServiceK8s:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Verify read_config_template returns embedded default when allow_default_fallback=True."""
+        from sms_api.simulation.github_repo import _DEFAULT_CONFIG_TEMPLATE
         from sms_api.simulation.models import SimulatorVersion
-        from sms_api.simulation.simulation_service_k8s import _DEFAULT_CONFIG_TEMPLATE
 
         simulator = SimulatorVersion(
             database_id=1,
