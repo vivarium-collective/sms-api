@@ -1,10 +1,11 @@
 """AWS Batch multi-node-parallel (MNP) Ray implementation of SimulationService.
 
 The v2ecoli whole-cell sim runs distributed on a *transient* Ray cluster: one
-Batch MNP job gang-schedules N nodes, the sms-cdk entrypoint
-(`ray-batch-entrypoint.sh`) forms the Ray cluster, stages a ParCa cache from S3,
-exports ``RAY_ADDRESS``, and runs ``RAY_JOB_CMD`` (the v2ecoli ensemble) on the
-head — no Nextflow. This service submits those MNP jobs.
+Batch MNP job gang-schedules N nodes, the Ray-on-Batch entrypoint
+(``ray-batch-entrypoint.sh``, bundled in the v2ecoli image) forms the Ray
+cluster, stages a ParCa cache from S3, exports ``RAY_ADDRESS``, and runs
+``RAY_JOB_CMD`` (the v2ecoli ensemble) on the head — no Nextflow. This service
+submits those MNP jobs.
 
 Data flow (no shared filesystem):
   - ParCa runs first as its own 1-node MNP job; its cache is captured to a
@@ -13,10 +14,15 @@ Data flow (no shared filesystem):
     ParCa SUCCEEDED), stages that cache (``RAY_STAGE_S3``), runs the ensemble,
     and captures the zarr/summary outputs to S3 (``RAY_OUT_S3``).
 
-The Ray image (``vecoli:<ray_image_tag>``) is prebuilt by sms-cdk
-``scripts/build-ray-image.sh``; ``submit_build_image_job`` is a no-op placeholder.
+The image is the **workload-owned**, self-contained ``v2ecoli:<sha>`` (bundles
+the AWS CLI + the Ray entrypoint), built by ``submit_build_image_job`` via a DooD
+Batch job — symmetric with how ``SimulationServiceK8s`` builds ``vecoli:{commit}``.
+Each run uses its simulator's TRUE commit image: since Batch MNP can't override the
+image per submission, we derive a per-commit MNP job-def revision from the sms-cdk
+base (cloning its node properties, swapping the image to ``v2ecoli:<commit>``).
 """
 
+import copy
 import logging
 import random
 import string
@@ -29,6 +35,7 @@ from sms_api.common.hpc.local_task_service import LocalTaskService
 from sms_api.common.models import JobBackend, JobId, JobStatus
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.config import get_settings
+from sms_api.simulation import batch_build
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.github_repo import (
     fetch_config_template,
@@ -77,10 +84,58 @@ class SimulationServiceRay(SimulationService):
         settings = get_settings()
         return f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}/"
 
+    def _image_uri(self, commit: str) -> str:
+        """The TRUE commit image for a run: <account>.dkr.ecr.<region>/v2ecoli:<commit>."""
+        settings = get_settings()
+        registry = f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
+        return f"{registry}/{settings.ray_ecr_repository}:{commit}"
+
+    def _ensure_mnp_job_def(self, image: str, commit: str) -> str:
+        """Return an MNP job definition (name:revision) whose image is the commit's image.
+
+        Batch MNP can't override the image per-submission, so — symmetric with how K8s
+        sets the image per-Job — we derive a per-commit job-def revision: describe the
+        CDK base job def (``ray_mnp_job_definition``: roles, resources, shm, log config,
+        node count), swap ONLY every node range's container image to ``image``, and
+        register it as ``<base>-<commit>``. An existing active revision already pointing
+        at this image is reused, so resubmits don't churn revisions.
+        """
+        settings = get_settings()
+        batch = self._batch()
+        name = f"{settings.ray_mnp_job_definition}-{commit}"
+
+        # Reuse an existing active revision that already targets this exact image.
+        existing = batch.describe_job_definitions(jobDefinitionName=name, status="ACTIVE")
+        for jd in existing.get("jobDefinitions", []):
+            images = {
+                nr.get("container", {}).get("image")
+                for nr in jd.get("nodeProperties", {}).get("nodeRangeProperties", [])
+            }
+            if images == {image}:
+                return f"{name}:{jd['revision']}"
+
+        # Otherwise clone the base job def's node properties and swap the image.
+        base = batch.describe_job_definitions(jobDefinitionName=settings.ray_mnp_job_definition, status="ACTIVE")
+        base_defs = base.get("jobDefinitions", [])
+        if not base_defs:
+            raise RuntimeError(f"Base Ray MNP job definition {settings.ray_mnp_job_definition!r} not found")
+        node_properties = copy.deepcopy(max(base_defs, key=lambda d: d["revision"])["nodeProperties"])
+        for nr in node_properties.get("nodeRangeProperties", []):
+            nr.setdefault("container", {})["image"] = image
+
+        response = batch.register_job_definition(
+            jobDefinitionName=name,
+            type="multinode",
+            nodeProperties=node_properties,
+        )
+        logger.info("Registered Ray MNP job def %s:%s for image %s", name, response["revision"], image)
+        return f"{name}:{response['revision']}"
+
     def _submit_mnp(
         self,
         *,
         job_name: str,
+        job_definition: str,
         num_nodes: int,
         ray_job_cmd: str,
         out_s3: str,
@@ -133,7 +188,7 @@ class SimulationServiceRay(SimulationService):
         kwargs: dict[str, Any] = {
             "jobName": job_name,
             "jobQueue": settings.ray_mnp_queue,
-            "jobDefinition": settings.ray_mnp_job_definition,
+            "jobDefinition": job_definition,
             "nodeOverrides": node_overrides,
         }
         if depends_on:
@@ -173,30 +228,73 @@ class SimulationServiceRay(SimulationService):
 
     @override
     async def submit_build_image_job(self, simulator_version: SimulatorVersion) -> JobId:
-        """No-op placeholder: the Ray image is prebuilt by sms-cdk build-ray-image.sh.
+        """Build the self-contained v2ecoli Ray image via a DooD Batch job.
 
-        Returns a LOCAL task that completes immediately so build-status checks pass.
+        Symmetric with SimulationServiceK8s.submit_build_image_job: a LOCAL task submits a
+        DooD Batch build job that clones the workload repo at the commit and runs its own
+        build-and-push recipe (v2ecoli/docker/build-and-push-ecr.sh) → v2ecoli:<commit>
+        (plus the :latest deploy tag the Ray-MNP job def references). Returns immediately
+        with a LOCAL JobId; _run_build polls the Batch job to completion.
         """
         commit = simulator_version.git_commit_hash
-        tag = get_settings().ray_image_tag
-        logger.info(
-            "Ray backend uses the prebuilt image vecoli:%s — skipping build for commit %s "
-            "(rebuild via sms-cdk scripts/build-ray-image.sh if needed)",
-            tag,
-            commit,
-        )
-        return self._local.submit(self._image_prebuilt(commit, tag), name=f"ray-build-{commit}")
+        return self._local.submit(self._run_build(simulator_version), name=f"ray-build-{commit}")
 
-    async def _image_prebuilt(self, commit: str, tag: str) -> None:
-        return None
+    def _build_command(self, simulator_version: SimulatorVersion) -> list[str]:
+        """DooD build command: clone v2ecoli@commit, run its build-and-push recipe.
+
+        Mirrors SimulationServiceK8s._build_command (apk deps, PAT clone, in-repo recipe),
+        but the workload repo is v2ecoli and the recipe is the v2ecoli image's own
+        docker/build-and-push-ecr.sh → v2ecoli:<sha> (+ :latest).
+        """
+        settings = get_settings()
+        commit = simulator_version.git_commit_hash
+        branch = simulator_version.git_branch
+        repo_url = simulator_version.git_repo_url
+        script = f"""\
+set -ex
+export USER=${{USER:-sms-api}}
+apk add --no-cache aws-cli git bash
+
+# Docker daemon runs on the host (DooD) — verify the mounted socket.
+docker info >/dev/null 2>&1 || {{ echo "ERROR: Docker socket not available"; exit 1; }}
+
+# GitHub PAT (Secrets Manager) for the clone; x-access-token is GitHub's HTTPS convention.
+GH_PAT=$(aws secretsmanager get-secret-value \
+    --secret-id {settings.build_git_secret_arn} --query SecretString --output text)
+CLONE_URL=$(echo "{repo_url}" | sed "s|https://github.com/|https://x-access-token:${{GH_PAT}}@github.com/|")
+
+export GIT_TERMINAL_PROMPT=0
+git clone --branch {branch} --single-branch "$CLONE_URL" /build/v2ecoli
+cd /build/v2ecoli
+git checkout {commit}
+
+# The v2ecoli image is self-contained (bundles the AWS CLI + Ray entrypoint); its own
+# recipe builds + pushes v2ecoli:<sha> and the :latest deploy tag the MNP job def uses.
+bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -R {settings.batch_region}
+"""
+        return ["sh", "-c", script]
+
+    async def _run_build(self, simulator_version: SimulatorVersion) -> None:
+        """Submit the DooD v2ecoli image build to Batch (amd64 queue) and poll it."""
+        settings = get_settings()
+        commit = simulator_version.git_commit_hash
+        job_id = await batch_build.submit_batch_build(
+            job_name=f"v2ecoli-ray-build-{commit}",
+            queue=settings.build_amd64_queue,
+            command=self._build_command(simulator_version),
+        )
+        await batch_build.poll_batch_jobs([job_id])
+        logger.info("v2ecoli Ray image build complete: %s:%s", settings.ray_ecr_repository, commit)
 
     @override
     async def submit_parca_job(self, parca_dataset: ParcaDataset) -> JobId:
         """Submit ParCa as a 1-node Ray MNP job, capturing the cache to S3."""
         simulator_version = parca_dataset.parca_dataset_request.simulator_version
         commit = simulator_version.git_commit_hash
+        job_def = self._ensure_mnp_job_def(self._image_uri(commit), commit)
         job_id = self._submit_mnp(
             job_name=f"ray-parca-{commit}-{_rand_suffix()}",
+            job_definition=job_def,
             num_nodes=1,
             ray_job_cmd=self._parca_command(),
             out_s3=self._cache_s3_uri(commit),
@@ -228,6 +326,10 @@ class SimulationServiceRay(SimulationService):
         experiment_id = ecoli_simulation.config.experiment_id
         cache_s3 = self._cache_s3_uri(commit)
 
+        # Run the TRUE commit image: derive a per-commit MNP job-def revision pointing at
+        # v2ecoli:<commit> (both ParCa and the sim run the same image).
+        job_def = self._ensure_mnp_job_def(self._image_uri(commit), commit)
+
         n_seeds = ecoli_simulation.num_seeds or getattr(ecoli_simulation.config, "n_init_sims", None) or 1
         n_steps = getattr(ecoli_simulation.config, "ray_n_steps", None) or settings.ray_n_steps
         chunk = getattr(ecoli_simulation.config, "ray_chunk", None) or settings.ray_chunk
@@ -235,6 +337,7 @@ class SimulationServiceRay(SimulationService):
         # 1. ParCa job (1 node) → cache to S3.
         parca_job_id = self._submit_mnp(
             job_name=f"ray-parca-{commit}-{_rand_suffix()}",
+            job_definition=job_def,
             num_nodes=1,
             ray_job_cmd=self._parca_command(),
             out_s3=cache_s3,
@@ -244,6 +347,7 @@ class SimulationServiceRay(SimulationService):
         # 2. Simulation ensemble (N nodes), gated on ParCa, staging the cache.
         sim_job_id = self._submit_mnp(
             job_name=f"ray-sim-{experiment_id}-{_rand_suffix()}"[:128],
+            job_definition=job_def,
             num_nodes=settings.ray_num_nodes,
             ray_job_cmd=self._sim_command(int(n_seeds), int(n_steps), int(chunk)),
             out_s3=self._results_s3_uri(experiment_id),

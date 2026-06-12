@@ -2,7 +2,7 @@
 and SimulationServiceRay submission/status/cancel (boto3 mocked, Postgres via testcontainers)."""
 
 from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -29,14 +29,45 @@ def _ray_settings() -> MagicMock:
         ray_mnp_queue="smscdk-ray-mnp",
         ray_mnp_job_definition="smscdk-ray-mnp",
         ray_num_nodes=3,
-        ray_image_tag="ray",
+        ray_ecr_repository="v2ecoli",
+        ecr_account_id="476270107793",
         ray_parca_mode="fast",
         ray_parca_cpus=8,
         ray_n_steps=600,
         ray_chunk=60,
         ray_log_s3_prefix="s3://mybucket/ray-logs/",
+        # build settings (DooD image build)
+        build_amd64_queue="smscdk-vecoli-build-amd64",
+        build_job_definition="smscdk-vecoli-dind-build",
+        build_git_secret_arn="arn:aws-us-gov:secretsmanager:us-gov-west-1:123:secret:vecoli-github-pat",  # noqa: S106  (ARN, not a secret)
         github_token=None,
     )
+
+
+def _fake_batch(submit_ids: list[str]) -> MagicMock:
+    """A boto3 Batch mock that supports the per-commit job-def derivation + submits.
+
+    describe_job_definitions returns the CDK base (with node properties to clone) for the
+    base name, and "no existing revision" for the per-commit name; register returns rev 1.
+    """
+    b = MagicMock()
+    base_node_props = {
+        "numNodes": 4,
+        "mainNode": 0,
+        "nodeRangeProperties": [
+            {"targetNodes": "0:", "container": {"image": "111.dkr.ecr.x/vecoli:ray", "vcpus": 16}}
+        ],
+    }
+
+    def _describe(**kwargs: Any) -> dict[str, Any]:
+        if kwargs.get("jobDefinitionName") == "smscdk-ray-mnp":  # the base
+            return {"jobDefinitions": [{"revision": 7, "nodeProperties": base_node_props}]}
+        return {"jobDefinitions": []}  # per-commit: none yet
+
+    b.describe_job_definitions.side_effect = _describe
+    b.register_job_definition.side_effect = lambda **kw: {"jobDefinitionName": kw["jobDefinitionName"], "revision": 1}
+    b.submit_job.side_effect = [{"jobId": jid} for jid in submit_ids]
+    return b
 
 
 def _overrides(call: Any) -> list[dict[str, Any]]:
@@ -110,8 +141,7 @@ class TestSimulationServiceRaySubmit:
         setattr(experiment_request.config, "n_init_sims", 2)  # noqa: B010
         simulation = await database_service.insert_simulation(sim_request=experiment_request)
 
-        mock_batch = MagicMock()
-        mock_batch.submit_job.side_effect = [{"jobId": "parca-123"}, {"jobId": "sim-456"}]
+        mock_batch = _fake_batch(["parca-123", "sim-456"])
 
         service = SimulationServiceRay()
         with (
@@ -165,9 +195,21 @@ class TestSimulationServiceRaySubmit:
         assert worker_env["RAY_OUT_S3"] == sim_env["RAY_OUT_S3"]
         assert worker_env["RAY_OUT_DIR"] == SIM_OUT_DIR
 
-        # Queue/job-def come from settings.
+        # Queue comes from settings; both jobs run the SAME per-commit job-def revision
+        # (derived from the base) so they use the simulator's TRUE commit image.
+        simulator = await database_service.get_simulator(simulator_id=simulation.simulator_id)
+        assert simulator is not None
+        commit = simulator.git_commit_hash
         assert sim_call.kwargs["jobQueue"] == "smscdk-ray-mnp"
-        assert sim_call.kwargs["jobDefinition"] == "smscdk-ray-mnp"
+        assert sim_call.kwargs["jobDefinition"] == f"smscdk-ray-mnp-{commit}:1"
+        assert parca_call.kwargs["jobDefinition"] == sim_call.kwargs["jobDefinition"]
+
+        # The per-commit job def was registered cloning the base, with the image swapped
+        # to v2ecoli:<commit> on every node range (never vecoli, never :latest).
+        reg = mock_batch.register_job_definition.call_args
+        assert reg.kwargs["type"] == "multinode"
+        reg_images = {nr["container"]["image"] for nr in reg.kwargs["nodeProperties"]["nodeRangeProperties"]}
+        assert reg_images == {f"476270107793.dkr.ecr.us-gov-west-1.amazonaws.com/v2ecoli:{commit}"}
 
 
 @pytest.mark.asyncio
@@ -215,3 +257,85 @@ class TestSimulationServiceRayStatusCancel:
             await service.cancel_job(JobId.ray("sim-456"))
         mock_batch.terminate_job.assert_called_once()
         assert mock_batch.terminate_job.call_args.kwargs["jobId"] == "sim-456"
+
+
+def _v2ecoli_simulator() -> Any:
+    from sms_api.simulation.models import SimulatorVersion
+
+    return SimulatorVersion(
+        database_id=1,
+        git_commit_hash="abc1234",
+        git_repo_url="https://github.com/vivarium-collective/v2Ecoli",
+        git_branch="main",
+    )
+
+
+class TestSimulationServiceRayBuild:
+    """submit_build_image_job builds the workload-owned v2ecoli image via a DooD Batch job."""
+
+    def test_build_command_clones_v2ecoli_and_runs_its_recipe(self) -> None:
+        service = SimulationServiceRay()
+        with patch("sms_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._build_command(_v2ecoli_simulator())
+        assert cmd[0] == "sh" and cmd[1] == "-c"
+        script = cmd[2]
+        assert "git clone --branch main --single-branch" in script
+        assert "v2Ecoli" in script  # the workload repo, not vEcoli
+        assert "git checkout abc1234" in script
+        # runs v2ecoli's OWN recipe (symmetric with K8s running vEcoli's), not an sms-cdk script
+        assert "docker/build-and-push-ecr.sh -i abc1234 -r v2ecoli -R us-gov-west-1" in script
+
+    @pytest.mark.asyncio
+    async def test_run_build_submits_to_amd64_queue_and_polls(self) -> None:
+        service = SimulationServiceRay()
+        with (
+            patch("sms_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch(
+                "sms_api.simulation.simulation_service_ray.batch_build.submit_batch_build",
+                new=AsyncMock(return_value="build-job-1"),
+            ) as mock_submit,
+            patch(
+                "sms_api.simulation.simulation_service_ray.batch_build.poll_batch_jobs",
+                new=AsyncMock(),
+            ) as mock_poll,
+        ):
+            await service._run_build(_v2ecoli_simulator())
+        assert mock_submit.await_count == 1
+        assert mock_submit.call_args.kwargs["queue"] == "smscdk-vecoli-build-amd64"
+        assert "docker/build-and-push-ecr.sh" in mock_submit.call_args.kwargs["command"][2]
+        mock_poll.assert_awaited_once_with(["build-job-1"])
+
+    @pytest.mark.asyncio
+    async def test_submit_build_returns_local_job(self) -> None:
+        service = SimulationServiceRay()
+        with (
+            patch("sms_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch(
+                "sms_api.simulation.simulation_service_ray.batch_build.submit_batch_build",
+                new=AsyncMock(return_value="bj"),
+            ),
+            patch("sms_api.simulation.simulation_service_ray.batch_build.poll_batch_jobs", new=AsyncMock()),
+        ):
+            job_id = await service.submit_build_image_job(_v2ecoli_simulator())
+        assert job_id.backend == JobBackend.LOCAL
+
+
+class TestEnsureMnpJobDef:
+    """Per-commit MNP job-def derivation (true commit image, no per-submission override)."""
+
+    def test_reuses_existing_revision_for_same_image(self) -> None:
+        image = "476270107793.dkr.ecr.us-gov-west-1.amazonaws.com/v2ecoli:abc1234"
+        mock_batch = MagicMock()
+        mock_batch.describe_job_definitions.return_value = {
+            "jobDefinitions": [
+                {"revision": 5, "nodeProperties": {"nodeRangeProperties": [{"container": {"image": image}}]}}
+            ]
+        }
+        service = SimulationServiceRay()
+        with (
+            patch("sms_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("sms_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+        ):
+            jd = service._ensure_mnp_job_def(image, "abc1234")
+        assert jd == "smscdk-ray-mnp-abc1234:5"
+        mock_batch.register_job_definition.assert_not_called()

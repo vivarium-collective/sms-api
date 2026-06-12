@@ -9,7 +9,6 @@ import json
 import logging
 from typing import override
 
-import boto3
 from kubernetes import client as k8s_client
 
 from sms_api.common.hpc.job_service import JobStatusInfo
@@ -18,6 +17,7 @@ from sms_api.common.hpc.local_task_service import LocalTaskService
 from sms_api.common.models import JobBackend, JobId
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
 from sms_api.config import get_settings
+from sms_api.simulation import batch_build
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.github_repo import (
     _DEFAULT_CONFIG_TEMPLATE,  # noqa: F401  re-exported for back-compat (SimulationServiceHpc, tests)
@@ -146,52 +146,16 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ecr_repository}:{image_tag}-s
     async def _submit_batch_build(self, job_name: str, queue: str, command: list[str], commit: str) -> str:
         """Submit a DooD build job to AWS Batch. Returns the Batch job ID."""
         settings = get_settings()
-        batch = boto3.client("batch", region_name=settings.batch_region)
         env = [{"name": "IMAGE_TAG", "value": commit}]
         if settings.ecoli_sources_repo_url:
             env.append({"name": "ECOLI_SOURCES_REPO_URL", "value": settings.ecoli_sources_repo_url})
         if settings.ecoli_sources_ref:
             env.append({"name": "ECOLI_SOURCES_REF", "value": settings.ecoli_sources_ref})
-
-        response = batch.submit_job(
-            jobName=job_name,
-            jobQueue=queue,
-            jobDefinition=settings.build_job_definition,
-            containerOverrides={
-                "command": command,
-                "environment": env,
-            },
-        )
-        batch_job_id = response["jobId"]
-        logger.info(f"Submitted Batch build job {job_name} (id={batch_job_id}) to queue {queue}")
-        return str(batch_job_id)
+        return await batch_build.submit_batch_build(job_name, queue, command, environment=env)
 
     async def _poll_batch_jobs(self, job_ids: list[str]) -> None:
         """Poll Batch jobs until all complete. Raises on failure."""
-        import asyncio
-
-        settings = get_settings()
-        batch = boto3.client("batch", region_name=settings.batch_region)
-
-        while True:
-            response = batch.describe_jobs(jobs=job_ids)
-            statuses = {j["jobId"]: j["status"] for j in response["jobs"]}
-
-            failed = [jid for jid, s in statuses.items() if s == "FAILED"]
-            if failed:
-                # Get failure reason
-                reasons = []
-                for job in response["jobs"]:
-                    if job["jobId"] in failed:
-                        reason = job.get("statusReason", "unknown")
-                        reasons.append(f"{job['jobName']}: {reason}")
-                raise RuntimeError(f"Batch build job(s) failed: {'; '.join(reasons)}")
-
-            if all(s == "SUCCEEDED" for s in statuses.values()):
-                logger.info(f"All {len(job_ids)} Batch build jobs completed successfully")
-                return
-
-            await asyncio.sleep(15)
+        await batch_build.poll_batch_jobs(job_ids)
 
     async def _run_build(self, simulator_version: SimulatorVersion) -> None:
         """Build Docker images via parallel DooD Batch jobs.

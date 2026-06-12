@@ -238,7 +238,7 @@ class Settings(BaseSettings):
     ray_mnp_queue: str = ""  # Batch MNP job queue (e.g. "smscdk-ray-mnp")
     ray_mnp_job_definition: str = ""  # Batch MNP job definition (e.g. "smscdk-ray-mnp")
     ray_num_nodes: int = 3  # MNP node count for the simulation job (1 head + N-1 workers)
-    ray_image_tag: str = "ray"  # ECR tag of the prebuilt Ray image (built via sms-cdk build-ray-image.sh)
+    ray_ecr_repository: str = "v2ecoli"  # ECR repo for the workload-owned Ray image (built by submit_build_image_job)
     ray_parca_mode: str = "full"  # v2ecoli-parca --mode (fast for debug, full for production)
     ray_parca_cpus: int = 8  # v2ecoli-parca --cpus
     ray_n_steps: int = 600  # default sim steps per seed (run_phase0_xarray_ensemble --n-steps)
