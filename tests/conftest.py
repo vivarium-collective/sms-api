@@ -9,12 +9,23 @@ os.environ.setdefault("PUBLIC_MODE", "false")
 
 
 def _hpc_reachable() -> bool:
-    """Return True only if the HPC SSH host is reachable (VPN is on)."""
+    """Return True only if the HPC SSH host is reachable AND an SSH key is configured.
+
+    Requiring the key file — not just host reachability — keeps the SLURM
+    integration tests from running with a blank/unset slurm_submit_key_path.
+    The UConn login node is publicly reachable on :22, so a host-only check
+    lets those tests run and then crash at key load (an empty key path becomes
+    Path("")==".", so asyncssh does open(".") -> IsADirectoryError). The
+    per-test skipif has the same blind spot: Path("").exists() is True. Gating
+    on os.path.isfile(key_path) (False for "") makes them skip cleanly instead.
+    """
     try:
         from sms_api.config import get_settings
 
-        host = get_settings().slurm_submit_host
-        if not host:
+        settings = get_settings()
+        host = settings.slurm_submit_host
+        key_path = settings.slurm_submit_key_path
+        if not host or not os.path.isfile(os.path.expanduser(key_path)):
             return False
         with socket.create_connection((host, 22), timeout=3):
             return True
