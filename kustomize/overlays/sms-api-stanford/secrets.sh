@@ -179,6 +179,32 @@ sed -i.bak \
 echo "✓ Batch queue names updated in shared.env"
 
 echo ""
+echo "=== Updating Ray-on-Batch settings in shared.env (best-effort) ==="
+
+# The Ray stacks (<prefix>-ray-batch, <prefix>-ray) are optional; only re-resolve if present.
+RAY_MNP_QUEUE_VAL=$(get_stack_output "${STACK_PREFIX}-ray-batch" "RayMnpQueueName")
+RAY_MNP_JOBDEF_VAL=$(get_stack_output "${STACK_PREFIX}-ray-batch" "RayMnpJobDefinition")
+RAY_LOG_PREFIX_VAL=$(get_stack_output "${STACK_PREFIX}-ray" "RayLogS3Prefix")
+
+if [ -n "$RAY_MNP_QUEUE_VAL" ] && [ "$RAY_MNP_QUEUE_VAL" != "None" ]; then
+    echo "✓ RAY_MNP_QUEUE: ${RAY_MNP_QUEUE_VAL}"
+    echo "✓ RAY_MNP_JOB_DEFINITION: ${RAY_MNP_JOBDEF_VAL}"
+    sed -i.bak \
+      -e "s|^RAY_MNP_QUEUE=.*|RAY_MNP_QUEUE=${RAY_MNP_QUEUE_VAL}|" \
+      -e "s|^RAY_MNP_JOB_DEFINITION=.*|RAY_MNP_JOB_DEFINITION=${RAY_MNP_JOBDEF_VAL}|" \
+      "${SHARED_ENV_FILE}" && rm -f "${SHARED_ENV_FILE}.bak"
+    if [ -n "$RAY_LOG_PREFIX_VAL" ] && [ "$RAY_LOG_PREFIX_VAL" != "None" ]; then
+        echo "✓ RAY_LOG_S3_PREFIX: ${RAY_LOG_PREFIX_VAL}"
+        ESCAPED_RAY_LOG=$(printf '%s\n' "$RAY_LOG_PREFIX_VAL" | sed 's/[&/\]/\\&/g')
+        sed -i.bak -e "s|^RAY_LOG_S3_PREFIX=.*|RAY_LOG_S3_PREFIX=${ESCAPED_RAY_LOG}|" \
+          "${SHARED_ENV_FILE}" && rm -f "${SHARED_ENV_FILE}.bak"
+    fi
+    echo "✓ Ray settings updated in shared.env"
+else
+    echo "  (Ray stacks not found for ${STACK_PREFIX}; keeping the hardcoded RAY_* values)"
+fi
+
+echo ""
 echo "=== Updating IRSA Role ARN in kustomization.yaml ==="
 
 BATCH_SUBMIT_ROLE_ARN=$(get_stack_output "${STACK_PREFIX}-batch" "BatchSubmitRoleArn")
