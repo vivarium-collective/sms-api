@@ -441,9 +441,13 @@ async def run_simulation_workflow(  # noqa: C901
             # Discovery failure should not block the workflow — log and continue
             logger.warning("Could not validate analysis_options against repo (discovery failed), proceeding anyway")
 
-    # 2. Read the config template via the resolved service (SSH for SLURM, GitHub API for K8s/Ray)
+    # 2. Read the config template via the resolved service (SSH for SLURM, GitHub API for K8s/Ray).
+    # v2ecoli (RAY) has no configs/ dir and runs from CLI args, so fall back to the embedded
+    # default template instead of 404-ing when the requested config file isn't in the repo.
     config_str = await service.read_config_template(
-        simulator_version=simulator, config_filename=simulation_config_filename
+        simulator_version=simulator,
+        config_filename=simulation_config_filename,
+        allow_default_fallback=(backend == ComputeBackend.RAY),
     )
 
     # 3. Replace placeholders in the config template
