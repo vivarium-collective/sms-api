@@ -1290,6 +1290,8 @@ async def get_simulation_log(db_service: DatabaseService, simulation_id: int, tr
 
     if hpc_run.job_id.backend == JobBackend.K8S:
         log_content = await _get_k8s_log(hpc_run, db_service, simulation_id)
+    elif hpc_run.job_id.backend == JobBackend.RAY:
+        log_content = await _get_ray_log(hpc_run, db_service, simulation_id)
     elif hpc_run.job_id.backend == JobBackend.LOCAL:
         log_content = f"Logs not available for local tasks (job {hpc_run.job_id})"
     else:
@@ -1493,6 +1495,34 @@ async def _get_slurm_log(hpc_run: HpcRun) -> str:
         except StopIteration:
             raise RuntimeError(f"No simulation job name available for HPC run {hpc_run.database_id}")
     return log_stdout
+
+
+async def _get_ray_log(hpc_run: HpcRun, db_service: DatabaseService, simulation_id: int) -> str:
+    """Surface a Ray MNP run's log.
+
+    Ray-on-Batch runs have no SSH login node or K8s pod to read — bulk per-node Ray
+    session logs go to ``RAY_LOG_S3_PREFIX`` and AWS Batch CloudWatch. The high-signal
+    per-run artifact is the ensemble ``summary.json`` (per-seed step counts / errors),
+    written to the run's S3 output prefix. Surface that plus pointers to the bulk logs.
+    Best-effort: never raises (a missing summary just means the run hasn't produced it yet).
+    """
+    settings = get_settings()
+    parts: list[str] = [f"Ray MNP simulation job {hpc_run.job_id.value} (state via `simulation status`)."]
+
+    simulation = await db_service.get_simulation(simulation_id=simulation_id)
+    file_service = get_file_service()
+    if simulation is not None and file_service is not None:
+        summary_key = f"{settings.s3_output_prefix}/{simulation.config.experiment_id}/summary.json"
+        try:
+            content = await file_service.get_file_contents(S3FilePath(s3_path=Path(summary_key)))
+            if content:
+                parts.append("=== summary.json (per-seed results) ===\n" + content.decode("utf-8", errors="replace"))
+        except Exception:
+            logger.info("Ray summary.json not yet available for simulation %s", simulation_id)
+
+    if settings.ray_log_s3_prefix:
+        parts.append(f"Bulk Ray session logs: {settings.ray_log_s3_prefix} (+ AWS Batch CloudWatch).")
+    return "\n\n".join(parts)
 
 
 async def _get_k8s_log(hpc_run: HpcRun, db_service: DatabaseService, simulation_id: int) -> str:
