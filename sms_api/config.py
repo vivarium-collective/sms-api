@@ -269,14 +269,31 @@ class ComputeBackend(StrEnum):
 
 
 def get_job_backend() -> ComputeBackend:
-    """Return the compute backend for the current deployment.
+    """Return the DEFAULT compute backend for the current deployment.
 
-    Raises ValueError if COMPUTE_BACKEND is not set or invalid.
+    This is the fallback when a simulator's repo doesn't map to a specific backend
+    (see ``compute_backend_for_repo``). Raises ValueError if COMPUTE_BACKEND is unset/invalid.
     """
     value = get_settings().compute_backend
     if not value:
         raise ValueError("COMPUTE_BACKEND must be set explicitly to 'slurm', 'batch', or 'ray'")
     return ComputeBackend(value)
+
+
+def compute_backend_for_repo(repo_url: str) -> ComputeBackend | None:
+    """Map a simulator repo to its compute backend, so one deployment can serve both.
+
+    v2ecoli (vivarium-collective/v2ecoli) runs on Ray; the vEcoli repos (CovertLab/vEcoli,
+    the fork, the private repo) run on AWS Batch + Nextflow. Returns None for an unknown
+    repo, in which case callers fall back to ``get_job_backend()`` (the deployment default).
+    Note ``v2ecoli`` does not contain the ``vecoli`` substring, so the checks are independent.
+    """
+    url = repo_url.lower()
+    if "v2ecoli" in url:
+        return ComputeBackend.RAY
+    if "vecoli" in url:
+        return ComputeBackend.BATCH
+    return None
 
 
 def get_public_mode() -> bool:
