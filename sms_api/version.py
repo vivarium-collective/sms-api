@@ -25,4 +25,5 @@
 # 0.9.1 — fix test_run_analysis to use HPC-available simulator (203ab2a), graceful GitHub cred skip
 # 0.9.2 — BioModels integration release
 # 0.9.3 — accept v2ecoli repo (RepoUrl allow-list), config-template fallback for Ray/v2ecoli
-__version__ = "0.9.3"
+# 0.9.4 — route simulator build by repo at the upload endpoint (v2ecoli builds on Ray, not the default)
+__version__ = "0.9.4"
