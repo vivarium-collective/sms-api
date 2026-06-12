@@ -178,20 +178,21 @@ class TestSimulationServiceRaySubmit:
         assert sim_env["RAY_STAGE_S3"] == parca_env["RAY_OUT_S3"]
         assert sim_env["RAY_STAGE_DIR"] == PARCA_CACHE_DIR
 
-        # Multi-node env targeting: workers (`1:`) must ALSO get the staging + output
-        # knobs (they need the cache to run seeds and must ship their own zarr), but
-        # NOT RAY_JOB_CMD (only the head runs the driver).
+        # Node env targeting: the CDK base job def declares a SINGLE range ("0:"), so the
+        # submit override must target that same range (Batch rejects "0:0"/"1:" splits as
+        # "NodeOverride targets should match job definition"). One override on "0:" carries
+        # the full env to every node — the staging + output knobs workers need to run seeds
+        # and ship their zarr, plus RAY_JOB_CMD/RAY_REPORT_PATH, which workers receive but
+        # never act on (the entrypoint branches on AWS_BATCH_JOB_NODE_INDEX; only the head
+        # runs the driver).
         sim_overrides = _overrides(sim_call)
-        assert len(sim_overrides) == 2
-        assert sim_overrides[0]["targetNodes"] == "0:0"
-        assert sim_overrides[1]["targetNodes"] == "1:"
-        worker_env = _env_at(sim_call, 1)
-        assert "RAY_JOB_CMD" not in worker_env
-        assert "RAY_REPORT_PATH" not in worker_env
-        assert worker_env["RAY_STAGE_S3"] == sim_env["RAY_STAGE_S3"]
-        assert worker_env["RAY_STAGE_DIR"] == PARCA_CACHE_DIR
-        assert worker_env["RAY_OUT_S3"] == sim_env["RAY_OUT_S3"]
-        assert worker_env["RAY_OUT_DIR"] == SIM_OUT_DIR
+        assert len(sim_overrides) == 1
+        assert sim_overrides[0]["targetNodes"] == "0:"
+        all_node_env = _env_at(sim_call, 0)
+        assert all_node_env["RAY_STAGE_S3"] == sim_env["RAY_STAGE_S3"]
+        assert all_node_env["RAY_STAGE_DIR"] == PARCA_CACHE_DIR
+        assert all_node_env["RAY_OUT_S3"] == sim_env["RAY_OUT_S3"]
+        assert all_node_env["RAY_OUT_DIR"] == SIM_OUT_DIR
 
         # Queue comes from settings; both jobs run the SAME per-commit job-def revision
         # (derived from the base) so they use the simulator's TRUE commit image.

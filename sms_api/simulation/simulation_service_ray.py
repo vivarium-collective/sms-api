@@ -166,21 +166,22 @@ class SimulationServiceRay(SimulationService):
             shared_env.append({"name": "RAY_LOG_S3_PREFIX", "value": settings.ray_log_s3_prefix})
 
         # The head additionally runs the workload (RAY_JOB_CMD) and writes the report.
+        # Workers receive these too but never act on them — the entrypoint branches on
+        # AWS_BATCH_JOB_NODE_INDEX and only the head executes RAY_JOB_CMD/writes the report.
         head_env: list[dict[str, str]] = [
             {"name": "RAY_JOB_CMD", "value": ray_job_cmd},
             {"name": "RAY_REPORT_PATH", "value": REPORT_PATH},
             *shared_env,
         ]
 
+        # The CDK base job definition declares a SINGLE node range ("0:") — the entrypoint
+        # self-branches head vs. worker — so the submit-time override must target that same
+        # range. (Splitting into "0:0"/"1:" makes Batch reject: "NodeOverride targets should
+        # match job definition".) One override on "0:" with the full env reaches every node;
+        # the per-node staging/output knobs in shared_env are what workers need.
         node_property_overrides: list[dict[str, Any]] = [
-            {"targetNodes": "0:0", "containerOverrides": {"environment": head_env}},
+            {"targetNodes": "0:", "containerOverrides": {"environment": head_env}},
         ]
-        if num_nodes > 1:
-            # `1:` targets every worker node (a `1:` range is invalid for a 1-node job).
-            node_property_overrides.append({
-                "targetNodes": "1:",
-                "containerOverrides": {"environment": list(shared_env)},
-            })
 
         node_overrides: dict[str, Any] = {
             "numNodes": num_nodes,
