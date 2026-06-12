@@ -208,10 +208,23 @@ class SimulationServiceRay(SimulationService):
         return batch_job_id
 
     def _parca_command(self) -> str:
+        """Run ParCa, then hydrate the sim-input bundle into PARCA_CACHE_DIR (out/cache).
+
+        v2ecoli's sim loads ``out/cache/{initial_state.json, sim_data_cache.dill, ...}`` via
+        ``build_composite(cache_dir=out/cache)``. ``v2ecoli-parca`` only emits the raw
+        ``parca_state.pkl`` (+ a Km cache), so ``scripts/build_cache.py`` must hydrate that
+        into the bundle. build_cache.py/load_parca_state read a GZIPPED fixture, so gzip the
+        parca output first (the round-trip bridges v2ecoli's .pkl→.pkl.gz mismatch). Only
+        PARCA_CACHE_DIR is synced to S3 (RAY_OUT_DIR), and that is exactly what the sim stages.
+        """
         settings = get_settings()
         return (
-            f"v2ecoli-parca --mode {settings.ray_parca_mode} --cpus {settings.ray_parca_cpus}"
+            f"cd {V2ECOLI_DIR}"
+            f" && v2ecoli-parca --mode {settings.ray_parca_mode} --cpus {settings.ray_parca_cpus}"
             f" -o {PARCA_SIMDATA_DIR} --cache-dir {PARCA_CACHE_DIR}"
+            f" && gzip -f -k {PARCA_SIMDATA_DIR}/parca_state.pkl"
+            f" && python scripts/build_cache.py"
+            f" --fixture {PARCA_SIMDATA_DIR}/parca_state.pkl.gz --cache {PARCA_CACHE_DIR}"
         )
 
     def _sim_command(self, n_seeds: int, n_steps: int, chunk: int) -> str:

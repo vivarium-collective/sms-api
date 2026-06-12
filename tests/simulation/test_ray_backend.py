@@ -162,6 +162,11 @@ class TestSimulationServiceRaySubmit:
         assert parca_call.kwargs["nodeOverrides"]["numNodes"] == 1
         assert len(_overrides(parca_call)) == 1
         assert "v2ecoli-parca" in parca_env["RAY_JOB_CMD"]
+        # ParCa alone only emits raw parca_state.pkl; the sim loads out/cache/initial_state.json,
+        # so the parca step must also hydrate the bundle via scripts/build_cache.py (into the
+        # cache dir that gets synced to S3). Without this the sim seeds fail with FileNotFound.
+        assert "build_cache.py" in parca_env["RAY_JOB_CMD"]
+        assert f"--cache {PARCA_CACHE_DIR}" in parca_env["RAY_JOB_CMD"]
         assert parca_env["RAY_OUT_DIR"] == PARCA_CACHE_DIR
         assert "dependsOn" not in parca_call.kwargs
 

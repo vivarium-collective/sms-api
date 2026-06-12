@@ -27,4 +27,5 @@
 # 0.9.3 — accept v2ecoli repo (RepoUrl allow-list), config-template fallback for Ray/v2ecoli
 # 0.9.4 — route simulator build by repo at the upload endpoint (v2ecoli builds on Ray, not the default)
 # 0.9.5 — Ray MNP submit: single "0:" node override to match the CDK job def; mask PAT in build logs
-__version__ = "0.9.5"
+# 0.9.6 — Ray parca: hydrate out/cache via build_cache.py so the sim finds initial_state.json
+__version__ = "0.9.6"
