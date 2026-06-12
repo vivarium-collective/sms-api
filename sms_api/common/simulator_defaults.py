@@ -29,6 +29,11 @@ class RepoUrl(StrEnumBase):
     VECOLI_FORK_REPO_URL = "https://github.com/vivarium-collective/vEcoli"
     VECOLI_PUBLIC_REPO_URL = "https://github.com/CovertLab/vEcoli"
     VECOLI_PRIVATE_REPO_URL = "https://github.com/CovertLabEcoli/vEcoli-private"
+    # v2ecoli (process-bigraph rewrite) — runs on the Ray-on-Batch backend
+    # (compute_backend_for_repo maps it to RAY). Listed here so it passes the
+    # verify_simulator_payload allow-list; its config semantics differ from vEcoli
+    # (no configs/ dir), so the Ray run path uses the embedded default template.
+    V2ECOLI_REPO_URL = "https://github.com/vivarium-collective/v2ecoli"
 
 
 PUBLIC_MODE = get_public_mode()

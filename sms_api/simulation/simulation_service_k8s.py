@@ -93,17 +93,19 @@ apk add --no-cache aws-cli git bash
 # Docker daemon runs on the host — verify socket is mounted
 docker info >/dev/null 2>&1 || {{ echo "ERROR: Docker socket not available"; exit 1; }}
 
-# Get GitHub PAT from Secrets Manager for private repo access
+# Get GitHub PAT from Secrets Manager for private repo access.
+# Disable xtrace around the secret so the PAT (and the clone URL embedding it) never lands
+# in the build logs (CloudWatch). Re-enable tracing once the clone is done.
+set +x
 GH_PAT=$(aws secretsmanager get-secret-value \
     --secret-id {settings.build_git_secret_arn} \
     --query SecretString --output text)
-
 # Inject PAT into clone URL for HTTPS auth (x-access-token is GitHub's convention)
 CLONE_URL=$(echo "{repo_url}" | sed "s|https://github.com/|https://x-access-token:${{GH_PAT}}@github.com/|")
-
-# Clone repo at the specified branch
 export GIT_TERMINAL_PROMPT=0
 git clone --branch {branch} --single-branch "$CLONE_URL" /build/vEcoli
+unset GH_PAT CLONE_URL
+set -x
 cd /build/vEcoli
 git checkout {commit}
 

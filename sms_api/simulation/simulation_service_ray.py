@@ -166,21 +166,22 @@ class SimulationServiceRay(SimulationService):
             shared_env.append({"name": "RAY_LOG_S3_PREFIX", "value": settings.ray_log_s3_prefix})
 
         # The head additionally runs the workload (RAY_JOB_CMD) and writes the report.
+        # Workers receive these too but never act on them — the entrypoint branches on
+        # AWS_BATCH_JOB_NODE_INDEX and only the head executes RAY_JOB_CMD/writes the report.
         head_env: list[dict[str, str]] = [
             {"name": "RAY_JOB_CMD", "value": ray_job_cmd},
             {"name": "RAY_REPORT_PATH", "value": REPORT_PATH},
             *shared_env,
         ]
 
+        # The CDK base job definition declares a SINGLE node range ("0:") — the entrypoint
+        # self-branches head vs. worker — so the submit-time override must target that same
+        # range. (Splitting into "0:0"/"1:" makes Batch reject: "NodeOverride targets should
+        # match job definition".) One override on "0:" with the full env reaches every node;
+        # the per-node staging/output knobs in shared_env are what workers need.
         node_property_overrides: list[dict[str, Any]] = [
-            {"targetNodes": "0:0", "containerOverrides": {"environment": head_env}},
+            {"targetNodes": "0:", "containerOverrides": {"environment": head_env}},
         ]
-        if num_nodes > 1:
-            # `1:` targets every worker node (a `1:` range is invalid for a 1-node job).
-            node_property_overrides.append({
-                "targetNodes": "1:",
-                "containerOverrides": {"environment": list(shared_env)},
-            })
 
         node_overrides: dict[str, Any] = {
             "numNodes": num_nodes,
@@ -207,10 +208,23 @@ class SimulationServiceRay(SimulationService):
         return batch_job_id
 
     def _parca_command(self) -> str:
+        """Run ParCa, then hydrate the sim-input bundle into PARCA_CACHE_DIR (out/cache).
+
+        v2ecoli's sim loads ``out/cache/{initial_state.json, sim_data_cache.dill, ...}`` via
+        ``build_composite(cache_dir=out/cache)``. ``v2ecoli-parca`` only emits the raw
+        ``parca_state.pkl`` (+ a Km cache), so ``scripts/build_cache.py`` must hydrate that
+        into the bundle. build_cache.py/load_parca_state read a GZIPPED fixture, so gzip the
+        parca output first (the round-trip bridges v2ecoli's .pkl→.pkl.gz mismatch). Only
+        PARCA_CACHE_DIR is synced to S3 (RAY_OUT_DIR), and that is exactly what the sim stages.
+        """
         settings = get_settings()
         return (
-            f"v2ecoli-parca --mode {settings.ray_parca_mode} --cpus {settings.ray_parca_cpus}"
+            f"cd {V2ECOLI_DIR}"
+            f" && v2ecoli-parca --mode {settings.ray_parca_mode} --cpus {settings.ray_parca_cpus}"
             f" -o {PARCA_SIMDATA_DIR} --cache-dir {PARCA_CACHE_DIR}"
+            f" && gzip -f -k {PARCA_SIMDATA_DIR}/parca_state.pkl"
+            f" && python scripts/build_cache.py"
+            f" --fixture {PARCA_SIMDATA_DIR}/parca_state.pkl.gz --cache {PARCA_CACHE_DIR}"
         )
 
     def _sim_command(self, n_seeds: int, n_steps: int, chunk: int) -> str:
@@ -260,12 +274,16 @@ apk add --no-cache aws-cli git bash
 docker info >/dev/null 2>&1 || {{ echo "ERROR: Docker socket not available"; exit 1; }}
 
 # GitHub PAT (Secrets Manager) for the clone; x-access-token is GitHub's HTTPS convention.
+# Disable xtrace around the secret so the PAT (and the clone URL embedding it) never lands
+# in the build logs (CloudWatch). Re-enable tracing once the clone is done.
+set +x
 GH_PAT=$(aws secretsmanager get-secret-value \
     --secret-id {settings.build_git_secret_arn} --query SecretString --output text)
 CLONE_URL=$(echo "{repo_url}" | sed "s|https://github.com/|https://x-access-token:${{GH_PAT}}@github.com/|")
-
 export GIT_TERMINAL_PROMPT=0
 git clone --branch {branch} --single-branch "$CLONE_URL" /build/v2ecoli
+unset GH_PAT CLONE_URL
+set -x
 cd /build/v2ecoli
 git checkout {commit}
 

@@ -18,6 +18,7 @@ from sms_api.dependencies import (
     get_database_service,
     get_postgres_engine,
     get_simulation_service,
+    get_simulation_service_for_repo,
 )
 from sms_api.simulation.models import (
     HpcRun,
@@ -156,7 +157,10 @@ async def insert_simulator_version(
     if db_service is None:
         logger.error("Simulation database service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation database service is not initialized")
-    sim_service = get_simulation_service()
+    # Route the build to the simulator's backend (v2ecoli→Ray builds v2ecoli:<sha> via its
+    # docker/ recipe; vEcoli→Batch builds vecoli:{commit}). Passing the deployment DEFAULT
+    # service here would send every repo's build to the default backend.
+    sim_service = get_simulation_service_for_repo(simulator.git_repo_url)
     if sim_service is None:
         logger.error("Simulation service is not initialized")
         raise HTTPException(status_code=500, detail="Simulation service is not initialized")
