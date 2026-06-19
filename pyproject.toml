@@ -137,7 +137,7 @@ strict = true
 exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^app/gui\\.py$', '^app/tui\\.py$', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/simulation_data_service\\.py$"]
 
 [[tool.mypy.overrides]]
-module = ["kubernetes.*", "textual", "textual.*", "boto3", "boto3.*", "botocore.*", "pbest.*", "biosimulators_utils.*", "libsedml.*", "libsbml.*", "spython.*", "nats.*", "biomodels", "biomodels.*"]
+module = ["kubernetes.*", "textual", "textual.*", "boto3", "boto3.*", "botocore.*", "pbest.*", "biosimulators_utils.*", "libsedml.*", "libsbml.*", "spython.*", "nats.*", "biomodels", "biomodels.*", "fsspec", "fsspec.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
