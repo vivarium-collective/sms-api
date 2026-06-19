@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 
 from sms_api.simulation.observable_reader import (
@@ -54,3 +55,29 @@ def test_read_observables_zarr_all(tmp_path: Path) -> None:
     time, series = read_observables(uri, names=[])
     assert set(series) == {"mass", "volume"}
     assert series["volume"] == [0.1, 0.2, 0.3]
+
+
+def _write_fixture_parquet(tmp_path: Path) -> str:
+    df = pd.DataFrame({"time": [0.0, 1.0, 2.0], "mass": [1.0, 2.0, 3.0], "volume": [0.1, 0.2, 0.3]})
+    p = tmp_path / "store.parquet"
+    df.to_parquet(p)
+    return f"file://{p}"
+
+
+def test_detect_store_kind_parquet(tmp_path: Path) -> None:
+    uri = _write_fixture_parquet(tmp_path)
+    assert detect_store_kind(uri) == "parquet"
+
+
+def test_list_observables_parquet(tmp_path: Path) -> None:
+    uri = _write_fixture_parquet(tmp_path)
+    idx = list_observables(uri)
+    assert idx.store == "parquet"
+    assert {o.name for o in idx.observables} == {"mass", "volume"}  # time excluded
+
+
+def test_read_observables_parquet(tmp_path: Path) -> None:
+    uri = _write_fixture_parquet(tmp_path)
+    time, series = read_observables(uri, names=["volume"])
+    assert time == [0.0, 1.0, 2.0]
+    assert series == {"volume": [0.1, 0.2, 0.3]}

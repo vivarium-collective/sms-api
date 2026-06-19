@@ -49,7 +49,12 @@ def list_observables(store_uri: str) -> StoreIndex:
         finally:
             ds.close()
         return StoreIndex(store="zarr", observables=obs)
-    raise NotImplementedError("parquet store listing is added in Task 3")
+    import pandas as pd
+
+    df = pd.read_parquet(store_uri)
+    cols = [c for c in df.columns if c != "time"]
+    obs = [ObservableInfo(name=str(c), dims=["time"], shape=[len(df)]) for c in cols]
+    return StoreIndex(store="parquet", observables=obs)
 
 
 def read_observables(store_uri: str, names: list[str]) -> tuple[list[float], dict[str, list[float]]]:
@@ -78,4 +83,13 @@ def read_observables(store_uri: str, names: list[str]) -> tuple[list[float], dic
         finally:
             ds.close()
         return time, series
-    raise NotImplementedError("parquet reads are added in Task 3")
+    import pandas as pd
+
+    df = pd.read_parquet(store_uri)
+    wanted = names or [str(c) for c in df.columns if c != "time"]
+    missing = [n for n in wanted if n not in df.columns]
+    if missing:
+        raise KeyError(f"observables not in store: {missing}")
+    time = [float(t) for t in df["time"].tolist()] if "time" in df.columns else [float(i) for i in range(len(df))]
+    series = {n: [float(v) for v in df[n].tolist()] for n in wanted}
+    return time, series
