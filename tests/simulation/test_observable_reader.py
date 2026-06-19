@@ -7,6 +7,7 @@ from sms_api.simulation.observable_reader import (
     StoreIndex,
     detect_store_kind,
     list_observables,
+    read_observables,
 )
 
 
@@ -39,3 +40,17 @@ def test_list_observables_zarr(tmp_path: Path) -> None:
     mass = next(o for o in idx.observables if o.name == "mass")
     assert mass.dims == ["time"]
     assert mass.shape == [3]
+
+
+def test_read_observables_zarr_selected(tmp_path: Path) -> None:
+    uri = _write_fixture_zarr(tmp_path)
+    time, series = read_observables(uri, names=["mass"])
+    assert time == [0.0, 1.0, 2.0]
+    assert series == {"mass": [1.0, 2.0, 3.0]}
+
+
+def test_read_observables_zarr_all(tmp_path: Path) -> None:
+    uri = _write_fixture_zarr(tmp_path)
+    time, series = read_observables(uri, names=[])
+    assert set(series) == {"mass", "volume"}
+    assert series["volume"] == [0.1, 0.2, 0.3]
