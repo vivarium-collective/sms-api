@@ -38,9 +38,10 @@ from sms_api.simulation.models import (
     RepoDiscovery,
     Simulation,
     SimulationObservableIndex,
+    SimulationObservables,
     SimulationRun,
 )
-from sms_api.simulation.observable_reader import list_observables
+from sms_api.simulation.observable_reader import detect_store_kind, list_observables, read_observables
 
 
 def _validate_simulation_config_filename(simulation_config_filename: str) -> None:
@@ -423,6 +424,43 @@ async def get_simulation_observables_index(
         seed=seed,
         store=idx.store,
         observables=[ObservableInfoModel(name=o.name, dims=o.dims, shape=o.shape) for o in idx.observables],
+    )
+
+
+@config.router.get(
+    path="/simulations/{id}/observables",
+    response_model=SimulationObservables,
+    operation_id="get-simulation-observables",
+    tags=["Simulations"],
+    summary="Read observable timeseries from a simulation's emitter store (S3)",
+)
+async def get_simulation_observables(
+    id: int = FastAPIPath(description="Database ID of the simulation"),
+    names: str = "",
+    seed: int = 0,
+) -> SimulationObservables:
+    db = get_database_service()
+    if db is None:
+        raise HTTPException(503, "database service unavailable")
+    sim = await db.get_simulation(simulation_id=id)
+    if sim is None:
+        raise HTTPException(404, f"Simulation {id} not found")
+    requested = [n.strip() for n in names.split(",") if n.strip()]
+    store_uri = _build_store_uri(sim.experiment_id, seed)
+    try:
+        store_kind = await asyncio.to_thread(detect_store_kind, store_uri)
+        time, series = await asyncio.to_thread(read_observables, store_uri, requested)
+    except FileNotFoundError:
+        raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})")
+    except KeyError as e:
+        raise HTTPException(400, str(e))
+    return SimulationObservables(
+        simulation_id=id,
+        experiment_id=sim.experiment_id,
+        seed=seed,
+        store=store_kind,
+        time=time,
+        series=series,
     )
 
 

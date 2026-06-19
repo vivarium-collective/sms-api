@@ -69,3 +69,44 @@ async def test_observables_index_404_when_missing(monkeypatch) -> None:
         assert r.status_code == 404
     finally:
         set_database_service(saved)
+
+
+@pytest.mark.asyncio
+async def test_observables_series_ok(monkeypatch) -> None:
+    saved = get_database_service()
+    set_database_service(_FakeDB(_sim()))
+    monkeypatch.setattr(
+        "sms_api.api.routers.sms.detect_store_kind",
+        lambda uri: "zarr",
+    )
+    monkeypatch.setattr(
+        "sms_api.api.routers.sms.read_observables",
+        lambda uri, names: ([0.0, 1.0, 2.0], {"mass": [1.0, 2.0, 3.0]}),
+    )
+    try:
+        async with _client() as c:
+            r = await c.get(f"{BASE}/simulations/49/observables", params={"names": "mass"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["time"] == [0.0, 1.0, 2.0]
+        assert body["series"]["mass"] == [1.0, 2.0, 3.0]
+    finally:
+        set_database_service(saved)
+
+
+@pytest.mark.asyncio
+async def test_observables_series_bad_name_400(monkeypatch) -> None:
+    saved = get_database_service()
+    set_database_service(_FakeDB(_sim()))
+    monkeypatch.setattr("sms_api.api.routers.sms.detect_store_kind", lambda uri: "zarr")
+
+    def _raise(uri, names):
+        raise KeyError("observables not in store: ['nope']")
+
+    monkeypatch.setattr("sms_api.api.routers.sms.read_observables", _raise)
+    try:
+        async with _client() as c:
+            r = await c.get(f"{BASE}/simulations/49/observables", params={"names": "nope"})
+        assert r.status_code == 400
+    finally:
+        set_database_service(saved)
