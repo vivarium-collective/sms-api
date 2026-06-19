@@ -59,6 +59,18 @@ def get_experiment_id(simulator_id: int, config_filename: str) -> str:
     return f"sim{simulator_id}-{config_filename.replace('.json', '')}"
 
 
+def _build_store_uri(experiment_id: str, seed: int) -> str:
+    """Build the S3 URI of a Ray run's per-seed XArray emitter store.
+
+    Layout written by simulation_service_ray.py:
+    ``s3://{bucket}/{output_prefix}/{experiment_id}/seed_{NN}/store.zarr``.
+    """
+    from sms_api.config import get_settings
+
+    settings = get_settings()
+    return f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}/seed_{seed:02d}/store.zarr"
+
+
 AnalysisOptions()
 
 
