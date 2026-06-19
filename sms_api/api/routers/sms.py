@@ -7,6 +7,7 @@
 #   IE: where do we provide this special config: in vEcoli or API?
 # TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
 # TODO: labkey preprocessing
+import asyncio
 import json
 import logging
 from collections.abc import Sequence
@@ -31,7 +32,15 @@ from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_router_config
 from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
-from sms_api.simulation.models import AnalysisOptions, RepoDiscovery, Simulation, SimulationRun
+from sms_api.simulation.models import (
+    AnalysisOptions,
+    ObservableInfoModel,
+    RepoDiscovery,
+    Simulation,
+    SimulationObservableIndex,
+    SimulationRun,
+)
+from sms_api.simulation.observable_reader import list_observables
 
 
 def _validate_simulation_config_filename(simulation_config_filename: str) -> None:
@@ -384,6 +393,37 @@ async def get_simulation_data(
     except Exception as e:
         logger.exception("Error retrieving simulation data")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/simulations/{id}/observables/index",
+    response_model=SimulationObservableIndex,
+    operation_id="get-simulation-observables-index",
+    tags=["Simulations"],
+    summary="List observables available in a simulation's emitter store (S3)",
+)
+async def get_simulation_observables_index(
+    id: int = FastAPIPath(description="Database ID of the simulation"),
+    seed: int = 0,
+) -> SimulationObservableIndex:
+    db = get_database_service()
+    if db is None:
+        raise HTTPException(503, "database service unavailable")
+    sim = await db.get_simulation(simulation_id=id)
+    if sim is None:
+        raise HTTPException(404, f"Simulation {id} not found")
+    store_uri = _build_store_uri(sim.experiment_id, seed)
+    try:
+        idx = await asyncio.to_thread(list_observables, store_uri)
+    except FileNotFoundError:
+        raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})")
+    return SimulationObservableIndex(
+        simulation_id=id,
+        experiment_id=sim.experiment_id,
+        seed=seed,
+        store=idx.store,
+        observables=[ObservableInfoModel(name=o.name, dims=o.dims, shape=o.shape) for o in idx.observables],
+    )
 
 
 @config.router.post(
