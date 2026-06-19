@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 from sms_api.simulation.observable_reader import (
@@ -45,16 +46,52 @@ def test_list_observables_zarr(tmp_path: Path) -> None:
 
 def test_read_observables_zarr_selected(tmp_path: Path) -> None:
     uri = _write_fixture_zarr(tmp_path)
-    time, series = read_observables(uri, names=["mass"])
+    kind, time, series = read_observables(uri, names=["mass"])
+    assert kind == "zarr"
     assert time == [0.0, 1.0, 2.0]
     assert series == {"mass": [1.0, 2.0, 3.0]}
 
 
 def test_read_observables_zarr_all(tmp_path: Path) -> None:
     uri = _write_fixture_zarr(tmp_path)
-    time, series = read_observables(uri, names=[])
+    kind, time, series = read_observables(uri, names=[])
+    assert kind == "zarr"
     assert set(series) == {"mass", "volume"}
     assert series["volume"] == [0.1, 0.2, 0.3]
+
+
+def test_read_observables_zarr_multidim_raises(tmp_path: Path) -> None:
+    """A 2-D variable (time, mol) must raise ValueError, not silently flatten."""
+    ds = xr.Dataset(
+        data_vars={
+            "bulk": (["time", "mol"], np.ones((3, 5))),
+        },
+        coords={"time": np.array([0.0, 1.0, 2.0])},
+    )
+    store_path = tmp_path / "store.zarr"
+    ds.to_zarr(store_path, mode="w")
+    uri = f"file://{store_path}"
+
+    with pytest.raises(ValueError, match="observable 'bulk' is not a 1-D timeseries"):
+        read_observables(uri, names=["bulk"])
+
+
+def test_read_observables_zarr_nan_sanitized(tmp_path: Path) -> None:
+    """NaN values must be sanitized to None for JSON-safe output."""
+    ds = xr.Dataset(
+        data_vars={
+            "mass": ("time", np.array([1.0, float("nan"), 3.0])),
+        },
+        coords={"time": np.array([0.0, 1.0, 2.0])},
+    )
+    store_path = tmp_path / "store.zarr"
+    ds.to_zarr(store_path, mode="w")
+    uri = f"file://{store_path}"
+
+    _, _, series = read_observables(uri, names=["mass"])
+    assert series["mass"][0] == 1.0
+    assert series["mass"][1] is None
+    assert series["mass"][2] == 3.0
 
 
 def _write_fixture_parquet(tmp_path: Path) -> str:
@@ -78,6 +115,7 @@ def test_list_observables_parquet(tmp_path: Path) -> None:
 
 def test_read_observables_parquet(tmp_path: Path) -> None:
     uri = _write_fixture_parquet(tmp_path)
-    time, series = read_observables(uri, names=["volume"])
+    kind, time, series = read_observables(uri, names=["volume"])
+    assert kind == "parquet"
     assert time == [0.0, 1.0, 2.0]
     assert series == {"volume": [0.1, 0.2, 0.3]}

@@ -41,7 +41,7 @@ from sms_api.simulation.models import (
     SimulationObservables,
     SimulationRun,
 )
-from sms_api.simulation.observable_reader import detect_store_kind, list_observables, read_observables
+from sms_api.simulation.observable_reader import list_observables, read_observables
 
 
 def _validate_simulation_config_filename(simulation_config_filename: str) -> None:
@@ -405,7 +405,7 @@ async def get_simulation_data(
 )
 async def get_simulation_observables_index(
     id: int = FastAPIPath(description="Database ID of the simulation"),
-    seed: int = 0,
+    seed: int = Query(0, ge=0),
 ) -> SimulationObservableIndex:
     db = get_database_service()
     if db is None:
@@ -417,7 +417,7 @@ async def get_simulation_observables_index(
     try:
         idx = await asyncio.to_thread(list_observables, store_uri)
     except FileNotFoundError:
-        raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})")
+        raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})") from None
     return SimulationObservableIndex(
         simulation_id=id,
         experiment_id=sim.experiment_id,
@@ -437,7 +437,7 @@ async def get_simulation_observables_index(
 async def get_simulation_observables(
     id: int = FastAPIPath(description="Database ID of the simulation"),
     names: str = "",
-    seed: int = 0,
+    seed: int = Query(0, ge=0),
 ) -> SimulationObservables:
     db = get_database_service()
     if db is None:
@@ -448,12 +448,13 @@ async def get_simulation_observables(
     requested = [n.strip() for n in names.split(",") if n.strip()]
     store_uri = _build_store_uri(sim.experiment_id, seed)
     try:
-        store_kind = await asyncio.to_thread(detect_store_kind, store_uri)
-        time, series = await asyncio.to_thread(read_observables, store_uri, requested)
+        store_kind, time, series = await asyncio.to_thread(read_observables, store_uri, requested)
     except FileNotFoundError:
-        raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})")
+        raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})") from None
     except KeyError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     return SimulationObservables(
         simulation_id=id,
         experiment_id=sim.experiment_id,

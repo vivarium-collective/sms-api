@@ -76,18 +76,15 @@ async def test_observables_series_ok(monkeypatch) -> None:
     saved = get_database_service()
     set_database_service(_FakeDB(_sim()))
     monkeypatch.setattr(
-        "sms_api.api.routers.sms.detect_store_kind",
-        lambda uri: "zarr",
-    )
-    monkeypatch.setattr(
         "sms_api.api.routers.sms.read_observables",
-        lambda uri, names: ([0.0, 1.0, 2.0], {"mass": [1.0, 2.0, 3.0]}),
+        lambda uri, names: ("zarr", [0.0, 1.0, 2.0], {"mass": [1.0, 2.0, 3.0]}),
     )
     try:
         async with _client() as c:
             r = await c.get(f"{BASE}/simulations/49/observables", params={"names": "mass"})
         assert r.status_code == 200
         body = r.json()
+        assert body["store"] == "zarr"
         assert body["time"] == [0.0, 1.0, 2.0]
         assert body["series"]["mass"] == [1.0, 2.0, 3.0]
     finally:
@@ -98,7 +95,6 @@ async def test_observables_series_ok(monkeypatch) -> None:
 async def test_observables_series_bad_name_400(monkeypatch) -> None:
     saved = get_database_service()
     set_database_service(_FakeDB(_sim()))
-    monkeypatch.setattr("sms_api.api.routers.sms.detect_store_kind", lambda uri: "zarr")
 
     def _raise(uri, names):
         raise KeyError("observables not in store: ['nope']")
@@ -108,5 +104,26 @@ async def test_observables_series_bad_name_400(monkeypatch) -> None:
         async with _client() as c:
             r = await c.get(f"{BASE}/simulations/49/observables", params={"names": "nope"})
         assert r.status_code == 400
+    finally:
+        set_database_service(saved)
+
+
+@pytest.mark.asyncio
+async def test_observables_series_multidim_400(monkeypatch) -> None:
+    """A multi-dimensional observable (ValueError from reader) must return HTTP 400."""
+    saved = get_database_service()
+    set_database_service(_FakeDB(_sim()))
+
+    def _raise(uri, names):
+        raise ValueError(
+            "observable 'bulk' is not a 1-D timeseries (shape (3, 5)); multi-dimensional observables are not supported"
+        )
+
+    monkeypatch.setattr("sms_api.api.routers.sms.read_observables", _raise)
+    try:
+        async with _client() as c:
+            r = await c.get(f"{BASE}/simulations/49/observables", params={"names": "bulk"})
+        assert r.status_code == 400
+        assert "1-D timeseries" in r.json()["detail"]
     finally:
         set_database_service(saved)

@@ -8,7 +8,9 @@ can be unit-tested without S3 or a database.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from typing import Literal
 
 import fsspec
 
@@ -22,11 +24,11 @@ class ObservableInfo:
 
 @dataclass
 class StoreIndex:
-    store: str  # "zarr" | "parquet"
+    store: Literal["zarr", "parquet"]
     observables: list[ObservableInfo]
 
 
-def detect_store_kind(store_uri: str) -> str:
+def detect_store_kind(store_uri: str) -> Literal["zarr", "parquet"]:
     """Return 'zarr' if the store is a zarr group (has a .zgroup/.zattrs), else 'parquet'."""
     fs, path = fsspec.core.url_to_fs(store_uri)
     if fs.exists(f"{path}/.zgroup") or fs.exists(f"{path}/zarr.json"):
@@ -57,11 +59,23 @@ def list_observables(store_uri: str) -> StoreIndex:
     return StoreIndex(store="parquet", observables=obs)
 
 
-def read_observables(store_uri: str, names: list[str]) -> tuple[list[float], dict[str, list[float]]]:
-    """Return (time, {name: values}) for the requested observables.
+def _sanitize(value: float) -> float | None:
+    """Convert NaN/Inf to None for JSON-safe output."""
+    if math.isfinite(value):
+        return value
+    return None
+
+
+def read_observables(
+    store_uri: str, names: list[str]
+) -> tuple[Literal["zarr", "parquet"], list[float], dict[str, list[float | None]]]:
+    """Return (store_kind, time, {name: values}) for the requested observables.
 
     ``names=[]`` returns every observable in the store. The time axis is taken from
     the ``time`` coordinate if present, else a 0..N index.
+
+    Raises ``ValueError`` if an observable's values are not a 1-D timeseries.
+    Non-finite float values (NaN, ±Inf) are sanitized to ``None``.
     """
     kind = detect_store_kind(store_uri)
     if kind == "zarr":
@@ -79,10 +93,19 @@ def read_observables(store_uri: str, names: list[str]) -> tuple[list[float], dic
             else:
                 first = ds[wanted[0]]
                 time = [float(i) for i in range(int(first.shape[0]))]
-            series = {n: [float(v) for v in np.asarray(ds[n].values).ravel()] for n in wanted}
+            series: dict[str, list[float | None]] = {}
+            for n in wanted:
+                arr = np.asarray(ds[n].values)
+                if arr.ndim != 1 or arr.shape[0] != len(time):
+                    raise ValueError(
+                        f"observable {n!r} is not a 1-D timeseries (shape {arr.shape}); "
+                        "multi-dimensional observables are not supported"
+                    )
+                series[n] = [_sanitize(float(v)) for v in arr]
         finally:
             ds.close()
-        return time, series
+        return kind, time, series
+
     import pandas as pd
 
     df = pd.read_parquet(store_uri)
@@ -91,5 +114,5 @@ def read_observables(store_uri: str, names: list[str]) -> tuple[list[float], dic
     if missing:
         raise KeyError(f"observables not in store: {missing}")
     time = [float(t) for t in df["time"].tolist()] if "time" in df.columns else [float(i) for i in range(len(df))]
-    series = {n: [float(v) for v in df[n].tolist()] for n in wanted}
-    return time, series
+    series_p: dict[str, list[float | None]] = {n: [_sanitize(float(v)) for v in df[n].tolist()] for n in wanted}
+    return kind, time, series_p

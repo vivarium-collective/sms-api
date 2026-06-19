@@ -3,7 +3,7 @@ import enum
 import hashlib
 import json
 from dataclasses import field
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel as _BaseModel
 from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
@@ -401,7 +401,7 @@ class SimulationObservableIndex(BaseModel):
     simulation_id: int
     experiment_id: str
     seed: int
-    store: str  # "zarr" | "parquet"
+    store: Literal["zarr", "parquet"]
     observables: list[ObservableInfoModel]
 
 
@@ -409,6 +409,6 @@ class SimulationObservables(BaseModel):
     simulation_id: int
     experiment_id: str
     seed: int
-    store: str  # "zarr" | "parquet"
+    store: Literal["zarr", "parquet"]
     time: list[float]
-    series: dict[str, list[float]]
+    series: dict[str, list[float | None]]
