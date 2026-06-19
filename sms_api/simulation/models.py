@@ -389,3 +389,26 @@ class Simulation(BaseModel):
             n_init = getattr(self.config, "n_init_sims", None)
             if n_init is not None:
                 self.num_seeds = int(n_init)
+
+
+class ObservableInfoModel(BaseModel):
+    name: str
+    dims: list[str]
+    shape: list[int]
+
+
+class SimulationObservableIndex(BaseModel):
+    simulation_id: int
+    experiment_id: str
+    seed: int
+    store: str  # "zarr" | "parquet"
+    observables: list[ObservableInfoModel]
+
+
+class SimulationObservables(BaseModel):
+    simulation_id: int
+    experiment_id: str
+    seed: int
+    store: str  # "zarr" | "parquet"
+    time: list[float]
+    series: dict[str, list[float]]
