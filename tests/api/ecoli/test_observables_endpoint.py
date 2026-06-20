@@ -1,11 +1,13 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import cast
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from sms_api.api.main import app
 from sms_api.dependencies import get_database_service, set_database_service
+from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import Simulation, SimulationConfig
 from sms_api.simulation.observable_reader import ObservableInfo, StoreIndex
 
@@ -40,9 +42,9 @@ async def _client() -> AsyncGenerator[AsyncClient]:
 
 
 @pytest.mark.asyncio
-async def test_observables_index_ok(monkeypatch) -> None:
+async def test_observables_index_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     saved = get_database_service()
-    set_database_service(_FakeDB(_sim()))
+    set_database_service(cast(DatabaseService, _FakeDB(_sim())))
     monkeypatch.setattr(
         "sms_api.api.routers.sms.list_observables",
         lambda uri: StoreIndex(store="zarr", observables=[ObservableInfo("mass", ["time"], [3])]),
@@ -60,9 +62,9 @@ async def test_observables_index_ok(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_observables_index_404_when_missing(monkeypatch) -> None:
+async def test_observables_index_404_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     saved = get_database_service()
-    set_database_service(_FakeDB(None))
+    set_database_service(cast(DatabaseService, _FakeDB(None)))
     try:
         async with _client() as c:
             r = await c.get(f"{BASE}/simulations/999/observables/index")
@@ -72,9 +74,9 @@ async def test_observables_index_404_when_missing(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_observables_series_ok(monkeypatch) -> None:
+async def test_observables_series_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     saved = get_database_service()
-    set_database_service(_FakeDB(_sim()))
+    set_database_service(cast(DatabaseService, _FakeDB(_sim())))
     monkeypatch.setattr(
         "sms_api.api.routers.sms.read_observables",
         lambda uri, names: ("zarr", [0.0, 1.0, 2.0], {"mass": [1.0, 2.0, 3.0]}),
@@ -92,11 +94,11 @@ async def test_observables_series_ok(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_observables_series_bad_name_400(monkeypatch) -> None:
+async def test_observables_series_bad_name_400(monkeypatch: pytest.MonkeyPatch) -> None:
     saved = get_database_service()
-    set_database_service(_FakeDB(_sim()))
+    set_database_service(cast(DatabaseService, _FakeDB(_sim())))
 
-    def _raise(uri, names):
+    def _raise(uri: str, names: list[str]) -> None:
         raise KeyError("observables not in store: ['nope']")
 
     monkeypatch.setattr("sms_api.api.routers.sms.read_observables", _raise)
@@ -109,12 +111,12 @@ async def test_observables_series_bad_name_400(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_observables_series_multidim_400(monkeypatch) -> None:
+async def test_observables_series_multidim_400(monkeypatch: pytest.MonkeyPatch) -> None:
     """A multi-dimensional observable (ValueError from reader) must return HTTP 400."""
     saved = get_database_service()
-    set_database_service(_FakeDB(_sim()))
+    set_database_service(cast(DatabaseService, _FakeDB(_sim())))
 
-    def _raise(uri, names):
+    def _raise(uri: str, names: list[str]) -> None:
         raise ValueError(
             "observable 'bulk' is not a 1-D timeseries (shape (3, 5)); multi-dimensional observables are not supported"
         )
