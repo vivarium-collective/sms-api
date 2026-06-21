@@ -373,6 +373,9 @@ async def run_simulation_workflow(  # noqa: C901
     simulation_config_filename: str,
     num_generations: int | None = None,
     num_seeds: int | None = None,
+    composite: str | None = None,
+    condition: str | None = None,
+    max_generations: int | None = None,
     description: str | None = None,
     run_parca: bool | None = None,
     observables: list[str] | None = None,
@@ -484,6 +487,16 @@ async def run_simulation_workflow(  # noqa: C901
         config_data["generations"] = num_generations
     if num_seeds is not None:
         config_data["n_init_sims"] = num_seeds
+    # Two-engine comparison knobs (Ray backend): when `composite` is set the Ray
+    # sim job runs scripts/run_comparison_ensemble.py instead of the phase0
+    # ensemble. SimulationConfig allows extra fields, so these flow through to
+    # SimulationServiceK8s/Ray._sim_command via getattr.
+    if composite is not None:
+        config_data["composite"] = composite
+    if condition is not None:
+        config_data["condition"] = condition
+    if max_generations is not None:
+        config_data["max_generations"] = max_generations
     if description is not None:
         config_data["description"] = description
     effective_observables = observables if observables else DEFAULT_OBSERVABLES

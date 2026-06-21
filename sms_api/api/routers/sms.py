@@ -124,6 +124,14 @@ async def run_simulation_workflow(
     ),
     num_generations: int | None = Query(default=None, description="Number of generations to simulate"),
     num_seeds: int | None = Query(default=None, description="Number of initial seeds (lineages)"),
+    composite: str | None = Query(
+        default=None,
+        description="Ray two-engine comparison: 'v2ecoli' (ported) or 'vecoli' "
+        "(imported via build_composite_native). When set, runs the comparison "
+        "ensemble driver instead of the phase0 ensemble.",
+    ),
+    condition: str | None = Query(default=None, description="Growth condition/media for the comparison run (e.g. basal, acetate)."),
+    max_generations: int | None = Query(default=None, description="Generations per lineage for the comparison ensemble."),
     description: str | None = Query(default=None, description="Description of the simulation"),
     run_parca: bool | None = Query(
         default=None,
@@ -183,6 +191,9 @@ async def run_simulation_workflow(
             simulation_config_filename=simulation_config_filename,
             num_generations=num_generations,
             num_seeds=num_seeds,
+            composite=composite,
+            condition=condition,
+            max_generations=max_generations,
             description=description,
             run_parca=run_parca,
             observables=observables,

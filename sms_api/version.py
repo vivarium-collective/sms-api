@@ -30,4 +30,5 @@
 # 0.9.6 — Ray parca: hydrate out/cache via build_cache.py so the sim finds initial_state.json
 # 0.9.7 — simulation log endpoint: RAY branch (surface summary.json) instead of 500-ing on SLURM SSH
 # 0.9.8 — Ray _sim_command: optional two-engine comparison driver (composite/condition/max_generations)
-__version__ = "0.9.8"
+# 0.9.9 — expose composite/condition/max_generations on the run endpoint (comparison submit)
+__version__ = "0.9.9"
