@@ -227,7 +227,28 @@ class SimulationServiceRay(SimulationService):
             f" --fixture {PARCA_SIMDATA_DIR}/parca_state.pkl.gz --cache {PARCA_CACHE_DIR}"
         )
 
-    def _sim_command(self, n_seeds: int, n_steps: int, chunk: int) -> str:
+    def _sim_command(
+        self,
+        n_seeds: int,
+        n_steps: int,
+        chunk: int,
+        *,
+        composite: str | None = None,
+        condition: str | None = None,
+        max_generations: int | None = None,
+    ) -> str:
+        # When ``composite`` is set, run the two-engine comparison driver — both
+        # engines (v2ecoli port + vEcoli imported via build_composite_native)
+        # as bigraph composites on Ray, multi-generation, emitting only the
+        # compact XArray view → zarr/S3. Otherwise the original phase0
+        # single-generation ensemble (back-compatible default).
+        if composite:
+            return (
+                f"cd {V2ECOLI_DIR} && python scripts/run_comparison_ensemble.py"
+                f" --composite {composite} --condition {condition or 'basal'}"
+                f" --n-seeds {n_seeds} --max-generations {int(max_generations or 16)}"
+                f" --chunk {chunk} --out-root {SIM_OUT_DIR} --mode ray"
+            )
         return (
             f"cd {V2ECOLI_DIR} && python scripts/run_phase0_xarray_ensemble.py"
             f" --n-seeds {n_seeds} --n-steps {n_steps} --chunk {chunk} --parallel ray"
@@ -352,6 +373,10 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         n_seeds = ecoli_simulation.num_seeds or getattr(ecoli_simulation.config, "n_init_sims", None) or 1
         n_steps = getattr(ecoli_simulation.config, "ray_n_steps", None) or settings.ray_n_steps
         chunk = getattr(ecoli_simulation.config, "ray_chunk", None) or settings.ray_chunk
+        # Optional two-engine comparison knobs (default phase0 ensemble when unset).
+        composite = getattr(ecoli_simulation.config, "composite", None)
+        condition = getattr(ecoli_simulation.config, "condition", None)
+        max_generations = getattr(ecoli_simulation.config, "max_generations", None)
 
         # 1. ParCa job (1 node) → cache to S3.
         parca_job_id = self._submit_mnp(
@@ -368,7 +393,10 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
             job_name=f"ray-sim-{experiment_id}-{_rand_suffix()}"[:128],
             job_definition=job_def,
             num_nodes=settings.ray_num_nodes,
-            ray_job_cmd=self._sim_command(int(n_seeds), int(n_steps), int(chunk)),
+            ray_job_cmd=self._sim_command(
+                int(n_seeds), int(n_steps), int(chunk),
+                composite=composite, condition=condition, max_generations=max_generations,
+            ),
             out_s3=self._results_s3_uri(experiment_id),
             out_dir=SIM_OUT_DIR,
             stage_s3=cache_s3,
