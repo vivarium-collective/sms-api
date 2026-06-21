@@ -143,6 +143,7 @@ class SimulationServiceRay(SimulationService):
         stage_s3: str | None = None,
         stage_dir: str | None = None,
         depends_on: list[str] | None = None,
+        tags: dict[str, str] | None = None,
     ) -> str:
         """Submit a Ray MNP job via boto3, mirroring sms-cdk scripts/ray_batch_submit.sh.
 
@@ -195,6 +196,11 @@ class SimulationServiceRay(SimulationService):
         }
         if depends_on:
             kwargs["dependsOn"] = [{"jobId": jid, "type": "SEQUENTIAL"} for jid in depends_on]
+        if tags:
+            # Cost-allocation tags: propagate to the underlying ECS tasks so the
+            # payer account's Cost Explorer can attribute compute per run/engine.
+            kwargs["tags"] = tags
+            kwargs["propagateTags"] = True
 
         response = self._batch().submit_job(**kwargs)
         batch_job_id = str(response["jobId"])
@@ -378,6 +384,18 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         condition = getattr(ecoli_simulation.config, "condition", None)
         max_generations = getattr(ecoli_simulation.config, "max_generations", None)
 
+        # Cost-allocation tags (propagate to ECS tasks → payer-account Cost
+        # Explorer attributes spend per run/engine/condition). Values must be
+        # tag-safe strings.
+        base_tags = {
+            "Project": "v2ecoli-comparison",
+            "ExperimentId": str(experiment_id)[:255],
+            "Engine": str(composite or "v2ecoli"),
+            "Condition": str(condition or "basal"),
+            "Commit": str(commit)[:12],
+            "Team": getattr(settings, "cost_team_tag", None) or "covertlab",
+        }
+
         # 1. ParCa job (1 node) → cache to S3.
         parca_job_id = self._submit_mnp(
             job_name=f"ray-parca-{commit}-{_rand_suffix()}",
@@ -386,6 +404,7 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
             ray_job_cmd=self._parca_command(),
             out_s3=cache_s3,
             out_dir=PARCA_CACHE_DIR,
+            tags={**base_tags, "Phase": "parca"},
         )
 
         # 2. Simulation ensemble (N nodes), gated on ParCa, staging the cache.
@@ -402,6 +421,7 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
             stage_s3=cache_s3,
             stage_dir=PARCA_CACHE_DIR,
             depends_on=[parca_job_id],
+            tags={**base_tags, "Phase": "sim"},
         )
         logger.info(
             "Ray simulation %s: parca job %s -> sim job %s (%d nodes)",
