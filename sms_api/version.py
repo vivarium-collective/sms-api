@@ -31,4 +31,5 @@
 # 0.9.7 — simulation log endpoint: RAY branch (surface summary.json) instead of 500-ing on SLURM SSH
 # 0.9.8 — Ray _sim_command: optional two-engine comparison driver (composite/condition/max_generations)
 # 0.9.9 — expose composite/condition/max_generations on the run endpoint (comparison submit)
-__version__ = "0.9.9"
+# 0.9.10 — Batch/Nextflow: clear leaked sim_data_path default when run_parca=True
+__version__ = "0.9.10"
