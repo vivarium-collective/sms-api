@@ -32,4 +32,5 @@
 # 0.9.8 — Ray _sim_command: optional two-engine comparison driver (composite/condition/max_generations)
 # 0.9.9 — expose composite/condition/max_generations on the run endpoint (comparison submit)
 # 0.9.10 — Batch/Nextflow: clear leaked sim_data_path default when run_parca=True
-__version__ = "0.9.10"
+# 0.9.11 — Batch/Nextflow: set sim_data_path=None (not pop) so config.template default is overridden
+__version__ = "0.9.11"

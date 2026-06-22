@@ -525,14 +525,15 @@ async def run_simulation_workflow(  # noqa: C901
             # from S3 to this path before workflow.py runs (vEcoli only accepts local paths)
             config_data["sim_data_path"] = "/tmp/simData.cPickle"  # noqa: S108
         else:
-            # run_parca=True: ParCa runs IN-WORKFLOW and produces sim_data. But the
-            # base vEcoli config (default.json) ships sim_data_path=out/kb/simData.cPickle,
-            # and workflow.py's generate_code() treats a non-None sim_data_path as
+            # run_parca=True: ParCa runs IN-WORKFLOW and produces sim_data. The base
+            # vEcoli config.template ships sim_data_path=out/kb/simData.cPickle, and
+            # workflow.py's generate_code() treats a non-None sim_data_path as
             # PRE-EXISTING and hashes it BEFORE ParCa runs → FileNotFoundError on the
-            # nonexistent default (the Nextflow head pod dies immediately). Clear the
-            # leaked default so generate_code takes the run-parca branch (sim_data_path
-            # is None → ParCa is generated as the first workflow step).
-            config_data.pop("sim_data_path", None)
+            # nonexistent default (the Nextflow head pod dies immediately). POPPING the
+            # key lets the config.template default win, so EXPLICITLY set None — the
+            # documented "null = run parca" signal (see submit_ecoli_simulation_job) —
+            # so the workflow.json override nulls it and generate_code runs ParCa first.
+            config_data["sim_data_path"] = None
     elif backend == ComputeBackend.RAY:
         # Ray backend: the v2ecoli ensemble runs from CLI args on a transient Ray
         # cluster (not Nextflow), so the Nextflow/AWS config blocks are unused.
