@@ -7,6 +7,7 @@ templates, and discover configs/analysis modules without an SSH login node.
 
 import json
 import logging
+from collections.abc import AsyncIterator
 
 import httpx
 from fastapi import HTTPException
@@ -181,3 +182,27 @@ async def fetch_repo_discovery(simulator_version: SimulatorVersion, token: str |
         config_filenames=sorted(config_filenames),
         analysis_modules=analysis_modules,
     )
+
+
+def repo_tarball_url(simulator_version: SimulatorVersion) -> str:
+    """GitHub API URL for the repo@commit gzipped tarball.
+
+    https://api.github.com/repos/<org>/<repo>/tarball/<commit>
+    """
+    return f"{_github_api_url(simulator_version.git_repo_url)}/tarball/{simulator_version.git_commit_hash}"
+
+
+async def stream_repo_tarball(simulator_version: SimulatorVersion, token: str | None) -> AsyncIterator[bytes]:
+    """Stream a build's repo@commit as a gzipped tarball via the GitHub API.
+
+    Streamed (not buffered) so a large repo never lands in memory or on the
+    pod's ephemeral disk (see CLAUDE.md Pitfall 2). The default simulator repo
+    is private, so a token is required for non-public repos.
+    """
+    url = repo_tarball_url(simulator_version)
+    headers = _github_headers(token)
+    async with httpx.AsyncClient(follow_redirects=True, timeout=300.0) as client:  # noqa: SIM117 (client.stream needs `client`)
+        async with client.stream("GET", url, headers=headers) as resp:
+            resp.raise_for_status()
+            async for chunk in resp.aiter_bytes():
+                yield chunk

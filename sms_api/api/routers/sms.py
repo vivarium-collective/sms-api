@@ -31,6 +31,7 @@ from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_router_config
 from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
+from sms_api.simulation.github_repo import stream_repo_tarball
 from sms_api.simulation.models import AnalysisOptions, RepoDiscovery, Simulation, SimulationRun
 
 
@@ -81,6 +82,34 @@ async def discover_repo_contents(
     if simulator is None:
         raise HTTPException(status_code=404, detail=f"Simulator {simulator_id} not found")
     return await sim_service.discover_repo_contents(simulator)
+
+
+@config.router.get(
+    path="/simulations/workspace",
+    operation_id="export-simulator-workspace",
+    tags=["Simulations"],
+    summary="Export a simulator's repo@commit workspace as a gzipped tarball",
+)
+async def export_simulator_workspace(
+    simulator_id: int = Query(..., description="database_id of the simulator to export"),
+) -> StreamingResponse:
+    """Stream the simulator's repo@commit as a gzipped tarball (GitHub tarball).
+
+    The repo@commit is the dashboard-loadable workspace; streamed so a large
+    repo never buffers in memory or on the pod's ephemeral disk.
+    """
+    database_service = get_database_service()
+    if database_service is None:
+        raise HTTPException(status_code=500, detail="Services not initialized")
+    simulator = await database_service.get_simulator(simulator_id)
+    if simulator is None:
+        raise HTTPException(status_code=404, detail=f"Simulator {simulator_id} not found")
+    filename = f"workspace-sim{simulator_id}-{simulator.git_commit_hash}.tar.gz"
+    return StreamingResponse(
+        stream_repo_tarball(simulator, get_settings().github_token),
+        media_type="application/gzip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @config.router.post(
