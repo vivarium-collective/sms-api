@@ -130,8 +130,14 @@ async def run_simulation_workflow(
         "(imported via build_composite_native). When set, runs the comparison "
         "ensemble driver instead of the phase0 ensemble.",
     ),
-    condition: str | None = Query(default=None, description="Growth condition/media for the comparison run (e.g. basal, acetate)."),
-    max_generations: int | None = Query(default=None, description="Generations per lineage for the comparison ensemble."),
+    condition: str | None = Query(
+        default=None,
+        description="Growth condition/media for the comparison run (e.g. basal, acetate).",
+    ),
+    max_generations: int | None = Query(
+        default=None,
+        description="Generations per lineage for the comparison ensemble.",
+    ),
     description: str | None = Query(default=None, description="Description of the simulation"),
     run_parca: bool | None = Query(
         default=None,
