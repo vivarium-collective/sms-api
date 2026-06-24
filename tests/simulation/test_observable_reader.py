@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import numpy as np
@@ -119,3 +120,102 @@ def test_read_observables_parquet(tmp_path: Path) -> None:
     assert kind == "parquet"
     assert time == [0.0, 1.0, 2.0]
     assert series == {"volume": [0.1, 0.2, 0.3]}
+
+
+# ── Column projection (review item b) ──────────────────────────────────────
+
+
+def _write_wide_zarr(tmp_path: Path, npoints: int = 8) -> str:
+    t = np.arange(npoints, dtype=float)
+    ds = xr.Dataset(
+        data_vars={
+            "mass": ("time", t),
+            "volume": ("time", t * 0.1),
+            "growth": ("time", t * 2.0),
+        },
+        coords={"time": t},
+    )
+    store_path = tmp_path / "store.zarr"
+    ds.to_zarr(store_path, mode="w")
+    return f"file://{store_path}"
+
+
+def _write_wide_parquet(tmp_path: Path, npoints: int = 8) -> str:
+    t = np.arange(npoints, dtype=float)
+    df = pd.DataFrame({"time": t, "mass": t, "volume": t * 0.1, "growth": t * 2.0})
+    p = tmp_path / "store.parquet"
+    df.to_parquet(p)
+    return f"file://{p}"
+
+
+def test_read_observables_parquet_projects_only_requested(tmp_path: Path) -> None:
+    """Requesting a subset returns exactly that subset (+ time) — no other columns."""
+    uri = _write_wide_parquet(tmp_path)
+    _, _, series = read_observables(uri, names=["growth"])
+    assert set(series) == {"growth"}
+    assert series["growth"] == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
+
+
+def test_list_observables_parquet_lists_without_full_read(tmp_path: Path) -> None:
+    """Listing reports names + row count (schema/footer only), excluding `time`."""
+    uri = _write_wide_parquet(tmp_path, npoints=8)
+    idx = list_observables(uri)
+    assert {o.name for o in idx.observables} == {"mass", "volume", "growth"}
+    assert all(o.shape == [8] for o in idx.observables)
+
+
+# ── Decimation (review item c) ─────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("writer", [_write_wide_zarr, _write_wide_parquet])
+def test_read_observables_stride(tmp_path: Path, writer) -> None:  # type: ignore[no-untyped-def]
+    uri = writer(tmp_path, 8)
+    _, time, series = read_observables(uri, names=["mass"], stride=2)
+    assert time == [0.0, 2.0, 4.0, 6.0]
+    assert series["mass"] == [0.0, 2.0, 4.0, 6.0]
+
+
+@pytest.mark.parametrize("writer", [_write_wide_zarr, _write_wide_parquet])
+def test_read_observables_max_points(tmp_path: Path, writer) -> None:  # type: ignore[no-untyped-def]
+    uri = writer(tmp_path, 8)
+    _, time, series = read_observables(uri, names=["mass"], max_points=3)
+    # ceil(8/3) = 3 → indices 0,3,6 → 3 points (≤ max_points)
+    assert len(time) <= 3
+    assert time == [0.0, 3.0, 6.0]
+    assert series["mass"] == [0.0, 3.0, 6.0]
+
+
+@pytest.mark.parametrize("writer", [_write_wide_zarr, _write_wide_parquet])
+def test_read_observables_max_points_overrides_smaller_stride(tmp_path: Path, writer) -> None:  # type: ignore[no-untyped-def]
+    uri = writer(tmp_path, 8)
+    # stride=1 but max_points=2 → coarser step wins (ceil(8/2)=4) → indices 0,4
+    _, time, _series = read_observables(uri, names=["mass"], stride=1, max_points=2)
+    assert time == [0.0, 4.0]
+
+
+# ── Remote store (review item: include remote tests if .dev_env vars present) ──
+
+_REMOTE_STORE_URI = os.environ.get("TEST_OBSERVABLE_STORE_URI", "")
+
+
+@pytest.mark.skipif(
+    not _REMOTE_STORE_URI,
+    reason="TEST_OBSERVABLE_STORE_URI not set (provide a real s3:// store via .dev_env) — skipping remote reader test",
+)
+def test_remote_store_round_trip() -> None:
+    """Round-trip against a real emitter store (S3) when one is configured.
+
+    Set ``TEST_OBSERVABLE_STORE_URI`` to a real store URI (e.g.
+    ``s3://<bucket>/<prefix>/<experiment_id>/<store>``) in ``.dev_env``; AWS
+    credentials are loaded by config.py's ``load_dotenv()``. Decoupled from
+    ``_build_store_uri`` so it validates the actual on-S3 layout directly.
+    """
+    idx = list_observables(_REMOTE_STORE_URI)
+    assert idx.store in ("zarr", "parquet")
+    assert idx.observables, "remote store exposed no observables"
+    first = idx.observables[0].name
+    kind, time, series = read_observables(_REMOTE_STORE_URI, names=[first], max_points=50)
+    assert kind == idx.store
+    assert len(time) <= 50
+    assert first in series
+    assert len(series[first]) == len(time)

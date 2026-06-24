@@ -111,7 +111,7 @@ async def discover_repo_contents(
     response_model=Simulation,
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-    summary="[New] Launches a vEcoli simulation workflow with simple parameters",
+    summary="[New] Launch a vEcoli simulation workflow (engine/composite, generations, seeds, condition)",
 )
 async def run_simulation_workflow(
     simulator_id: int = Query(
@@ -455,6 +455,10 @@ async def get_simulation_observables(
     id: int = FastAPIPath(description="Database ID of the simulation"),
     names: str = "",
     seed: int = Query(0, ge=0),
+    stride: int = Query(1, ge=1, description="Return every Nth point (decimation). 1 = full resolution."),
+    max_points: int | None = Query(
+        None, ge=1, description="Cap the number of points returned; overrides `stride` if it implies a coarser step."
+    ),
 ) -> SimulationObservables:
     db = get_database_service()
     if db is None:
@@ -465,7 +469,9 @@ async def get_simulation_observables(
     requested = [n.strip() for n in names.split(",") if n.strip()]
     store_uri = _build_store_uri(sim.experiment_id, seed)
     try:
-        store_kind, time, series = await asyncio.to_thread(read_observables, store_uri, requested)
+        store_kind, time, series = await asyncio.to_thread(
+            read_observables, store_uri, requested, stride=stride, max_points=max_points
+        )
     except FileNotFoundError:
         raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})") from None
     except KeyError as e:

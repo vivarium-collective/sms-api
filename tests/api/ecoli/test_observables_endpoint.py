@@ -79,7 +79,7 @@ async def test_observables_series_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     set_database_service(cast(DatabaseService, _FakeDB(_sim())))
     monkeypatch.setattr(
         "sms_api.api.routers.sms.read_observables",
-        lambda uri, names: ("zarr", [0.0, 1.0, 2.0], {"mass": [1.0, 2.0, 3.0]}),
+        lambda uri, names, *, stride=1, max_points=None: ("zarr", [0.0, 1.0, 2.0], {"mass": [1.0, 2.0, 3.0]}),
     )
     try:
         async with _client() as c:
@@ -94,11 +94,35 @@ async def test_observables_series_ok(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_observables_series_forwards_decimation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`stride` / `max_points` query params are forwarded to the reader."""
+    saved = get_database_service()
+    set_database_service(cast(DatabaseService, _FakeDB(_sim())))
+    captured: dict[str, object] = {}
+
+    def _capture(uri: str, names: list[str], *, stride: int = 1, max_points: int | None = None) -> tuple:  # type: ignore[type-arg]
+        captured["stride"] = stride
+        captured["max_points"] = max_points
+        return "zarr", [0.0, 2.0], {"mass": [1.0, 3.0]}
+
+    monkeypatch.setattr("sms_api.api.routers.sms.read_observables", _capture)
+    try:
+        async with _client() as c:
+            r = await c.get(
+                f"{BASE}/simulations/49/observables", params={"names": "mass", "stride": 2, "max_points": 100}
+            )
+        assert r.status_code == 200
+        assert captured == {"stride": 2, "max_points": 100}
+    finally:
+        set_database_service(saved)
+
+
+@pytest.mark.asyncio
 async def test_observables_series_bad_name_400(monkeypatch: pytest.MonkeyPatch) -> None:
     saved = get_database_service()
     set_database_service(cast(DatabaseService, _FakeDB(_sim())))
 
-    def _raise(uri: str, names: list[str]) -> None:
+    def _raise(uri: str, names: list[str], *, stride: int = 1, max_points: int | None = None) -> None:
         raise KeyError("observables not in store: ['nope']")
 
     monkeypatch.setattr("sms_api.api.routers.sms.read_observables", _raise)
@@ -116,7 +140,7 @@ async def test_observables_series_multidim_400(monkeypatch: pytest.MonkeyPatch) 
     saved = get_database_service()
     set_database_service(cast(DatabaseService, _FakeDB(_sim())))
 
-    def _raise(uri: str, names: list[str]) -> None:
+    def _raise(uri: str, names: list[str], *, stride: int = 1, max_points: int | None = None) -> None:
         raise ValueError(
             "observable 'bulk' is not a 1-D timeseries (shape (3, 5)); multi-dimensional observables are not supported"
         )
