@@ -193,6 +193,61 @@ def test_read_observables_max_points_overrides_smaller_stride(tmp_path: Path, wr
     assert time == [0.0, 4.0]
 
 
+# ── Hive-partitioned datatree (real Ray XArrayEmitter layout) ──────────────
+
+
+def _write_partitioned_zarr(tmp_path: Path) -> str:
+    """Write a tiny hive-partitioned datatree matching the real S3 layout:
+    leaf observables carry generation={G}; the parent carries time_gen={G}."""
+    from xarray import DataTree
+
+    parent = xr.Dataset({"time_gen=1": ("t1", [0.0, 1.0, 2.0]), "time_gen=2": ("t2", [3.0, 4.0])})
+    cell_mass = xr.Dataset({"generation=1": ("t1", [10.0, 11.0, 12.0]), "generation=2": ("t2", [13.0, 14.0])})
+    growth = xr.Dataset({"generation=1": ("t1", [0.1, 0.2, 0.3]), "generation=2": ("t2", [0.4, 0.5])})
+    base = "experiment_id=cmp/variant=0/lineage_seed=0"
+    dt = DataTree.from_dict({base: parent, f"{base}/cell_mass": cell_mass, f"{base}/growth": growth})
+    store = tmp_path / "v2ecoli_seed00.zarr"
+    dt.to_zarr(store, mode="w")
+    return f"file://{store}"
+
+
+def test_list_observables_partitioned(tmp_path: Path) -> None:
+    uri = _write_partitioned_zarr(tmp_path)
+    idx = list_observables(uri)
+    assert idx.store == "zarr"
+    assert {o.name for o in idx.observables} == {"cell_mass", "growth"}
+    # concatenated length across both generations (3 + 2)
+    assert all(o.shape == [5] for o in idx.observables)
+
+
+def test_read_observables_partitioned_concatenates_generations(tmp_path: Path) -> None:
+    uri = _write_partitioned_zarr(tmp_path)
+    kind, time, series = read_observables(uri, names=["cell_mass"])
+    assert kind == "zarr"
+    assert time == [0.0, 1.0, 2.0, 3.0, 4.0]
+    assert series["cell_mass"] == [10.0, 11.0, 12.0, 13.0, 14.0]
+
+
+def test_read_observables_partitioned_all(tmp_path: Path) -> None:
+    uri = _write_partitioned_zarr(tmp_path)
+    _, _, series = read_observables(uri, names=[])
+    assert set(series) == {"cell_mass", "growth"}
+    assert series["growth"] == [0.1, 0.2, 0.3, 0.4, 0.5]
+
+
+def test_read_observables_partitioned_decimation(tmp_path: Path) -> None:
+    uri = _write_partitioned_zarr(tmp_path)
+    _, time, series = read_observables(uri, names=["cell_mass"], stride=2)
+    assert time == [0.0, 2.0, 4.0]
+    assert series["cell_mass"] == [10.0, 12.0, 14.0]
+
+
+def test_read_observables_partitioned_bad_name(tmp_path: Path) -> None:
+    uri = _write_partitioned_zarr(tmp_path)
+    with pytest.raises(KeyError):
+        read_observables(uri, names=["nope"])
+
+
 # ── Remote store (review item: include remote tests if .dev_env vars present) ──
 
 _REMOTE_STORE_URI = os.environ.get("TEST_OBSERVABLE_STORE_URI", "")

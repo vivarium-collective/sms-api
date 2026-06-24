@@ -245,14 +245,18 @@ class SimulationServiceRay(SimulationService):
     ) -> str:
         # When ``composite`` is set, run the two-engine comparison driver — both
         # engines (v2ecoli port + vEcoli imported via build_composite_native)
-        # as bigraph composites on Ray, multi-generation, emitting only the
-        # compact XArray view → zarr/S3. Otherwise the original phase0
-        # single-generation ensemble (back-compatible default).
+        # as bigraph composites on Ray, emitting only the compact XArray view →
+        # zarr/S3. Otherwise the original phase0 single-generation ensemble.
+        #
+        # Engine selection is decoupled from generation count: ``max_generations``
+        # defaults to 1 (the phase0 single-gen baseline), so picking an engine
+        # never implies a multi-generation comparison-ensemble run by itself —
+        # callers opt into more generations explicitly.
         if composite:
             return (
                 f"cd {V2ECOLI_DIR} && python scripts/run_comparison_ensemble.py"
                 f" --composite {composite} --condition {condition or 'basal'}"
-                f" --n-seeds {n_seeds} --max-generations {int(max_generations or 16)}"
+                f" --n-seeds {n_seeds} --max-generations {int(max_generations or 1)}"
                 f" --chunk {chunk} --out-root {SIM_OUT_DIR} --mode ray"
             )
         return (

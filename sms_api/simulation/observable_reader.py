@@ -5,24 +5,35 @@ The reader is store-agnostic over fsspec URIs: ``file://`` paths work in tests,
 It has one job — turn a store URI into observable metadata and timeseries — so it
 can be unit-tested without S3 or a database.
 
+Two zarr layouts are supported:
+
+* **Flat** — a single ``xarray.Dataset`` whose ``data_vars`` are the observables
+  (used by simple/legacy emitters and the unit-test fixtures).
+* **Hive-partitioned XArrayEmitter datatree** — what the Ray comparison engine
+  actually writes to S3: ``…/{experiment_id}/v2ecoli_seed{NN}.zarr`` with the
+  interior ``experiment_id=…/variant=…/lineage_seed=…/{observable}/generation={G}``.
+  Each observable is a leaf node whose ``generation={G}`` data-vars are the
+  per-generation segments; the matching ``time_gen={G}`` arrays live on the
+  parent node. Observables are reconstructed by concatenating the segments in
+  generation order (mirrors the dashboard's ``study_charts`` reader).
+
 Read performance (per review):
 - The Parquet path uses **Polars** with **column projection** — listing reads
   only the schema + the parquet footer row count (no column data), and fetching
-  reads only the requested columns + ``time``, so only the requested data leaves
-  S3.
-- ``read_observables`` supports **decimation** (``stride`` / ``max_points``)
-  applied *before* materialization — a lazy row-slice on the Polars side and an
-  ``isel`` on the zarr side — so a long multi-generation run never serializes
-  millions of points it doesn't need.
+  reads only the requested columns + ``time``.
+- ``read_observables`` supports **decimation** (``stride`` / ``max_points``).
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import fsspec
+
+# The real XArrayEmitter stores aren't consolidated; opening with
+# ``consolidated=False`` silences xarray's fallback warning and skips a probe.
 
 
 @dataclass
@@ -58,6 +69,127 @@ def _effective_stride(n: int, stride: int, max_points: int | None) -> int:
     return step
 
 
+def _sanitize(value: float) -> float | None:
+    """Convert NaN/Inf to None for JSON-safe output."""
+    if math.isfinite(value):
+        return value
+    return None
+
+
+# ── Hive-partitioned XArrayEmitter datatree ────────────────────────────────
+
+
+def _gen_order(parent: Any) -> list[int]:
+    """Sorted generation indices ``G`` for which the parent has a ``time_gen={G}``."""
+    gens: list[int] = []
+    for v in parent.data_vars or {}:
+        s = str(v)
+        if s.startswith("time_gen="):
+            try:
+                gens.append(int(s.split("=", 1)[1]))
+            except ValueError:
+                continue
+    return sorted(gens)
+
+
+def _partition_leaves(dt: Any) -> tuple[dict[str, Any], Any] | None:
+    """Return ``({observable_name: leaf_node}, time_parent)`` for a partitioned
+    datatree, or ``None`` if the store isn't hive-partitioned by generation.
+
+    A leaf is an observable iff it has ``generation={G}`` data-vars and its parent
+    carries the matching ``time_gen={G}`` arrays. All observable leaves under one
+    lineage share that parent (and thus a single time axis); the first such parent
+    found is used.
+    """
+    leaves: dict[str, Any] = {}
+    parent: Any = None
+    for node in dt.subtree:
+        if node.parent is None:
+            continue
+        has_gen = any(str(v).startswith("generation=") for v in (node.data_vars or {}))
+        if not has_gen:
+            continue
+        if not _gen_order(node.parent):
+            continue
+        if parent is None:
+            parent = node.parent
+        # Keep only leaves sharing the first parent (one seed → one lineage).
+        if node.parent is parent:
+            leaves[str(node.name)] = node
+    if not leaves or parent is None:
+        return None
+    return leaves, parent
+
+
+def _read_partitioned_zarr(
+    store_uri: str, names: list[str], stride: int, max_points: int | None
+) -> tuple[list[float], dict[str, list[float | None]]] | None:
+    """Read observables from a hive-partitioned datatree, or ``None`` if the store
+    isn't partitioned (caller falls back to the flat path)."""
+    import numpy as np
+    import xarray as xr
+
+    try:
+        dt = xr.open_datatree(store_uri, engine="zarr", consolidated=False)
+    except Exception:
+        return None
+    part = _partition_leaves(dt)
+    if part is None:
+        return None
+    leaves, parent = part
+
+    wanted = names or sorted(leaves)
+    missing = [n for n in wanted if n not in leaves]
+    if missing:
+        raise KeyError(f"observables not in store: {missing}")
+
+    gens = _gen_order(parent)
+    raw_time: list[float] = []
+    for g in gens:
+        raw_time.extend(float(t) for t in np.asarray(parent[f"time_gen={g}"].values).ravel())
+    step = _effective_stride(len(raw_time), stride, max_points)
+    time = raw_time[::step]
+
+    series: dict[str, list[float | None]] = {}
+    for nm in wanted:
+        node = leaves[nm]
+        vals: list[float | None] = []
+        for g in gens:
+            var_name = f"generation={g}"
+            if var_name not in (node.data_vars or {}):
+                continue
+            arr = np.asarray(node[var_name].values)
+            if arr.ndim != 1:
+                raise ValueError(
+                    f"observable {nm!r} is not a 1-D timeseries (shape {tuple(arr.shape)}); "
+                    "multi-dimensional observables are not supported"
+                )
+            vals.extend(_sanitize(float(v)) for v in arr)
+        series[nm] = vals[::step]
+    return time, series
+
+
+def _list_partitioned_zarr(store_uri: str) -> list[ObservableInfo] | None:
+    """List observables in a hive-partitioned datatree (concatenated length per
+    observable), or ``None`` if the store isn't partitioned."""
+    import xarray as xr
+
+    try:
+        dt = xr.open_datatree(store_uri, engine="zarr", consolidated=False)
+    except Exception:
+        return None
+    part = _partition_leaves(dt)
+    if part is None:
+        return None
+    leaves, parent = part
+    gens = _gen_order(parent)
+    total = sum(int(parent[f"time_gen={g}"].shape[0]) for g in gens)
+    return [ObservableInfo(name=name, dims=["time"], shape=[total]) for name in sorted(leaves)]
+
+
+# ── Public API ─────────────────────────────────────────────────────────────
+
+
 def list_observables(store_uri: str) -> StoreIndex:
     """Open the emitter store and return its observable variables (name, dims, shape).
 
@@ -66,6 +198,10 @@ def list_observables(store_uri: str) -> StoreIndex:
     """
     kind = detect_store_kind(store_uri)
     if kind == "zarr":
+        partitioned = _list_partitioned_zarr(store_uri)
+        if partitioned is not None:
+            return StoreIndex(store="zarr", observables=partitioned)
+
         import xarray as xr
 
         ds = xr.open_zarr(store_uri)
@@ -87,13 +223,6 @@ def list_observables(store_uri: str) -> StoreIndex:
     return StoreIndex(store="parquet", observables=obs)
 
 
-def _sanitize(value: float) -> float | None:
-    """Convert NaN/Inf to None for JSON-safe output."""
-    if math.isfinite(value):
-        return value
-    return None
-
-
 def read_observables(
     store_uri: str,
     names: list[str],
@@ -108,8 +237,8 @@ def read_observables(
 
     ``stride`` returns every Nth point; ``max_points`` caps the total points (and
     overrides ``stride`` when it implies a coarser step). Decimation is applied
-    *before* materialization — a lazy row-slice (Parquet) / ``isel`` (zarr) — so
-    only the kept points are read and serialized.
+    *before* materialization where possible — a lazy row-slice (Parquet) / ``isel``
+    (flat zarr) — so only the kept points are read and serialized.
 
     Raises ``KeyError`` if a requested observable is absent, and ``ValueError`` if
     an observable's values are not a 1-D timeseries. Non-finite float values
@@ -117,6 +246,10 @@ def read_observables(
     """
     kind = detect_store_kind(store_uri)
     if kind == "zarr":
+        partitioned = _read_partitioned_zarr(store_uri, names, stride, max_points)
+        if partitioned is not None:
+            return "zarr", partitioned[0], partitioned[1]
+
         import numpy as np
         import xarray as xr
 
