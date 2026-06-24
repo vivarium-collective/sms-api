@@ -29,4 +29,6 @@
 # 0.9.5 — Ray MNP submit: single "0:" node override to match the CDK job def; mask PAT in build logs
 # 0.9.6 — Ray parca: hydrate out/cache via build_cache.py so the sim finds initial_state.json
 # 0.9.7 — simulation log endpoint: RAY branch (surface summary.json) instead of 500-ing on SLURM SSH
-__version__ = "0.9.7"
+# 0.9.12 — export-simulator-workspace endpoint (stream a build's repo@commit tarball);
+#          reconciles version.py with the ad-hoc 0.9.8–0.9.11 deploy tags
+__version__ = "0.9.12"
