@@ -26,6 +26,7 @@ Read performance (per review):
 
 from __future__ import annotations
 
+import asyncio
 import math
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -298,3 +299,28 @@ def read_observables(
     time = [float(t) for t in df["time"].to_list()] if has_time else [float(i) for i in range(0, nrows, step)]
     series_p: dict[str, list[float | None]] = {n: [_sanitize(float(v)) for v in df[n].to_list()] for n in wanted}
     return kind, time, series_p
+
+
+# ── Async API (for FastAPI routes) ─────────────────────────────────────────
+#
+# ``list_observables`` / ``read_observables`` wrap synchronous libraries
+# (fsspec + xarray/zarr + polars) that have no true-async read path, so they
+# must run off the event loop. These thin wrappers offload to a worker thread
+# (``asyncio.to_thread``) and expose an awaitable surface, so async callers
+# write ``await read_observables_async(...)`` instead of threading by hand.
+
+
+async def list_observables_async(store_uri: str) -> StoreIndex:
+    """Async wrapper over :func:`list_observables` (offloaded to a thread)."""
+    return await asyncio.to_thread(list_observables, store_uri)
+
+
+async def read_observables_async(
+    store_uri: str,
+    names: list[str],
+    *,
+    stride: int = 1,
+    max_points: int | None = None,
+) -> tuple[Literal["zarr", "parquet"], list[float], dict[str, list[float | None]]]:
+    """Async wrapper over :func:`read_observables` (offloaded to a thread)."""
+    return await asyncio.to_thread(read_observables, store_uri, names, stride=stride, max_points=max_points)

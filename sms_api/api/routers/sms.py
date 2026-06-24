@@ -7,7 +7,6 @@
 #   IE: where do we provide this special config: in vEcoli or API?
 # TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
 # TODO: labkey preprocessing
-import asyncio
 import json
 import logging
 from collections.abc import Sequence
@@ -42,7 +41,7 @@ from sms_api.simulation.models import (
     SimulationObservables,
     SimulationRun,
 )
-from sms_api.simulation.observable_reader import list_observables, read_observables
+from sms_api.simulation.observable_reader import list_observables_async, read_observables_async
 
 
 def _validate_simulation_config_filename(simulation_config_filename: str) -> None:
@@ -475,7 +474,7 @@ async def get_simulation_observables_index(
         raise HTTPException(404, f"Simulation {id} not found")
     store_uri = _build_store_uri(sim.experiment_id, seed)
     try:
-        idx = await asyncio.to_thread(list_observables, store_uri)
+        idx = await list_observables_async(store_uri)
     except FileNotFoundError:
         raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})") from None
     return SimulationObservableIndex(
@@ -512,8 +511,8 @@ async def get_simulation_observables(
     requested = [n.strip() for n in names.split(",") if n.strip()]
     store_uri = _build_store_uri(sim.experiment_id, seed)
     try:
-        store_kind, time, series = await asyncio.to_thread(
-            read_observables, store_uri, requested, stride=stride, max_points=max_points
+        store_kind, time, series = await read_observables_async(
+            store_uri, requested, stride=stride, max_points=max_points
         )
     except FileNotFoundError:
         raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})") from None
