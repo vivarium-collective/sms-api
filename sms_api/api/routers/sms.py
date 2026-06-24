@@ -114,6 +114,13 @@ async def discover_repo_contents(
     operation_id="export-simulator-workspace",
     tags=["Simulations"],
     summary="Export a simulator's repo@commit workspace as a gzipped tarball",
+    response_model=None,
+    responses={
+        200: {
+            "content": {"application/gzip": {}},
+            "description": "A gzipped tarball of the simulator's repo at its commit",
+        }
+    },
 )
 async def export_simulator_workspace(
     simulator_id: int = Query(..., description="database_id of the simulator to export"),

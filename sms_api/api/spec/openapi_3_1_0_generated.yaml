@@ -57,10 +57,11 @@ paths:
         description: database_id of the simulator to export
       responses:
         '200':
-          description: Successful Response
+          description: A gzipped tarball of the simulator's repo at its commit
           content:
             application/json:
               schema: {}
+            application/gzip: {}
         '422':
           description: Validation Error
           content:
@@ -877,7 +878,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-06-24T13:42:31.852643'
+                  created_at: '2026-06-24T17:14:59.554901'
                 parca_config:
                   outdir: .
       responses:
@@ -2460,7 +2461,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-06-24 13:42:31.227967'
+          default: '2026-06-24 17:14:58.942468'
         job_id:
           anyOf:
           - type: string
