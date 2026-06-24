@@ -373,6 +373,9 @@ async def run_simulation_workflow(  # noqa: C901
     simulation_config_filename: str,
     num_generations: int | None = None,
     num_seeds: int | None = None,
+    composite: str | None = None,
+    condition: str | None = None,
+    max_generations: int | None = None,
     description: str | None = None,
     run_parca: bool | None = None,
     observables: list[str] | None = None,
@@ -484,6 +487,16 @@ async def run_simulation_workflow(  # noqa: C901
         config_data["generations"] = num_generations
     if num_seeds is not None:
         config_data["n_init_sims"] = num_seeds
+    # Two-engine comparison knobs (Ray backend): when `composite` is set the Ray
+    # sim job runs scripts/run_comparison_ensemble.py instead of the phase0
+    # ensemble. SimulationConfig allows extra fields, so these flow through to
+    # SimulationServiceK8s/Ray._sim_command via getattr.
+    if composite is not None:
+        config_data["composite"] = composite
+    if condition is not None:
+        config_data["condition"] = condition
+    if max_generations is not None:
+        config_data["max_generations"] = max_generations
     if description is not None:
         config_data["description"] = description
     effective_observables = observables if observables else DEFAULT_OBSERVABLES
@@ -511,6 +524,16 @@ async def run_simulation_workflow(  # noqa: C901
             # Set local path for cached simData — the K8s job command will download
             # from S3 to this path before workflow.py runs (vEcoli only accepts local paths)
             config_data["sim_data_path"] = "/tmp/simData.cPickle"  # noqa: S108
+        else:
+            # run_parca=True: ParCa runs IN-WORKFLOW and produces sim_data. The base
+            # vEcoli config.template ships sim_data_path=out/kb/simData.cPickle, and
+            # workflow.py's generate_code() treats a non-None sim_data_path as
+            # PRE-EXISTING and hashes it BEFORE ParCa runs → FileNotFoundError on the
+            # nonexistent default (the Nextflow head pod dies immediately). POPPING the
+            # key lets the config.template default win, so EXPLICITLY set None — the
+            # documented "null = run parca" signal (see submit_ecoli_simulation_job) —
+            # so the workflow.json override nulls it and generate_code runs ParCa first.
+            config_data["sim_data_path"] = None
     elif backend == ComputeBackend.RAY:
         # Ray backend: the v2ecoli ensemble runs from CLI args on a transient Ray
         # cluster (not Nextflow), so the Nextflow/AWS config blocks are unused.

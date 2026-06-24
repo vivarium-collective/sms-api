@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.9.7
+  version: 0.9.12
 paths:
   /api/v1/simulations/discovery:
     get:
@@ -71,7 +71,8 @@ paths:
     post:
       tags:
       - Simulations
-      summary: '[New] Launches a vEcoli simulation workflow with simple parameters'
+      summary: '[New] Launch a vEcoli simulation workflow (engine/composite, generations,
+        seeds, condition)'
       description: 'Run a vEcoli simulation workflow with simplified parameters.
 
 
@@ -130,6 +131,41 @@ paths:
           description: Number of initial seeds (lineages)
           title: Num Seeds
         description: Number of initial seeds (lineages)
+      - name: composite
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 'Ray two-engine comparison: ''v2ecoli'' (ported) or ''vecoli''
+            (imported via build_composite_native). When set, runs the comparison ensemble
+            driver instead of the phase0 ensemble.'
+          title: Composite
+        description: 'Ray two-engine comparison: ''v2ecoli'' (ported) or ''vecoli''
+          (imported via build_composite_native). When set, runs the comparison ensemble
+          driver instead of the phase0 ensemble.'
+      - name: condition
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Growth condition/media for the comparison run (e.g. basal,
+            acetate).
+          title: Condition
+        description: Growth condition/media for the comparison run (e.g. basal, acetate).
+      - name: max_generations
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: Generations per lineage for the comparison ensemble.
+          title: Max Generations
+        description: Generations per lineage for the comparison ensemble.
       - name: description
         in: query
         required: false
@@ -466,6 +502,108 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/simulations/{id}/observables/index:
+    get:
+      tags:
+      - Simulations
+      summary: List observables available in a simulation's emitter store (S3)
+      operationId: get-simulation-observables-index
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the simulation
+          title: Id
+        description: Database ID of the simulation
+      - name: seed
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Seed
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationObservableIndex'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/simulations/{id}/observables:
+    get:
+      tags:
+      - Simulations
+      summary: Read observable timeseries from a simulation's emitter store (S3)
+      operationId: get-simulation-observables
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the simulation
+          title: Id
+        description: Database ID of the simulation
+      - name: names
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Names
+      - name: seed
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Seed
+      - name: stride
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          description: Return every Nth point (decimation). 1 = full resolution.
+          default: 1
+          title: Stride
+        description: Return every Nth point (decimation). 1 = full resolution.
+      - name: max_points
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          description: Cap the number of points returned; overrides `stride` if it
+            implies a coarser step.
+          title: Max Points
+        description: Cap the number of points returned; overrides `stride` if it implies
+          a coarser step.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationObservables'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/analyses:
     post:
       tags:
@@ -739,7 +877,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-06-23T14:52:30.064578'
+                  created_at: '2026-06-24T13:42:31.852643'
                 parca_config:
                   outdir: .
       responses:
@@ -2061,6 +2199,28 @@ components:
       - parca
       - build_image
       title: JobType
+    ObservableInfoModel:
+      properties:
+        name:
+          type: string
+          title: Name
+        dims:
+          items:
+            type: string
+          type: array
+          title: Dims
+        shape:
+          items:
+            type: integer
+          type: array
+          title: Shape
+      additionalProperties: true
+      type: object
+      required:
+      - name
+      - dims
+      - shape
+      title: ObservableInfoModel
     OutputFile:
       properties:
         name:
@@ -2300,7 +2460,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-06-23 14:52:29.906361'
+          default: '2026-06-24 13:42:31.227967'
         job_id:
           anyOf:
           - type: string
@@ -2360,6 +2520,78 @@ components:
       required:
       - experiment_id
       title: SimulationConfig
+    SimulationObservableIndex:
+      properties:
+        simulation_id:
+          type: integer
+          title: Simulation Id
+        experiment_id:
+          type: string
+          title: Experiment Id
+        seed:
+          type: integer
+          title: Seed
+        store:
+          type: string
+          enum:
+          - zarr
+          - parquet
+          title: Store
+        observables:
+          items:
+            $ref: '#/components/schemas/ObservableInfoModel'
+          type: array
+          title: Observables
+      additionalProperties: true
+      type: object
+      required:
+      - simulation_id
+      - experiment_id
+      - seed
+      - store
+      - observables
+      title: SimulationObservableIndex
+    SimulationObservables:
+      properties:
+        simulation_id:
+          type: integer
+          title: Simulation Id
+        experiment_id:
+          type: string
+          title: Experiment Id
+        seed:
+          type: integer
+          title: Seed
+        store:
+          type: string
+          enum:
+          - zarr
+          - parquet
+          title: Store
+        time:
+          items:
+            type: number
+          type: array
+          title: Time
+        series:
+          additionalProperties:
+            items:
+              anyOf:
+              - type: number
+              - type: 'null'
+            type: array
+          type: object
+          title: Series
+      additionalProperties: true
+      type: object
+      required:
+      - simulation_id
+      - experiment_id
+      - seed
+      - store
+      - time
+      - series
+      title: SimulationObservables
     SimulationRun:
       properties:
         id:

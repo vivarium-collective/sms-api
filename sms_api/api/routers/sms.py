@@ -7,6 +7,7 @@
 #   IE: where do we provide this special config: in vEcoli or API?
 # TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
 # TODO: labkey preprocessing
+import asyncio
 import json
 import logging
 from collections.abc import Sequence
@@ -32,7 +33,16 @@ from sms_api.common.gateway.utils import get_router_config
 from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.github_repo import stream_repo_tarball
-from sms_api.simulation.models import AnalysisOptions, RepoDiscovery, Simulation, SimulationRun
+from sms_api.simulation.models import (
+    AnalysisOptions,
+    ObservableInfoModel,
+    RepoDiscovery,
+    Simulation,
+    SimulationObservableIndex,
+    SimulationObservables,
+    SimulationRun,
+)
+from sms_api.simulation.observable_reader import list_observables, read_observables
 
 
 def _validate_simulation_config_filename(simulation_config_filename: str) -> None:
@@ -58,6 +68,21 @@ config = get_router_config(prefix="api", version_major=False)
 
 def get_experiment_id(simulator_id: int, config_filename: str) -> str:
     return f"sim{simulator_id}-{config_filename.replace('.json', '')}"
+
+
+def _build_store_uri(experiment_id: str, seed: int) -> str:
+    """Build the S3 URI of a Ray run's per-seed XArray emitter store.
+
+    Layout written by the Ray comparison engine (run_comparison_ensemble.py):
+    ``s3://{bucket}/{output_prefix}/{experiment_id}/v2ecoli_seed{NN}.zarr`` — a
+    hive-partitioned datatree (``experiment_id=…/variant=…/lineage_seed=…/
+    {observable}/generation={G}``) that ``observable_reader`` walks. Verified
+    against smsvpctest build #61 (e.g. ``sim61-v2c-with_aa-7292``).
+    """
+    from sms_api.config import get_settings
+
+    settings = get_settings()
+    return f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}/v2ecoli_seed{seed:02d}.zarr"
 
 
 AnalysisOptions()
@@ -118,7 +143,7 @@ async def export_simulator_workspace(
     response_model=Simulation,
     tags=["Simulations"],
     dependencies=[Depends(get_simulation_service), Depends(get_database_service)],
-    summary="[New] Launches a vEcoli simulation workflow with simple parameters",
+    summary="[New] Launch a vEcoli simulation workflow (engine/composite, generations, seeds, condition)",
 )
 async def run_simulation_workflow(
     simulator_id: int = Query(
@@ -131,6 +156,20 @@ async def run_simulation_workflow(
     ),
     num_generations: int | None = Query(default=None, description="Number of generations to simulate"),
     num_seeds: int | None = Query(default=None, description="Number of initial seeds (lineages)"),
+    composite: str | None = Query(
+        default=None,
+        description="Ray two-engine comparison: 'v2ecoli' (ported) or 'vecoli' "
+        "(imported via build_composite_native). When set, runs the comparison "
+        "ensemble driver instead of the phase0 ensemble.",
+    ),
+    condition: str | None = Query(
+        default=None,
+        description="Growth condition/media for the comparison run (e.g. basal, acetate).",
+    ),
+    max_generations: int | None = Query(
+        default=None,
+        description="Generations per lineage for the comparison ensemble.",
+    ),
     description: str | None = Query(default=None, description="Description of the simulation"),
     run_parca: bool | None = Query(
         default=None,
@@ -190,6 +229,9 @@ async def run_simulation_workflow(
             simulation_config_filename=simulation_config_filename,
             num_generations=num_generations,
             num_seeds=num_seeds,
+            composite=composite,
+            condition=condition,
+            max_generations=max_generations,
             description=description,
             run_parca=run_parca,
             observables=observables,
@@ -401,6 +443,81 @@ async def get_simulation_data(
     except Exception as e:
         logger.exception("Error retrieving simulation data")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/simulations/{id}/observables/index",
+    response_model=SimulationObservableIndex,
+    operation_id="get-simulation-observables-index",
+    tags=["Simulations"],
+    summary="List observables available in a simulation's emitter store (S3)",
+)
+async def get_simulation_observables_index(
+    id: int = FastAPIPath(description="Database ID of the simulation"),
+    seed: int = Query(0, ge=0),
+) -> SimulationObservableIndex:
+    db = get_database_service()
+    if db is None:
+        raise HTTPException(503, "database service unavailable")
+    sim = await db.get_simulation(simulation_id=id)
+    if sim is None:
+        raise HTTPException(404, f"Simulation {id} not found")
+    store_uri = _build_store_uri(sim.experiment_id, seed)
+    try:
+        idx = await asyncio.to_thread(list_observables, store_uri)
+    except FileNotFoundError:
+        raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})") from None
+    return SimulationObservableIndex(
+        simulation_id=id,
+        experiment_id=sim.experiment_id,
+        seed=seed,
+        store=idx.store,
+        observables=[ObservableInfoModel(name=o.name, dims=o.dims, shape=o.shape) for o in idx.observables],
+    )
+
+
+@config.router.get(
+    path="/simulations/{id}/observables",
+    response_model=SimulationObservables,
+    operation_id="get-simulation-observables",
+    tags=["Simulations"],
+    summary="Read observable timeseries from a simulation's emitter store (S3)",
+)
+async def get_simulation_observables(
+    id: int = FastAPIPath(description="Database ID of the simulation"),
+    names: str = "",
+    seed: int = Query(0, ge=0),
+    stride: int = Query(1, ge=1, description="Return every Nth point (decimation). 1 = full resolution."),
+    max_points: int | None = Query(
+        None, ge=1, description="Cap the number of points returned; overrides `stride` if it implies a coarser step."
+    ),
+) -> SimulationObservables:
+    db = get_database_service()
+    if db is None:
+        raise HTTPException(503, "database service unavailable")
+    sim = await db.get_simulation(simulation_id=id)
+    if sim is None:
+        raise HTTPException(404, f"Simulation {id} not found")
+    requested = [n.strip() for n in names.split(",") if n.strip()]
+    store_uri = _build_store_uri(sim.experiment_id, seed)
+    try:
+        store_kind, time, series = await asyncio.to_thread(
+            read_observables, store_uri, requested, stride=stride, max_points=max_points
+        )
+    except FileNotFoundError:
+        raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})") from None
+    except KeyError as e:
+        raise HTTPException(400, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    return SimulationObservables(
+        simulation_id=id,
+        experiment_id=sim.experiment_id,
+        seed=seed,
+        store=store_kind,
+        time=time,
+        series=series,
+    )
 
 
 @config.router.post(
