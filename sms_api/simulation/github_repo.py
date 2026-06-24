@@ -192,17 +192,54 @@ def repo_tarball_url(simulator_version: SimulatorVersion) -> str:
     return f"{_github_api_url(simulator_version.git_repo_url)}/tarball/{simulator_version.git_commit_hash}"
 
 
-async def stream_repo_tarball(simulator_version: SimulatorVersion, token: str | None) -> AsyncIterator[bytes]:
-    """Stream a build's repo@commit as a gzipped tarball via the GitHub API.
+async def open_repo_tarball_stream(simulator_version: SimulatorVersion, token: str | None) -> AsyncIterator[bytes]:
+    """Open the repo@commit gzipped tarball stream, validating the upstream
+    status BEFORE any bytes are produced, then yield the body.
+
+    The status check is done eagerly here (not inside the streamed body) so a
+    non-2xx upstream — 404 (stale/deleted commit), 401/403 (missing/expired
+    ``github_token``), or a GitHub 5xx — raises ``HTTPException`` *before* the
+    caller commits a ``StreamingResponse``. Otherwise ``raise_for_status`` would
+    only fire after Starlette had already sent a 200 + ``Content-Disposition``,
+    truncating the download mid-stream instead of returning a clean error.
 
     Streamed (not buffered) so a large repo never lands in memory or on the
     pod's ephemeral disk (see CLAUDE.md Pitfall 2). The default simulator repo
     is private, so a token is required for non-public repos.
+
+    The endpoint must ``await`` this (it returns the body iterator) so the
+    validation runs before the response is constructed.
     """
     url = repo_tarball_url(simulator_version)
     headers = _github_headers(token)
-    async with httpx.AsyncClient(follow_redirects=True, timeout=300.0) as client:  # noqa: SIM117 (client.stream needs `client`)
-        async with client.stream("GET", url, headers=headers) as resp:
-            resp.raise_for_status()
+    client = httpx.AsyncClient(follow_redirects=True, timeout=300.0)
+    request = client.build_request("GET", url, headers=headers)
+    try:
+        resp = await client.send(request, stream=True)
+    except httpx.HTTPError as e:
+        await client.aclose()
+        raise HTTPException(status_code=502, detail=f"GitHub tarball fetch failed: {e}") from e
+
+    if resp.status_code >= 400:
+        await resp.aread()
+        await resp.aclose()
+        await client.aclose()
+        # Surface auth/not-found verbatim; collapse other upstream errors to 502.
+        status = resp.status_code if resp.status_code in (401, 403, 404) else 502
+        raise HTTPException(
+            status_code=status,
+            detail=(
+                f"GitHub tarball fetch for {simulator_version.git_repo_url}@"
+                f"{simulator_version.git_commit_hash} returned {resp.status_code}"
+            ),
+        )
+
+    async def _body() -> AsyncIterator[bytes]:
+        try:
             async for chunk in resp.aiter_bytes():
                 yield chunk
+        finally:
+            await resp.aclose()
+            await client.aclose()
+
+    return _body()

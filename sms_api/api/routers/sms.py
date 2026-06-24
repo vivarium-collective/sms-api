@@ -32,7 +32,7 @@ from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_router_config
 from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
-from sms_api.simulation.github_repo import stream_repo_tarball
+from sms_api.simulation.github_repo import open_repo_tarball_stream
 from sms_api.simulation.models import (
     AnalysisOptions,
     ObservableInfoModel,
@@ -130,8 +130,12 @@ async def export_simulator_workspace(
     if simulator is None:
         raise HTTPException(status_code=404, detail=f"Simulator {simulator_id} not found")
     filename = f"workspace-sim{simulator_id}-{simulator.git_commit_hash}.tar.gz"
+    # Validate the upstream GitHub fetch (await) BEFORE constructing the response,
+    # so a 404/401/403/5xx surfaces as a real HTTPException instead of a 200 that
+    # truncates mid-stream.
+    body = await open_repo_tarball_stream(simulator, get_settings().github_token)
     return StreamingResponse(
-        stream_repo_tarball(simulator, get_settings().github_token),
+        body,
         media_type="application/gzip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
