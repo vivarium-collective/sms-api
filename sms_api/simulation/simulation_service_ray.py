@@ -80,6 +80,18 @@ class SimulationServiceRay(SimulationService):
         settings = get_settings()
         return f"s3://{settings.s3_work_bucket}/ray-parca-cache/{commit}/"
 
+    def _upstream_cache_s3_uri(self, commit: str) -> str:
+        """S3 URI for the PRISTINE upstream-vEcoli ParCa cache (``--composite vecoli``).
+
+        Kept SEPARATE from ``_cache_s3_uri`` (the v2ecoli cache): the external
+        upstream wrapper needs an UPSTREAM-MASTER-built ``simData.cPickle``, not
+        the v2ecoli one (whose TCS ``modified_molecules`` skew makes upstream's
+        two-component-system ODE go negative). Keyed by the same image commit so
+        both engines' parca→sim hand-offs derive their URI with no runtime wiring.
+        """
+        settings = get_settings()
+        return f"s3://{settings.s3_work_bucket}/ray-upstream-parca-cache/{commit}/"
+
     def _results_s3_uri(self, experiment_id: str) -> str:
         settings = get_settings()
         return f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}/"
@@ -233,6 +245,23 @@ class SimulationServiceRay(SimulationService):
             f" --fixture {PARCA_SIMDATA_DIR}/parca_state.pkl.gz --cache {PARCA_CACHE_DIR}"
         )
 
+    def _upstream_parca_command(self) -> str:
+        """Build a PRISTINE upstream-vEcoli ParCa simData for the ``--composite vecoli`` wrapper.
+
+        Runs once on the 1-node parca job from the image's bundled upstream
+        checkout (``$V2E_VECOLI_DIR=/app/vEcoli``), dropping a flat
+        ``simData.cPickle`` into ``PARCA_CACHE_DIR``. The entrypoint then syncs
+        that dir to ``_upstream_cache_s3_uri``; the N-node sim stages the SAME
+        cache to every node (Ray workers must read identical sim_data — a
+        per-node refit would diverge since ParCa is not bit-reproducible).
+        """
+        settings = get_settings()
+        return (
+            f"cd {V2ECOLI_DIR} && python scripts/build_upstream_parca.py"
+            f" --outdir {V2ECOLI_DIR}/out/upstream --cpus {settings.ray_parca_cpus}"
+            f" --copy-to {PARCA_CACHE_DIR}"
+        )
+
     def _sim_command(
         self,
         n_seeds: int,
@@ -374,7 +403,6 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         settings = get_settings()
         commit = simulator.git_commit_hash
         experiment_id = ecoli_simulation.config.experiment_id
-        cache_s3 = self._cache_s3_uri(commit)
 
         # Run the TRUE commit image: derive a per-commit MNP job-def revision pointing at
         # v2ecoli:<commit> (both ParCa and the sim run the same image).
@@ -387,6 +415,14 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         composite = getattr(ecoli_simulation.config, "composite", None)
         condition = getattr(ecoli_simulation.config, "condition", None)
         max_generations = getattr(ecoli_simulation.config, "max_generations", None)
+
+        # Engine-specific ParCa source: the pristine upstream wrapper (--composite
+        # vecoli) stages an UPSTREAM-built simData (separate cache + build cmd);
+        # every other engine stages the v2ecoli cache. Both ParCa and the sim use
+        # the matching pair so the staged simData is consistent across all nodes.
+        is_upstream = composite == "vecoli"
+        cache_s3 = self._upstream_cache_s3_uri(commit) if is_upstream else self._cache_s3_uri(commit)
+        parca_command = self._upstream_parca_command() if is_upstream else self._parca_command()
 
         # Cost-allocation tags (propagate to ECS tasks → payer-account Cost
         # Explorer attributes spend per run/engine/condition). Values must be
@@ -405,7 +441,7 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
             job_name=f"ray-parca-{commit}-{_rand_suffix()}",
             job_definition=job_def,
             num_nodes=1,
-            ray_job_cmd=self._parca_command(),
+            ray_job_cmd=parca_command,
             out_s3=cache_s3,
             out_dir=PARCA_CACHE_DIR,
             tags={**base_tags, "Phase": "parca"},

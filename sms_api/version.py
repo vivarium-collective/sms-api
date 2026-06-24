@@ -33,4 +33,6 @@
 # 0.9.9 — expose composite/condition/max_generations on the run endpoint (comparison submit)
 # 0.9.10 — Batch/Nextflow: clear leaked sim_data_path default when run_parca=True
 # 0.9.11 — Batch/Nextflow: set sim_data_path=None (not pop) so config.template default is overridden
-__version__ = "0.9.11"
+# 0.9.13 — Ray: --composite vecoli stages a SEPARATE pristine-upstream ParCa cache
+#          (build_upstream_parca.py) instead of the v2ecoli cache, fixing the TCS ODE crash
+__version__ = "0.9.13"
