@@ -7,7 +7,6 @@
 #   IE: where do we provide this special config: in vEcoli or API?
 # TODO: what does a "configuration endpoint" actually mean (can we configure via the simulation?)
 # TODO: labkey preprocessing
-import asyncio
 import json
 import logging
 from collections.abc import Sequence
@@ -32,6 +31,7 @@ from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_router_config
 from sms_api.config import ComputeBackend, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
+from sms_api.simulation.github_repo import open_repo_tarball_stream
 from sms_api.simulation.models import (
     AnalysisOptions,
     ObservableInfoModel,
@@ -41,7 +41,7 @@ from sms_api.simulation.models import (
     SimulationObservables,
     SimulationRun,
 )
-from sms_api.simulation.observable_reader import list_observables, read_observables
+from sms_api.simulation.observable_reader import list_observables_async, read_observables_async
 
 
 def _validate_simulation_config_filename(simulation_config_filename: str) -> None:
@@ -106,6 +106,45 @@ async def discover_repo_contents(
     if simulator is None:
         raise HTTPException(status_code=404, detail=f"Simulator {simulator_id} not found")
     return await sim_service.discover_repo_contents(simulator)
+
+
+@config.router.get(
+    path="/simulations/workspace",
+    operation_id="export-simulator-workspace",
+    tags=["Simulations"],
+    summary="Export a simulator's repo@commit workspace as a gzipped tarball",
+    response_model=None,
+    responses={
+        200: {
+            "content": {"application/gzip": {}},
+            "description": "A gzipped tarball of the simulator's repo at its commit",
+        }
+    },
+)
+async def export_simulator_workspace(
+    simulator_id: int = Query(..., description="database_id of the simulator to export"),
+) -> StreamingResponse:
+    """Stream the simulator's repo@commit as a gzipped tarball (GitHub tarball).
+
+    The repo@commit is the dashboard-loadable workspace; streamed so a large
+    repo never buffers in memory or on the pod's ephemeral disk.
+    """
+    database_service = get_database_service()
+    if database_service is None:
+        raise HTTPException(status_code=500, detail="Services not initialized")
+    simulator = await database_service.get_simulator(simulator_id)
+    if simulator is None:
+        raise HTTPException(status_code=404, detail=f"Simulator {simulator_id} not found")
+    filename = f"workspace-sim{simulator_id}-{simulator.git_commit_hash}.tar.gz"
+    # Validate the upstream GitHub fetch (await) BEFORE constructing the response,
+    # so a 404/401/403/5xx surfaces as a real HTTPException instead of a 200 that
+    # truncates mid-stream.
+    body = await open_repo_tarball_stream(simulator, get_settings().github_token)
+    return StreamingResponse(
+        body,
+        media_type="application/gzip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @config.router.post(
@@ -435,7 +474,7 @@ async def get_simulation_observables_index(
         raise HTTPException(404, f"Simulation {id} not found")
     store_uri = _build_store_uri(sim.experiment_id, seed)
     try:
-        idx = await asyncio.to_thread(list_observables, store_uri)
+        idx = await list_observables_async(store_uri)
     except FileNotFoundError:
         raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})") from None
     return SimulationObservableIndex(
@@ -472,8 +511,8 @@ async def get_simulation_observables(
     requested = [n.strip() for n in names.split(",") if n.strip()]
     store_uri = _build_store_uri(sim.experiment_id, seed)
     try:
-        store_kind, time, series = await asyncio.to_thread(
-            read_observables, store_uri, requested, stride=stride, max_points=max_points
+        store_kind, time, series = await read_observables_async(
+            store_uri, requested, stride=stride, max_points=max_points
         )
     except FileNotFoundError:
         raise HTTPException(404, f"No emitter store for simulation {id} (seed {seed})") from None

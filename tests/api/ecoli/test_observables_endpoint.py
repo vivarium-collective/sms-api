@@ -46,7 +46,7 @@ async def test_observables_index_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     saved = get_database_service()
     set_database_service(cast(DatabaseService, _FakeDB(_sim())))
     monkeypatch.setattr(
-        "sms_api.api.routers.sms.list_observables",
+        "sms_api.simulation.observable_reader.list_observables",
         lambda uri: StoreIndex(store="zarr", observables=[ObservableInfo("mass", ["time"], [3])]),
     )
     try:
@@ -78,7 +78,7 @@ async def test_observables_series_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     saved = get_database_service()
     set_database_service(cast(DatabaseService, _FakeDB(_sim())))
     monkeypatch.setattr(
-        "sms_api.api.routers.sms.read_observables",
+        "sms_api.simulation.observable_reader.read_observables",
         lambda uri, names, *, stride=1, max_points=None: ("zarr", [0.0, 1.0, 2.0], {"mass": [1.0, 2.0, 3.0]}),
     )
     try:
@@ -105,7 +105,7 @@ async def test_observables_series_forwards_decimation(monkeypatch: pytest.Monkey
         captured["max_points"] = max_points
         return "zarr", [0.0, 2.0], {"mass": [1.0, 3.0]}
 
-    monkeypatch.setattr("sms_api.api.routers.sms.read_observables", _capture)
+    monkeypatch.setattr("sms_api.simulation.observable_reader.read_observables", _capture)
     try:
         async with _client() as c:
             r = await c.get(
@@ -125,7 +125,7 @@ async def test_observables_series_bad_name_400(monkeypatch: pytest.MonkeyPatch) 
     def _raise(uri: str, names: list[str], *, stride: int = 1, max_points: int | None = None) -> None:
         raise KeyError("observables not in store: ['nope']")
 
-    monkeypatch.setattr("sms_api.api.routers.sms.read_observables", _raise)
+    monkeypatch.setattr("sms_api.simulation.observable_reader.read_observables", _raise)
     try:
         async with _client() as c:
             r = await c.get(f"{BASE}/simulations/49/observables", params={"names": "nope"})
@@ -145,7 +145,7 @@ async def test_observables_series_multidim_400(monkeypatch: pytest.MonkeyPatch) 
             "observable 'bulk' is not a 1-D timeseries (shape (3, 5)); multi-dimensional observables are not supported"
         )
 
-    monkeypatch.setattr("sms_api.api.routers.sms.read_observables", _raise)
+    monkeypatch.setattr("sms_api.simulation.observable_reader.read_observables", _raise)
     try:
         async with _client() as c:
             r = await c.get(f"{BASE}/simulations/49/observables", params={"names": "bulk"})

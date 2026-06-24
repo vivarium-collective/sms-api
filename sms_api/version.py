@@ -33,4 +33,9 @@
 # 0.9.9 — expose composite/condition/max_generations on the run endpoint (comparison submit)
 # 0.9.10 — Batch/Nextflow: clear leaked sim_data_path default when run_parca=True
 # 0.9.11 — Batch/Nextflow: set sim_data_path=None (not pop) so config.template default is overridden
-__version__ = "0.9.11"
+# 0.9.12 — export-simulator-workspace endpoint (stream a build's repo@commit tarball);
+#          reconciles version.py with the ad-hoc 0.9.8-0.9.11 deploy tags
+# 0.9.15 — same export endpoint + observables read-path fixes; bumped past the
+#          ad-hoc 0.9.13/0.9.14 deploy tags so the next tagged release is the
+#          unambiguous high-water mark (supersedes 0.9.12)
+__version__ = "0.9.15"

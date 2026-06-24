@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.9.11
+  version: 0.9.12
 paths:
   /api/v1/simulations/discovery:
     get:
@@ -27,6 +27,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RepoDiscovery'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/simulations/workspace:
+    get:
+      tags:
+      - Simulations
+      summary: Export a simulator's repo@commit workspace as a gzipped tarball
+      description: 'Stream the simulator''s repo@commit as a gzipped tarball (GitHub
+        tarball).
+
+
+        The repo@commit is the dashboard-loadable workspace; streamed so a large
+
+        repo never buffers in memory or on the pod''s ephemeral disk.'
+      operationId: export-simulator-workspace
+      parameters:
+      - name: simulator_id
+        in: query
+        required: true
+        schema:
+          type: integer
+          description: database_id of the simulator to export
+          title: Simulator Id
+        description: database_id of the simulator to export
+      responses:
+        '200':
+          description: A gzipped tarball of the simulator's repo at its commit
+          content:
+            application/json:
+              schema: {}
+            application/gzip: {}
         '422':
           description: Validation Error
           content:
@@ -843,7 +878,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-06-24T11:05:07.318164'
+                  created_at: '2026-06-24T17:14:59.554901'
                 parca_config:
                   outdir: .
       responses:
@@ -2426,7 +2461,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-06-24 11:05:07.146337'
+          default: '2026-06-24 17:14:58.942468'
         job_id:
           anyOf:
           - type: string
