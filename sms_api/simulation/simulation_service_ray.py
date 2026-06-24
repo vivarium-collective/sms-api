@@ -255,10 +255,16 @@ class SimulationServiceRay(SimulationService):
         cache to every node (Ray workers must read identical sim_data — a
         per-node refit would diverge since ParCa is not bit-reproducible).
         """
-        settings = get_settings()
+        # --cpus 1 is REQUIRED, not a perf knob: upstream's fit_sim_data_1 only
+        # spawns a worker Pool when cpus>1, and those workers re-import
+        # wholecell.utils.polymerize from the source-only /app/vEcoli checkout —
+        # which has no compiled Cython (.so) and hard-raises "Failed to import
+        # Cython module", looping forever. The serial path (cpus==1) runs entirely
+        # in the main process, where _ensure_upstream has pinned the INSTALLED
+        # compiled wholecell into sys.modules, so the import resolves correctly.
         return (
             f"cd {V2ECOLI_DIR} && python scripts/build_upstream_parca.py"
-            f" --outdir {V2ECOLI_DIR}/out/upstream --cpus {settings.ray_parca_cpus}"
+            f" --outdir {V2ECOLI_DIR}/out/upstream --cpus 1"
             f" --copy-to {PARCA_CACHE_DIR}"
         )
 

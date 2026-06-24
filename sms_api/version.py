@@ -35,4 +35,5 @@
 # 0.9.11 — Batch/Nextflow: set sim_data_path=None (not pop) so config.template default is overridden
 # 0.9.13 — Ray: --composite vecoli stages a SEPARATE pristine-upstream ParCa cache
 #          (build_upstream_parca.py) instead of the v2ecoli cache, fixing the TCS ODE crash
-__version__ = "0.9.13"
+# 0.9.14 — upstream ParCa build uses --cpus 1 (serial) to avoid pool-worker Cython re-import hang
+__version__ = "0.9.14"
