@@ -287,6 +287,21 @@ class TestSimulationServiceRayBuild:
         # runs v2ecoli's OWN recipe (symmetric with K8s running vEcoli's), not an sms-cdk script
         assert "docker/build-and-push-ecr.sh -i abc1234 -r v2ecoli -R us-gov-west-1" in script
 
+    def test_sim_command_composite_defaults_to_single_generation(self) -> None:
+        """Selecting an engine must NOT imply the 16-gen comparison default."""
+        service = SimulationServiceRay()
+        with patch("sms_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._sim_command(n_seeds=1, n_steps=10, chunk=4, composite="v2ecoli")
+        assert "run_comparison_ensemble.py" in cmd
+        assert "--max-generations 1" in cmd
+        assert "--max-generations 16" not in cmd
+
+    def test_sim_command_composite_honors_explicit_generations(self) -> None:
+        service = SimulationServiceRay()
+        with patch("sms_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._sim_command(n_seeds=1, n_steps=10, chunk=4, composite="v2ecoli", max_generations=5)
+        assert "--max-generations 5" in cmd
+
     @pytest.mark.asyncio
     async def test_run_build_submits_to_amd64_queue_and_polls(self) -> None:
         service = SimulationServiceRay()
