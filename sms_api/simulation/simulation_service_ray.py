@@ -278,6 +278,7 @@ class SimulationServiceRay(SimulationService):
         composite: str | None = None,
         condition: str | None = None,
         max_generations: int | None = None,
+        vecoli_source: str | None = None,
     ) -> str:
         # When ``composite`` is set, run the two-engine comparison driver — both
         # engines (v2ecoli port + vEcoli imported via build_composite_native)
@@ -289,11 +290,17 @@ class SimulationServiceRay(SimulationService):
         # never implies a multi-generation comparison-ensemble run by itself —
         # callers opt into more generations explicitly.
         if composite:
+            # vecoli_source selects HOW the genuine vEcoli side runs (only meaningful
+            # for --composite vecoli): "upstream" (default, ~50 pbg steps) or
+            # "vivarium-process" (vEcoli as ONE pbg node with vivarium-core's Engine
+            # inside — faithful by construction). Both stage the SAME upstream ParCa
+            # cache (is_upstream routing is unchanged), so only the driver flag differs.
+            src = f" --vecoli-source {vecoli_source}" if (composite == "vecoli" and vecoli_source) else ""
             return (
                 f"cd {V2ECOLI_DIR} && python scripts/run_comparison_ensemble.py"
                 f" --composite {composite} --condition {condition or 'basal'}"
                 f" --n-seeds {n_seeds} --max-generations {int(max_generations or 1)}"
-                f" --chunk {chunk} --out-root {SIM_OUT_DIR} --mode ray"
+                f" --chunk {chunk} --out-root {SIM_OUT_DIR} --mode ray{src}"
             )
         return (
             f"cd {V2ECOLI_DIR} && python scripts/run_phase0_xarray_ensemble.py"
@@ -422,6 +429,9 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         composite = getattr(ecoli_simulation.config, "composite", None)
         condition = getattr(ecoli_simulation.config, "condition", None)
         max_generations = getattr(ecoli_simulation.config, "max_generations", None)
+        # How the vEcoli side runs (composite=vecoli only): "upstream" (default) or
+        # "vivarium-process" (vEcoli as one pbg node, vivarium Engine inside).
+        vecoli_source = getattr(ecoli_simulation.config, "vecoli_source", None)
 
         # Engine-specific ParCa source: the pristine upstream wrapper (--composite
         # vecoli) stages an UPSTREAM-built simData (separate cache + build cmd);
@@ -466,6 +476,7 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
                 composite=composite,
                 condition=condition,
                 max_generations=max_generations,
+                vecoli_source=vecoli_source,
             ),
             out_s3=self._results_s3_uri(experiment_id),
             out_dir=SIM_OUT_DIR,
