@@ -38,4 +38,6 @@
 # 0.9.15 — same export endpoint + observables read-path fixes; bumped past the
 #          ad-hoc 0.9.13/0.9.14 deploy tags so the next tagged release is the
 #          unambiguous high-water mark (supersedes 0.9.12)
-__version__ = "0.9.15"
+# 0.9.16 — Ray: --composite vecoli stages a SEPARATE pristine-upstream ParCa cache
+#          (build_upstream_parca.py, serial --cpus 1) instead of the v2ecoli cache
+__version__ = "0.9.16"
