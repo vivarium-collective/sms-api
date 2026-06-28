@@ -15,8 +15,6 @@ from pbest.containerization.container_constructor import generate_container_def_
 from pbest.utils.input_types import (
     ContainerizationEngine,
     ContainerizationFileRepr,
-    ContainerizationProgramArguments,
-    ContainerizationTypes,
 )
 
 from sms_api.compose.database_service import ComposeDatabaseService
@@ -56,7 +54,7 @@ def _inject_pip_deps(base_def: ContainerizationFileRepr, deps: list[str]) -> Con
         text = text.replace(marker, f"{install_lines}\n\n{marker}")
     else:
         text = text.rstrip() + f"\n{install_lines}\n"
-    return ContainerizationFileRepr(representation=text)
+    return ContainerizationFileRepr(representation=text, containerization_engine=base_def.containerization_engine)
 
 
 def _extract_document_content(sim_request: ComposeSimulationRequest) -> str | None:
@@ -109,12 +107,8 @@ async def run_compose_simulation(
 ) -> ComposeSimulationExperiment:
     with tempfile.TemporaryDirectory(delete=False) as tmp_dir:
         singularity_rep = generate_container_def_file(
-            ContainerizationProgramArguments(
-                input_file_path=str(simulation_request.request_file_path),
-                working_directory=Path(tmp_dir),
-                containerization_type=ContainerizationTypes.SINGLE,
-                containerization_engine=ContainerizationEngine.APPTAINER,
-            ),
+            simulation_request.request_file_path,
+            container_engine=ContainerizationEngine.APPTAINER,
         )
         if extra_pip_deps:
             singularity_rep = _inject_pip_deps(singularity_rep, extra_pip_deps)

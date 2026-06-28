@@ -8,7 +8,7 @@ import datetime
 import enum
 import logging
 
-from pbest.utils.input_types import ContainerizationFileRepr
+from pbest.utils.input_types import ContainerizationEngine, ContainerizationFileRepr
 from sqlalchemy import ForeignKey, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
@@ -119,7 +119,7 @@ class ORMComposeSimulator(ComposeBase):
         return ComposeSimulatorVersion(
             database_id=self.id,
             created_at=self.created_at,
-            singularity_def=ContainerizationFileRepr(representation=self.singularity_def),
+            singularity_def=ContainerizationFileRepr(representation=self.singularity_def, containerization_engine=ContainerizationEngine.APPTAINER),
             singularity_def_hash=self.singularity_def_hash,
             packages=None,
         )

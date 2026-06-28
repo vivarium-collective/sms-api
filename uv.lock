@@ -2354,7 +2354,7 @@ wheels = [
 
 [[package]]
 name = "pbest"
-version = "0.5.5"
+version = "0.6.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bigraph-schema" },
@@ -2366,9 +2366,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "spython" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a4/c2/1c405d3f7390acfcea5e8603ea98446502006cbe077881bcb35ef7b43088/pbest-0.5.5.tar.gz", hash = "sha256:2bd27ffae173779644f786df36b96e8f29a118542a7004dd07173b677df70174", size = 139114, upload-time = "2026-04-21T17:37:06.408Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7f/24/ef6cc5e03f496f5e0e7b1f1d7b15e8d41b27bc34ea22b150c17e3fc021e6/pbest-0.6.3.tar.gz", hash = "sha256:305710334f40a19a3b9c1122149661dd0624c675e646d30ffcac026c88cf4e12", size = 224259, upload-time = "2026-05-15T16:30:53.229992Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3d/39/66412340dafe3e4e09bcc16d6297872bf655b51991f8bebe75af615d8982/pbest-0.5.5-py3-none-any.whl", hash = "sha256:e6ea0230f4a4c42605aba21c848b7ae6b73ed179291a77da984d6a5b656cb108", size = 24554, upload-time = "2026-04-21T17:37:05.009Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/cb/4e28c572ac4a2ac9760e434795f246bd20dac3c12c2c43b748172f44f641/pbest-0.6.3-py3-none-any.whl", hash = "sha256:fc69c2f44bbd048d708a4fbdae3cf9c1360822f3e28105c837a646c31d0c6cb1", size = 26916, upload-time = "2026-05-15T16:30:54.498992Z" },
 ]
 
 [[package]]
@@ -3731,7 +3731,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.3.1,<3" },
     { name = "orjson", specifier = ">=3.11.1" },
     { name = "pandas-stubs", specifier = ">=2.3.0.250703" },
-    { name = "pbest", specifier = "==0.5.5" },
+    { name = "pbest", specifier = "==0.6.3" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "polars-lts-cpu", extras = ["pyarrow"], specifier = ">=1.31.0,<2" },
     { name = "pydantic", specifier = ">=2.11.5,<3" },
