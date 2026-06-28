@@ -134,9 +134,12 @@ class TestComposeSimulationExperiment:
 
 class TestGetSingularityHash:
     def test_deterministic(self) -> None:
-        from pbest.utils.input_types import ContainerizationFileRepr
+        from pbest.utils.input_types import ContainerizationEngine, ContainerizationFileRepr
 
-        rep = ContainerizationFileRepr(representation="Bootstrap: docker\nFrom: python:3.13")
+        rep = ContainerizationFileRepr(
+            representation="Bootstrap: docker\nFrom: python:3.13",
+            containerization_engine=ContainerizationEngine.APPTAINER,
+        )
         h1 = get_singularity_hash(rep)
         h2 = get_singularity_hash(rep)
         assert h1 == h2
