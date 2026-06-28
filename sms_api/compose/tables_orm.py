@@ -119,7 +119,10 @@ class ORMComposeSimulator(ComposeBase):
         return ComposeSimulatorVersion(
             database_id=self.id,
             created_at=self.created_at,
-            singularity_def=ContainerizationFileRepr(representation=self.singularity_def, containerization_engine=ContainerizationEngine.APPTAINER),
+            singularity_def=ContainerizationFileRepr(
+                representation=self.singularity_def,
+                containerization_engine=ContainerizationEngine.APPTAINER,
+            ),
             singularity_def_hash=self.singularity_def_hash,
             packages=None,
         )
