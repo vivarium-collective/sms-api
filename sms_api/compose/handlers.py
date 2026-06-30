@@ -4,19 +4,14 @@ import asyncio
 import json
 import logging
 import random
-import shutil
 import string
 import tempfile
 import zipfile
 from pathlib import Path
 
 from fastapi import BackgroundTasks, HTTPException
-from pbest.containerization.container_constructor import generate_container_def_file
-from pbest.utils.input_types import (
-    ContainerizationEngine,
-    ContainerizationFileRepr,
-)
 
+from sms_api.compose.container_def import build_pbg_def
 from sms_api.compose.database_service import ComposeDatabaseService
 from sms_api.compose.hpc_utils import get_compose_correlation_id, get_compose_experiment_id
 from sms_api.compose.job_monitor import ComposeJobMonitor
@@ -35,26 +30,6 @@ from sms_api.compose.models import (
 from sms_api.compose.simulation_service import ComposeSimulationService
 
 logger = logging.getLogger(__name__)
-
-_MICROMAMBA_ENV = "/micromamba_env/runtime_env"
-
-
-def _inject_pip_deps(base_def: ContainerizationFileRepr, deps: list[str]) -> ContainerizationFileRepr:
-    """Append extra pip install commands to a generated singularity def.
-
-    Inserts the install lines just before the ``## Execute`` marker so they
-    run during the container build, after all other dependency installs.
-    """
-    marker = "## Execute"
-    install_lines = "\n".join(
-        f"micromamba run -p {_MICROMAMBA_ENV} pip install --ignore-requires-python '{dep}'" for dep in deps
-    )
-    text = base_def.representation
-    if marker in text:
-        text = text.replace(marker, f"{install_lines}\n\n{marker}")
-    else:
-        text = text.rstrip() + f"\n{install_lines}\n"
-    return ContainerizationFileRepr(representation=text, containerization_engine=base_def.containerization_engine)
 
 
 def _extract_document_content(sim_request: ComposeSimulationRequest) -> str | None:
@@ -105,13 +80,8 @@ async def run_compose_simulation(
     extra_pip_deps: list[str] | None = None,
     override_command: str | None = None,
 ) -> ComposeSimulationExperiment:
-    with tempfile.TemporaryDirectory(delete=False) as tmp_dir:
-        singularity_rep = generate_container_def_file(
-            simulation_request.request_file_path,
-            container_engine=ContainerizationEngine.APPTAINER,
-        )
-        if extra_pip_deps:
-            singularity_rep = _inject_pip_deps(singularity_rep, extra_pip_deps)
+    suffix = simulation_request.simulation_file_type.get_files_suffix()
+    singularity_rep = build_pbg_def(suffix, extra_pip_deps=extra_pip_deps)
 
     simulator_db = database_service.get_simulator_db()
     simulator_version = await simulator_db.get_simulator_by_def_hash(get_singularity_hash(singularity_rep))
@@ -141,11 +111,7 @@ async def run_compose_simulation(
             override_command=override_command,
         )
 
-    def remove_temp_dir() -> None:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
     background_tasks.add_task(perform_job)
-    background_tasks.add_task(remove_temp_dir)
 
     return ComposeSimulationExperiment(
         simulation_database_id=simulation.database_id,

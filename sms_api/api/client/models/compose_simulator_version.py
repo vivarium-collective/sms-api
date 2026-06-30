@@ -20,7 +20,8 @@ T = TypeVar("T", bound="ComposeSimulatorVersion")
 class ComposeSimulatorVersion:
     """
     Attributes:
-        singularity_def (ContainerizationFileRepr):
+        singularity_def (ContainerizationFileRepr): A textual container-definition file (e.g. a Singularity/apptainer
+            def).
         singularity_def_hash (str):
         packages (Union[None, list['RegisteredPackage']]):
         database_id (int):

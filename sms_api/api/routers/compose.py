@@ -128,6 +128,7 @@ async def submit_simulation(
     uploaded_file: UploadFile,
     interval_time: float = 1.0,
     batch_submission: bool = False,
+    extra_pip_deps: list[str] | None = Query(default=None),
 ) -> ComposeSimulationExperiment:
     if interval_time < 0 or interval_time > 1000:
         raise HTTPException(400, "interval_time must be between 0 and 1000")
@@ -140,6 +141,7 @@ async def submit_simulation(
         job_monitor=_require_monitor(),
         pb_allow_list=PBAllowList(allow_list=COMPOSE_ALLOW_LIST),
         background_tasks=background_tasks,
+        extra_pip_deps=extra_pip_deps,
     )
 
 
