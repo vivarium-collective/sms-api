@@ -14,7 +14,7 @@ images:
   # pod has been running successfully; keeping both namespaces pointing here
   # avoids an ErrImagePull ReplicaSet while api iterates independently.
   - name: ghcr.io/vivarium-collective/sms-ptools
-    newTag: 0.5.9
+    newTag: 0.8.2
 
 replicas:
   - count: 1
