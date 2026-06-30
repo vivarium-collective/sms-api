@@ -20,7 +20,8 @@ T = TypeVar("T", bound="ComposeSimulatorVersion")
 class ComposeSimulatorVersion:
     """
     Attributes:
-        singularity_def (ContainerizationFileRepr):
+        singularity_def (ContainerizationFileRepr): A textual container-definition file (e.g. a Singularity/apptainer
+            def).
         singularity_def_hash (str):
         packages (Union[None, list['RegisteredPackage']]):
         database_id (int):
@@ -61,12 +62,14 @@ class ComposeSimulatorVersion:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "singularity_def": singularity_def,
-            "singularity_def_hash": singularity_def_hash,
-            "packages": packages,
-            "database_id": database_id,
-        })
+        field_dict.update(
+            {
+                "singularity_def": singularity_def,
+                "singularity_def_hash": singularity_def_hash,
+                "packages": packages,
+                "database_id": database_id,
+            }
+        )
         if created_at is not UNSET:
             field_dict["created_at"] = created_at
 

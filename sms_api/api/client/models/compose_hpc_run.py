@@ -82,14 +82,16 @@ class ComposeHpcRun:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "database_id": database_id,
-            "slurmjobid": slurmjobid,
-            "correlation_id": correlation_id,
-            "job_type": job_type,
-            "sim_id": sim_id,
-            "simulator_id": simulator_id,
-        })
+        field_dict.update(
+            {
+                "database_id": database_id,
+                "slurmjobid": slurmjobid,
+                "correlation_id": correlation_id,
+                "job_type": job_type,
+                "sim_id": sim_id,
+                "simulator_id": simulator_id,
+            }
+        )
         if status is not UNSET:
             field_dict["status"] = status
         if start_time is not UNSET:

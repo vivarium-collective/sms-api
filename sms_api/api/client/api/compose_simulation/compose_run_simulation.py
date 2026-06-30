@@ -16,6 +16,7 @@ def _get_kwargs(
     body: BodyComposeRunSimulation,
     interval_time: Union[Unset, float] = 1.0,
     batch_submission: Union[Unset, bool] = False,
+    extra_pip_deps: Union[None, Unset, list[str]] = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
 
@@ -24,6 +25,16 @@ def _get_kwargs(
     params["interval_time"] = interval_time
 
     params["batch_submission"] = batch_submission
+
+    json_extra_pip_deps: Union[None, Unset, list[str]]
+    if isinstance(extra_pip_deps, Unset):
+        json_extra_pip_deps = UNSET
+    elif isinstance(extra_pip_deps, list):
+        json_extra_pip_deps = extra_pip_deps
+
+    else:
+        json_extra_pip_deps = extra_pip_deps
+    params["extra_pip_deps"] = json_extra_pip_deps
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -73,12 +84,14 @@ def sync_detailed(
     body: BodyComposeRunSimulation,
     interval_time: Union[Unset, float] = 1.0,
     batch_submission: Union[Unset, bool] = False,
+    extra_pip_deps: Union[None, Unset, list[str]] = UNSET,
 ) -> Response[Union[ComposeSimulationExperiment, HTTPValidationError]]:
     """Run a process-bigraph simulation (OMEX/PBG/SBML upload)
 
     Args:
         interval_time (Union[Unset, float]):  Default: 1.0.
         batch_submission (Union[Unset, bool]):  Default: False.
+        extra_pip_deps (Union[None, Unset, list[str]]):
         body (BodyComposeRunSimulation):
 
     Raises:
@@ -93,6 +106,7 @@ def sync_detailed(
         body=body,
         interval_time=interval_time,
         batch_submission=batch_submission,
+        extra_pip_deps=extra_pip_deps,
     )
 
     response = client.get_httpx_client().request(
@@ -108,12 +122,14 @@ def sync(
     body: BodyComposeRunSimulation,
     interval_time: Union[Unset, float] = 1.0,
     batch_submission: Union[Unset, bool] = False,
+    extra_pip_deps: Union[None, Unset, list[str]] = UNSET,
 ) -> Optional[Union[ComposeSimulationExperiment, HTTPValidationError]]:
     """Run a process-bigraph simulation (OMEX/PBG/SBML upload)
 
     Args:
         interval_time (Union[Unset, float]):  Default: 1.0.
         batch_submission (Union[Unset, bool]):  Default: False.
+        extra_pip_deps (Union[None, Unset, list[str]]):
         body (BodyComposeRunSimulation):
 
     Raises:
@@ -129,6 +145,7 @@ def sync(
         body=body,
         interval_time=interval_time,
         batch_submission=batch_submission,
+        extra_pip_deps=extra_pip_deps,
     ).parsed
 
 
@@ -138,12 +155,14 @@ async def asyncio_detailed(
     body: BodyComposeRunSimulation,
     interval_time: Union[Unset, float] = 1.0,
     batch_submission: Union[Unset, bool] = False,
+    extra_pip_deps: Union[None, Unset, list[str]] = UNSET,
 ) -> Response[Union[ComposeSimulationExperiment, HTTPValidationError]]:
     """Run a process-bigraph simulation (OMEX/PBG/SBML upload)
 
     Args:
         interval_time (Union[Unset, float]):  Default: 1.0.
         batch_submission (Union[Unset, bool]):  Default: False.
+        extra_pip_deps (Union[None, Unset, list[str]]):
         body (BodyComposeRunSimulation):
 
     Raises:
@@ -158,6 +177,7 @@ async def asyncio_detailed(
         body=body,
         interval_time=interval_time,
         batch_submission=batch_submission,
+        extra_pip_deps=extra_pip_deps,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -171,12 +191,14 @@ async def asyncio(
     body: BodyComposeRunSimulation,
     interval_time: Union[Unset, float] = 1.0,
     batch_submission: Union[Unset, bool] = False,
+    extra_pip_deps: Union[None, Unset, list[str]] = UNSET,
 ) -> Optional[Union[ComposeSimulationExperiment, HTTPValidationError]]:
     """Run a process-bigraph simulation (OMEX/PBG/SBML upload)
 
     Args:
         interval_time (Union[Unset, float]):  Default: 1.0.
         batch_submission (Union[Unset, bool]):  Default: False.
+        extra_pip_deps (Union[None, Unset, list[str]]):
         body (BodyComposeRunSimulation):
 
     Raises:
@@ -193,5 +215,6 @@ async def asyncio(
             body=body,
             interval_time=interval_time,
             batch_submission=batch_submission,
+            extra_pip_deps=extra_pip_deps,
         )
     ).parsed
