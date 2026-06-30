@@ -2366,9 +2366,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "spython" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7f/24/ef6cc5e03f496f5e0e7b1f1d7b15e8d41b27bc34ea22b150c17e3fc021e6/pbest-0.6.3.tar.gz", hash = "sha256:305710334f40a19a3b9c1122149661dd0624c675e646d30ffcac026c88cf4e12", size = 224259, upload-time = "2026-05-15T16:30:53.229992Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7f/24/ef6cc5e03f496f5e0e7b1f1d7b15e8d41b27bc34ea22b150c17e3fc021e6/pbest-0.6.3.tar.gz", hash = "sha256:305710334f40a19a3b9c1122149661dd0624c675e646d30ffcac026c88cf4e12", size = 224259, upload-time = "2026-05-15T16:30:53.229Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e6/cb/4e28c572ac4a2ac9760e434795f246bd20dac3c12c2c43b748172f44f641/pbest-0.6.3-py3-none-any.whl", hash = "sha256:fc69c2f44bbd048d708a4fbdae3cf9c1360822f3e28105c837a646c31d0c6cb1", size = 26916, upload-time = "2026-05-15T16:30:54.498992Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/cb/4e28c572ac4a2ac9760e434795f246bd20dac3c12c2c43b748172f44f641/pbest-0.6.3-py3-none-any.whl", hash = "sha256:fc69c2f44bbd048d708a4fbdae3cf9c1360822f3e28105c837a646c31d0c6cb1", size = 26916, upload-time = "2026-05-15T16:30:54.498Z" },
 ]
 
 [[package]]
@@ -3611,7 +3611,7 @@ wheels = [
 
 [[package]]
 name = "sms-api"
-version = "0.9.15"
+version = "0.9.16"
 source = { editable = "." }
 dependencies = [
     { name = "aioboto3" },
@@ -3742,7 +3742,7 @@ requires-dist = [
     { name = "python-libsedml", specifier = ">=2.0.33" },
     { name = "python-multipart", specifier = ">=0.0.27" },
     { name = "pyyaml", specifier = ">=6.0.2,<7" },
-    { name = "redis", specifier = ">=5.0.0,<8" },
+    { name = "redis", specifier = ">=5.0.0,<9" },
     { name = "rich-pixels", specifier = ">=3.0.1" },
     { name = "rich-pyfiglet", specifier = ">=1.0.0" },
     { name = "ruff", specifier = ">=0.12.2,<0.16" },
@@ -3757,7 +3757,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.16.1" },
     { name = "types-aioboto3", extras = ["s3"], specifier = ">=13.3.0" },
     { name = "typing-extensions", specifier = ">=4.14.0,<5" },
-    { name = "uvicorn", specifier = ">=0.34.3,<0.47" },
+    { name = "uvicorn", specifier = ">=0.34.3,<0.50" },
     { name = "vegafusion", specifier = ">=2.0.2,<3" },
     { name = "vl-convert-python", specifier = ">=1.8.0,<2" },
     { name = "xarray", specifier = ">=2024.6.0" },
@@ -3770,8 +3770,8 @@ dev = [
     { name = "debugpy", specifier = ">=1.8.16" },
     { name = "deptry", specifier = ">=0.16.2,<0.26" },
     { name = "ipdb", specifier = ">=0.13.13" },
-    { name = "mypy", specifier = ">=1.5.1,<1.21" },
-    { name = "openapi-python-client", specifier = ">=0.25.2,<0.29" },
+    { name = "mypy", specifier = ">=1.5.1,<2.2" },
+    { name = "openapi-python-client", specifier = ">=0.25.2,<0.30" },
     { name = "pre-commit", specifier = ">=3.4.0,<5" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", specifier = ">=1.0.0,<2" },

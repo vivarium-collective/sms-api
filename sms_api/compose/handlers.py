@@ -12,11 +12,8 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks, HTTPException
 from pbest.containerization.container_constructor import generate_container_def_file
-from pbest.utils.input_types import (
-    ContainerizationEngine,
-    ContainerizationFileRepr,
-)
 
+from sms_api.compose.container_def import ContainerizationEngine, ContainerizationFileRepr
 from sms_api.compose.database_service import ComposeDatabaseService
 from sms_api.compose.hpc_utils import get_compose_correlation_id, get_compose_experiment_id
 from sms_api.compose.job_monitor import ComposeJobMonitor

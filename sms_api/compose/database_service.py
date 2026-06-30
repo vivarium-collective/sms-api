@@ -6,12 +6,12 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, override
 
-from pbest.utils.input_types import ContainerizationFileRepr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import InstrumentedAttribute
 
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.compose.container_def import ContainerizationFileRepr
 from sms_api.compose.models import (
     BiGraphComputeType,
     BiGraphProcess,
