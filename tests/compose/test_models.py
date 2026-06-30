@@ -134,7 +134,7 @@ class TestComposeSimulationExperiment:
 
 class TestGetSingularityHash:
     def test_deterministic(self) -> None:
-        from pbest.utils.input_types import ContainerizationEngine, ContainerizationFileRepr
+        from sms_api.compose.container_def import ContainerizationEngine, ContainerizationFileRepr
 
         rep = ContainerizationFileRepr(
             representation="Bootstrap: docker\nFrom: python:3.13",

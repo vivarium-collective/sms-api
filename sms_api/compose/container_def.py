@@ -1,10 +1,10 @@
 """Containerization DTOs and the generic process-bigraph singularity def builder.
 
 This module inlines the small ``ContainerizationFileRepr`` / ``ContainerizationEngine``
-DTOs (previously imported from ``pbest``) and owns ``build_pbg_def`` — a
-deterministic Singularity/apptainer definition that installs process-bigraph and
-embeds the generic ``run_pbg.py`` runner. This removes sms-api's dependency on
-``pbest`` for the generic compose path.
+DTOs (previously sourced from an external containerization package) and owns
+``build_pbg_def`` — a deterministic Singularity/apptainer definition that installs
+process-bigraph and embeds the generic ``run_pbg.py`` runner. This makes sms-api
+self-sufficient for the generic compose path, with no external def-builder dependency.
 """
 
 import importlib.resources as _res

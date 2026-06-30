@@ -1,4 +1,6 @@
 import json
+import sys
+import types
 from pathlib import Path
 from typing import Any
 
@@ -19,10 +21,11 @@ def test_run_writes_final_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         def serialize_state(self) -> dict[str, int]:
             return {"ran": self.n}
 
-    # run() does `from process_bigraph import Composite`, so patch it there.
-    import process_bigraph
-
-    monkeypatch.setattr(process_bigraph, "Composite", FakeComposite)
+    # run() does `from process_bigraph import Composite`. Inject a fake module so
+    # the runner is testable without the (container-only) process-bigraph install.
+    fake_mod = types.ModuleType("process_bigraph")
+    fake_mod.Composite = FakeComposite  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "process_bigraph", fake_mod)
 
     pbg = tmp_path / "m.pbg"
     pbg.write_text(json.dumps({"state": {}, "composition": {}}))

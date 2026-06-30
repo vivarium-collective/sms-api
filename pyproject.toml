@@ -63,7 +63,6 @@ dependencies = [
     "python-libsedml>=2.0.33",
     "biosimulators-utils>=0.2.3",
     "python-libsbml>=5.20.5",
-    "pbest==0.6.3",
     "spython>=0.3.14",
     "biomodels>=0.3.2",
 ]
@@ -137,7 +136,7 @@ strict = true
 exclude = ['^notes/', '^sms_api/api/client/.*', '^app/ui/.*', '^app/gui\\.py$', '^app/tui\\.py$', '^home/*', "^scratchpads/*", "^simulation_configs/*", "^sms_api/simulation_data_service\\.py$"]
 
 [[tool.mypy.overrides]]
-module = ["kubernetes.*", "textual", "textual.*", "boto3", "boto3.*", "botocore.*", "pbest.*", "biosimulators_utils.*", "libsedml.*", "libsbml.*", "spython.*", "nats.*", "biomodels", "biomodels.*", "fsspec", "fsspec.*"]
+module = ["kubernetes.*", "textual", "textual.*", "boto3", "boto3.*", "botocore.*", "process_bigraph", "process_bigraph.*", "biosimulators_utils.*", "libsedml.*", "libsbml.*", "spython.*", "nats.*", "biomodels", "biomodels.*", "fsspec", "fsspec.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
