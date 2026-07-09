@@ -137,7 +137,10 @@ paths:
         required: false
         schema:
           anyOf:
-          - type: string
+          - enum:
+            - v2ecoli
+            - vecoli
+            type: string
           - type: 'null'
           description: 'Ray two-engine comparison: ''v2ecoli'' (ported) or ''vecoli''
             (imported via build_composite_native). When set, runs the comparison ensemble
@@ -167,6 +170,23 @@ paths:
           description: Generations per lineage for the comparison ensemble.
           title: Max Generations
         description: Generations per lineage for the comparison ensemble.
+      - name: vecoli_source
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - upstream
+            - vivarium-process
+            type: string
+          - type: 'null'
+          description: 'How the genuine vEcoli side runs (composite=''vecoli'' only):
+            ''upstream'' (default, ~50 pbg steps) or ''vivarium-process'' (vEcoli
+            as one pbg node with vivarium-core''s Engine inside).'
+          title: Vecoli Source
+        description: 'How the genuine vEcoli side runs (composite=''vecoli'' only):
+          ''upstream'' (default, ~50 pbg steps) or ''vivarium-process'' (vEcoli as
+          one pbg node with vivarium-core''s Engine inside).'
       - name: description
         in: query
         required: false
@@ -878,9 +898,9 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-06-29T23:19:33.951936'
+                  created_at: '2026-07-10T12:37:53.862427'
                 parca_config:
-                  outdir: .
+                  outdir: /projects/SMS/sms_api/jim/sims
       responses:
         '200':
           description: Successful Response
@@ -2323,7 +2343,7 @@ components:
         parca_config:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: .
+            outdir: /projects/SMS/sms_api/jim/sims
       additionalProperties: true
       type: object
       required:
@@ -2334,7 +2354,7 @@ components:
         outdir:
           type: string
           title: Outdir
-          default: .
+          default: /projects/SMS/sms_api/jim/sims
       additionalProperties: true
       type: object
       title: ParcaOptions
@@ -2485,7 +2505,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-06-29 23:19:33.784599'
+          default: '2026-07-10 12:37:53.611158'
         job_id:
           anyOf:
           - type: string
@@ -2522,7 +2542,7 @@ components:
         parca_options:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: .
+            outdir: /projects/SMS/sms_api/jim/sims
         analysis_options:
           $ref: '#/components/schemas/AnalysisOptions'
           default: {}
