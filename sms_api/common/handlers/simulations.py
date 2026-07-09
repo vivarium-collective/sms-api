@@ -1248,9 +1248,13 @@ async def _stream_s3_tar_gz_ray(experiment_id: str, chunk_size: int = 64 * 1024)
     """Stream a Ray ensemble's S3 outputs (zarr stores + summaries) into a tar.gz.
 
     The Ray entrypoint syncs the whole ``.pbg/runs/phase0-xarray`` tree to
-    ``s3://{bucket}/{s3_output_prefix}/{experiment_id}/`` — seed_NN/store.zarr
-    (many small chunk objects) plus per-seed and ensemble summary.json. Unlike
-    the Nextflow layout, we stream every object under the prefix as-is.
+    ``s3://{bucket}/{s3_output_prefix}/{experiment_id}/`` — for v2ecoli comparison
+    runs that is ``v2ecoli_seed{NN}.zarr/`` per seed (each a hive-partitioned
+    datatree of many small chunk objects; verified against ``sim61-v2c-*`` on
+    smsvpctest) plus ``v2ecoli_build_config.json``. This function does not build
+    those paths: unlike the Nextflow layout, we stream every object under the
+    prefix as-is. (The per-seed store URI the observables reader targets is built
+    by ``_build_store_uri`` in ``api/routers/sms.py``.)
     """
     settings = get_settings()
     experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}"
