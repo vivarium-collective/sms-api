@@ -10,7 +10,7 @@ Two zarr layouts are supported:
 * **Flat** — a single ``xarray.Dataset`` whose ``data_vars`` are the observables
   (used by simple/legacy emitters and the unit-test fixtures).
 * **Hive-partitioned XArrayEmitter datatree** — what the Ray comparison engine
-  actually writes to S3: ``…/{experiment_id}/v2ecoli_seed{NN}.zarr`` with the
+  actually writes to S3 (``data_layout.ray_seed_store_uri``): ``…/v2ecoli_seed{NN}.zarr`` with the
   interior ``experiment_id=…/variant=…/lineage_seed=…/{observable}/generation={G}``.
   Each observable is a leaf node whose ``generation={G}`` data-vars are the
   per-generation segments; the matching ``time_gen={G}`` arrays live on the

@@ -144,6 +144,8 @@ class TestSimulationServiceRaySubmit:
         service = SimulationServiceRay()
         with (
             patch("sms_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            # data_layout builds the S3 URIs (results/cache) and reads config.get_settings directly.
+            patch("sms_api.common.storage.data_layout.get_settings", _ray_settings),
             patch("sms_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
         ):
             job_id = await service.submit_ecoli_simulation_job(
@@ -301,6 +303,35 @@ class TestSimulationServiceRayBuild:
         with patch("sms_api.simulation.simulation_service_ray.get_settings", _ray_settings):
             cmd = service._sim_command(n_seeds=1, n_steps=10, chunk=4, composite="v2ecoli", max_generations=5)
         assert "--max-generations 5" in cmd
+
+    def test_sim_command_vecoli_source_only_appended_for_upstream_vecoli(self) -> None:
+        """--vecoli-source is meaningful only for --composite vecoli."""
+        service = SimulationServiceRay()
+        with patch("sms_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            vecoli = service._sim_command(
+                n_seeds=1, n_steps=10, chunk=4, composite="vecoli", vecoli_source="vivarium-process"
+            )
+            v2ecoli = service._sim_command(
+                n_seeds=1, n_steps=10, chunk=4, composite="v2ecoli", vecoli_source="vivarium-process"
+            )
+        assert "--vecoli-source vivarium-process" in vecoli
+        # v2ecoli engine ignores vecoli_source (guarded by _is_upstream_vecoli)
+        assert "--vecoli-source" not in v2ecoli
+
+
+class TestIsUpstreamVecoli:
+    """The single routing predicate shared by submit_ecoli_simulation_job and _sim_command."""
+
+    def test_only_vecoli_is_upstream(self) -> None:
+        from sms_api.simulation.simulation_service_ray import _is_upstream_vecoli
+
+        assert _is_upstream_vecoli("vecoli") is True
+        assert _is_upstream_vecoli("v2ecoli") is False
+        assert _is_upstream_vecoli(None) is False
+
+
+class TestSimulationServiceRayBuildSubmit:
+    """Build-image submission: DooD Batch job to the amd64 queue, then poll."""
 
     @pytest.mark.asyncio
     async def test_run_build_submits_to_amd64_queue_and_polls(self) -> None:

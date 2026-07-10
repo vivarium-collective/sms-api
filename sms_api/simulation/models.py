@@ -191,6 +191,23 @@ class AnalysisOptions(BaseModel):
         trim_attributes(self)
 
 
+# Ray two-engine comparison knobs — validated at the API boundary (Literal Query
+# params on the run endpoint → 422 on a typo), NOT declared on SimulationConfig.
+# SimulationConfig is a passthrough to the vEcoli solver's schema, and the
+# established convention here is to declare only fields authoritative to us and
+# leave everything the solver owns undeclared (extra="allow" carries them through
+# without injecting our defaults). So these ride in as extra keys, present only
+# when the caller set them, and the Ray backend reads them via getattr.
+# ``CompositeEngine`` — which engine the comparison driver runs:
+#   "v2ecoli" (the ported bigraph model) or "vecoli" (pristine upstream vEcoli,
+#   which requires the separate upstream ParCa cache; see _is_upstream_vecoli).
+CompositeEngine = Literal["v2ecoli", "vecoli"]
+# ``VecoliSource`` — how the genuine vEcoli side runs (only meaningful for
+# composite="vecoli"): "upstream" (default, ~50 pbg steps) or "vivarium-process"
+# (vEcoli as one pbg node with vivarium-core's Engine inside).
+VecoliSource = Literal["upstream", "vivarium-process"]
+
+
 class SimulationConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
     experiment_id: str

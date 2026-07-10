@@ -283,13 +283,33 @@ def get_job_backend() -> ComputeBackend:
 def compute_backend_for_repo(repo_url: str) -> ComputeBackend | None:
     """Map a simulator repo to its compute backend, so one deployment can serve both.
 
-    v2ecoli (vivarium-collective/v2ecoli) runs on Ray; the vEcoli repos (CovertLab/vEcoli,
-    the fork, the private repo) run on AWS Batch + Nextflow. Returns None for an unknown
-    repo, in which case callers fall back to ``get_job_backend()`` (the deployment default).
-    Note ``v2ecoli`` does not contain the ``vecoli`` substring, so the checks are independent.
+    The KNOWN repos (the ``RepoUrl`` enum) are mapped explicitly — this is the
+    authoritative dispatch, and it's the only way repos whose name matches neither
+    substring (e.g. the production Ray repo ``CovertLabEcoli/sms-ecoli``) are routed
+    correctly. A substring check is kept as a fallback for forks/variants at other
+    URLs. Returns None for a true unknown, in which case callers fall back to
+    ``get_job_backend()`` (the deployment default).
+
+    Ray: v2ecoli + sms-ecoli. Batch/Nextflow: the vEcoli repos. Note ``v2ecoli`` /
+    ``sms-ecoli`` do not contain the ``vecoli`` substring, so the checks are independent.
     """
+    # Lazy import: simulator_defaults imports this module, so importing RepoUrl at
+    # module load would be circular. RepoUrl is the single source of the repo URLs.
+    from sms_api.common.simulator_defaults import RepoUrl
+
+    known: dict[str, ComputeBackend] = {
+        RepoUrl.V2ECOLI_REPO_URL: ComputeBackend.RAY,
+        RepoUrl.SMS_ECOLI_REPO_URL: ComputeBackend.RAY,
+        RepoUrl.VECOLI_FORK_REPO_URL: ComputeBackend.BATCH,
+        RepoUrl.VECOLI_PUBLIC_REPO_URL: ComputeBackend.BATCH,
+        RepoUrl.VECOLI_PRIVATE_REPO_URL: ComputeBackend.BATCH,
+    }
+    if repo_url in known:
+        return known[repo_url]
+
+    # Fallback for forks/variants at other URLs.
     url = repo_url.lower()
-    if "v2ecoli" in url:
+    if "v2ecoli" in url or "sms-ecoli" in url:
         return ComputeBackend.RAY
     if "vecoli" in url:
         return ComputeBackend.BATCH

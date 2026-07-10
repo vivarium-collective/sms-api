@@ -21,6 +21,7 @@ from sms_api.common.handlers.simulators import upload_simulator
 from sms_api.common.hpc.job_service import JobStatusUpdate
 from sms_api.common.models import JobBackend, JobStatus, SSHTarget
 from sms_api.common.simulator_defaults import DEFAULT_OBSERVABLES, RepoUrl
+from sms_api.common.storage import data_layout
 from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
 from sms_api.config import ComputeBackend, compute_backend_for_repo, get_job_backend, get_settings
 from sms_api.dependencies import (
@@ -35,6 +36,7 @@ from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import (
     AnalysisOptions,
+    CompositeEngine,
     HpcRun,
     JobType,
     ParcaDataset,
@@ -45,6 +47,7 @@ from sms_api.simulation.models import (
     SimulationRequest,
     SimulationRun,
     SimulatorVersion,
+    VecoliSource,
 )
 from sms_api.simulation.simulation_service import SimulationService
 
@@ -373,9 +376,10 @@ async def run_simulation_workflow(  # noqa: C901
     simulation_config_filename: str,
     num_generations: int | None = None,
     num_seeds: int | None = None,
-    composite: str | None = None,
+    composite: CompositeEngine | None = None,
     condition: str | None = None,
     max_generations: int | None = None,
+    vecoli_source: VecoliSource | None = None,
     description: str | None = None,
     run_parca: bool | None = None,
     observables: list[str] | None = None,
@@ -489,21 +493,25 @@ async def run_simulation_workflow(  # noqa: C901
         config_data["n_init_sims"] = num_seeds
     # Two-engine comparison knobs (Ray backend): when `composite` is set the Ray
     # sim job runs scripts/run_comparison_ensemble.py instead of the phase0
-    # ensemble. SimulationConfig allows extra fields, so these flow through to
-    # SimulationServiceK8s/Ray._sim_command via getattr.
+    # ensemble. Validated at the API boundary (Literal Query params → 422 on a
+    # typo); they ride through SimulationConfig as extra passthrough keys (set only
+    # when provided) so they never inject our defaults into the vEcoli solver
+    # config. The Ray backend reads them via getattr.
     if composite is not None:
         config_data["composite"] = composite
     if condition is not None:
         config_data["condition"] = condition
     if max_generations is not None:
         config_data["max_generations"] = max_generations
+    if vecoli_source is not None:
+        config_data["vecoli_source"] = vecoli_source
     if description is not None:
         config_data["description"] = description
     effective_observables = observables if observables else DEFAULT_OBSERVABLES
     config_data["engine_process_reports"] = [obs.split(".") for obs in effective_observables]
     # For Batch backend, override HPC paths with AWS equivalents
     if backend == ComputeBackend.BATCH:
-        s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{unique_experiment_id}"
+        s3_output = data_layout.NextflowLayout.output_uri(unique_experiment_id)
         config_data["emitter_arg"] = {"out_uri": s3_output}
         config_data.pop("aws_cdk", None)
         config_data.pop("ccam", None)
@@ -543,9 +551,7 @@ async def run_simulation_workflow(  # noqa: C901
         config_data.pop("ccam", None)
         config_data.pop("aws", None)
         config_data["emitter"] = "xarray"
-        config_data["emitter_arg"] = {
-            "out_uri": f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{unique_experiment_id}"
-        }
+        config_data["emitter_arg"] = {"out_uri": data_layout.NextflowLayout.output_uri(unique_experiment_id)}
     else:
         # SLURM path: replace K8s-specific sections with SLURM equivalents.
         # The ccam Nextflow profile only exists in the fork (api-support branch)
@@ -1159,12 +1165,11 @@ async def _download_outputs_from_s3(experiment_id: str, local_cache: Path) -> No
     idle timeouts (60s default on ALB/NGINX) don't trigger a 504 before the
     streaming response begins.
     """
-    settings = get_settings()
     file_service = get_file_service()
     if file_service is None:
         raise RuntimeError("File service is not initialized")
 
-    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}/{experiment_id}"
+    experiment_prefix = data_layout.NextflowLayout.experiment_prefix(experiment_id)
 
     # 1. Plan analyses/ downloads
     analyses_prefix = S3FilePath(s3_path=Path(f"{experiment_prefix}/analyses"))
@@ -1256,8 +1261,7 @@ async def _stream_s3_tar_gz(experiment_id: str, chunk_size: int = 64 * 1024) -> 
     so bytes flow to the client continuously — avoids ALB 504 timeouts that
     occur when the server downloads all files to disk before responding.
     """
-    settings = get_settings()
-    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}/{experiment_id}"
+    experiment_prefix = data_layout.NextflowLayout.experiment_prefix(experiment_id)
 
     file_service = get_file_service()
     if file_service is None:
@@ -1287,17 +1291,16 @@ async def _stream_s3_tar_gz(experiment_id: str, chunk_size: int = 64 * 1024) -> 
 async def _stream_s3_tar_gz_ray(experiment_id: str, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
     """Stream a Ray ensemble's S3 outputs (zarr stores + summaries) into a tar.gz.
 
-    The Ray entrypoint syncs the whole ``.pbg/runs/phase0-xarray`` tree to
-    ``s3://{bucket}/{s3_output_prefix}/{experiment_id}/`` — for v2ecoli comparison
-    runs that is ``v2ecoli_seed{NN}.zarr/`` per seed (each a hive-partitioned
-    datatree of many small chunk objects; verified against ``sim61-v2c-*`` on
-    smsvpctest) plus ``v2ecoli_build_config.json``. This function does not build
-    those paths: unlike the Nextflow layout, we stream every object under the
-    prefix as-is. (The per-seed store URI the observables reader targets is built
-    by ``_build_store_uri`` in ``api/routers/sms.py``.)
+        The Ray entrypoint syncs the whole ``.pbg/runs/phase0-xarray`` tree to
+        ``s3://{bucket}/{s3_output_prefix}/{experiment_id}/`` — for v2ecoli comparison
+        runs that is ``v2ecoli_seed{NN}.zarr/`` per seed (each a hive-partitioned
+        datatree of many small chunk objects; verified against ``sim61-v2c-*`` on
+        smsvpctest) plus ``v2ecoli_build_config.json``. This function does not build
+        those paths: unlike the Nextflow layout, we stream every object under the
+        prefix as-is. (The per-seed store URI the observables reader targets is built
+    by ``data_layout.RayLayout.seed_store_uri`` (the observables reader's path).)
     """
-    settings = get_settings()
-    experiment_prefix = f"{settings.s3_output_prefix}/{experiment_id}"
+    experiment_prefix = data_layout.RayLayout.experiment_prefix(experiment_id)
 
     file_service = get_file_service()
     if file_service is None:
@@ -1493,7 +1496,7 @@ async def run_standalone_analysis(
     # Build analysis config — path patterns match vEcoli conventions
     backend = get_job_backend()
     if backend == ComputeBackend.BATCH:
-        s3_output = f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}"
+        s3_output = data_layout.NextflowLayout.output_uri(experiment_id)
         analysis_name = f"analysis-{experiment_id[:20]}-{str(uuid.uuid4())[:4]}"
         analysis_config: dict[str, Any] = {
             "analysis_options": {
@@ -1579,7 +1582,7 @@ async def _get_ray_log(hpc_run: HpcRun, db_service: DatabaseService, simulation_
     simulation = await db_service.get_simulation(simulation_id=simulation_id)
     file_service = get_file_service()
     if simulation is not None and file_service is not None:
-        summary_key = f"{settings.s3_output_prefix}/{simulation.config.experiment_id}/summary.json"
+        summary_key = data_layout.RayLayout.summary_key(simulation.config.experiment_id)
         try:
             content = await file_service.get_file_contents(S3FilePath(s3_path=Path(summary_key)))
             if content:
