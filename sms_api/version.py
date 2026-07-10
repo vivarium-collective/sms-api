@@ -40,4 +40,10 @@
 #          unambiguous high-water mark (supersedes 0.9.12)
 # 0.9.16 — Ray: --composite vecoli stages a SEPARATE pristine-upstream ParCa cache
 #          (build_upstream_parca.py, serial --cpus 1) instead of the v2ecoli cache
-__version__ = "0.9.16"
+# 0.9.17 — data-layout module centralizes all S3 store/cache paths and closes the
+#          reader-vs-downloader drift (#153/#152); comparison knobs validated at the
+#          API boundary via Literal query params (#154); recognize
+#          CovertLabEcoli/sms-ecoli as a Ray repo + harden repo->backend dispatch
+#          to the explicit RepoUrl map (#164); observables endpoint returns 409 for
+#          non-Ray runs; vivarium-workbench deploy manifests move into kustomize (#165)
+__version__ = "0.9.17"
