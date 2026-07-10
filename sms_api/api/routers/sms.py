@@ -34,12 +34,14 @@ from sms_api.dependencies import get_database_service, get_simulation_service
 from sms_api.simulation.github_repo import open_repo_tarball_stream
 from sms_api.simulation.models import (
     AnalysisOptions,
+    CompositeEngine,
     ObservableInfoModel,
     RepoDiscovery,
     Simulation,
     SimulationObservableIndex,
     SimulationObservables,
     SimulationRun,
+    VecoliSource,
 )
 from sms_api.simulation.observable_reader import list_observables_async, read_observables_async
 
@@ -166,7 +168,7 @@ async def run_simulation_workflow(
     ),
     num_generations: int | None = Query(default=None, description="Number of generations to simulate"),
     num_seeds: int | None = Query(default=None, description="Number of initial seeds (lineages)"),
-    composite: str | None = Query(
+    composite: CompositeEngine | None = Query(
         default=None,
         description="Ray two-engine comparison: 'v2ecoli' (ported) or 'vecoli' "
         "(imported via build_composite_native). When set, runs the comparison "
@@ -179,6 +181,12 @@ async def run_simulation_workflow(
     max_generations: int | None = Query(
         default=None,
         description="Generations per lineage for the comparison ensemble.",
+    ),
+    vecoli_source: VecoliSource | None = Query(
+        default=None,
+        description="How the genuine vEcoli side runs (composite='vecoli' only): "
+        "'upstream' (default, ~50 pbg steps) or 'vivarium-process' (vEcoli as one "
+        "pbg node with vivarium-core's Engine inside).",
     ),
     description: str | None = Query(default=None, description="Description of the simulation"),
     run_parca: bool | None = Query(
@@ -242,6 +250,7 @@ async def run_simulation_workflow(
             composite=composite,
             condition=condition,
             max_generations=max_generations,
+            vecoli_source=vecoli_source,
             description=description,
             run_parca=run_parca,
             observables=observables,

@@ -35,6 +35,7 @@ from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.hpc_utils import get_correlation_id
 from sms_api.simulation.models import (
     AnalysisOptions,
+    CompositeEngine,
     HpcRun,
     JobType,
     ParcaDataset,
@@ -45,6 +46,7 @@ from sms_api.simulation.models import (
     SimulationRequest,
     SimulationRun,
     SimulatorVersion,
+    VecoliSource,
 )
 from sms_api.simulation.simulation_service import SimulationService
 
@@ -373,9 +375,10 @@ async def run_simulation_workflow(  # noqa: C901
     simulation_config_filename: str,
     num_generations: int | None = None,
     num_seeds: int | None = None,
-    composite: str | None = None,
+    composite: CompositeEngine | None = None,
     condition: str | None = None,
     max_generations: int | None = None,
+    vecoli_source: VecoliSource | None = None,
     description: str | None = None,
     run_parca: bool | None = None,
     observables: list[str] | None = None,
@@ -489,14 +492,18 @@ async def run_simulation_workflow(  # noqa: C901
         config_data["n_init_sims"] = num_seeds
     # Two-engine comparison knobs (Ray backend): when `composite` is set the Ray
     # sim job runs scripts/run_comparison_ensemble.py instead of the phase0
-    # ensemble. SimulationConfig allows extra fields, so these flow through to
-    # SimulationServiceK8s/Ray._sim_command via getattr.
+    # ensemble. Validated at the API boundary (Literal Query params → 422 on a
+    # typo); they ride through SimulationConfig as extra passthrough keys (set only
+    # when provided) so they never inject our defaults into the vEcoli solver
+    # config. The Ray backend reads them via getattr.
     if composite is not None:
         config_data["composite"] = composite
     if condition is not None:
         config_data["condition"] = condition
     if max_generations is not None:
         config_data["max_generations"] = max_generations
+    if vecoli_source is not None:
+        config_data["vecoli_source"] = vecoli_source
     if description is not None:
         config_data["description"] = description
     effective_observables = observables if observables else DEFAULT_OBSERVABLES

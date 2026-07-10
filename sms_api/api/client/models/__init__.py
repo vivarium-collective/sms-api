@@ -53,6 +53,8 @@ from .repo_discovery_analysis_modules import RepoDiscoveryAnalysisModules
 from .run_ecoli_simulation_analysis_response_run_ecoli_simulation_analysis import (
     RunEcoliSimulationAnalysisResponseRunEcoliSimulationAnalysis,
 )
+from .run_ecoli_simulation_new_composite_type_0 import RunEcoliSimulationNewCompositeType0
+from .run_ecoli_simulation_new_vecoli_source_type_0 import RunEcoliSimulationNewVecoliSourceType0
 from .simulation import Simulation
 from .simulation_analysis_data_response_type import SimulationAnalysisDataResponseType
 from .simulation_config import SimulationConfig
@@ -118,6 +120,8 @@ __all__ = (
     "RepoDiscovery",
     "RepoDiscoveryAnalysisModules",
     "RunEcoliSimulationAnalysisResponseRunEcoliSimulationAnalysis",
+    "RunEcoliSimulationNewCompositeType0",
+    "RunEcoliSimulationNewVecoliSourceType0",
     "Simulation",
     "SimulationAnalysisDataResponseType",
     "SimulationConfig",

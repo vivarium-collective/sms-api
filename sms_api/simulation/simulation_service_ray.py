@@ -42,7 +42,14 @@ from sms_api.simulation.github_repo import (
     fetch_latest_commit_hash,
     fetch_repo_discovery,
 )
-from sms_api.simulation.models import ParcaDataset, RepoDiscovery, Simulation, SimulatorVersion
+from sms_api.simulation.models import (
+    CompositeEngine,
+    ParcaDataset,
+    RepoDiscovery,
+    Simulation,
+    SimulatorVersion,
+    VecoliSource,
+)
 from sms_api.simulation.simulation_service import SimulationService
 
 logger = logging.getLogger(__name__)
@@ -60,6 +67,17 @@ REPORT_PATH = "/tmp/report.json"  # noqa: S108
 
 def _rand_suffix() -> str:
     return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
+
+
+def _is_upstream_vecoli(composite: CompositeEngine | None) -> bool:
+    """The pristine upstream-vEcoli engine (``--composite vecoli``).
+
+    The single source of truth for the routing question "does this run need the
+    separate upstream ParCa cache + ``--vecoli-source`` flag?" — used both to
+    select the ParCa cache/command in ``submit_ecoli_simulation_job`` and to gate
+    the ``--vecoli-source`` arg in ``_sim_command``.
+    """
+    return composite == "vecoli"
 
 
 class SimulationServiceRay(SimulationService):
@@ -275,10 +293,10 @@ class SimulationServiceRay(SimulationService):
         n_steps: int,
         chunk: int,
         *,
-        composite: str | None = None,
+        composite: CompositeEngine | None = None,
         condition: str | None = None,
         max_generations: int | None = None,
-        vecoli_source: str | None = None,
+        vecoli_source: VecoliSource | None = None,
     ) -> str:
         # When ``composite`` is set, run the two-engine comparison driver — both
         # engines (v2ecoli port + vEcoli imported via build_composite_native)
@@ -295,7 +313,7 @@ class SimulationServiceRay(SimulationService):
             # "vivarium-process" (vEcoli as ONE pbg node with vivarium-core's Engine
             # inside — faithful by construction). Both stage the SAME upstream ParCa
             # cache (is_upstream routing is unchanged), so only the driver flag differs.
-            src = f" --vecoli-source {vecoli_source}" if (composite == "vecoli" and vecoli_source) else ""
+            src = f" --vecoli-source {vecoli_source}" if (_is_upstream_vecoli(composite) and vecoli_source) else ""
             return (
                 f"cd {V2ECOLI_DIR} && python scripts/run_comparison_ensemble.py"
                 f" --composite {composite} --condition {condition or 'basal'}"
@@ -422,22 +440,26 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         # v2ecoli:<commit> (both ParCa and the sim run the same image).
         job_def = self._ensure_mnp_job_def(self._image_uri(commit), commit)
 
-        n_seeds = ecoli_simulation.num_seeds or getattr(ecoli_simulation.config, "n_init_sims", None) or 1
-        n_steps = getattr(ecoli_simulation.config, "ray_n_steps", None) or settings.ray_n_steps
-        chunk = getattr(ecoli_simulation.config, "ray_chunk", None) or settings.ray_chunk
+        config = ecoli_simulation.config
+        # SimulationConfig is a vEcoli passthrough (extra="allow"); the comparison
+        # knobs are validated at the API boundary (Literal Query params) and ride
+        # in as extra keys, so they're read here via getattr (present only when the
+        # caller set them). ``composite``/``vecoli_source`` values are already
+        # constrained by the endpoint's CompositeEngine/VecoliSource types.
+        n_seeds = ecoli_simulation.num_seeds or getattr(config, "n_init_sims", None) or 1
+        n_steps = getattr(config, "ray_n_steps", None) or settings.ray_n_steps
+        chunk = getattr(config, "ray_chunk", None) or settings.ray_chunk
         # Optional two-engine comparison knobs (default phase0 ensemble when unset).
-        composite = getattr(ecoli_simulation.config, "composite", None)
-        condition = getattr(ecoli_simulation.config, "condition", None)
-        max_generations = getattr(ecoli_simulation.config, "max_generations", None)
-        # How the vEcoli side runs (composite=vecoli only): "upstream" (default) or
-        # "vivarium-process" (vEcoli as one pbg node, vivarium Engine inside).
-        vecoli_source = getattr(ecoli_simulation.config, "vecoli_source", None)
+        composite = getattr(config, "composite", None)
+        condition = getattr(config, "condition", None)
+        max_generations = getattr(config, "max_generations", None)
+        vecoli_source = getattr(config, "vecoli_source", None)
 
         # Engine-specific ParCa source: the pristine upstream wrapper (--composite
         # vecoli) stages an UPSTREAM-built simData (separate cache + build cmd);
         # every other engine stages the v2ecoli cache. Both ParCa and the sim use
         # the matching pair so the staged simData is consistent across all nodes.
-        is_upstream = composite == "vecoli"
+        is_upstream = _is_upstream_vecoli(composite)
         cache_s3 = self._upstream_cache_s3_uri(commit) if is_upstream else self._cache_s3_uri(commit)
         parca_command = self._upstream_parca_command() if is_upstream else self._parca_command()
 

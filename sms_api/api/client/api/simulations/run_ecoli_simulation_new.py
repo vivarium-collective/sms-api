@@ -7,6 +7,8 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.analysis_options import AnalysisOptions
 from ...models.http_validation_error import HTTPValidationError
+from ...models.run_ecoli_simulation_new_composite_type_0 import RunEcoliSimulationNewCompositeType0
+from ...models.run_ecoli_simulation_new_vecoli_source_type_0 import RunEcoliSimulationNewVecoliSourceType0
 from ...models.simulation import Simulation
 from ...types import UNSET, Response, Unset
 
@@ -19,9 +21,10 @@ def _get_kwargs(
     simulation_config_filename: Union[Unset, str] = "api_simulation_default.json",
     num_generations: Union[None, Unset, int] = UNSET,
     num_seeds: Union[None, Unset, int] = UNSET,
-    composite: Union[None, Unset, str] = UNSET,
+    composite: Union[None, RunEcoliSimulationNewCompositeType0, Unset] = UNSET,
     condition: Union[None, Unset, str] = UNSET,
     max_generations: Union[None, Unset, int] = UNSET,
+    vecoli_source: Union[None, RunEcoliSimulationNewVecoliSourceType0, Unset] = UNSET,
     description: Union[None, Unset, str] = UNSET,
     run_parca: Union[None, Unset, bool] = UNSET,
     observables: Union[None, Unset, list[str]] = UNSET,
@@ -62,6 +65,8 @@ def _get_kwargs(
     json_composite: Union[None, Unset, str]
     if isinstance(composite, Unset):
         json_composite = UNSET
+    elif isinstance(composite, RunEcoliSimulationNewCompositeType0):
+        json_composite = composite.value
     else:
         json_composite = composite
     params["composite"] = json_composite
@@ -79,6 +84,15 @@ def _get_kwargs(
     else:
         json_max_generations = max_generations
     params["max_generations"] = json_max_generations
+
+    json_vecoli_source: Union[None, Unset, str]
+    if isinstance(vecoli_source, Unset):
+        json_vecoli_source = UNSET
+    elif isinstance(vecoli_source, RunEcoliSimulationNewVecoliSourceType0):
+        json_vecoli_source = vecoli_source.value
+    else:
+        json_vecoli_source = vecoli_source
+    params["vecoli_source"] = json_vecoli_source
 
     json_description: Union[None, Unset, str]
     if isinstance(description, Unset):
@@ -189,9 +203,10 @@ def sync_detailed(
     simulation_config_filename: Union[Unset, str] = "api_simulation_default.json",
     num_generations: Union[None, Unset, int] = UNSET,
     num_seeds: Union[None, Unset, int] = UNSET,
-    composite: Union[None, Unset, str] = UNSET,
+    composite: Union[None, RunEcoliSimulationNewCompositeType0, Unset] = UNSET,
     condition: Union[None, Unset, str] = UNSET,
     max_generations: Union[None, Unset, int] = UNSET,
+    vecoli_source: Union[None, RunEcoliSimulationNewVecoliSourceType0, Unset] = UNSET,
     description: Union[None, Unset, str] = UNSET,
     run_parca: Union[None, Unset, bool] = UNSET,
     observables: Union[None, Unset, list[str]] = UNSET,
@@ -216,13 +231,16 @@ def sync_detailed(
             'api_simulation_default.json'.
         num_generations (Union[None, Unset, int]): Number of generations to simulate
         num_seeds (Union[None, Unset, int]): Number of initial seeds (lineages)
-        composite (Union[None, Unset, str]): Ray two-engine comparison: 'v2ecoli' (ported) or
-            'vecoli' (imported via build_composite_native). When set, runs the comparison ensemble
-            driver instead of the phase0 ensemble.
+        composite (Union[None, RunEcoliSimulationNewCompositeType0, Unset]): Ray two-engine
+            comparison: 'v2ecoli' (ported) or 'vecoli' (imported via build_composite_native). When
+            set, runs the comparison ensemble driver instead of the phase0 ensemble.
         condition (Union[None, Unset, str]): Growth condition/media for the comparison run (e.g.
             basal, acetate).
         max_generations (Union[None, Unset, int]): Generations per lineage for the comparison
             ensemble.
+        vecoli_source (Union[None, RunEcoliSimulationNewVecoliSourceType0, Unset]): How the
+            genuine vEcoli side runs (composite='vecoli' only): 'upstream' (default, ~50 pbg steps) or
+            'vivarium-process' (vEcoli as one pbg node with vivarium-core's Engine inside).
         description (Union[None, Unset, str]): Description of the simulation
         run_parca (Union[None, Unset, bool]): If true, run the simulation parameter calculator
             prior to running simulation (re-parameterizes simulation workflow).
@@ -259,6 +277,7 @@ def sync_detailed(
         composite=composite,
         condition=condition,
         max_generations=max_generations,
+        vecoli_source=vecoli_source,
         description=description,
         run_parca=run_parca,
         observables=observables,
@@ -284,9 +303,10 @@ def sync(
     simulation_config_filename: Union[Unset, str] = "api_simulation_default.json",
     num_generations: Union[None, Unset, int] = UNSET,
     num_seeds: Union[None, Unset, int] = UNSET,
-    composite: Union[None, Unset, str] = UNSET,
+    composite: Union[None, RunEcoliSimulationNewCompositeType0, Unset] = UNSET,
     condition: Union[None, Unset, str] = UNSET,
     max_generations: Union[None, Unset, int] = UNSET,
+    vecoli_source: Union[None, RunEcoliSimulationNewVecoliSourceType0, Unset] = UNSET,
     description: Union[None, Unset, str] = UNSET,
     run_parca: Union[None, Unset, bool] = UNSET,
     observables: Union[None, Unset, list[str]] = UNSET,
@@ -311,13 +331,16 @@ def sync(
             'api_simulation_default.json'.
         num_generations (Union[None, Unset, int]): Number of generations to simulate
         num_seeds (Union[None, Unset, int]): Number of initial seeds (lineages)
-        composite (Union[None, Unset, str]): Ray two-engine comparison: 'v2ecoli' (ported) or
-            'vecoli' (imported via build_composite_native). When set, runs the comparison ensemble
-            driver instead of the phase0 ensemble.
+        composite (Union[None, RunEcoliSimulationNewCompositeType0, Unset]): Ray two-engine
+            comparison: 'v2ecoli' (ported) or 'vecoli' (imported via build_composite_native). When
+            set, runs the comparison ensemble driver instead of the phase0 ensemble.
         condition (Union[None, Unset, str]): Growth condition/media for the comparison run (e.g.
             basal, acetate).
         max_generations (Union[None, Unset, int]): Generations per lineage for the comparison
             ensemble.
+        vecoli_source (Union[None, RunEcoliSimulationNewVecoliSourceType0, Unset]): How the
+            genuine vEcoli side runs (composite='vecoli' only): 'upstream' (default, ~50 pbg steps) or
+            'vivarium-process' (vEcoli as one pbg node with vivarium-core's Engine inside).
         description (Union[None, Unset, str]): Description of the simulation
         run_parca (Union[None, Unset, bool]): If true, run the simulation parameter calculator
             prior to running simulation (re-parameterizes simulation workflow).
@@ -355,6 +378,7 @@ def sync(
         composite=composite,
         condition=condition,
         max_generations=max_generations,
+        vecoli_source=vecoli_source,
         description=description,
         run_parca=run_parca,
         observables=observables,
@@ -374,9 +398,10 @@ async def asyncio_detailed(
     simulation_config_filename: Union[Unset, str] = "api_simulation_default.json",
     num_generations: Union[None, Unset, int] = UNSET,
     num_seeds: Union[None, Unset, int] = UNSET,
-    composite: Union[None, Unset, str] = UNSET,
+    composite: Union[None, RunEcoliSimulationNewCompositeType0, Unset] = UNSET,
     condition: Union[None, Unset, str] = UNSET,
     max_generations: Union[None, Unset, int] = UNSET,
+    vecoli_source: Union[None, RunEcoliSimulationNewVecoliSourceType0, Unset] = UNSET,
     description: Union[None, Unset, str] = UNSET,
     run_parca: Union[None, Unset, bool] = UNSET,
     observables: Union[None, Unset, list[str]] = UNSET,
@@ -401,13 +426,16 @@ async def asyncio_detailed(
             'api_simulation_default.json'.
         num_generations (Union[None, Unset, int]): Number of generations to simulate
         num_seeds (Union[None, Unset, int]): Number of initial seeds (lineages)
-        composite (Union[None, Unset, str]): Ray two-engine comparison: 'v2ecoli' (ported) or
-            'vecoli' (imported via build_composite_native). When set, runs the comparison ensemble
-            driver instead of the phase0 ensemble.
+        composite (Union[None, RunEcoliSimulationNewCompositeType0, Unset]): Ray two-engine
+            comparison: 'v2ecoli' (ported) or 'vecoli' (imported via build_composite_native). When
+            set, runs the comparison ensemble driver instead of the phase0 ensemble.
         condition (Union[None, Unset, str]): Growth condition/media for the comparison run (e.g.
             basal, acetate).
         max_generations (Union[None, Unset, int]): Generations per lineage for the comparison
             ensemble.
+        vecoli_source (Union[None, RunEcoliSimulationNewVecoliSourceType0, Unset]): How the
+            genuine vEcoli side runs (composite='vecoli' only): 'upstream' (default, ~50 pbg steps) or
+            'vivarium-process' (vEcoli as one pbg node with vivarium-core's Engine inside).
         description (Union[None, Unset, str]): Description of the simulation
         run_parca (Union[None, Unset, bool]): If true, run the simulation parameter calculator
             prior to running simulation (re-parameterizes simulation workflow).
@@ -444,6 +472,7 @@ async def asyncio_detailed(
         composite=composite,
         condition=condition,
         max_generations=max_generations,
+        vecoli_source=vecoli_source,
         description=description,
         run_parca=run_parca,
         observables=observables,
@@ -467,9 +496,10 @@ async def asyncio(
     simulation_config_filename: Union[Unset, str] = "api_simulation_default.json",
     num_generations: Union[None, Unset, int] = UNSET,
     num_seeds: Union[None, Unset, int] = UNSET,
-    composite: Union[None, Unset, str] = UNSET,
+    composite: Union[None, RunEcoliSimulationNewCompositeType0, Unset] = UNSET,
     condition: Union[None, Unset, str] = UNSET,
     max_generations: Union[None, Unset, int] = UNSET,
+    vecoli_source: Union[None, RunEcoliSimulationNewVecoliSourceType0, Unset] = UNSET,
     description: Union[None, Unset, str] = UNSET,
     run_parca: Union[None, Unset, bool] = UNSET,
     observables: Union[None, Unset, list[str]] = UNSET,
@@ -494,13 +524,16 @@ async def asyncio(
             'api_simulation_default.json'.
         num_generations (Union[None, Unset, int]): Number of generations to simulate
         num_seeds (Union[None, Unset, int]): Number of initial seeds (lineages)
-        composite (Union[None, Unset, str]): Ray two-engine comparison: 'v2ecoli' (ported) or
-            'vecoli' (imported via build_composite_native). When set, runs the comparison ensemble
-            driver instead of the phase0 ensemble.
+        composite (Union[None, RunEcoliSimulationNewCompositeType0, Unset]): Ray two-engine
+            comparison: 'v2ecoli' (ported) or 'vecoli' (imported via build_composite_native). When
+            set, runs the comparison ensemble driver instead of the phase0 ensemble.
         condition (Union[None, Unset, str]): Growth condition/media for the comparison run (e.g.
             basal, acetate).
         max_generations (Union[None, Unset, int]): Generations per lineage for the comparison
             ensemble.
+        vecoli_source (Union[None, RunEcoliSimulationNewVecoliSourceType0, Unset]): How the
+            genuine vEcoli side runs (composite='vecoli' only): 'upstream' (default, ~50 pbg steps) or
+            'vivarium-process' (vEcoli as one pbg node with vivarium-core's Engine inside).
         description (Union[None, Unset, str]): Description of the simulation
         run_parca (Union[None, Unset, bool]): If true, run the simulation parameter calculator
             prior to running simulation (re-parameterizes simulation workflow).
@@ -539,6 +572,7 @@ async def asyncio(
             composite=composite,
             condition=condition,
             max_generations=max_generations,
+            vecoli_source=vecoli_source,
             description=description,
             run_parca=run_parca,
             observables=observables,
