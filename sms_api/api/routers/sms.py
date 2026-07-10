@@ -147,6 +147,22 @@ async def export_simulator_workspace(
     )
 
 
+@config.router.get(
+    path="/simulations/tags",
+    operation_id="list-simulation-tags",
+    tags=["Simulations"],
+    summary="List available simulation filter tags and their experiment IDs",
+)
+async def list_simulation_tags() -> dict[str, list[str]]:
+    """Return the predefined tags that can be used to filter simulations.
+
+    Each tag maps to a list of experiment IDs that belong to that bundle.
+    """
+    from sms_api.simulation.simulation_tags import SIMULATION_TAGS
+
+    return SIMULATION_TAGS
+
+
 @config.router.post(
     path="/simulations",
     operation_id="run-ecoli-simulation-new",
@@ -394,14 +410,32 @@ async def run_simulation_analysis(
     summary="List all simulation specs uploaded to the database",
     dependencies=[Depends(get_database_service)],
 )
-async def list_simulations() -> list[Simulation]:
+async def list_simulations(
+    experiment_id: str | None = Query(
+        default=None,
+        description="Comma-separated list of experiment IDs to filter by. "
+        "Example: 'sim31-baseline-60bb,sim33-violacien-seeds1000-generations10-9617'",
+    ),
+    tag: str | None = Query(
+        default=None,
+        description="Predefined tag name that resolves to a bundle of experiment IDs. "
+        "Example: 'cd1'. Use GET /api/v1/simulations/tags to list available tags.",
+    ),
+) -> list[Simulation]:
     db_service = get_database_service()
     if db_service is None:
         logger.error("Database service is not initialized")
         raise HTTPException(status_code=500, detail="Database service is not initialized")
     try:
-        # return await db_service.list_simulations()
+        if experiment_id is not None or tag is not None:
+            return await handlers.simulations.list_simulations_filtered(
+                db_service=db_service,
+                experiment_id=experiment_id,
+                tag=tag,
+            )
         return await handlers.simulations.list_simulations(db_service=db_service)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.exception("Error fetching the uploaded analyses")
         raise HTTPException(status_code=500, detail=str(e)) from e

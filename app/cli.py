@@ -606,14 +606,34 @@ def simulation_list(
     n: int | None = Option(
         default=None, help="Number of entries to show. Positive = first N, negative = last N (by ID)."
     ),
+    experiment_id: str | None = Option(default=None, help="Comma-separated experiment IDs to filter by."),
+    tag: str | None = Option(
+        default=None, help="Predefined tag name (e.g. 'cd1'). Use 'atlantis simulation tags' to list available tags."
+    ),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     console = get_console()
     data_service = get_data_service(base_url=base_url)
-    simulations = data_service.show_workflows()
+    simulations = data_service.show_workflows(experiment_id=experiment_id, tag=tag)
     simulations = _slice_by_id(simulations, n)
     for sim in simulations:
         display_json(sim.model_dump(), console)
+
+
+@simulation_cli.command("tags", help="List available simulation filter tags.")
+def simulation_tags(
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    tags = data_service.list_simulation_tags()
+    if not tags:
+        console.print("[dim]No simulation tags defined.[/]")
+        return
+    for tag_name, experiment_ids in tags.items():
+        console.print(f"[memphis.info]{tag_name}[/]")
+        for eid in experiment_ids:
+            console.print(f"  {eid}")
 
 
 @simulation_cli.command("configs", help="List available config filenames for a simulator's repo.")

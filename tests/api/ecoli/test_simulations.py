@@ -311,3 +311,115 @@ async def test_run_simulation_workflow_e2e(
     print("\n=== Test completed successfully! ===")
     print(f"  Experiment ID: {experiment_id}")
     print(f"  Simulation DB ID: {db_id}")
+
+
+# =============================================================================
+# Filter tests (no SSH required)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_list_simulations_filtered_by_experiment_id(
+    database_service: DatabaseServiceSQL,
+    experiment_request: SimulationRequest,
+) -> None:
+    """Test filtering simulations by comma-separated experiment IDs."""
+    experiment_ids = ["filter-test-a", "filter-test-b", "filter-test-c", "filter-test-d", "filter-test-e"]
+    for eid in experiment_ids:
+        sim_request = experiment_request
+        sim_request.experiment_id = eid
+        sim_request.config.experiment_id = eid
+        await database_service.insert_simulation(sim_request)
+
+    filtered = await database_service.list_simulations_filtered(experiment_ids=["filter-test-a", "filter-test-c"])
+    assert len(filtered) == 2
+    filtered_eids = {s.experiment_id for s in filtered}
+    assert filtered_eids == {"filter-test-a", "filter-test-c"}
+
+
+@pytest.mark.asyncio
+async def test_list_simulations_filtered_no_results(
+    database_service: DatabaseServiceSQL,
+) -> None:
+    """Test filtering by an experiment ID that doesn't exist returns empty list."""
+    filtered = await database_service.list_simulations_filtered(experiment_ids=["nonexistent-experiment-id"])
+    assert filtered == []
+
+
+@pytest.mark.asyncio
+async def test_list_simulations_unfiltered_backwards_compat(
+    database_service: DatabaseServiceSQL,
+    experiment_request: SimulationRequest,
+) -> None:
+    """Test that calling list_simulations without filters returns all simulations."""
+    for i in range(3):
+        eid = f"compat-test-{i}"
+        sim_request = experiment_request
+        sim_request.experiment_id = eid
+        sim_request.config.experiment_id = eid
+        await database_service.insert_simulation(sim_request)
+
+    all_sims = await database_service.list_simulations()
+    assert len(all_sims) >= 3
+
+
+@pytest.mark.asyncio
+async def test_list_simulation_tags_endpoint(
+    base_router: str,
+    database_service: DatabaseServiceSQL,
+) -> None:
+    """Test the tags discovery endpoint returns expected structure."""
+    from httpx import ASGITransport, AsyncClient
+
+    from sms_api.api.main import app
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get(f"{base_router}/simulations/tags")
+        assert response.status_code == 200
+        tags = response.json()
+        assert isinstance(tags, dict)
+        assert "cd1" in tags
+        assert isinstance(tags["cd1"], list)
+        assert len(tags["cd1"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_list_simulations_filtered_by_tag(
+    base_router: str,
+    database_service: DatabaseServiceSQL,
+) -> None:
+    """Test filtering simulations by tag via the API endpoint."""
+    from httpx import ASGITransport, AsyncClient
+
+    from sms_api.api.main import app
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get(
+            f"{base_router}/simulations",
+            params={"tag": "cd1"},
+        )
+        assert response.status_code == 200
+        simulations = response.json()
+        assert isinstance(simulations, list)
+
+
+@pytest.mark.asyncio
+async def test_list_simulations_filtered_unknown_tag(
+    base_router: str,
+    database_service: DatabaseServiceSQL,
+) -> None:
+    """Test that an unknown tag returns a 400 error."""
+    from httpx import ASGITransport, AsyncClient
+
+    from sms_api.api.main import app
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get(
+            f"{base_router}/simulations",
+            params={"tag": "nonexistent"},
+        )
+        assert response.status_code == 400
+        assert "nonexistent" in response.text
