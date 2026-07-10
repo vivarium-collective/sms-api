@@ -37,9 +37,9 @@ git add <files> && git commit -m "fix: ..." && git push origin <branch>
 # Step 2 — Build and push Docker image via GH Action
 gh workflow run build-and-push.yml --ref <branch> -f version=<VERSION>
 gh run watch $(gh run list --workflow=build-and-push.yml --limit 1 --json databaseId -q '.[0].databaseId')
-# NOTE: sms-nextflow step will fail ("BASE_IMAGE blank") — that's expected/known-broken.
-# Success = "Built and pushed service api" appears before the nextflow step fails.
-# DO NOT bump sms-ptools tag — keep it pinned to 0.5.9
+# NOTE: CI builds only sms-api now (nextflow removed — it's a runtime per-commit
+# build). Success = "Built and pushed service api". DO NOT bump sms-ptools tag —
+# keep it pinned to 0.5.9.
 
 # Step 3 — Apply kustomize + rollout
 kubectl kustomize kustomize/overlays/sms-api-stanford-test | kubectl apply -f -
