@@ -8,18 +8,28 @@ from httpx import ASGITransport, AsyncClient
 from sms_api.api.main import app
 from sms_api.dependencies import get_database_service, set_database_service
 from sms_api.simulation.database_service import DatabaseService
-from sms_api.simulation.models import Simulation, SimulationConfig
+from sms_api.simulation.models import Simulation, SimulationConfig, SimulatorVersion
 from sms_api.simulation.observable_reader import ObservableInfo, StoreIndex
 
 BASE = "/api/v1"
 
+# v2ecoli repo => compute_backend_for_repo => RAY (observables are Ray-only).
+_RAY_REPO = "https://github.com/vivarium-collective/v2ecoli"
+_VECOLI_REPO = "https://github.com/CovertLab/vEcoli"
+
 
 class _FakeDB:
-    def __init__(self, sim: Simulation | None) -> None:
+    def __init__(self, sim: Simulation | None, repo_url: str = _RAY_REPO) -> None:
         self._sim = sim
+        self._repo_url = repo_url
 
     async def get_simulation(self, simulation_id: int) -> Simulation | None:
         return self._sim
+
+    async def get_simulator(self, simulator_id: int) -> SimulatorVersion:
+        return SimulatorVersion(
+            database_id=simulator_id, git_commit_hash="abc1234", git_repo_url=self._repo_url, git_branch="master"
+        )
 
 
 def _sim(experiment_id: str = "exp-abc") -> Simulation:
@@ -69,6 +79,20 @@ async def test_observables_index_404_when_missing(monkeypatch: pytest.MonkeyPatc
         async with _client() as c:
             r = await c.get(f"{BASE}/simulations/999/observables/index")
         assert r.status_code == 404
+    finally:
+        set_database_service(saved)
+
+
+@pytest.mark.asyncio
+async def test_observables_409_for_non_ray_run() -> None:
+    """Observables are Ray-only; a vEcoli/Nextflow run fails loudly (409), not 404."""
+    saved = get_database_service()
+    set_database_service(cast(DatabaseService, _FakeDB(_sim(), repo_url=_VECOLI_REPO)))
+    try:
+        async with _client() as c:
+            r = await c.get(f"{BASE}/simulations/49/observables/index")
+        assert r.status_code == 409
+        assert "v2ecoli (Ray)" in r.json()["detail"]
     finally:
         set_database_service(saved)
 

@@ -29,8 +29,10 @@ from sms_api.analysis.models import (
 from sms_api.api import request_examples
 from sms_api.common import handlers
 from sms_api.common.gateway.utils import get_router_config
-from sms_api.config import ComputeBackend, get_job_backend, get_settings
+from sms_api.common.storage import data_layout
+from sms_api.config import ComputeBackend, compute_backend_for_repo, get_job_backend, get_settings
 from sms_api.dependencies import get_database_service, get_simulation_service
+from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.github_repo import open_repo_tarball_stream
 from sms_api.simulation.models import (
     AnalysisOptions,
@@ -71,19 +73,28 @@ def get_experiment_id(simulator_id: int, config_filename: str) -> str:
     return f"sim{simulator_id}-{config_filename.replace('.json', '')}"
 
 
-def _build_store_uri(experiment_id: str, seed: int) -> str:
-    """Build the S3 URI of a Ray run's per-seed XArray emitter store.
+async def _ray_seed_store_uri_or_error(db: DatabaseService, sim: Simulation, seed: int) -> str:
+    """Resolve the per-seed XArray/zarr store URI for a Ray run, or fail loudly.
 
-    Layout written by the Ray comparison engine (run_comparison_ensemble.py):
-    ``s3://{bucket}/{output_prefix}/{experiment_id}/v2ecoli_seed{NN}.zarr`` — a
-    hive-partitioned datatree (``experiment_id=…/variant=…/lineage_seed=…/
-    {observable}/generation={G}``) that ``observable_reader`` walks. Verified
-    against smsvpctest build #61 (e.g. ``sim61-v2c-with_aa-7292``).
+    Observables are a v2ecoli/Ray-only concept (an XArray/zarr store; layout owned
+    by ``data_layout.ray_seed_store_uri`` and walked by ``observable_reader``). A
+    vEcoli/Nextflow run emits parquet under a different layout and has no such
+    store, so we return a clear 409 rather than the bare 404 (which reads as
+    "results not ready yet" and was the ambiguity flagged in #152).
     """
-    from sms_api.config import get_settings
-
-    settings = get_settings()
-    return f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}/v2ecoli_seed{seed:02d}.zarr"
+    simulator = await db.get_simulator(sim.simulator_id)
+    backend = compute_backend_for_repo(simulator.git_repo_url) if simulator else None
+    layout = data_layout.layout_for(backend) if backend is not None else None
+    if layout is not data_layout.RayLayout:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Observables are only available for v2ecoli (Ray) runs; simulation "
+                f"{sim.database_id} ran on the {backend.value if backend else 'unknown'} backend. "
+                f"Use POST /api/v1/simulations/{sim.database_id}/data for its outputs."
+            ),
+        )
+    return data_layout.RayLayout.seed_store_uri(sim.experiment_id, seed)
 
 
 AnalysisOptions()
@@ -481,7 +492,7 @@ async def get_simulation_observables_index(
     sim = await db.get_simulation(simulation_id=id)
     if sim is None:
         raise HTTPException(404, f"Simulation {id} not found")
-    store_uri = _build_store_uri(sim.experiment_id, seed)
+    store_uri = await _ray_seed_store_uri_or_error(db, sim, seed)
     try:
         idx = await list_observables_async(store_uri)
     except FileNotFoundError:
@@ -518,7 +529,7 @@ async def get_simulation_observables(
     if sim is None:
         raise HTTPException(404, f"Simulation {id} not found")
     requested = [n.strip() for n in names.split(",") if n.strip()]
-    store_uri = _build_store_uri(sim.experiment_id, seed)
+    store_uri = await _ray_seed_store_uri_or_error(db, sim, seed)
     try:
         store_kind, time, series = await read_observables_async(
             store_uri, requested, stride=stride, max_points=max_points
