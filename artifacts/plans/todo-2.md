@@ -1,6 +1,6 @@
 # Plan for Todo #2: Simulation Search Filter
 
-> **Status**: IN PROGRESS
+> **Status**: IMPLEMENTED — PR #163
 > **Last updated**: 2026-07-10
 > **Plan file**: `artifacts/plans/todo-2.md`
 
@@ -88,15 +88,16 @@ Create a production-grade, lightweight filter mechanism for the `GET /api/v1/sim
 ## Progress
 
 - [x] Write plan to artifacts/plans/todo-2.md
-- [ ] Update todo.md to reference plan file
-- [ ] Step 1: Create tag registry module
-- [ ] Step 2: Add filter params to endpoint
-- [ ] Step 3: Add filtered query method to DatabaseService
-- [ ] Step 4: Add handler for filtered list
-- [ ] Step 5: Add tags discovery endpoint
-- [ ] Step 6: Update CLI simulation list command
-- [ ] Step 7: Update app_data_service
-- [ ] Step 8: Write tests
-- [ ] Step 9: Regenerate OpenAPI spec and client
-- [ ] Step 10: Run quality checks
-- [ ] Step 11: Add documentation
+- [x] Update todo.md to reference plan file
+- [x] Step 1: Create tag registry module
+- [x] Step 2: Add filter params to endpoint
+- [x] Step 3: Add filtered query method to DatabaseService
+- [x] Step 4: Add handler for filtered list
+- [x] Step 5: Add tags discovery endpoint
+- [x] Step 6: Update CLI simulation list command
+- [x] Step 7: Update app_data_service
+- [x] Step 8: Write tests
+- [x] Step 9: Regenerate OpenAPI spec and client
+- [x] Step 10: Run quality checks (`make check` passes, 9 filter tests pass)
+- [ ] Step 11: Add documentation (readthedocs guide)
+- [x] Commit, push, and open PR (#163)
