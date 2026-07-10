@@ -144,6 +144,8 @@ class TestSimulationServiceRaySubmit:
         service = SimulationServiceRay()
         with (
             patch("sms_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            # data_layout builds the S3 URIs (results/cache) and reads config.get_settings directly.
+            patch("sms_api.common.storage.data_layout.get_settings", _ray_settings),
             patch("sms_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
         ):
             job_id = await service.submit_ecoli_simulation_job(

@@ -1,0 +1,75 @@
+"""data_layout is the single owner of S3 sim-data paths. These tests lock the
+exact layout for both backends so the writer / reader / downloader can't drift
+apart again (#152/#153) — including the load-bearing single-nested (Ray) vs
+double-nested (Nextflow download) asymmetry — and lock the backend->layout
+binding (layout_for)."""
+
+import pytest
+
+from sms_api.common.storage import data_layout
+from sms_api.common.storage.data_layout import NextflowLayout, RayLayout, layout_for
+from sms_api.config import ComputeBackend, get_settings
+
+
+@pytest.fixture(autouse=True)
+def _s3_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "s3_work_bucket", "my-bucket")
+    monkeypatch.setattr(settings, "s3_output_prefix", "vecoli-output")
+
+
+class TestRayLayout:
+    def test_seed_store_uri(self) -> None:
+        assert RayLayout.seed_store_uri("exp-abc", 0) == "s3://my-bucket/vecoli-output/exp-abc/v2ecoli_seed00.zarr"
+
+    def test_seed_store_uri_zero_pads_seed(self) -> None:
+        assert RayLayout.seed_store_uri("exp", 7).endswith("/exp/v2ecoli_seed07.zarr")
+
+    def test_results_uri_is_single_nested_with_trailing_slash(self) -> None:
+        assert RayLayout.results_uri("exp") == "s3://my-bucket/vecoli-output/exp/"
+
+    def test_experiment_prefix_single_nested(self) -> None:
+        assert RayLayout.experiment_prefix("exp") == "vecoli-output/exp"
+
+    def test_summary_key(self) -> None:
+        assert RayLayout.summary_key("exp") == "vecoli-output/exp/summary.json"
+
+    def test_seed_store_lives_under_results_prefix(self) -> None:
+        # The reader's store path must sit under the writer's results dir.
+        assert RayLayout.seed_store_uri("exp", 3).startswith(RayLayout.results_uri("exp"))
+
+    def test_parca_cache_v2ecoli(self) -> None:
+        assert RayLayout.parca_cache_uri("abc123") == "s3://my-bucket/ray-parca-cache/abc123/"
+
+    def test_parca_cache_upstream_is_distinct(self) -> None:
+        assert RayLayout.parca_cache_uri("abc123", upstream=True) == "s3://my-bucket/ray-upstream-parca-cache/abc123/"
+        assert RayLayout.parca_cache_uri("abc123", upstream=True) != RayLayout.parca_cache_uri("abc123")
+
+
+class TestNextflowLayout:
+    def test_output_uri_is_single_nested(self) -> None:
+        assert NextflowLayout.output_uri("exp") == "s3://my-bucket/vecoli-output/exp"
+
+    def test_download_prefix_is_double_nested(self) -> None:
+        assert NextflowLayout.experiment_prefix("exp") == "vecoli-output/exp/exp"
+
+    def test_ray_and_nextflow_prefixes_differ(self) -> None:
+        # The whole point: Ray reads single-nested, Nextflow download reads double.
+        assert RayLayout.experiment_prefix("exp") != NextflowLayout.experiment_prefix("exp")
+
+
+class TestLayoutFor:
+    def test_ray_backend(self) -> None:
+        assert layout_for(ComputeBackend.RAY) is RayLayout
+
+    def test_batch_and_slurm_backends(self) -> None:
+        assert layout_for(ComputeBackend.BATCH) is NextflowLayout
+        assert layout_for(ComputeBackend.SLURM) is NextflowLayout
+
+    def test_seed_store_is_ray_only(self) -> None:
+        # NextflowLayout has no per-seed zarr store — the type/namespace enforces it.
+        assert not hasattr(NextflowLayout, "seed_store_uri")
+
+    def test_unknown_backend_raises(self) -> None:
+        with pytest.raises(ValueError, match="no data layout"):
+            layout_for("bogus")  # type: ignore[arg-type]

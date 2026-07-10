@@ -263,7 +263,7 @@ def test_remote_store_round_trip() -> None:
     Set ``TEST_OBSERVABLE_STORE_URI`` to a real store URI (e.g.
     ``s3://<bucket>/<prefix>/<experiment_id>/<store>``) in ``.dev_env``; AWS
     credentials are loaded by config.py's ``load_dotenv()``. Decoupled from
-    ``_build_store_uri`` so it validates the actual on-S3 layout directly.
+    ``data_layout.ray_seed_store_uri`` so it validates the actual on-S3 layout directly.
     """
     idx = list_observables(_REMOTE_STORE_URI)
     assert idx.store in ("zarr", "parquet")

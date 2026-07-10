@@ -34,6 +34,7 @@ from sms_api.common.hpc.job_service import JobStatusInfo
 from sms_api.common.hpc.local_task_service import LocalTaskService
 from sms_api.common.models import JobBackend, JobId, JobStatus
 from sms_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
+from sms_api.common.storage import data_layout
 from sms_api.config import get_settings
 from sms_api.simulation import batch_build
 from sms_api.simulation.database_service import DatabaseService
@@ -90,13 +91,12 @@ class SimulationServiceRay(SimulationService):
         return boto3.client("batch", region_name=get_settings().batch_region)
 
     def _cache_s3_uri(self, commit: str) -> str:
-        """Deterministic S3 URI for a commit's ParCa cache.
+        """Deterministic S3 URI for a commit's v2ecoli ParCa cache.
 
         Both the ParCa job (writes here) and the simulation job (stages from
         here) derive the same URI, so the cache hand-off needs no runtime wiring.
         """
-        settings = get_settings()
-        return f"s3://{settings.s3_work_bucket}/ray-parca-cache/{commit}/"
+        return data_layout.RayLayout.parca_cache_uri(commit)
 
     def _upstream_cache_s3_uri(self, commit: str) -> str:
         """S3 URI for the PRISTINE upstream-vEcoli ParCa cache (``--composite vecoli``).
@@ -107,12 +107,10 @@ class SimulationServiceRay(SimulationService):
         two-component-system ODE go negative). Keyed by the same image commit so
         both engines' parca→sim hand-offs derive their URI with no runtime wiring.
         """
-        settings = get_settings()
-        return f"s3://{settings.s3_work_bucket}/ray-upstream-parca-cache/{commit}/"
+        return data_layout.RayLayout.parca_cache_uri(commit, upstream=True)
 
     def _results_s3_uri(self, experiment_id: str) -> str:
-        settings = get_settings()
-        return f"s3://{settings.s3_work_bucket}/{settings.s3_output_prefix}/{experiment_id}/"
+        return data_layout.RayLayout.results_uri(experiment_id)
 
     def _image_uri(self, commit: str) -> str:
         """The TRUE commit image for a run: <account>.dkr.ecr.<region>/v2ecoli:<commit>."""
