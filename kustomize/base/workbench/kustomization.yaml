@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Standalone base for the vivarium-workbench Deployment + Service. Kept OUT of the
+# shared base/kustomization.yaml so it deploys ONLY where an overlay references it
+# (the Stanford EKS overlays) — never on the rke/local (SLURM) deployments, which
+# have no ALB TargetGroupBinding or EBS PVC for it. Overlays add the EBS PVC, the
+# TargetGroupBinding, and the pinned image tag.
+resources:
+  - workbench.yaml
