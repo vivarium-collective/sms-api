@@ -17,7 +17,13 @@ version=${1:-${declared_version}}
 
 echo "building and pushing images for version ${version}"
 
-for service in api nextflow; do
+# Only the standalone sms-api image is built here. The Nextflow/vEcoli-submit
+# image is NOT a version-tagged artifact: it's built at RUNTIME, per simulator
+# commit, layering Java+Nextflow onto that commit's freshly-built vecoli:<sha>
+# base (see runscripts/container/build-and-push-ecr.sh in the vEcoli repo and the
+# captured artifacts/build_*.sh). There is no fixed base image for a version tag,
+# so building it here only ever failed with "base name (${BASE_IMAGE}) blank".
+for service in api; do
   tag="${version}"
   dockerfile="${ROOT_DIR}/Dockerfile-${service}"
   image_name="ghcr.io/vivarium-collective/sms-${service}:${tag}"

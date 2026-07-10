@@ -279,13 +279,12 @@ git add <files> && git commit -m "fix: ..." && git push origin atlantis-cli
 #    working tree. If your fix isn't pushed, the action builds the old code.
 gh workflow run build-and-push.yml --ref atlantis-cli -f version=<VERSION>
 gh run watch $(gh run list --workflow=build-and-push.yml --limit 1 --json databaseId -q '.[0].databaseId')
-# NOTE: The action builds sms-api and sms-nextflow (aka sms-ptools). sms-api is
-# the important one. The sms-nextflow step is known-broken
-# (`ERROR: failed to build: base name (${BASE_IMAGE}) should not be blank` in
-# Dockerfile-nextflow). That's fine — as long as "Built and pushed service api"
-# appears in the logs before the nextflow step fails, you're good. DO NOT bump
-# the sms-ptools newTag in kustomize to match the new api version because there
-# is no sms-ptools:0.6.x image on ghcr.io; keep it pinned to 0.5.9.
+# NOTE: The action builds only sms-api now (scripts/build_action.sh). The
+# Nextflow/vEcoli-submit image is NOT built here — it's a runtime, per-commit
+# build (base = that commit's vecoli:<sha>), so it was removed from the loop and
+# Dockerfile-nextflow deleted (it always failed "BASE_IMAGE blank"). Success =
+# "Built and pushed service api". DO NOT bump the sms-ptools newTag to match api;
+# ptools is intentionally pinned to 0.5.9 (no newer sms-ptools image on ghcr.io).
 
 # 3. Apply + roll Stanford-test
 kubectl kustomize kustomize/overlays/sms-api-stanford-test | kubectl apply -f -
