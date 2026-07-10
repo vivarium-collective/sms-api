@@ -99,5 +99,5 @@ Create a production-grade, lightweight filter mechanism for the `GET /api/v1/sim
 - [x] Step 8: Write tests
 - [x] Step 9: Regenerate OpenAPI spec and client
 - [x] Step 10: Run quality checks (`make check` passes, 9 filter tests pass)
-- [ ] Step 11: Add documentation (readthedocs guide)
+- [x] Step 11: Add documentation (readthedocs guide)
 - [x] Commit, push, and open PR (#163)

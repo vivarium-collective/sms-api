@@ -4,6 +4,7 @@ docs/_build/
 docs/source/api/generated/
 docker-compose.yml
 artifacts/
+!artifacts/plans/todo-2.md
 # From https://raw.githubusercontent.com/github/gitignore/main/Python.gitignore
 
 
