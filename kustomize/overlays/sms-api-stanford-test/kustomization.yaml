@@ -18,7 +18,7 @@ images:
   # vivarium-workbench: build + push with the workbench repo's
   # deploy/build-and-push.sh, then pin that tag (a git sha) here.
   - name: ghcr.io/vivarium-collective/vivarium-workbench
-    newTag: REPLACE_WITH_BUILT_TAG
+    newTag: 0.1.0
 
 replicas:
   - count: 1

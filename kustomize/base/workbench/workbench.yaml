@@ -31,12 +31,17 @@ spec:
       labels:
         app: vivarium-workbench
     spec:
-      # Match the shared-storage identity sms-api uses (see api.yaml) so files/git
-      # on the EBS PVC are written as the expected uid/gid.
+      # Run as ROOT (uid 0). The combined image installs its uv-managed CPython
+      # under /root/.local/share/uv/python (root home, mode 700); as any non-root
+      # uid the interpreter cannot read its own stdlib there — sys.base_prefix
+      # falls back to the build-time /install and Python dies with "No module named
+      # 'encodings'". So this image MUST run as root. (No restricted PodSecurity
+      # enforcement on this namespace; unlike api, which runs as 17163 by choice.)
+      # fsGroup 0 so the EBS workspace volume is root-writable.
       securityContext:
-        runAsUser: 17163
-        runAsGroup: 10000
-        fsGroup: 10000
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
       # Seed the (initially empty) EBS workspace ONCE from the image's baked-in
       # v2ecoli workspace. `workspace.yaml` is the seeded-marker so pod restarts /
       # user edits are never clobbered (and EBS's ext4 lost+found is ignored).
