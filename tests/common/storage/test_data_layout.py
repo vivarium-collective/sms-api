@@ -6,7 +6,6 @@ binding (layout_for)."""
 
 import pytest
 
-from sms_api.common.storage import data_layout
 from sms_api.common.storage.data_layout import NextflowLayout, RayLayout, layout_for
 from sms_api.config import ComputeBackend, get_settings
 
