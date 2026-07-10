@@ -1,0 +1,120 @@
+# vivarium-workbench Deployment + Service — a PEER of the api service (modeled on
+# api.yaml). The workbench renders workspaces in-process (imports pbg_v2ecoli via
+# build_core) and delegates ALL compute/storage to sms-api over in-cluster HTTP;
+# it needs no Postgres, IRSA, or AWS creds.
+#
+# This file is intentionally NOT listed in base/kustomization.yaml — the workbench
+# only makes sense on the EKS/GovCloud (Stanford) deployments (it needs the ALB
+# TargetGroupBinding + an EBS PVC), so ONLY the Stanford overlays reference it
+# directly (resources: ../../base/workbench.yaml). The rke/local (SLURM) overlays
+# must not deploy it.
+#
+# Env-specific bits come from the overlay: namespace, image tag (images:), the EBS
+# PVC (workbench-pvc.yaml), and the TargetGroupBinding. The image + ghcr pull
+# secret come from this repo's overlay conventions; the workspace is served from
+# the mounted EBS PVC, seeded once from the image's baked-in /app/v2ecoli.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workbench
+  labels:
+    app: vivarium-workbench
+spec:
+  # Single replica: the workbench holds a git working copy + SQLite on an RWO EBS
+  # volume, so exactly one writer.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vivarium-workbench
+  template:
+    metadata:
+      labels:
+        app: vivarium-workbench
+    spec:
+      # Match the shared-storage identity sms-api uses (see api.yaml) so files/git
+      # on the EBS PVC are written as the expected uid/gid.
+      securityContext:
+        runAsUser: 17163
+        runAsGroup: 10000
+        fsGroup: 10000
+      # Seed the (initially empty) EBS workspace ONCE from the image's baked-in
+      # v2ecoli workspace. `workspace.yaml` is the seeded-marker so pod restarts /
+      # user edits are never clobbered (and EBS's ext4 lost+found is ignored).
+      initContainers:
+        - name: seed-workspace
+          image: ghcr.io/vivarium-collective/vivarium-workbench:latest
+          imagePullPolicy: Always
+          command:
+            - "sh"
+            - "-c"
+            - |
+              if [ ! -f /workspace/workspace.yaml ]; then
+                echo "seeding /workspace from baked-in /app/v2ecoli";
+                cp -a /app/v2ecoli/. /workspace/;
+              else
+                echo "/workspace already seeded (workspace.yaml present); skipping";
+              fi
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      containers:
+        - name: workbench
+          # Overlays pin the tag via `images:` (build with deploy/build-and-push.sh).
+          image: ghcr.io/vivarium-collective/vivarium-workbench:latest
+          imagePullPolicy: Always
+          command: ["vivarium-workbench"]
+          args:
+            - "serve"
+            - "--workspace"
+            - "/workspace"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
+            # Served under /workbench so it co-tenants the internal ALB with sms-api
+            # (the sms-cdk /workbench/* + /bigraph-loom/* listener rules forward to
+            # the workbench target group). uvicorn root_path is derived from this.
+            - "--base-path"
+            - "/workbench"
+          ports:
+            - containerPort: 8000
+          env:
+            # The ONLY backend: sms-api's in-cluster Service. Same-namespace short
+            # DNS (the workbench is a peer of `api` in the sms-api namespace).
+            - name: SMS_API_BASE
+              value: "http://api:8000"
+            - name: VIVARIUM_WORKBENCH_WORKSPACE
+              value: "/workspace"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      volumes:
+        # Private EBS gp3 PVC (RWO) — workspace + caches. The claim is defined in
+        # the overlay (workbench-pvc.yaml). No shared filesystem with the compute:
+        # run outputs arrive from S3 via sms-api's download endpoints.
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: workbench-workspace
+      imagePullSecrets:
+        - name: ghcr-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workbench
+  labels:
+    app: vivarium-workbench
+spec:
+  ports:
+    - name: "8000"
+      port: 8000
+      targetPort: 8000
+  selector:
+    app: vivarium-workbench

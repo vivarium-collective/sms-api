@@ -15,6 +15,10 @@ images:
   # avoids an ErrImagePull ReplicaSet while api iterates independently.
   - name: ghcr.io/vivarium-collective/sms-ptools
     newTag: 0.5.9
+  # vivarium-workbench: build + push with the workbench repo's
+  # deploy/build-and-push.sh, then pin that tag (a git sha) here.
+  - name: ghcr.io/vivarium-collective/vivarium-workbench
+    newTag: REPLACE_WITH_BUILT_TAG
 
 replicas:
   - count: 1
@@ -31,6 +35,11 @@ resources:
   - target-group-binding.yaml # to accept traffic from predefined ALB rather than use an ingres
   - secret-ghcr.yaml
   - secret-shared.yaml
+  # vivarium-workbench: peer Deployment+Service (base/workbench.yaml is referenced
+  # directly, NOT via base/kustomization.yaml, so it deploys ONLY on Stanford) +
+  # its EBS PVC. Its TargetGroupBinding is in target-group-binding.yaml above.
+  - ../../base/workbench
+  - workbench-pvc.yaml
   - ../../config/sms-api-stanford-test
   - ../../base
 
