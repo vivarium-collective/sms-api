@@ -34,6 +34,12 @@ class RepoUrl(StrEnumBase):
     # verify_simulator_payload allow-list; its config semantics differ from vEcoli
     # (no configs/ dir), so the Ray run path uses the embedded default template.
     V2ECOLI_REPO_URL = "https://github.com/vivarium-collective/v2ecoli"
+    # The OFFICIAL production Ray/v2ecoli repo. Coexists with V2ECOLI_REPO_URL
+    # (both -> RAY). Its name contains neither "v2ecoli" nor "vecoli", so it is
+    # NOT matched by the substring fallback in compute_backend_for_repo and must be
+    # listed explicitly — otherwise it silently falls back to the deployment
+    # default (Batch on Stanford) and mis-routes to the vEcoli/Nextflow backend.
+    SMS_ECOLI_REPO_URL = "https://github.com/CovertLabEcoli/sms-ecoli"
 
 
 PUBLIC_MODE = get_public_mode()

@@ -15,14 +15,27 @@ class TestComputeBackendForRepo:
         [
             ("https://github.com/vivarium-collective/v2ecoli", ComputeBackend.RAY),
             ("https://github.com/vivarium-collective/v2Ecoli", ComputeBackend.RAY),  # case-insensitive
+            # The production Ray repo — matches NEITHER substring; only the explicit
+            # RepoUrl map routes it correctly (regression guard for the mis-route bug).
+            ("https://github.com/CovertLabEcoli/sms-ecoli", ComputeBackend.RAY),
             ("https://github.com/CovertLab/vEcoli", ComputeBackend.BATCH),
             ("https://github.com/vivarium-collective/vEcoli", ComputeBackend.BATCH),  # the fork
             ("https://github.com/CovertLabEcoli/vEcoli-private", ComputeBackend.BATCH),
+            # Fork/variant fallback (substring) at other URLs.
+            ("https://github.com/someuser/sms-ecoli-experiment", ComputeBackend.RAY),
+            ("https://github.com/someuser/my-vEcoli-fork", ComputeBackend.BATCH),
             ("https://github.com/someone/unrelated", None),
         ],
     )
     def test_mapping(self, url: str, expected: ComputeBackend | None) -> None:
         assert compute_backend_for_repo(url) == expected
+
+    def test_sms_ecoli_is_not_matched_by_substring_alone(self) -> None:
+        """Guard the exact bug: 'sms-ecoli' contains neither 'v2ecoli' nor 'vecoli',
+        so without the explicit RepoUrl map it would fall through to None."""
+        url = "https://github.com/CovertLabEcoli/sms-ecoli".lower()
+        assert "v2ecoli" not in url and "vecoli" not in url
+        assert compute_backend_for_repo(url) == ComputeBackend.RAY
 
 
 class TestServiceRouting:
