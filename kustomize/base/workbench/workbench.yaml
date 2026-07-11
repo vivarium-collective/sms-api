@@ -59,6 +59,27 @@ spec:
               else
                 echo "/workspace already seeded (workspace.yaml present); skipping";
               fi
+              # Deployment override for the pbg-ptools Omics Viewer: the baked-in
+              # workspace.yaml sets ui.ptools_server_url to a LOCAL dev container
+              # (http://localhost:1555). In-cluster the viewer builds a link the
+              # user's BROWSER opens, so it must be the browser-reachable PTools URL
+              # (ALB/tunnel), supplied per-overlay via PTOOLS_SERVER_URL. Re-applied
+              # every start so overlay changes take effect; skipped when unset.
+              if [ -n "${PTOOLS_SERVER_URL:-}" ]; then
+                python - <<'PY'
+              import os, pathlib, yaml
+              p = pathlib.Path("/workspace/workspace.yaml")
+              d = yaml.safe_load(p.read_text()) or {}
+              d.setdefault("ui", {})["ptools_server_url"] = os.environ["PTOOLS_SERVER_URL"]
+              p.write_text(yaml.safe_dump(d, sort_keys=False))
+              print("set ui.ptools_server_url =", os.environ["PTOOLS_SERVER_URL"])
+              PY
+              fi
+          env:
+            # Browser-reachable PTools base for the Omics Viewer; set per-overlay.
+            # Empty = leave the workspace's own ui.ptools_server_url untouched.
+            - name: PTOOLS_SERVER_URL
+              value: ""
           volumeMounts:
             - name: workspace
               mountPath: /workspace

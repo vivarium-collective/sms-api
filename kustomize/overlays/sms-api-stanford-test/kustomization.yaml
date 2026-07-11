@@ -95,3 +95,24 @@ patches:
     target:
       kind: Deployment
       name: api
+  # Browser-reachable PTools base for the pbg-ptools Omics Viewer. The seed
+  # initContainer stamps this into the served workspace.yaml (ui.ptools_server_url),
+  # overriding the baked-in local-dev http://localhost:1555. Tunnel value
+  # (sms-proxy -s smsvpctest -> localhost:8080, PTools at the ALB root); use a real
+  # internal-ALB DNS if the demo is hosted for others.
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: workbench
+      spec:
+        template:
+          spec:
+            initContainers:
+              - name: seed-workspace
+                env:
+                  - name: PTOOLS_SERVER_URL
+                    value: "http://localhost:8080"
+    target:
+      kind: Deployment
+      name: workbench
