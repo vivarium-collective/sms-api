@@ -14,10 +14,11 @@ images:
   # avoids an ErrImagePull ReplicaSet while api iterates independently.
   - name: ghcr.io/vivarium-collective/sms-ptools
     newTag: 0.5.9
-  # vivarium-workbench: build + push with the workbench repo's
-  # deploy/build-and-push.sh, then pin that tag (a git sha) here.
+  # vivarium-workbench: published by cutting a GitHub Release in the workbench
+  # repo (build-and-push.yml → ghcr:<version>); pin that release tag here.
+  # 0.1.1 = first image with the pbg-ptools viewer plugin + decoupled v2ecoli.
   - name: ghcr.io/vivarium-collective/vivarium-workbench
-    newTag: 0.1.0
+    newTag: 0.1.1
 
 replicas:
   - count: 1
