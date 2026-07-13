@@ -111,6 +111,15 @@ spec:
               value: "http://api:8000"
             - name: VIVARIUM_WORKBENCH_WORKSPACE
               value: "/workspace"
+            # The internal ALB terminating /workbench REWRITES the Host header and
+            # does NOT emit X-Forwarded-Host, so the CSRF same-origin check (and
+            # --trust-proxy) can never match the browser's Origin. Declare the
+            # browser-facing origin explicitly so POST/DELETE (Run, Run-remotely,
+            # saves) are admitted. This is the SSM-tunnel origin every operator
+            # reaches the dashboard through (sms-proxy.sh → localhost:8080). base/
+            # workbench is Stanford-tunnel-only, so this fixed origin lives here.
+            - name: VIVARIUM_WORKBENCH_ALLOWED_ORIGINS
+              value: "http://localhost:8080"
           resources:
             requests:
               cpu: "500m"
