@@ -14,10 +14,11 @@ images:
   # avoids an ErrImagePull ReplicaSet while api iterates independently.
   - name: ghcr.io/vivarium-collective/sms-ptools
     newTag: 0.5.9
-  # vivarium-workbench: build + push with the workbench repo's
-  # deploy/build-and-push.sh, then pin that tag (a git sha) here.
+  # vivarium-workbench: published by cutting a GitHub Release in the workbench
+  # repo (build-and-push.yml → ghcr:<version>); pin that release tag here.
+  # 0.1.1 = first image with the pbg-ptools viewer plugin + decoupled v2ecoli.
   - name: ghcr.io/vivarium-collective/vivarium-workbench
-    newTag: 0.1.0
+    newTag: 0.1.1
 
 replicas:
   - count: 1
@@ -94,3 +95,24 @@ patches:
     target:
       kind: Deployment
       name: api
+  # Browser-reachable PTools base for the pbg-ptools Omics Viewer. The seed
+  # initContainer stamps this into the served workspace.yaml (ui.ptools_server_url),
+  # overriding the baked-in local-dev http://localhost:1555. Tunnel value
+  # (sms-proxy -s smsvpctest -> localhost:8080, PTools at the ALB root); use a real
+  # internal-ALB DNS if the demo is hosted for others.
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: workbench
+      spec:
+        template:
+          spec:
+            initContainers:
+              - name: seed-workspace
+                env:
+                  - name: PTOOLS_SERVER_URL
+                    value: "http://localhost:8080"
+    target:
+      kind: Deployment
+      name: workbench
