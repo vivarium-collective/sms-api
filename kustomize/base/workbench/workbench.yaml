@@ -102,6 +102,13 @@ spec:
             # the workbench target group). uvicorn root_path is derived from this.
             - "--base-path"
             - "/workbench"
+            # Opt-in: trust X-Forwarded-Host for the CSRF/origin guard. Required
+            # behind this ALB hop chain (ALB -> tunnel -> k8s Service), which
+            # rewrites Host; without this every POST/DELETE 403s as
+            # "cross-origin request forbidden" (vivarium-workbench, fix in
+            # 481b3f2). Safe here because this Deployment is only ever reached
+            # through the ALB, never directly.
+            - "--trust-proxy"
           ports:
             - containerPort: 8000
           env:
