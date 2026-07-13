@@ -120,6 +120,19 @@ spec:
             # workbench is Stanford-tunnel-only, so this fixed origin lives here.
             - name: VIVARIUM_WORKBENCH_ALLOWED_ORIGINS
               value: "http://localhost:8080"
+            # Pinned-build remote runs: the "Run on remote" card submits sims
+            # against the latest ALREADY-BUILT simulator for this repo@branch
+            # (resolved from sms-api in-cluster), skipping the per-run git
+            # push/build/login entirely. This is the demo model — one pinned
+            # build, many simulation configs — and it sidesteps the pod's
+            # unwritable /workspace git remote + protected-main push. Enabled
+            # declaratively here; no human GitHub token is embedded.
+            - name: VIVARIUM_WORKBENCH_REMOTE_PINNED
+              value: "1"
+            - name: VIVARIUM_WORKBENCH_REMOTE_REPO_URL
+              value: "https://github.com/vivarium-collective/v2ecoli"
+            - name: VIVARIUM_WORKBENCH_REMOTE_BRANCH
+              value: "main"
           resources:
             requests:
               cpu: "500m"
