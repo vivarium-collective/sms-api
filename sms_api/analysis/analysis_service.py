@@ -10,8 +10,6 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
-import pandas as pd
-
 from sms_api.analysis.models import (
     AnalysisConfig,
     AnalysisJobFailedException,
@@ -19,6 +17,7 @@ from sms_api.analysis.models import (
     ExperimentAnalysisDTO,
     ExperimentAnalysisRequest,
     TsvOutputFile,
+    infer_n_tp_from_tsv,
 )
 from sms_api.common.hpc.slurm_service import SlurmService
 from sms_api.common.models import JobStatus, SSHTarget
@@ -265,9 +264,7 @@ class AnalysisServiceSlurm:
 
     @classmethod
     def _verify_result(cls, local_result_path: Path, expected_n_tp: int) -> bool:
-        tsv_data = pd.read_csv(local_result_path, sep="\t")
-        actual_cols = [col for col in tsv_data.columns if col.startswith("t")]
-        return len(actual_cols) == expected_n_tp
+        return infer_n_tp_from_tsv(local_result_path.read_text()) == expected_n_tp
 
     def _generate_slurm_script(
         self,

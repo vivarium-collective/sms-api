@@ -436,6 +436,28 @@ async def run_simulation_analysis(
 
 
 @config.router.get(
+    path="/simulations/{id}/analyses",
+    operation_id="list-simulation-analyses",
+    tags=["Analyses"],
+    dependencies=[Depends(get_database_service)],
+    summary="List the existing (pre-run) analyses for a simulation",
+)
+async def list_simulation_analyses(
+    id: int = FastAPIPath(description="Database ID of the simulation"),
+) -> list[ExperimentAnalysisDTO]:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    try:
+        return await handlers.analyses.list_simulation_analyses(db_service=db_service, simulation_id=id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("Error listing simulation analyses")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
     path="/simulations",
     operation_id="list-ecoli-simulations",
     tags=["Simulations"],
@@ -673,6 +695,27 @@ async def run_analysis(
 
 
 @config.router.get(
+    path="/analyses",
+    operation_id="list-analyses",
+    tags=["Analyses"],
+    dependencies=[Depends(get_database_service)],
+    summary="List all analyses across all simulations (exhaustive; filtering/paging to come)",
+)
+async def list_analyses(
+    experiment_id: str | None = Query(default=None, description="Optional: filter by experiment_id."),
+    simulation_id: int | None = Query(default=None, description="Optional: filter by simulation database id."),
+) -> list[ExperimentAnalysisDTO]:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    try:
+        return await db_service.list_analyses(experiment_id=experiment_id, simulation_id=simulation_id)
+    except Exception as e:
+        logger.exception("Error listing analyses")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
     path="/analyses/{id}",
     operation_id="get-analysis",
     tags=["Analyses"],
@@ -757,4 +800,33 @@ async def get_analysis_plots(
         return await handlers.analyses.handle_get_analysis_plots(db_service=db_service, id=id)
     except Exception as e:
         logger.exception("Error getting analysis data")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/analyses/{id}/data",
+    tags=["Analyses"],
+    operation_id="get-analysis-data",
+    dependencies=[Depends(get_database_service)],
+    summary="Retrieve the output files (TSV/CSV/TXT/HTML) of an existing analysis by id",
+)
+async def get_analysis_data(
+    id: int = FastAPIPath(..., description="Database ID of the analysis"),
+) -> list[TsvOutputFile]:
+    """Pure retrieval of a pre-computed analysis's files by id (never computes).
+
+    Returns the same ``list[TsvOutputFile]`` shape as the legacy ``POST /analyses``.
+    409 if the analysis is not READY; 404 if the analysis id is unknown.
+    """
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=404, detail="Database not found")
+    try:
+        return await handlers.analyses.fetch_analysis_data(db_service=db_service, analysis_id=id)
+    except handlers.analyses.AnalysisNotReadyError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("Error retrieving analysis data")
         raise HTTPException(status_code=500, detail=str(e)) from e

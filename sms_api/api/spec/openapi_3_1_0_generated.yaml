@@ -553,6 +553,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/simulations/{id}/analyses:
+    get:
+      tags:
+      - Analyses
+      summary: List the existing (pre-run) analyses for a simulation
+      operationId: list-simulation-analyses
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the simulation
+          title: Id
+        description: Database ID of the simulation
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExperimentAnalysisDTO'
+                title: Response List-Simulation-Analyses
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/simulations/{id}/tags:
     post:
       tags:
@@ -758,12 +789,55 @@ paths:
           content:
             application/json:
               schema:
+                type: array
                 items:
                   anyOf:
                   - $ref: '#/components/schemas/TsvOutputFile'
                   - $ref: '#/components/schemas/OutputFileMetadata'
-                type: array
                 title: Response Run-Ecoli-Simulation-Analysis
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Analyses
+      summary: List all analyses across all simulations (exhaustive; filtering/paging
+        to come)
+      operationId: list-analyses
+      parameters:
+      - name: experiment_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 'Optional: filter by experiment_id.'
+          title: Experiment Id
+        description: 'Optional: filter by experiment_id.'
+      - name: simulation_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: 'Optional: filter by simulation database id.'
+          title: Simulation Id
+        description: 'Optional: filter by simulation database id.'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExperimentAnalysisDTO'
+                title: Response List-Analyses
         '422':
           description: Validation Error
           content:
@@ -879,6 +953,45 @@ paths:
                 items:
                   $ref: '#/components/schemas/OutputFile'
                 title: Response Get-Analysis-Plots
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/analyses/{id}/data:
+    get:
+      tags:
+      - Analyses
+      summary: Retrieve the output files (TSV/CSV/TXT/HTML) of an existing analysis
+        by id
+      description: 'Pure retrieval of a pre-computed analysis''s files by id (never
+        computes).
+
+
+        Returns the same ``list[TsvOutputFile]`` shape as the legacy ``POST /analyses``.
+
+        409 if the analysis is not READY; 404 if the analysis id is unknown.'
+      operationId: get-analysis-data
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of the analysis
+          title: Id
+        description: Database ID of the analysis
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TsvOutputFile'
+                title: Response Get-Analysis-Data
         '422':
           description: Validation Error
           content:
@@ -1008,7 +1121,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-07-14T10:34:21.796114'
+                  created_at: '2026-07-14T16:12:39.019002'
                 parca_config:
                   outdir: /projects/SMS/sms_api/prod/sims
       responses:
@@ -2181,6 +2294,40 @@ components:
           - type: integer
           - type: 'null'
           title: Job Id
+        experiment_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Experiment Id
+        n_tp:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: N Tp
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/JobStatus'
+          - type: 'null'
+        result_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Result Uri
+        simulation_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Simulation Id
+        backend:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Backend
+        error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Message
       type: object
       required:
       - database_id
@@ -2627,7 +2774,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-07-14 10:34:21.082112'
+          default: '2026-07-14 16:12:38.947722'
         job_id:
           anyOf:
           - type: string

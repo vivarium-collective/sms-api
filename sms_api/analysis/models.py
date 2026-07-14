@@ -11,6 +11,21 @@ from sms_api.config import Settings, get_settings
 
 MAX_ANALYSIS_CPUS = 3
 
+# Predetermined samplings offered by the analysis-results endpoints (see
+# analysis-results-design.md). POST only accepts an n_tp from this set.
+AVAILABLE_NTP: list[int] = [10, 50, 100]
+
+
+def infer_n_tp_from_tsv(tsv_text: str) -> int:
+    """Infer ``n_tp`` (number of timepoint columns) from a ptools analysis TSV.
+
+    Mirrors ``AnalysisServiceSlurm._verify_result``: ``n_tp`` is the count of
+    header columns whose name starts with ``"t"``. Reads only the header line, so
+    it is cheap and has no heavy dependencies.
+    """
+    header = tsv_text.split("\n", 1)[0]
+    return sum(1 for col in header.split("\t") if col.startswith("t"))
+
 
 ### -- analyses -- ###
 
@@ -270,6 +285,14 @@ class ExperimentAnalysisDTO(BaseModel):
     last_updated: str
     job_name: str | None = None
     job_id: int | None = None
+    # --- query/result fields (populated for the Batch/S3 analysis-result flow) ---
+    experiment_id: str | None = None
+    n_tp: int | None = None
+    status: JobStatus | None = None
+    result_uri: str | None = None
+    simulation_id: int | None = None
+    backend: str | None = None
+    error_message: str | None = None
 
 
 class AnalysisRun(BaseModel):
