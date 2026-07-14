@@ -17,10 +17,11 @@ images:
   # vivarium-workbench: published by cutting a GitHub Release in the workbench
   # repo (build-and-push.yml → ghcr:<version>); pin that release tag here.
   # 0.1.1 = first image with the pbg-ptools viewer plugin + decoupled v2ecoli.
-  # 2c56cb8 = demo-v2ecoli dev SHA: bigraph-loom baked in (Bug 3) + CSRF
-  # allowed-origins support (Bug 2). Revert to a release tag after WS-F merge.
+  # 72e00b8 = demo-v2ecoli dev SHA: adds pinned-build remote runs (Segment 6
+  # Part B) on top of bigraph-loom (Bug 3) + CSRF allowed-origins (Bug 2).
+  # Revert to a release tag after WS-F merge.
   - name: ghcr.io/vivarium-collective/vivarium-workbench
-    newTag: 2c56cb8
+    newTag: 72e00b8
 
 replicas:
   - count: 1
