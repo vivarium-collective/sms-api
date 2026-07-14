@@ -783,6 +783,46 @@ async def list_simulations(db_service: DatabaseService) -> list[Simulation]:
     return await db_service.list_simulations()
 
 
+async def list_simulations_filtered(
+    db_service: DatabaseService,
+    experiment_id: str | None = None,
+    tag: str | None = None,
+) -> list[Simulation]:
+    """List simulations filtered by experiment IDs and/or tag.
+
+    If both ``experiment_id`` and ``tag`` are provided, the result is the union
+    of both sets (deduplicated).
+
+    Args:
+        db_service: Database service instance.
+        experiment_id: Comma-separated list of experiment IDs.
+        tag: Predefined tag name that resolves to a bundle of experiment IDs.
+
+    Returns:
+        A list of Simulation objects matching the filter criteria.
+
+    Raises:
+        ValueError: If the tag is not found in the registry.
+    """
+    from sms_api.simulation.simulation_tags import resolve_tag
+
+    experiment_ids: set[str] = set()
+
+    if tag is not None:
+        experiment_ids.update(resolve_tag(tag))
+
+    if experiment_id is not None:
+        for eid in experiment_id.split(","):
+            eid_stripped = eid.strip()
+            if eid_stripped:
+                experiment_ids.add(eid_stripped)
+
+    if not experiment_ids:
+        return []
+
+    return await db_service.list_simulations_filtered(list(experiment_ids))
+
+
 async def get_omics_outputs(
     hpc_sim_base_path: HPCFilePath, experiment_id: str, output_type: SimulationAnalysisResponseType | None = None
 ) -> list[TsvOutputFile] | StreamingResponse:
@@ -1251,14 +1291,14 @@ async def _stream_s3_tar_gz(experiment_id: str, chunk_size: int = 64 * 1024) -> 
 async def _stream_s3_tar_gz_ray(experiment_id: str, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
     """Stream a Ray ensemble's S3 outputs (zarr stores + summaries) into a tar.gz.
 
-    The Ray entrypoint syncs the whole ``.pbg/runs/phase0-xarray`` tree to
-    ``s3://{bucket}/{s3_output_prefix}/{experiment_id}/`` — for v2ecoli comparison
-    runs that is ``v2ecoli_seed{NN}.zarr/`` per seed (each a hive-partitioned
-    datatree of many small chunk objects; verified against ``sim61-v2c-*`` on
-    smsvpctest) plus ``v2ecoli_build_config.json``. This function does not build
-    those paths: unlike the Nextflow layout, we stream every object under the
-    prefix as-is. (The per-seed store URI the observables reader targets is built
-    by ``data_layout.ray_seed_store_uri`` (the observables reader's path).)
+        The Ray entrypoint syncs the whole ``.pbg/runs/phase0-xarray`` tree to
+        ``s3://{bucket}/{s3_output_prefix}/{experiment_id}/`` — for v2ecoli comparison
+        runs that is ``v2ecoli_seed{NN}.zarr/`` per seed (each a hive-partitioned
+        datatree of many small chunk objects; verified against ``sim61-v2c-*`` on
+        smsvpctest) plus ``v2ecoli_build_config.json``. This function does not build
+        those paths: unlike the Nextflow layout, we stream every object under the
+        prefix as-is. (The per-seed store URI the observables reader targets is built
+    by ``data_layout.RayLayout.seed_store_uri`` (the observables reader's path).)
     """
     experiment_prefix = data_layout.RayLayout.experiment_prefix(experiment_id)
 

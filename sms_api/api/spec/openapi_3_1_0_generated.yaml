@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.9.16
+  version: 0.9.17
 paths:
   /api/v1/simulations/discovery:
     get:
@@ -68,6 +68,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/simulations/tags:
+    get:
+      tags:
+      - Simulations
+      summary: List available simulation filter tags and their experiment IDs
+      description: 'Return the predefined tags that can be used to filter simulations.
+
+
+        Each tag maps to a list of experiment IDs that belong to that bundle.'
+      operationId: list-simulation-tags
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                type: object
+                title: Response List-Simulation-Tags
   /api/v1/simulations:
     post:
       tags:
@@ -301,6 +323,33 @@ paths:
       - Simulations
       summary: List all simulation specs uploaded to the database
       operationId: list-ecoli-simulations
+      parameters:
+      - name: experiment_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 'Comma-separated list of experiment IDs to filter by. Example:
+            ''sim31-baseline-60bb,sim33-violacien-seeds1000-generations10-9617'''
+          title: Experiment Id
+        description: 'Comma-separated list of experiment IDs to filter by. Example:
+          ''sim31-baseline-60bb,sim33-violacien-seeds1000-generations10-9617'''
+      - name: tag
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 'Predefined tag name that resolves to a bundle of experiment
+            IDs. Example: ''cd1''. Use GET /api/v1/simulations/tags to list available
+            tags.'
+          title: Tag
+        description: 'Predefined tag name that resolves to a bundle of experiment
+          IDs. Example: ''cd1''. Use GET /api/v1/simulations/tags to list available
+          tags.'
       responses:
         '200':
           description: Successful Response
@@ -311,6 +360,12 @@ paths:
                 items:
                   $ref: '#/components/schemas/Simulation'
                 title: Response List-Ecoli-Simulations
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/simulations/{id}:
     get:
       tags:
@@ -898,9 +953,9 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-07-10T12:37:53.862427'
+                  created_at: '2026-07-14T07:37:08.039169'
                 parca_config:
-                  outdir: /projects/SMS/sms_api/jim/sims
+                  outdir: /projects/SMS/sms_api/prod/sims
       responses:
         '200':
           description: Successful Response
@@ -2343,7 +2398,7 @@ components:
         parca_config:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: /projects/SMS/sms_api/jim/sims
+            outdir: /projects/SMS/sms_api/prod/sims
       additionalProperties: true
       type: object
       required:
@@ -2354,7 +2409,7 @@ components:
         outdir:
           type: string
           title: Outdir
-          default: /projects/SMS/sms_api/jim/sims
+          default: /projects/SMS/sms_api/prod/sims
       additionalProperties: true
       type: object
       title: ParcaOptions
@@ -2505,7 +2560,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-07-10 12:37:53.611158'
+          default: '2026-07-14 07:37:07.790339'
         job_id:
           anyOf:
           - type: string
@@ -2542,7 +2597,7 @@ components:
         parca_options:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: /projects/SMS/sms_api/jim/sims
+            outdir: /projects/SMS/sms_api/prod/sims
         analysis_options:
           $ref: '#/components/schemas/AnalysisOptions'
           default: {}

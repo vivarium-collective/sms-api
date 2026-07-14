@@ -46,4 +46,8 @@
 #          CovertLabEcoli/sms-ecoli as a Ray repo + harden repo->backend dispatch
 #          to the explicit RepoUrl map (#164); observables endpoint returns 409 for
 #          non-Ray runs; vivarium-workbench deploy manifests move into kustomize (#165)
-__version__ = "0.9.17"
+# 0.9.18 — simulation search filter: GET /api/v1/simulations gains optional
+#          experiment_id (comma-separated) + tag (predefined bundle, e.g. cd1) query
+#          params (union, backwards-compatible), a GET /simulations/tags discovery
+#          endpoint, and the atlantis CLI --tag/--experiment-id + `simulation tags` (#163)
+__version__ = "0.9.18"

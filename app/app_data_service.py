@@ -138,8 +138,8 @@ class E2EDataService:
     def get_workflow(self, simulation_id: int) -> Simulation:
         return self.submit_get_workflow(simulation_id=simulation_id)
 
-    def show_workflows(self) -> list[Simulation]:
-        sims = self.submit_list_workflows()
+    def show_workflows(self, experiment_id: str | None = None, tag: str | None = None) -> list[Simulation]:
+        sims = self.submit_list_workflows(experiment_id=experiment_id, tag=tag)
         return sorted(sims, key=lambda s: s.database_id)
 
     def show_simulators(self) -> list[SimulatorVersion]:
@@ -414,9 +414,14 @@ class E2EDataService:
         except Exception as e:
             raise httpx.HTTPError(f"Could not load simulation {simulation_id}: {e}") from e
 
-    def submit_list_workflows(self) -> list[Simulation]:
+    def submit_list_workflows(self, experiment_id: str | None = None, tag: str | None = None) -> list[Simulation]:
         try:
-            simulations = self.client.get(url="/api/v1/simulations")
+            params: dict[str, str] = {}
+            if experiment_id is not None:
+                params["experiment_id"] = experiment_id
+            if tag is not None:
+                params["tag"] = tag
+            simulations = self.client.get(url="/api/v1/simulations", params=params)
             if simulations.status_code != 200:
                 raise httpx.HTTPError(f"Server returned {simulations.status_code}: {simulations.text}")  # noqa: TRY301
             return [Simulation(**sim) for sim in simulations.json()]
@@ -424,6 +429,18 @@ class E2EDataService:
             raise
         except Exception as e:
             raise httpx.HTTPError(f"Could not list simulations: {e}") from e
+
+    def list_simulation_tags(self) -> dict[str, list[str]]:
+        try:
+            response = self.client.get(url="/api/v1/simulations/tags")
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            data: dict[str, list[str]] = response.json()
+            return data
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not list simulation tags: {e}") from e
 
     def submit_get_workflow_log(self, simulation_id: int, truncate: bool = True) -> str:
         try:

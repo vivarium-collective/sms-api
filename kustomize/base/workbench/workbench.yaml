@@ -75,10 +75,35 @@ spec:
               print("set ui.ptools_server_url =", os.environ["PTOOLS_SERVER_URL"])
               PY
               fi
+              # Deployment override for the pbg-ptools Omics Viewer DATA overlay:
+              # the launcher builds a TSV URL off ui.dashboard_public_base_url that
+              # the IN-CLUSTER ptools pod fetches, so it must be the workbench's
+              # in-cluster Service URL (incl. the /workbench base path) — not the
+              # local-dev host.docker.internal value baked into workspace.yaml.
+              # Also clear ui.ptools_data_dir so the launcher uses HTTP delivery
+              # (the ptools pod has no workspace mount). Skipped when unset.
+              if [ -n "${DASHBOARD_PUBLIC_BASE_URL:-}" ]; then
+                python - <<'PY'
+              import os, pathlib, yaml
+              p = pathlib.Path("/workspace/workspace.yaml")
+              d = yaml.safe_load(p.read_text()) or {}
+              ui = d.setdefault("ui", {})
+              ui["dashboard_public_base_url"] = os.environ["DASHBOARD_PUBLIC_BASE_URL"]
+              ui.pop("ptools_data_dir", None)
+              p.write_text(yaml.safe_dump(d, sort_keys=False))
+              print("set ui.dashboard_public_base_url =", os.environ["DASHBOARD_PUBLIC_BASE_URL"], "; cleared ui.ptools_data_dir")
+              PY
+              fi
           env:
             # Browser-reachable PTools base for the Omics Viewer; set per-overlay.
             # Empty = leave the workspace's own ui.ptools_server_url untouched.
             - name: PTOOLS_SERVER_URL
+              value: ""
+            # In-cluster workbench Service URL (with the /workbench base path) that
+            # the ptools pod fetches study TSVs from for the Omics Viewer overlay.
+            # Empty = leave the workspace's own ui.dashboard_public_base_url +
+            # ui.ptools_data_dir untouched (local-dev behavior). Set per-overlay.
+            - name: DASHBOARD_PUBLIC_BASE_URL
               value: ""
           volumeMounts:
             - name: workspace
@@ -111,6 +136,28 @@ spec:
               value: "http://api:8000"
             - name: VIVARIUM_WORKBENCH_WORKSPACE
               value: "/workspace"
+            # The internal ALB terminating /workbench REWRITES the Host header and
+            # does NOT emit X-Forwarded-Host, so the CSRF same-origin check (and
+            # --trust-proxy) can never match the browser's Origin. Declare the
+            # browser-facing origin explicitly so POST/DELETE (Run, Run-remotely,
+            # saves) are admitted. This is the SSM-tunnel origin every operator
+            # reaches the dashboard through (sms-proxy.sh → localhost:8080). base/
+            # workbench is Stanford-tunnel-only, so this fixed origin lives here.
+            - name: VIVARIUM_WORKBENCH_ALLOWED_ORIGINS
+              value: "http://localhost:8080"
+            # Pinned-build remote runs: the "Run on remote" card submits sims
+            # against the latest ALREADY-BUILT simulator for this repo@branch
+            # (resolved from sms-api in-cluster), skipping the per-run git
+            # push/build/login entirely. This is the demo model — one pinned
+            # build, many simulation configs — and it sidesteps the pod's
+            # unwritable /workspace git remote + protected-main push. Enabled
+            # declaratively here; no human GitHub token is embedded.
+            - name: VIVARIUM_WORKBENCH_REMOTE_PINNED
+              value: "1"
+            - name: VIVARIUM_WORKBENCH_REMOTE_REPO_URL
+              value: "https://github.com/vivarium-collective/v2ecoli"
+            - name: VIVARIUM_WORKBENCH_REMOTE_BRANCH
+              value: "main"
           resources:
             requests:
               cpu: "500m"

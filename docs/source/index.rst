@@ -46,6 +46,7 @@ download results) in a different format:
    guides/compose-tutorial
    guides/biomodels
    guides/analysis-filtering
+   guides/simulation-filtering
 
 .. toctree::
    :maxdepth: 2

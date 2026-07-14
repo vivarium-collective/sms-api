@@ -159,6 +159,11 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def list_simulations_filtered(self, experiment_ids: list[str]) -> list[Simulation]:
+        """Return simulations whose experiment_id is in the given list."""
+        pass
+
+    @abstractmethod
     async def list_active_hpcruns(self) -> list[HpcRun]:
         """Return all HpcRun jobs with status PENDING or RUNNING."""
         pass
@@ -666,21 +671,31 @@ class DatabaseServiceSQL(DatabaseService):
         async with self.async_sessionmaker() as session:
             stmt = select(ORMSimulation)
             result: Result[tuple[ORMSimulation]] = await session.execute(stmt)
-            orm_simulations = result.scalars().all()
+            orm_simulations = list(result.scalars().all())
+            return self._build_simulations(orm_simulations)
 
-            simulations: list[Simulation] = []
-            for orm_simulation in orm_simulations:
-                simulation = Simulation(
-                    simulation_config_filename=orm_simulation.config_filename,
-                    experiment_id=orm_simulation.experiment_id,
-                    database_id=orm_simulation.id,
-                    simulator_id=orm_simulation.simulator_id,
-                    parca_dataset_id=orm_simulation.parca_dataset_id,
-                    config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
-                )
-                simulations.append(simulation)
+    @override
+    async def list_simulations_filtered(self, experiment_ids: list[str]) -> list[Simulation]:
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMSimulation).where(ORMSimulation.experiment_id.in_(experiment_ids))
+            result: Result[tuple[ORMSimulation]] = await session.execute(stmt)
+            orm_simulations = list(result.scalars().all())
+            return self._build_simulations(orm_simulations)
 
-            return simulations
+    @staticmethod
+    def _build_simulations(orm_simulations: list[ORMSimulation]) -> list[Simulation]:
+        simulations: list[Simulation] = []
+        for orm_simulation in orm_simulations:
+            simulation = Simulation(
+                simulation_config_filename=orm_simulation.config_filename,
+                experiment_id=orm_simulation.experiment_id,
+                database_id=orm_simulation.id,
+                simulator_id=orm_simulation.simulator_id,
+                parca_dataset_id=orm_simulation.parca_dataset_id,
+                config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
+            )
+            simulations.append(simulation)
+        return simulations
 
     @override
     async def list_active_hpcruns(self) -> list[HpcRun]:
