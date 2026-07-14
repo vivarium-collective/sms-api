@@ -67,4 +67,14 @@
 #          Tags are site-local data (per-site RDS), fixing the shared-S3 /
 #          independent-DB mismatch. Reconciler fingerprint extended for the new
 #          revision (frozen once create_all is guarded off in prod).
-__version__ = "0.9.20"
+# 0.9.21 — analysis-result endpoints (read side): generalize the `analysis` table
+#          (migration d3f9a1c72b84 adds nullable indexed experiment_id/n_tp/status/
+#          result_uri/... ; config JSONB stays authoritative). New GET /analyses
+#          (exhaustive list across sims, optional experiment_id/simulation_id
+#          filters), GET /simulations/{id}/analyses (per-sim list), and GET
+#          /analyses/{id}/data (pure fetch-by-id -> list[TsvOutputFile], same shape
+#          as legacy POST /analyses; 409 not-ready, 404 unknown, never computes).
+#          scripts/backfill_analysis_results.py records READY rows for existing S3
+#          analysis dirs (both nestings). n_tp sampling + nonblocking submit are a
+#          separate future track. Reconciler fingerprint extended (analysis.n_tp).
+__version__ = "0.9.21"

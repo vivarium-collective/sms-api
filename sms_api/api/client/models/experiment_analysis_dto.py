@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, Union, cast
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
+from ..models.job_status import JobStatus
 from ..types import UNSET, Unset
 
 if TYPE_CHECKING:
@@ -33,6 +34,13 @@ class ExperimentAnalysisDTO:
             last_updated (str):
             job_name (Union[None, Unset, str]):
             job_id (Union[None, Unset, int]):
+            experiment_id (Union[None, Unset, str]):
+            n_tp (Union[None, Unset, int]):
+            status (Union[JobStatus, None, Unset]):
+            result_uri (Union[None, Unset, str]):
+            simulation_id (Union[None, Unset, int]):
+            backend (Union[None, Unset, str]):
+            error_message (Union[None, Unset, str]):
     """
 
     database_id: int
@@ -41,6 +49,13 @@ class ExperimentAnalysisDTO:
     last_updated: str
     job_name: Union[None, Unset, str] = UNSET
     job_id: Union[None, Unset, int] = UNSET
+    experiment_id: Union[None, Unset, str] = UNSET
+    n_tp: Union[None, Unset, int] = UNSET
+    status: Union[JobStatus, None, Unset] = UNSET
+    result_uri: Union[None, Unset, str] = UNSET
+    simulation_id: Union[None, Unset, int] = UNSET
+    backend: Union[None, Unset, str] = UNSET
+    error_message: Union[None, Unset, str] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -64,6 +79,50 @@ class ExperimentAnalysisDTO:
         else:
             job_id = self.job_id
 
+        experiment_id: Union[None, Unset, str]
+        if isinstance(self.experiment_id, Unset):
+            experiment_id = UNSET
+        else:
+            experiment_id = self.experiment_id
+
+        n_tp: Union[None, Unset, int]
+        if isinstance(self.n_tp, Unset):
+            n_tp = UNSET
+        else:
+            n_tp = self.n_tp
+
+        status: Union[None, Unset, str]
+        if isinstance(self.status, Unset):
+            status = UNSET
+        elif isinstance(self.status, JobStatus):
+            status = self.status.value
+        else:
+            status = self.status
+
+        result_uri: Union[None, Unset, str]
+        if isinstance(self.result_uri, Unset):
+            result_uri = UNSET
+        else:
+            result_uri = self.result_uri
+
+        simulation_id: Union[None, Unset, int]
+        if isinstance(self.simulation_id, Unset):
+            simulation_id = UNSET
+        else:
+            simulation_id = self.simulation_id
+
+        backend: Union[None, Unset, str]
+        if isinstance(self.backend, Unset):
+            backend = UNSET
+        else:
+            backend = self.backend
+
+        error_message: Union[None, Unset, str]
+        if isinstance(self.error_message, Unset):
+            error_message = UNSET
+        else:
+            error_message = self.error_message
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
@@ -76,6 +135,20 @@ class ExperimentAnalysisDTO:
             field_dict["job_name"] = job_name
         if job_id is not UNSET:
             field_dict["job_id"] = job_id
+        if experiment_id is not UNSET:
+            field_dict["experiment_id"] = experiment_id
+        if n_tp is not UNSET:
+            field_dict["n_tp"] = n_tp
+        if status is not UNSET:
+            field_dict["status"] = status
+        if result_uri is not UNSET:
+            field_dict["result_uri"] = result_uri
+        if simulation_id is not UNSET:
+            field_dict["simulation_id"] = simulation_id
+        if backend is not UNSET:
+            field_dict["backend"] = backend
+        if error_message is not UNSET:
+            field_dict["error_message"] = error_message
 
         return field_dict
 
@@ -110,6 +183,77 @@ class ExperimentAnalysisDTO:
 
         job_id = _parse_job_id(d.pop("job_id", UNSET))
 
+        def _parse_experiment_id(data: object) -> Union[None, Unset, str]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, str], data)
+
+        experiment_id = _parse_experiment_id(d.pop("experiment_id", UNSET))
+
+        def _parse_n_tp(data: object) -> Union[None, Unset, int]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, int], data)
+
+        n_tp = _parse_n_tp(d.pop("n_tp", UNSET))
+
+        def _parse_status(data: object) -> Union[JobStatus, None, Unset]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                status_type_0 = JobStatus(data)
+
+                return status_type_0
+            except:  # noqa: E722
+                pass
+            return cast(Union[JobStatus, None, Unset], data)
+
+        status = _parse_status(d.pop("status", UNSET))
+
+        def _parse_result_uri(data: object) -> Union[None, Unset, str]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, str], data)
+
+        result_uri = _parse_result_uri(d.pop("result_uri", UNSET))
+
+        def _parse_simulation_id(data: object) -> Union[None, Unset, int]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, int], data)
+
+        simulation_id = _parse_simulation_id(d.pop("simulation_id", UNSET))
+
+        def _parse_backend(data: object) -> Union[None, Unset, str]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, str], data)
+
+        backend = _parse_backend(d.pop("backend", UNSET))
+
+        def _parse_error_message(data: object) -> Union[None, Unset, str]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, str], data)
+
+        error_message = _parse_error_message(d.pop("error_message", UNSET))
+
         experiment_analysis_dto = cls(
             database_id=database_id,
             name=name,
@@ -117,6 +261,13 @@ class ExperimentAnalysisDTO:
             last_updated=last_updated,
             job_name=job_name,
             job_id=job_id,
+            experiment_id=experiment_id,
+            n_tp=n_tp,
+            status=status,
+            result_uri=result_uri,
+            simulation_id=simulation_id,
+            backend=backend,
+            error_message=error_message,
         )
 
         experiment_analysis_dto.additional_properties = d
