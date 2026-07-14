@@ -150,6 +150,18 @@ enum.
 `AVAILABLE_NTP` governs only what **POST** accepts. Do **not** reuse the pre-existing duplicate
 `operation_id="run-ecoli-simulation-analysis"` (`sms.py:409` & `:627`).
 
+#### ptools transition (response-shape parity)
+
+The legacy blocking `POST /analyses` (`sms.py:625`) returns **`Sequence[TsvOutputFile | OutputFileMetadata]`**
+— a buffered JSON array where each element is `{filename, variant, lineage_seed, generation, agent_id,
+content}` and `content` is the raw TSV string. It does **not** stream and does **not** return an archive.
+
+**Requirement (confirmed):** `GET /analyses/{id}/data` MUST return the **identical shape**
+(`list[TsvOutputFile]`) so ptools reuses its existing response-parsing verbatim. We **retain** the legacy
+`POST /analyses` (SLURM, blocking) unchanged; ptools' only change is to replace its single blocking call
+with **submit → poll status → fetch data**, where the fetched data shape is byte-for-byte the same. This
+is why the fetch shape is `list[TsvOutputFile]` (not a tar.gz stream).
+
 ### 6. Backfill (`scripts/backfill_analysis_results.py`, no admin endpoint)
 
 Config-first, two tiers:
@@ -206,11 +218,14 @@ After deploy + the `alembic-migrate` reconciler applies the new columns, run
 `analysis_id`), `POST …/analyses?n_tp=10` (nonblocking submit), poll `GET /analyses/{id}/status` → READY,
 `GET /analyses/{id}/data` returns TSVs.
 
+## Resolved decisions
+
+- **Fetch response shape** — DECIDED: `GET /analyses/{id}/data` returns `list[TsvOutputFile]`, the
+  identical shape the legacy `POST /analyses` already returns, so ptools reuses its response parsing.
+  The legacy `POST /analyses` is retained unchanged (see "ptools transition" above).
+
 ## Open decisions
 
-- **Fetch response shape** for `GET /analyses/{id}/data`: `list[TsvOutputFile]` JSON (recommended;
-  programmatic-client friendly, matches the SLURM `/analyses` shape) vs a tar.gz stream — pick whichever
-  ptools' client prefers.
 - **Release:** this adds a migration → same reconciler / migration-Job flow as 0.9.20; version bump TBD.
 
 ## Alternatives considered
