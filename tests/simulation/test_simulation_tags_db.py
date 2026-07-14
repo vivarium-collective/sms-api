@@ -56,9 +56,7 @@ async def test_filter_union_of_experiment_ids_and_tags(
     await _insert(database_service, experiment_request, "tagdb-u3", ["untagged-here"])
 
     # experiment_id OR tag => union (u3 by id, u1/u2 by tag)
-    result = await database_service.list_simulations_filtered(
-        experiment_ids=["tagdb-u3"], tags=["ubundle"]
-    )
+    result = await database_service.list_simulations_filtered(experiment_ids=["tagdb-u3"], tags=["ubundle"])
     assert {s.experiment_id for s in result} == {"tagdb-u1", "tagdb-u2", "tagdb-u3"}
 
 
