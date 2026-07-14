@@ -2,7 +2,7 @@ import contextlib
 import datetime
 import logging
 from abc import ABC, abstractmethod
-from typing import override
+from typing import Any, override
 
 from sqlalchemy import ColumnElement, Result, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -24,6 +24,7 @@ from sms_api.simulation.models import (
     WorkerEvent,
 )
 from sms_api.simulation.tables_orm import (
+    AnalysisStatusDB,
     JobStatusDB,
     JobTypeDB,
     ORMAnalysis,
@@ -51,8 +52,45 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def list_analyses(self) -> list[ExperimentAnalysisDTO]:
-        """Used by the /ecoli router"""
+    async def list_analyses(
+        self, *, experiment_id: str | None = None, simulation_id: int | None = None
+    ) -> list[ExperimentAnalysisDTO]:
+        """List analyses, optionally filtered by experiment_id and/or simulation_id."""
+        pass
+
+    @abstractmethod
+    async def record_analysis(
+        self,
+        *,
+        experiment_id: str,
+        n_tp: int,
+        status: AnalysisStatusDB,
+        config: dict[str, Any],
+        name: str,
+        simulation_id: int | None = None,
+        backend: str = "batch",
+        job_name: str | None = None,
+        job_id_ext: str | None = None,
+        result_uri: str | None = None,
+        error_message: str | None = None,
+    ) -> ExperimentAnalysisDTO:
+        """Insert or update (by ``(experiment_id, n_tp)``) an analysis-result row and return it."""
+        pass
+
+    @abstractmethod
+    async def get_analysis_by_experiment_ntp(self, experiment_id: str, n_tp: int) -> ExperimentAnalysisDTO | None:
+        """Return the most recent analysis row for ``(experiment_id, n_tp)``, or None."""
+        pass
+
+    @abstractmethod
+    async def update_analysis_status(
+        self,
+        analysis_id: int,
+        status: AnalysisStatusDB,
+        result_uri: str | None = None,
+        error_message: str | None = None,
+    ) -> ExperimentAnalysisDTO:
+        """Update an analysis row's status (and optionally result_uri/error) by id."""
         pass
 
     ####################################
@@ -279,17 +317,110 @@ class DatabaseServiceSQL(DatabaseService):
             return orm_analysis.to_dto()
 
     @override
-    async def list_analyses(self) -> list[ExperimentAnalysisDTO]:
-        """Used by the /ecoli router"""
+    async def list_analyses(
+        self, *, experiment_id: str | None = None, simulation_id: int | None = None
+    ) -> list[ExperimentAnalysisDTO]:
         async with self.async_sessionmaker() as session:
+            clauses: list[ColumnElement[bool]] = []
+            if experiment_id is not None:
+                clauses.append(ORMAnalysis.experiment_id == experiment_id)
+            if simulation_id is not None:
+                clauses.append(ORMAnalysis.simulation_id == simulation_id)
             stmt = select(ORMAnalysis)
+            if clauses:
+                stmt = stmt.where(and_(*clauses))
+            stmt = stmt.order_by(ORMAnalysis.id)
             result: Result[tuple[ORMAnalysis]] = await session.execute(stmt)
-            orm_analyses = result.scalars().all()
+            return [orm_analysis.to_dto() for orm_analysis in result.scalars().all()]
 
-            versions: list[ExperimentAnalysisDTO] = []
-            for experiment in orm_analyses:
-                versions.append(experiment.to_dto())
-            return versions
+    @override
+    async def record_analysis(
+        self,
+        *,
+        experiment_id: str,
+        n_tp: int,
+        status: AnalysisStatusDB,
+        config: dict[str, Any],
+        name: str,
+        simulation_id: int | None = None,
+        backend: str = "batch",
+        job_name: str | None = None,
+        job_id_ext: str | None = None,
+        result_uri: str | None = None,
+        error_message: str | None = None,
+    ) -> ExperimentAnalysisDTO:
+        async with self.async_sessionmaker() as session, session.begin():
+            # Idempotency: update the existing row for (experiment_id, n_tp) if present.
+            stmt = (
+                select(ORMAnalysis)
+                .where(ORMAnalysis.experiment_id == experiment_id, ORMAnalysis.n_tp == n_tp)
+                .order_by(ORMAnalysis.id.desc())
+                .limit(1)
+            )
+            existing = (await session.execute(stmt)).scalars().first()
+            if existing is not None:
+                existing.status = status
+                existing.config = config
+                existing.name = name
+                existing.simulation_id = simulation_id
+                existing.backend = backend
+                existing.job_name = job_name
+                existing.job_id_ext = job_id_ext
+                existing.result_uri = result_uri
+                existing.error_message = error_message
+                existing.last_updated = str(datetime.datetime.now())
+                await session.flush()
+                return existing.to_dto()
+            orm_analysis = ORMAnalysis(
+                name=name,
+                config=config,
+                last_updated=str(datetime.datetime.now()),
+                experiment_id=experiment_id,
+                n_tp=n_tp,
+                status=status,
+                simulation_id=simulation_id,
+                backend=backend,
+                job_name=job_name,
+                job_id_ext=job_id_ext,
+                result_uri=result_uri,
+                error_message=error_message,
+            )
+            session.add(orm_analysis)
+            await session.flush()
+            return orm_analysis.to_dto()
+
+    @override
+    async def get_analysis_by_experiment_ntp(self, experiment_id: str, n_tp: int) -> ExperimentAnalysisDTO | None:
+        async with self.async_sessionmaker() as session:
+            stmt = (
+                select(ORMAnalysis)
+                .where(ORMAnalysis.experiment_id == experiment_id, ORMAnalysis.n_tp == n_tp)
+                .order_by(ORMAnalysis.id.desc())
+                .limit(1)
+            )
+            orm_analysis = (await session.execute(stmt)).scalars().first()
+            return orm_analysis.to_dto() if orm_analysis is not None else None
+
+    @override
+    async def update_analysis_status(
+        self,
+        analysis_id: int,
+        status: AnalysisStatusDB,
+        result_uri: str | None = None,
+        error_message: str | None = None,
+    ) -> ExperimentAnalysisDTO:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_analysis = await self._get_orm_analysis(session, database_id=analysis_id)
+            if orm_analysis is None:
+                raise RuntimeError(f"Analysis {analysis_id} not found")
+            orm_analysis.status = status
+            if result_uri is not None:
+                orm_analysis.result_uri = result_uri
+            if error_message is not None:
+                orm_analysis.error_message = error_message
+            orm_analysis.last_updated = str(datetime.datetime.now())
+            await session.flush()
+            return orm_analysis.to_dto()
 
     ##################################
 

@@ -41,6 +41,29 @@ class JobStatusDB(enum.Enum):
         return cls(status.value)
 
 
+class AnalysisStatusDB(enum.Enum):
+    """Coarse readiness of an analysis result set (see analysis-results-design.md)."""
+
+    COMPUTING = "computing"
+    READY = "ready"
+    FAILED = "failed"
+
+    def to_job_status(self) -> JobStatus:
+        return {
+            AnalysisStatusDB.COMPUTING: JobStatus.RUNNING,
+            AnalysisStatusDB.READY: JobStatus.COMPLETED,
+            AnalysisStatusDB.FAILED: JobStatus.FAILED,
+        }[self]
+
+    @classmethod
+    def from_job_status(cls, status: JobStatus) -> "AnalysisStatusDB":
+        if status == JobStatus.COMPLETED:
+            return cls.READY
+        if status in (JobStatus.FAILED, JobStatus.CANCELLED):
+            return cls.FAILED
+        return cls.COMPUTING
+
+
 class JobTypeDB(enum.Enum):
     SIMULATION = "simulation"
     PARCA = "parca"
@@ -207,7 +230,10 @@ class ORMWorkerEvent(Base):
 
 
 class ORMAnalysis(Base):
-    """Used by the /ecoli router"""
+    """General record of an analysis (any type). ``config`` (JSONB) is the
+    authoritative store of the full analysis config; the columns below are
+    denormalized/indexed only for the attributes we query on (see
+    analysis-results-design.md). Legacy SLURM rows leave the new columns NULL."""
 
     __tablename__ = "analysis"
 
@@ -215,8 +241,22 @@ class ORMAnalysis(Base):
     name: Mapped[str] = mapped_column(nullable=False)  # this should be request.analysis_name
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     last_updated: Mapped[str] = mapped_column(nullable=False)
-    job_name: Mapped[str] = mapped_column(nullable=True)
-    job_id: Mapped[int] = mapped_column(nullable=True)
+    job_name: Mapped[str | None] = mapped_column(nullable=True)
+    job_id: Mapped[int | None] = mapped_column(nullable=True)
+
+    # --- query columns (nullable; additive; backfilled for old rows) ---
+    experiment_id: Mapped[str | None] = mapped_column(nullable=True, index=True)
+    n_tp: Mapped[int | None] = mapped_column(nullable=True, index=True)
+    status: Mapped[AnalysisStatusDB | None] = mapped_column(nullable=True)
+    result_uri: Mapped[str | None] = mapped_column(nullable=True)
+    backend: Mapped[str | None] = mapped_column(nullable=True, server_default="batch")
+    simulation_id: Mapped[int | None] = mapped_column(ForeignKey("simulation.id"), nullable=True, index=True)
+    job_id_ext: Mapped[str | None] = mapped_column(nullable=True)  # K8s job name / batch id
+    error_message: Mapped[str | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True, server_default=func.now())
+    updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        nullable=True, server_default=func.now(), onupdate=func.now()
+    )
 
     def to_dto(self) -> ExperimentAnalysisDTO:
         options = AnalysisConfigOptions(**self.config["analysis_options"])
@@ -232,6 +272,13 @@ class ORMAnalysis(Base):
             last_updated=self.last_updated,
             job_name=self.job_name,
             job_id=self.job_id,
+            experiment_id=self.experiment_id,
+            n_tp=self.n_tp,
+            status=self.status.to_job_status() if self.status is not None else None,
+            result_uri=self.result_uri,
+            simulation_id=self.simulation_id,
+            backend=self.backend,
+            error_message=self.error_message,
         )
 
 
