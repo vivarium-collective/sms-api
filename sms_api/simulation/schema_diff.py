@@ -39,7 +39,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from sms_api.simulation.db_reconcile import resolve_database_url
 
-
 # Tables that legitimately exist in the database but are not ORM-declared app
 # schema, so they must not be reported as drift.
 _IGNORED_TABLES = frozenset({"alembic_version"})
@@ -51,6 +50,10 @@ class DbSchema:
 
     tables: dict[str, set[str]]
     enums: dict[str, set[str]]
+    # enum type name -> tables whose columns use it (populated for the ORM side only).
+    # Used to tell "blocking" enum drift (a live table uses it) from enums that
+    # simply arrive with a not-yet-created table via create_all.
+    enum_tables: dict[str, set[str]] = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass
@@ -58,7 +61,8 @@ class SchemaDiff:
     missing_tables: list[str]  # expected by ORM, absent in DB (create_all will create — INFO)
     missing_columns: dict[str, list[str]]  # existing table -> columns the ORM expects but DB lacks (BLOCKING)
     missing_enum_values: dict[str, list[str]]  # existing enum -> labels the ORM expects but DB lacks (BLOCKING)
-    missing_enum_types: list[str]  # enum types the ORM expects, absent in DB (BLOCKING if a live table uses it)
+    missing_enum_types: list[str]  # enum types absent AND used by an EXISTING table (BLOCKING)
+    pending_enum_types: list[str]  # enum types absent but used only by missing tables (create_all creates — INFO)
     extra_tables: list[str]  # in DB, not in ORM (INFO)
     extra_columns: dict[str, list[str]]  # existing table -> columns in DB the ORM no longer declares (INFO)
 
@@ -76,11 +80,12 @@ def _expected_schema_from_orm() -> DbSchema:
         from sms_api.compose.tables_orm import ComposeBase
 
         metadatas.append(ComposeBase.metadata)
-    except Exception:  # noqa: BLE001 - compose is optional for this check
+    except ImportError:
         pass
 
     tables: dict[str, set[str]] = {}
     enums: dict[str, set[str]] = {}
+    enum_tables: dict[str, set[str]] = {}
     for metadata in metadatas:
         for table in metadata.tables.values():
             tables[table.name] = {col.name for col in table.columns}
@@ -91,7 +96,8 @@ def _expected_schema_from_orm() -> DbSchema:
                     # member names (e.g. WAITING) while some DB labels are lowercased
                     # values (e.g. 'cancelled'); lowercasing both avoids false positives.
                     enums[col_type.name] = {label.lower() for label in col_type.enums}
-    return DbSchema(tables=tables, enums=enums)
+                    enum_tables.setdefault(col_type.name, set()).add(table.name)
+    return DbSchema(tables=tables, enums=enums, enum_tables=enum_tables)
 
 
 def _collect_db_schema(sync_conn: Connection) -> DbSchema:
@@ -136,11 +142,21 @@ def diff_schemas(expected: DbSchema, actual: DbSchema) -> SchemaDiff:
         if extra:
             extra_columns[table] = extra
 
-    missing_enum_types = sorted(name for name in expected.enums if name not in actual.enums)
+    # A missing enum type only blocks if a table that already EXISTS uses it; if
+    # its only users are missing tables, create_all creates the type with them.
+    def _used_by_existing_table(enum_name: str) -> bool:
+        users = expected.enum_tables.get(enum_name, set())
+        return any(t in actual.tables for t in users) if users else True
+
+    missing_enum_types: list[str] = []
+    pending_enum_types: list[str] = []
+    for name in sorted(name for name in expected.enums if name not in actual.enums):
+        (missing_enum_types if _used_by_existing_table(name) else pending_enum_types).append(name)
+
     missing_enum_values: dict[str, list[str]] = {}
     for name, expected_labels in expected.enums.items():
         if name not in actual.enums:
-            continue  # whole type missing — reported under missing_enum_types
+            continue  # whole type missing — reported under missing/pending_enum_types
         missing_labels = sorted(expected_labels - actual.enums[name])
         if missing_labels:
             missing_enum_values[name] = missing_labels
@@ -150,6 +166,7 @@ def diff_schemas(expected: DbSchema, actual: DbSchema) -> SchemaDiff:
         missing_columns=missing_columns,
         missing_enum_values=missing_enum_values,
         missing_enum_types=missing_enum_types,
+        pending_enum_types=pending_enum_types,
         extra_tables=extra_tables,
         extra_columns=extra_columns,
     )
@@ -175,6 +192,8 @@ def render_report(diff: SchemaDiff) -> str:
     lines.append("")
     lines.append("INFO — expected by ORM but absent (create_all creates these on boot):")
     lines.append(f"  Missing tables: {', '.join(diff.missing_tables) if diff.missing_tables else '(none)'}")
+    if diff.pending_enum_types:
+        lines.append(f"  Enum types for missing tables: {', '.join(diff.pending_enum_types)}")
     lines.append("")
     lines.append("INFO — present in DB but not declared by the ORM (usually harmless legacy):")
     lines.append(f"  Extra tables: {', '.join(diff.extra_tables) if diff.extra_tables else '(none)'}")
@@ -185,11 +204,12 @@ def render_report(diff: SchemaDiff) -> str:
 
     lines.append("")
     lines.append(
-        "RESULT: BLOCKING DRIFT — do not deploy until resolved."
+        "RESULT: BLOCKING DRIFT — resolve, OR confirm each item is added by a pending Alembic\n"
+        "        migration (cross-check `db_reconcile.py --analyze`) before deploying."
         if diff.has_blocking_drift
         else "RESULT: no blocking drift."
     )
-    lines.append("(Presence only — this check does not compare column types.)")
+    lines.append("(Presence only — no column-type comparison. Items a pending migration adds are expected here.)")
     return "\n".join(lines)
 
 

@@ -7,37 +7,48 @@ def _expected() -> DbSchema:
     return DbSchema(
         tables={
             "simulation": {"id", "experiment_id", "config", "tags"},
-            "hpcrun": {"id", "job_id_ext", "job_backend"},
+            "hpcrun": {"id", "job_id_ext", "job_backend", "status"},
             "compose_run": {"id", "status"},  # a table create_all would add on boot
         },
-        enums={"jobstatusdb": {"waiting", "running", "cancelled"}},
+        enums={
+            "jobstatusdb": {"waiting", "running", "cancelled"},  # used by hpcrun (usually exists)
+            "composejobstatusdb": {"queued", "done"},  # used only by compose_run
+        },
+        enum_tables={
+            "jobstatusdb": {"hpcrun"},
+            "composejobstatusdb": {"compose_run"},
+        },
     )
+
+
+def _actual(**overrides: object) -> DbSchema:
+    base = DbSchema(
+        tables={
+            "simulation": {"id", "experiment_id", "config", "tags"},
+            "hpcrun": {"id", "job_id_ext", "job_backend", "status"},
+            "compose_run": {"id", "status"},
+        },
+        enums={"jobstatusdb": {"waiting", "running", "cancelled"}, "composejobstatusdb": {"queued", "done"}},
+    )
+    for k, v in overrides.items():
+        setattr(base, k, v)
+    return base
 
 
 def test_no_drift_when_db_matches_orm() -> None:
-    actual = DbSchema(
-        tables={
-            "simulation": {"id", "experiment_id", "config", "tags"},
-            "hpcrun": {"id", "job_id_ext", "job_backend"},
-            "compose_run": {"id", "status"},
-        },
-        enums={"jobstatusdb": {"waiting", "running", "cancelled"}},
-    )
-    diff = diff_schemas(_expected(), actual)
+    diff = diff_schemas(_expected(), _actual())
     assert not diff.has_blocking_drift
     assert diff.missing_tables == []
     assert diff.missing_columns == {}
 
 
 def test_missing_column_on_existing_table_is_blocking() -> None:
-    # tags column absent on the existing simulation table -> blocking (create_all won't add it).
-    actual = DbSchema(
+    actual = _actual(
         tables={
             "simulation": {"id", "experiment_id", "config"},  # no 'tags'
-            "hpcrun": {"id", "job_id_ext", "job_backend"},
+            "hpcrun": {"id", "job_id_ext", "job_backend", "status"},
             "compose_run": {"id", "status"},
-        },
-        enums={"jobstatusdb": {"waiting", "running", "cancelled"}},
+        }
     )
     diff = diff_schemas(_expected(), actual)
     assert diff.has_blocking_drift
@@ -45,55 +56,63 @@ def test_missing_column_on_existing_table_is_blocking() -> None:
 
 
 def test_missing_table_is_info_not_blocking() -> None:
-    # compose_run entirely absent -> create_all creates it on boot -> INFO only.
-    actual = DbSchema(
+    actual = _actual(
         tables={
             "simulation": {"id", "experiment_id", "config", "tags"},
-            "hpcrun": {"id", "job_id_ext", "job_backend"},
-        },
-        enums={"jobstatusdb": {"waiting", "running", "cancelled"}},
+            "hpcrun": {"id", "job_id_ext", "job_backend", "status"},
+        }
     )
     diff = diff_schemas(_expected(), actual)
     assert diff.missing_tables == ["compose_run"]
     assert not diff.has_blocking_drift
 
 
-def test_missing_enum_value_is_blocking() -> None:
-    actual = DbSchema(
-        tables=_expected().tables,
-        enums={"jobstatusdb": {"waiting", "running"}},  # missing 'cancelled'
-    )
+def test_missing_enum_value_on_used_enum_is_blocking() -> None:
+    actual = _actual(enums={"jobstatusdb": {"waiting", "running"}, "composejobstatusdb": {"queued", "done"}})
     diff = diff_schemas(_expected(), actual)
     assert diff.has_blocking_drift
     assert diff.missing_enum_values == {"jobstatusdb": ["cancelled"]}
 
 
-def test_missing_enum_type_is_blocking() -> None:
-    actual = DbSchema(tables=_expected().tables, enums={})
+def test_missing_enum_type_used_by_existing_table_is_blocking() -> None:
+    # jobstatusdb absent, but hpcrun (which uses it) exists -> blocking.
+    actual = _actual(enums={"composejobstatusdb": {"queued", "done"}})
     diff = diff_schemas(_expected(), actual)
     assert diff.has_blocking_drift
     assert diff.missing_enum_types == ["jobstatusdb"]
 
 
-def test_alembic_version_table_is_ignored() -> None:
-    actual = DbSchema(
-        tables={**_expected().tables, "alembic_version": {"version_num"}},
-        enums=_expected().enums,
+def test_missing_enum_type_for_missing_table_is_pending_not_blocking() -> None:
+    # composejobstatusdb absent AND its only table (compose_run) is absent ->
+    # create_all creates the type with the table -> INFO, not blocking.
+    actual = _actual(
+        tables={
+            "simulation": {"id", "experiment_id", "config", "tags"},
+            "hpcrun": {"id", "job_id_ext", "job_backend", "status"},
+        },
+        enums={"jobstatusdb": {"waiting", "running", "cancelled"}},
     )
+    diff = diff_schemas(_expected(), actual)
+    assert diff.pending_enum_types == ["composejobstatusdb"]
+    assert "composejobstatusdb" not in diff.missing_enum_types
+    assert not diff.has_blocking_drift
+
+
+def test_alembic_version_table_is_ignored() -> None:
+    actual = _actual(tables={**_expected().tables, "alembic_version": {"version_num"}})
     diff = diff_schemas(_expected(), actual)
     assert "alembic_version" not in diff.extra_tables
     assert not diff.has_blocking_drift
 
 
 def test_extra_tables_and_columns_are_info_only() -> None:
-    actual = DbSchema(
+    actual = _actual(
         tables={
             "simulation": {"id", "experiment_id", "config", "tags", "legacy_col"},
-            "hpcrun": {"id", "job_id_ext", "job_backend"},
+            "hpcrun": {"id", "job_id_ext", "job_backend", "status"},
             "compose_run": {"id", "status"},
             "old_orphan_table": {"id"},
-        },
-        enums={"jobstatusdb": {"waiting", "running", "cancelled"}},
+        }
     )
     diff = diff_schemas(_expected(), actual)
     assert not diff.has_blocking_drift
