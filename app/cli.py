@@ -488,6 +488,11 @@ def simulation_run(
         default=None,
         help="Git ref (branch/tag/commit) for --sources-repo. Defaults to 'main'.",
     ),
+    tag: list[str] = Option(
+        default_factory=list,
+        help="Free-form tag to attach for later filtering (e.g. --tag cd1). Repeat for multiple. "
+        "Tags can also be added later with 'atlantis simulation tag <id> <tag>'.",
+    ),
     poll: bool = Option(default=False, help="Poll simulation status until completion."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
@@ -548,6 +553,7 @@ def simulation_run(
             ecoli_sources_overlays=ecoli_sources_overlays,
             ecoli_sources_repo_url=sources_repo,
             ecoli_sources_ref=sources_ref,
+            tags=list(tag) or None,
         )
 
     console.print(f"[memphis.success]Simulation submitted![/]  ID: {simulation.database_id}")
@@ -608,7 +614,8 @@ def simulation_list(
     ),
     experiment_id: str | None = Option(default=None, help="Comma-separated experiment IDs to filter by."),
     tag: str | None = Option(
-        default=None, help="Predefined tag name (e.g. 'cd1'). Use 'atlantis simulation tags' to list available tags."
+        default=None,
+        help="Comma-separated tags to filter by (e.g. 'cd1'). Use 'atlantis simulation tags' to list tags in use.",
     ),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
@@ -620,7 +627,7 @@ def simulation_list(
         display_json(sim.model_dump(), console)
 
 
-@simulation_cli.command("tags", help="List available simulation filter tags.")
+@simulation_cli.command("tags", help="List the tags in use and the experiment IDs carrying each.")
 def simulation_tags(
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
@@ -634,6 +641,18 @@ def simulation_tags(
         console.print(f"[memphis.info]{tag_name}[/]")
         for eid in experiment_ids:
             console.print(f"  {eid}")
+
+
+@simulation_cli.command("tag", help="Attach one or more tags to an existing simulation.")
+def simulation_tag(
+    simulation_id: int = Argument(help="Database ID of the simulation to tag."),
+    tags: list[str] = Argument(help="One or more tags to add (e.g. cd1)."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    simulation = data_service.tag_workflow(simulation_id=simulation_id, tags=list(tags))
+    console.print(f"[memphis.success]Tagged simulation {simulation_id}[/]  tags: {simulation.tags}")
 
 
 @simulation_cli.command("configs", help="List available config filenames for a simulator's repo.")

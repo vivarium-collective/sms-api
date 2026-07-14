@@ -11,7 +11,7 @@ import json
 import logging
 from collections.abc import Sequence
 
-from fastapi import BackgroundTasks, Depends, HTTPException, Query
+from fastapi import BackgroundTasks, Body, Depends, HTTPException, Query
 from fastapi import Path as FastAPIPath
 from fastapi.requests import Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -164,16 +164,21 @@ async def export_simulator_workspace(
     path="/simulations/tags",
     operation_id="list-simulation-tags",
     tags=["Simulations"],
-    summary="List available simulation filter tags and their experiment IDs",
+    dependencies=[Depends(get_database_service)],
+    summary="List the tags present in the database and their experiment IDs",
 )
 async def list_simulation_tags() -> dict[str, list[str]]:
-    """Return the predefined tags that can be used to filter simulations.
+    """Return every tag carried by a simulation, mapped to the experiment IDs that carry it.
 
-    Each tag maps to a list of experiment IDs that belong to that bundle.
+    Tags are free-form data on each simulation (set at run time or via
+    POST /simulations/{id}/tags), so this reflects the actual database contents
+    rather than a predefined registry.
     """
-    from sms_api.simulation.simulation_tags import SIMULATION_TAGS
-
-    return SIMULATION_TAGS
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Database service is not initialized")
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    return await db_service.list_distinct_tags()
 
 
 @config.router.post(
@@ -247,6 +252,12 @@ async def run_simulation_workflow(
         default=None,
         description="Git ref (branch/tag/commit) for ecoli_sources_repo_url. Defaults to 'main'.",
     ),
+    tags: list[str] | None = Query(
+        default=None,
+        description="Free-form tags to attach to this simulation for later filtering "
+        "(e.g. 'cd1'). Repeat the param for multiple tags. Tags can also be added "
+        "later via POST /simulations/{id}/tags.",
+    ),
     analysis_options: AnalysisOptions | None = None,
 ) -> Simulation:
     """Run a vEcoli simulation workflow with simplified parameters.
@@ -286,6 +297,7 @@ async def run_simulation_workflow(
             ecoli_sources_overlays=ecoli_sources_overlays,
             ecoli_sources_repo_url=ecoli_sources_repo_url,
             ecoli_sources_ref=ecoli_sources_ref,
+            tags=tags,
         )
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
@@ -438,8 +450,9 @@ async def list_simulations(
     ),
     tag: str | None = Query(
         default=None,
-        description="Predefined tag name that resolves to a bundle of experiment IDs. "
-        "Example: 'cd1'. Use GET /api/v1/simulations/tags to list available tags.",
+        description="Comma-separated list of tags to filter by (e.g. 'cd1'). "
+        "Tags are free-form data on each simulation; an unknown tag simply matches "
+        "nothing. Use GET /api/v1/simulations/tags to list tags present in the database.",
     ),
 ) -> list[Simulation]:
     db_service = get_database_service()
@@ -454,11 +467,36 @@ async def list_simulations(
                 tag=tag,
             )
         return await handlers.simulations.list_simulations(db_service=db_service)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.exception("Error fetching the uploaded analyses")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/simulations/{id}/tags",
+    operation_id="add-simulation-tags",
+    response_model=Simulation,
+    tags=["Simulations"],
+    dependencies=[Depends(get_database_service)],
+    summary="Attach one or more free-form tags to an existing simulation",
+)
+async def add_simulation_tags(
+    id: int = FastAPIPath(description="Database ID of the simulation"),
+    tags: list[str] = Body(
+        ...,
+        embed=True,
+        description="Tags to add (union-merged with existing tags). Example: ['cd1'].",
+    ),
+) -> Simulation:
+    db_service = get_database_service()
+    if db_service is None:
+        logger.error("Database service is not initialized")
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    try:
+        return await db_service.add_tags(simulation_id=id, tags=tags)
+    except Exception as e:
+        logger.exception("Error adding tags to simulation")
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @config.router.post(

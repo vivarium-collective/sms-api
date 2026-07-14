@@ -4,7 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import override
 
-from sqlalchemy import Result, and_, select
+from sqlalchemy import ColumnElement, Result, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import InstrumentedAttribute
 
@@ -159,8 +159,20 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def list_simulations_filtered(self, experiment_ids: list[str]) -> list[Simulation]:
-        """Return simulations whose experiment_id is in the given list."""
+    async def list_simulations_filtered(
+        self, experiment_ids: list[str] | None = None, tags: list[str] | None = None
+    ) -> list[Simulation]:
+        """Return simulations whose experiment_id is in ``experiment_ids`` OR that carry any of ``tags`` (union)."""
+        pass
+
+    @abstractmethod
+    async def add_tags(self, simulation_id: int, tags: list[str]) -> Simulation:
+        """Union-merge ``tags`` into a simulation's tag list and return the updated simulation."""
+        pass
+
+    @abstractmethod
+    async def list_distinct_tags(self) -> dict[str, list[str]]:
+        """Return each tag present in the database mapped to the experiment IDs that carry it."""
         pass
 
     @abstractmethod
@@ -608,6 +620,7 @@ class DatabaseServiceSQL(DatabaseService):
                 config_filename=config_filename,
                 experiment_id=sim_request.experiment_id,
                 config=sim_config.model_dump(),
+                tags=list(sim_request.tags),
             )
             session.add(orm_simulation)
             await session.flush()  # Ensure the ORM object is inserted and has an ID
@@ -619,6 +632,7 @@ class DatabaseServiceSQL(DatabaseService):
                 config=sim_config,
                 simulation_config_filename=config_filename,
                 experiment_id=sim_request.experiment_id,
+                tags=list(orm_simulation.tags),
             )
             return simulation
 
@@ -636,6 +650,7 @@ class DatabaseServiceSQL(DatabaseService):
                 simulator_id=orm_simulation.simulator_id,
                 parca_dataset_id=orm_simulation.parca_dataset_id,
                 config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
+                tags=list(orm_simulation.tags),
             )
             return simulation
 
@@ -655,6 +670,7 @@ class DatabaseServiceSQL(DatabaseService):
                 simulator_id=orm_simulation.simulator_id,
                 parca_dataset_id=orm_simulation.parca_dataset_id,
                 config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
+                tags=list(orm_simulation.tags),
             )
             return simulation
 
@@ -675,12 +691,48 @@ class DatabaseServiceSQL(DatabaseService):
             return self._build_simulations(orm_simulations)
 
     @override
-    async def list_simulations_filtered(self, experiment_ids: list[str]) -> list[Simulation]:
+    async def list_simulations_filtered(
+        self, experiment_ids: list[str] | None = None, tags: list[str] | None = None
+    ) -> list[Simulation]:
+        clauses: list[ColumnElement[bool]] = []
+        if experiment_ids:
+            clauses.append(ORMSimulation.experiment_id.in_(experiment_ids))
+        if tags:
+            # tags @> '[t]' (JSONB containment) per tag, OR'd => "carries ANY of these tags".
+            clauses.extend(ORMSimulation.tags.contains([t]) for t in tags)
+        if not clauses:
+            return []
         async with self.async_sessionmaker() as session:
-            stmt = select(ORMSimulation).where(ORMSimulation.experiment_id.in_(experiment_ids))
+            stmt = select(ORMSimulation).where(or_(*clauses))
             result: Result[tuple[ORMSimulation]] = await session.execute(stmt)
             orm_simulations = list(result.scalars().all())
             return self._build_simulations(orm_simulations)
+
+    @override
+    async def add_tags(self, simulation_id: int, tags: list[str]) -> Simulation:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_simulation = await self._get_orm_simulation(session, simulation_id)
+            if orm_simulation is None:
+                raise Exception(f"Simulation with id {simulation_id} not found in the database")
+            # Union-merge, preserving existing order then appending new tags.
+            merged = list(orm_simulation.tags)
+            for tag in tags:
+                if tag and tag not in merged:
+                    merged.append(tag)
+            orm_simulation.tags = merged
+            await session.flush()
+            return self._build_simulations([orm_simulation])[0]
+
+    @override
+    async def list_distinct_tags(self) -> dict[str, list[str]]:
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMSimulation.experiment_id, ORMSimulation.tags)
+            result = await session.execute(stmt)
+            tag_map: dict[str, list[str]] = {}
+            for experiment_id, tags in result.all():
+                for tag in tags or []:
+                    tag_map.setdefault(tag, []).append(experiment_id)
+            return tag_map
 
     @staticmethod
     def _build_simulations(orm_simulations: list[ORMSimulation]) -> list[Simulation]:
@@ -693,6 +745,7 @@ class DatabaseServiceSQL(DatabaseService):
                 simulator_id=orm_simulation.simulator_id,
                 parca_dataset_id=orm_simulation.parca_dataset_id,
                 config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
+                tags=list(orm_simulation.tags),
             )
             simulations.append(simulation)
         return simulations

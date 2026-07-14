@@ -3,7 +3,7 @@ import enum
 import logging
 from typing import Any
 
-from sqlalchemy import ForeignKey, func
+from sqlalchemy import ForeignKey, Index, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -144,6 +144,12 @@ class ORMSimulation(Base):
     config: Mapped[dict[str, list[str] | bool | int | str | float | dict[str, int | float | str]]] = mapped_column(
         JSONB, nullable=False
     )
+    # Free-form tags for filtering/bundling (e.g. "cd1"). Stored as data on the
+    # row (not a hard-coded registry) so tags are site-local — each site's RDS is
+    # independent while S3 is shared. GIN-indexed for JSONB containment queries.
+    tags: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default="[]")
+
+    __table_args__ = (Index("ix_simulation_tags", "tags", postgresql_using="gin"),)
 
 
 class ORMWorkerEvent(Base):

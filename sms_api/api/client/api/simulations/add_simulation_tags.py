@@ -5,26 +5,43 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.list_simulation_tags_response_list_simulation_tags import ListSimulationTagsResponseListSimulationTags
+from ...models.body_add_simulation_tags import BodyAddSimulationTags
+from ...models.http_validation_error import HTTPValidationError
+from ...models.simulation import Simulation
 from ...types import Response
 
 
-def _get_kwargs() -> dict[str, Any]:
+def _get_kwargs(
+    id: int,
+    *,
+    body: BodyAddSimulationTags,
+) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
+
     _kwargs: dict[str, Any] = {
-        "method": "get",
-        "url": "/api/v1/simulations/tags",
+        "method": "post",
+        "url": f"/api/v1/simulations/{id}/tags",
     }
 
+    _kwargs["json"] = body.to_dict()
+
+    headers["Content-Type"] = "application/json"
+
+    _kwargs["headers"] = headers
     return _kwargs
 
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[ListSimulationTagsResponseListSimulationTags]:
+) -> Optional[Union[HTTPValidationError, Simulation]]:
     if response.status_code == 200:
-        response_200 = ListSimulationTagsResponseListSimulationTags.from_dict(response.json())
+        response_200 = Simulation.from_dict(response.json())
 
         return response_200
+    if response.status_code == 422:
+        response_422 = HTTPValidationError.from_dict(response.json())
+
+        return response_422
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
@@ -33,7 +50,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[ListSimulationTagsResponseListSimulationTags]:
+) -> Response[Union[HTTPValidationError, Simulation]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -43,26 +60,29 @@ def _build_response(
 
 
 def sync_detailed(
+    id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[ListSimulationTagsResponseListSimulationTags]:
-    """List the tags present in the database and their experiment IDs
+    body: BodyAddSimulationTags,
+) -> Response[Union[HTTPValidationError, Simulation]]:
+    """Attach one or more free-form tags to an existing simulation
 
-     Return every tag carried by a simulation, mapped to the experiment IDs that carry it.
-
-    Tags are free-form data on each simulation (set at run time or via
-    POST /simulations/{id}/tags), so this reflects the actual database contents
-    rather than a predefined registry.
+    Args:
+        id (int): Database ID of the simulation
+        body (BodyAddSimulationTags):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ListSimulationTagsResponseListSimulationTags]
+        Response[Union[HTTPValidationError, Simulation]]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        id=id,
+        body=body,
+    )
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -72,51 +92,56 @@ def sync_detailed(
 
 
 def sync(
+    id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[ListSimulationTagsResponseListSimulationTags]:
-    """List the tags present in the database and their experiment IDs
+    body: BodyAddSimulationTags,
+) -> Optional[Union[HTTPValidationError, Simulation]]:
+    """Attach one or more free-form tags to an existing simulation
 
-     Return every tag carried by a simulation, mapped to the experiment IDs that carry it.
-
-    Tags are free-form data on each simulation (set at run time or via
-    POST /simulations/{id}/tags), so this reflects the actual database contents
-    rather than a predefined registry.
+    Args:
+        id (int): Database ID of the simulation
+        body (BodyAddSimulationTags):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ListSimulationTagsResponseListSimulationTags
+        Union[HTTPValidationError, Simulation]
     """
 
     return sync_detailed(
+        id=id,
         client=client,
+        body=body,
     ).parsed
 
 
 async def asyncio_detailed(
+    id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[ListSimulationTagsResponseListSimulationTags]:
-    """List the tags present in the database and their experiment IDs
+    body: BodyAddSimulationTags,
+) -> Response[Union[HTTPValidationError, Simulation]]:
+    """Attach one or more free-form tags to an existing simulation
 
-     Return every tag carried by a simulation, mapped to the experiment IDs that carry it.
-
-    Tags are free-form data on each simulation (set at run time or via
-    POST /simulations/{id}/tags), so this reflects the actual database contents
-    rather than a predefined registry.
+    Args:
+        id (int): Database ID of the simulation
+        body (BodyAddSimulationTags):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ListSimulationTagsResponseListSimulationTags]
+        Response[Union[HTTPValidationError, Simulation]]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        id=id,
+        body=body,
+    )
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
@@ -124,27 +149,29 @@ async def asyncio_detailed(
 
 
 async def asyncio(
+    id: int,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[ListSimulationTagsResponseListSimulationTags]:
-    """List the tags present in the database and their experiment IDs
+    body: BodyAddSimulationTags,
+) -> Optional[Union[HTTPValidationError, Simulation]]:
+    """Attach one or more free-form tags to an existing simulation
 
-     Return every tag carried by a simulation, mapped to the experiment IDs that carry it.
-
-    Tags are free-form data on each simulation (set at run time or via
-    POST /simulations/{id}/tags), so this reflects the actual database contents
-    rather than a predefined registry.
+    Args:
+        id (int): Database ID of the simulation
+        body (BodyAddSimulationTags):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ListSimulationTagsResponseListSimulationTags
+        Union[HTTPValidationError, Simulation]
     """
 
     return (
         await asyncio_detailed(
+            id=id,
             client=client,
+            body=body,
         )
     ).parsed

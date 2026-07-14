@@ -16,6 +16,7 @@ from .biomodels_regression_request import BiomodelsRegressionRequest
 from .biomodels_regression_result import BiomodelsRegressionResult
 from .biomodels_run_request import BiomodelsRunRequest
 from .biomodels_run_result import BiomodelsRunResult
+from .body_add_simulation_tags import BodyAddSimulationTags
 from .body_compose_run_copasi import BodyComposeRunCopasi
 from .body_compose_run_simulation import BodyComposeRunSimulation
 from .body_compose_run_tellurium import BodyComposeRunTellurium
@@ -88,6 +89,7 @@ __all__ = (
     "BiomodelsRegressionResult",
     "BiomodelsRunRequest",
     "BiomodelsRunResult",
+    "BodyAddSimulationTags",
     "BodyComposeRunCopasi",
     "BodyComposeRunSimulation",
     "BodyComposeRunTellurium",

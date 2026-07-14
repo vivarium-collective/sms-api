@@ -116,6 +116,7 @@ class E2EDataService:
         ecoli_sources_overlays: str | None = None,
         ecoli_sources_repo_url: str | None = None,
         ecoli_sources_ref: str | None = None,
+        tags: list[str] | None = None,
     ) -> Simulation:
         simulation = self.submit_run_workflow(
             params=params,
@@ -132,8 +133,12 @@ class E2EDataService:
             ecoli_sources_overlays=ecoli_sources_overlays,
             ecoli_sources_repo_url=ecoli_sources_repo_url,
             ecoli_sources_ref=ecoli_sources_ref,
+            tags=tags,
         )
         return simulation
+
+    def tag_workflow(self, simulation_id: int, tags: list[str]) -> Simulation:
+        return self.submit_add_tags(simulation_id=simulation_id, tags=tags)
 
     def get_workflow(self, simulation_id: int) -> Simulation:
         return self.submit_get_workflow(simulation_id=simulation_id)
@@ -328,6 +333,7 @@ class E2EDataService:
         ecoli_sources_overlays: str | None = None,
         ecoli_sources_repo_url: str | None = None,
         ecoli_sources_ref: str | None = None,
+        tags: list[str] | None = None,
     ) -> Simulation:
         if params is not None:
             query_params = params
@@ -352,6 +358,8 @@ class E2EDataService:
             ]
             if observables:
                 items.extend(("observables", obs) for obs in observables)
+            if tags:
+                items.extend(("tags", tag) for tag in tags)
             query_params = httpx.QueryParams(items)
         try:
             json_body = analysis_options if analysis_options else None
@@ -413,6 +421,17 @@ class E2EDataService:
             raise
         except Exception as e:
             raise httpx.HTTPError(f"Could not load simulation {simulation_id}: {e}") from e
+
+    def submit_add_tags(self, simulation_id: int, tags: list[str]) -> Simulation:
+        try:
+            response = self.client.post(url=f"/api/v1/simulations/{simulation_id}/tags", json={"tags": tags})
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return Simulation(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not add tags to simulation {simulation_id}: {e}") from e
 
     def submit_list_workflows(self, experiment_id: str | None = None, tag: str | None = None) -> list[Simulation]:
         try:

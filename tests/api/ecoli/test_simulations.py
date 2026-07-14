@@ -363,15 +363,31 @@ async def test_list_simulations_unfiltered_backwards_compat(
     assert len(all_sims) >= 3
 
 
+async def _insert_tagged(
+    database_service: DatabaseServiceSQL,
+    experiment_request: SimulationRequest,
+    experiment_id: str,
+    tags: list[str],
+) -> None:
+    experiment_request.experiment_id = experiment_id
+    experiment_request.config.experiment_id = experiment_id
+    experiment_request.tags = tags
+    await database_service.insert_simulation(experiment_request)
+
+
 @pytest.mark.asyncio
 async def test_list_simulation_tags_endpoint(
     base_router: str,
     database_service: DatabaseServiceSQL,
+    experiment_request: SimulationRequest,
 ) -> None:
-    """Test the tags discovery endpoint returns expected structure."""
+    """The discovery endpoint reflects tags actually present in the database."""
     from httpx import ASGITransport, AsyncClient
 
     from sms_api.api.main import app
+
+    await _insert_tagged(database_service, experiment_request, "tagdisc-a", ["disc-bundle"])
+    await _insert_tagged(database_service, experiment_request, "tagdisc-b", ["disc-bundle"])
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -379,30 +395,32 @@ async def test_list_simulation_tags_endpoint(
         assert response.status_code == 200
         tags = response.json()
         assert isinstance(tags, dict)
-        assert "cd1" in tags
-        assert isinstance(tags["cd1"], list)
-        assert len(tags["cd1"]) == 3
+        assert set(tags["disc-bundle"]) == {"tagdisc-a", "tagdisc-b"}
 
 
 @pytest.mark.asyncio
 async def test_list_simulations_filtered_by_tag(
     base_router: str,
     database_service: DatabaseServiceSQL,
+    experiment_request: SimulationRequest,
 ) -> None:
-    """Test filtering simulations by tag via the API endpoint."""
+    """Filtering by tag returns exactly the simulations carrying that tag."""
     from httpx import ASGITransport, AsyncClient
 
     from sms_api.api.main import app
 
+    await _insert_tagged(database_service, experiment_request, "tagfilt-x", ["filt-bundle"])
+    await _insert_tagged(database_service, experiment_request, "tagfilt-y", ["filt-bundle"])
+    await _insert_tagged(database_service, experiment_request, "tagfilt-z", ["other"])
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.get(
-            f"{base_router}/simulations",
-            params={"tag": "cd1"},
-        )
+        response = await client.get(f"{base_router}/simulations", params={"tag": "filt-bundle"})
         assert response.status_code == 200
         simulations = response.json()
-        assert isinstance(simulations, list)
+        returned = {s["experiment_id"] for s in simulations}
+        assert returned == {"tagfilt-x", "tagfilt-y"}
+        assert all("filt-bundle" in s["tags"] for s in simulations)
 
 
 @pytest.mark.asyncio
@@ -410,16 +428,42 @@ async def test_list_simulations_filtered_unknown_tag(
     base_router: str,
     database_service: DatabaseServiceSQL,
 ) -> None:
-    """Test that an unknown tag returns a 400 error."""
+    """An unknown tag matches nothing and returns an empty 200 (tags are free-form data)."""
     from httpx import ASGITransport, AsyncClient
 
     from sms_api.api.main import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.get(
-            f"{base_router}/simulations",
-            params={"tag": "nonexistent"},
+        response = await client.get(f"{base_router}/simulations", params={"tag": "no-such-tag-xyz"})
+        assert response.status_code == 200
+        assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_add_simulation_tags_endpoint(
+    base_router: str,
+    database_service: DatabaseServiceSQL,
+    experiment_request: SimulationRequest,
+) -> None:
+    """POST /simulations/{id}/tags union-merges tags onto an existing simulation."""
+    from httpx import ASGITransport, AsyncClient
+
+    from sms_api.api.main import app
+
+    experiment_request.experiment_id = "tagadd-1"
+    experiment_request.config.experiment_id = "tagadd-1"
+    experiment_request.tags = ["initial"]
+    sim = await database_service.insert_simulation(experiment_request)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            f"{base_router}/simulations/{sim.database_id}/tags",
+            json={"tags": ["cd1", "initial"]},  # 'initial' is a duplicate, must not double
         )
-        assert response.status_code == 400
-        assert "nonexistent" in response.text
+        assert response.status_code == 200
+        assert sorted(response.json()["tags"]) == ["cd1", "initial"]
+
+        missing = await client.post(f"{base_router}/simulations/99999999/tags", json={"tags": ["x"]})
+        assert missing.status_code == 404
