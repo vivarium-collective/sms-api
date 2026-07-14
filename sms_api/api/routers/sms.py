@@ -695,6 +695,27 @@ async def run_analysis(
 
 
 @config.router.get(
+    path="/analyses",
+    operation_id="list-analyses",
+    tags=["Analyses"],
+    dependencies=[Depends(get_database_service)],
+    summary="List all analyses across all simulations (exhaustive; filtering/paging to come)",
+)
+async def list_analyses(
+    experiment_id: str | None = Query(default=None, description="Optional: filter by experiment_id."),
+    simulation_id: int | None = Query(default=None, description="Optional: filter by simulation database id."),
+) -> list[ExperimentAnalysisDTO]:
+    db_service = get_database_service()
+    if db_service is None:
+        raise HTTPException(status_code=500, detail="Database service is not initialized")
+    try:
+        return await db_service.list_analyses(experiment_id=experiment_id, simulation_id=simulation_id)
+    except Exception as e:
+        logger.exception("Error listing analyses")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
     path="/analyses/{id}",
     operation_id="get-analysis",
     tags=["Analyses"],

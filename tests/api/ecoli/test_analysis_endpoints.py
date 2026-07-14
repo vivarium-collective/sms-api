@@ -84,9 +84,7 @@ async def test_get_analysis_data_ready(base_router: str, database_service: Datab
 
 
 @pytest.mark.asyncio
-async def test_get_analysis_data_not_ready_returns_409(
-    base_router: str, database_service: DatabaseServiceSQL
-) -> None:
+async def test_get_analysis_data_not_ready_returns_409(base_router: str, database_service: DatabaseServiceSQL) -> None:
     rec = await database_service.record_analysis(
         experiment_id="exp-computing",
         n_tp=10,
@@ -104,3 +102,25 @@ async def test_get_analysis_data_unknown_returns_404(base_router: str, database_
     async with await _client() as client:
         resp = await client.get(f"{base_router}/analyses/99999999/data")
         assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_all_analyses_exhaustive_and_filter(base_router: str, database_service: DatabaseServiceSQL) -> None:
+    for exp in ("exp-all-x", "exp-all-y"):
+        await database_service.record_analysis(
+            experiment_id=exp,
+            n_tp=None,
+            status=AnalysisStatusDB.READY,
+            config={"analysis_options": {"experiment_id": [exp]}},
+            name=f"backfill-{exp}",
+            result_uri=f"vecoli-output/{exp}/{exp}/analyses",
+        )
+    async with await _client() as client:
+        all_resp = await client.get(f"{base_router}/analyses")
+        assert all_resp.status_code == 200
+        exps = {r["experiment_id"] for r in all_resp.json()}
+        assert {"exp-all-x", "exp-all-y"} <= exps  # exhaustive across sims
+
+        filtered = await client.get(f"{base_router}/analyses", params={"experiment_id": "exp-all-x"})
+        assert filtered.status_code == 200
+        assert {r["experiment_id"] for r in filtered.json()} == {"exp-all-x"}
