@@ -13,7 +13,7 @@ from textwrap import dedent
 
 from starlette.requests import Request
 
-from sms_api.analysis.analysis_service import AnalysisServiceSlurm, RequestPayload
+from sms_api.analysis.analysis_service import AnalysisServiceSlurm, RequestPayload, parse_partition_metadata
 from sms_api.analysis.models import (
     AnalysisRun,
     ExperimentAnalysisDTO,
@@ -22,13 +22,66 @@ from sms_api.analysis.models import (
     OutputFileMetadata,
     TsvOutputFile,
 )
-from sms_api.common.models import SSHTarget
-from sms_api.common.storage.file_paths import HPCFilePath
+from sms_api.common.models import JobStatus, SSHTarget
+from sms_api.common.storage.file_paths import HPCFilePath, S3FilePath
 from sms_api.common.utils import get_data_id, timestamp
 from sms_api.config import get_settings
-from sms_api.dependencies import get_ssh_session_service
+from sms_api.dependencies import get_file_service, get_ssh_session_service
 from sms_api.simulation.database_service import DatabaseService
 from sms_api.simulation.models import SimulatorVersion
+
+# Text output extensions the analysis data endpoint returns (mirrors the legacy
+# SLURM path's get_available_output_paths).
+_ANALYSIS_OUTPUT_EXTENSIONS = (".tsv", ".csv", ".txt", ".html")
+
+
+class AnalysisNotReadyError(Exception):
+    """Raised when analysis data is requested but the result is not READY."""
+
+
+async def list_simulation_analyses(db_service: DatabaseService, simulation_id: int) -> list[ExperimentAnalysisDTO]:
+    """List existing analysis records for a simulation (by its experiment_id)."""
+    simulation = await db_service.get_simulation(simulation_id=simulation_id)
+    if simulation is None:
+        raise ValueError(f"Simulation {simulation_id} not found")
+    return await db_service.list_analyses(experiment_id=simulation.experiment_id)
+
+
+async def fetch_analysis_data(db_service: DatabaseService, analysis_id: int) -> list[TsvOutputFile]:
+    """Return all text output files of an existing analysis by id, as ``list[TsvOutputFile]``.
+
+    Pure retrieval: reads S3 under the analysis row's ``result_uri`` and inlines each
+    file's content with variant/lineage_seed/generation parsed from its partition
+    path — the same shape as the legacy ``POST /analyses``. Never computes: if the
+    analysis is not READY it raises ``AnalysisNotReadyError`` (mapped to 409).
+    """
+    analysis = await db_service.get_analysis(database_id=analysis_id)  # RuntimeError -> 404 at the router
+    if analysis.status != JobStatus.COMPLETED or not analysis.result_uri:
+        raise AnalysisNotReadyError(f"Analysis {analysis_id} is not ready (status={analysis.status})")
+
+    file_service = get_file_service()
+    if file_service is None:
+        raise RuntimeError("File service is not initialized")
+
+    listing = await file_service.get_listing(S3FilePath(s3_path=Path(analysis.result_uri)))
+    outputs: list[TsvOutputFile] = []
+    for item in listing:
+        if not item.Key.lower().endswith(_ANALYSIS_OUTPUT_EXTENSIONS):
+            continue
+        content = await file_service.get_file_contents(S3FilePath(s3_path=Path(item.Key)))
+        if content is None:
+            continue
+        metadata = parse_partition_metadata(Path(item.Key))
+        outputs.append(
+            TsvOutputFile(
+                filename=Path(item.Key).name,
+                content=content.decode(errors="replace"),
+                variant=metadata.get("variant", 0),
+                lineage_seed=metadata.get("lineage_seed"),
+                generation=metadata.get("generation"),
+            )
+        )
+    return outputs
 
 
 async def handle_run_analysis(

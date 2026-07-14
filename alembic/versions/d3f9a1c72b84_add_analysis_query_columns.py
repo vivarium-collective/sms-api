@@ -41,9 +41,7 @@ def upgrade() -> None:
     op.add_column("analysis", sa.Column("error_message", sa.String(), nullable=True))
     op.add_column("analysis", sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=True))
     op.add_column("analysis", sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=True))
-    op.create_foreign_key(
-        "fk_analysis_simulation_id", "analysis", "simulation", ["simulation_id"], ["id"]
-    )
+    op.create_foreign_key("fk_analysis_simulation_id", "analysis", "simulation", ["simulation_id"], ["id"])
     op.create_index("ix_analysis_experiment_id", "analysis", ["experiment_id"])
     op.create_index("ix_analysis_n_tp", "analysis", ["n_tp"])
     op.create_index("ix_analysis_simulation_id", "analysis", ["simulation_id"])

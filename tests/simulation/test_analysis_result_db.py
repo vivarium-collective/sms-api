@@ -66,7 +66,11 @@ async def test_record_twice_updates_in_place(database_service: DatabaseServiceSQ
 @pytest.mark.asyncio
 async def test_list_analyses_filters(database_service: DatabaseServiceSQL) -> None:
     await database_service.record_analysis(
-        experiment_id="exp-c", n_tp=10, status=AnalysisStatusDB.READY, config=_config("exp-c", 10), name="c10",
+        experiment_id="exp-c",
+        n_tp=10,
+        status=AnalysisStatusDB.READY,
+        config=_config("exp-c", 10),
+        name="c10",
         simulation_id=None,
     )
     await database_service.record_analysis(

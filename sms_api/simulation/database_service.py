@@ -63,7 +63,7 @@ class DatabaseService(ABC):
         self,
         *,
         experiment_id: str,
-        n_tp: int,
+        n_tp: int | None,
         status: AnalysisStatusDB,
         config: dict[str, Any],
         name: str,
@@ -74,7 +74,7 @@ class DatabaseService(ABC):
         result_uri: str | None = None,
         error_message: str | None = None,
     ) -> ExperimentAnalysisDTO:
-        """Insert or update (by ``(experiment_id, n_tp)``) an analysis-result row and return it."""
+        """Insert an analysis-result row (dedup-updating an existing ``(experiment_id, n_tp)`` when n_tp is set)."""
         pass
 
     @abstractmethod
@@ -338,7 +338,7 @@ class DatabaseServiceSQL(DatabaseService):
         self,
         *,
         experiment_id: str,
-        n_tp: int,
+        n_tp: int | None,
         status: AnalysisStatusDB,
         config: dict[str, Any],
         name: str,
@@ -351,13 +351,17 @@ class DatabaseServiceSQL(DatabaseService):
     ) -> ExperimentAnalysisDTO:
         async with self.async_sessionmaker() as session, session.begin():
             # Idempotency: update the existing row for (experiment_id, n_tp) if present.
-            stmt = (
-                select(ORMAnalysis)
-                .where(ORMAnalysis.experiment_id == experiment_id, ORMAnalysis.n_tp == n_tp)
-                .order_by(ORMAnalysis.id.desc())
-                .limit(1)
-            )
-            existing = (await session.execute(stmt)).scalars().first()
+            # Only dedup when n_tp is set (NULL n_tp — e.g. backfilled demo data — is
+            # kept unique by the caller).
+            existing = None
+            if n_tp is not None:
+                stmt = (
+                    select(ORMAnalysis)
+                    .where(ORMAnalysis.experiment_id == experiment_id, ORMAnalysis.n_tp == n_tp)
+                    .order_by(ORMAnalysis.id.desc())
+                    .limit(1)
+                )
+                existing = (await session.execute(stmt)).scalars().first()
             if existing is not None:
                 existing.status = status
                 existing.config = config
