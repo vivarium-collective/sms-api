@@ -64,6 +64,7 @@ download results) in a different format:
    guides/qumulo-setup
    architecture/aws-batch
    architecture/build-pipeline
+   architecture/analysis-results-design
 
 .. toctree::
    :maxdepth: 2
