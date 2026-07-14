@@ -50,4 +50,12 @@
 #          experiment_id (comma-separated) + tag (predefined bundle, e.g. cd1) query
 #          params (union, backwards-compatible), a GET /simulations/tags discovery
 #          endpoint, and the atlantis CLI --tag/--experiment-id + `simulation tags` (#163)
-__version__ = "0.9.18"
+# 0.9.19 — self-diagnosing DB reconciliation (sms_api/simulation/db_reconcile.py +
+#          scripts/db_analyze.py|db_reconcile.py): adopts legacy create_all-bootstrapped
+#          databases into Alembic (stamp matched rev -> upgrade head), upgrades managed
+#          ones, builds fresh ones from base, and refuses loudly on an inconsistent
+#          schema. The stanford-test alembic-migrate Job now runs the reconciler instead
+#          of bare `alembic upgrade head`, so migrations are safe on customer-controlled
+#          databases. Reconciling stanford-test also applies the missing 'cancelled'
+#          jobstatusdb enum value (a1c3e5f7b9d2, never stamped there under create_all).
+__version__ = "0.9.19"
