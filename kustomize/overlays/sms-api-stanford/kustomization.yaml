@@ -16,6 +16,10 @@ images:
   # avoids an ErrImagePull ReplicaSet while api iterates independently.
   - name: ghcr.io/vivarium-collective/sms-ptools
     newTag: 0.5.9
+  # vivarium-workbench: pin the workbench GitHub Release tag (build-and-push.yml ->
+  # ghcr:<version>). 0.2.0 = the demo-migration release (matches stanford-test).
+  - name: ghcr.io/vivarium-collective/vivarium-workbench
+    newTag: 0.2.0
 
 replicas:
   - count: 1
@@ -32,6 +36,11 @@ resources:
   - target-group-binding.yaml
   - secret-ghcr.yaml
   - secret-shared.yaml
+  # vivarium-workbench: peer Deployment+Service (base/workbench referenced directly,
+  # NOT via base/kustomization.yaml, so it deploys ONLY on Stanford) + its EBS PVC.
+  # Its TargetGroupBinding (workbench-binding) is in target-group-binding.yaml above.
+  - ../../base/workbench
+  - workbench-pvc.yaml
   - ../../config/sms-api-stanford
   - ../../base
 
@@ -87,3 +96,28 @@ patches:
     target:
       kind: Deployment
       name: api
+  # Browser-reachable PTools base for the pbg-ptools Omics Viewer. The seed
+  # initContainer stamps this into the served workspace.yaml (ui.ptools_server_url).
+  # Tunnel value (sms-proxy -s smscdk -> localhost:8080, PTools at the ALB root).
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: workbench
+      spec:
+        template:
+          spec:
+            initContainers:
+              - name: seed-workspace
+                env:
+                  - name: PTOOLS_SERVER_URL
+                    value: "http://localhost:8080"
+                  # Omics Viewer DATA overlay: the in-cluster ptools pod fetches
+                  # the study TSV from this workbench Service URL (same namespace,
+                  # incl. the /workbench base path the container serves under).
+                  # The seed also clears ui.ptools_data_dir so HTTP delivery is used.
+                  - name: DASHBOARD_PUBLIC_BASE_URL
+                    value: "http://workbench.sms-api-stanford.svc.cluster.local:8000/workbench"
+    target:
+      kind: Deployment
+      name: workbench

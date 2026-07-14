@@ -1,0 +1,16 @@
+# Private EBS gp3 volume for the workbench's workspace (git working copy / YAML /
+# SQLite) + caches. RWO — one writer, matches the single-replica Deployment.
+# `gp3-retain` (Retain reclaim policy) keeps the volume if the PVC is deleted, so
+# the workspace survives a redeploy; the SC is present on the smscdk cluster.
+# NOT shared with the compute — run outputs arrive from S3 via sms-api.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workbench-workspace
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3-retain
+  resources:
+    requests:
+      storage: 20Gi
