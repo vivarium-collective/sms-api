@@ -379,6 +379,7 @@ class SimulationRequest(BaseModel):
     simulator: Simulator | None = None
     simulator_id: int | None = None
     parca_dataset_id: int | None = None
+    tags: list[str] = Field(default_factory=list)
 
     def model_post_init(self, context: Any, /) -> None:
         if self.simulator is None and self.simulator_id is None:
@@ -399,6 +400,7 @@ class Simulation(BaseModel):
     last_updated: str = Field(default=str(datetime.datetime.now()))
     job_id: str | None = None  # Backend-specific job ID (str(slurm_int) or k8s_job_name)
     num_seeds: int | None = None  # Number of lineage seeds (derived from config.n_init_sims)
+    tags: list[str] = Field(default_factory=list)  # Free-form filter tags (e.g. "cd1")
 
     def model_post_init(self, context: Any, /) -> None:
         # Surface num_seeds from the config JSONB (stored as n_init_sims by vEcoli)

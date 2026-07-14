@@ -32,6 +32,7 @@ def _get_kwargs(
     ecoli_sources_overlays: Union[None, Unset, str] = UNSET,
     ecoli_sources_repo_url: Union[None, Unset, str] = UNSET,
     ecoli_sources_ref: Union[None, Unset, str] = UNSET,
+    tags: Union[None, Unset, list[str]] = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
 
@@ -146,6 +147,16 @@ def _get_kwargs(
         json_ecoli_sources_ref = ecoli_sources_ref
     params["ecoli_sources_ref"] = json_ecoli_sources_ref
 
+    json_tags: Union[None, Unset, list[str]]
+    if isinstance(tags, Unset):
+        json_tags = UNSET
+    elif isinstance(tags, list):
+        json_tags = tags
+
+    else:
+        json_tags = tags
+    params["tags"] = json_tags
+
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
     _kwargs: dict[str, Any] = {
@@ -214,6 +225,7 @@ def sync_detailed(
     ecoli_sources_overlays: Union[None, Unset, str] = UNSET,
     ecoli_sources_repo_url: Union[None, Unset, str] = UNSET,
     ecoli_sources_ref: Union[None, Unset, str] = UNSET,
+    tags: Union[None, Unset, list[str]] = UNSET,
 ) -> Response[Union[HTTPValidationError, Simulation]]:
     """[New] Launch a vEcoli simulation workflow (engine/composite, generations, seeds, condition)
 
@@ -257,6 +269,9 @@ def sync_detailed(
             container. No AWS CLI needed on the client.
         ecoli_sources_ref (Union[None, Unset, str]): Git ref (branch/tag/commit) for
             ecoli_sources_repo_url. Defaults to 'main'.
+        tags (Union[None, Unset, list[str]]): Free-form tags to attach to this simulation for
+            later filtering (e.g. 'cd1'). Repeat the param for multiple tags. Tags can also be added
+            later via POST /simulations/{id}/tags.
         body (Union['AnalysisOptions', None]):
 
     Raises:
@@ -285,6 +300,7 @@ def sync_detailed(
         ecoli_sources_overlays=ecoli_sources_overlays,
         ecoli_sources_repo_url=ecoli_sources_repo_url,
         ecoli_sources_ref=ecoli_sources_ref,
+        tags=tags,
     )
 
     response = client.get_httpx_client().request(
@@ -314,6 +330,7 @@ def sync(
     ecoli_sources_overlays: Union[None, Unset, str] = UNSET,
     ecoli_sources_repo_url: Union[None, Unset, str] = UNSET,
     ecoli_sources_ref: Union[None, Unset, str] = UNSET,
+    tags: Union[None, Unset, list[str]] = UNSET,
 ) -> Optional[Union[HTTPValidationError, Simulation]]:
     """[New] Launch a vEcoli simulation workflow (engine/composite, generations, seeds, condition)
 
@@ -357,6 +374,9 @@ def sync(
             container. No AWS CLI needed on the client.
         ecoli_sources_ref (Union[None, Unset, str]): Git ref (branch/tag/commit) for
             ecoli_sources_repo_url. Defaults to 'main'.
+        tags (Union[None, Unset, list[str]]): Free-form tags to attach to this simulation for
+            later filtering (e.g. 'cd1'). Repeat the param for multiple tags. Tags can also be added
+            later via POST /simulations/{id}/tags.
         body (Union['AnalysisOptions', None]):
 
     Raises:
@@ -386,6 +406,7 @@ def sync(
         ecoli_sources_overlays=ecoli_sources_overlays,
         ecoli_sources_repo_url=ecoli_sources_repo_url,
         ecoli_sources_ref=ecoli_sources_ref,
+        tags=tags,
     ).parsed
 
 
@@ -409,6 +430,7 @@ async def asyncio_detailed(
     ecoli_sources_overlays: Union[None, Unset, str] = UNSET,
     ecoli_sources_repo_url: Union[None, Unset, str] = UNSET,
     ecoli_sources_ref: Union[None, Unset, str] = UNSET,
+    tags: Union[None, Unset, list[str]] = UNSET,
 ) -> Response[Union[HTTPValidationError, Simulation]]:
     """[New] Launch a vEcoli simulation workflow (engine/composite, generations, seeds, condition)
 
@@ -452,6 +474,9 @@ async def asyncio_detailed(
             container. No AWS CLI needed on the client.
         ecoli_sources_ref (Union[None, Unset, str]): Git ref (branch/tag/commit) for
             ecoli_sources_repo_url. Defaults to 'main'.
+        tags (Union[None, Unset, list[str]]): Free-form tags to attach to this simulation for
+            later filtering (e.g. 'cd1'). Repeat the param for multiple tags. Tags can also be added
+            later via POST /simulations/{id}/tags.
         body (Union['AnalysisOptions', None]):
 
     Raises:
@@ -480,6 +505,7 @@ async def asyncio_detailed(
         ecoli_sources_overlays=ecoli_sources_overlays,
         ecoli_sources_repo_url=ecoli_sources_repo_url,
         ecoli_sources_ref=ecoli_sources_ref,
+        tags=tags,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -507,6 +533,7 @@ async def asyncio(
     ecoli_sources_overlays: Union[None, Unset, str] = UNSET,
     ecoli_sources_repo_url: Union[None, Unset, str] = UNSET,
     ecoli_sources_ref: Union[None, Unset, str] = UNSET,
+    tags: Union[None, Unset, list[str]] = UNSET,
 ) -> Optional[Union[HTTPValidationError, Simulation]]:
     """[New] Launch a vEcoli simulation workflow (engine/composite, generations, seeds, condition)
 
@@ -550,6 +577,9 @@ async def asyncio(
             container. No AWS CLI needed on the client.
         ecoli_sources_ref (Union[None, Unset, str]): Git ref (branch/tag/commit) for
             ecoli_sources_repo_url. Defaults to 'main'.
+        tags (Union[None, Unset, list[str]]): Free-form tags to attach to this simulation for
+            later filtering (e.g. 'cd1'). Repeat the param for multiple tags. Tags can also be added
+            later via POST /simulations/{id}/tags.
         body (Union['AnalysisOptions', None]):
 
     Raises:
@@ -580,5 +610,6 @@ async def asyncio(
             ecoli_sources_overlays=ecoli_sources_overlays,
             ecoli_sources_repo_url=ecoli_sources_repo_url,
             ecoli_sources_ref=ecoli_sources_ref,
+            tags=tags,
         )
     ).parsed

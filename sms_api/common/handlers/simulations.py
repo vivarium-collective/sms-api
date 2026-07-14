@@ -388,6 +388,7 @@ async def run_simulation_workflow(  # noqa: C901
     ecoli_sources_overlays: str | None = None,
     ecoli_sources_repo_url: str | None = None,
     ecoli_sources_ref: str | None = None,
+    tags: list[str] | None = None,
 ) -> Simulation:
     """
     Simplified workflow execution with just the essential parameters.
@@ -631,6 +632,7 @@ async def run_simulation_workflow(  # noqa: C901
         parca_dataset_id=parca_ds.database_id,
         simulation_config_filename=simulation_config_filename,
         experiment_id=unique_experiment_id,
+        tags=tags or [],
     )
     export_baseline_config(request)
     simulation = await database_service.insert_simulation(sim_request=request)
@@ -788,39 +790,34 @@ async def list_simulations_filtered(
     experiment_id: str | None = None,
     tag: str | None = None,
 ) -> list[Simulation]:
-    """List simulations filtered by experiment IDs and/or tag.
+    """List simulations filtered by experiment IDs and/or tags (union).
 
-    If both ``experiment_id`` and ``tag`` are provided, the result is the union
-    of both sets (deduplicated).
+    Tags are free-form data stored on each simulation row (see ``add_tags`` /
+    ``GET /simulations/tags``), so an unknown tag simply matches nothing and
+    yields an empty list — the same behavior as an experiment_id that no
+    simulation carries. Both ``experiment_id`` and ``tag`` accept comma-separated
+    lists; when both are given the result is their union (deduplicated by the DB).
 
     Args:
         db_service: Database service instance.
         experiment_id: Comma-separated list of experiment IDs.
-        tag: Predefined tag name that resolves to a bundle of experiment IDs.
+        tag: Comma-separated list of tag names (e.g. "cd1").
 
     Returns:
         A list of Simulation objects matching the filter criteria.
-
-    Raises:
-        ValueError: If the tag is not found in the registry.
     """
-    from sms_api.simulation.simulation_tags import resolve_tag
-
-    experiment_ids: set[str] = set()
-
-    if tag is not None:
-        experiment_ids.update(resolve_tag(tag))
-
-    if experiment_id is not None:
-        for eid in experiment_id.split(","):
-            eid_stripped = eid.strip()
-            if eid_stripped:
-                experiment_ids.add(eid_stripped)
-
-    if not experiment_ids:
+    experiment_ids = _split_csv(experiment_id)
+    tags = _split_csv(tag)
+    if not experiment_ids and not tags:
         return []
+    return await db_service.list_simulations_filtered(experiment_ids=experiment_ids, tags=tags)
 
-    return await db_service.list_simulations_filtered(list(experiment_ids))
+
+def _split_csv(value: str | None) -> list[str]:
+    """Split a comma-separated query value into a list of non-empty, stripped tokens."""
+    if not value:
+        return []
+    return [token.strip() for token in value.split(",") if token.strip()]
 
 
 async def get_omics_outputs(

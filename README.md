@@ -39,14 +39,19 @@ uv run atlantis simulator list --n 3         # first 3 simulators
 uv run atlantis simulation configs 16
 uv run atlantis simulation analyses 16
 
-# Run a simulation (1 generation, 1 seed)
-uv run atlantis simulation run my-experiment 16 --generations 1 --seeds 1 --poll
+# Run a simulation (1 generation, 1 seed); attach filter tags with --tag
+uv run atlantis simulation run my-experiment 16 --generations 1 --seeds 1 --tag cd1 --poll
 
 # Sync local data sources to S3 and run with custom RNA-seq datasets
 uv run atlantis simulation run my-exp 16 --sources ../ecoli-sources --run-parca --poll
 
 # Check status (fast — shows log tail + status)
 uv run atlantis simulation status 37
+
+# Tag an existing simulation, list tags in use, and filter by tag
+uv run atlantis simulation tag 37 cd1
+uv run atlantis simulation tags
+uv run atlantis simulation list --tag cd1
 
 # Download outputs
 uv run atlantis simulation outputs 37 --dest ./results
@@ -77,6 +82,18 @@ A Kubernetes cluster running a FastAPI application, hosted at [https://sms.cam.u
 **Routers:**
 - `core`: Administrative — simulator builds, parca management
 - `api`: User-facing — simulation workflows, status, data download
+
+**Database migrations** are Alembic-based and applied by a self-diagnosing
+reconciler that safely adopts any database state (fresh, already-managed, or a
+legacy `create_all`-bootstrapped DB). Preview state read-only before applying:
+
+```bash
+uv run python scripts/db_analyze.py     # read-only report (changes nothing)
+uv run python scripts/db_reconcile.py   # stamp/upgrade as diagnosed (idempotent)
+```
+
+Connection comes from `SQLALCHEMY_DATABASE_URL`, or `POSTGRES_HOST/PORT/USER/
+PASSWORD/DATABASE`. See the "Database migrations" section in `CLAUDE.md`.
 
 ### Client
 

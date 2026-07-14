@@ -146,6 +146,47 @@ After making significant code changes, run these steps in order:
 4. `uv run pytest` - run all unit tests
 5. `uv run pytest tests/integration/test_hpc_workflow.py -v` - integration tests (requires SSH)
 
+### Database migrations
+
+Schema changes go through **Alembic** (`alembic/versions/`), but the deployment
+applies them with a **self-diagnosing reconciler**, not bare `alembic upgrade head`.
+
+Why: the app also bootstraps schema with `Base.metadata.create_all` at startup
+(`tables_orm.create_db`), which creates missing objects but never *alters*
+existing ones and never writes `alembic_version`. A database the app touched
+before Alembic ends up un-stamped and possibly drifted, and `alembic upgrade
+head` then runs from base and fails re-`CREATE`-ing existing tables.
+
+- **Add a migration**: `uv run alembic revision -m "…"` (or hand-write one; see
+  `c1a2b3d4e5f6_add_tags_to_simulation.py`). Set `down_revision` to the current
+  head. Prefer PG-safe, idempotent ops.
+- **The reconciler** (`sms_api/simulation/db_reconcile.py`, run by the
+  `alembic-migrate` Job) classifies any DB and acts idempotently:
+  - **FRESH** (no tables, no `alembic_version`) → `upgrade head` from base
+  - **MANAGED** (`alembic_version` present) → `upgrade head` (no-op if current)
+  - **LEGACY** (tables, no `alembic_version`) → `stamp <matched>` → `upgrade head`
+  - **INCONSISTENT** (non-linear fingerprint) → refuse, print manual steps
+  The LEGACY match walks a small **frozen** fingerprint table (one schema marker
+  per pre-adoption revision) in `LEGACY_FINGERPRINTS`.
+- **Fingerprint maintenance contract**: while `create_all` still bootstraps prod
+  DBs, **add a new fingerprint marker whenever you add a migration** (a create_all
+  DB advanced past the top marker would otherwise stamp stale and re-apply an
+  already-made migration). Guarding `create_all` off in prod freezes the list —
+  the intended end state.
+- **Before deploying to a site**: run the read-only report first, then apply.
+  Each site's RDS may sit at a different un-stamped point.
+  ```bash
+  # read-only report (in a pod or locally; uses SQLALCHEMY_DATABASE_URL or POSTGRES_*)
+  uv run python -m sms_api.simulation.db_reconcile --analyze   # or scripts/db_analyze.py
+  # apply (this is what the migration Job runs)
+  kubectl delete job alembic-migrate -n <ns> --ignore-not-found   # Jobs are immutable
+  kubectl apply -k kustomize/overlays/<ns>-db-migration
+  kubectl wait --for=condition=complete job/alembic-migrate -n <ns> --timeout=300s
+  ```
+  The `<ns>-db-migration` overlay's `sms-api` `newTag` must contain the new
+  migration — **keep it in sync with the app overlay's tag** (see version-sync
+  checklist).
+
 ## Testing
 
 ### Integration Tests
@@ -238,6 +279,11 @@ Follow this exact sequence to cut a release:
 - `kustomize/overlays/sms-api-stanford/kustomization.yaml`
 - `kustomize/overlays/sms-api-rke/kustomization.yaml`
 - `kustomize/overlays/sms-api-rke-dev/kustomization.yaml`
+- **`kustomize/overlays/<ns>-db-migration/kustomization.yaml`** — the migration
+  Job runs the reconciler from *this* image tag, so it MUST contain any new
+  migration. Keep it equal to the matching app overlay's `sms-api` tag. (These
+  historically drifted — e.g. stanford-test was pinned to an old tag — because
+  they were omitted from this checklist.)
 
 ## Notes
 

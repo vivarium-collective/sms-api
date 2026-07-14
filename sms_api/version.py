@@ -58,4 +58,13 @@
 #          of bare `alembic upgrade head`, so migrations are safe on customer-controlled
 #          databases. Reconciling stanford-test also applies the missing 'cancelled'
 #          jobstatusdb enum value (a1c3e5f7b9d2, never stamped there under create_all).
-__version__ = "0.9.19"
+# 0.9.20 — tags as data: simulation gains a free-form `tags` JSONB column
+#          (migration c1a2b3d4e5f6, GIN-indexed), replacing the hard-coded tag
+#          registry. GET /simulations/tags now reflects DB contents; GET
+#          /simulations?tag= filters via JSONB containment (unknown tag -> empty
+#          200, not 400); POST /simulations/{id}/tags retro-tags; run accepts
+#          tags. Atlantis CLI: `simulation run --tag`, `simulation tag <id>`.
+#          Tags are site-local data (per-site RDS), fixing the shared-S3 /
+#          independent-DB mismatch. Reconciler fingerprint extended for the new
+#          revision (frozen once create_all is guarded off in prod).
+__version__ = "0.9.20"

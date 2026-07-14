@@ -86,8 +86,9 @@ def sync_detailed(
     Args:
         experiment_id (Union[None, Unset, str]): Comma-separated list of experiment IDs to filter
             by. Example: 'sim31-baseline-60bb,sim33-violacien-seeds1000-generations10-9617'
-        tag (Union[None, Unset, str]): Predefined tag name that resolves to a bundle of experiment
-            IDs. Example: 'cd1'. Use GET /api/v1/simulations/tags to list available tags.
+        tag (Union[None, Unset, str]): Comma-separated list of tags to filter by (e.g. 'cd1').
+            Tags are free-form data on each simulation; an unknown tag simply matches nothing. Use GET
+            /api/v1/simulations/tags to list tags present in the database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -120,8 +121,9 @@ def sync(
     Args:
         experiment_id (Union[None, Unset, str]): Comma-separated list of experiment IDs to filter
             by. Example: 'sim31-baseline-60bb,sim33-violacien-seeds1000-generations10-9617'
-        tag (Union[None, Unset, str]): Predefined tag name that resolves to a bundle of experiment
-            IDs. Example: 'cd1'. Use GET /api/v1/simulations/tags to list available tags.
+        tag (Union[None, Unset, str]): Comma-separated list of tags to filter by (e.g. 'cd1').
+            Tags are free-form data on each simulation; an unknown tag simply matches nothing. Use GET
+            /api/v1/simulations/tags to list tags present in the database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -149,8 +151,9 @@ async def asyncio_detailed(
     Args:
         experiment_id (Union[None, Unset, str]): Comma-separated list of experiment IDs to filter
             by. Example: 'sim31-baseline-60bb,sim33-violacien-seeds1000-generations10-9617'
-        tag (Union[None, Unset, str]): Predefined tag name that resolves to a bundle of experiment
-            IDs. Example: 'cd1'. Use GET /api/v1/simulations/tags to list available tags.
+        tag (Union[None, Unset, str]): Comma-separated list of tags to filter by (e.g. 'cd1').
+            Tags are free-form data on each simulation; an unknown tag simply matches nothing. Use GET
+            /api/v1/simulations/tags to list tags present in the database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -181,8 +184,9 @@ async def asyncio(
     Args:
         experiment_id (Union[None, Unset, str]): Comma-separated list of experiment IDs to filter
             by. Example: 'sim31-baseline-60bb,sim33-violacien-seeds1000-generations10-9617'
-        tag (Union[None, Unset, str]): Predefined tag name that resolves to a bundle of experiment
-            IDs. Example: 'cd1'. Use GET /api/v1/simulations/tags to list available tags.
+        tag (Union[None, Unset, str]): Comma-separated list of tags to filter by (e.g. 'cd1').
+            Tags are free-form data on each simulation; an unknown tag simply matches nothing. Use GET
+            /api/v1/simulations/tags to list tags present in the database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

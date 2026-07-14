@@ -24,9 +24,10 @@ class Simulation:
         config (SimulationConfig):
         simulation_config_filename (str):
         experiment_id (str):
-        last_updated (Union[Unset, str]):  Default: '2026-07-10 13:41:10.692389'.
+        last_updated (Union[Unset, str]):  Default: '2026-07-14 10:34:21.082112'.
         job_id (Union[None, Unset, str]):
         num_seeds (Union[None, Unset, int]):
+        tags (Union[Unset, list[str]]):
     """
 
     database_id: int
@@ -35,9 +36,10 @@ class Simulation:
     config: "SimulationConfig"
     simulation_config_filename: str
     experiment_id: str
-    last_updated: Union[Unset, str] = "2026-07-10 13:41:10.692389"
+    last_updated: Union[Unset, str] = "2026-07-14 10:34:21.082112"
     job_id: Union[None, Unset, str] = UNSET
     num_seeds: Union[None, Unset, int] = UNSET
+    tags: Union[Unset, list[str]] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -67,6 +69,10 @@ class Simulation:
         else:
             num_seeds = self.num_seeds
 
+        tags: Union[Unset, list[str]] = UNSET
+        if not isinstance(self.tags, Unset):
+            tags = self.tags
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
@@ -83,6 +89,8 @@ class Simulation:
             field_dict["job_id"] = job_id
         if num_seeds is not UNSET:
             field_dict["num_seeds"] = num_seeds
+        if tags is not UNSET:
+            field_dict["tags"] = tags
 
         return field_dict
 
@@ -123,6 +131,8 @@ class Simulation:
 
         num_seeds = _parse_num_seeds(d.pop("num_seeds", UNSET))
 
+        tags = cast(list[str], d.pop("tags", UNSET))
+
         simulation = cls(
             database_id=database_id,
             simulator_id=simulator_id,
@@ -133,6 +143,7 @@ class Simulation:
             last_updated=last_updated,
             job_id=job_id,
             num_seeds=num_seeds,
+            tags=tags,
         )
 
         simulation.additional_properties = d
