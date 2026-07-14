@@ -16,14 +16,16 @@ images:
     newTag: 0.5.9
   # vivarium-workbench: published by cutting a GitHub Release in the workbench
   # repo (build-and-push.yml → ghcr:<version>); pin that release tag here.
-  # 0.1.1 = first image with the pbg-ptools viewer plugin + decoupled v2ecoli.
-  # 7a9620c = demo-v2ecoli dev SHA: adds the Segment 7 /reports/ figure base-path
-  # prefix (interactive Plotly resolves under /workbench, not the co-tenant PTools
-  # root) on top of pinned-build remote runs (Segment 6 Part B, 72e00b8),
-  # bigraph-loom (Bug 3), and CSRF allowed-origins (Bug 2).
-  # Revert to a release tag after WS-F merge.
+  # 0.2.0 = the demo-migration release (workbench PR #453 + #466): v2ecoli dashboard
+  # demo migrated into the workbench repo + the product code backing it — pinned-build
+  # remote runs, CSRF allowlist + reverse-proxy support, /reports/ + study-detail
+  # base-path fixes, composite-resolve graceful degradation, and the pbg-ptools viewer
+  # plugin against decoupled v2ecoli. Functionally identical to the temporary demo
+  # build build/demo-v2ecoli/7a9620c (only docs changed after that SHA), now on an
+  # immutable release tag. The env this image needs (allowed-origins / REMOTE_PINNED /
+  # DASHBOARD_PUBLIC_BASE_URL) is set on the workbench Deployment below.
   - name: ghcr.io/vivarium-collective/vivarium-workbench
-    newTag: 7a9620c
+    newTag: 0.2.0
 
 replicas:
   - count: 1

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.9.16
+  version: 0.9.17
 paths:
   /api/v1/simulations/discovery:
     get:
@@ -159,7 +159,10 @@ paths:
         required: false
         schema:
           anyOf:
-          - type: string
+          - enum:
+            - v2ecoli
+            - vecoli
+            type: string
           - type: 'null'
           description: 'Ray two-engine comparison: ''v2ecoli'' (ported) or ''vecoli''
             (imported via build_composite_native). When set, runs the comparison ensemble
@@ -189,6 +192,23 @@ paths:
           description: Generations per lineage for the comparison ensemble.
           title: Max Generations
         description: Generations per lineage for the comparison ensemble.
+      - name: vecoli_source
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - upstream
+            - vivarium-process
+            type: string
+          - type: 'null'
+          description: 'How the genuine vEcoli side runs (composite=''vecoli'' only):
+            ''upstream'' (default, ~50 pbg steps) or ''vivarium-process'' (vEcoli
+            as one pbg node with vivarium-core''s Engine inside).'
+          title: Vecoli Source
+        description: 'How the genuine vEcoli side runs (composite=''vecoli'' only):
+          ''upstream'' (default, ~50 pbg steps) or ''vivarium-process'' (vEcoli as
+          one pbg node with vivarium-core''s Engine inside).'
       - name: description
         in: query
         required: false
@@ -933,7 +953,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-07-10T13:41:10.864632'
+                  created_at: '2026-07-14T07:37:08.039169'
                 parca_config:
                   outdir: /projects/SMS/sms_api/prod/sims
       responses:
@@ -2540,7 +2560,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-07-10 13:41:10.692389'
+          default: '2026-07-14 07:37:07.790339'
         job_id:
           anyOf:
           - type: string
