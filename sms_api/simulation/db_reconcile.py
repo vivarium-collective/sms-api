@@ -46,11 +46,12 @@ import os
 import sys
 from pathlib import Path
 
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 # Repo root = two levels up from sms_api/simulation/db_reconcile.py
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -169,7 +170,9 @@ def classify(
             current_revision=None,
             matched_revision=None,
             markers=markers,
-            message="No application tables and no alembic_version — fresh database. 'upgrade head' builds it from base.",
+            message=(
+                "No application tables and no alembic_version — fresh database. 'upgrade head' builds it from base."
+            ),
         )
 
     # Legacy (create_all-bootstrapped): walk the fingerprint. A valid legacy
@@ -235,8 +238,7 @@ def resolve_database_url() -> str:
         ]
         if missing:
             raise RuntimeError(
-                "No database connection configured. Set SQLALCHEMY_DATABASE_URL, or all of: "
-                + ", ".join(missing)
+                "No database connection configured. Set SQLALCHEMY_DATABASE_URL, or all of: " + ", ".join(missing)
             )
         user = os.environ["POSTGRES_USER"]
         password = os.environ["POSTGRES_PASSWORD"]
