@@ -17,9 +17,10 @@ images:
   - name: ghcr.io/vivarium-collective/sms-ptools
     newTag: 0.5.9
   # vivarium-workbench: pin the workbench GitHub Release tag (build-and-push.yml ->
-  # ghcr:<version>). 0.2.0 = the demo-migration release (matches stanford-test).
+  # ghcr:<version>). 0.3.0 = 0.2.0 demo-migration image + pinned-run progress bar
+  # (#467) and report-rendering fixes (#468/#470) (matches stanford-test).
   - name: ghcr.io/vivarium-collective/vivarium-workbench
-    newTag: 0.2.0
+    newTag: 0.3.0
 
 replicas:
   - count: 1
