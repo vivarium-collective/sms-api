@@ -77,4 +77,13 @@
 #          scripts/backfill_analysis_results.py records READY rows for existing S3
 #          analysis dirs (both nestings). n_tp sampling + nonblocking submit are a
 #          separate future track. Reconciler fingerprint extended (analysis.n_tp).
-__version__ = "0.9.22"
+# 0.9.23 — pin vivarium-workbench 0.3.1 (bigraph-loom base-path fix). The wiring
+#          explorer's "test run" posted a root-absolute /api/composite-test-run;
+#          bigraph-loom is a third-party bundle the workbench serves but does not
+#          render, so it never received the workbench's base-path URL shim. Under
+#          `serve --base-path /workbench` the call escaped the prefix and matched
+#          the ALB's /api/* rule -> routed to THIS service, which 404'd it
+#          (`POST /api/composite-test-run -> 404` in the api log). The workbench
+#          now injects the shim into the loom's HTML entry (workbench #476),
+#          covering both the prefixed and the unprefixed /bigraph-loom/* paths.
+__version__ = "0.9.23"
