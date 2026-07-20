@@ -3075,7 +3075,7 @@ wheels = [
 
 [[package]]
 name = "sms-api"
-version = "0.9.21"
+version = "0.9.22"
 source = { editable = "." }
 dependencies = [
     { name = "aioboto3" },

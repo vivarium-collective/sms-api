@@ -77,4 +77,4 @@
 #          scripts/backfill_analysis_results.py records READY rows for existing S3
 #          analysis dirs (both nestings). n_tp sampling + nonblocking submit are a
 #          separate future track. Reconciler fingerprint extended (analysis.n_tp).
-__version__ = "0.9.21"
+__version__ = "0.9.22"
