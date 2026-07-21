@@ -26,7 +26,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.execute("ALTER TABLE compose_hpcrun ADD COLUMN IF NOT EXISTS job_id_ext VARCHAR")
-    op.execute("ALTER TABLE compose_hpcrun ADD COLUMN IF NOT EXISTS job_backend VARCHAR NOT NULL DEFAULT 'slurm'")
+    op.execute("ALTER TABLE compose_hpcrun ADD COLUMN IF NOT EXISTS job_backend VARCHAR NOT NULL DEFAULT 'batch'")
 
 
 def downgrade() -> None:
