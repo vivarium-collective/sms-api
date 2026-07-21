@@ -11,12 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import InstrumentedAttribute
 
 from sms_api.common.hpc.models import SlurmJob
+from sms_api.common.models import JobBackend
 from sms_api.compose.container_def import ContainerizationFileRepr
 from sms_api.compose.models import (
     BiGraphComputeType,
     BiGraphProcess,
     BiGraphStep,
     ComposeHpcRun,
+    ComposeJobStatus,
     ComposeJobType,
     ComposeSimulation,
     ComposeSimulationRequest,
@@ -25,6 +27,7 @@ from sms_api.compose.models import (
     ComposeSubmittedSimulation,
     ComposeWorkerEvent,
     PackageOutline,
+    PackageType,
     RegisteredPackage,
     get_singularity_hash,
 )
@@ -32,6 +35,7 @@ from sms_api.compose.tables_orm import (
     BiGraphComputeTypeDB,
     ComposeJobStatusDB,
     ComposeJobTypeDB,
+    ORMComposeAllowList,
     ORMComposeBiGraphCompute,
     ORMComposeHpcRun,
     ORMComposePackage,
@@ -294,6 +298,16 @@ class HPCDatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def update_hpcrun_dispatch(
+        self, hpcrun_id: int, job_id_ext: str, backend: "JobBackend", status: ComposeJobStatus
+    ) -> None:
+        """Attach the real backend job id + status to a placeholder row written at submit time."""
+
+    @abstractmethod
+    async def mark_hpcrun_failed(self, hpcrun_id: int, error_message: str) -> None:
+        """Flip a placeholder/in-flight row to FAILED (e.g. a background dispatch throw)."""
+
+    @abstractmethod
     async def insert_worker_event(self, worker_event: ComposeWorkerEvent, hpcrun_id: int) -> ComposeWorkerEvent:
         pass
 
@@ -403,6 +417,43 @@ class HPCORMExecutor(HPCDatabaseService):
             await session.flush()
 
     @override
+    async def update_hpcrun_dispatch(
+        self, hpcrun_id: int, job_id_ext: str, backend: "JobBackend", status: ComposeJobStatus
+    ) -> None:
+        async with self.async_session_maker() as session, session.begin():
+            orm = (
+                (await session.execute(select(ORMComposeHpcRun).where(ORMComposeHpcRun.id == hpcrun_id)))
+                .scalars()
+                .first()
+            )
+            if orm is None:
+                raise RuntimeError(f"ComposeHpcRun {hpcrun_id} not found")
+            orm.job_id_ext = job_id_ext
+            orm.job_backend = backend.value
+            # SLURM job ids are ints — keep ``slurmjobid`` populated so the existing
+            # squeue-based ComposeJobMonitor path still finds the run. Batch/Ray ids are
+            # UUID strings and live only in ``job_id_ext``.
+            if backend == JobBackend.SLURM:
+                orm.slurmjobid = int(job_id_ext)
+            orm.status = ComposeJobStatusDB(status.value)
+            await session.flush()
+
+    @override
+    async def mark_hpcrun_failed(self, hpcrun_id: int, error_message: str) -> None:
+        async with self.async_session_maker() as session, session.begin():
+            orm = (
+                (await session.execute(select(ORMComposeHpcRun).where(ORMComposeHpcRun.id == hpcrun_id)))
+                .scalars()
+                .first()
+            )
+            if orm is None:
+                raise RuntimeError(f"ComposeHpcRun {hpcrun_id} not found")
+            orm.status = ComposeJobStatusDB.FAILED
+            orm.error_message = error_message[:2000]
+            orm.end_time = datetime.datetime.now()
+            await session.flush()
+
+    @override
     async def insert_worker_event(self, worker_event: ComposeWorkerEvent, hpcrun_id: int) -> ComposeWorkerEvent:
         async with self.async_session_maker() as session, session.begin():
             orm = ORMComposeWorkerEvent.from_worker_event(worker_event, hpcrun_id=hpcrun_id)
@@ -482,6 +533,56 @@ class PackageORMExecutor(PackageDatabaseService):
 
 
 # ---------------------------------------------------------------------------
+# Allow-list database service (compose_allow_list) — wires the previously
+# dead ``ORMComposeAllowList`` table into something ``PBAllowList`` reads from.
+# ---------------------------------------------------------------------------
+
+
+class AllowListDatabaseService(ABC):
+    @abstractmethod
+    async def list_allow_list(self) -> list[str]:
+        """Approved package specs, as ``"<type>::<name>"`` strings (``PBAllowList`` shape)."""
+
+    @abstractmethod
+    async def seed_if_empty(self, entries: list[str]) -> None:
+        """Populate the table from ``entries`` (``"<type>::<name>"``) iff it's currently empty.
+
+        Never overwrites operator-curated rows — only bootstraps a fresh deployment.
+        """
+
+
+class AllowListORMExecutor(AllowListDatabaseService):
+    async_session_maker: async_sessionmaker[AsyncSession]
+
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
+        self.async_session_maker = session_maker
+
+    @override
+    async def list_allow_list(self) -> list[str]:
+        async with self.async_session_maker() as session:
+            result = await session.execute(select(ORMComposeAllowList))
+            return [orm.to_spec() for orm in result.scalars().all()]
+
+    @override
+    async def seed_if_empty(self, entries: list[str]) -> None:
+        async with self.async_session_maker() as session, session.begin():
+            existing = (await session.execute(select(ORMComposeAllowList.id).limit(1))).scalar_one_or_none()
+            if existing is not None:
+                return
+            for entry in entries:
+                package_type_str, _, package_name = entry.partition("::")
+                if not package_name:
+                    package_type_str, package_name = PackageType.PYPI.value, entry
+                session.add(
+                    ORMComposeAllowList(
+                        package_name=package_name,
+                        package_type=PackageTypeDB(package_type_str),
+                        package_version="*",
+                    )
+                )
+
+
+# ---------------------------------------------------------------------------
 # Facade
 # ---------------------------------------------------------------------------
 
@@ -492,11 +593,13 @@ class ComposeDatabaseService:
     simulator_db: SimulatorDatabaseService
     hpc_db: HPCDatabaseService
     package_db: PackageDatabaseService
+    allow_list_db: AllowListDatabaseService
 
     def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
         self.simulator_db = SimulatorORMExecutor(session_maker)
         self.hpc_db = HPCORMExecutor(session_maker)
         self.package_db = PackageORMExecutor(session_maker)
+        self.allow_list_db = AllowListORMExecutor(session_maker)
 
     def get_simulator_db(self) -> SimulatorDatabaseService:
         return self.simulator_db
@@ -506,3 +609,6 @@ class ComposeDatabaseService:
 
     def get_package_db(self) -> PackageDatabaseService:
         return self.package_db
+
+    def get_allow_list_db(self) -> AllowListDatabaseService:
+        return self.allow_list_db

@@ -164,6 +164,11 @@ class ORMComposeHpcRun(ComposeBase):
     job_type: Mapped[ComposeJobTypeDB] = mapped_column(nullable=False)
     correlation_id: Mapped[str] = mapped_column(nullable=False, index=True, unique=True)
     slurmjobid: Mapped[int] = mapped_column(nullable=True)
+    # Backend-agnostic job id (string), mirroring ``ORMHpcRun.job_id_ext``/``job_backend``:
+    # SLURM job ids are ints (kept in ``slurmjobid`` for the existing monitor path), but
+    # AWS Batch/Ray job ids are UUID strings — those live here, tagged by ``job_backend``.
+    job_id_ext: Mapped[str | None] = mapped_column(nullable=True)
+    job_backend: Mapped[str] = mapped_column(nullable=False, server_default="slurm")
     start_time: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
     end_time: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
     status: Mapped[ComposeJobStatusDB] = mapped_column(nullable=False)
@@ -178,6 +183,8 @@ class ORMComposeHpcRun(ComposeBase):
         return ComposeHpcRun(
             database_id=self.id,
             slurmjobid=self.slurmjobid,
+            job_id_ext=self.job_id_ext,
+            job_backend=self.job_backend,
             correlation_id=self.correlation_id,
             job_type=self.job_type.to_job_type(),
             sim_id=self.simulation_id,
@@ -300,6 +307,10 @@ class ORMComposeAllowList(ComposeBase):
     package_name: Mapped[str] = mapped_column(nullable=False, index=True)
     package_type: Mapped[PackageTypeDB] = mapped_column(nullable=False)
     package_version: Mapped[str] = mapped_column(nullable=False)
+
+    def to_spec(self) -> str:
+        """Render as the ``"<type>::<name>"`` spec string ``PBAllowList.allow_list`` uses."""
+        return f"{self.package_type.value}::{self.package_name}"
 
 
 # ---------------------------------------------------------------------------

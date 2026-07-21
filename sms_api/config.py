@@ -255,6 +255,10 @@ class Settings(BaseSettings):
     compose_sim_base_path: str = ""  # HPC path for compose simulation outputs
     compose_cache_base_path: str = ""  # HPC path for compose ParCa cache (bind-mounted into containers)
     compose_containers_output_dir: str = "/output"  # Container-internal output dir
+    # Ray/Batch compose runner image (prebuilt, carries process-bigraph + pbg-emitters).
+    # `<ray_ecr_repository>:<compose_ray_image_tag>` — the deploy points this at the served
+    # workspace's image (e.g. v2ecoli:latest). Generic run_pbg.py runs inside it.
+    compose_ray_image_tag: str = "latest"
     compose_nats_url: str = ""  # NATS server URL (optional)
     compose_nats_worker_event_subject: str = "compose.worker.events"
     compose_has_messaging: bool = False  # Enable NATS messaging
