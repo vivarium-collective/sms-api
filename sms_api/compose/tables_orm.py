@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from sms_api.common.models import JobBackend
 from sms_api.compose.container_def import ContainerizationEngine, ContainerizationFileRepr
 from sms_api.compose.models import (
     BiGraphCompute,
@@ -168,7 +169,7 @@ class ORMComposeHpcRun(ComposeBase):
     # SLURM job ids are ints (kept in ``slurmjobid`` for the existing monitor path), but
     # AWS Batch/Ray job ids are UUID strings — those live here, tagged by ``job_backend``.
     job_id_ext: Mapped[str | None] = mapped_column(nullable=True)
-    job_backend: Mapped[str] = mapped_column(nullable=False, server_default="slurm")
+    job_backend: Mapped[str] = mapped_column(nullable=False, server_default=JobBackend.RAY)
     start_time: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
     end_time: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
     status: Mapped[ComposeJobStatusDB] = mapped_column(nullable=False)
