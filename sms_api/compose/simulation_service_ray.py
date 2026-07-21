@@ -65,18 +65,53 @@ class ComposeSimulationServiceRay(ComposeSimulationService):
 
     def _image_uri(self) -> str:
         settings = get_settings()
+        if not settings.compose_ray_image_tag:
+            # Fail here, at submit, with the setting name — not 10 minutes later as an
+            # opaque Batch image-pull failure. The tag is the workspace commit and has
+            # no safe default (see config.compose_ray_image_tag).
+            raise RuntimeError(
+                "compose_ray_image_tag is unset; set COMPOSE_RAY_IMAGE_TAG to the workspace "
+                f"commit to run compose jobs on {settings.ray_ecr_repository}."
+            )
         registry = f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
         return f"{registry}/{settings.ray_ecr_repository}:{settings.compose_ray_image_tag}"
 
     def _compose_command(self, doc_s3_uri: str, steps: int) -> str:
         """Download the doc from S3, materialize the embedded runner, run it → RAY_OUT_DIR."""
         heredoc = f"cat > {COMPOSE_RUNNER_PATH} <<'PBG_RUNNER_EOF'\n{_RUNNER_SRC}\nPBG_RUNNER_EOF"
+        # Name the workspace's own core builder when the deploy configures one, so a
+        # document referencing workspace-registered TYPES (not just addresses) resolves.
+        core_builder = get_settings().compose_pbg_core_builder
+        env = f"PBG_RESULTS_DIR={COMPOSE_OUT_DIR}"
+        if core_builder:
+            env += f" PBG_CORE_BUILDER={core_builder}"
         return (
             f"mkdir -p {COMPOSE_OUT_DIR}"
             f" && aws s3 cp {doc_s3_uri} {COMPOSE_DOC_PATH}"
             f" && {heredoc}"
-            f" && PBG_RESULTS_DIR={COMPOSE_OUT_DIR} python {COMPOSE_RUNNER_PATH}"
+            f" && {env} python {COMPOSE_RUNNER_PATH}"
             f" {COMPOSE_DOC_PATH} -o {COMPOSE_OUT_DIR} -n {steps}"
+        )
+
+    def _parca_staging(self) -> tuple[str | None, str | None]:
+        """(stage_s3, stage_dir) for the commit-keyed ParCa cache, or (None, None).
+
+        The ensemble path stages this cache by passing these same two args to
+        ``_submit_mnp`` (``simulation_service_ray.py``, sim submit) — the entrypoint
+        turns them into RAY_STAGE_S3/RAY_STAGE_DIR and syncs S3 → local on every node
+        before the job command runs. The compose driver-swap replaced the command but
+        must keep the staging, or a composite whose ``cache_dir`` expects a populated
+        ParCa bundle (v2ecoli's ``baseline``) starts against an empty directory.
+
+        Keyed by the image tag because that IS the workspace commit, and the ParCa
+        cache is commit-addressed. Disabled when no cache dir is configured.
+        """
+        settings = get_settings()
+        if not settings.compose_parca_cache_dir:
+            return None, None
+        return (
+            data_layout.RayLayout.parca_cache_uri(settings.compose_ray_image_tag),
+            settings.compose_parca_cache_dir,
         )
 
     @override
@@ -102,6 +137,7 @@ class ComposeSimulationServiceRay(ComposeSimulationService):
         # `_ensure_mnp_job_def` keys the derived revision by a tag string — reuse the
         # image tag as that key so resubmits with the same image reuse the revision.
         job_def = self._ray._ensure_mnp_job_def(image, get_settings().compose_ray_image_tag)
+        stage_s3, stage_dir = self._parca_staging()
         batch_job_id = self._ray._submit_mnp(
             job_name=f"compose-{experiment_id}"[:128],
             job_definition=job_def,
@@ -109,6 +145,8 @@ class ComposeSimulationServiceRay(ComposeSimulationService):
             ray_job_cmd=self._compose_command(doc_s3_uri, steps),
             out_s3=data_layout.RayLayout.results_uri(experiment_id),
             out_dir=COMPOSE_OUT_DIR,
+            stage_s3=stage_s3,
+            stage_dir=stage_dir,
         )
         logger.info("Submitted compose Ray job %s (experiment=%s)", batch_job_id, experiment_id)
         return batch_job_id

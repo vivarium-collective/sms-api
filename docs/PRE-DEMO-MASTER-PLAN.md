@@ -241,6 +241,18 @@ run. The only gap is that `invoke_run` is called with a hardcoded `n_steps=0`
 The "baseline default_n_steps=2700 is too long to demo" risk is therefore
 **largely retired** — the run length is caller-controlled.
 
+### Release state (2026-07-21 18:23)
+`v0.3.2` released, image built and available. **Does NOT contain A/B6/C** — verified
+at tag `b814ef8`: SP-D still stubbed, `invoke_run` still called without `target=`.
+0.3.2 is a prerequisite for the dev deploy, not the demo-enabling release; that needs
+0.3.3. Each workbench iteration costs ~11 min of release-triggered build (~15 GB image).
+
+Follow-up (not blocking): `Dockerfile:36` `ARG V2ECOLI_REF=main` is unpinned and the
+workflow passes no build-args, so a rebuild bakes whatever v2ecoli `main` points at.
+0.3.2 baked the correct `a08e20bd…` only because main still sits there — the next
+merge breaks agreement with the ECR runner image and ParCa cache. Same for
+`PBG_PTOOLS_REF` (`:67`).
+
 ### Remaining workbench work (revised)
 1. Wire `invoke_run` deployment target → `remote_run.run_remote` (SP-D). ~1.5h
 2. Force/select the deployment target (B6). ~0.5h

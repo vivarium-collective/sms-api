@@ -86,4 +86,17 @@
 #          (`POST /api/composite-test-run -> 404` in the api log). The workbench
 #          now injects the shim into the loom's HTML entry (workbench #476),
 #          covering both the prefixed and the unprefixed /bigraph-loom/* paths.
-__version__ = "0.9.23"
+# 0.9.24 — generic compose-on-Batch made actually runnable. ComposeSimulationServiceRay
+#          gains the ParCa cache staging the driver-swap had dropped (it passes
+#          stage_s3/stage_dir to _submit_mnp exactly as the ensemble sim path does, keyed
+#          by the image tag = workspace commit); run_pbg.py can build the WORKSPACE's own
+#          core via PBG_CORE_BUILDER (the generic core registers only process-bigraph base
+#          types + pbg-emitters links, so documents referencing workspace-registered types
+#          — v2ecoli's ECOLI_TYPES — could not resolve); and run_pbg.py now redirects every
+#          emitter's out_dir/out_uri into the results dir the entrypoint syncs to S3
+#          (v2ecoli's baseline omits out_dir on purpose, resolving it to
+#          <workspace>/.pbg/parquet-runs — real output that never left the container).
+#          compose_ray_image_tag loses its "latest" default: that ECR repo is per-commit
+#          and has no such tag, so the default could only resolve to a nonexistent image;
+#          unset now fails at submit naming the setting. Deployed to stanford-test only.
+__version__ = "0.9.24"

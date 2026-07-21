@@ -133,6 +133,30 @@ while the real `steps` sits in a local variable at `:73` and goes only into
 
 ---
 
+## 3b. Release state (updated 2026-07-21 18:23)
+
+**`v0.3.2` is released and its image is built** (`ghcr.io/vivarium-collective/vivarium-workbench:0.3.2`,
+build 29857016174, 10m57s). It is the deploy target for the dev site.
+
+**It does NOT contain items A / B6 / C.** The tag points at `b814ef8` (the version
+bump); verified at that commit, `run_core.invoke_run` still raises
+`RunTargetUnavailable` and `composite_test_run_views` still calls it with no
+`target=`. So 0.3.2 ships the loom-vendoring / emitter / packaging work but **the
+UI still cannot dispatch a remote run**. Your three items need a further release
+(0.3.3).
+
+**Budget ~11 min of image build per workbench iteration** — the build is
+release-triggered and the image is ~15 GB. Batch your changes rather than cutting a
+release per fix.
+
+**Latent reproducibility hazard (follow-up, not blocking).** `Dockerfile:36` has
+`ARG V2ECOLI_REF=main` and the build workflow passes no build-args, so the baked
+v2ecoli is whatever `main` points at *at build time*. 0.3.2 happened to bake the
+correct `a08e20bd…` only because v2ecoli main still sits there. The next merge to
+v2ecoli main makes a rebuild silently disagree with the ECR runner image and the
+ParCa cache — both of which are pinned to that commit. `PBG_PTOOLS_REF` (`:67`) is
+exposed the same way. Worth pinning both as explicit build-args.
+
 ## 4. Coordination rules — non-negotiable
 
 - **Deploy is serialized, not parallel.** sms-api must be on prod *before* the
