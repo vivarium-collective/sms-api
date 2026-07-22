@@ -48,6 +48,17 @@ from sms_api.compose.tables_orm import (
 
 logger = logging.getLogger(__name__)
 
+# Terminal compose job states — a row in any of these is done and the monitor stops
+# polling it. Everything else (WAITING/QUEUED/PENDING/RUNNING/SUSPENDED/UNKNOWN) is
+# in-flight and must keep being polled so it can advance to a terminal state.
+_TERMINAL_COMPOSE_STATUSES = (
+    ComposeJobStatusDB.COMPLETED,
+    ComposeJobStatusDB.FAILED,
+    ComposeJobStatusDB.CANCELLED,
+    ComposeJobStatusDB.OUT_OF_MEMORY,
+    ComposeJobStatusDB.TIMEOUT,
+)
+
 
 # ---------------------------------------------------------------------------
 # HPC path helper (used by simulator DB to build result paths)
@@ -393,9 +404,15 @@ class HPCORMExecutor(HPCDatabaseService):
 
     @override
     async def list_running_hpcruns(self) -> list[ComposeHpcRun]:
+        # In-flight = NOT yet terminal. Must include QUEUED/PENDING/WAITING, not just
+        # RUNNING: a Batch job sits at QUEUED (Batch RUNNABLE/STARTING) for minutes, and
+        # the monitor is what advances it. A RUNNING-only filter dropped a job the instant
+        # it was marked QUEUED, so it never got polled again and froze at QUEUED forever
+        # even after the Batch job SUCCEEDED (the entire status lifecycle stalled). Poll
+        # everything that isn't in a terminal state so a job can traverse queued→running→done.
         async with self.async_session_maker() as session:
             result = await session.execute(
-                select(ORMComposeHpcRun).where(ORMComposeHpcRun.status == ComposeJobStatusDB.RUNNING)
+                select(ORMComposeHpcRun).where(ORMComposeHpcRun.status.notin_(_TERMINAL_COMPOSE_STATUSES))
             )
             return [orm.to_hpc_run() for orm in result.scalars().all()]
 

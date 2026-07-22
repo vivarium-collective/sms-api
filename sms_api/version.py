@@ -106,4 +106,10 @@
 #          FAILED at dispatch. The runner is now `aws s3 cp`'d in like the document,
 #          keeping the command a few hundred bytes regardless of runner size. Caught
 #          by a live smoke test on stanford-test; unit test now guards the 8192 limit.
-__version__ = "0.9.25"
+# 0.9.26 — fix: compose job status froze at QUEUED. list_running_hpcruns polled
+#          RUNNING-only, so once the monitor marked a Batch job QUEUED (Batch
+#          RUNNABLE/STARTING) it dropped out of the polling set and never advanced —
+#          stuck at QUEUED forever even after the Batch job SUCCEEDED and results
+#          landed in S3. Now polls every NON-TERMINAL state so a job traverses
+#          queued->running->completed. Found by the same stanford-test smoke test.
+__version__ = "0.9.26"
