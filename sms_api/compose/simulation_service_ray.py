@@ -16,6 +16,7 @@ the runner source travels with the job without living in the image.
 
 import importlib.resources as _res
 import logging
+import tempfile
 from pathlib import Path
 from typing import override
 
@@ -76,9 +77,16 @@ class ComposeSimulationServiceRay(ComposeSimulationService):
         registry = f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
         return f"{registry}/{settings.ray_ecr_repository}:{settings.compose_ray_image_tag}"
 
-    def _compose_command(self, doc_s3_uri: str, steps: int) -> str:
-        """Download the doc from S3, materialize the embedded runner, run it → RAY_OUT_DIR."""
-        heredoc = f"cat > {COMPOSE_RUNNER_PATH} <<'PBG_RUNNER_EOF'\n{_RUNNER_SRC}\nPBG_RUNNER_EOF"
+    def _compose_command(self, doc_s3_uri: str, runner_s3_uri: str, steps: int) -> str:
+        """Download the doc AND the runner from S3, run it → RAY_OUT_DIR.
+
+        The runner is fetched from S3 (staged by ``submit_simulation_job``) rather
+        than embedded in the command via a heredoc: AWS Batch caps a container
+        override command at 8192 bytes, and inlining the full ``run_pbg.py`` source
+        overflowed that once the runner grew (the emitter-redirect + workspace-core
+        additions tipped it to 8199). ``aws s3 cp`` keeps the command a few hundred
+        bytes regardless of runner size — the same mechanism already used for the doc.
+        """
         # Name the workspace's own core builder when the deploy configures one, so a
         # document referencing workspace-registered TYPES (not just addresses) resolves.
         core_builder = get_settings().compose_pbg_core_builder
@@ -88,7 +96,7 @@ class ComposeSimulationServiceRay(ComposeSimulationService):
         return (
             f"mkdir -p {COMPOSE_OUT_DIR}"
             f" && aws s3 cp {doc_s3_uri} {COMPOSE_DOC_PATH}"
-            f" && {heredoc}"
+            f" && aws s3 cp {runner_s3_uri} {COMPOSE_RUNNER_PATH}"
             f" && {env} python {COMPOSE_RUNNER_PATH}"
             f" {COMPOSE_DOC_PATH} -o {COMPOSE_OUT_DIR} -n {steps}"
         )
@@ -127,10 +135,23 @@ class ComposeSimulationServiceRay(ComposeSimulationService):
         if doc_path is None:
             raise RuntimeError("Compose simulation has no request_file_path to stage.")
 
-        # Stage the uploaded document to S3 (bucket-relative, under the experiment prefix).
-        doc_key = f"{data_layout.RayLayout.experiment_prefix(experiment_id)}/input.pbg"
+        # Stage the uploaded document AND the generic runner to S3 (bucket-relative,
+        # under the experiment prefix). The runner goes to S3 rather than into the
+        # command because AWS Batch caps the container override at 8192 bytes.
+        exp_prefix = data_layout.RayLayout.experiment_prefix(experiment_id)
+        doc_key = f"{exp_prefix}/input.pbg"
         await file_service.upload_file(Path(doc_path), S3FilePath(s3_path=Path(doc_key)))
         doc_s3_uri = data_layout.s3_uri(doc_key)
+
+        runner_key = f"{exp_prefix}/run_pbg.py"
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tmp:
+            tmp.write(_RUNNER_SRC)
+            runner_local = tmp.name
+        try:
+            await file_service.upload_file(Path(runner_local), S3FilePath(s3_path=Path(runner_key)))
+        finally:
+            Path(runner_local).unlink(missing_ok=True)
+        runner_s3_uri = data_layout.s3_uri(runner_key)
 
         steps = int(simulation.sim_request.end_time_point)
         image = self._image_uri()
@@ -142,7 +163,7 @@ class ComposeSimulationServiceRay(ComposeSimulationService):
             job_name=f"compose-{experiment_id}"[:128],
             job_definition=job_def,
             num_nodes=1,
-            ray_job_cmd=self._compose_command(doc_s3_uri, steps),
+            ray_job_cmd=self._compose_command(doc_s3_uri, runner_s3_uri, steps),
             out_s3=data_layout.RayLayout.results_uri(experiment_id),
             out_dir=COMPOSE_OUT_DIR,
             stage_s3=stage_s3,

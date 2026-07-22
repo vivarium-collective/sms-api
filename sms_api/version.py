@@ -99,4 +99,11 @@
 #          compose_ray_image_tag loses its "latest" default: that ECR repo is per-commit
 #          and has no such tag, so the default could only resolve to a nonexistent image;
 #          unset now fails at submit naming the setting. Deployed to stanford-test only.
-__version__ = "0.9.24"
+# 0.9.25 — fix: stage run_pbg.py to S3 instead of heredoc-embedding it in the Batch
+#          command. The B3/B4 additions grew the runner to 7933 bytes, pushing the
+#          compose container-override command to 8199 — over AWS Batch's 8192 limit
+#          ("Container Overrides length must be at most 8192"), so every compose job
+#          FAILED at dispatch. The runner is now `aws s3 cp`'d in like the document,
+#          keeping the command a few hundred bytes regardless of runner size. Caught
+#          by a live smoke test on stanford-test; unit test now guards the 8192 limit.
+__version__ = "0.9.25"

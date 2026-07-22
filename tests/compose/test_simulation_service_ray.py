@@ -28,14 +28,34 @@ def test_backend_flags() -> None:
     assert svc.requires_container_build is False
 
 
-def test_compose_command_embeds_runner_and_stages_doc() -> None:
+def test_compose_command_stages_doc_and_runner_from_s3() -> None:
     svc = ComposeSimulationServiceRay()
-    cmd = svc._compose_command("s3://bucket/exp/input.pbg", steps=7)
-    # downloads the doc, embeds the runner via heredoc, runs it with -n steps
+    cmd = svc._compose_command("s3://bucket/exp/input.pbg", "s3://bucket/exp/run_pbg.py", steps=7)
+    # downloads BOTH the doc and the runner from S3, then runs with -n steps
     assert "aws s3 cp s3://bucket/exp/input.pbg" in cmd
-    assert "PBG_RUNNER_EOF" in cmd
+    assert "aws s3 cp s3://bucket/exp/run_pbg.py" in cmd
     assert "-n 7" in cmd
     assert mod.COMPOSE_OUT_DIR in cmd
+
+
+def test_compose_command_stays_under_batch_8192_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AWS Batch rejects a container override command longer than 8192 bytes with
+    'Container Overrides length must be at most 8192'. The runner is fetched from S3
+    (not embedded) precisely so the command length is independent of run_pbg.py's
+    size — assert it stays comfortably under, with a realistically-long core builder.
+    """
+    monkeypatch.setattr(
+        mod, "get_settings", lambda: _settings(compose_pbg_core_builder="some.long.workspace.module:build_core")
+    )
+    cmd = ComposeSimulationServiceRay()._compose_command(
+        "s3://bucket/very/long/experiment/prefix/input.pbg",
+        "s3://bucket/very/long/experiment/prefix/run_pbg.py",
+        steps=1000,
+    )
+    assert len(cmd) < 8192, f"compose command is {len(cmd)} bytes — over the Batch 8192 limit"
+    # and it must NOT inline the runner source (the regression this guards)
+    assert "def _redirect_emitters" not in cmd
+    assert "PBG_RUNNER_EOF" not in cmd
 
 
 # --- B1: an unset image tag must fail at SUBMIT, not as an opaque Batch pull error ---
@@ -83,24 +103,15 @@ def test_parca_staging_is_keyed_by_the_image_tag_commit(monkeypatch: pytest.Monk
 # --- B3: name the workspace's own core builder so its registered TYPES resolve ---
 
 
-def _exec_suffix(cmd: str) -> str:
-    """The command AFTER the embedded runner source.
-
-    The heredoc inlines all of run_pbg.py, whose own source mentions
-    ``PBG_CORE_BUILDER`` (it reads that env var and logs it), so a substring check
-    over the whole command can never be negative. Only the tail is the real
-    invocation.
-    """
-    return cmd.rsplit("PBG_RUNNER_EOF", 1)[-1]
-
-
 def test_compose_command_passes_core_builder_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The runner is no longer inlined, so the whole command is the exec line — a plain
+    # substring check is meaningful (it can't false-match on the runner's own source).
     monkeypatch.setattr(mod, "get_settings", lambda: _settings(compose_pbg_core_builder="v2ecoli.core:build_core"))
-    cmd = ComposeSimulationServiceRay()._compose_command("s3://b/i.pbg", steps=3)
-    assert "PBG_CORE_BUILDER=v2ecoli.core:build_core" in _exec_suffix(cmd)
+    cmd = ComposeSimulationServiceRay()._compose_command("s3://b/i.pbg", "s3://b/run_pbg.py", steps=3)
+    assert "PBG_CORE_BUILDER=v2ecoli.core:build_core" in cmd
 
 
 def test_compose_command_omits_core_builder_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mod, "get_settings", lambda: _settings(compose_pbg_core_builder=""))
-    cmd = ComposeSimulationServiceRay()._compose_command("s3://b/i.pbg", steps=3)
-    assert "PBG_CORE_BUILDER" not in _exec_suffix(cmd)
+    cmd = ComposeSimulationServiceRay()._compose_command("s3://b/i.pbg", "s3://b/run_pbg.py", steps=3)
+    assert "PBG_CORE_BUILDER" not in cmd

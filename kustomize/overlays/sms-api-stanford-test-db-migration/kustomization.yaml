@@ -10,7 +10,7 @@ images:
     # 0.9.24 carries migration e5a7c9d10f21 (compose_hpcrun.job_id_ext/job_backend)
     # and its db_reconcile fingerprint marker — the Job only applies what THIS tag
     # contains, so a stale tag here silently skips the migration.
-    newTag: 0.9.24
+    newTag: 0.9.25
 
 resources:
   - alembic-job.yaml
