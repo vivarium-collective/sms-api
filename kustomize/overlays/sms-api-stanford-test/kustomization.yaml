@@ -28,7 +28,7 @@ images:
   # image needs (allowed-origins / REMOTE_PINNED / DASHBOARD_PUBLIC_BASE_URL) is set
   # on the workbench Deployment below.
   - name: ghcr.io/vivarium-collective/vivarium-workbench
-    newTag: 0.3.1
+    newTag: 0.3.3
 
 replicas:
   - count: 1
