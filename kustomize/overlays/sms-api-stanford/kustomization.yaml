@@ -30,6 +30,11 @@ replicas:
     name: api
   - count: 1
     name: ptools
+  # Single writer: workbench holds a git working copy + SQLite on an RWO EBS volume.
+  # Pinned here explicitly (not just inherited from base/workbench.yaml) so the count
+  # lives alongside every other deployment's.
+  - count: 1
+    name: workbench
   - count: 0
     name: redis
   - count: 0
