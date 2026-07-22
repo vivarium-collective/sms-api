@@ -23,6 +23,14 @@ spec:
   # Single replica: the workbench holds a git working copy + SQLite on an RWO EBS
   # volume, so exactly one writer.
   replicas: 1
+  # Recreate (not RollingUpdate): a rollout must NOT surge a second pod. The default
+  # RollingUpdate maxSurge=25% rounds up to 1 for a single replica, so it briefly runs
+  # two pods — both trying to mount the ReadWriteOnce EBS volume. If the new pod lands
+  # on a different node it wedges on a Multi-Attach error until the old one dies.
+  # Recreate terminates the old pod fully before starting the new one: never two pods,
+  # never a volume conflict.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: vivarium-workbench
