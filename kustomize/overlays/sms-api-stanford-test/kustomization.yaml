@@ -41,7 +41,7 @@ images:
   # a rebuild bakes whatever v2ecoli main points at. 0.3.2 baked the correct
   # a08e20bd… only because main still sits there; that agreement is not enforced.
   - name: ghcr.io/vivarium-collective/vivarium-workbench
-    newTag: 0.3.2
+    newTag: 0.3.3
 
 replicas:
   - count: 1
