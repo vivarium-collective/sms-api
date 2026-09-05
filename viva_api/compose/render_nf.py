@@ -72,6 +72,8 @@ def render(
     *,
     overrides: dict[str, Any] | None = None,
     executor: str = "local",
+    nf_params: dict[str, Any] | None = None,
+    resources: dict[str, dict[str, Any]] | None = None,
     launch: bool = False,
     resume: bool = False,
     work_dir: str | None = None,
@@ -79,7 +81,14 @@ def render(
     trace: str | None = None,
     weblog_url: str | None = None,
 ) -> dict[str, Any]:
-    """Build the document, render it, and (optionally) run ``nextflow``."""
+    """Build the document, render it, and (optionally) run ``nextflow``.
+
+    ``nf_params`` are Nextflow *config* params (queue, container image, region,
+    work dir), not to be confused with ``overrides``, which are the composite
+    generator's parameters. The ``awsbatch`` profile is built entirely out of
+    them; process-bigraph raises if the ones it cannot invent are missing,
+    rather than rendering ``queue = null`` into a config Nextflow accepts.
+    """
     from process_bigraph import Composite
     from process_bigraph.nextflow_deploy import deploy
 
@@ -94,6 +103,8 @@ def render(
         composite,
         outdir=str(outdir),
         executor=executor,
+        params=nf_params,
+        resources=resources,
         launch=launch,
         work_dir=work_dir,
         resume=resume,
@@ -112,6 +123,7 @@ def render(
         "process_blocks": main_nf.count("process "),
         "subworkflows": main_nf.count("workflow ") - 1,  # minus the entry workflow
         "staged_configs": sorted(p.name for p in outdir.glob("*.config.json")),
+        "nf_params": sorted(nf_params or {}),
         "returncode": result.get("returncode"),
     }
     (outdir / "render_summary.json").write_text(json.dumps(summary, indent=2))
@@ -124,6 +136,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--outdir", default=str(DEFAULT_OUTDIR))
     parser.add_argument("--overrides", default=None, help="JSON object of generator parameter overrides.")
     parser.add_argument("--executor", default="local", help="Nextflow profile: local, slurm, awsbatch, google-batch.")
+    parser.add_argument(
+        "--nf-params",
+        default=None,
+        help="JSON object of Nextflow config params (queue, container_image, aws_region, ...). "
+        "Distinct from --overrides, which parameterizes the composite generator.",
+    )
+    parser.add_argument("--resources", default=None, help="JSON object of per-label {cpus, memory, time}.")
     parser.add_argument("--launch", action="store_true", help="Actually run `nextflow run` (needs the binary).")
     parser.add_argument("--resume", action="store_true", help="Pass -resume; reuses cached successful tasks.")
     parser.add_argument("--work-dir", default=None)
@@ -138,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.outdir),
         overrides=overrides,
         executor=args.executor,
+        nf_params=json.loads(args.nf_params) if args.nf_params else None,
+        resources=json.loads(args.resources) if args.resources else None,
         launch=args.launch or _env_truthy(os.environ.get("NF_LAUNCH")),
         resume=args.resume,
         work_dir=args.work_dir,

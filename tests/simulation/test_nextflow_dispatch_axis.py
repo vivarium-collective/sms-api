@@ -94,6 +94,8 @@ def _command(**dispatch: Any) -> str:
             executor=dispatch.get("executor", "local"),
             launch=dispatch.get("launch", False),
             outdir="/app/v2ecoli/nf-render",
+            nf_params=dispatch.get("nf_params"),
+            resources=dispatch.get("resources"),
             work_dir=dispatch.get("work_dir"),
             resume=dispatch.get("resume", False),
         )
@@ -145,3 +147,76 @@ def test_head_image_is_the_submit_tag_not_the_task_image() -> None:
     service = SimulationServiceRay()
     with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
         assert service._submit_image_uri("abc1234").endswith("/v2ecoli:abc1234-submit")
+
+
+# --- Phase 4: the awsbatch profile's inputs ---------------------------------
+
+# The contract with process-bigraph's `_awsbatch_profile`, spelled out rather
+# than imported: process_bigraph is not a declared dependency here, so an
+# `importorskip` cross-check would simply skip in CI and prove nothing. A
+# mismatch (`containerImage` for `container_image`, say) renders a profile full
+# of nulls that Nextflow accepts and that fails minutes later inside Batch.
+# Upstream constant: process_bigraph.nextflow_deploy.AWSBATCH_REQUIRED_PARAMS
+# (process-bigraph#204).
+AWSBATCH_PARAM_NAMES = {
+    "container_image",
+    "queue",
+    "aws_region",
+    "s3_endpoint",
+    "project_root",
+    "work_dir",
+}
+
+
+def _nf_params(**overrides: Any) -> dict[str, Any]:
+    service = SimulationServiceRay()
+    settings = _ray_settings()
+    for key, value in overrides.items():
+        setattr(settings, key, value)
+    with patch("viva_api.simulation.simulation_service_ray.get_settings", lambda: settings):
+        return service._awsbatch_nf_params("abc1234", "exp-nf")
+
+
+def test_awsbatch_params_are_derived_from_settings_not_from_the_request() -> None:
+    """Queue, registry and work bucket name the DEPLOYMENT, so a caller does not
+    get to supply them."""
+    params = _nf_params()
+    assert set(params) == AWSBATCH_PARAM_NAMES
+    assert params["queue"] == "smscdk-vecoli-task-amd64"
+    assert params["aws_region"] == "us-gov-west-1"
+    assert params["s3_endpoint"] == "https://s3.us-gov-west-1.amazonaws.com"
+    assert params["work_dir"] == "s3://mybucket/nextflow/work/exp-nf/work"
+
+
+def test_task_container_is_the_plain_image_not_the_submit_head() -> None:
+    """Only the head needs a JVM. Handing tasks the `-submit` tag would work --
+    and quietly run every task on a fatter image built for a different job."""
+    assert _nf_params()["container_image"].endswith("/v2ecoli:abc1234")
+    assert "-submit" not in _nf_params()["container_image"]
+
+
+def test_project_root_is_always_emitted() -> None:
+    """`PYTHONPATH` is not optional under Nextflow: the task's cwd is not
+    /app/v2ecoli, and v2ecoli bare-imports `scripts.*` throughout. viva-api#359
+    fixed this via PBG_RUNNER_ENV, which an emitted process block never sees."""
+    assert _nf_params()["project_root"] == "/app/v2ecoli"
+
+
+@pytest.mark.parametrize("missing", ["batch_amd64_queue", "s3_work_bucket", "ecr_account_id"])
+def test_unconfigured_deployment_raises_at_dispatch_not_inside_batch(missing: str) -> None:
+    with pytest.raises(ValueError, match=missing):
+        _nf_params(**{missing: ""})
+
+
+def test_nf_params_reach_the_command_as_quoted_json() -> None:
+    cmd = _command(executor="awsbatch", nf_params=_nf_params())
+    assert "--nf-params" in cmd
+    payload = cmd.split("--nf-params ", 1)[1].split(" --")[0]
+    assert json.loads(payload.strip("'")) == _nf_params()
+    # Distinct flag from --overrides, which parameterizes the composite generator.
+    assert "--overrides" not in cmd
+
+
+def test_local_executor_carries_no_aws_params() -> None:
+    """Phase 3's local check must stay independent of any AWS configuration."""
+    assert "--nf-params" not in _command()
