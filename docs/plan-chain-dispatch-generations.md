@@ -192,10 +192,20 @@ module returns **zero callers**. So either pass it at the call sites, or add
 `retryStrategy` + `timeout` to the two `register_job_definition` calls. Prefer the latter:
 it also covers anything submitting against those definitions from outside this module.
 
-> **Contrast worth recording, since it cuts the other way:** on the Nextflow path nf-amazon
-> sets **both** `retryStrategy` and `timeout` on the `SubmitJobRequest` itself, so a
-> per-commit definition's `attempts: 1` never binds there. The gap in this section is
-> specific to the two v2 mechanisms. (See `plan-nextflow-dispatch.md` §11.1b.)
+> **Contrast worth recording, since it cuts the other way — with one condition this
+> originally omitted.** On the Nextflow path nf-amazon sets `timeout` on the
+> `SubmitJobRequest` itself unconditionally, so a per-commit definition's timeout never
+> binds there. **`retryStrategy` is different: it is attached only when
+> `aws.batch.maxSpotAttempts > 0`, and that default is `0`.** So on a profile that does not
+> set it, `retryStrategy` is absent from the submission and the job definition's own
+> `attempts` *does* bind — which for every per-commit definition is `1`. The escape is a
+> config line, not a property of using Nextflow.
+>
+> *Corrected 2026-09-05*: this paragraph previously said nf-amazon "sets **both**", full
+> stop. Our own profile sets `maxSpotAttempts = 10` as of process-bigraph#204, which makes
+> the original sentence true **of that profile** and still wrong as a general claim about
+> nf-amazon. The gap in this section remains specific to the two v2 mechanisms.
+> (See `plan-nextflow-dispatch.md` §11.1b.)
 
 ### 3g. Every generation after the first silently lost its trailing parquet **and** its success sentinel
 

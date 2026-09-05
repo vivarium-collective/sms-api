@@ -791,21 +791,27 @@ awsbatch executor work".
 
 ### Phase 4 — the `awsbatch` profile
 
-**Prerequisite, found 2026-09-04:** there is no v2ecoli/sms-ecoli image with Java and the
-Nextflow binary — the submit layer is built only for vEcoli, and ECR confirms it (§11.3).
-Add it before anything here can dispatch.
+> **✅ IMPLEMENTED 2026-09-05 — process-bigraph#204 + viva-api#433.** The table below is
+> what shipped, with two changes to it recorded under §12. The prerequisite is also
+> discharged: `v2ecoli:266ed00-submit` exists and answered on Batch. **What has NOT
+> happened is a run** — the profile is parse-verified against the real `nextflow config
+> -profile awsbatch`, and nothing has yet been submitted to AWS Batch through it.
 
-`generate_nextflow_config` emits literally `// STUB (untested in v1)` plus
+**Prerequisite, found 2026-09-04 (now met):** there was no v2ecoli/sms-ecoli image with Java
+and the Nextflow binary — the submit layer was built only for vEcoli, and ECR confirmed it
+(§11.3). Built as viva-api#423/#426.
+
+`generate_nextflow_config` emitted literally `// STUB (untested in v1)` plus
 `process { executor = 'awsbatch' }` — **no queue, work-dir, region, container or
-errorStrategy**. "Untested" understates it; it is structurally incomplete. Model the real
-one on vEcoli's proven profile:
+errorStrategy**. "Untested" understated it; it was structurally incomplete. The real one is
+modelled on vEcoli's proven profile:
 
 | Emit | Source |
 |---|---|
 | `queue` | `settings.batch_amd64_queue` |
 | `container` | ECR URI built as in `simulation_service_k8s.py:233-236` |
 | `containerOptions --env AWS_DEFAULT_REGION` | required for S3 access in-container |
-| **`containerOptions --env PYTHONPATH=/app/v2ecoli`** | **not optional under `scratch true`** — the image sets no `PYTHONPATH`, and v2ecoli's bare `scripts._compare` imports resolve on cwd alone. This is viva-api#359's fix, which does not reach a Nextflow-emitted process block (§Phase 0) |
+| **`containerOptions --env PYTHONPATH=/app/v2ecoli`** | **not optional under `scratch true`** — the image sets no `PYTHONPATH`, and v2ecoli's bare `scripts._compare` imports resolve on cwd alone. This is viva-api#359's fix, which does not reach a Nextflow-emitted process block (§Phase 0). **Shipped as `params.container_env`, supplied by viva-api** rather than as a `PYTHONPATH` directive in the profile — see §12 |
 | `aws.region` | `settings.batch_region` |
 | **`aws.client.endpoint`** | `https://s3.<region>.amazonaws.com` — the GovCloud-only line currently injected by a `sed` hack at `simulation_service_k8s.py:265-267`; emitting it natively deletes the hack |
 | `aws.batch.maxSpotAttempts` / `maxTransferAttempts` | vEcoli precedent — and **not optional**: the default is 0 and this queue is Spot-first (§11.1b) |
@@ -1059,6 +1065,11 @@ Two constraints found while checking:
 
 ### 11.3 A v2ecoli/sms-ecoli image with Java + Nextflow — **CONFIRMED ABSENT; it is a Phase 4 prerequisite**
 
+> **✅ DISCHARGED 2026-09-05.** Built as viva-api#423 (the `include_submit_image` branch on
+> the Ray build path) and #426 (making it requestable). The finding below is preserved as
+> the reason the work existed.
+
+
 - `SimulationServiceK8s._build_command(submit_image=True)` appends the submit layer
   (`default-jre-headless`, then `ARG NEXTFLOW_VERSION=25.10.2`) — and it is reached only
   from `_run_build`'s **amd64 vEcoli** build.
@@ -1131,9 +1142,9 @@ the `scratch true` / `PYTHONPATH` collision in Phase 0 — and that is corrected
 
 ## 12. Implementation status (2026-09-05)
 
-Everything below Phase 4 is merged. The gates that decide whether this path is *justified*
-are unchanged — and two of the three are now **runnable rather than blocked**, which is a
-different thing from passing.
+**Phases 1–4 are written.** The gates that decide whether this path is *justified* are
+unchanged — and they are now **runnable rather than blocked**, which is a different thing
+from passing. Nothing in this plan has yet run on AWS Batch.
 
 ### What landed
 
@@ -1142,6 +1153,7 @@ different thing from passing.
 | **Phase 1** | process-bigraph **#197** (renderer, `run_composite`, `run_step` restored to `main`), **#201** (nested `Composite` → sub-workflow, plus per-node config threading), **#203** (`deploy()` gains `-resume`, `report`/`trace`/`weblog_url`, and scopes the `sys.executable` pin to `executor='local'`). Released as **v1.8.4** (#202) |
 | **Phase 2** | v2ecoli **#694** — `LineageStep` (a whole lineage as one atomic task) and `workflow_nf` (the campaign DAG). Reviewed by @eagmon; his review caught two defects that would have surfaced first on real infrastructure |
 | **Phase 3** | viva-api **#427** (`render_nf.py`, the compiler) and **#428** (`nextflow_dispatch`, the per-request axis) |
+| **Phase 4** | process-bigraph **#204** (the `awsbatch` profile, replacing the stub; plus `deploy(config=…)` and `container_env`) and viva-api **#433** (its params, derived from settings). Both green |
 | **Prerequisite (§11.3)** | viva-api **#423** built the head-image branch, **#426** made it requestable. `v2ecoli:266ed00-submit` exists and is **verified on Batch**: OpenJDK 17.0.20.1 and Nextflow 25.10.2 both answering, rc=0 |
 
 ### The gather works, and go/no-go 4 renders at Run 4 scale
@@ -1169,8 +1181,8 @@ M channels into one — which is what a flat sibling list cannot express at all 
 | **1** — per-variant caches | expressible now (`workflow_nf` puts strain inputs on **ParCa**), untested end to end |
 | **1b** — founders differ across seeds | ⛔ **measured, and it FAILS on the current Ray path** — see below |
 | **1c** — ParCa mode recorded out-of-band | unchanged |
-| **2** — handoff as a staged `path` at real cache size | mechanism proven in Phase 0 at 23 bytes; needs the `awsbatch` profile |
-| **3** — `-resume` re-runs only the failed lineage | **now possible**: `deploy()` could not emit `-resume` at all until #203. Needs Phase 4 to exercise |
+| **2** — handoff as a staged `path` at real cache size | mechanism proven in Phase 0 at 23 bytes; the profile exists as of #204, so this is now **blocked only on a deploy** |
+| **3** — `-resume` re-runs only the failed lineage | **now possible**: `deploy()` could not emit `-resume` at all until #203, and the profile it needed landed in #204. Blocked only on a deploy |
 | **4** — 336 renders and the gather gathers | renders ✅, gathers ✅ structurally; the "sees 336 sweeps" half needs execution |
 | **5** — head overhead < ~2 min | untested |
 | **6** — a task that emits nothing FAILS | implemented in `LineageStep` and in `render_nf`'s own guard |
@@ -1212,11 +1224,62 @@ share one — so "N independent cells to average over" is wrong on any dispatch 
   ordered PRs per upstream fix, and `main` declaring `1.8.4` while carrying #203 recreated the
   very ambiguity the release removed. Tag again when Phases 1–4 stop moving.
 
-### What Phase 4 still needs
+### Phase 4 — what shipped, and two departures from the plan above
 
-The `awsbatch` profile is still `// STUB (untested in v1)`. Beyond §Phase 4's table, two
-items are now non-optional and both were measured rather than assumed: **`PYTHONPATH`**
-(§Phase 0 — `scratch true` moves cwd off `/app/v2ecoli`, and viva-api#359's fix lives in
-`PBG_RUNNER_ENV`, which a Nextflow-emitted process block never sees) and **retry**
-(§11.1b — `maxSpotAttempts` defaults to 0 on a Spot-first queue, and `errorStrategy` defaults
-to `terminate`).
+Everything in §Phase 4's table is emitted, including the two items that were non-optional
+and measured rather than assumed: **`PYTHONPATH`** (§Phase 0) and **retry** (§11.1b —
+`maxSpotAttempts` defaults to 0 on a Spot-first queue, `errorStrategy` defaults to
+`terminate`). `errorStrategy` retries to `maxRetries` then **`finish`**; `jobRole` and
+`cliPath` are left unset, per §11.2.
+
+The profile is **parse-verified against the real binary** — `nextflow config -profile
+awsbatch` resolves every value, including the interpolated `containerOptions`. That check is
+mutation-tested: single-quoting `containerOptions` (Groovy does not interpolate single
+quotes — the bug §5's staging work already hit once) passes every string assertion and fails
+the parse. What it does **not** prove is that anything runs; see below.
+
+**Departure 1 — the profile is now a default, not the only path.** Review asked how much of
+an `awsbatch` profile is general to "Nextflow on Batch" and how much is one application.
+`generate_nextflow_config` emits **one fixed shape**, and a production config routinely needs
+more than it can express: per-label *executor* switching (vEcoli's `slurm_hq` runs ParCa on
+SLURM and sims on HyperQueue in one profile), memory scaled on the previous attempt's exit
+status, `workflow.failOnIgnore`, Fusion, accelerators. So `deploy(config=…)` now replaces the
+generated config outright. Without it, disagreeing about one directive means abandoning
+`deploy()` — a cliff rather than a ramp.
+
+Worth recording what that comparison exposed: process-bigraph's **`slurm` profile is
+documented as "supported" but names no partition and no container**, so it is *narrower* than
+the `awsbatch` one this phase added. Its status table is corrected upstream.
+
+**Departure 2 — `PYTHONPATH` rides in `params.container_env`, not a profile directive.** The
+general fact is "a task container may need extra env"; the specific fact is "*this* image
+needs `PYTHONPATH`, because Nextflow moves the task's cwd off its project root". §Phase 4's
+table above prescribed the second; what shipped is the first, with viva-api passing
+`{"PYTHONPATH": "/app/v2ecoli"}`. The emitted block is identical.
+
+**A Groovy trap found on the way.** `container_env` is *consumed* by the generator rather
+than echoed into `params { }`, because a Python `dict` repr is a Groovy **closure**, not a
+map — `params { x = {'a': 1} }` fails to compile and takes the **whole config** with it,
+reported as a column number in a generated script. Any `dict` param now raises naming the
+parameter. A `list` is fine; Python and Groovy list literals coincide. Both checked against
+the real binary.
+
+### What is left, and it is all execution
+
+No code gates remain. What remains needs a version bump, an image build, and a
+`sms-api-stanford-test` deploy, then §10's ladder in order:
+
+1. `-stub-run` against the `awsbatch` profile
+2. one trivial `echo` task — proves IAM, the S3 endpoint and the ECR pull **before any
+   science**, and closes §11.2 together with §11's remaining "does an emitted `time` land as
+   `attemptDurationSeconds` on a *submitted* job"
+3. `n_seeds=1, n_generations=1` — **go/no-go 2**, the staged handoff at real cache size
+   (90 MB + 165 MB, against Phase 0's 23-byte stand-in)
+4. kill the head, `-resume`, assert ParCa shows `CACHED` in the trace CSV — **go/no-go 3**
+
+Steps 3 and 4 are the two §8 calls the entire justification for a third path. **If either
+fails, stop** — that instruction is unchanged and is the point of running them before Run 4.
+
+Risk 2 becomes live at step 4: `-resume` needs a durable **session cache**, not just a
+durable work dir, and `.nextflow/` sits on the head's local filesystem — an ephemeral pod.
+Plan its S3 sync around the run rather than discovering it on the first head OOM.
