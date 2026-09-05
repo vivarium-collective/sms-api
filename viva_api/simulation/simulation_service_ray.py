@@ -1076,11 +1076,13 @@ class SimulationServiceRay(SimulationService):
         the process running ``nextflow run`` needs a JVM, and the task container needs
         only the AWS CLI to stage the S3 work dir (which v2ecoli's Dockerfile installs).
 
-        ``project_root`` becomes ``--env PYTHONPATH`` in the emitted process block. It
-        is not optional: Nextflow moves the task's cwd off ``/app/v2ecoli``, and
-        v2ecoli bare-imports ``scripts.*`` throughout. viva-api#359 fixed this for the
-        chain/Ray paths by way of ``PBG_RUNNER_ENV``, which a Nextflow-emitted process
-        block has no idea exists.
+        ``container_env`` carries ``PYTHONPATH``, which is not optional: Nextflow moves
+        the task's cwd off ``/app/v2ecoli``, and v2ecoli bare-imports ``scripts.*``
+        throughout. viva-api#359 fixed this for the chain/Ray paths by way of
+        ``PBG_RUNNER_ENV``, which a Nextflow-emitted process block has no idea exists.
+        It rides in ``container_env`` rather than a dedicated profile directive because
+        it is a fact about THIS image, not about AWS Batch -- process-bigraph#204 keeps
+        the profile free of any one consumer's layout.
         """
         settings = get_settings()
         missing = [
@@ -1105,7 +1107,7 @@ class SimulationServiceRay(SimulationService):
             # that injects the same line into vEcoli's config.template
             # (simulation_service_k8s.py).
             "s3_endpoint": f"https://s3.{settings.batch_region}.amazonaws.com",
-            "project_root": V2ECOLI_DIR,
+            "container_env": {"PYTHONPATH": V2ECOLI_DIR},
             "work_dir": f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/work",
         }
 

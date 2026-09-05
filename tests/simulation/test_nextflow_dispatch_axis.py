@@ -163,7 +163,7 @@ AWSBATCH_PARAM_NAMES = {
     "queue",
     "aws_region",
     "s3_endpoint",
-    "project_root",
+    "container_env",
     "work_dir",
 }
 
@@ -195,11 +195,13 @@ def test_task_container_is_the_plain_image_not_the_submit_head() -> None:
     assert "-submit" not in _nf_params()["container_image"]
 
 
-def test_project_root_is_always_emitted() -> None:
+def test_pythonpath_is_always_emitted() -> None:
     """`PYTHONPATH` is not optional under Nextflow: the task's cwd is not
     /app/v2ecoli, and v2ecoli bare-imports `scripts.*` throughout. viva-api#359
-    fixed this via PBG_RUNNER_ENV, which an emitted process block never sees."""
-    assert _nf_params()["project_root"] == "/app/v2ecoli"
+    fixed this via PBG_RUNNER_ENV, which an emitted process block never sees.
+
+    It rides in `container_env` because it describes THIS image, not AWS Batch."""
+    assert _nf_params()["container_env"] == {"PYTHONPATH": "/app/v2ecoli"}
 
 
 @pytest.mark.parametrize("missing", ["batch_amd64_queue", "s3_work_bucket", "ecr_account_id"])
