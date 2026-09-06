@@ -1380,6 +1380,67 @@ Whatever defaults get added, the retry closure should scale on 137.
 
 Both are viva-api changes, and neither was visible before a real submission.
 
+### ✅ Both justifying gates now pass on real infrastructure (2026-09-06)
+
+**Go/no-go 2 — the staged handoff at real cache size.** ParCa ran on Batch and its
+cache travelled to the lineage as a staged `path` through the S3 work dir:
+
+```
+cache/sim_data_cache.dill    159,503,724
+cache/simData.cPickle         84,718,821
+cache/parca_state.pkl.gz      19,485,454
+cache/initial_state.json      10,411,488          total 274,414,146 (262 MB)
+```
+
+Which is §8's predicted "90 MB + 165 MB", against Phase 0's 23-byte stand-in. The
+lineage then simulated for 11 minutes and wrote hive-partitioned parquet with
+`variant=` / `lineage_seed=` / `generation=` / `agent_id=`, seven history shards,
+and the per-generation success sentinel.
+
+**Go/no-go 3 — `-resume` reuses cached tasks.**
+
+```
+G1  session 279089c6-…   hashes 0b3ef7e6… / 4fe466eb…   19m 22s
+G2  session 279089c6-…   hashes 0b3ef7e6… / 4fe466eb…   76 s
+    [26/1c6ed2] Cached process > parca_v0
+    [ac/1e3c9f] Cached process > runs_v0:lineage_s0
+```
+
+Same session, same hashes, both tasks reused.
+
+#### `-resume` needs THREE things aligned; risk 2 named one
+
+Four hypotheses, three deploy cycles. Worth recording because only one was the
+blocker and the other two were real bugs that had to be fixed anyway:
+
+1. **No durable session.** `.nextflow/history` and the cache DB live in the head's
+   LAUNCH dir — an ephemeral pod — so Nextflow said *"It appears you have never run
+   this project before -- Option `-resume` is ignored"*. This is risk 2, and fixing it
+   was necessary but not sufficient.
+2. **Input timestamps.** `cache = 'lenient'` (name+size, no mtime), because a
+   re-render rewrites each staged config with identical content and a fresh mtime.
+   Real, kept, also not the blocker.
+3. **Non-deterministic rendering** — disproved: two renders are byte-identical.
+4. ⛔ **The blocker: our own `-preview` compile guard.** Nextflow appends every run to
+   `.nextflow/history` in its launch dir, and a bare `-resume` resumes the LAST entry.
+   The guard ran in the render dir, so it appended itself after the campaign:
+
+   ```
+   08:12:17  19m 23s  …  20d769c2-…  nextflow … -profile awsbatch …
+   08:31:48   3.1s    …  402084d4-…  nextflow run main.nf -profile local -preview
+   ```
+
+   Nextflow **seeds every task hash with `session.uniqueId`** — `-dump-hashes`' first
+   entry is a `java.util.UUID`, and it recurs inside each staged input's `storePath`
+   as `stage-<uuid>`. So `-resume` adopted the PROBE's session, every hash changed, and
+   a completed 262 MB ParCa re-ran. The probe now runs from a throwaway cwd;
+   `projectDir` follows the SCRIPT, so an absolute `main.nf` keeps `${projectDir}`
+   resolving.
+
+**The method lesson.** `-dump-hashes` named the cause in one run, after three wrong
+guesses and two deploy cycles. Build the instrument after the FIRST failed
+hypothesis, not the third.
+
 ### Still missing: `publishDir`
 
 Nothing publishes task outputs, so a successful campaign leaves its science in
