@@ -170,6 +170,7 @@ def render(
     report: str | None = None,
     trace: str | None = None,
     weblog_url: str | None = None,
+    nextflow_args: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build the document, render it, and (optionally) run ``nextflow``.
 
@@ -215,6 +216,7 @@ def render(
         report=report,
         trace=trace,
         weblog_url=weblog_url,
+        nextflow_args=nextflow_args,
     )
     _assert_rendered(outdir)
 
@@ -253,6 +255,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report", default=None)
     parser.add_argument("--trace", default=None, help="Write a trace CSV; a reused task shows CACHED there.")
     parser.add_argument("--weblog-url", default=None)
+    parser.add_argument(
+        "--nextflow-args",
+        default=None,
+        help="JSON array appended to the `nextflow run` command verbatim, e.g. "
+        "'[\"-dump-hashes\"]'. A LIST, never a string: a string would have to be "
+        "shell-split, and quoting is exactly where that goes wrong silently.",
+    )
     args = parser.parse_args(argv)
 
     overrides = json.loads(args.overrides) if args.overrides else None
@@ -269,6 +278,7 @@ def main(argv: list[str] | None = None) -> int:
         report=args.report,
         trace=args.trace,
         weblog_url=args.weblog_url,
+        nextflow_args=json.loads(args.nextflow_args) if args.nextflow_args else None,
     )
     print(json.dumps(summary, indent=2))
     return 0

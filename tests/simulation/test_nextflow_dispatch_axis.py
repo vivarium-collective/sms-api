@@ -101,6 +101,7 @@ def _command(**dispatch: Any) -> str:
             resume=dispatch.get("resume", False),
             stage_out_s3=dispatch.get("stage_out_s3"),
             session_s3=dispatch.get("session_s3"),
+            nextflow_args=dispatch.get("nextflow_args"),
         )
 
 
@@ -481,3 +482,17 @@ def test_session_and_work_dir_are_keyed_the_same() -> None:
         session = service._nf_session_s3_uri("exp-nf")
         work = service._awsbatch_nf_params("abc1234", "exp-nf")["work_dir"]
     assert session.rsplit("/", 1)[0] == work.rsplit("/", 1)[0]
+
+
+def test_nextflow_args_pass_through_as_quoted_json() -> None:
+    """`-dump-hashes` prints each component of a task hash, and is the only way
+    to see WHY a `-resume` did not match. A list, never a string -- a string
+    would have to be shell-split, and quoting is where that goes wrong."""
+    cmd = _command(nextflow_args=["-dump-hashes", "-ansi-log", "false"])
+    assert "--nextflow-args" in cmd
+    payload = cmd.split("--nextflow-args ", 1)[1].split(" --")[0]
+    assert json.loads(payload.strip("'")) == ["-dump-hashes", "-ansi-log", "false"]
+
+
+def test_no_nextflow_args_by_default() -> None:
+    assert "--nextflow-args" not in _command()

@@ -1193,6 +1193,7 @@ class SimulationServiceRay(SimulationService):
         resume: bool = False,
         stage_out_s3: str | None = None,
         session_s3: str | None = None,
+        nextflow_args: list[str] | None = None,
     ) -> str:
         """The container command: fetch the compiler, render, optionally launch.
 
@@ -1210,6 +1211,13 @@ class SimulationServiceRay(SimulationService):
         nf_params_flag = ""
         if nf_params:
             nf_params_flag = f" --nf-params {shlex.quote(json.dumps(nf_params))}"
+        # Verbatim passthrough to `nextflow run` -- `-dump-hashes` above all, which
+        # prints each component of a task hash and is the only way to see WHY a
+        # `-resume` did not match. A list, never a string, for the same reason
+        # deploy() insists on one.
+        nextflow_args_flag = ""
+        if nextflow_args:
+            nextflow_args_flag = f" --nextflow-args {shlex.quote(json.dumps(list(nextflow_args)))}"
         resources_flag = ""
         if resources:
             resources_flag = f" --resources {shlex.quote(json.dumps(resources))}"
@@ -1273,6 +1281,7 @@ class SimulationServiceRay(SimulationService):
             f" --executor {shlex.quote(executor)}"
             f" --trace {shlex.quote(outdir)}/trace.csv"
             f"{overrides_flag}{nf_params_flag}{resources_flag}{launch_flag}{resume_flag}{work_dir_flag}"
+            f"{nextflow_args_flag}"
             f"{stage_out}"
         )
 
@@ -1353,6 +1362,7 @@ class SimulationServiceRay(SimulationService):
             resume=bool(nf_dispatch.get("resume", False)),
             stage_out_s3=self._results_s3_uri(experiment_id),
             session_s3=self._nf_session_s3_uri(experiment_id),
+            nextflow_args=nf_dispatch.get("nextflow_args"),
         )
         job_name = self._nf_head_job_name(experiment_id)
         self._k8s.create_job(self._nf_head_job(job_name, experiment_id, commit, command))
