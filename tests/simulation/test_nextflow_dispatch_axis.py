@@ -350,3 +350,23 @@ def test_command_stages_run_pbg_beside_render_nf() -> None:
     assert f"aws s3 cp s3://b/exp/run_pbg.py {staged_runner}" in cmd
     # Same directory: the fallback import resolves from render_nf's own dir.
     assert cmd.index(staged_runner) < cmd.index("python /tmp/render_nf.py")
+
+
+@pytest.mark.asyncio
+async def test_head_job_carries_the_workspace_core_builder_and_import_root() -> None:
+    """The head RESOLVES the composite, so it needs what PBG_RUNNER_ENV carries.
+
+    The generic core registers only process-bigraph's base types. A document with
+    a nested Composite then fails to realize with
+    `no link found at address: {'protocol': 'local', 'data': 'composite'}` --
+    which is every sub-workflow this dispatch path exists to emit.
+
+    #359 put these in PBG_RUNNER_ENV for the chain/Ray paths. A K8s Job never
+    sees that string; §Phase 0 of the plan predicted this for PYTHONPATH, and it
+    generalises to PBG_CORE_BUILDER.
+    """
+    _, k8s = await _dispatch()
+    env = {e.name: e.value for e in k8s.create_job.call_args[0][0].spec.template.spec.containers[0].env}
+    assert env["PBG_CORE_BUILDER"] == "v2ecoli.core:build_core"
+    assert env["PYTHONPATH"] == "/app/v2ecoli"
+    assert env["AWS_DEFAULT_REGION"] == "us-gov-west-1"

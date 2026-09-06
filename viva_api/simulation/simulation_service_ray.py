@@ -1322,6 +1322,16 @@ class SimulationServiceRay(SimulationService):
                                     k8s_client.V1EnvVar(name="AWS_REGION", value=settings.batch_region),
                                     k8s_client.V1EnvVar(name="AWS_STS_REGIONAL_ENDPOINTS", value="regional"),
                                     k8s_client.V1EnvVar(name="NXF_ANSI_LOG", value="false"),
+                                    # The head RESOLVES the composite, so it needs the
+                                    # workspace's own core builder and import root -- the
+                                    # generic core registers only process-bigraph's base
+                                    # types, and a nested Composite then fails to realize
+                                    # (`no link found at address: local:composite`).
+                                    # These live in PBG_RUNNER_ENV for the chain/Ray
+                                    # paths (#359), which a K8s Job never sees; §Phase 0
+                                    # of the plan predicted exactly this for PYTHONPATH.
+                                    k8s_client.V1EnvVar(name="PBG_CORE_BUILDER", value=V2ECOLI_CORE_BUILDER),
+                                    k8s_client.V1EnvVar(name="PYTHONPATH", value=V2ECOLI_DIR),
                                 ],
                                 resources=k8s_client.V1ResourceRequirements(
                                     requests={"cpu": "500m", "memory": "1Gi"},

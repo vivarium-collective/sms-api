@@ -66,7 +66,7 @@ def _assert_rendered(outdir: Path) -> None:
         )
 
 
-def _load_run_pbg() -> tuple[Any, Any]:
+def _load_run_pbg() -> tuple[Any, Any, Any]:
     """Import ``run_pbg``'s resolver, in-process OR as a staged sibling script.
 
     This module runs in two places, and only one of them has ``viva_api``:
@@ -84,7 +84,7 @@ def _load_run_pbg() -> tuple[Any, Any]:
     different name.
     """
     try:
-        from viva_api.compose.run_pbg import _build_core, _resolve_document
+        from viva_api.compose.run_pbg import _build_core, _resolve_document, _workspace_core
     except ModuleNotFoundError:
         here = str(Path(__file__).resolve().parent)
         if here not in sys.path:
@@ -95,6 +95,7 @@ def _load_run_pbg() -> tuple[Any, Any]:
             from run_pbg import (  # type: ignore[no-redef,import-not-found]
                 _build_core,
                 _resolve_document,
+                _workspace_core,
             )
         except ModuleNotFoundError as exc:  # pragma: no cover - staging bug
             raise SystemExit(
@@ -102,7 +103,7 @@ def _load_run_pbg() -> tuple[Any, Any]:
                 f"viva_api.compose.run_pbg nor staged beside {__file__}. The dispatcher "
                 f"must stage BOTH scripts; see stage_render_nf."
             ) from exc
-    return _build_core, _resolve_document
+    return _build_core, _resolve_document, _workspace_core
 
 
 def render(
@@ -131,9 +132,23 @@ def render(
     from process_bigraph import Composite
     from process_bigraph.nextflow_deploy import deploy
 
-    _build_core, _resolve_document = _load_run_pbg()
+    _build_core, _resolve_document, _workspace_core = _load_run_pbg()
 
-    core = _build_core()
+    # EXACTLY run_pbg's own selection (run_pbg.py:688). The generic core registers
+    # only process-bigraph's base types plus the emitter links; a workspace's own
+    # builder registers much more -- v2ecoli's registers ECOLI_TYPES and several
+    # process/step links. Addresses resolve dynamically, but registered TYPES do
+    # not, so building against the generic core fails on a document that uses
+    # them: `no link found at address: {'protocol': 'local', 'data': 'composite'}`,
+    # which is a nested Composite -- i.e. every sub-workflow this path exists to
+    # emit.
+    #
+    # Tested against None explicitly rather than `or`: a Core is a registry-ish
+    # object that may define __bool__/__len__, and `or` would silently discard a
+    # valid-but-empty one. Same reasoning as run_pbg's comment there.
+    core = _workspace_core()
+    if core is None:
+        core = _build_core()
     document, core = _resolve_document(None, composite_id, overrides or {}, core)
     composite = Composite(document, core=core)
 

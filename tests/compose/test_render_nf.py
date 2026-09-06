@@ -184,8 +184,8 @@ def test_render_nf_resolves_run_pbg_without_viva_api(tmp_path: Path) -> None:
         assert spec is not None and spec.loader is not None
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)  # module scope must not need viva_api
-        build_core, resolve_document = mod._load_run_pbg()
-        assert callable(build_core) and callable(resolve_document)
+        build_core, resolve_document, workspace_core = mod._load_run_pbg()
+        assert callable(build_core) and callable(resolve_document) and callable(workspace_core)
     finally:
         sys.meta_path.pop(0)
         sys.path.remove(str(staged))
@@ -229,3 +229,36 @@ def test_render_nf_says_what_is_missing_when_run_pbg_was_not_staged(tmp_path: Pa
     finally:
         sys.meta_path.pop(0)
         sys.modules.update(saved)
+
+
+def test_render_prefers_the_workspace_core_over_the_generic_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """render_nf must make run_pbg's OWN core choice, not half of it.
+
+    It called `_build_core()` directly, which skips `_workspace_core()` and so
+    ignores PBG_CORE_BUILDER entirely. Everything resolved except documents
+    using workspace-registered TYPES -- addresses resolve dynamically, types do
+    not -- so it failed only on nested Composites, i.e. only on the sub-workflow
+    emission this path is for.
+    """
+    import viva_api.compose.render_nf as rn
+
+    calls: list[str] = []
+
+    def _fake_workspace() -> object:
+        calls.append("workspace")
+        return object()
+
+    def _fake_generic() -> object:  # pragma: no cover - must NOT be reached
+        calls.append("generic")
+        return object()
+
+    monkeypatch.setattr(rn, "_load_run_pbg", lambda: (_fake_generic, _fake_resolve, _fake_workspace))
+
+    def _fake_resolve(_in: object, _cid: str, _ov: dict[str, Any], core: object) -> tuple[dict[str, Any], object]:
+        return ({}, core)
+
+    with pytest.raises(Exception):  # noqa: B017 - Composite({}) is not the point
+        rn.render("some.composite", tmp_path, executor="local")
+    assert calls == ["workspace"], "the generic core must not be built when a workspace one exists"
