@@ -1130,6 +1130,7 @@ class SimulationServiceRay(SimulationService):
         executor: str,
         launch: bool,
         outdir: str,
+        pbg_runner_s3_uri: str,
         nf_params: dict[str, Any] | None = None,
         resources: dict[str, dict[str, Any]] | None = None,
         work_dir: str | None = None,
@@ -1176,6 +1177,11 @@ class SimulationServiceRay(SimulationService):
         return (
             f"cd {V2ECOLI_DIR}"
             f" && aws s3 cp {shlex.quote(runner_s3_uri)} /tmp/render_nf.py"
+            # render_nf reuses run_pbg's resolver, and the simulator image has no
+            # `viva_api` -- so the sibling it imports has to be staged too, into
+            # the SAME directory. Staging only render_nf fails at import, after a
+            # successful pull and a clean start.
+            f" && aws s3 cp {shlex.quote(pbg_runner_s3_uri)} /tmp/run_pbg.py"
             f" && python /tmp/render_nf.py"
             f" --composite-id {shlex.quote(composite_id)}"
             f" --outdir {shlex.quote(outdir)}"
@@ -1232,6 +1238,7 @@ class SimulationServiceRay(SimulationService):
                 "ServiceAccount to submit Batch tasks), but k8s_job_namespace is not configured"
             )
         runner_s3_uri = await self.stage_render_nf(experiment_id)
+        pbg_runner_s3_uri = await self.stage_runner(experiment_id)
         executor = str(nf_dispatch.get("executor", "local"))
         nf_params: dict[str, Any] | None = None
         work_dir = nf_dispatch.get("work_dir")
@@ -1247,6 +1254,7 @@ class SimulationServiceRay(SimulationService):
             work_dir = work_dir or nf_params["work_dir"]
         command = self._render_nf_command(
             runner_s3_uri=runner_s3_uri,
+            pbg_runner_s3_uri=pbg_runner_s3_uri,
             composite_id=str(composite_id),
             params=nf_dispatch.get("params"),
             executor=executor,

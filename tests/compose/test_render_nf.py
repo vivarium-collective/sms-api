@@ -136,3 +136,96 @@ def test_executor_is_forwarded(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     deploy = _fake_deploy(tmp_path)
     _render(monkeypatch, tmp_path, deploy, executor="awsbatch")
     assert deploy.kwargs["executor"] == "awsbatch"
+
+
+# --- render_nf must survive where it actually RUNS -------------------------
+
+
+def test_render_nf_resolves_run_pbg_without_viva_api(tmp_path: Path) -> None:
+    """render_nf is staged into the SIMULATOR image, which has no `viva_api`.
+
+    It reuses run_pbg's resolver, and originally did so via
+    `from viva_api.compose.run_pbg import ...`. That import works in the api pod
+    and fails in the only place the script actually runs -- after a successful
+    5.8 GB pull and a clean container start, which is the most expensive
+    possible moment to find out.
+
+    This reproduces the staged layout exactly: both scripts as bare top-level
+    modules in one directory, with `viva_api` genuinely unimportable.
+    """
+    import importlib.util
+    import shutil
+    import sys
+
+    import viva_api.compose.render_nf as rn
+    import viva_api.compose.run_pbg as rp
+
+    staged = tmp_path / "staged"
+    staged.mkdir()
+    shutil.copy(rn.__file__, staged / "render_nf.py")
+    shutil.copy(rp.__file__, staged / "run_pbg.py")
+
+    class _BlockVivaApi:
+        def find_module(self, name: str, path: object = None) -> object:
+            return self if name == "viva_api" or name.startswith("viva_api.") else None
+
+        def find_spec(self, name: str, path: object = None, target: object = None) -> None:
+            if name == "viva_api" or name.startswith("viva_api."):
+                raise ModuleNotFoundError(f"No module named {name!r}")
+            return None
+
+    saved_modules = {k: v for k, v in sys.modules.items() if k.startswith("viva_api")}
+    for k in saved_modules:
+        del sys.modules[k]
+    sys.meta_path.insert(0, _BlockVivaApi())
+    sys.path.insert(0, str(staged))
+    try:
+        spec = importlib.util.spec_from_file_location("render_nf_staged", staged / "render_nf.py")
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # module scope must not need viva_api
+        build_core, resolve_document = mod._load_run_pbg()
+        assert callable(build_core) and callable(resolve_document)
+    finally:
+        sys.meta_path.pop(0)
+        sys.path.remove(str(staged))
+        sys.modules.update(saved_modules)
+
+
+def test_render_nf_says_what_is_missing_when_run_pbg_was_not_staged(tmp_path: Path) -> None:
+    """Staging only render_nf is a dispatcher bug; the error should name it."""
+    import importlib.util
+    import shutil
+    import sys
+
+    import viva_api.compose.render_nf as rn
+
+    staged = tmp_path / "lonely"
+    staged.mkdir()
+    shutil.copy(rn.__file__, staged / "render_nf.py")  # run_pbg deliberately absent
+
+    class _BlockAll:
+        def find_spec(self, name: str, path: object = None, target: object = None) -> None:
+            if name == "viva_api" or name.startswith("viva_api."):
+                raise ModuleNotFoundError(f"No module named {name!r}")
+            return None
+
+    # `run_pbg` must go too: a previous test imports it as a TOP-LEVEL module,
+    # and a cached entry would satisfy the fallback and mask the failure.
+    saved = {k: v for k, v in sys.modules.items() if k.startswith("viva_api") or k == "run_pbg"}
+    for k in saved:
+        del sys.modules[k]
+    sys.meta_path.insert(0, _BlockAll())
+    try:
+        spec = importlib.util.spec_from_file_location("render_nf_lonely", staged / "render_nf.py")
+        assert spec is not None and spec.loader is not None
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        import pytest as _pytest
+
+        with _pytest.raises(SystemExit, match="stage_render_nf"):
+            mod._load_run_pbg()
+    finally:
+        sys.meta_path.pop(0)
+        sys.modules.update(saved)

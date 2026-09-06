@@ -94,6 +94,7 @@ def _command(**dispatch: Any) -> str:
             executor=dispatch.get("executor", "local"),
             launch=dispatch.get("launch", False),
             outdir="/app/v2ecoli/nf-render",
+            pbg_runner_s3_uri="s3://b/exp/run_pbg.py",
             nf_params=dispatch.get("nf_params"),
             resources=dispatch.get("resources"),
             work_dir=dispatch.get("work_dir"),
@@ -239,6 +240,7 @@ async def _dispatch(**dispatch: Any) -> tuple[Any, MagicMock]:
     with (
         patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
         patch.object(service, "stage_render_nf", new=AsyncMock(return_value="s3://b/e/render_nf.py")),
+        patch.object(service, "stage_runner", new=AsyncMock(return_value="s3://b/e/run_pbg.py")),
     ):
         job_id = await service._submit_nextflow_dispatch(
             sim, _db(), {"composite_id": "v2ecoli.composites.workflow_nf", **dispatch}
@@ -284,6 +286,7 @@ async def test_head_job_name_is_a_valid_dns_label() -> None:
     with (
         patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
         patch.object(service, "stage_render_nf", new=AsyncMock(return_value="s3://b/e/r.py")),
+        patch.object(service, "stage_runner", new=AsyncMock(return_value="s3://b/e/run_pbg.py")),
     ):
         job_id = await service._submit_nextflow_dispatch(sim, _db(), {"composite_id": "v2ecoli.composites.workflow_nf"})
     assert _re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", job_id.value), job_id.value
@@ -335,3 +338,15 @@ def test_command_preserves_the_exit_code_before_staging_out() -> None:
 
 def test_default_command_stages_nothing() -> None:
     assert "NF_EXIT" not in _command()
+
+
+def test_command_stages_run_pbg_beside_render_nf() -> None:
+    """render_nf imports run_pbg's resolver, and the simulator image has no
+    `viva_api`. Fetching only render_nf fails at import -- after a successful
+    5.8 GB pull and a clean start."""
+    cmd = _command()
+    assert "aws s3 cp s3://b/exp/render_nf.py /tmp/render_nf.py" in cmd
+    staged_runner = "/tmp/run_pbg.py"  # noqa: S108  (a path in a container, not a local temp file)
+    assert f"aws s3 cp s3://b/exp/run_pbg.py {staged_runner}" in cmd
+    # Same directory: the fallback import resolves from render_nf's own dir.
+    assert cmd.index(staged_runner) < cmd.index("python /tmp/render_nf.py")

@@ -66,6 +66,45 @@ def _assert_rendered(outdir: Path) -> None:
         )
 
 
+def _load_run_pbg() -> tuple[Any, Any]:
+    """Import ``run_pbg``'s resolver, in-process OR as a staged sibling script.
+
+    This module runs in two places, and only one of them has ``viva_api``:
+
+    * in the api pod, as ``viva_api.compose.render_nf`` -- the package import works;
+    * **staged into the SIMULATOR image** as a bare ``/tmp/render_nf.py``, where
+      ``viva_api`` is not installed and never will be.
+
+    ``run_pbg`` is deliberately stdlib-only at module scope for exactly this
+    reason, and is staged beside this file. So fall back to importing it as a
+    top-level module from this file's own directory.
+
+    The package import is tried FIRST so that in-process callers get the same
+    module object the rest of the app uses, rather than a second copy under a
+    different name.
+    """
+    try:
+        from viva_api.compose.run_pbg import _build_core, _resolve_document
+    except ModuleNotFoundError:
+        here = str(Path(__file__).resolve().parent)
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        try:
+            # Resolvable only in the STAGED layout, where run_pbg.py sits beside
+            # this file; mypy cannot see a module that exists only at runtime.
+            from run_pbg import (  # type: ignore[no-redef,import-not-found]
+                _build_core,
+                _resolve_document,
+            )
+        except ModuleNotFoundError as exc:  # pragma: no cover - staging bug
+            raise SystemExit(
+                f"render_nf: could not import run_pbg. It is neither installed as "
+                f"viva_api.compose.run_pbg nor staged beside {__file__}. The dispatcher "
+                f"must stage BOTH scripts; see stage_render_nf."
+            ) from exc
+    return _build_core, _resolve_document
+
+
 def render(
     composite_id: str,
     outdir: Path,
@@ -92,7 +131,7 @@ def render(
     from process_bigraph import Composite
     from process_bigraph.nextflow_deploy import deploy
 
-    from viva_api.compose.run_pbg import _build_core, _resolve_document
+    _build_core, _resolve_document = _load_run_pbg()
 
     core = _build_core()
     document, core = _resolve_document(None, composite_id, overrides or {}, core)
