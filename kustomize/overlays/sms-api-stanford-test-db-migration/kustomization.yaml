@@ -19,7 +19,10 @@ images:
     # multi_node_composite_id migration, 9c2e6b1f4a73) -- the app was deployed
     # slightly ahead of this Job (real, caught live via UndefinedColumnError
     # spam in the api pod's own logs, fixed the same few minutes).
-    newTag: 0.9.104
+    newTag: 0.9.105
+    # 2026-09-06: 0.9.104 -> 0.9.105, matching the app overlay bump (PR#444's
+    # mbp_dispatch Run 1 param threading) -- no new migration this release,
+    # kept in lockstep per the standing version-sync checklist.
     # 2026-09-06: 0.9.103 -> 0.9.104, matching the app overlay bump (PR#442's
     # ParcaOptions.include_violacein_reactions field) -- no new migration this
     # release, kept in lockstep per the standing version-sync checklist.
