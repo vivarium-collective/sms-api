@@ -833,9 +833,14 @@ class TestSubmitMultiNodeComposite:
         )
         simulation = await database_service.insert_simulation(sim_request=experiment_request)
 
-        mock_batch = _fake_multi_node_batch(["parca-7", "composite-7"])
+        # Only ONE id: a variant cache is expected to already be staged, so
+        # the guard added for backlog items 105/106 must skip the plain ParCa
+        # rebuild below rather than run one -- see the two dedicated guard
+        # tests right after this one.
+        mock_batch = _fake_multi_node_batch(["composite-7"])
         fake_file_service = AsyncMock()
         fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[MagicMock()])  # cache already staged
 
         service = SimulationServiceRay()
         with (
@@ -851,6 +856,97 @@ class TestSubmitMultiNodeComposite:
 
         mock_cache_s3_uri.assert_called_once()
         assert mock_cache_s3_uri.call_args.kwargs.get("variant") == "cd2-run2-j3"
+        assert mock_batch.submit_job.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_cache_variant_missing_content_fails_loud_instead_of_building_stock(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """The real bug this guard exists to close (backlog items 105/106,
+        sms-ecoli#210, viva-api Dispatch 339:Run 1 / Dispatch 340:Run 2):
+        this path used to run a plain `_parca_command()` unconditionally,
+        with no check for pre-existing content, silently writing a stock/
+        un-perturbed cache into a freshly-built commit's own cache_variant
+        slot -- indistinguishable from a real strain's cache short of
+        inspecting cache_version.json's own build_params by hand. A caller-
+        requested variant cache that hasn't actually been staged yet must
+        fail loud, not silently manufacture a substitute."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {},
+                "cache_variant": "cd2-run1-k4-candidate-v1-lambda050",
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch([])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[])  # nothing staged at this commit yet
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+            pytest.raises(ValueError, match="cd2-run1-k4-candidate-v1-lambda050"),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-missing"
+            )
+
+        # Fails BEFORE submitting anything -- no partial dispatch, no stock
+        # cache silently built under the candidate's own name.
+        mock_batch.submit_job.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cache_variant_existing_content_skips_parca_job_entirely(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """The other half of the guard: when a variant cache genuinely IS
+        already staged, the composite job must submit directly -- no parca
+        job, no dependsOn -- not merely fewer submit_job calls."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {},
+                "cache_variant": "cd2-run2-j3-candidate-v1-lambda075",
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["composite-only"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[MagicMock()])
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            job_id = await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-existing"
+            )
+
+        assert job_id == JobId.ray("composite-only")
+        assert mock_batch.submit_job.call_count == 1
+        (composite_call,) = mock_batch.submit_job.call_args_list
+        assert "dependsOn" not in composite_call.kwargs
 
     @pytest.mark.asyncio
     async def test_omitted_cache_variant_is_byte_identical_to_before(
