@@ -97,21 +97,36 @@ def _assert_compiles(outdir: Path) -> None:
     """
     import shutil
     import subprocess
+    import tempfile
 
     nextflow = shutil.which("nextflow")
     if nextflow is None:
         return
-    probe = subprocess.run(  # noqa: S603  (fixed argv, resolved binary)
-        [nextflow, "run", "main.nf", "-profile", "local", "-preview"],
-        cwd=str(outdir),
-        capture_output=True,
-        text=True,
-        # Nextflow's banner is UTF-8; under a C/POSIX locale -- which a container
-        # very often has -- `text=True` decodes as ascii and raises
-        # UnicodeDecodeError, turning a passing render into a crash.
-        encoding="utf-8",
-        errors="replace",
-    )
+    # Run from a THROWAWAY cwd, never from `outdir`.
+    #
+    # Nextflow writes `.nextflow/history` into its LAUNCH directory, and a bare
+    # `-resume` resumes the LAST entry there. Launching this probe in `outdir`
+    # appended the probe's own run -- with its own session id -- after the real
+    # campaign's. Nextflow seeds every task hash with `session.uniqueId`, so the
+    # next `-resume` adopted the PROBE's session, every hash changed, and a
+    # completed 262 MB ParCa was re-run. Measured: the saved history's last row
+    # was `nextflow run main.nf -profile local -preview`.
+    #
+    # `projectDir` follows the SCRIPT's location, not the cwd, so an absolute
+    # main.nf keeps `file("${projectDir}/…config.json")` resolving while the
+    # session artefacts land somewhere we throw away.
+    with tempfile.TemporaryDirectory(prefix="nf-preview-") as probe_cwd:
+        probe = subprocess.run(  # noqa: S603  (fixed argv, resolved binary)
+            [nextflow, "run", str((outdir / "main.nf").resolve()), "-profile", "local", "-preview"],
+            cwd=probe_cwd,
+            capture_output=True,
+            text=True,
+            # Nextflow's banner is UTF-8; under a C/POSIX locale -- which a
+            # container very often has -- `text=True` decodes as ascii and raises
+            # UnicodeDecodeError, turning a passing render into a crash.
+            encoding="utf-8",
+            errors="replace",
+        )
     if probe.returncode != 0:
         raise SystemExit(f"render_nf: the rendered workflow does not compile.\n{(probe.stdout + probe.stderr)[-2000:]}")
 

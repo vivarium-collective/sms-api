@@ -339,3 +339,33 @@ def test_a_workflow_that_does_not_compile_is_a_failed_render(monkeypatch: pytest
 
     with pytest.raises(SystemExit, match="does not compile"):
         render("some.composite", tmp_path, executor="local")
+
+
+@pytest.mark.skipif(shutil.which("nextflow") is None, reason="nextflow binary not on PATH")
+def test_the_compile_probe_leaves_no_session_behind(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The probe must not write `.nextflow/` into the render directory.
+
+    Nextflow appends every run to `.nextflow/history` in its LAUNCH dir, and a
+    bare `-resume` resumes the LAST entry. When this probe ran in `outdir` it
+    appended itself after the real campaign, so `-resume` adopted the PROBE's
+    session id -- which seeds every task hash -- and a completed 262 MB ParCa
+    was re-run. This is the regression test for that.
+    """
+    _install_fake_pbg(monkeypatch, lambda *a, **k: {"returncode": 0})
+    (tmp_path / "main.nf").write_text('process x {\n    script:\n    """\n    echo hi\n    """\n}\nworkflow { x() }\n')
+    (tmp_path / "nextflow.config").write_text("profiles { local { process { executor='local' } } }\n")
+    monkeypatch.setattr(
+        "viva_api.compose.render_nf._load_run_pbg",
+        lambda: (
+            lambda: object(),
+            lambda _i, _c, _o, core: ({"state": {}}, core),
+            lambda: object(),
+        ),
+    )
+    from viva_api.compose.render_nf import render
+
+    render("some.composite", tmp_path, executor="local")
+    assert not (tmp_path / ".nextflow").exists(), (
+        "the probe polluted the render dir's session; a later -resume will adopt ITS session id"
+    )
+    assert not (tmp_path / ".nextflow.log").exists()
