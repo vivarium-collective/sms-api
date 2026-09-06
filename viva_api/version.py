@@ -875,7 +875,19 @@
 #           inject.py), not by anything viva-api's own dispatch command
 #           construction builds; None (the default) preserves v2ecoli's own
 #           auto-detect fallback for every existing caller.
-__version__ = "0.9.104"
+#           0.9.105 -- _mbp_tracked_command/_submit_mbp_tracked_dispatch (item 116)
+#           gain 7 new optional params (seed, cells_per_agent,
+#           initial_glucose_mM, initial_ammonium_mM, injected_processes,
+#           reactor_config, aeration_schedule) -- Dispatch 370's own request
+#           only exercised variant/max_generations; Chris's real CD2 Run 1
+#           coupled-arm spec (sms-ecoli#210, 2026-09-06) additionally needs a
+#           per-lineage --seed (hive-partitions the parquet output; a
+#           mismatched/repeated seed across dispatches silently MERGES rather
+#           than erroring -- real data loss, not just a missing feature) and 3
+#           file-path arguments the runner enforces as absolute, given here as
+#           paths relative to V2ECOLI_DIR and resolved once server-side. All 7
+#           omitted (every existing caller) is byte-for-byte unaffected.
+__version__ = "0.9.105"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
