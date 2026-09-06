@@ -1002,10 +1002,11 @@ Two consequences worth carrying into Phase 4:
   override, so no job-def change is needed to bound a runaway lineage.
 - **There is a 60-second floor.** Any `time` below that is silently raised.
 
-> **Version skew to resolve.** Phase 0 ran **25.04.3** locally; the only Nextflow we
-> actually ship anywhere is **25.10.2**, baked into the vEcoli submit image. Pin one
-> deliberately in 11.3's new image rather than inheriting whichever the Dockerfile's
-> `ARG` default happens to be.
+> **Version skew — ✅ CLOSED 2026-09-05.** Phase 0 ran **25.04.3** locally; the image
+> ships **25.10.2**. Both are now checked: the profile parses and *fully resolves*
+> under 25.10.2, run inside the real head image on Batch — `containerOptions` came
+> back `--env AWS_DEFAULT_REGION=us-gov-west-1 --env PYTHONPATH=/app/v2ecoli`, with
+> the real queue, ECR URI, GovCloud endpoint and S3 work dir all interpolated.
 
 ### 11.1b The same method also settles risk 4 — and the answer is worse than "no retry"
 
@@ -1030,6 +1031,41 @@ outer DAG" is only true once the second row above is emitted** — it is a confi
 property of using Nextflow.
 
 ### 11.2 `batch-submit` may submit to `batch_amd64_queue` and write the work dir — **CONFIRMED (effect-checked)**
+
+> ### ⛔ 11.2b — this checked the right role for the *other* head (2026-09-05)
+>
+> Everything below is true of `batch-submit`, the **api pod's** IRSA identity —
+> which is what vEcoli's Nextflow head runs as, because that head is an **EKS K8s
+> Job** with `serviceAccountName: batch-submit` (§11.3b says exactly this).
+>
+> But viva-api#428 implemented the v2ecoli head as a **Batch container job**, and a
+> Batch job's identity is its job definition's `jobRoleArn` — here
+> `smsvpctest-ray-mnp-job`. Effect-checked from inside a container job on that very
+> job definition:
+>
+> ```
+> assumed-role/smsvpctest-ray-mnp-job/…
+> batch:SubmitJob              AccessDeniedException
+> batch:RegisterJobDefinition  AccessDeniedException
+> batch:DescribeJobQueues      AccessDeniedException
+> s3 work dir                  OK (put+delete)
+> ```
+>
+> **Not even read access to Batch.** The head would have pulled its image, parsed
+> its config, started cleanly, and failed at the first task submission.
+> `RegisterJobDefinition` matters independently — nf-amazon auto-registers a job
+> definition per container image, so a `SubmitJob` grant alone is insufficient.
+>
+> No role viva-api may `iam:PassRole` fixes it: of the four, two carry no
+> `batch:*`, and the two that do (the IRSA submit role, the compute role) trust the
+> EKS OIDC provider and `ec2.amazonaws.com` respectively, so neither can be an
+> ECS/Batch task role at all. Widening `ray-mnp-job` in sms-cdk would let *every*
+> Ray and chain-dispatch job submit Batch jobs to fix one that should.
+>
+> **Fixed by viva-api#435** — the head becomes a K8s Job with
+> `serviceAccountName: batch-submit`, i.e. the arrangement §11.3b already
+> described. The lesson generalises: *the identity follows the substrate*, so
+> moving where a process runs re-opens every permission question about it.
 
 Not read off the policy — executed from inside the running api pod under the pod's own
 IRSA identity (`kubectl exec … /app/.venv/bin/python`):
@@ -1153,7 +1189,7 @@ from passing. Nothing in this plan has yet run on AWS Batch.
 | **Phase 1** | process-bigraph **#197** (renderer, `run_composite`, `run_step` restored to `main`), **#201** (nested `Composite` → sub-workflow, plus per-node config threading), **#203** (`deploy()` gains `-resume`, `report`/`trace`/`weblog_url`, and scopes the `sys.executable` pin to `executor='local'`). Released as **v1.8.4** (#202) |
 | **Phase 2** | v2ecoli **#694** — `LineageStep` (a whole lineage as one atomic task) and `workflow_nf` (the campaign DAG). Reviewed by @eagmon; his review caught two defects that would have surfaced first on real infrastructure |
 | **Phase 3** | viva-api **#427** (`render_nf.py`, the compiler) and **#428** (`nextflow_dispatch`, the per-request axis) |
-| **Phase 4** | process-bigraph **#204** (the `awsbatch` profile, replacing the stub; plus `deploy(config=…)` and `container_env`) and viva-api **#433** (its params, derived from settings). Both green |
+| **Phase 4** | process-bigraph **#204** (the `awsbatch` profile, replacing the stub; plus `deploy(config=…)` and `container_env`), viva-api **#433** (its params, derived from settings) and **#435** (the head moves to a K8s Job — see §11.2b; without it the head cannot submit a single task) |
 | **Prerequisite (§11.3)** | viva-api **#423** built the head-image branch, **#426** made it requestable. `v2ecoli:266ed00-submit` exists and is **verified on Batch**: OpenJDK 17.0.20.1 and Nextflow 25.10.2 both answering, rc=0 |
 
 ### The gather works, and go/no-go 4 renders at Run 4 scale
@@ -1263,6 +1299,14 @@ map — `params { x = {'a': 1} }` fails to compile and takes the **whole config*
 reported as a column number in a generated script. Any `dict` param now raises naming the
 parameter. A `list` is fine; Python and Groovy list literals coincide. Both checked against
 the real binary.
+
+### One thing Phase 4 got wrong, and how it surfaced
+
+Asking "can we test any of this on AWS before the upstream review lands?" is what
+found §11.2b — an IAM read, then a single probe container that submitted no task
+job and cost nothing. Had it not been asked, the first real dispatch would have
+failed at its first submission, after a green pull, a parsed config and a clean
+start. **§8's go/no-go discipline paid for itself before a single gate ran.**
 
 ### What is left, and it is all execution
 
