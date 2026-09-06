@@ -3205,6 +3205,204 @@ class TestSubmitContainer:
         assert call.kwargs["propagateTags"] is True
 
 
+class TestMbpTrackedCommand:
+    """_mbp_tracked_command: Run 1's real missing-output fix (Alex's Option 1
+    decision, 2026-09-06) -- a run_mbp_tracked.py dispatch, e.g. reactor_bird_coupled."""
+
+    def test_includes_variant_and_all_optional_flags_when_set(self) -> None:
+        service = SimulationServiceRay()
+        cmd = service._mbp_tracked_command(
+            variant="reactor-bird-coupled-batch-multigen",
+            max_generations=3,
+            duration_sec=7200,
+            chunk=5,
+            emitter="parquet",
+            cache_dir="/app/v2ecoli/out/cache",
+            single_daughters=True,
+            carbon_exhaustion_arrest=True,
+        )
+        assert "cd /app/v2ecoli" in cmd
+        assert "V2E_STUDIES_ROOT=/app/v2ecoli/.pbg/runs/phase0-xarray/studies" in cmd
+        assert "python scripts/run_mbp_tracked.py" in cmd
+        assert "--variant reactor-bird-coupled-batch-multigen" in cmd
+        assert "--emitter parquet" in cmd
+        assert "--cache-dir /app/v2ecoli/out/cache" in cmd
+        assert "--max-generations 3" in cmd
+        assert "--duration-sec 7200" in cmd
+        assert "--chunk 5" in cmd
+        assert "--carbon-exhaustion-arrest" in cmd
+        assert "--no-single-daughters" not in cmd
+
+    def test_omitted_optionals_produce_no_flags_and_default_single_daughters_true(self) -> None:
+        service = SimulationServiceRay()
+        cmd = service._mbp_tracked_command(
+            variant="aggregator-cpa1",
+            max_generations=None,
+            duration_sec=None,
+            chunk=None,
+            emitter="parquet",
+            cache_dir="/app/v2ecoli/out/cache",
+            single_daughters=True,
+            carbon_exhaustion_arrest=False,
+        )
+        assert "--max-generations" not in cmd
+        assert "--duration-sec" not in cmd
+        assert "--chunk" not in cmd
+        assert "--carbon-exhaustion-arrest" not in cmd
+        assert "--no-single-daughters" not in cmd
+
+    def test_single_daughters_false_adds_no_single_daughters_flag(self) -> None:
+        service = SimulationServiceRay()
+        cmd = service._mbp_tracked_command(
+            variant="aggregator-cpa1",
+            max_generations=None,
+            duration_sec=None,
+            chunk=None,
+            emitter="sqlite",
+            cache_dir="/app/v2ecoli/out/cache",
+            single_daughters=False,
+            carbon_exhaustion_arrest=False,
+        )
+        assert "--no-single-daughters" in cmd
+        assert "--emitter sqlite" in cmd
+
+
+@pytest.mark.asyncio
+class TestSubmitMbpTrackedDispatch:
+    """_submit_mbp_tracked_dispatch + its routing off SimulationConfig.mbp_dispatch
+    (backlog item 105/106's own Run 1 sibling gap, Alex's Option 1 decision,
+    2026-09-06). Mirrors TestSubmitMultiNodeComposite's own cache_variant guard
+    tests exactly (viva-api#437's parity discipline, applied at build time)."""
+
+    @pytest.mark.asyncio
+    async def test_routes_via_mbp_dispatch_before_other_shapes(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "mbp_dispatch",
+            {"variant": "reactor-bird-coupled-batch-multigen", "max_generations": 3},
+        )
+        experiment_request.config.generations = 5  # would satisfy chain-dispatch's own condition
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_container_batch(["mbp-parca-1", "mbp-tracked-1"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            job_id = await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mbp"
+            )
+
+        assert job_id == JobId.ray("mbp-tracked-1")
+        assert mock_batch.submit_job.call_count == 2
+        parca_call, mbp_call = mock_batch.submit_job.call_args_list
+        assert "dependsOn" not in parca_call.kwargs  # first job, nothing to depend on
+        assert mbp_call.kwargs["dependsOn"] == [{"jobId": "mbp-parca-1", "type": "SEQUENTIAL"}]
+        env = _container_env_of(mbp_call)
+        assert "--variant reactor-bird-coupled-batch-multigen" in env["CONTAINER_JOB_CMD"]
+        assert "--max-generations 3" in env["CONTAINER_JOB_CMD"]
+        assert mbp_call.kwargs["tags"]["Variant"] == "reactor-bird-coupled-batch-multigen"
+
+    @pytest.mark.asyncio
+    async def test_missing_variant_raises_before_submitting_anything(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        setattr(experiment_request.config, "mbp_dispatch", {})  # noqa: B010
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_container_batch([])
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            pytest.raises(ValueError, match="mbp_dispatch.variant is required"),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mbp-missing"
+            )
+        mock_batch.submit_job.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cache_variant_missing_content_fails_loud_instead_of_building_stock(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """The same viva-api#437 guard, applied here at build time rather than
+        found later (the standing parity-check discipline) -- a variant cache
+        is meant to already exist; this path never builds one itself."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "mbp_dispatch",
+            {"variant": "reactor-bird-coupled-batch-multigen", "cache_variant": "cd2-run1-k4-candidate-v1-lambda050"},
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_container_batch([])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[])
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+            pytest.raises(ValueError, match="cd2-run1-k4-candidate-v1-lambda050"),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mbp-guard"
+            )
+        mock_batch.submit_job.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cache_variant_existing_content_skips_parca_job(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "mbp_dispatch",
+            {"variant": "reactor-bird-coupled-batch-multigen", "cache_variant": "cd2-run1-k4-candidate-v1-lambda050"},
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_container_batch(["mbp-tracked-only"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[MagicMock()])
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            job_id = await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mbp-existing"
+            )
+
+        assert job_id == JobId.ray("mbp-tracked-only")
+        assert mock_batch.submit_job.call_count == 1
+        (call,) = mock_batch.submit_job.call_args_list
+        assert "dependsOn" not in call.kwargs
+
+
 @pytest.mark.asyncio
 class TestSubmitParcaJob:
     """submit_parca_job (backlog item 71): migrated from a 1-node MNP job to the

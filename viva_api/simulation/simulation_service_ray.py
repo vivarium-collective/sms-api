@@ -1158,6 +1158,154 @@ class SimulationServiceRay(SimulationService):
         # with describe_jobs regardless of which mechanism submitted it.
         return JobId.ray(job_id)
 
+    def _mbp_tracked_command(
+        self,
+        *,
+        variant: str,
+        max_generations: int | None,
+        duration_sec: int | None,
+        chunk: int | None,
+        emitter: str,
+        cache_dir: str,
+        single_daughters: bool,
+        carbon_exhaustion_arrest: bool,
+    ) -> str:
+        """The container command for a ``run_mbp_tracked.py`` dispatch (backlog item
+        105/106's own Run 1 sibling gap: the coupled composite's real missing-output
+        fix -- Alex's Option 1 decision, 2026-09-06).
+
+        ``run_mbp_tracked.py`` (v2ecoli#695) already lives in the image
+        (``scripts/run_mbp_tracked.py``) -- no runner staging needed here, unlike
+        ``run_pbg.py``/``render_nf.py``. ``V2E_STUDIES_ROOT`` is set to a path under
+        ``SIM_OUT_DIR``, the ONE directory the entrypoint actually syncs to S3 --
+        without this, a run's parquet lands under the image's own
+        ``REPO_ROOT/studies`` and is silently discarded on container exit (confirmed
+        root cause: Dispatch 322 ran ``reactor_bird_coupled`` cleanly for ~3h with
+        zero retrievable output for exactly this reason).
+
+        A prior fix attempt (declaring an emitter directly on the composite
+        generator) is structurally impossible for this composite --
+        ``_merge_emit_paths`` roots each declared path at its first segment as a
+        top-level store, and 3 of the 6 real paths (``listeners/mass/*``,
+        ``boundary/external/*``) live under ``agents/0/``, not top-level, so they
+        silently drop no matter what is declared (v2ecoli#700, closed/superseded).
+        ``run_mbp_tracked.py``'s own runtime emitter is the one mechanism confirmed
+        (locally, by Eran) to carry all 6 real paths and survive division.
+        """
+        max_gens_flag = f" --max-generations {int(max_generations)}" if max_generations is not None else ""
+        duration_flag = f" --duration-sec {int(duration_sec)}" if duration_sec is not None else ""
+        chunk_flag = f" --chunk {int(chunk)}" if chunk is not None else ""
+        daughters_flag = "" if single_daughters else " --no-single-daughters"
+        arrest_flag = " --carbon-exhaustion-arrest" if carbon_exhaustion_arrest else ""
+        studies_root = f"{SIM_OUT_DIR}/studies"
+        return (
+            f"cd {V2ECOLI_DIR}"
+            f" && V2E_STUDIES_ROOT={shlex.quote(studies_root)} python scripts/run_mbp_tracked.py"
+            f" --variant {shlex.quote(variant)}"
+            f" --emitter {shlex.quote(emitter)}"
+            f" --cache-dir {shlex.quote(cache_dir)}"
+            f"{max_gens_flag}{duration_flag}{chunk_flag}{daughters_flag}{arrest_flag}"
+        )
+
+    async def _submit_mbp_tracked_dispatch(
+        self,
+        ecoli_simulation: Simulation,
+        database_service: DatabaseService,
+        mbp_dispatch: dict[str, Any],
+        *,
+        correlation_id: str | None = None,
+    ) -> JobId:
+        """Dispatch a ``run_mbp_tracked.py`` variant remotely (Run 1's real
+        missing-output fix, Alex's Option 1 decision, 2026-09-06 -- see
+        ``_mbp_tracked_command``'s own docstring for why this mechanism and not a
+        declared-emitter composite edit).
+
+        Single-container job (matching ``reactor_bird_coupled``'s own confirmed
+        non-``ray:``-distributed, single-process nature) -- mirrors
+        ``_submit_nextflow_dispatch``'s exact shape, minus runner staging (the
+        script already lives in the image).
+
+        ``cache_variant`` mirrors the item105/106 guard (viva-api#437): a variant
+        cache is meant to already exist -- checked via S3 existence before
+        submitting anything, exactly like the multi-node-composite path, so this
+        new dispatch path does not reproduce the exact class of bug #437 fixed
+        there (the standing parity-check discipline, applied at build time rather
+        than found later). Omitted (every existing caller) preserves the plain
+        per-commit ParCa cache, byte-for-byte unaffected.
+        """
+        simulator = await database_service.get_simulator(simulator_id=ecoli_simulation.simulator_id)
+        if simulator is None:
+            raise ValueError(f"Simulator {ecoli_simulation.simulator_id} not found")
+
+        variant = mbp_dispatch.get("variant")
+        if not variant:
+            raise ValueError("mbp_dispatch.variant is required")
+
+        settings = get_settings()
+        commit = simulator.git_commit_hash
+        experiment_id = str(ecoli_simulation.config.experiment_id)
+        cache_variant = mbp_dispatch.get("cache_variant") or None
+        cache_s3 = self.cache_s3_uri(commit, variant=cache_variant)
+
+        job_def = self._ensure_container_job_def(self._image_uri(commit), commit)
+
+        base_tags = {
+            "Project": "v2ecoli-mbp-tracked",
+            "ExperimentId": experiment_id[:255],
+            "Variant": str(variant)[:255],
+            "Commit": str(commit)[:12],
+            "Team": getattr(settings, "cost_team_tag", None) or "covertlab",
+        }
+
+        parca_job_id: str | None
+        if cache_variant:
+            from viva_api.dependencies import get_file_service
+
+            file_service = get_file_service()
+            if file_service is None:
+                raise RuntimeError("FileService not initialized; cannot verify cache_variant staging.")
+            existing = await file_service.get_listing(S3FilePath(s3_path=Path(data_layout.key_from_uri(cache_s3))))
+            if not existing:
+                raise ValueError(
+                    f"cache_variant={cache_variant!r} has no staged ParCa cache at commit "
+                    f"{commit!r} ({cache_s3}). This dispatch path never builds a variant "
+                    f"cache itself -- build it first via POST /parca/new-gene-cache or an "
+                    f"external bridge sync, then retry."
+                )
+            parca_job_id = None
+        else:
+            parca_job_id = self._submit_container(
+                job_name=f"mbp-parca-{commit}-{_rand_suffix()}",
+                job_definition=job_def,
+                job_cmd=self._parca_command(),
+                out_s3=cache_s3,
+                out_dir=PARCA_CACHE_DIR,
+                tags={**base_tags, "Phase": "parca"},
+            )
+
+        command = self._mbp_tracked_command(
+            variant=str(variant),
+            max_generations=mbp_dispatch.get("max_generations"),
+            duration_sec=mbp_dispatch.get("duration_sec"),
+            chunk=mbp_dispatch.get("chunk"),
+            emitter=str(mbp_dispatch.get("emitter") or "parquet"),
+            cache_dir=PARCA_CACHE_DIR,
+            single_daughters=bool(mbp_dispatch.get("single_daughters", True)),
+            carbon_exhaustion_arrest=bool(mbp_dispatch.get("carbon_exhaustion_arrest", False)),
+        )
+        job_id = self._submit_container(
+            job_name=f"mbp-tracked-{experiment_id}-{_rand_suffix()}"[:128],
+            job_definition=job_def,
+            job_cmd=command,
+            out_s3=self._results_s3_uri(experiment_id),
+            out_dir=SIM_OUT_DIR,
+            stage_s3=cache_s3,
+            stage_dir=PARCA_CACHE_DIR,
+            depends_on=[parca_job_id] if parca_job_id else None,
+            tags={**base_tags, "Phase": "mbp_tracked"},
+        )
+        return JobId.ray(job_id)
+
     async def stage_runner(self, experiment_id: str) -> str:
         """Upload the generic run_pbg.py runner to S3 for this experiment; return its URI.
 
@@ -1915,6 +2063,19 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         if nf_dispatch is not None:
             return await self._submit_nextflow_dispatch(
                 ecoli_simulation, database_service, nf_dispatch, correlation_id=correlation_id
+            )
+
+        # Run 1's real missing-output fix (Alex's Option 1 decision, 2026-09-06):
+        # a run_mbp_tracked.py variant dispatch, e.g. reactor_bird_coupled. Checked
+        # here for the same reason nextflow_dispatch/multi_node_dispatch are --
+        # it carries no composite_id/generations shape that would otherwise
+        # satisfy a different branch's own routing condition, but checking early
+        # keeps every extra-field dispatch shape's own precedence explicit rather
+        # than incidental.
+        mbp_dispatch = getattr(config, "mbp_dispatch", None)
+        if mbp_dispatch is not None:
+            return await self._submit_mbp_tracked_dispatch(
+                ecoli_simulation, database_service, mbp_dispatch, correlation_id=correlation_id
             )
 
         mnp_dispatch = getattr(config, "multi_node_dispatch", None)

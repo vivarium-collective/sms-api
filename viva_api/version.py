@@ -846,7 +846,26 @@
 #           loud with a ValueError instead of fabricating a substitute.
 #           cache_variant=None (every other existing caller) is byte-for-byte
 #           unaffected.
-__version__ = "0.9.102"
+#           0.9.103 -- Run 1's real missing-output fix (Alex's Option 1
+#           decision, 2026-09-06): a new dispatch path, mbp_dispatch, invokes
+#           v2ecoli's own run_mbp_tracked.py remotely (e.g. the
+#           reactor-bird-coupled-batch-multigen variant) with
+#           V2E_STUDIES_ROOT pointed under SIM_OUT_DIR, the one directory the
+#           Ray entrypoint actually syncs to S3. Fixes Dispatch 322's own
+#           real symptom: reactor_bird_coupled ran cleanly for ~3h with zero
+#           retrievable output because its parquet landed under the image's
+#           own REPO_ROOT/studies instead. A prior declared-emitter fix
+#           attempt (v2ecoli#700) is structurally impossible for this
+#           composite -- 3 of 6 real paths live under agents/0/, not
+#           top-level, so _merge_emit_paths silently drops them regardless of
+#           what's declared; run_mbp_tracked.py's own runtime emitter is the
+#           one mechanism confirmed (locally) to carry all six and survive
+#           division. Single-container job (matching this composite's own
+#           non-ray:-distributed nature). cache_variant support mirrors the
+#           #437 guard from the start (the standing parity-check discipline,
+#           applied at build time): a variant cache must already exist,
+#           checked via S3 existence before submitting anything.
+__version__ = "0.9.103"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
