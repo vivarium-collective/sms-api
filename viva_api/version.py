@@ -865,7 +865,17 @@
 #           #437 guard from the start (the standing parity-check discipline,
 #           applied at build time): a variant cache must already exist,
 #           checked via S3 existence before submitting anything.
-__version__ = "0.9.103"
+#           0.9.104 -- ParcaOptions now declares include_violacein_reactions
+#           (bool | None). A real, tracked config (configs/
+#           pathway_expression_carina_final.json, CD2 Run 4) sets this field
+#           and used to fail SimulationConfig validation outright with
+#           extra_forbidden -- the exact class of gap new_genes/
+#           bundle_overrides were before they were declared (items 93/104).
+#           Genuinely consumed by v2ecoli's own injection pipeline (library/
+#           inject.py), not by anything viva-api's own dispatch command
+#           construction builds; None (the default) preserves v2ecoli's own
+#           auto-detect fallback for every existing caller.
+__version__ = "0.9.104"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in

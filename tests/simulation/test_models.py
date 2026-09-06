@@ -71,9 +71,44 @@ class TestParcaOptionsNewGenes:
             "intermediates_directory": "",
             "variable_elongation_transcription": True,
             "variable_elongation_translation": False,
+            "include_violacein_reactions": None,
         }
         opts = ParcaOptions(**full)  # type: ignore[arg-type]
         assert opts.new_genes == "off"
+
+
+class TestParcaOptionsIncludeViolaceinReactions:
+    """A real, tracked config (configs/pathway_expression_carina_final.json,
+    CD2 Run 4) sets this field and used to fail SimulationConfig validation
+    outright with extra_forbidden — the exact class of gap new_genes/
+    bundle_overrides were before they were declared (backlog items 93/104).
+    Genuinely consumed downstream by v2ecoli's own injection pipeline
+    (library/inject.py), not by anything in viva-api's own dispatch command
+    construction — declared here so the config survives validation; v2ecoli's
+    own auto-detect fallback (``if "include_violacein_reactions" not in cfg``)
+    still applies whenever a caller omits it."""
+
+    def test_survives_construction_when_true(self) -> None:
+        opts = ParcaOptions(include_violacein_reactions=True)
+        assert opts.include_violacein_reactions is True
+
+    def test_survives_through_a_full_simulation_config(self) -> None:
+        config = SimulationConfig(
+            experiment_id="exp-violacein",
+            parca_options={"include_violacein_reactions": True},  # type: ignore[arg-type]
+        )
+        assert config.parca_options.include_violacein_reactions is True
+
+    def test_defaults_to_none_not_false(self) -> None:
+        """None (not False) preserves v2ecoli's own auto-detect fallback for any
+        config that never mentions this field at all — a hardcoded False would
+        instead force it off, a real behavior change for existing callers.
+
+        model_post_init's own trim_attributes deletes any None-valued field
+        outright (same as every other unset-optional field on this model, e.g.
+        bundle_overrides) -- read via getattr, matching how viva-api's own
+        dispatch code reads it, not direct attribute access."""
+        assert getattr(ParcaOptions(), "include_violacein_reactions", None) is None
 
 
 @pytest.mark.asyncio
