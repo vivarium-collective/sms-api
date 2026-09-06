@@ -1,10 +1,10 @@
-import asyncio
+import inspect
 import logging
 
 from fastapi import HTTPException
 
-from viva_api.common.hpc.job_service import JobStatusUpdate
-from viva_api.common.models import JobBackend, JobId, JobStatus
+from viva_api.common.hpc.local_task_service import LocalTaskService
+from viva_api.common.models import JobBackend, JobStatus
 from viva_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO, RepoUrl
 from viva_api.dependencies import get_database_service, get_simulation_service_for_repo
 from viva_api.simulation.database_service import DatabaseService
@@ -59,44 +59,6 @@ async def get_simulator_versions() -> RegisteredSimulators:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-def _register_build_done_callback(
-    local_tasks: dict[str, asyncio.Task],  # type: ignore[type-arg]
-    task_id: str,
-    database_service: DatabaseService,
-    hpcrun_id: int,
-) -> None:
-    """Register asyncio done-callback to propagate build result to DB."""
-    task = local_tasks.get(task_id)
-    if task is None:
-        return
-    callback = lambda t: asyncio.ensure_future(  # noqa: E731
-        _update_build_status(t, database_service, hpcrun_id, task_id)
-    )
-    task.add_done_callback(callback)
-
-
-async def _update_build_status(
-    task: asyncio.Task,  # type: ignore[type-arg]
-    db: DatabaseService,
-    hpcrun_id: int,
-    task_id: str,
-) -> None:
-    """Write final build status to the HpcRun record."""
-    if task.cancelled():
-        status, err = JobStatus.CANCELLED, None
-    elif task.exception():
-        status, err = JobStatus.FAILED, str(task.exception())
-    else:
-        status, err = JobStatus.COMPLETED, None
-    try:
-        await db.update_hpcrun_status(
-            hpcrun_id=hpcrun_id,
-            update=JobStatusUpdate(job_id=JobId.local(task_id), status=status, error_message=err),
-        )
-    except Exception:
-        logger.exception(f"Failed to update HpcRun {hpcrun_id} status to {status}")
-
-
 async def upload_simulator(  # noqa: C901
     commit_hash: str,
     git_repo_url: str,
@@ -104,6 +66,7 @@ async def upload_simulator(  # noqa: C901
     simulation_service_slurm: SimulationService | SimulationServiceHpc | None = None,
     database_service: DatabaseService | None = None,
     force: bool = False,
+    include_submit_image: bool = False,
 ) -> SimulatorVersion:
     if not simulation_service_slurm:
         # Route the build to the simulator's backend (v2ecoli→Ray builds v2ecoli:<sha>,
@@ -148,7 +111,28 @@ async def upload_simulator(  # noqa: C901
         verify_simulator_payload(simulator)
 
     if needs_build:
-        build_job_id = await simulation_service_slurm.submit_build_image_job(simulator_version=simulator)
+        # ``include_submit_image``: also build the NEXTFLOW HEAD image
+        # (base + JRE + the nextflow binary) beside the task image. Only the
+        # process that runs ``nextflow run`` needs a JVM -- Batch TASKS run the
+        # plain science image -- so this is a thin derived layer, off by default.
+        # Supported by the Ray build path (viva-api#423); other services ignore
+        # a flag they do not accept, so ask by keyword only where it exists.
+        build_kwargs: dict[str, object] = {"simulator_version": simulator}
+        if include_submit_image:
+            if (
+                "include_submit_image"
+                not in inspect.signature(simulation_service_slurm.submit_build_image_job).parameters
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "include_submit_image is not supported by the build path for "
+                        f"{simulator.git_repo_url!r}. The Nextflow head image is built by the "
+                        "Ray/v2ecoli path; vEcoli builds its own -submit image unconditionally."
+                    ),
+                )
+            build_kwargs["include_submit_image"] = True
+        build_job_id = await simulation_service_slurm.submit_build_image_job(**build_kwargs)  # type: ignore[arg-type]
         hpc_run = await database_service.insert_hpcrun(
             job_id=build_job_id,
             job_type=JobType.BUILD_IMAGE,
@@ -157,16 +141,13 @@ async def upload_simulator(  # noqa: C901
         )
 
         # For LOCAL builds (K8s AND Ray both submit the DooD build as a LOCAL task),
-        # register a done-callback to propagate the final status to the DB. Both services
-        # expose the LocalTaskService as `_local`, so resolve it generically.
+        # bind the task to its row: the LocalTaskService then finalizes the row
+        # from the task's own outcome and persists the Batch job ids the task
+        # records, so the build is recoverable if this pod dies mid-poll
+        # (viva-api#414). Both services expose the LocalTaskService as `_local`.
         if build_job_id.backend == JobBackend.LOCAL:
             local_svc = getattr(simulation_service_slurm, "_local", None)
-            if local_svc is not None:
-                _register_build_done_callback(
-                    local_svc._tasks,
-                    build_job_id.value,
-                    database_service,
-                    hpc_run.database_id,
-                )
+            if isinstance(local_svc, LocalTaskService):
+                await local_svc.bind_hpcrun(build_job_id.value, hpc_run.database_id, database_service)
 
     return simulator

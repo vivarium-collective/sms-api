@@ -23,6 +23,7 @@ from viva_api.simulation.simulation_service_ray import (
     SimulationServiceRay,
     analysis_modules_for,
     injected_processes_from_config,
+    strain_from_config,
 )
 
 if TYPE_CHECKING:
@@ -552,6 +553,111 @@ class TestSimulationServiceRaySubmit:
         assert "--composite vecoli" in _env_of(sim_call)["RAY_JOB_CMD"]
         assert parca_call.kwargs["nodeOverrides"]["numNodes"] == 1
 
+    @pytest.mark.asyncio
+    async def test_composite_comparison_cache_variant_reaches_the_staged_cache_uri(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Real gap, found live 2026-09-05 scoping a real remote genotype-sweep
+        dispatch: run_comparison_ensemble.py's own --cache-dir already defaults
+        to the exact path this path stages (REPO_ROOT/out/cache ==
+        PARCA_CACHE_DIR) -- confirmed identical, so no command-line change is
+        needed -- but cache_s3 (what gets staged there) never respected a
+        caller-supplied cache_variant, unlike every other dispatch path
+        (mirrors test_cache_variant_reaches_the_staged_cache_uri's own MNP
+        case). Without this, a caller pointed at a real genotype-specific
+        cache would silently get the plain per-commit default instead."""
+        setattr(experiment_request.config, "composite", "v2ecoli")  # noqa: B010
+        setattr(experiment_request.config, "cache_variant", "cd2-run4-genotype-07")  # noqa: B010
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_batch(["parca-9", "sim-9"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+            patch.object(service, "cache_s3_uri", wraps=service.cache_s3_uri) as mock_cache_s3_uri,
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-comparison-variant"
+            )
+
+        mock_cache_s3_uri.assert_called_once()
+        assert mock_cache_s3_uri.call_args.kwargs.get("variant") == "cd2-run4-genotype-07"
+
+    @pytest.mark.asyncio
+    async def test_composite_comparison_omitted_cache_variant_is_byte_identical_to_before(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """cache_variant omitted must resolve to the plain per-commit cache,
+        unchanged from every existing caller's own behavior."""
+        setattr(experiment_request.config, "composite", "v2ecoli")  # noqa: B010
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_batch(["parca-10", "sim-10"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+            patch.object(service, "cache_s3_uri", wraps=service.cache_s3_uri) as mock_cache_s3_uri,
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation,
+                database_service=database_service,
+                correlation_id="corr-comparison-no-variant",
+            )
+
+        mock_cache_s3_uri.assert_called_once()
+        assert mock_cache_s3_uri.call_args.kwargs.get("variant") is None
+
+    @pytest.mark.asyncio
+    async def test_composite_comparison_upstream_vecoli_ignores_cache_variant(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """The upstream-vEcoli engine (--composite vecoli) uses its own,
+        entirely separate config_path-driven cache mechanism (item 87) -- a
+        cache_variant set alongside it must be ignored, not misapplied to the
+        wrong cache family."""
+        setattr(experiment_request.config, "composite", "vecoli")  # noqa: B010
+        setattr(experiment_request.config, "cache_variant", "should-be-ignored")  # noqa: B010
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_batch(["parca-11", "sim-11"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+            patch.object(service, "cache_s3_uri", wraps=service.cache_s3_uri) as mock_cache_s3_uri,
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation,
+                database_service=database_service,
+                correlation_id="corr-comparison-upstream",
+            )
+
+        # Upstream vEcoli never calls the v2ecoli cache_s3_uri helper at all.
+        mock_cache_s3_uri.assert_not_called()
+
 
 def _fake_multi_node_batch(submit_ids: list[str], *, per_node_vcpus: int = 16) -> MagicMock:
     """Like _fake_batch, but also answers describe_job_definitions for the
@@ -701,6 +807,180 @@ class TestSubmitMultiNodeComposite:
         assert "colony" not in cmd.lower()
 
         assert composite_call.kwargs["tags"]["CompositeId"] == "some_workspace.composites.some_multi_node_composite"
+
+    @pytest.mark.asyncio
+    async def test_cache_variant_reaches_the_staged_cache_uri(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Real gap, found live 2026-09-04 firing the first-ever real
+        strain-specific pbg-native dispatch: this composite path never had
+        cache_variant support at all -- only chain-dispatch did (job_
+        scheduler.py's own already-proven getattr(simulation.config,
+        "cache_variant", ...) pattern). Without it, a caller pointed at a
+        real derived strain cache (POST /parca/new-gene-cache, viva-api#378)
+        would silently stage the generic per-commit default instead."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {},
+                "cache_variant": "cd2-run2-j3",
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        # Only ONE id: a variant cache is expected to already be staged, so
+        # the guard added for backlog items 105/106 must skip the plain ParCa
+        # rebuild below rather than run one -- see the two dedicated guard
+        # tests right after this one.
+        mock_batch = _fake_multi_node_batch(["composite-7"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[MagicMock()])  # cache already staged
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+            patch.object(service, "cache_s3_uri", wraps=service.cache_s3_uri) as mock_cache_s3_uri,
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-variant"
+            )
+
+        mock_cache_s3_uri.assert_called_once()
+        assert mock_cache_s3_uri.call_args.kwargs.get("variant") == "cd2-run2-j3"
+        assert mock_batch.submit_job.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_cache_variant_missing_content_fails_loud_instead_of_building_stock(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """The real bug this guard exists to close (backlog items 105/106,
+        sms-ecoli#210, viva-api Dispatch 339:Run 1 / Dispatch 340:Run 2):
+        this path used to run a plain `_parca_command()` unconditionally,
+        with no check for pre-existing content, silently writing a stock/
+        un-perturbed cache into a freshly-built commit's own cache_variant
+        slot -- indistinguishable from a real strain's cache short of
+        inspecting cache_version.json's own build_params by hand. A caller-
+        requested variant cache that hasn't actually been staged yet must
+        fail loud, not silently manufacture a substitute."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {},
+                "cache_variant": "cd2-run1-k4-candidate-v1-lambda050",
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch([])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[])  # nothing staged at this commit yet
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+            pytest.raises(ValueError, match="cd2-run1-k4-candidate-v1-lambda050"),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-missing"
+            )
+
+        # Fails BEFORE submitting anything -- no partial dispatch, no stock
+        # cache silently built under the candidate's own name.
+        mock_batch.submit_job.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cache_variant_existing_content_skips_parca_job_entirely(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """The other half of the guard: when a variant cache genuinely IS
+        already staged, the composite job must submit directly -- no parca
+        job, no dependsOn -- not merely fewer submit_job calls."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {},
+                "cache_variant": "cd2-run2-j3-candidate-v1-lambda075",
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["composite-only"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[MagicMock()])
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            job_id = await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-existing"
+            )
+
+        assert job_id == JobId.ray("composite-only")
+        assert mock_batch.submit_job.call_count == 1
+        (composite_call,) = mock_batch.submit_job.call_args_list
+        assert "dependsOn" not in composite_call.kwargs
+
+    @pytest.mark.asyncio
+    async def test_omitted_cache_variant_is_byte_identical_to_before(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """cache_variant omitted must resolve to the plain per-commit cache,
+        unchanged from every existing caller's own behavior."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {"composite_id": "v2ecoli.composites.lineage_ray_batch", "num_nodes": 2, "params": {}},
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-8", "composite-8"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+            patch.object(service, "cache_s3_uri", wraps=service.cache_s3_uri) as mock_cache_s3_uri,
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-no-variant"
+            )
+
+        mock_cache_s3_uri.assert_called_once()
+        assert mock_cache_s3_uri.call_args.kwargs.get("variant") is None
 
     def test_multi_node_composite_command_sets_pythonpath_for_injection_imports(self) -> None:
         """Direct unit test of _multi_node_composite_command's own command string
@@ -1070,6 +1350,37 @@ class TestSubmitMnpStandaloneQueueRouting:
         assert mock_batch.submit_job.call_args.kwargs["jobQueue"] == "smscdk-ray-mnp"
 
 
+class TestSubmitMnpAllowsSlowStorage:
+    """Item 105/109: a single-node lineage_ray_batch diagnostic (database_id=344,
+    2026-09-05) died in Ray's own raylet bootstrap -- before any application code
+    ran -- because the container's /dev/shm was smaller than the plasma object
+    store's default request. RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1 is Ray's own
+    documented fallback (disk-backed instead of a hard error), applied
+    unconditionally since it changes nothing on a node where shm is sufficient."""
+
+    def test_flag_present_in_every_node_environment(self) -> None:
+        settings = _ray_settings()
+        mock_batch = MagicMock()
+        mock_batch.submit_job.return_value = {"jobId": "job-1"}
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", return_value=settings):
+            service._submit_mnp(
+                job_name="shm-test",
+                job_definition="smscdk-ray-mnp",
+                num_nodes=2,
+                ray_job_cmd="echo hi",
+                out_s3="s3://bucket/out/",
+                out_dir="/out",
+                batch_client=mock_batch,
+            )
+        node_overrides = mock_batch.submit_job.call_args.kwargs["nodeOverrides"]
+        env = node_overrides["nodePropertyOverrides"][0]["containerOverrides"]["environment"]
+        env_by_name = {e["name"]: e["value"] for e in env}
+        assert env_by_name["RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE"] == "1"
+        # Targets "0:" (every node), not just the head -- every node runs its own raylet.
+        assert node_overrides["nodePropertyOverrides"][0]["targetNodes"] == "0:"
+
+
 class TestAnalysisModulesFor:
     """analysis_modules_for reads the simulation's OWN configured analyses."""
 
@@ -1201,6 +1512,61 @@ class TestAnalysisDagNode:
 
         assert mock_batch.submit_job.call_count == 2
         assert await database_service.list_analyses(simulation_id=simulation.database_id) == []
+
+
+class TestParcaCommandNewGenes:
+    """P0-2: a config that requests a real strain (parca_options.new_genes) must
+    produce a ParCa command that actually carries the --new-genes flag."""
+
+    def test_new_genes_flows_into_the_parca_command(self) -> None:
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(new_genes="violacein")
+        assert f"--new-genes {shlex.quote('violacein')}" in cmd
+
+    @pytest.mark.parametrize("new_genes", [None, "off"])
+    def test_new_genes_off_or_absent_omits_the_flag(self, new_genes: str | None) -> None:
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(new_genes=new_genes)
+        assert "--new-genes" not in cmd
+
+    def test_new_genes_with_a_space_is_shell_quoted(self) -> None:
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(new_genes="two genes")
+        assert f"--new-genes {shlex.quote('two genes')}" in cmd
+
+
+@pytest.mark.asyncio
+class TestBatchExitCode:
+    """P1-13: get_job_status must surface the Batch container exit code, not None."""
+
+    async def test_exit_code_is_populated_from_container_exit_code(self) -> None:
+        mock_batch = MagicMock()
+        mock_batch.describe_jobs.return_value = {
+            "jobs": [{"jobId": "sim-1", "status": "FAILED", "container": {"exitCode": 137}}]
+        }
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+        ):
+            info = await service.get_job_status(JobId.ray("sim-1"))
+        assert info is not None
+        assert info.exit_code == "137"
+
+    async def test_exit_code_is_none_when_batch_reports_none(self) -> None:
+        mock_batch = MagicMock()
+        mock_batch.describe_jobs.return_value = {"jobs": [{"jobId": "sim-2", "status": "RUNNING"}]}
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+        ):
+            info = await service.get_job_status(JobId.ray("sim-2"))
+        assert info is not None
+        assert info.exit_code is None
 
 
 @pytest.mark.asyncio
@@ -1548,6 +1914,9 @@ class TestSimulationServiceRayBuild:
         # own comment in simulation_service_ray.py for the full incident history).
         assert "--composite-id v2ecoli.composites.ecoli_baseline.ecoli_baseline " in cmd
         assert "PBG_CORE_BUILDER=v2ecoli.core:build_core" in cmd
+        # Effect guard (#395 / #375 §3e): the generation command carries the min-global-time
+        # floor so a one-tick collapse fails loud instead of reporting success.
+        assert "PBG_MIN_GLOBAL_TIME=" in cmd
         # PYTHONPATH=V2ECOLI_DIR (backlog item 93): ecoli_baseline.baseline()'s
         # injection branch does `from scripts._compare.inject import (...)`, a bare
         # absolute import that only resolves with the repo root on sys.path --
@@ -1568,6 +1937,103 @@ class TestSimulationServiceRayBuild:
             "analyses": "none",
             "parallel": "ray",
         }
+
+    def test_sim_command_batch_threads_injected_processes_swap(self) -> None:
+        """CD2 native seam: a config carrying swap_processes must reach the
+        --composite-id batch overrides as ecoli_baseline.baseline()'s own
+        injected_processes kwarg, or the composite runs plain basal despite the
+        requested metabolism-redux/violacein swap (depends on v2ecoli #640)."""
+        service = SimulationServiceRay()
+        injected = {
+            "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
+            "add_processes": [],
+            "exclude_processes": [],
+            "fork_repo": "",
+        }
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._sim_command(
+                n_seeds=2,
+                n_steps=600,
+                chunk=60,
+                n_generations=3,
+                experiment_id="cd2-swap",
+                runner_s3_uri="s3://b/cd2-swap/run_pbg.py",
+                injected_processes=injected,
+            )
+        tokens = shlex.split(cmd)
+        overrides = json.loads(tokens[tokens.index("--overrides") + 1])
+        assert overrides["injected_processes"] == injected
+        # The swap survived into the native composite's own kwarg shape.
+        assert overrides["injected_processes"]["swap_processes"] == {"ecoli-metabolism": "ecoli-metabolism-redux"}
+
+    def test_sim_command_batch_threads_all_domain_fields(self) -> None:
+        """variants/config_overrides/features/exchange_fluxes(+basis) are the
+        remaining ecoli_baseline batch-mode kwargs -- each must reach --overrides
+        when the config carries it."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._sim_command(
+                n_seeds=1,
+                n_steps=600,
+                chunk=60,
+                n_generations=2,
+                experiment_id="cd2-full",
+                runner_s3_uri="s3://b/cd2-full/run_pbg.py",
+                variants={"grid": {"a": {"p.k": [1.0]}}},
+                config_overrides={"ecoli-metabolism-redux.foo": 1},
+                features=["exchange_flux"],
+                exchange_fluxes={"GLC": "EX_glc__D_e"},
+                exchange_flux_basis="mmol_per_gDCW_per_hr",
+            )
+        overrides = json.loads(shlex.split(cmd)[shlex.split(cmd).index("--overrides") + 1])
+        assert overrides["variants"] == {"grid": {"a": {"p.k": [1.0]}}}
+        assert overrides["config_overrides"] == {"ecoli-metabolism-redux.foo": 1}
+        assert overrides["features"] == ["exchange_flux"]
+        assert overrides["exchange_fluxes"] == {"GLC": "EX_glc__D_e"}
+        assert overrides["exchange_flux_basis"] == "mmol_per_gDCW_per_hr"
+
+    def test_sim_command_batch_no_domain_fields_is_byte_for_byte_unchanged(self) -> None:
+        """Regression guard: a config with no swap/variant intent produces the
+        exact overrides dict this path built before threading was added -- no
+        stray domain keys leak in."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._sim_command(
+                n_seeds=2,
+                n_steps=600,
+                chunk=60,
+                n_generations=3,
+                experiment_id="plain",
+                runner_s3_uri="s3://b/plain/run_pbg.py",
+            )
+        overrides = json.loads(shlex.split(cmd)[shlex.split(cmd).index("--overrides") + 1])
+        assert overrides == {
+            "n_seeds": 2,
+            "n_generations": 3,
+            "cache_dir": PARCA_CACHE_DIR,
+            "out_dir": SIM_OUT_DIR,
+            "experiment_id": "plain",
+            "analyses": "none",
+            "parallel": "ray",
+        }
+
+    def test_sim_command_batch_flux_basis_omitted_without_flux_map(self) -> None:
+        """exchange_flux_basis only matters alongside a flux map -- it is omitted
+        when no exchange_fluxes are supplied (composite defaults it to '')."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._sim_command(
+                n_seeds=1,
+                n_steps=600,
+                chunk=60,
+                n_generations=2,
+                experiment_id="no-flux",
+                runner_s3_uri="s3://b/no-flux/run_pbg.py",
+                exchange_flux_basis="mmol_per_gDCW_per_hr",
+            )
+        overrides = json.loads(shlex.split(cmd)[shlex.split(cmd).index("--overrides") + 1])
+        assert "exchange_flux_basis" not in overrides
+        assert "exchange_fluxes" not in overrides
 
     def test_sim_command_multi_generation_requires_experiment_id_and_runner_uri(self) -> None:
         """No silent placeholder default -- both must be supplied explicitly or the
@@ -1601,6 +2067,67 @@ class TestSimulationServiceRayBuild:
         assert "--vecoli-source vivarium-process" in vecoli
         # v2ecoli engine ignores vecoli_source (guarded by _is_upstream_vecoli)
         assert "--vecoli-source" not in v2ecoli
+
+
+def test_runner_env_carries_both_output_guards() -> None:
+    """The CD2 baseline/lineage dispatch env pairs the presence guard
+    (PBG_REQUIRE_OUTPUT) with the effect guard (PBG_MIN_GLOBAL_TIME, #395 / #375 §3e),
+    and the floor is above the one-tick collapse (global_time ~= 1.0)."""
+    from viva_api.simulation.simulation_service_ray import PBG_MIN_GLOBAL_TIME, PBG_RUNNER_ENV
+
+    assert "PBG_REQUIRE_OUTPUT=1" in PBG_RUNNER_ENV
+    assert f"PBG_MIN_GLOBAL_TIME={PBG_MIN_GLOBAL_TIME}" in PBG_RUNNER_ENV
+    assert PBG_MIN_GLOBAL_TIME > 1.0
+
+
+def _env_names(env: list[dict[str, str]]) -> dict[str, str]:
+    return {e["name"]: e["value"] for e in env}
+
+
+def test_stage_out_env_emits_expect_vars_for_a_real_strain() -> None:
+    """Wrong-strain guard companion (sms-ecoli#210 / #215): the staged-cache env
+    carries the requested strain so the entrypoint can reject a wrong-strain cache."""
+    svc = SimulationServiceRay()
+    env = svc._stage_out_env(
+        prefix="RAY",
+        out_dir="/o",
+        out_s3="s3://o",
+        stage_s3="s3://c",
+        stage_dir="/c",
+        expect_new_genes="violacein_MG1655_M5",
+        expect_bundle_overrides="models/parca/composed_overlay.tsv",
+    )
+    d = _env_names(env)
+    assert d["RAY_EXPECT_NEW_GENES"] == "violacein_MG1655_M5"
+    assert d["RAY_EXPECT_BUNDLE_OVERRIDES"] == "models/parca/composed_overlay.tsv"
+
+
+@pytest.mark.parametrize("wild", [None, "", "off", "  off  "])
+def test_stage_out_env_omits_expect_vars_for_wild_type(wild: str | None) -> None:
+    """off/empty/None is wild-type -> no expectation, byte-identical to before."""
+    svc = SimulationServiceRay()
+    env = svc._stage_out_env(
+        prefix="RAY",
+        out_dir="/o",
+        out_s3="s3://o",
+        expect_new_genes=wild,
+        expect_bundle_overrides=wild,
+    )
+    names = _env_names(env)
+    assert "RAY_EXPECT_NEW_GENES" not in names
+    assert "RAY_EXPECT_BUNDLE_OVERRIDES" not in names
+
+
+def test_stage_out_env_expect_vars_follow_the_prefix() -> None:
+    """CONTAINER path gets CONTAINER_EXPECT_* (future-proofs the chain-dispatch path)."""
+    svc = SimulationServiceRay()
+    env = svc._stage_out_env(
+        prefix="CONTAINER",
+        out_dir="/o",
+        out_s3="s3://o",
+        expect_new_genes="violacein",
+    )
+    assert "CONTAINER_EXPECT_NEW_GENES" in _env_names(env)
 
 
 class TestSeedGenerationCommand:
@@ -1879,6 +2406,32 @@ class TestSeedGenerationCommand:
         assert overrides["stop_at_division"] is True
 
 
+class TestStrainFromConfig:
+    """strain_from_config (sms-ecoli#210 / #215): the shared helper JobScheduler
+    and the sim submit use to read (new_genes, bundle_overrides) off a config's
+    parca_options and thread them to the entrypoint as *_EXPECT_* so a wrong-strain
+    staged cache is rejected."""
+
+    def test_none_when_no_parca_options(self) -> None:
+        assert strain_from_config(SimpleNamespace()) == (None, None)
+
+    def test_reads_a_real_strain(self) -> None:
+        cfg = SimpleNamespace(
+            parca_options=SimpleNamespace(new_genes="violacein_MG1655_M5", bundle_overrides="models/parca/o.tsv")
+        )
+        assert strain_from_config(cfg) == ("violacein_MG1655_M5", "models/parca/o.tsv")
+
+    @pytest.mark.parametrize("wild", [None, "", "off", "  off  "])
+    def test_wild_type_sentinels_are_none(self, wild: str | None) -> None:
+        cfg = SimpleNamespace(parca_options=SimpleNamespace(new_genes=wild, bundle_overrides=wild))
+        assert strain_from_config(cfg) == (None, None)
+
+    def test_partial_strain(self) -> None:
+        """new_genes set, bundle_overrides absent -> only the former."""
+        cfg = SimpleNamespace(parca_options=SimpleNamespace(new_genes="violacein"))
+        assert strain_from_config(cfg) == ("violacein", None)
+
+
 class TestInjectedProcessesFromConfig:
     """injected_processes_from_config (backlog item 93): the shared helper
     JobScheduler uses to turn a legacy config's swap_processes/add_processes/
@@ -1922,6 +2475,130 @@ class TestInjectedProcessesFromConfig:
         result = injected_processes_from_config(config)
         assert result is not None
         assert result["fork_repo"] == ""
+
+    def test_reads_nested_injected_processes_block(self) -> None:
+        """viva-api#385 regression: a caller may pass the whole injected_processes
+        block as an extra (extra_params={"injected_processes": {...}}) -- the shape
+        run_comparison_ensemble.py --from-vecoli-config emits. The helper must read
+        the nested block, not only the flat top-level fields; otherwise the swap is
+        silently dropped and chain-dispatch runs wild-type while reporting success."""
+        config = SimpleNamespace(
+            injected_processes={
+                "fork_repo": "",
+                "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
+                "cache_dir": "/app/v2ecoli/out/cache",
+            }
+        )
+        result = injected_processes_from_config(config)
+        assert result == {
+            "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
+            "add_processes": [],
+            "exclude_processes": [],
+            "fork_repo": "",
+            "cache_dir": "/app/v2ecoli/out/cache",
+        }
+
+    def test_nested_block_carries_extra_keys_through(self) -> None:
+        """viva-api#392 regression: #387 fixed the nested-block DROP but reconstructed
+        only the four canonical keys, silently dropping everything else the caller
+        put in the block -- e.g. `cache_dir`, which a fork-free swap's own
+        resolve_injections() spec-building needs to load the target process's config
+        from the ParCa bundle (confirmed via cplong90's own trace on PR#387, and
+        jcschaff's independent live-pod confirmation). Without it the swapped-in
+        process mounts with an empty config and crashes at tick 0 well away from the
+        real cause. The fix must carry ARBITRARY extra keys through, not just
+        special-case `cache_dir` -- assert with an unrelated marker key too."""
+        config = SimpleNamespace(
+            injected_processes={
+                "fork_repo": "",
+                "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
+                "cache_dir": "/app/v2ecoli/out/cache",
+                "some_future_key": "must-survive",
+            }
+        )
+        result = injected_processes_from_config(config)
+        assert result is not None
+        assert result["cache_dir"] == "/app/v2ecoli/out/cache"
+        assert result["some_future_key"] == "must-survive"
+        # The four canonical keys are still normalized defaults layered on top,
+        # not left to whatever the caller happened to send for them.
+        assert result["add_processes"] == []
+        assert result["exclude_processes"] == []
+        assert result["fork_repo"] == ""
+
+    def test_flat_shape_stays_byte_identical_no_carry_through(self) -> None:
+        """The legacy FLAT shape has no nested block to carry extra keys from --
+        the fix must not change its output at all (byte-identical regression)."""
+        config = SimpleNamespace(
+            swap_processes={"ecoli-metabolism": "ecoli-metabolism-redux"},
+            add_processes=[],
+            exclude_processes=[],
+        )
+        result = injected_processes_from_config(config)
+        assert result == {
+            "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
+            "add_processes": [],
+            "exclude_processes": [],
+            "fork_repo": "",
+        }
+
+    def test_nested_block_without_intent_falls_through_to_flat(self) -> None:
+        """A nested block carrying no swap/add/exclude intent (e.g. only fork_repo)
+        must not shadow flat top-level fields."""
+        config = SimpleNamespace(
+            injected_processes={"fork_repo": ""},
+            swap_processes={"ecoli-metabolism": "ecoli-metabolism-redux"},
+        )
+        result = injected_processes_from_config(config)
+        assert result is not None
+        assert result["swap_processes"] == {"ecoli-metabolism": "ecoli-metabolism-redux"}
+
+    def test_nested_swap_only_preserves_configs_flat_add_and_exclude(self) -> None:
+        """viva-api#401 regression: a nested block carrying ONLY swap_processes must
+        not silently drop the config's own flat add_processes/exclude_processes --
+        the two shapes are not a whole-block either/or, each of the three fields is
+        resolved independently. Observed live (sim 296, mecillinam_wellmixed.json):
+        a nested metabolism swap that never mentioned add_processes silently dropped
+        all 4 of the config's own add_processes, and nothing reported it."""
+        config = SimpleNamespace(
+            injected_processes={"swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"}},
+            add_processes=["permeability", "antibiotic-transport-odeint"],
+            exclude_processes=["exchange_data"],
+        )
+        result = injected_processes_from_config(config)
+        assert result == {
+            "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
+            "add_processes": ["permeability", "antibiotic-transport-odeint"],
+            "exclude_processes": ["exchange_data"],
+            "fork_repo": "",
+        }
+
+    def test_nested_field_wins_over_flat_on_real_conflict(self) -> None:
+        """When both the nested block and the flat config set the SAME field, the
+        caller's nested value wins -- an explicit override of the caller's own
+        stated intent, not a silent drop of it."""
+        config = SimpleNamespace(
+            injected_processes={"swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"}},
+            swap_processes={"ecoli-metabolism": "some-other-swap"},
+        )
+        result = injected_processes_from_config(config)
+        assert result is not None
+        assert result["swap_processes"] == {"ecoli-metabolism": "ecoli-metabolism-redux"}
+
+    def test_nested_add_only_preserves_configs_flat_swap(self) -> None:
+        """Symmetric to the swap-only case above: a nested block setting only
+        add_processes must not drop the config's own flat swap_processes."""
+        config = SimpleNamespace(
+            injected_processes={"add_processes": ["gillespie"]},
+            swap_processes={"ecoli-metabolism": "ecoli-metabolism-redux"},
+        )
+        result = injected_processes_from_config(config)
+        assert result == {
+            "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
+            "add_processes": ["gillespie"],
+            "exclude_processes": [],
+            "fork_repo": "",
+        }
 
 
 class TestIsUpstreamVecoli:
@@ -2031,6 +2708,36 @@ class TestParcaCommand:
             )
         assert "--new-genes violacein_MG1655_M5 --bundle-overrides models/parca/composed_overlay.tsv" in cmd
 
+    def test_strain_flags_do_not_reach_the_build_cache_step(self) -> None:
+        """SUPERSEDES the old test_strain_flags_reach_the_build_cache_step
+        (v2ecoli#676-era design). scripts/build_cache.py's own real current CLI
+        (confirmed live 2026-09-04, sms-ecoli study/cd2-pnnl-02-strain-sims) has
+        ONLY --fixture/--cache/--media-condition/--fixed-media -- --new-genes/
+        --bundle-overrides raise `unrecognized arguments`, confirmed via a real
+        ParCa+build_cache dispatch that got exactly this far and crashed. Root
+        cause, from build_cache.py's own current comment: a second, redundant
+        write_cache_version() call that USED TO need these flags was removed
+        because it re-derived a version with none of the real build_params and
+        clobbered the correct one -- save_sim_input's own bundle-write already
+        produces a complete, correct cache_version.json straight from sim_data
+        (itself already correctly strain-specific, since v2ecoli-parca received
+        the real --new-genes/--bundle-overrides flags one command earlier in
+        this same chain). Restamping strain identity a second time at this step
+        is not just unsupported now, it would be redundant even if it were."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(
+                new_genes="violacein_MG1655_M5", bundle_overrides="models/parca/composed_overlay.tsv"
+            )
+        # isolate just the build_cache.py invocation (between it and the trailing cp)
+        build_step = cmd.split("&& python scripts/build_cache.py", 1)[1].split("&& cp", 1)[0]
+        assert "--new-genes" not in build_step
+        assert "--bundle-overrides" not in build_step
+        # the flags still reach v2ecoli-parca, one command earlier in the chain
+        parca_step = cmd.split("&& v2ecoli-parca", 1)[1].split("&& gzip", 1)[0]
+        assert "--new-genes violacein_MG1655_M5" in parca_step
+        assert "--bundle-overrides models/parca/composed_overlay.tsv" in parca_step
+
 
 class TestCacheS3UriVariant:
     """cache_s3_uri's new `variant` kwarg (backlog item 105) -- mirrors
@@ -2135,6 +2842,73 @@ class TestSubmitNewGeneCacheJob:
         assert "k4-induced" not in env["CONTAINER_STAGE_S3"]
 
 
+class TestRaySubmitImage:
+    """The Nextflow HEAD image for the Ray/v2ecoli path (plan-nextflow-dispatch.md §11.3).
+
+    Only the process that runs ``nextflow run`` needs a JVM. On vEcoli's proven awsbatch
+    profile the Batch TASKS run ``container = params.container_image`` -- the plain science
+    image -- and v2ecoli's own Dockerfile already installs AWS CLI v2, which is the one thing
+    Nextflow requires inside a task container to stage the S3 work dir. So this is a thin
+    derived layer, and the task side is deliberately untouched.
+    """
+
+    def test_default_build_is_byte_identical_and_has_no_submit_layer(self) -> None:
+        """Same guarantee item 87 established for include_new_gene_data: adding a flag must
+        not perturb any existing caller. The unflagged script must be a strict PREFIX of the
+        flagged one -- not merely 'similar'."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            default = service._build_command(_v2ecoli_simulator())[2]
+            flagged = service._build_command(_v2ecoli_simulator(), include_submit_image=True)[2]
+        assert "Dockerfile-submit" not in default
+        assert "default-jre-headless" not in default
+        assert flagged.startswith(default)
+
+    def test_submit_image_adds_java_and_a_pinned_nextflow(self) -> None:
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            script = service._build_command(_v2ecoli_simulator(), include_submit_image=True)[2]
+        assert "default-jre-headless" in script
+        # Pinned, not floating: an unpinned `nextflow` download would silently change the
+        # renderer's runtime between two builds of the same commit.
+        assert "ARG NEXTFLOW_VERSION=25.10.2" in script
+
+    def test_submit_image_is_derived_from_this_commit_and_pushed_beside_it(self) -> None:
+        """The head must be built FROM the same commit's task image, or the workflow it
+        launches is not the code the simulator record names."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            script = service._build_command(_v2ecoli_simulator(), include_submit_image=True)[2]
+        assert "BASE_URI=$ECR_REGISTRY/v2ecoli:abc1234" in script
+        assert 'docker push "$ECR_REGISTRY/v2ecoli:abc1234-submit"' in script
+
+    def test_submit_image_workdir_is_the_repo_root(self) -> None:
+        """WORKDIR /app/v2ecoli, not vEcoli's /vEcoli. v2ecoli bare-imports `scripts._compare`
+        throughout, which resolves on cwd alone -- the same root cause as viva-api#359 and the
+        reason the awsbatch profile must also export PYTHONPATH."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            script = service._build_command(_v2ecoli_simulator(), include_submit_image=True)[2]
+        assert "WORKDIR /app/v2ecoli" in script
+
+    @pytest.mark.asyncio
+    async def test_run_build_threads_the_flag(self) -> None:
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch(
+                "viva_api.simulation.simulation_service_ray.batch_build.submit_batch_build",
+                new=AsyncMock(return_value="build-job-1"),
+            ) as mock_submit,
+            patch(
+                "viva_api.simulation.simulation_service_ray.batch_build.poll_batch_jobs",
+                new=AsyncMock(),
+            ),
+        ):
+            await service._run_build(_v2ecoli_simulator(), include_submit_image=True)
+        assert "Dockerfile-submit" in mock_submit.call_args.kwargs["command"][2]
+
+
 class TestSimulationServiceRayBuildSubmit:
     """Build-image submission: DooD Batch job to the amd64 queue, then poll."""
 
@@ -2171,6 +2945,98 @@ class TestSimulationServiceRayBuildSubmit:
         ):
             job_id = await service.submit_build_image_job(_v2ecoli_simulator())
         assert job_id.backend == JobBackend.LOCAL
+
+    @pytest.mark.asyncio
+    async def test_submitted_build_records_its_batch_job_id_and_finalizes_its_row(self) -> None:
+        """viva-api#414: the LOCAL build task persists the Batch job id it is
+        polling onto its bound HpcRun row (so a restart can recover the
+        build's outcome), and the row is finalized from the task's outcome."""
+        service = SimulationServiceRay()
+        db = MagicMock()
+        db.set_hpcrun_external_job_ids = AsyncMock()
+        db.update_hpcrun_status = AsyncMock()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch(
+                "viva_api.simulation.simulation_service_ray.batch_build.submit_batch_build",
+                new=AsyncMock(return_value="build-job-1"),
+            ) as mock_submit,
+            patch("viva_api.simulation.simulation_service_ray.batch_build.poll_batch_jobs", new=AsyncMock()),
+        ):
+            job_id = await service.submit_build_image_job(_v2ecoli_simulator())
+            await service._local.bind_hpcrun(job_id.value, hpcrun_id=506, database_service=db)
+            await service._local.wait_finalized(job_id.value)
+        assert mock_submit.call_args.kwargs["job_name"] == "v2ecoli-ray-build-abc1234"
+        db.set_hpcrun_external_job_ids.assert_awaited_once_with(506, ["build-job-1"])
+        update = db.update_hpcrun_status.await_args.kwargs["update"]
+        assert update.status == JobStatus.COMPLETED
+        assert update.end_time is not None
+
+
+class TestChainDispatchPlaceholderBinding:
+    """viva-api#414: the chain-dispatch placeholder row is bound to its
+    background task, so the DB row is finalized from the task's outcome
+    instead of staying `running` forever (and a submission crash is written
+    to the row, not only to this process's memory)."""
+
+    @pytest.mark.asyncio
+    async def test_placeholder_is_completed_once_the_task_finishes(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        setattr(experiment_request.config, "n_init_sims", 2)  # noqa: B010
+        experiment_request.config.generations = 3
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+        mock_batch = _fake_container_batch(["parca-1"])
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+        ):
+            job_id = await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-bind-ok"
+            )
+            placeholder = await database_service.get_hpcrun_by_job_id(job_id)
+            assert placeholder is not None and placeholder.status == JobStatus.RUNNING
+            await service._local.wait_finalized(job_id.value)
+        fresh = await database_service.get_hpcrun(placeholder.database_id)
+        assert fresh is not None
+        assert fresh.status == JobStatus.COMPLETED
+        assert fresh.end_time is not None
+        # the real campaign row is untouched and still the one every read resolves
+        campaign = await database_service.get_hpcrun_by_ref(ref_id=simulation.database_id, job_type=JobType.SIMULATION)
+        assert campaign is not None
+        assert campaign.database_id != placeholder.database_id
+        assert campaign.status == JobStatus.RUNNING
+
+    @pytest.mark.asyncio
+    async def test_placeholder_is_failed_with_the_error_when_submission_crashes(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        setattr(experiment_request.config, "n_init_sims", 2)  # noqa: B010
+        experiment_request.config.generations = 3
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch.object(
+                service, "submit_chain_dispatch_job", new=AsyncMock(side_effect=RuntimeError("ParCa submit boom"))
+            ),
+        ):
+            job_id = await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-bind-crash"
+            )
+            await service._local.wait_finalized(job_id.value)
+            failed = await service.get_job_status(job_id)
+            assert failed is not None and failed.status == JobStatus.FAILED
+        placeholder = await database_service.get_hpcrun_by_job_id(job_id)
+        assert placeholder is not None
+        assert placeholder.status == JobStatus.FAILED
+        assert "ParCa submit boom" in (placeholder.error_message or "")
 
 
 class TestEnsureMnpJobDef:

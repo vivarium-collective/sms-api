@@ -781,4 +781,135 @@
 #           that never surfaced because no existing caller set BOTH at once.
 #           Verified live: a real smoke dispatch's stored config showed
 #           multi_node_dispatch reaching the server intact, then cancelled.
-__version__ = "0.9.90"
+# 0.9.92 -- carry a caller's extra injected_processes keys (e.g. cache_dir)
+#           through injected_processes_from_config's rebuild instead of
+#           reconstructing only {swap_processes, add_processes,
+#           exclude_processes, fork_repo} (viva-api#392, follow-up to #385/
+#           #387). Without cache_dir a fork-free swap's resolve_injections()
+#           spec-building has no ParCa bundle path, so the swapped-in process
+#           mounts with an empty config and crashes at tick 0 well away from
+#           the real cause -- root-caused precisely by cplong90 on #387's own
+#           thread, independently confirmed live by jcschaff. The four
+#           canonical keys are still normalized defaults layered on top, not
+#           replaced -- flat/legacy-shape output is byte-identical.
+# 0.9.93 -- injected_processes_from_config resolves swap_processes/
+#           add_processes/exclude_processes PER FIELD instead of choosing the
+#           whole nested-vs-flat shape once (viva-api#401, found by cplong90
+#           while measuring #387's own effect). The either/or choice meant a
+#           nested submit setting only swap_processes silently dropped a
+#           config's own flat add_processes/exclude_processes -- observed live
+#           (sim 296, mecillinam_wellmixed.json): a nested metabolism swap
+#           dropped all 4 of the config's own add_processes, unreported. Each
+#           field now resolves independently, nested winning on a real
+#           conflict; a real conflict is logged (a caller's override, not a
+#           silent one). Same root cause as #392 above -- both are
+#           consequences of RECONSTRUCTING the block instead of merging into
+#           it, cplong90's own framing on #401.
+# 0.9.94 -- fix: run_pbg.py's effect check (#395/#398, PBG_MIN_GLOBAL_TIME) now
+#           also checks LineageProcess's own per-generation `duration` (summed
+#           across every summary.generations entry found in final_state.json),
+#           not just the composite's top-level global_time. A chain-dispatch/
+#           pbg-native generation only advances the OUTER composite's clock by
+#           the single external run(interval) tick it was invoked with --
+#           LineageProcess's own docstring: "the inner composite's global_time
+#           RESTARTS at 0 each generation" -- so a real, multi-thousand-second
+#           division reads back as global_time~=1.0, indistinguishable from a
+#           genuine one-tick collapse under the old check. Found live: sms-
+#           ecoli#210, dispatch 297 -- chain-dispatch's metabolism-redux swap
+#           genuinely divided at t=2527s (confirmed via the real CloudWatch
+#           log) but the job still exited 1, effect-check false positive. Both
+#           dispatch mechanisms share this runner, so both are fixed by the
+#           one change. Non-lineage composites are byte-for-byte unaffected
+#           (no summary.generations shape found -> falls back to global_time
+#           exactly as before).
+#           0.9.99 -- JobScheduler/ComposeJobMonitor.get_hpcrun_by_correlation_id
+#           no longer caches a miss (viva-api#416). It was @alru_cache, which
+#           keeps a successful None forever; every dispatch path submits to the
+#           backend BEFORE inserting the HpcRun row, so a worker event that
+#           arrived first poisoned its correlation_id for the pod's life and
+#           every later WorkerEvent for that run was dropped ("No HpcRun found
+#           ... Skipping event") while the row sat running. Hits (immutable
+#           ids) are still cached; a miss is re-asked next time. Found by the
+#           in-memory-state survey done for #414.
+#           0.9.102 -- _submit_multi_node_composite (the generic multi-node
+#           process-bigraph composite path, e.g. lineage_ray_batch/colony) no
+#           longer builds a plain ParCa cache unconditionally when a caller
+#           sets cache_variant. A variant cache is meant to already exist
+#           (POST /parca/new-gene-cache, #378, or an external bridge sync);
+#           with no existence check, a fresh commit's own cache_variant slot
+#           silently got a stock/un-perturbed cache instead, indistinguishable
+#           from the real one short of inspecting cache_version.json by hand.
+#           Root-caused live from Dispatch 339:Run 1 / Dispatch 340:Run 2 both
+#           resolving to stock caches (sms-ecoli#210). Now checks the staged
+#           S3 prefix first: existing content skips the ParCa job entirely
+#           (composite submits directly, no dependsOn); missing content fails
+#           loud with a ValueError instead of fabricating a substitute.
+#           cache_variant=None (every other existing caller) is byte-for-byte
+#           unaffected.
+__version__ = "0.9.102"
+#           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
+#           on every node of every Ray MNP submission. Found: a single-node
+#           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
+#           raylet bootstrap before any application code ran -- the plasma
+#           object store's default request (~10.2GB) exceeded the container's
+#           /dev/shm (~9.66GB available). Ray's own documented fallback (disk-
+#           backed instead of a hard error); zero behavior change on any node
+#           where shm is already sufficient.
+#           0.9.100 -- fix(comparison-ensemble): thread cache_variant through
+#           the composite-comparison dispatch path (Run 4's genotype fan-out
+#           was never reachable with real genotype content via any remote
+#           dispatch path -- only ever run locally against a manually-selected
+#           cache). #430.
+#           0.9.98 -- _submit_multi_node_composite (the pbg-native/lineage_
+#           ray_batch dispatch path) never had cache_variant support at all --
+#           only chain-dispatch did. Found firing the first-ever real
+#           strain-specific pbg-native dispatch, 2026-09-04: without it, a
+#           multi_node_dispatch pointed at a real derived cache (POST
+#           /parca/new-gene-cache) would silently stage the generic
+#           per-commit default instead. Mirrors chain-dispatch's own already-
+#           proven job_scheduler.py pattern. Omitted preserves today's
+#           behavior byte-for-byte.
+#           0.9.97 -- orphaned job polling (viva-api#414): a LOCAL-backend HpcRun
+#           row (an in-process asyncio task polling a DooD image build on AWS
+#           Batch, or the chain-dispatch placeholder) stayed `running` forever
+#           once the api pod that owned the task was replaced, while the Batch
+#           job finished normally -- measured live 2026-09-04 (hpcrun 506,
+#           v2ecoli-ray-build-10ebc4c SUCCEEDED 6 min after the 0.9.95->0.9.96
+#           rollout; dispatch refused "build is still in progress"; recovery
+#           was a redundant 10-min rebuild). Three changes: (1) the build task
+#           persists its Batch job id(s) onto the row (new hpcrun.external_job_ids,
+#           migration c7d1f3a9b2e4 + fingerprint marker) so the work is
+#           addressable from any process; (2) LocalTaskService binds a task to
+#           its row (bind_hpcrun) and finalizes the row from the task's own
+#           outcome, with end_time -- the chain-dispatch placeholder is bound
+#           too, so a submission crash now reaches the DB instead of only this
+#           process's memory; (3) JobScheduler.reconcile_local_tasks runs FIRST
+#           on every poll tick (so at startup): every active LOCAL row this
+#           process does not own is finished from Batch truth (describe_jobs
+#           by persisted id, or by the deterministic build job name for rows
+#           that predate the column), SUCCEEDED->completed, FAILED->failed with
+#           the reason, still-running left alone; a placeholder superseded by
+#           its real campaign row is completed, one with no successor after a
+#           10-min grace window is failed and says to re-submit. Stateless by
+#           construction -- nothing is re-attached, so it does not matter how
+#           many polling events were missed.
+#           0.9.96 -- run_new_gene_cache resolved its service via
+#           get_simulation_service() (the deployment's own COMPUTE_BACKEND
+#           default -- "batch"/Nextflow on sms-api-stanford-test), not Ray --
+#           501'd on this endpoint's own first-ever real call, 2026-09-04,
+#           on a deployment that fires real Ray/Batch MNP jobs successfully
+#           through every other route (those resolve via
+#           get_simulation_service_for_repo, commit/repo-aware). Now asks
+#           for ComputeBackend.RAY by name, matching what this handler's own
+#           docstring always said it wanted. New regression test is the
+#           first one in its class to actually exercise resolution instead
+#           of injecting a mock service directly.
+#           0.9.95 -- _parca_command's own build_cache.py step no longer carries
+#           --new-genes/--bundle-overrides -- confirmed live 2026-09-04, its real
+#           current CLI has neither flag (`unrecognized arguments`), stalling ANY
+#           new_genes ParCa dispatch one step after ParCa itself succeeds. Not a
+#           regression to work around: build_cache.py's own save_sim_input already
+#           writes a complete, correct cache_version.json straight from sim_data,
+#           itself already strain-specific since v2ecoli-parca received both flags
+#           one command earlier in the same chain. Restamping here was redundant
+#           even when it was once supported.

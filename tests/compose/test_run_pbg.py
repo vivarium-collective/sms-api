@@ -1,4 +1,6 @@
 import json
+import shutil
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -479,6 +481,305 @@ def test_run_skips_persisting_emitter_history_when_a_file_backed_emitter_already
 
     assert calls == []
     assert not (tmp_path / "output" / "emitter_history.json").exists()
+
+
+# --- _assert_emitted_output: P0-3, a zero-output run must not report success ---
+
+
+def test_has_emitted_output_true_for_nonempty_parquet(tmp_path: Path) -> None:
+    (tmp_path / "history").mkdir()
+    (tmp_path / "history" / "part.pq").write_bytes(b"PAR1-not-really-but-nonempty")
+    assert run_pbg._has_emitted_output(tmp_path) is True
+
+
+def test_has_emitted_output_true_for_nonempty_emitter_history(tmp_path: Path) -> None:
+    (tmp_path / "emitter_history.json").write_text(json.dumps({"emitter": [[0.0, {"x": 1}]]}))
+    assert run_pbg._has_emitted_output(tmp_path) is True
+
+
+def test_has_emitted_output_false_for_empty_dir_or_only_final_state(tmp_path: Path) -> None:
+    assert run_pbg._has_emitted_output(tmp_path) is False
+    (tmp_path / "final_state.json").write_text("{}")  # the always-present fallback does NOT count
+    (tmp_path / "emitter_history.json").write_text("{}")  # empty history does NOT count
+    (tmp_path / "empty.pq").write_bytes(b"")  # zero-byte parquet does NOT count
+    assert run_pbg._has_emitted_output(tmp_path) is False
+
+
+def test_run_raises_when_require_output_set_and_nothing_emitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The core P0-3 guard: a run that produced only final_state.json must exit
+    non-zero under PBG_REQUIRE_OUTPUT instead of reporting success."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    _install_fake_pbg_for_run(monkeypatch, gather_emitter_results=lambda composite: {})
+
+    pbg = tmp_path / "m.pbg"
+    pbg.write_text(json.dumps({"state": {}, "composition": {}}))
+    with pytest.raises(SystemExit):
+        run_pbg.run(str(pbg), steps=1, results_dir=tmp_path / "output")
+
+
+def test_run_succeeds_when_require_output_set_and_history_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real in-memory-emitter run (history persisted) satisfies the guard."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    _install_fake_pbg_for_run(monkeypatch, gather_emitter_results=lambda composite: {("emitter",): [(0.0, {"x": 1})]})
+
+    pbg = tmp_path / "m.pbg"
+    pbg.write_text(json.dumps({"composition": {"emitter": {"address": "local:RAMEmitter", "config": {}}}}))
+    out = run_pbg.run(str(pbg), steps=1, results_dir=tmp_path / "output")
+    assert out.name == "final_state.json"
+    assert (tmp_path / "output" / "emitter_history.json").exists()
+
+
+# --- viva-api#419: the driver's own filesystem is not authoritative on a multi-node run ---
+
+
+def _fake_aws(monkeypatch: pytest.MonkeyPatch, listing: str, *, rc: int = 0, missing: bool = False) -> list[list[str]]:
+    """Stub the `aws s3 ls` probe. Returns the calls made, so a test can assert it was
+    NOT called on the paths where the local check already answered."""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(shutil, "which", lambda _: None if missing else "/usr/local/bin/aws")
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, rc, stdout=listing, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    return calls
+
+
+_S3_WITH_OUTPUT = (
+    "2026-09-04 21:30:58        408 vecoli-output/x/success/generation=1/agent_id=00/s.pq\n"
+    "2026-09-04 21:22:11   54677027 vecoli-output/x/history/generation=0/agent_id=0/400.pq\n"
+)
+_S3_EMPTY_ONLY = "2026-09-04 21:30:58       2147 vecoli-output/x/final_state.json\n"
+
+
+def test_shared_prefix_rescues_a_run_whose_actors_ran_on_a_PEER_node(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The #419 regression, stated as the failure it actually was: two successful
+    lineage runs were failed here because Ray placed every actor on another node, so
+    the driver's local dir was empty while ~700MB of parquet sat in S3."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    monkeypatch.setenv("RAY_OUT_S3", "s3://bucket/vecoli-output/x/")
+    calls = _fake_aws(monkeypatch, _S3_WITH_OUTPUT)
+    (tmp_path / "final_state.json").write_text("{}")  # only the fallback, locally
+
+    run_pbg._assert_emitted_output(tmp_path)  # must NOT raise
+    assert calls and calls[0][1:4] == ["s3", "ls", "--recursive"]
+
+
+def test_local_output_short_circuits_without_consulting_s3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """When this node did host an actor the local answer is sufficient — no probe,
+    no 120s subprocess on the happy path."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    monkeypatch.setenv("RAY_OUT_S3", "s3://bucket/vecoli-output/x/")
+    calls = _fake_aws(monkeypatch, _S3_WITH_OUTPUT)
+    (tmp_path / "part.pq").write_bytes(b"nonempty")
+
+    run_pbg._assert_emitted_output(tmp_path)
+    assert calls == []
+
+
+def test_still_fails_when_neither_local_nor_shared_has_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The guard must keep doing its job: a genuinely empty run still fails, and the
+    message names BOTH places looked at."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    monkeypatch.setenv("RAY_OUT_S3", "s3://bucket/vecoli-output/x/")
+    monkeypatch.setattr(run_pbg, "_SHARED_OUTPUT_WAIT_SECONDS", 0)
+    _fake_aws(monkeypatch, _S3_EMPTY_ONLY)
+
+    with pytest.raises(SystemExit) as exc:
+        run_pbg._assert_emitted_output(tmp_path)
+    assert "s3://bucket/vecoli-output/x/" in str(exc.value)
+
+
+def test_unreachable_shared_prefix_says_so_rather_than_claiming_no_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """'Could not look' and 'nothing there' are different answers. Failing is still the
+    conservative choice, but the message must not assert an absence it never verified."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    monkeypatch.setenv("RAY_OUT_S3", "s3://bucket/vecoli-output/x/")
+    monkeypatch.setattr(run_pbg, "_SHARED_OUTPUT_WAIT_SECONDS", 0)
+    _fake_aws(monkeypatch, "", missing=True)  # no aws binary in the image
+
+    with pytest.raises(SystemExit) as exc:
+        run_pbg._assert_emitted_output(tmp_path)
+    assert "could not be listed" in str(exc.value)
+
+
+def test_without_ray_out_s3_behaviour_is_unchanged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Single-node and non-Batch callers keep the old, purely local semantics."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    monkeypatch.delenv("RAY_OUT_S3", raising=False)
+    calls = _fake_aws(monkeypatch, _S3_WITH_OUTPUT)
+
+    with pytest.raises(SystemExit) as exc:
+        run_pbg._assert_emitted_output(tmp_path)
+    assert calls == []
+    assert "no shared prefix" in str(exc.value)
+
+
+def test_run_does_not_guard_output_when_require_output_unset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default (unset): the generic runner is unchanged — a bare document whose
+    only artifact is final_state.json still succeeds."""
+    monkeypatch.delenv("PBG_REQUIRE_OUTPUT", raising=False)
+    _install_fake_pbg_for_run(monkeypatch, gather_emitter_results=lambda composite: {})
+
+    pbg = tmp_path / "m.pbg"
+    pbg.write_text(json.dumps({"state": {}, "composition": {}}))
+    out = run_pbg.run(str(pbg), steps=1, results_dir=tmp_path / "output")  # must not raise
+    assert out.name == "final_state.json"
+
+
+# --- _assert_run_advanced: P0-3 effect check, a one-tick collapse must not report success ---
+
+
+def _write_final_state(results_dir: Path, state: Any) -> None:
+    results_dir.mkdir(parents=True, exist_ok=True)
+    (results_dir / "final_state.json").write_text(json.dumps(state))
+
+
+def test_final_global_time_reads_top_level(tmp_path: Path) -> None:
+    _write_final_state(tmp_path, {"global_time": 2528.0, "ran": True})
+    assert run_pbg._final_global_time(tmp_path) == 2528.0
+    _write_final_state(tmp_path, {"global_time": 5})  # int is fine
+    assert run_pbg._final_global_time(tmp_path) == 5.0
+
+
+def test_final_global_time_none_when_absent_or_not_a_number(tmp_path: Path) -> None:
+    assert run_pbg._final_global_time(tmp_path) is None  # no file
+    _write_final_state(tmp_path, {"ran": True})  # no key
+    assert run_pbg._final_global_time(tmp_path) is None
+    _write_final_state(tmp_path, {"global_time": "1.0"})  # string, not a number
+    assert run_pbg._final_global_time(tmp_path) is None
+    _write_final_state(tmp_path, {"global_time": True})  # bool must not read as 1.0
+    assert run_pbg._final_global_time(tmp_path) is None
+
+
+def test_assert_run_advanced_noop_when_min_unset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default (unset): no check even on a one-tick final state."""
+    monkeypatch.delenv("PBG_MIN_GLOBAL_TIME", raising=False)
+    _write_final_state(tmp_path, {"global_time": 1.0})
+    run_pbg._assert_run_advanced(tmp_path)  # must not raise
+
+
+def test_assert_run_advanced_raises_on_one_tick_collapse(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The effect check: a non-empty store from a one-tick run (global_time ~= 1.0)
+    must fail when a real generation was expected (#210 §3d / #375 §3e)."""
+    monkeypatch.setenv("PBG_MIN_GLOBAL_TIME", "100")
+    _write_final_state(tmp_path, {"global_time": 1.0})
+    with pytest.raises(SystemExit):
+        run_pbg._assert_run_advanced(tmp_path)
+
+
+def test_assert_run_advanced_passes_a_real_generation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PBG_MIN_GLOBAL_TIME", "100")
+    _write_final_state(tmp_path, {"global_time": 2528.0})
+    run_pbg._assert_run_advanced(tmp_path)  # must not raise
+
+
+def test_assert_run_advanced_raises_when_global_time_unverifiable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Caller demanded the check but the run left no readable global_time -> refuse
+    to report success rather than pass blindly."""
+    monkeypatch.setenv("PBG_MIN_GLOBAL_TIME", "100")
+    _write_final_state(tmp_path, {"ran": True})  # no global_time
+    with pytest.raises(SystemExit):
+        run_pbg._assert_run_advanced(tmp_path)
+
+
+def test_assert_run_advanced_raises_on_non_numeric_min(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PBG_MIN_GLOBAL_TIME", "not-a-number")
+    _write_final_state(tmp_path, {"global_time": 2528.0})
+    with pytest.raises(SystemExit):
+        run_pbg._assert_run_advanced(tmp_path)
+
+
+# --- _lineage_generation_duration_total: LineageProcess's real per-generation clock,
+# --- decoupled from the outer composite's own global_time (sms-ecoli#210, dispatch 297) ---
+
+
+def test_lineage_generation_duration_total_sums_nested_summaries(tmp_path: Path) -> None:
+    _write_final_state(
+        tmp_path,
+        {
+            "global_time": 1.0,
+            "seed_0000": {
+                "summary": {
+                    "generations": [
+                        {"generation": 0, "duration": 2527.0, "divided": True},
+                    ]
+                }
+            },
+            "seed_0001": {"summary": {"generations": [{"generation": 0, "duration": 1800.0, "divided": True}]}},
+        },
+    )
+    assert run_pbg._lineage_generation_duration_total(tmp_path) == 4327.0
+
+
+def test_lineage_generation_duration_total_none_when_absent(tmp_path: Path) -> None:
+    assert run_pbg._lineage_generation_duration_total(tmp_path) is None  # no file
+    _write_final_state(tmp_path, {"global_time": 2528.0})  # no summary anywhere
+    assert run_pbg._lineage_generation_duration_total(tmp_path) is None
+    _write_final_state(tmp_path, {"seed_0000": {"summary": {"generations": []}}})  # empty list
+    assert run_pbg._lineage_generation_duration_total(tmp_path) is None
+    _write_final_state(tmp_path, {"seed_0000": {"summary": {"generations": [{"divided": True}]}}})  # no duration
+    assert run_pbg._lineage_generation_duration_total(tmp_path) is None
+
+
+def test_assert_run_advanced_passes_a_real_lineage_generation_even_though_global_time_reads_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reproduces dispatch 297 exactly (sms-ecoli#210): a chain-dispatch/pbg-native
+    generation genuinely divided at t=2527s, but the outer composite's own
+    global_time only reflects the single external run(interval) tick (~1.0) —
+    the effect check must not treat this as a one-tick collapse."""
+    monkeypatch.setenv("PBG_MIN_GLOBAL_TIME", "100")
+    _write_final_state(
+        tmp_path,
+        {
+            "global_time": 1.0,
+            "seed_0000": {"summary": {"generations": [{"generation": 0, "duration": 2527.0, "divided": True}]}},
+        },
+    )
+    run_pbg._assert_run_advanced(tmp_path)  # must not raise
+
+
+def test_assert_run_advanced_still_raises_on_a_real_lineage_one_tick_collapse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lineage summary that itself reports a short duration is still a real
+    collapse — the lineage-aware signal doesn't blanket-exempt this composite
+    family from the check, it just reads the correct clock."""
+    monkeypatch.setenv("PBG_MIN_GLOBAL_TIME", "100")
+    _write_final_state(
+        tmp_path,
+        {"global_time": 1.0, "seed_0000": {"summary": {"generations": [{"duration": 1.0, "divided": False}]}}},
+    )
+    with pytest.raises(SystemExit):
+        run_pbg._assert_run_advanced(tmp_path)
+
+
+def test_run_raises_when_min_global_time_set_but_run_did_not_advance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end: run() calls the effect check. The fake composite serializes no
+    global_time, so with PBG_MIN_GLOBAL_TIME set the run must exit non-zero even
+    though emitted history satisfies PBG_REQUIRE_OUTPUT (presence != effect)."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    monkeypatch.setenv("PBG_MIN_GLOBAL_TIME", "100")
+    _install_fake_pbg_for_run(monkeypatch, gather_emitter_results=lambda composite: {("emitter",): [(0.0, {"x": 1})]})
+
+    pbg = tmp_path / "m.pbg"
+    pbg.write_text(json.dumps({"composition": {"emitter": {"address": "local:RAMEmitter", "config": {}}}}))
+    with pytest.raises(SystemExit):
+        run_pbg.run(str(pbg), steps=1, results_dir=tmp_path / "output")
 
 
 # --- _workspace_core: the workspace registers types the generic core can't know ---

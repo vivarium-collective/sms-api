@@ -80,6 +80,9 @@ logger = logging.getLogger(__name__)
 # the multi-generation batch path below dispatches through the identical mechanism instead
 # of a v2ecoli-specific CLI script — see backlog items 26/27.
 _RUNNER_SRC = (_res.files("viva_api.compose") / "run_pbg.py").read_text()
+# The Nextflow compiler, staged the same way and for the same reason (Batch caps a
+# container override command at 8192 bytes).
+_RENDER_NF_SRC = (_res.files("viva_api.compose") / "render_nf.py").read_text()
 
 # Registered composite id (process_bigraph.composite_spec) for the multi-generation
 # batch orchestrator, and the workspace core-builder that resolves its registered
@@ -139,7 +142,25 @@ SIM_OUT_DIR = f"{V2ECOLI_DIR}/.pbg/runs/phase0-xarray"
 # fix this; PYTHONPATH does. Found live 2026-09-01 (backlog item 93): a real
 # chain-dispatch run with a non-empty injected_processes failed
 # ModuleNotFoundError('scripts') despite the cd already being correct.
-PBG_RUNNER_ENV = f"PBG_RESULTS_DIR={SIM_OUT_DIR} PBG_CORE_BUILDER={V2ECOLI_CORE_BUILDER} PYTHONPATH={V2ECOLI_DIR}"
+# PBG_REQUIRE_OUTPUT=1: on the CD2 Ray/baseline dispatch a run that produced no
+# emitted store is always a failure, so run_pbg.py must exit non-zero instead of
+# reporting success on the final_state.json fallback alone (audit §2.4 / P0-3).
+# PBG_MIN_GLOBAL_TIME: the EFFECT half of the output guard (viva-api #395 / #375 §3e).
+# PBG_REQUIRE_OUTPUT proves an emitted store EXISTS; this proves the generation
+# actually RAN. A swap campaign that collapses to one tick (#375 §3d/§3e; the
+# item-103 test measured "global_time never exceeded 1.0 across 10 chained
+# generations") still writes a non-empty 1.pq and passes the presence check — and
+# that is exactly the mode #387 can expose (a nested swap that used to be dropped
+# now reaches the run). A real whole-cell generation advances hundreds-to-thousands
+# of seconds of global_time, so a floor well above one tick (1.0) and far below one
+# generation catches the collapse with no false-fail. Conservative and tunable; only
+# set on this CD2 baseline/lineage path, NOT the generic compose path (which can run
+# legitimately short composites).
+PBG_MIN_GLOBAL_TIME = 10.0
+PBG_RUNNER_ENV = (
+    f"PBG_RESULTS_DIR={SIM_OUT_DIR} PBG_CORE_BUILDER={V2ECOLI_CORE_BUILDER}"
+    f" PYTHONPATH={V2ECOLI_DIR} PBG_REQUIRE_OUTPUT=1 PBG_MIN_GLOBAL_TIME={PBG_MIN_GLOBAL_TIME}"
+)
 # The analysis DAG node writes its outputs straight to S3 (see _analysis_command),
 # so this local dir normally never exists and the entrypoint's RAY_OUT_DIR sync is a
 # documented no-op ("no <dir>; nothing to upload"). It is still declared so anything
@@ -256,6 +277,27 @@ def _is_upstream_vecoli(composite: CompositeEngine | None) -> bool:
     return composite == "vecoli"
 
 
+def strain_from_config(config: Any) -> tuple[str | None, str | None]:
+    """Return ``(new_genes, bundle_overrides)`` — the strain a run requested — from
+    a config's ``parca_options``, or ``(None, None)`` for a wild-type/unset build.
+
+    Same read the ParCa command uses (``getattr(config.parca_options, ...)``);
+    threaded to the entrypoint as ``*_EXPECT_NEW_GENES`` / ``*_EXPECT_BUNDLE_OVERRIDES``
+    so a wrong-strain staged cache is rejected (sms-ecoli#210 / #215). ``off``/empty
+    is wild-type -> ``None`` (matches build_cache.py's own normalization).
+    """
+    parca_options = getattr(config, "parca_options", None)
+
+    def _norm(value: Any) -> str | None:
+        s = value.strip() if isinstance(value, str) else None
+        return None if not s or s == "off" else s
+
+    return (
+        _norm(getattr(parca_options, "new_genes", None)),
+        _norm(getattr(parca_options, "bundle_overrides", None)),
+    )
+
+
 def injected_processes_from_config(config: Any) -> dict[str, Any] | None:
     """Build ``ecoli_baseline.baseline()``'s own ``injected_processes`` kwarg
     (backlog item 93) from a legacy config's ``swap_processes``/
@@ -278,17 +320,128 @@ def injected_processes_from_config(config: Any) -> dict[str, Any] | None:
     ``injected_processes["fork_repo"]`` directly (not ``.get``), so the key
     must be present even though it is always empty on this path.
     """
-    swap_processes = getattr(config, "swap_processes", None) or {}
-    add_processes = getattr(config, "add_processes", None) or []
-    exclude_processes = getattr(config, "exclude_processes", None) or []
+
+    # Two accepted shapes, resolved PER FIELD, not as a whole-block either/or:
+    #   (1) FLAT: swap_processes / add_processes / exclude_processes as top-level
+    #       config extras (the legacy shape this helper was written for).
+    #   (2) NESTED: a whole ``injected_processes`` block passed through as an extra
+    #       -- e.g. ``extra_params={"injected_processes": {"swap_processes": ...}}``,
+    #       exactly the shape ``run_comparison_ensemble.py --from-vecoli-config``
+    #       emits. This is what viva-api#385 hit: the nested block reached the
+    #       resolved config, but this helper only read the flat fields, found none,
+    #       returned None, and the swap was silently dropped at every downstream hop
+    #       (chain-dispatch ran wild-type, reporting success).
+    # A nested submit and the config's own flat fields are NOT mutually-exclusive
+    # alternatives (viva-api#401): choosing the whole shape once meant a nested
+    # submit setting only ``swap_processes`` silently dropped a config's own flat
+    # ``add_processes``/``exclude_processes``, even though nothing about the
+    # caller's request implied dropping them -- observed live (sim 296): a
+    # mecillinam config's own 4 ``add_processes`` vanished under a nested swap
+    # that never mentioned them. Each of the three fields is now resolved
+    # independently -- the nested value wins when set, else fall back to flat --
+    # so a caller sending only ``swap_processes`` keeps the config's own
+    # ``add_processes``/``exclude_processes`` rather than losing them.
+    def _read(src: Any, key: str, default: Any) -> Any:
+        if isinstance(src, dict):
+            return src.get(key) or default
+        return getattr(src, key, None) or default
+
+    nested = getattr(config, "injected_processes", None)
+    nested_has_intent = nested is not None and (
+        _read(nested, "swap_processes", None)
+        or _read(nested, "add_processes", None)
+        or _read(nested, "exclude_processes", None)
+    )
+
+    flat_swap = _read(config, "swap_processes", {})
+    flat_add = _read(config, "add_processes", [])
+    flat_exclude = _read(config, "exclude_processes", [])
+    nested_swap = _read(nested, "swap_processes", None)
+    nested_add = _read(nested, "add_processes", None)
+    nested_exclude = _read(nested, "exclude_processes", None)
+
+    # A real conflict (both sides set the SAME field) is a silent override,
+    # not just a merge -- worth a log line so it is at least discoverable,
+    # per cplong90's own framing on #401 ("an override worth logging, not one
+    # to make silently"), matching this codebase's own repeated fix pattern
+    # for silent-success-masking-a-real-difference (items 93/103/111/114).
+    for name, nested_val, flat_val in (
+        ("swap_processes", nested_swap, flat_swap),
+        ("add_processes", nested_add, flat_add),
+        ("exclude_processes", nested_exclude, flat_exclude),
+    ):
+        if nested_val and flat_val:
+            logger.warning(
+                "injected_processes_from_config: nested %s overrides the config's own flat %s (nested=%r, flat=%r)",
+                name,
+                name,
+                nested_val,
+                flat_val,
+            )
+
+    swap_processes = nested_swap or flat_swap
+    add_processes = nested_add or flat_add
+    exclude_processes = nested_exclude or flat_exclude
     if not (swap_processes or add_processes or exclude_processes):
         return None
-    return {
+
+    # Carry the caller-supplied nested block through rather than rebuilding a
+    # fresh dict from just the four keys below (viva-api#392): a nested submit
+    # can carry additional real intent -- e.g. `cache_dir`, which a fork-free
+    # swap's own resolve_injections() spec-building needs to load the target
+    # process's config from the ParCa bundle. Reconstructing only
+    # {swap_processes, add_processes, exclude_processes, fork_repo} silently
+    # dropped it, so the swapped-in process mounted with an empty config
+    # instead of failing loud or running correctly. The four keys are
+    # normalized defaults layered ON TOP of the carried-through block, not a
+    # replacement for it, so this stays byte-identical for the flat/legacy
+    # shape (nothing to carry through there) and for any nested submit that
+    # never set the four keys to begin with.
+    result: dict[str, Any] = dict(nested) if isinstance(nested, dict) and nested_has_intent else {}
+    result.update({
         "swap_processes": swap_processes,
         "add_processes": add_processes,
         "exclude_processes": exclude_processes,
         "fork_repo": "",
-    }
+    })
+    return result
+
+
+def _batch_domain_overrides(
+    *,
+    injected_processes: dict[str, Any] | None = None,
+    variants: dict[str, Any] | None = None,
+    config_overrides: dict[str, Any] | None = None,
+    features: list[Any] | None = None,
+    exchange_fluxes: dict[str, Any] | None = None,
+    exchange_flux_basis: str | None = None,
+) -> dict[str, Any]:
+    """The submitted config's DOMAIN fields as ``ecoli_baseline.baseline()``'s own
+    batch-mode ``--overrides`` keys (the CD2 native seam).
+
+    v2ecoli #640 threaded ``injected_processes``/``features``/``exchange_fluxes``/
+    ``exchange_flux_basis`` through ``_build_batch_document``; ``config_overrides``
+    and ``variants`` already existed. Each key is emitted ONLY when non-empty, so a
+    config with no injection/variant intent yields ``{}`` and the caller's overrides
+    dict is byte-for-byte what this path built before threading was added -- the
+    same regression contract as ``injected_processes_from_config`` and the 0.9.79
+    chain-dispatch passthrough. ``exchange_flux_basis`` rides only alongside a flux
+    map (the composite defaults it to "").
+    """
+    out: dict[str, Any] = {}
+    if injected_processes:
+        out["injected_processes"] = injected_processes
+    if variants:
+        out["variants"] = variants
+    if config_overrides:
+        out["config_overrides"] = config_overrides
+    if features:
+        out["features"] = features
+    if exchange_fluxes:
+        out["exchange_fluxes"] = exchange_fluxes
+        if exchange_flux_basis:
+            out["exchange_flux_basis"] = exchange_flux_basis
+    return out
 
 
 @dataclass
@@ -313,6 +466,22 @@ class ChainCampaignPollResult:
     terminal: bool
     succeeded_job_ids: list[str] = field(default_factory=list)
     failed_job_ids: list[str] = field(default_factory=list)
+
+
+def _batch_exit_code(job: dict[str, Any]) -> str | None:
+    """The container exit code from an AWS Batch ``describe_jobs`` job object,
+    as a string (JobStatusInfo.exit_code is ``str | None``), or None when Batch
+    has not reported one yet.
+
+    Batch surfaces it at ``job["container"]["exitCode"]`` for a single-container
+    job and at ``job["nodeProperties"]...["container"]["exitCode"]`` for a
+    multi-node (MNP) job's main node; the top-level ``container`` key carries the
+    main container for both shapes in ``describe_jobs`` output, so read it there.
+    Previously hardcoded to None, discarding the real exit status (CD2 audit
+    §2.4 / P1-13).
+    """
+    exit_code = (job.get("container") or {}).get("exitCode")
+    return str(exit_code) if exit_code is not None else None
 
 
 class SimulationServiceRay(SimulationService):
@@ -420,6 +589,8 @@ class SimulationServiceRay(SimulationService):
         tags: dict[str, str] | None = None,
         retry_strategy: dict[str, Any] | None = None,
         batch_client: Any = None,
+        expect_new_genes: str | None = None,
+        expect_bundle_overrides: str | None = None,
     ) -> str:
         """Submit a Ray MNP job via boto3, mirroring sms-cdk scripts/ray_batch_submit.sh.
 
@@ -459,7 +630,22 @@ class SimulationServiceRay(SimulationService):
             stage_s3=stage_s3,
             stage_dir=stage_dir,
             log_s3_prefix=settings.ray_log_s3_prefix,
+            expect_new_genes=expect_new_genes,
+            expect_bundle_overrides=expect_bundle_overrides,
         )
+        # Ray's own documented safety net (not a bespoke workaround): by default Ray
+        # refuses to start its plasma object store when the container's /dev/shm is
+        # smaller than the size it wants to request, which is a real, observed
+        # failure mode on this fleet -- a single-node lineage_ray_batch diagnostic
+        # (item 105/109, database_id=344, 2026-09-05) died in raylet bootstrap,
+        # before any application code ran, requesting ~10.2GB against ~9.66GB
+        # available. This flag makes Ray fall back to a disk-backed object store
+        # instead of erroring -- zero behavioral change on every node where shm is
+        # already sufficient (every other MNP dispatch to date), a graceful
+        # (slower, not silent) degradation instead of a hard crash on the ones
+        # that aren't. Every node runs its own raylet, so this belongs in
+        # shared_env, not head-only.
+        shared_env.append({"name": "RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE", "value": "1"})
 
         # The head additionally runs the workload (RAY_JOB_CMD) and writes the report.
         # Workers receive these too but never act on them — the entrypoint branches on
@@ -536,12 +722,23 @@ class SimulationServiceRay(SimulationService):
         stage_s3: str | None = None,
         stage_dir: str | None = None,
         log_s3_prefix: str | None = None,
+        expect_new_genes: str | None = None,
+        expect_bundle_overrides: str | None = None,
     ) -> list[dict[str, str]]:
         """Shared stage/output/log env-var construction for both the MNP (``RAY_*``)
         and container (``CONTAINER_*``) submission paths (backlog item 71) -- same
         conditional logic (only emit STAGE_*/LOG_S3_PREFIX when configured), a
         different env-var prefix per job shape, since each entrypoint script only
         reads its own prefix -- the values can't literally share one env list.
+
+        ``expect_new_genes``/``expect_bundle_overrides`` (sms-ecoli#210 / #215): the
+        STRAIN this run requested. The entrypoint's ``stage_inputs`` already runs
+        ``verify_cache_version`` (schema + source-hash) on the staged cache; these
+        let it ALSO reject a WRONG-STRAIN cache (P1-6). Emitted as
+        ``{prefix}_EXPECT_NEW_GENES`` / ``{prefix}_EXPECT_BUNDLE_OVERRIDES`` only for
+        a real strain -- ``off``/empty is wild-type and emits nothing, so a
+        wild-type run is byte-identical to before and the entrypoint check stays
+        inert until a real strain is requested.
         """
         env: list[dict[str, str]] = [
             {"name": f"{prefix}_OUT_DIR", "value": out_dir},
@@ -552,6 +749,14 @@ class SimulationServiceRay(SimulationService):
             env.append({"name": f"{prefix}_STAGE_DIR", "value": stage_dir})
         if log_s3_prefix:
             env.append({"name": f"{prefix}_LOG_S3_PREFIX", "value": log_s3_prefix})
+        # off/empty is wild-type -> no expectation to assert (matches the parca-side
+        # normalization in build_cache.py and _parca_command's own flag guard).
+        ng = (expect_new_genes or "").strip()
+        if ng and ng != "off":
+            env.append({"name": f"{prefix}_EXPECT_NEW_GENES", "value": ng})
+        bo = (expect_bundle_overrides or "").strip()
+        if bo and bo != "off":
+            env.append({"name": f"{prefix}_EXPECT_BUNDLE_OVERRIDES", "value": bo})
         return env
 
     def _ensure_container_job_def(self, image: str, commit: str) -> str:
@@ -614,6 +819,8 @@ class SimulationServiceRay(SimulationService):
         tags: dict[str, str] | None = None,
         retry_strategy: dict[str, Any] | None = None,
         batch_client: Any = None,
+        expect_new_genes: str | None = None,
+        expect_bundle_overrides: str | None = None,
     ) -> str:
         """Submit a plain, standalone AWS Batch container-type job (backlog item 71).
 
@@ -645,6 +852,8 @@ class SimulationServiceRay(SimulationService):
                 stage_s3=stage_s3,
                 stage_dir=stage_dir,
                 log_s3_prefix=settings.ray_log_s3_prefix,
+                expect_new_genes=expect_new_genes,
+                expect_bundle_overrides=expect_bundle_overrides,
             ),
         ]
 
@@ -705,19 +914,36 @@ class SimulationServiceRay(SimulationService):
         is small next to the rest of the cache, and every existing consumer of
         this cache dir already tolerates unknown files (nothing here globs or
         rejects extras).
+
+        ``new_genes``/``bundle_overrides`` do NOT ride onto the ``build_cache.py``
+        step below (confirmed 2026-09-04 against a real crash: its current CLI has
+        neither flag, ``unrecognized arguments``). Not a gap -- its own bundle-write
+        (``save_sim_input``) already produces a complete, correct ``cache_version.json``
+        straight from ``sim_data``, which is already strain-specific because
+        ``v2ecoli-parca`` received both flags one command earlier in this same chain.
+        Restamping here would be redundant even where it was once supported.
         """
         settings = get_settings()
         new_genes_flag = f" --new-genes {shlex.quote(new_genes)}" if new_genes and new_genes != "off" else ""
         bundle_overrides_flag = f" --bundle-overrides {shlex.quote(bundle_overrides)}" if bundle_overrides else ""
-        return (
+        command = (
             f"cd {V2ECOLI_DIR}"
             f" && v2ecoli-parca --mode {settings.ray_parca_mode} --cpus {settings.ray_parca_cpus}"
             f" -o {PARCA_SIMDATA_DIR} --cache-dir {PARCA_CACHE_DIR}{new_genes_flag}{bundle_overrides_flag}"
             f" && gzip -f -k {PARCA_SIMDATA_DIR}/parca_state.pkl"
             f" && python scripts/build_cache.py"
-            f" --fixture {PARCA_SIMDATA_DIR}/parca_state.pkl.gz --cache {PARCA_CACHE_DIR}"
+            f" --fixture {PARCA_SIMDATA_DIR}/parca_state.pkl.gz"
+            f" --cache {PARCA_CACHE_DIR}"
             f" && cp {PARCA_SIMDATA_DIR}/parca_state.pkl.gz {PARCA_CACHE_DIR}/parca_state.pkl.gz"
         )
+        # A config that requests a real strain (new_genes != "off") MUST produce a
+        # command that carries the flag — otherwise ParCa silently builds wild-type
+        # and the run "succeeds" with the wrong genotype (CD2 audit §2.1 / P0-2).
+        if new_genes and new_genes != "off":
+            assert new_genes_flag and new_genes_flag in command, (  # noqa: S101  internal invariant, not input validation
+                f"new_genes={new_genes!r} requested but the ParCa command does not carry --new-genes: {command!r}"
+            )
+        return command
 
     def _build_new_gene_cache_command(
         self,
@@ -802,6 +1028,136 @@ class SimulationServiceRay(SimulationService):
             f" --copy-to {PARCA_CACHE_DIR}{config_flag}"
         )
 
+    async def stage_render_nf(self, experiment_id: str) -> str:
+        """Upload the Nextflow compiler beside the run_pbg runner; return its URI.
+
+        Same staging idiom and the same reason as ``stage_runner``: Batch caps a
+        container override command at 8192 bytes, so the script travels through S3
+        rather than the command line. Deterministic from ``experiment_id``.
+        """
+        from viva_api.dependencies import get_file_service
+
+        file_service = get_file_service()
+        if file_service is None:
+            raise RuntimeError("FileService not initialized; cannot stage render_nf.py to S3.")
+        exp_prefix = data_layout.RayLayout.experiment_prefix(experiment_id)
+        runner_key = f"{exp_prefix}/render_nf.py"
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tmp:
+            tmp.write(_RENDER_NF_SRC)
+            runner_local = tmp.name
+        try:
+            await file_service.upload_file(Path(runner_local), S3FilePath(s3_path=Path(runner_key)))
+        finally:
+            Path(runner_local).unlink(missing_ok=True)
+        return data_layout.s3_uri(runner_key)
+
+    def _submit_image_uri(self, commit: str) -> str:
+        """The Nextflow HEAD image for a commit: ``<repo>:<commit>-submit``.
+
+        Only the process running ``nextflow run`` needs a JVM; Batch TASKS run the
+        plain science image. Built on request by ``include_submit_image``
+        (viva-api#423/#426) -- a dispatch asking for Nextflow against a commit whose
+        head image was never built fails at the Batch pull, which is why the
+        submitter names the tag explicitly rather than reusing ``_image_uri``.
+        """
+        settings = get_settings()
+        registry = f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
+        return f"{registry}/{settings.ray_ecr_repository}:{commit}-submit"
+
+    def _render_nf_command(
+        self,
+        *,
+        runner_s3_uri: str,
+        composite_id: str,
+        params: dict[str, Any] | None,
+        executor: str,
+        launch: bool,
+        outdir: str,
+        work_dir: str | None = None,
+        resume: bool = False,
+    ) -> str:
+        """The container command: fetch the compiler, render, optionally launch.
+
+        ``--executor local`` is the intended FIRST check (Phase 3 of
+        docs/plan-nextflow-dispatch.md): it answers "does render+launch work in our
+        real image" separately from "does the awsbatch executor work", so a failure
+        has one candidate cause rather than two.
+        """
+        overrides_flag = ""
+        if params:
+            overrides_flag = f" --overrides {shlex.quote(json.dumps(params))}"
+        launch_flag = " --launch" if launch else ""
+        resume_flag = " --resume" if resume else ""
+        work_dir_flag = f" --work-dir {shlex.quote(work_dir)}" if work_dir else ""
+        # A trace is how a resumed run is told apart from a repeated one: a reused
+        # task reports CACHED there and nowhere else.
+        return (
+            f"cd {V2ECOLI_DIR}"
+            f" && aws s3 cp {shlex.quote(runner_s3_uri)} /tmp/render_nf.py"
+            f" && python /tmp/render_nf.py"
+            f" --composite-id {shlex.quote(composite_id)}"
+            f" --outdir {shlex.quote(outdir)}"
+            f" --executor {shlex.quote(executor)}"
+            f" --trace {shlex.quote(outdir)}/trace.csv"
+            f"{overrides_flag}{launch_flag}{resume_flag}{work_dir_flag}"
+        )
+
+    async def _submit_nextflow_dispatch(
+        self,
+        ecoli_simulation: Simulation,
+        database_service: DatabaseService,
+        nf_dispatch: dict[str, Any],
+        *,
+        correlation_id: str | None = None,
+    ) -> JobId:
+        """Compile a registered composite to a Nextflow workflow and run it.
+
+        The third dispatch path (docs/plan-nextflow-dispatch.md). Runs as a
+        CONTAINER job on the Nextflow HEAD image -- reusing ``_submit_container``
+        exactly as the plan specifies, so Phase 3 is verified with
+        ``executor='local'`` before Phase 4 introduces the awsbatch executor.
+        """
+        simulator = await database_service.get_simulator(simulator_id=ecoli_simulation.simulator_id)
+        if simulator is None:
+            raise ValueError(f"Simulator {ecoli_simulation.simulator_id} not found")
+
+        composite_id = nf_dispatch.get("composite_id")
+        if not composite_id:
+            raise ValueError("nextflow_dispatch.composite_id is required")
+
+        commit = simulator.git_commit_hash
+        experiment_id = str(ecoli_simulation.config.experiment_id)
+        outdir = f"{V2ECOLI_DIR}/nf-render"
+
+        job_def = self._ensure_container_job_def(self._submit_image_uri(commit), f"{commit}-submit")
+        runner_s3_uri = await self.stage_render_nf(experiment_id)
+        command = self._render_nf_command(
+            runner_s3_uri=runner_s3_uri,
+            composite_id=str(composite_id),
+            params=nf_dispatch.get("params"),
+            executor=str(nf_dispatch.get("executor", "local")),
+            launch=bool(nf_dispatch.get("launch", False)),
+            outdir=outdir,
+            work_dir=nf_dispatch.get("work_dir"),
+            resume=bool(nf_dispatch.get("resume", False)),
+        )
+        job_id = self._submit_container(
+            job_name=f"nf-dispatch-{experiment_id}-{_rand_suffix()}"[:128],
+            job_definition=job_def,
+            job_cmd=command,
+            out_s3=self._results_s3_uri(experiment_id),
+            out_dir=outdir,
+            tags={
+                "Project": "v2ecoli-nextflow-dispatch",
+                "ExperimentId": experiment_id[:255],
+                "CompositeId": str(composite_id)[:255],
+                "Commit": str(commit)[:12],
+            },
+        )
+        # JobId.ray, like every other Batch-backed path here: the poller tracks it
+        # with describe_jobs regardless of which mechanism submitted it.
+        return JobId.ray(job_id)
+
     async def stage_runner(self, experiment_id: str) -> str:
         """Upload the generic run_pbg.py runner to S3 for this experiment; return its URI.
 
@@ -846,6 +1202,12 @@ class SimulationServiceRay(SimulationService):
         n_generations: int = 1,
         experiment_id: str | None = None,
         runner_s3_uri: str | None = None,
+        injected_processes: dict[str, Any] | None = None,
+        variants: dict[str, Any] | None = None,
+        config_overrides: dict[str, Any] | None = None,
+        features: list[Any] | None = None,
+        exchange_fluxes: dict[str, Any] | None = None,
+        exchange_flux_basis: str | None = None,
     ) -> str:
         # When ``composite`` is set, run the two-engine comparison driver — both
         # engines (v2ecoli port + vEcoli imported via build_composite_native)
@@ -892,7 +1254,7 @@ class SimulationServiceRay(SimulationService):
                     "runner_s3_uri is required for multi-generation batch dispatch "
                     "(the generic run_pbg.py runner must be staged to S3 first)"
                 )
-            overrides = {
+            overrides: dict[str, Any] = {
                 "n_seeds": int(n_seeds),
                 "n_generations": int(n_generations),
                 "cache_dir": PARCA_CACHE_DIR,
@@ -905,6 +1267,36 @@ class SimulationServiceRay(SimulationService):
                 "analyses": "none",
                 "parallel": "ray",
             }
+            # Thread the submitted config's DOMAIN fields into the batch composite's
+            # own overrides so the native ``ecoli_baseline.baseline()`` batch run
+            # actually carries the metabolism-redux/violacein swap (the CD2 native
+            # seam). Without these keys the composite runs a plain basal baseline
+            # even though the config requested a swap -- the composite never sees it.
+            #
+            # These are exactly ``ecoli_baseline.baseline()``'s own batch-mode kwargs
+            # (v2ecoli #640 threaded injected_processes/features/exchange_fluxes/
+            # exchange_flux_basis through ``_build_batch_document``; config_overrides
+            # and variants already existed). Each is added ONLY when non-empty, so a
+            # config with no injection/variant intent produces the exact overrides
+            # dict this path built before -- the byte-for-byte-unchanged regression
+            # property (mirrors ``injected_processes_from_config``'s own contract and
+            # the 0.9.79 chain-dispatch passthrough).
+            #
+            # ``injected_processes`` is the mapped shape ``baseline()`` expects
+            # ({swap_processes, add_processes, exclude_processes, fork_repo}), built
+            # by ``injected_processes_from_config`` from the legacy config's
+            # ``swap_processes`` -- the SAME mapping ``_seed_generation_command`` and
+            # the chain-dispatch/JobScheduler path already use.
+            overrides.update(
+                _batch_domain_overrides(
+                    injected_processes=injected_processes,
+                    variants=variants,
+                    config_overrides=config_overrides,
+                    features=features,
+                    exchange_fluxes=exchange_fluxes,
+                    exchange_flux_basis=exchange_flux_basis,
+                )
+            )
             env = PBG_RUNNER_ENV
             return (
                 f"cd {V2ECOLI_DIR}"
@@ -1240,7 +1632,11 @@ class SimulationServiceRay(SimulationService):
 
     @override
     async def submit_build_image_job(
-        self, simulator_version: SimulatorVersion, *, include_new_gene_data: bool = False
+        self,
+        simulator_version: SimulatorVersion,
+        *,
+        include_new_gene_data: bool = False,
+        include_submit_image: bool = False,
     ) -> JobId:
         """Build the self-contained v2ecoli Ray image via a DooD Batch job.
 
@@ -1255,11 +1651,21 @@ class SimulationServiceRay(SimulationService):
         """
         commit = simulator_version.git_commit_hash
         return self._local.submit(
-            self._run_build(simulator_version, include_new_gene_data=include_new_gene_data),
+            self._run_build(
+                simulator_version,
+                include_new_gene_data=include_new_gene_data,
+                include_submit_image=include_submit_image,
+            ),
             name=f"ray-build-{commit}",
         )
 
-    def _build_command(self, simulator_version: SimulatorVersion, *, include_new_gene_data: bool = False) -> list[str]:
+    def _build_command(
+        self,
+        simulator_version: SimulatorVersion,
+        *,
+        include_new_gene_data: bool = False,
+        include_submit_image: bool = False,
+    ) -> list[str]:
         """DooD build command: clone v2ecoli@commit, run its build-and-push recipe.
 
         Mirrors SimulationServiceK8s._build_command (apk deps, PAT clone, in-repo recipe),
@@ -1307,17 +1713,67 @@ git checkout {commit}
 # recipe builds + pushes v2ecoli:<sha> and the :latest deploy tag the MNP job def uses.
 bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -R {settings.batch_region}{build_flags}
 """
+        if include_submit_image:
+            # The Nextflow HEAD image. Deliberately a thin derived layer, not a change to the
+            # task image: on vEcoli's proven awsbatch profile the Batch tasks run
+            # ``container = params.container_image`` -- the PLAIN science image, with no JVM
+            # and no nextflow binary anywhere. Only the process that runs ``nextflow run``
+            # needs Java. v2ecoli's own image already installs AWS CLI v2 (Dockerfile:149-156),
+            # which is the one thing Nextflow *does* require inside a task container to stage
+            # the S3 work dir, so nothing about the task side has to change.
+            #
+            # Mirrors SimulationServiceK8s._build_command(submit_image=True) rather than
+            # inventing a second recipe; NEXTFLOW_VERSION is pinned to the same 25.10.2 that
+            # image uses, so one Nextflow version spans the deployment. (Phase 0 of
+            # docs/plan-nextflow-dispatch.md measured 25.04.3; both map `time` to Batch
+            # attemptDurationSeconds -- see its §11.1 -- and the skew is resolved here in
+            # favour of what already ships.)
+            script += f"""
+BASE_URI=$ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}
+
+cat > /tmp/Dockerfile-submit <<'DOCKERFILE'
+ARG BASE_IMAGE
+FROM ${{BASE_IMAGE}}
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends default-jre-headless \\
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+ARG NEXTFLOW_VERSION=25.10.2
+RUN curl -fsSL "https://github.com/nextflow-io/nextflow/releases/download/v${{NEXTFLOW_VERSION}}/nextflow" \\
+    -o /usr/local/bin/nextflow && chmod +x /usr/local/bin/nextflow
+WORKDIR /app/v2ecoli
+DOCKERFILE
+
+docker build -t "$ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-submit" \
+    --build-arg BASE_IMAGE="$BASE_URI" \
+    -f /tmp/Dockerfile-submit /tmp
+docker push "$ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-submit"
+echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-submit"
+"""
         return ["sh", "-c", script]
 
-    async def _run_build(self, simulator_version: SimulatorVersion, *, include_new_gene_data: bool = False) -> None:
+    async def _run_build(
+        self,
+        simulator_version: SimulatorVersion,
+        *,
+        include_new_gene_data: bool = False,
+        include_submit_image: bool = False,
+    ) -> None:
         """Submit the DooD v2ecoli image build to Batch (amd64 queue) and poll it."""
         settings = get_settings()
         commit = simulator_version.git_commit_hash
         job_id = await batch_build.submit_batch_build(
-            job_name=f"v2ecoli-ray-build-{commit}",
+            job_name=batch_build.ray_build_job_name(commit),
             queue=settings.build_amd64_queue,
-            command=self._build_command(simulator_version, include_new_gene_data=include_new_gene_data),
+            command=self._build_command(
+                simulator_version,
+                include_new_gene_data=include_new_gene_data,
+                include_submit_image=include_submit_image,
+            ),
         )
+        # viva-api#414: persist the Batch handle on this task's HpcRun row so
+        # the build's outcome is recoverable from any process, not only the
+        # one holding this asyncio.Task (which dies with the pod).
+        await self._local.record_external_job_ids([job_id])
         await batch_build.poll_batch_jobs([job_id])
         logger.info("v2ecoli Ray image build complete: %s:%s", settings.ray_ecr_repository, commit)
 
@@ -1445,6 +1901,22 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         # field -- checked FIRST, before the chain-dispatch routing below, since a
         # multi-node request may otherwise also satisfy that check's own
         # composite-is-None/generations>1 condition and would silently misroute.
+        # A Nextflow dispatch is checked BEFORE multi_node_dispatch for the same
+        # reason that one is checked before chain-dispatch: it carries a
+        # composite_id too, so a later check would silently claim it first and the
+        # request would run on the wrong mechanism while looking like it worked.
+        #
+        # Deliberately a per-request extra rather than a new ComputeBackend:
+        # compute_backend_for_repo maps repo -> backend, so a NEXTFLOW member would
+        # either reroute every v2ecoli request or be dead configuration. This is the
+        # same axis multi_node_dispatch already uses to pick pbg-native over
+        # chain-dispatch for the same repo, same image, one config field apart.
+        nf_dispatch = getattr(config, "nextflow_dispatch", None)
+        if nf_dispatch is not None:
+            return await self._submit_nextflow_dispatch(
+                ecoli_simulation, database_service, nf_dispatch, correlation_id=correlation_id
+            )
+
         mnp_dispatch = getattr(config, "multi_node_dispatch", None)
         if mnp_dispatch is not None:
             return await self._submit_multi_node_composite(
@@ -1492,7 +1964,18 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         # every other engine stages the v2ecoli cache. Both ParCa and the sim use
         # the matching pair so the staged simData is consistent across all nodes.
         is_upstream = _is_upstream_vecoli(composite)
-        cache_s3 = self._upstream_cache_s3_uri(commit) if is_upstream else self.cache_s3_uri(commit)
+        # Backlog item 105: same generic cache_variant passthrough already proven
+        # for the chain-dispatch/multi-node-composite paths -- irrelevant to the
+        # upstream-vEcoli engine (its own config_path-driven mechanism is separate).
+        # This is the whole fix for the comparison-ensemble path's own real gap: the
+        # driver's `--cache-dir` default already resolves to PARCA_CACHE_DIR (the
+        # exact path staged below), so redirecting the STAGED cache via `variant`
+        # is sufficient -- no command-line change needed, confirmed the two paths
+        # are byte-identical (`REPO_ROOT/out/cache` == `/app/v2ecoli/out/cache`).
+        cache_variant = None if is_upstream else (getattr(config, "cache_variant", None) or None)
+        cache_s3 = (
+            self._upstream_cache_s3_uri(commit) if is_upstream else self.cache_s3_uri(commit, variant=cache_variant)
+        )
         # Backlog item 93: same generic new_genes passthrough as
         # submit_chain_dispatch_job -- irrelevant to the upstream-vEcoli
         # engine (its own config_path-driven mechanism, item 87, is separate).
@@ -1559,6 +2042,19 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
                 n_generations=n_generations,
                 experiment_id=str(experiment_id),
                 runner_s3_uri=runner_s3_uri,
+                # CD2 native seam: thread the submitted config's domain fields so the
+                # --composite-id batch run carries the metabolism-redux/violacein swap.
+                # injected_processes maps the legacy config's swap_processes ->
+                # ecoli_baseline.baseline()'s injected_processes kwarg (same helper the
+                # chain-dispatch/JobScheduler path uses); the rest are ecoli_baseline
+                # batch-mode kwargs read straight off the config (extra="allow"), all
+                # no-ops when the config sets none of them.
+                injected_processes=injected_processes_from_config(config),
+                variants=getattr(config, "variants", None),
+                config_overrides=getattr(config, "config_overrides", None),
+                features=getattr(config, "features", None),
+                exchange_fluxes=getattr(config, "exchange_fluxes", None),
+                exchange_flux_basis=getattr(config, "exchange_flux_basis", None),
             ),
             out_s3=self._results_s3_uri(experiment_id),
             out_dir=SIM_OUT_DIR,
@@ -1566,6 +2062,11 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
             stage_dir=PARCA_CACHE_DIR,
             depends_on=[parca_job_id],
             tags={**base_tags, "Phase": "sim"},
+            # Wrong-strain guard (sms-ecoli#210 / #215): tell the entrypoint which
+            # strain this run staged so it rejects a cache built for a different one.
+            # off/None (wild-type) emits nothing, so this is inert for non-strain runs.
+            expect_new_genes=new_genes,
+            expect_bundle_overrides=bundle_overrides,
         )
         logger.info(
             "Ray simulation %s: parca job %s -> sim job %s (%d nodes)",
@@ -1715,6 +2216,15 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         num_nodes = int(mnp_dispatch.get("num_nodes") or 1)
         params = dict(mnp_dispatch.get("params") or {})
         steps = int(mnp_dispatch.get("steps") or 1)
+        # cache_variant (item 105, mirrors chain-dispatch's own already-proven
+        # job_scheduler.py pattern -- getattr(simulation.config, "cache_variant",
+        # ...)): selects a variant-labeled derived ParCa cache (POST
+        # /parca/new-gene-cache, viva-api#378) instead of the plain per-commit
+        # default. Found missing 2026-09-04 firing the first-ever real strain-
+        # specific pbg-native dispatch -- this composite path never had it,
+        # only chain-dispatch did. None preserves today's behavior byte-for-
+        # byte (cache_s3_uri's own variant=None default).
+        cache_variant = mnp_dispatch.get("cache_variant") or None
 
         simulator = await database_service.get_simulator(simulator_id=ecoli_simulation.simulator_id)
         if simulator is None:
@@ -1729,7 +2239,7 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         if n_shards_default:
             n_shards_default *= num_nodes
 
-        cache_s3 = self.cache_s3_uri(commit)
+        cache_s3 = self.cache_s3_uri(commit, variant=cache_variant)
         runner_s3_uri = await self.stage_runner(experiment_id)
 
         base_tags = {
@@ -1740,15 +2250,51 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
             "Team": getattr(settings, "cost_team_tag", None) or "covertlab",
         }
 
-        parca_job_id = self._submit_mnp(
-            job_name=f"ray-parca-{commit}-{_rand_suffix()}",
-            job_definition=job_def,
-            num_nodes=1,
-            ray_job_cmd=self._parca_command(),
-            out_s3=cache_s3,
-            out_dir=PARCA_CACHE_DIR,
-            tags={**base_tags, "Phase": "parca"},
-        )
+        parca_job_id: str | None
+        if cache_variant:
+            # A variant cache is BY DEFINITION meant to already exist -- built
+            # via POST /parca/new-gene-cache (viva-api#378) or an external
+            # bridge sync (backlog item 106) -- never something this generic
+            # composite path knows how to build itself (it has no `new_genes`/
+            # `bundle_overrides` to give `_parca_command()`; those only ever
+            # reach chain-dispatch's own `_sim_command`/`_seed_generation_
+            # command`). Before this guard, submitting the plain ParCa job
+            # below UNCONDITIONALLY -- with no existence check -- would
+            # silently write a stock, un-perturbed cache into this exact
+            # commit+variant slot whenever a fresh simulator got built (a new
+            # commit means a brand-new, empty slot under the same variant
+            # name), indistinguishable from the real thing short of manually
+            # inspecting cache_version.json's own build_params. This is
+            # exactly what happened to Dispatch 339:Run 1 and Dispatch
+            # 340:Run 2 (backlog items 105/106, sms-ecoli#210) -- both
+            # resolved to a stock cache at a freshly-built commit under a
+            # real strain's own "candidate" variant name. Fail loud instead
+            # of ever fabricating a substitute; `cache_variant=None` (every
+            # other existing caller) is completely unaffected.
+            from viva_api.dependencies import get_file_service
+
+            file_service = get_file_service()
+            if file_service is None:
+                raise RuntimeError("FileService not initialized; cannot verify cache_variant staging.")
+            existing = await file_service.get_listing(S3FilePath(s3_path=Path(data_layout.key_from_uri(cache_s3))))
+            if not existing:
+                raise ValueError(
+                    f"cache_variant={cache_variant!r} has no staged ParCa cache at commit "
+                    f"{commit!r} ({cache_s3}). This dispatch path never builds a variant "
+                    f"cache itself -- build it first via POST /parca/new-gene-cache or an "
+                    f"external bridge sync, then retry."
+                )
+            parca_job_id = None
+        else:
+            parca_job_id = self._submit_mnp(
+                job_name=f"ray-parca-{commit}-{_rand_suffix()}",
+                job_definition=job_def,
+                num_nodes=1,
+                ray_job_cmd=self._parca_command(),
+                out_s3=cache_s3,
+                out_dir=PARCA_CACHE_DIR,
+                tags={**base_tags, "Phase": "parca"},
+            )
 
         composite_job_id = self._submit_mnp(
             job_name=f"ray-mnp-composite-{experiment_id}-{_rand_suffix()}"[:128],
@@ -1765,7 +2311,7 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
             out_dir=SIM_OUT_DIR,
             stage_s3=cache_s3,
             stage_dir=PARCA_CACHE_DIR,
-            depends_on=[parca_job_id],
+            depends_on=[parca_job_id] if parca_job_id else None,
             tags={**base_tags, "Phase": "composite"},
         )
         logger.info(
@@ -1823,6 +2369,8 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         injected_processes: dict[str, Any] | None = None,
         variants: dict[str, Any] | None = None,
         composite_id: str | None = None,
+        expect_new_genes: str | None = None,
+        expect_bundle_overrides: str | None = None,
     ) -> str:
         """Submit ONE seed's ONE generation as a standalone container-type job
         (backlog item 71 Phase 4) — the app-level-gated replacement for the
@@ -1863,6 +2411,8 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
             stage_dir=PARCA_CACHE_DIR,
             tags={**tags, "Seed": str(seed), "Generation": str(generation_index)},
             batch_client=batch_client,
+            expect_new_genes=expect_new_genes,
+            expect_bundle_overrides=expect_bundle_overrides,
         )
 
     async def submit_chain_generation_batch(
@@ -1878,6 +2428,8 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
         injected_processes: dict[str, Any] | None = None,
         variants: dict[str, Any] | None = None,
         composite_id: str | None = None,
+        expect_new_genes: str | None = None,
+        expect_bundle_overrides: str | None = None,
     ) -> dict[int, str]:
         """Submit the SAME generation index for MULTIPLE seeds at once,
         TPS-paced below the account-wide ``SubmitJob`` rate limit (reuses
@@ -1922,6 +2474,8 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
                     injected_processes=injected_processes,
                     variants=variants,
                     composite_id=composite_id,
+                    expect_new_genes=expect_new_genes,
+                    expect_bundle_overrides=expect_bundle_overrides,
                 )
             except Exception:
                 logger.exception(
@@ -2022,7 +2576,7 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
 
         task_job_id = self._local.submit(_run(), name=f"chain-dispatch-{ecoli_simulation.config.experiment_id}")
         try:
-            await database_service.insert_hpcrun(
+            placeholder = await database_service.insert_hpcrun(
                 job_id=task_job_id,
                 job_type=JobType.SIMULATION,
                 ref_id=ecoli_simulation.database_id,
@@ -2034,6 +2588,12 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
             # is about to be handed an error.
             self._local.cancel(task_job_id.value)
             raise
+        # viva-api#414: bind the placeholder to its task so the row is finalized
+        # from the task's own outcome (COMPLETED once the real campaign row has
+        # superseded it; FAILED, with the exception, if submission crashed).
+        # Before this the placeholder stayed `running` in the DB forever, and a
+        # submission crash was visible only in this process's memory.
+        await self._local.bind_hpcrun(task_job_id.value, placeholder.database_id, database_service)
         placeholder_recorded.set()
         logger.info(
             "Chain dispatch %s: submitting the campaign in the background as local task %s "
@@ -2408,7 +2968,7 @@ bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -
             status=status,
             start_time=str(started) if started else None,
             end_time=str(stopped) if stopped else None,
-            exit_code=None,
+            exit_code=_batch_exit_code(job),
             error_message=job.get("statusReason") if status == JobStatus.FAILED else None,
         )
 

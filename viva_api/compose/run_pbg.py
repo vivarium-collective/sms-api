@@ -28,6 +28,9 @@ import argparse
 import contextlib
 import json
 import os
+import shutil
+import subprocess
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -265,6 +268,301 @@ def _persist_emitter_history(composite: Any, results_dir: Path) -> Path | None:
     return out
 
 
+def _env_truthy(value: str | None) -> bool:
+    """A permissive truthiness test for an env-var string: any value other than
+    the usual falsy spellings counts as set."""
+    if not value:
+        return False
+    return value.strip().lower() not in ("0", "false", "no", "off", "")
+
+
+def _has_emitted_output(results_dir: Path) -> bool:
+    """True when *results_dir* holds REAL emitted output — a non-empty parquet or
+    zarr store, or a non-empty in-memory ``emitter_history.json`` — as opposed to
+    only the always-written ``final_state.json`` fallback (which is deliberately
+    NOT counted here).
+    """
+    for pattern in ("*.pq", "*.parquet"):
+        for p in results_dir.rglob(pattern):
+            if p.is_file() and p.stat().st_size > 0:
+                return True
+    # A zarr store is a directory tree; any of these marker files means a real store.
+    for marker in (".zgroup", ".zarray", "zarr.json", ".zattrs"):
+        for p in results_dir.rglob(marker):
+            if p.is_file():
+                return True
+    history = results_dir / "emitter_history.json"
+    if history.is_file() and history.stat().st_size > 0:
+        try:
+            if history.read_text().strip() not in ("", "{}"):
+                return True
+        except OSError:
+            return True  # exists and non-empty but unreadable here — treat as present
+    return False
+
+
+# How long to keep re-checking the shared prefix before giving up. Peer nodes sync on a
+# periodic timer (RAY_OUT_SYNC_INTERVAL, default 30 s), so a peer that emitted may not have
+# uploaded in the last few seconds when the driver reaches this check. We are asking "did
+# ANYTHING get emitted", not "is it complete", so one interval plus slack is enough.
+_SHARED_OUTPUT_WAIT_SECONDS = 90
+_SHARED_OUTPUT_POLL_SECONDS = 15
+
+_OUTPUT_SUFFIXES = (".pq", ".parquet")
+_ZARR_MARKERS = (".zgroup", ".zarray", "zarr.json", ".zattrs")
+
+
+def _has_emitted_output_shared(out_s3: str) -> bool | None:
+    """True/False when the shared S3 prefix can be listed; ``None`` when it cannot.
+
+    ``None`` is deliberately distinct from ``False``: "no output" and "could not look" are
+    different answers, and only the first justifies failing a run.
+
+    Shells out to the AWS CLI rather than importing boto3 — this module is stdlib-only by
+    design (it is staged into the simulator image, not installed with viva-api), and the
+    image's own entrypoint already depends on `aws` for these very syncs.
+    """
+    aws = shutil.which("aws")
+    if aws is None:
+        # The image's entrypoint warns and skips its own S3 sync in this case, so there is
+        # nothing to cross-check against either.
+        return None
+    try:
+        # Fixed argv (no shell), absolute resolved binary, and out_s3 comes from the
+        # entrypoint's own RAY_OUT_S3 -- the same value it syncs to.
+        proc = subprocess.run(  # noqa: S603
+            [aws, "s3", "ls", "--recursive", out_s3],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    for line in proc.stdout.splitlines():
+        # `aws s3 ls --recursive` → "<date> <time> <size> <key>"
+        parts = line.split(maxsplit=3)
+        if len(parts) < 4:
+            continue
+        try:
+            size = int(parts[2])
+        except ValueError:
+            continue
+        key = parts[3]
+        if size > 0 and key.endswith(_OUTPUT_SUFFIXES):
+            return True
+        if key.rsplit("/", 1)[-1] in _ZARR_MARKERS:
+            return True
+        if size > 0 and key.endswith("emitter_history.json"):
+            return True
+    return False
+
+
+def _assert_emitted_output(results_dir: Path) -> None:
+    """Fail the run (``SystemExit(1)``) when it produced no emitted output.
+
+    Gated by ``PBG_REQUIRE_OUTPUT`` (set by sms-api's Ray/compose dispatch, where
+    a zero-output run is always a failure), so the generic runner's other users —
+    a bare document whose only artifact is ``final_state.json`` — are unaffected
+    by default.
+
+    Closes the CD2 false-success chain (audit §2.4/§2.10 / P0-3): a composite
+    emits nothing (a missing ``[parquet]`` extra silently degrading to an
+    in-memory RAMEmitter, a declared emit path that resolved to nothing, a
+    zero-step run) → run_pbg writes ``final_state.json`` → exit 0 → Batch
+    SUCCEEDED → the run lands ``completed`` with no science in it. The SLURM
+    compose path already guards this (``compose/simulation_service.py:94-95``);
+    this is the stronger Ray/compose equivalent — ``final_state.json`` ALWAYS
+    exists here, so it asserts on the emitted store, not on that fallback.
+    """
+    if not _env_truthy(os.environ.get("PBG_REQUIRE_OUTPUT")):
+        return
+    if _has_emitted_output(results_dir):
+        return
+
+    # This process's OWN filesystem is not authoritative on a multi-node run (viva-api#419).
+    # Ray places `ray:`-addressed actors wherever it likes, and the emitters write on the node
+    # that actually hosts the actor -- which need not be this one. Twice on 2026-09-04 a
+    # fully successful lineage run was failed here because Ray put every actor on a peer and
+    # the driver checked an empty directory; the run's ~700 MB of parquet was already in S3.
+    #
+    # What IS authoritative is the shared prefix every node syncs into (RAY_OUT_S3, see the
+    # image's ray-batch entrypoint). Consult it before failing.
+    out_s3 = (os.environ.get("RAY_OUT_S3") or "").strip()
+    if out_s3:
+        deadline = time.monotonic() + _SHARED_OUTPUT_WAIT_SECONDS
+        unreachable = False
+        while True:
+            found = _has_emitted_output_shared(out_s3)
+            if found:
+                return
+            unreachable = found is None
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(_SHARED_OUTPUT_POLL_SECONDS)
+        where = (
+            f"and the shared prefix {out_s3} could not be listed"
+            if unreachable
+            else f"nor under the shared prefix {out_s3} (checked for {_SHARED_OUTPUT_WAIT_SECONDS}s)"
+        )
+    else:
+        where = "and no shared prefix (RAY_OUT_S3) is configured to cross-check"
+
+    raise SystemExit(
+        f"run_pbg: PBG_REQUIRE_OUTPUT is set but the run produced no emitted output under "
+        f"{results_dir} {where} (no non-empty parquet/zarr store and no emitter history; only "
+        f"the final_state.json fallback would remain). Refusing to report success."
+    )
+
+
+def _final_global_time(results_dir: Path) -> float | None:
+    """Read ``global_time`` from the run's ``final_state.json``, or ``None`` if it
+    is not present/readable as a number.
+
+    process_bigraph tracks simulated time as a top-level ``global_time`` in the
+    composite state that ``serialize_state()`` writes here. It is how much
+    biological time the run actually advanced — the single most robust tell of a
+    generation that "completed" without running (sms-ecoli#210 §3d / PR #375 §3e:
+    a swap campaign collapsing to one tick reaches ``final_state.json`` with
+    ``global_time`` ~= one time-step, e.g. 1.0, while a real generation reaches its
+    doubling time).
+    """
+    fs = results_dir / "final_state.json"
+    if not fs.is_file():
+        return None
+    try:
+        state = json.loads(fs.read_text())
+    except (OSError, ValueError):
+        return None
+    gt = state.get("global_time") if isinstance(state, dict) else None
+    # bool is an int subclass — exclude it so a stray True can't read as 1.0.
+    if isinstance(gt, bool) or not isinstance(gt, int | float):
+        return None
+    return float(gt)
+
+
+def _lineage_generation_duration_total(results_dir: Path) -> float | None:
+    """Sum ``duration`` across every ``summary.generations`` entry found anywhere
+    in the run's ``final_state.json``, or ``None`` if no such shape is present.
+
+    v2ecoli's ``LineageProcess`` (chain-dispatch's ``stop_at_division`` route,
+    and pbg-native's ``lineage_ray_batch``) does not report elapsed simulated
+    time through the composite's top-level ``global_time`` at all — its own
+    docstring: "the inner composite's global_time RESTARTS at 0 each
+    generation." What it reports instead is a real per-generation ``duration``
+    in the ``summary`` its ``update()`` returns
+    (``{"summary": {"generations": [{"duration": ..., "divided": ...}, ...]}}``).
+    A chain-dispatch job that runs exactly one generation per external
+    ``Composite.run(interval)`` call still only advances the OUTER composite's
+    own clock by that one call's requested interval regardless of how long the
+    generation's own internal division-seeking loop actually took — so a real,
+    multi-thousand-second division reads as ``global_time`` ~= the requested
+    interval (often 1.0), indistinguishable from a genuine one-tick collapse if
+    ``global_time`` were the only signal checked. Found live: sms-ecoli#210,
+    dispatch 297 (real division at t=2527s, `global_time` read back as 1.0).
+    Recursive rather than path-specific, since a lineage node's own key in the
+    document varies by composite/seed.
+    """
+    fs = results_dir / "final_state.json"
+    if not fs.is_file():
+        return None
+    try:
+        state = json.loads(fs.read_text())
+    except (OSError, ValueError):
+        return None
+
+    durations: list[float] = []
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            summary = node.get("summary")
+            if isinstance(summary, dict):
+                durations.extend(_durations_from_generations(summary.get("generations")))
+            for value in node.values():
+                _walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                _walk(value)
+
+    _walk(state)
+    return sum(durations) if durations else None
+
+
+def _durations_from_generations(generations: Any) -> list[float]:
+    """Extract valid numeric ``duration`` values from a ``summary.generations`` list."""
+    if not isinstance(generations, list):
+        return []
+    out: list[float] = []
+    for gen in generations:
+        if not isinstance(gen, dict):
+            continue
+        duration = gen.get("duration")
+        if isinstance(duration, bool) or not isinstance(duration, int | float):
+            continue
+        out.append(float(duration))
+    return out
+
+
+def _assert_run_advanced(results_dir: Path) -> None:
+    """Fail the run (``SystemExit(1)``) when it emitted output but did not actually
+    advance in simulated time.
+
+    Gated by ``PBG_MIN_GLOBAL_TIME`` (a float the dispatch sets to a value safely
+    below one real generation and far above a single tick). ``_assert_emitted_output``
+    proves a store EXISTS but not that it holds a real trajectory — presence, not
+    effect. A swap campaign that collapses to one tick (sms-ecoli#210 §3d / PR #375
+    §3e: the swap reaches the run but the generation closes after one tick,
+    ``global_time`` ~= 1.0) still writes a non-empty ``1.pq`` and passes the
+    presence check. This is the effect check: the run must have advanced past
+    ``PBG_MIN_GLOBAL_TIME`` of simulated time.
+
+    Opt-in: unset/empty ``PBG_MIN_GLOBAL_TIME`` → no check (unchanged behavior), so
+    only a dispatch that knows the expected generation length turns it on. Runs
+    after ``final_state.json`` is written, so it reads ``global_time`` from that file
+    and the file survives as a postmortem artifact on failure.
+
+    Checks the larger of two independent signals: the composite's own top-level
+    ``global_time``, and (when present) the total ``duration`` across any
+    ``LineageProcess``-shaped generation summary (see
+    ``_lineage_generation_duration_total``) — a chain-dispatch/pbg-native
+    generation's real elapsed time lives in the latter, not the former (sms-
+    ecoli#210, dispatch 297: a genuine division at t=2527s still reads
+    ``global_time`` ~= 1.0, since that field only counts the outer composite's
+    own ``run(interval)`` ticks, decoupled from how long the generation's own
+    internal division-seeking loop took).
+    """
+    raw = os.environ.get("PBG_MIN_GLOBAL_TIME")
+    if raw is None or raw.strip() == "":
+        return
+    try:
+        minimum = float(raw)
+    except ValueError:
+        raise SystemExit(f"run_pbg: PBG_MIN_GLOBAL_TIME={raw!r} is not a number.")
+    gt = _final_global_time(results_dir)
+    lineage_total = _lineage_generation_duration_total(results_dir)
+    candidates = [v for v in (gt, lineage_total) if v is not None]
+    if not candidates:
+        raise SystemExit(
+            f"run_pbg: PBG_MIN_GLOBAL_TIME={minimum} is set but {results_dir}/final_state.json "
+            f"has no readable global_time (and no LineageProcess-shaped generation summary) — "
+            f"cannot verify the run advanced. Refusing to report success."
+        )
+    effective = max(candidates)
+    if effective < minimum:
+        detail = f"global_time={gt}" if gt is not None else "global_time=<unreadable>"
+        if lineage_total is not None:
+            detail += f", lineage_generation_duration_total={lineage_total}"
+        raise SystemExit(
+            f"run_pbg: the run advanced only {effective} of simulated time ({detail}) "
+            f"(< PBG_MIN_GLOBAL_TIME={minimum}) under {results_dir}. The emitted store is "
+            f"non-empty but the generation did not run — e.g. a one-tick collapse "
+            f"(sms-ecoli#210 / #375 §3d-e, a swap that reaches the run but closes the "
+            f"generation after one tick). Refusing to report success."
+        )
+
+
 def _redirect_emitters(node: Any, results_dir: Path) -> int:
     """Point every emitter step's output location at *results_dir*, recursively.
 
@@ -432,6 +730,15 @@ def run(
         _persist_emitter_history(composite, results_dir)
     out = results_dir / "final_state.json"
     out.write_text(json.dumps(composite.serialize_state(), default=str))
+    # P0-3: nothing downstream asserts the run produced the science it was asked
+    # for. Under PBG_REQUIRE_OUTPUT (set by sms-api's Ray/compose dispatch), refuse
+    # to exit 0 when only final_state.json was produced. Runs AFTER final_state is
+    # written so it survives as a postmortem artifact even on this failure.
+    _assert_emitted_output(results_dir)
+    # P0-3 (effect, not just presence): a run can emit a non-empty store yet not have
+    # advanced — a one-tick collapse (sms-ecoli#210 §3d / #375 §3e). Under
+    # PBG_MIN_GLOBAL_TIME (opt-in), refuse to exit 0 unless real simulated time elapsed.
+    _assert_run_advanced(results_dir)
     return out
 
 
