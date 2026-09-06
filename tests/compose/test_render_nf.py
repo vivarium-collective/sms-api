@@ -236,29 +236,68 @@ def test_render_prefers_the_workspace_core_over_the_generic_one(
 ) -> None:
     """render_nf must make run_pbg's OWN core choice, not half of it.
 
-    It called `_build_core()` directly, which skips `_workspace_core()` and so
-    ignores PBG_CORE_BUILDER entirely. Everything resolved except documents
+    It called `_build_core()` directly, skipping `_workspace_core()` and so
+    ignoring PBG_CORE_BUILDER entirely. Everything resolved except documents
     using workspace-registered TYPES -- addresses resolve dynamically, types do
     not -- so it failed only on nested Composites, i.e. only on the sub-workflow
-    emission this path is for.
-    """
-    import viva_api.compose.render_nf as rn
+    emission this whole path exists for.
 
+    Uses the fake process_bigraph, because it is NOT a viva-api dependency: an
+    earlier version of this test let `render` die at `from process_bigraph
+    import Composite` and passed anyway, since a bare `pytest.raises(Exception)`
+    cannot tell that apart from the thing it meant to assert.
+    """
     calls: list[str] = []
+    workspace_core = object()
+
+    _install_fake_pbg(monkeypatch, lambda *a, **k: {"returncode": 0})
+    (tmp_path / "main.nf").write_text("process x { }\nworkflow { }\n")
 
     def _fake_workspace() -> object:
         calls.append("workspace")
-        return object()
+        return workspace_core
 
-    def _fake_generic() -> object:  # pragma: no cover - must NOT be reached
+    def _fake_generic() -> object:
         calls.append("generic")
         return object()
 
-    monkeypatch.setattr(rn, "_load_run_pbg", lambda: (_fake_generic, _fake_resolve, _fake_workspace))
+    seen: dict[str, object] = {}
 
     def _fake_resolve(_in: object, _cid: str, _ov: dict[str, Any], core: object) -> tuple[dict[str, Any], object]:
-        return ({}, core)
+        seen["core"] = core
+        return ({"state": {}}, core)
 
-    with pytest.raises(Exception):  # noqa: B017 - Composite({}) is not the point
-        rn.render("some.composite", tmp_path, executor="local")
+    monkeypatch.setattr(
+        "viva_api.compose.render_nf._load_run_pbg",
+        lambda: (_fake_generic, _fake_resolve, _fake_workspace),
+    )
+    from viva_api.compose.render_nf import render
+
+    render("some.composite", tmp_path, executor="local")
+
     assert calls == ["workspace"], "the generic core must not be built when a workspace one exists"
+    assert seen["core"] is workspace_core, "the workspace core must be the one handed to _resolve_document"
+
+
+def test_render_falls_back_to_the_generic_core_when_no_builder_is_named(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """PBG_CORE_BUILDER unset is normal for a plain compose document."""
+    calls: list[str] = []
+    generic = object()
+
+    _install_fake_pbg(monkeypatch, lambda *a, **k: {"returncode": 0})
+    (tmp_path / "main.nf").write_text("process x { }\nworkflow { }\n")
+
+    monkeypatch.setattr(
+        "viva_api.compose.render_nf._load_run_pbg",
+        lambda: (
+            lambda: (calls.append("generic"), generic)[1],
+            lambda _i, _c, _o, core: ({"state": {}}, core),
+            lambda: (calls.append("workspace"), None)[1],
+        ),
+    )
+    from viva_api.compose.render_nf import render
+
+    render("some.composite", tmp_path, executor="local")
+    assert calls == ["workspace", "generic"]
