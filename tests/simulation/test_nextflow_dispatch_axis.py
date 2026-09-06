@@ -24,7 +24,7 @@ def _sim(**extras: Any) -> MagicMock:
     cfg.experiment_id = "exp-nf"
     cfg.generations = 1
     # getattr(config, name, None) must miss for anything not explicitly given
-    for name in ("nextflow_dispatch", "multi_node_dispatch", "composite"):
+    for name in ("nextflow_dispatch", "multi_node_dispatch", "composite", "mbp_dispatch"):
         setattr(cfg, name, extras.get(name))
     sim.config = cfg
     sim.simulator_id = 133
