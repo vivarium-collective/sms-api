@@ -64,6 +64,51 @@ def _assert_rendered(outdir: Path) -> None:
             f"empty workflow. A composite whose nodes are all unrenderable produces a file that "
             f"Nextflow accepts and that does nothing."
         )
+    _assert_compiles(outdir)
+
+
+def _assert_compiles(outdir: Path) -> None:
+    """Ask Nextflow whether the file it will be handed actually parses.
+
+    The presence check above is not enough, and that is not hypothetical: a
+    render once produced the right sub-workflow structure, the right staged
+    configs and exit 0, while emitting a `script:` block containing Groovy
+    SOURCE rather than a string. `main.nf` contained "process ", so every guard
+    passed; `nextflow run` then failed to compile the whole file. Only running
+    the parser catches that class, and the head image already has the binary.
+
+    Uses ``-preview``, which compiles the script and builds the DAG while
+    executing NO processes -- verified: it returns 1 with "Script compilation
+    error" on a bad file, and 0 with zero ``executor >`` lines on a good one.
+    (``nextflow config`` would not do: it parses nextflow.config only and never
+    looks at main.nf.)
+
+    Always ``-profile local``, whatever the render targets. Every profile is
+    emitted, so it always resolves, and it removes any possibility of a
+    validation step touching AWS.
+
+    What it does NOT catch: a script that compiles but whose Groovy
+    interpolation fails when the task materialises -- ``${VAR:-default}`` in a
+    ``script:`` block, say. Those surface only on execution. This closes the
+    compile-time class, which is the one that reached production.
+
+    Skipped when `nextflow` is absent -- the plain task image has no JVM, and
+    render-only callers are legitimate.
+    """
+    import shutil
+    import subprocess
+
+    nextflow = shutil.which("nextflow")
+    if nextflow is None:
+        return
+    probe = subprocess.run(  # noqa: S603  (fixed argv, resolved binary)
+        [nextflow, "run", "main.nf", "-profile", "local", "-preview"],
+        cwd=str(outdir),
+        capture_output=True,
+        text=True,
+    )
+    if probe.returncode != 0:
+        raise SystemExit(f"render_nf: the rendered workflow does not compile.\n{(probe.stdout + probe.stderr)[-2000:]}")
 
 
 def _load_run_pbg() -> tuple[Any, Any, Any]:

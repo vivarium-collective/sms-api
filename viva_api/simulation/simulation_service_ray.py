@@ -1117,7 +1117,7 @@ class SimulationServiceRay(SimulationService):
             # that injects the same line into vEcoli's config.template
             # (simulation_service_k8s.py).
             "s3_endpoint": f"https://s3.{settings.batch_region}.amazonaws.com",
-            "container_env": {"PYTHONPATH": V2ECOLI_DIR},
+            "container_env": {"PYTHONPATH": V2ECOLI_DIR, "V2E_ROOT": V2ECOLI_DIR},
             "work_dir": f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/work",
         }
 
@@ -1332,6 +1332,10 @@ class SimulationServiceRay(SimulationService):
                                     # of the plan predicted exactly this for PYTHONPATH.
                                     k8s_client.V1EnvVar(name="PBG_CORE_BUILDER", value=V2ECOLI_CORE_BUILDER),
                                     k8s_client.V1EnvVar(name="PYTHONPATH", value=V2ECOLI_DIR),
+                                    # The checkout root, for artefacts that ship in the
+                                    # repo rather than the wheel (v2ecoli resolves
+                                    # scripts/build_cache.py against it at RENDER time).
+                                    k8s_client.V1EnvVar(name="V2E_ROOT", value=V2ECOLI_DIR),
                                 ],
                                 resources=k8s_client.V1ResourceRequirements(
                                     requests={"cpu": "500m", "memory": "1Gi"},

@@ -203,7 +203,12 @@ def test_pythonpath_is_always_emitted() -> None:
     fixed this via PBG_RUNNER_ENV, which an emitted process block never sees.
 
     It rides in `container_env` because it describes THIS image, not AWS Batch."""
-    assert _nf_params()["container_env"] == {"PYTHONPATH": "/app/v2ecoli"}
+    assert _nf_params()["container_env"] == {
+        "PYTHONPATH": "/app/v2ecoli",
+        # The checkout root, for artefacts that ship in the repo and not the
+        # wheel -- v2ecoli resolves scripts/build_cache.py against it.
+        "V2E_ROOT": "/app/v2ecoli",
+    }
 
 
 @pytest.mark.parametrize("missing", ["batch_amd64_queue", "s3_work_bucket", "ecr_account_id"])

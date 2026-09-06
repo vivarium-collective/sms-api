@@ -8,6 +8,7 @@ it, which is the exact failure family this pipeline keeps paying for.
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import types
 from pathlib import Path
@@ -251,7 +252,8 @@ def test_render_prefers_the_workspace_core_over_the_generic_one(
     workspace_core = object()
 
     _install_fake_pbg(monkeypatch, lambda *a, **k: {"returncode": 0})
-    (tmp_path / "main.nf").write_text("process x { }\nworkflow { }\n")
+    # Must be VALID Nextflow: _assert_rendered now compiles it (see _assert_compiles).
+    (tmp_path / "main.nf").write_text('process x {\n    script:\n    """\n    echo hi\n    """\n}\nworkflow { x() }\n')
 
     def _fake_workspace() -> object:
         calls.append("workspace")
@@ -287,7 +289,8 @@ def test_render_falls_back_to_the_generic_core_when_no_builder_is_named(
     generic = object()
 
     _install_fake_pbg(monkeypatch, lambda *a, **k: {"returncode": 0})
-    (tmp_path / "main.nf").write_text("process x { }\nworkflow { }\n")
+    # Must be VALID Nextflow: _assert_rendered now compiles it (see _assert_compiles).
+    (tmp_path / "main.nf").write_text('process x {\n    script:\n    """\n    echo hi\n    """\n}\nworkflow { x() }\n')
 
     def _fake_generic() -> object:
         calls.append("generic")
@@ -308,3 +311,31 @@ def test_render_falls_back_to_the_generic_core_when_no_builder_is_named(
 
     render("some.composite", tmp_path, executor="local")
     assert calls == ["workspace", "generic"]
+
+
+@pytest.mark.skipif(shutil.which("nextflow") is None, reason="nextflow binary not on PATH")
+def test_a_workflow_that_does_not_compile_is_a_failed_render(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The guard that would have caught process-bigraph#205.
+
+    A render once produced the right sub-workflow structure, the right staged
+    configs and exit 0 while emitting a `script:` block containing Groovy
+    SOURCE. `main.nf` contained "process ", so every presence check passed;
+    `nextflow run` then failed to compile the whole file. This reproduces that
+    shape exactly -- an unquoted script body.
+    """
+    _install_fake_pbg(monkeypatch, lambda *a, **k: {"returncode": 0})
+    (tmp_path / "main.nf").write_text(
+        "process parca_v0 {\n    script:\nv2ecoli-parca --mode fast\n}\nworkflow { parca_v0() }\n"
+    )
+    monkeypatch.setattr(
+        "viva_api.compose.render_nf._load_run_pbg",
+        lambda: (
+            lambda: object(),
+            lambda _i, _c, _o, core: ({"state": {}}, core),
+            lambda: object(),
+        ),
+    )
+    from viva_api.compose.render_nf import render
+
+    with pytest.raises(SystemExit, match="does not compile"):
+        render("some.composite", tmp_path, executor="local")
