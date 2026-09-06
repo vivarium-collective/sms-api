@@ -106,6 +106,11 @@ def _assert_compiles(outdir: Path) -> None:
         cwd=str(outdir),
         capture_output=True,
         text=True,
+        # Nextflow's banner is UTF-8; under a C/POSIX locale -- which a container
+        # very often has -- `text=True` decodes as ascii and raises
+        # UnicodeDecodeError, turning a passing render into a crash.
+        encoding="utf-8",
+        errors="replace",
     )
     if probe.returncode != 0:
         raise SystemExit(f"render_nf: the rendered workflow does not compile.\n{(probe.stdout + probe.stderr)[-2000:]}")
