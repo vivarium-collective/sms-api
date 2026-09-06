@@ -98,6 +98,7 @@ def _command(**dispatch: Any) -> str:
             resources=dispatch.get("resources"),
             work_dir=dispatch.get("work_dir"),
             resume=dispatch.get("resume", False),
+            stage_out_s3=dispatch.get("stage_out_s3"),
         )
 
 
@@ -222,3 +223,115 @@ def test_nf_params_reach_the_command_as_quoted_json() -> None:
 def test_local_executor_carries_no_aws_params() -> None:
     """Phase 3's local check must stay independent of any AWS configuration."""
     assert "--nf-params" not in _command()
+
+
+# --- the head runs as a K8s Job, and that is a permission fact ---------------
+
+
+def _svc_with_k8s() -> tuple[Any, MagicMock]:
+    k8s = MagicMock()
+    return SimulationServiceRay(k8s_job_service=k8s), k8s
+
+
+async def _dispatch(**dispatch: Any) -> tuple[Any, MagicMock]:
+    service, k8s = _svc_with_k8s()
+    sim = _sim()
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+        patch.object(service, "stage_render_nf", new=AsyncMock(return_value="s3://b/e/render_nf.py")),
+    ):
+        job_id = await service._submit_nextflow_dispatch(
+            sim, _db(), {"composite_id": "v2ecoli.composites.workflow_nf", **dispatch}
+        )
+    return job_id, k8s
+
+
+@pytest.mark.asyncio
+async def test_head_job_uses_the_batch_submit_service_account() -> None:
+    """The entire reason the head is a K8s Job rather than a Batch job.
+
+    A Batch-hosted head runs as `ray-mnp-job`, which has S3 and no `batch:*` at
+    all, so it would pull, parse its config, start, and only then fail at the
+    first task submission. `batch-submit` carries the IRSA identity that may
+    submit -- the same one vEcoli's Nextflow head has always used.
+    """
+    _, k8s = await _dispatch()
+    assert k8s.create_job.call_count == 1
+    job = k8s.create_job.call_args[0][0]
+    assert job.spec.template.spec.service_account_name == "batch-submit"
+
+
+@pytest.mark.asyncio
+async def test_head_job_id_is_neither_ray_nor_plain_k8s() -> None:
+    """`ray` would send a Job NAME to describe_jobs. `k8s` would poll fine and
+    then serve vEcoli's output layout for a v2ecoli run."""
+    from viva_api.common.models import JobBackend
+
+    job_id, _ = await _dispatch()
+    assert job_id.backend == JobBackend.K8S_NEXTFLOW
+    assert job_id.backend not in (JobBackend.RAY, JobBackend.K8S)
+
+
+@pytest.mark.asyncio
+async def test_head_job_name_is_a_valid_dns_label() -> None:
+    """K8s rejects the underscores and uppercase that experiment ids carry, and
+    it rejects them at create time -- on a dispatch that otherwise worked."""
+    import re as _re
+
+    service, k8s = _svc_with_k8s()
+    sim = _sim()
+    sim.config.experiment_id = "Test_Experiment_NF_2026"
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+        patch.object(service, "stage_render_nf", new=AsyncMock(return_value="s3://b/e/r.py")),
+    ):
+        job_id = await service._submit_nextflow_dispatch(sim, _db(), {"composite_id": "v2ecoli.composites.workflow_nf"})
+    assert _re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", job_id.value), job_id.value
+    assert len(job_id.value) <= 63
+    assert k8s.create_job.call_args[0][0].metadata.name == job_id.value
+
+
+@pytest.mark.asyncio
+async def test_head_job_is_not_retried_by_kubernetes() -> None:
+    """A half-finished Nextflow run is not safely restartable from scratch --
+    a retried head would resubmit every task. Recovery is `-resume` on a new
+    dispatch, which reuses the cached successful ones."""
+    _, k8s = await _dispatch()
+    assert k8s.create_job.call_args[0][0].spec.backoff_limit == 0
+
+
+@pytest.mark.asyncio
+async def test_dispatch_without_a_cluster_fails_loudly() -> None:
+    service = SimulationServiceRay()  # no K8sJobService
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+        pytest.raises(RuntimeError, match="k8s_job_namespace"),
+    ):
+        await service._submit_nextflow_dispatch(_sim(), _db(), {"composite_id": "v2ecoli.composites.workflow_nf"})
+
+
+@pytest.mark.asyncio
+async def test_status_of_a_k8s_head_does_not_go_to_describe_jobs() -> None:
+    """The value is a Job NAME. describe_jobs would return an empty list, and
+    this would report None -- a running campaign that looks like a lost one."""
+    from viva_api.common.models import JobId
+
+    service, k8s = _svc_with_k8s()
+    with patch.object(service, "_batch") as batch:
+        await service.get_job_status(JobId.k8s_nextflow("nf-exp-abc"))
+    assert batch.call_count == 0
+    k8s.get_job_status.assert_called_once_with("nf-exp-abc")
+
+
+def test_command_preserves_the_exit_code_before_staging_out() -> None:
+    """On the Batch path an entrypoint synced out_dir -> S3. A pod has none, so
+    the command stages its own -- and a trailing copy that succeeded would
+    otherwise report a failed render as a success."""
+    cmd = _command(nf_params=_nf_params(), stage_out_s3="s3://bucket/out/")
+    assert "NF_EXIT=$?" in cmd
+    assert cmd.strip().endswith("exit $NF_EXIT")
+    assert cmd.index("NF_EXIT=$?") < cmd.index("aws s3 cp --recursive")
+
+
+def test_default_command_stages_nothing() -> None:
+    assert "NF_EXIT" not in _command()
