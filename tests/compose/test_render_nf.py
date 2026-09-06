@@ -289,13 +289,20 @@ def test_render_falls_back_to_the_generic_core_when_no_builder_is_named(
     _install_fake_pbg(monkeypatch, lambda *a, **k: {"returncode": 0})
     (tmp_path / "main.nf").write_text("process x { }\nworkflow { }\n")
 
+    def _fake_generic() -> object:
+        calls.append("generic")
+        return generic
+
+    def _fake_workspace() -> object | None:
+        calls.append("workspace")
+        return None  # no PBG_CORE_BUILDER named
+
+    def _fake_resolve(_i: object, _c: str, _o: dict[str, Any], core: object) -> tuple[dict[str, Any], object]:
+        return ({"state": {}}, core)
+
     monkeypatch.setattr(
         "viva_api.compose.render_nf._load_run_pbg",
-        lambda: (
-            lambda: (calls.append("generic"), generic)[1],
-            lambda _i, _c, _o, core: ({"state": {}}, core),
-            lambda: (calls.append("workspace"), None)[1],
-        ),
+        lambda: (_fake_generic, _fake_resolve, _fake_workspace),
     )
     from viva_api.compose.render_nf import render
 
