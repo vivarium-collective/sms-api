@@ -1308,6 +1308,94 @@ job and cost nothing. Had it not been asked, the first real dispatch would have
 failed at its first submission, after a green pull, a parsed config and a clean
 start. **§8's go/no-go discipline paid for itself before a single gate ran.**
 
+### §10's ladder was run 2026-09-06, and it is where the defects were
+
+Everything above was written before anything ran. Rung A — `executor=local,
+launch=false`, the cheapest rung — took **six** fixes to pass, none caught by
+any local test, each found only by dispatching:
+
+| # | defect | fixed in |
+|---|---|---|
+| 1 | `render_nf` imported `viva_api`, which the simulator image does not have | viva-api rc2 |
+| 2 | the composite id is `v2ecoli.composites.workflow_nf.`**`workflow_nf`** — the bare form has no alias (unlike `lineage_ray_batch`), and the bare form is what this doc and PR #428 both used | dispatch payload |
+| 3 | `render_nf` called `_build_core()`, skipping `run_pbg`'s own `_workspace_core()`; and nothing set `PBG_CORE_BUILDER` on the head | viva-api rc3/rc4 |
+| 4 | `workflow_nf` declared no `core_extensions`, so nothing registered `composite` / `LineageStep` / `ParcaTaskStep`. Its tests passed only because the fixture registered by hand | v2ecoli#704 |
+| 5 | a `nextflow_script()` override was emitted **verbatim** while the renderer's default self-quotes, so `script:` held Groovy source and the file would not compile | process-bigraph#205 |
+| 6 | `scripts/build_cache.py` referenced cwd-relatively — and it does not ship with the wheel at all, so it was unreachable however cwd was set | v2ecoli#705 |
+
+Rung A is green, checked on the artifact rather than the summary: 4 process
+blocks, 1 sub-workflow, 4 staged configs, 4 `label` directives, an absolute
+`build_cache` path, and `nextflow run -preview` returning 0 with zero
+`executor >` lines.
+
+**Defect 5 is the one to internalise.** The render exited 0, reported a
+plausible summary and the correct `take:`/`emit:` structure, and emitted a file
+Nextflow could not parse. `_assert_rendered` checked that `main.nf` contains
+`process `, which it did. viva-api now runs `nextflow run -preview` as part of
+rendering. Its limit, stated because it bit immediately afterwards: it does
+**not** catch a script that compiles but whose *Groovy interpolation* fails when
+the task materialises — `${VAR:-default}` in a `script:` block dies at run time
+with `No signature of method: java.lang.String.negative()`.
+
+### What rung C proved, and the two defaults it exposed
+
+`executor=awsbatch, launch=true` (simulation 355) reached real Batch dispatch:
+
+```
+N E X T F L O W  ~  version 25.10.2      (closes §11.1's version-skew note)
+Downloading plugin nf-amazon@3.4.2
+[3e/347ff3] Submitted process > parca_v0
+queue smsvpctest-vecoli-task-amd64:  parca_v0  RUNNABLE
+```
+
+Confirmed **by effect**, on the submitted job rather than read from source:
+
+- **viva-api#435 works** — the head submits Batch jobs. The same call returned
+  `AccessDeniedException` from the Batch-hosted head (§11.2b).
+- `RegisterJobDefinition` is permitted; nf-amazon auto-registered
+  `nf-…-v2ecoli-6c4688f:1`.
+- the task runs the **plain** image, not `-submit`.
+- `container_env` arrives: `PYTHONPATH=/app/v2ecoli`, `V2E_ROOT=/app/v2ecoli`.
+- `maxSpotAttempts = 10` renders as a Batch `retryStrategy` with
+  `evaluateOnExit: Host EC2* → retry, * → exit` — exactly §11.1b's prediction.
+
+Then ParCa was **killed, exit 137**, three times:
+
+```
+.command.sh: line 2: 120 Killed  v2ecoli-parca --mode fast --cpus 8 …
+```
+
+⛔ **The default dispatch is unresourced.** `nf_dispatch.resources` is optional
+and `_awsbatch_nf_params` supplies none, so no `withLabel` block is emitted and
+the auto-registered job definition takes nf-amazon's defaults (~1 GB). ParCa
+OOMs instantly. `timeout` came back `null` for the same reason — which means
+**§11.1's last open question, whether an emitted `time` reaches
+`attemptDurationSeconds` on a *submitted* job, remains unverified**; it cannot
+be answered until a dispatch passes resources.
+
+⛔ **Retrying an OOM without raising memory is futile.** Our `errorStrategy`
+retries to `maxRetries` on any failure; vEcoli's scales memory on
+`exitStatus == 137` (`scaledMemory`). Three attempts, three identical OOMs.
+Whatever defaults get added, the retry closure should scale on 137.
+
+Both are viva-api changes, and neither was visible before a real submission.
+
+### Still missing: `publishDir`
+
+Nothing publishes task outputs, so a successful campaign leaves its science in
+`s3://…/work/<hash>/sweep`. vEcoli's template has `params.publishDir`; the
+renderer supports it (`_directive_lines` special-cases the closure form); no
+Step declares one. Not needed for go/no-go 2 or 3 — those exercise task-to-task
+staging and the session cache — but required before a result can be *used*.
+
+### A packaging trap worth stating once
+
+process-bigraph **#205 branched from `main`, not from #204**. Siblings, so no
+branch head carried both the `awsbatch` profile and the script-quoting fix, and
+pinning either lost the other. #204 was merged and #205 rebased onto it;
+`2efb2c4` is the first commit with both. A pin chain built from PR branch heads
+has to check the topology rather than assume it.
+
 ### What is left, and it is all execution
 
 No code gates remain. What remains needs a version bump, an image build, and a
