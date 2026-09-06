@@ -375,3 +375,69 @@ async def test_head_job_carries_the_workspace_core_builder_and_import_root() -> 
     assert env["PBG_CORE_BUILDER"] == "v2ecoli.core:build_core"
     assert env["PYTHONPATH"] == "/app/v2ecoli"
     assert env["AWS_DEFAULT_REGION"] == "us-gov-west-1"
+
+
+# --- resources are not optional in practice --------------------------------
+
+
+def test_a_dispatch_with_no_resources_still_gets_them() -> None:
+    """Measured on simulation 355: no `resources` means no `withLabel` block,
+    so nf-amazon's auto-registered job definition took ITS defaults (~1 GB, no
+    timeout) and ParCa was killed with exit 137 before doing anything."""
+    from viva_api.simulation.simulation_service_ray import _merge_nf_resources
+
+    res = _merge_nf_resources(None)
+    assert set(res) == {"parca", "lineage", "analysis"}
+    for label, spec in res.items():
+        assert "memory" in spec, label
+        assert "time" in spec, label  # the only bound on a runaway task
+
+
+def test_memory_scales_on_137_and_only_on_137() -> None:
+    """Retrying an OOM at the same size is three identical failures -- which is
+    exactly what happened. Scaling on EVERY failure would instead multiply
+    memory for faults that have nothing to do with it."""
+    from viva_api.simulation.simulation_service_ray import _merge_nf_resources
+
+    mem = _merge_nf_resources(None)["parca"]["memory"]
+    assert mem.lstrip().startswith("{"), "must be a Groovy closure, not a quoted string"
+    assert "task.exitStatus == 137" in mem
+    assert "task.attempt" in mem
+
+
+def test_overriding_one_key_does_not_drop_the_others() -> None:
+    """Replacing wholesale would let `{'lineage': {'time': ...}}` silently take
+    the run back to nf-amazon's ~1 GB."""
+    from viva_api.simulation.simulation_service_ray import _merge_nf_resources
+
+    merged = _merge_nf_resources({"lineage": {"time": "24 h"}})
+    assert merged["lineage"]["time"] == "24 h"
+    assert "137" in merged["lineage"]["memory"]
+    assert merged["lineage"]["cpus"] == 4
+    assert "137" in merged["parca"]["memory"]
+
+
+def test_an_unknown_label_is_additive() -> None:
+    from viva_api.simulation.simulation_service_ray import _merge_nf_resources
+
+    merged = _merge_nf_resources({"custom": {"cpus": 2}})
+    assert merged["custom"] == {"cpus": 2}
+    assert "parca" in merged
+
+
+@pytest.mark.asyncio
+async def test_resources_reach_the_rendered_command() -> None:
+    """The defaults are useless if the dispatcher does not pass them."""
+    service, k8s = _svc_with_k8s()
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+        patch.object(service, "stage_render_nf", new=AsyncMock(return_value="s3://b/e/r.py")),
+        patch.object(service, "stage_runner", new=AsyncMock(return_value="s3://b/e/run_pbg.py")),
+    ):
+        await service._submit_nextflow_dispatch(
+            _sim(), _db(), {"composite_id": "v2ecoli.composites.workflow_nf.workflow_nf", "executor": "awsbatch"}
+        )
+    cmd = k8s.create_job.call_args[0][0].spec.template.spec.containers[0].command[2]
+    assert "--resources" in cmd
+    payload = cmd.split("--resources ", 1)[1].split(" --")[0]
+    assert "task.exitStatus == 137" in payload

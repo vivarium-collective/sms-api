@@ -486,6 +486,51 @@ def _batch_exit_code(job: dict[str, Any]) -> str | None:
     return str(exit_code) if exit_code is not None else None
 
 
+# Per-label resources for the Nextflow dispatch. NOT optional in practice: a
+# dispatch that supplies none emits no `withLabel` block, so nf-amazon's
+# auto-registered job definition takes ITS defaults (~1 GB, no timeout) and
+# ParCa is killed with exit 137 before it does anything. Measured on simulation
+# 355 -- three times, because `maxRetries` retried an OOM at the same size.
+#
+# `memory` is a Groovy CLOSURE (process-bigraph#205) that RAISES memory on 137
+# specifically. Scaling on every failure would multiply memory for faults that
+# have nothing to do with it; scaling on nothing makes the retries pointless.
+# vEcoli's `scaledMemory` makes the same distinction.
+#
+# Sizes are anchored on what the chain/Ray paths actually run with -- their base
+# job definitions request 16 vCPU / 60000 MB -- rather than invented. A caller
+# may override any label via `nextflow_dispatch.resources`.
+def _scaled_memory(base_gb: int) -> str:
+    """Groovy: `base` normally, `base * attempt` after an OOM."""
+    return f"{{ task.exitStatus == 137 ? {base_gb}.GB * task.attempt : {base_gb}.GB }}"
+
+
+DEFAULT_NF_RESOURCES: dict[str, dict[str, Any]] = {
+    # ParCa is the memory-hungry one and the reason this default exists.
+    "parca": {"cpus": 8, "memory": _scaled_memory(32), "time": "4 h"},
+    # A lineage is the LONG one -- hours of simulated generations -- so `time`
+    # matters here more than anywhere: it is the only bound on a runaway task
+    # (plan-nextflow-dispatch §11.1), and Spot reclaim already retries 10x.
+    "lineage": {"cpus": 4, "memory": _scaled_memory(16), "time": "12 h"},
+    "analysis": {"cpus": 4, "memory": _scaled_memory(16), "time": "2 h"},
+}
+
+
+def _merge_nf_resources(
+    overrides: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    """DEFAULT_NF_RESOURCES with per-label overrides merged in.
+
+    Merged rather than replaced, and merged per KEY within a label: overriding
+    `lineage.time` must not drop `lineage.memory` and take the run back to
+    nf-amazon's ~1 GB, which is the failure this whole default exists to stop.
+    """
+    merged = {label: dict(res) for label, res in DEFAULT_NF_RESOURCES.items()}
+    for label, res in (overrides or {}).items():
+        merged.setdefault(label, {}).update(res)
+    return merged
+
+
 class SimulationServiceRay(SimulationService):
     """Ray-on-Batch (MNP) implementation of SimulationService."""
 
@@ -1261,7 +1306,9 @@ class SimulationServiceRay(SimulationService):
             launch=bool(nf_dispatch.get("launch", False)),
             outdir=outdir,
             nf_params=nf_params,
-            resources=nf_dispatch.get("resources"),
+            # Defaults MERGED per label, not replaced wholesale: a caller who
+            # overrides `lineage` must not silently lose parca's memory scaling.
+            resources=_merge_nf_resources(nf_dispatch.get("resources")),
             work_dir=work_dir,
             resume=bool(nf_dispatch.get("resume", False)),
             stage_out_s3=self._results_s3_uri(experiment_id),
