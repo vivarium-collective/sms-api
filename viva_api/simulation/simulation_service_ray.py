@@ -2101,15 +2101,51 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             "Team": getattr(settings, "cost_team_tag", None) or "covertlab",
         }
 
-        parca_job_id = self._submit_mnp(
-            job_name=f"ray-parca-{commit}-{_rand_suffix()}",
-            job_definition=job_def,
-            num_nodes=1,
-            ray_job_cmd=self._parca_command(),
-            out_s3=cache_s3,
-            out_dir=PARCA_CACHE_DIR,
-            tags={**base_tags, "Phase": "parca"},
-        )
+        parca_job_id: str | None
+        if cache_variant:
+            # A variant cache is BY DEFINITION meant to already exist -- built
+            # via POST /parca/new-gene-cache (viva-api#378) or an external
+            # bridge sync (backlog item 106) -- never something this generic
+            # composite path knows how to build itself (it has no `new_genes`/
+            # `bundle_overrides` to give `_parca_command()`; those only ever
+            # reach chain-dispatch's own `_sim_command`/`_seed_generation_
+            # command`). Before this guard, submitting the plain ParCa job
+            # below UNCONDITIONALLY -- with no existence check -- would
+            # silently write a stock, un-perturbed cache into this exact
+            # commit+variant slot whenever a fresh simulator got built (a new
+            # commit means a brand-new, empty slot under the same variant
+            # name), indistinguishable from the real thing short of manually
+            # inspecting cache_version.json's own build_params. This is
+            # exactly what happened to Dispatch 339:Run 1 and Dispatch
+            # 340:Run 2 (backlog items 105/106, sms-ecoli#210) -- both
+            # resolved to a stock cache at a freshly-built commit under a
+            # real strain's own "candidate" variant name. Fail loud instead
+            # of ever fabricating a substitute; `cache_variant=None` (every
+            # other existing caller) is completely unaffected.
+            from viva_api.dependencies import get_file_service
+
+            file_service = get_file_service()
+            if file_service is None:
+                raise RuntimeError("FileService not initialized; cannot verify cache_variant staging.")
+            existing = await file_service.get_listing(S3FilePath(s3_path=Path(data_layout.key_from_uri(cache_s3))))
+            if not existing:
+                raise ValueError(
+                    f"cache_variant={cache_variant!r} has no staged ParCa cache at commit "
+                    f"{commit!r} ({cache_s3}). This dispatch path never builds a variant "
+                    f"cache itself -- build it first via POST /parca/new-gene-cache or an "
+                    f"external bridge sync, then retry."
+                )
+            parca_job_id = None
+        else:
+            parca_job_id = self._submit_mnp(
+                job_name=f"ray-parca-{commit}-{_rand_suffix()}",
+                job_definition=job_def,
+                num_nodes=1,
+                ray_job_cmd=self._parca_command(),
+                out_s3=cache_s3,
+                out_dir=PARCA_CACHE_DIR,
+                tags={**base_tags, "Phase": "parca"},
+            )
 
         composite_job_id = self._submit_mnp(
             job_name=f"ray-mnp-composite-{experiment_id}-{_rand_suffix()}"[:128],
@@ -2126,7 +2162,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             out_dir=SIM_OUT_DIR,
             stage_s3=cache_s3,
             stage_dir=PARCA_CACHE_DIR,
-            depends_on=[parca_job_id],
+            depends_on=[parca_job_id] if parca_job_id else None,
             tags={**base_tags, "Phase": "composite"},
         )
         logger.info(

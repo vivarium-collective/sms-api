@@ -831,7 +831,22 @@
 #           ... Skipping event") while the row sat running. Hits (immutable
 #           ids) are still cached; a miss is re-asked next time. Found by the
 #           in-memory-state survey done for #414.
-__version__ = "0.9.101"
+#           0.9.102 -- _submit_multi_node_composite (the generic multi-node
+#           process-bigraph composite path, e.g. lineage_ray_batch/colony) no
+#           longer builds a plain ParCa cache unconditionally when a caller
+#           sets cache_variant. A variant cache is meant to already exist
+#           (POST /parca/new-gene-cache, #378, or an external bridge sync);
+#           with no existence check, a fresh commit's own cache_variant slot
+#           silently got a stock/un-perturbed cache instead, indistinguishable
+#           from the real one short of inspecting cache_version.json by hand.
+#           Root-caused live from Dispatch 339:Run 1 / Dispatch 340:Run 2 both
+#           resolving to stock caches (sms-ecoli#210). Now checks the staged
+#           S3 prefix first: existing content skips the ParCa job entirely
+#           (composite submits directly, no dependsOn); missing content fails
+#           loud with a ValueError instead of fabricating a substitute.
+#           cache_variant=None (every other existing caller) is byte-for-byte
+#           unaffected.
+__version__ = "0.9.102"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
