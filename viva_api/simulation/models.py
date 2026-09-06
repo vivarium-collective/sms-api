@@ -210,6 +210,20 @@ class ParcaOptions(BaseModel):
     intermediates_directory: str = ""
     variable_elongation_transcription: bool = True
     variable_elongation_translation: bool = False
+    # include_violacein_reactions: a real, legacy-config field consumed by
+    # v2ecoli's own injection pipeline (library/inject.py, ~line 519) to decide
+    # whether to append violacein reactions during metabolism-redux adaptation.
+    # Not currently read anywhere in viva-api's own dispatch command
+    # construction (neither the comparison-ensemble nor chain-dispatch paths
+    # thread it through) -- v2ecoli's own inject.py auto-detects a reasonable
+    # value when the field is absent (any(...) over the injected gene set), so
+    # omitting it is not silently wrong, just less explicit than a config that
+    # sets it directly. Declared here (the exact class of gap `new_genes`/
+    # `bundle_overrides` were before they were declared, backlog items 93/104)
+    # so a real, tracked config carrying this field (e.g.
+    # pathway_expression_carina_final.json) doesn't fail SimulationConfig
+    # validation outright before any dispatch is even attempted.
+    include_violacein_reactions: bool | None = None
 
     def model_post_init(self, context: Any, /) -> None:
         trim_attributes(self)
