@@ -1166,6 +1166,17 @@ class SimulationServiceRay(SimulationService):
             "work_dir": f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/work",
         }
 
+    def _nf_session_s3_uri(self, experiment_id: str) -> str:
+        """Where this campaign's Nextflow session cache lives between dispatches.
+
+        Beside the work dir and keyed the same way, because the two are only
+        useful together: `-resume` matches a task by its hash in the SESSION and
+        then reuses the outputs in the WORK DIR. Either one alone resumes
+        nothing.
+        """
+        settings = get_settings()
+        return f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/session"
+
     def _render_nf_command(
         self,
         *,
@@ -1181,6 +1192,7 @@ class SimulationServiceRay(SimulationService):
         work_dir: str | None = None,
         resume: bool = False,
         stage_out_s3: str | None = None,
+        session_s3: str | None = None,
     ) -> str:
         """The container command: fetch the compiler, render, optionally launch.
 
@@ -1209,10 +1221,37 @@ class SimulationServiceRay(SimulationService):
         # -- and MUST preserve the exit code, or a failed render would be
         # reported as a success by the trailing copy. `|| true` on the copy
         # keeps a staging hiccup from masking a run that actually worked.
+        # `-resume` needs a durable SESSION, not just a durable work dir. Nextflow
+        # keeps `.nextflow/history` and its cache DB in the LAUNCH directory --
+        # here an ephemeral pod -- so a second dispatch starts with no record of
+        # the first and reports, verbatim:
+        #
+        #   WARN: It appears you have never run this project before
+        #         -- Option `-resume` is ignored
+        #
+        # and re-runs a ParCa whose output is sitting complete in the work dir.
+        # Measured on simulation 359; plan-nextflow-dispatch risk 2 called it.
+        # So the session is restored before the run and saved after, keyed by the
+        # same experiment the work dir is.
+        session_restore = ""
+        session_save = ""
+        if session_s3:
+            session_restore = (
+                f" && (aws s3 cp --recursive {shlex.quote(session_s3)} {shlex.quote(outdir)}/.nextflow"
+                f" --only-show-errors 2>/dev/null || true)"
+            )
+            # Saved unconditionally -- a FAILED run's session is exactly the one a
+            # `-resume` needs, so guarding this on success would defeat the point.
+            session_save = (
+                f" ; aws s3 cp --recursive {shlex.quote(outdir)}/.nextflow {shlex.quote(session_s3)}"
+                f" --only-show-errors || true"
+            )
+
         stage_out = ""
         if stage_out_s3:
             stage_out = (
                 f" ; NF_EXIT=$?"
+                f"{session_save}"
                 f" ; aws s3 cp --recursive {shlex.quote(outdir)} {shlex.quote(stage_out_s3)}"
                 f" --only-show-errors || true"
                 f" ; exit $NF_EXIT"
@@ -1221,6 +1260,7 @@ class SimulationServiceRay(SimulationService):
         # task reports CACHED there and nowhere else.
         return (
             f"cd {V2ECOLI_DIR}"
+            f"{session_restore}"
             f" && aws s3 cp {shlex.quote(runner_s3_uri)} /tmp/render_nf.py"
             # render_nf reuses run_pbg's resolver, and the simulator image has no
             # `viva_api` -- so the sibling it imports has to be staged too, into
@@ -1312,6 +1352,7 @@ class SimulationServiceRay(SimulationService):
             work_dir=work_dir,
             resume=bool(nf_dispatch.get("resume", False)),
             stage_out_s3=self._results_s3_uri(experiment_id),
+            session_s3=self._nf_session_s3_uri(experiment_id),
         )
         job_name = self._nf_head_job_name(experiment_id)
         self._k8s.create_job(self._nf_head_job(job_name, experiment_id, commit, command))

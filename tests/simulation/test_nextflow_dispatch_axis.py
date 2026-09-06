@@ -100,6 +100,7 @@ def _command(**dispatch: Any) -> str:
             work_dir=dispatch.get("work_dir"),
             resume=dispatch.get("resume", False),
             stage_out_s3=dispatch.get("stage_out_s3"),
+            session_s3=dispatch.get("session_s3"),
         )
 
 
@@ -441,3 +442,42 @@ async def test_resources_reach_the_rendered_command() -> None:
     assert "--resources" in cmd
     payload = cmd.split("--resources ", 1)[1].split(" --")[0]
     assert "task.exitStatus == 137" in payload
+
+
+# --- the session cache is what makes -resume mean anything ------------------
+
+
+def test_the_session_is_restored_before_the_run_and_saved_after() -> None:
+    """`-resume` needs a durable SESSION, not just a durable work dir.
+
+    Nextflow keeps .nextflow/history and its cache DB in the LAUNCH directory --
+    an ephemeral pod here -- so without this a second dispatch reports, verbatim:
+
+        WARN: It appears you have never run this project before
+              -- Option `-resume` is ignored
+
+    and re-runs a ParCa whose output is sitting complete in the work dir.
+    Measured on simulation 359.
+    """
+    cmd = _command(stage_out_s3="s3://b/out/", session_s3="s3://b/sess/")
+    assert "aws s3 cp --recursive s3://b/sess/" in cmd  # restored
+    assert "/.nextflow s3://b/sess/" in cmd  # and saved
+    assert cmd.index("s3://b/sess/") < cmd.index("render_nf.py")  # before the run
+
+
+def test_the_session_is_saved_even_when_the_run_fails() -> None:
+    """A FAILED run's session is exactly the one a `-resume` needs, so guarding
+    the save on success would defeat the purpose."""
+    cmd = _command(stage_out_s3="s3://b/out/", session_s3="s3://b/sess/")
+    assert cmd.index("NF_EXIT=$?") < cmd.index("/.nextflow s3://b/sess/")
+    assert cmd.strip().endswith("exit $NF_EXIT")
+
+
+def test_session_and_work_dir_are_keyed_the_same() -> None:
+    """They are only useful together: -resume matches a task by hash in the
+    SESSION, then reuses outputs in the WORK DIR. Either alone resumes nothing."""
+    service = SimulationServiceRay()
+    with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+        session = service._nf_session_s3_uri("exp-nf")
+        work = service._awsbatch_nf_params("abc1234", "exp-nf")["work_dir"]
+    assert session.rsplit("/", 1)[0] == work.rsplit("/", 1)[0]
