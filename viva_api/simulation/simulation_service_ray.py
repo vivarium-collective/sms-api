@@ -1169,6 +1169,13 @@ class SimulationServiceRay(SimulationService):
         cache_dir: str,
         single_daughters: bool,
         carbon_exhaustion_arrest: bool,
+        seed: int | None = None,
+        cells_per_agent: float | None = None,
+        initial_glucose_mM: float | None = None,
+        initial_ammonium_mM: float | None = None,
+        injected_processes: str | None = None,
+        reactor_config: str | None = None,
+        aeration_schedule: str | None = None,
     ) -> str:
         """The container command for a ``run_mbp_tracked.py`` dispatch (backlog item
         105/106's own Run 1 sibling gap: the coupled composite's real missing-output
@@ -1191,12 +1198,37 @@ class SimulationServiceRay(SimulationService):
         silently drop no matter what is declared (v2ecoli#700, closed/superseded).
         ``run_mbp_tracked.py``'s own runtime emitter is the one mechanism confirmed
         (locally, by Eran) to carry all 6 real paths and survive division.
+
+        The last 7 params (added 2026-09-06, real Run 1 dispatch per Chris's own
+        exact spec on sms-ecoli#210): Dispatch 370's own request only needed
+        ``variant``/``max_generations`` -- the real coupled experiment additionally
+        needs a per-lineage ``--seed`` (which hive-partitions the parquet output;
+        a mismatched/repeated seed across dispatches silently MERGES rather than
+        erroring, real data loss), 3 environment overrides, and 3 file-path
+        arguments the runner enforces as absolute. ``injected_processes``/
+        ``reactor_config``/``aeration_schedule`` are given as paths RELATIVE to
+        ``V2ECOLI_DIR`` (matching how every other file reference in this dispatch
+        family is expressed) and resolved to absolute here, once, rather than
+        pushing that concern onto every caller.
         """
         max_gens_flag = f" --max-generations {int(max_generations)}" if max_generations is not None else ""
         duration_flag = f" --duration-sec {int(duration_sec)}" if duration_sec is not None else ""
         chunk_flag = f" --chunk {int(chunk)}" if chunk is not None else ""
         daughters_flag = "" if single_daughters else " --no-single-daughters"
         arrest_flag = " --carbon-exhaustion-arrest" if carbon_exhaustion_arrest else ""
+        seed_flag = f" --seed {int(seed)}" if seed is not None else ""
+        cells_per_agent_flag = f" --cells-per-agent {cells_per_agent}" if cells_per_agent is not None else ""
+        glucose_flag = f" --initial-glucose-mM {initial_glucose_mM}" if initial_glucose_mM is not None else ""
+        ammonium_flag = f" --initial-ammonium-mM {initial_ammonium_mM}" if initial_ammonium_mM is not None else ""
+        injected_processes_flag = (
+            f" --injected-processes {shlex.quote(f'{V2ECOLI_DIR}/{injected_processes}')}" if injected_processes else ""
+        )
+        reactor_config_flag = (
+            f" --reactor-config {shlex.quote(f'{V2ECOLI_DIR}/{reactor_config}')}" if reactor_config else ""
+        )
+        aeration_schedule_flag = (
+            f" --aeration-schedule {shlex.quote(f'{V2ECOLI_DIR}/{aeration_schedule}')}" if aeration_schedule else ""
+        )
         studies_root = f"{SIM_OUT_DIR}/studies"
         return (
             f"cd {V2ECOLI_DIR}"
@@ -1205,6 +1237,8 @@ class SimulationServiceRay(SimulationService):
             f" --emitter {shlex.quote(emitter)}"
             f" --cache-dir {shlex.quote(cache_dir)}"
             f"{max_gens_flag}{duration_flag}{chunk_flag}{daughters_flag}{arrest_flag}"
+            f"{seed_flag}{cells_per_agent_flag}{glucose_flag}{ammonium_flag}"
+            f"{injected_processes_flag}{reactor_config_flag}{aeration_schedule_flag}"
         )
 
     async def _submit_mbp_tracked_dispatch(
@@ -1292,6 +1326,13 @@ class SimulationServiceRay(SimulationService):
             cache_dir=PARCA_CACHE_DIR,
             single_daughters=bool(mbp_dispatch.get("single_daughters", True)),
             carbon_exhaustion_arrest=bool(mbp_dispatch.get("carbon_exhaustion_arrest", False)),
+            seed=mbp_dispatch.get("seed"),
+            cells_per_agent=mbp_dispatch.get("cells_per_agent"),
+            initial_glucose_mM=mbp_dispatch.get("initial_glucose_mM"),
+            initial_ammonium_mM=mbp_dispatch.get("initial_ammonium_mM"),
+            injected_processes=mbp_dispatch.get("injected_processes"),
+            reactor_config=mbp_dispatch.get("reactor_config"),
+            aeration_schedule=mbp_dispatch.get("aeration_schedule"),
         )
         job_id = self._submit_container(
             job_name=f"mbp-tracked-{experiment_id}-{_rand_suffix()}"[:128],

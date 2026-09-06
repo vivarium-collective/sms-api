@@ -3266,6 +3266,65 @@ class TestMbpTrackedCommand:
         assert "--no-single-daughters" in cmd
         assert "--emitter sqlite" in cmd
 
+    def test_includes_the_real_run1_params_when_set(self) -> None:
+        """Chris's own exact spec for a real Run 1 coupled dispatch (sms-ecoli#210,
+        2026-09-06) -- Dispatch 370's own request only exercised variant/
+        max_generations; this is the full set his real experiment needs."""
+        service = SimulationServiceRay()
+        cmd = service._mbp_tracked_command(
+            variant="reactor-bird-coupled-batch-multigen",
+            max_generations=16,
+            duration_sec=50400,
+            chunk=1,
+            emitter="parquet",
+            cache_dir="/app/v2ecoli/out/cache",
+            single_daughters=True,
+            carbon_exhaustion_arrest=False,
+            seed=3,
+            cells_per_agent=9e10,
+            initial_glucose_mM=111,
+            initial_ammonium_mM=92.9,
+            injected_processes="workspace/studies/cd2-pnnl-03-od10-batch/injection_vio_gfp_v0.json",
+            reactor_config="workspace/studies/cd2-pnnl-03-od10-batch/reactor_route1_pnnl_aerobic_top.json",
+            aeration_schedule="workspace/studies/cd2-pnnl-03-od10-batch/aeration_ramp_route1_density.json",
+        )
+        assert "--seed 3" in cmd
+        assert "--cells-per-agent 90000000000.0" in cmd
+        assert "--initial-glucose-mM 111" in cmd
+        assert "--initial-ammonium-mM 92.9" in cmd
+        assert (
+            "--injected-processes /app/v2ecoli/workspace/studies/cd2-pnnl-03-od10-batch/injection_vio_gfp_v0.json"
+            in cmd
+        )
+        assert (
+            "--reactor-config /app/v2ecoli/workspace/studies/cd2-pnnl-03-od10-batch/"
+            "reactor_route1_pnnl_aerobic_top.json" in cmd
+        )
+        assert (
+            "--aeration-schedule /app/v2ecoli/workspace/studies/cd2-pnnl-03-od10-batch/"
+            "aeration_ramp_route1_density.json" in cmd
+        )
+
+    def test_run1_params_omitted_by_default_byte_for_byte_unaffected(self) -> None:
+        """Every existing caller (Dispatch 370's own shape) omits all 7 -- must
+        stay byte-for-byte identical to before this extension."""
+        service = SimulationServiceRay()
+        cmd = service._mbp_tracked_command(
+            variant="reactor-bird-coupled-batch-multigen",
+            max_generations=2,
+            duration_sec=None,
+            chunk=None,
+            emitter="parquet",
+            cache_dir="/app/v2ecoli/out/cache",
+            single_daughters=True,
+            carbon_exhaustion_arrest=False,
+        )
+        assert cmd == (
+            "cd /app/v2ecoli && V2E_STUDIES_ROOT=/app/v2ecoli/.pbg/runs/phase0-xarray/studies "
+            "python scripts/run_mbp_tracked.py --variant reactor-bird-coupled-batch-multigen "
+            "--emitter parquet --cache-dir /app/v2ecoli/out/cache --max-generations 2"
+        )
+
 
 @pytest.mark.asyncio
 class TestSubmitMbpTrackedDispatch:
@@ -3401,6 +3460,71 @@ class TestSubmitMbpTrackedDispatch:
         assert mock_batch.submit_job.call_count == 1
         (call,) = mock_batch.submit_job.call_args_list
         assert "dependsOn" not in call.kwargs
+
+    @pytest.mark.asyncio
+    async def test_forwards_the_real_run1_params_to_the_submitted_command(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Chris's own exact spec (sms-ecoli#210, 2026-09-06) end to end through
+        submit_ecoli_simulation_job -- not just _mbp_tracked_command in isolation."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "mbp_dispatch",
+            {
+                "variant": "reactor-bird-coupled-batch-multigen",
+                "cache_variant": "cd2-run1-k4-candidate-v1-lambda050",
+                "max_generations": 16,
+                "duration_sec": 50400,
+                "chunk": 1,
+                "seed": 7,
+                "cells_per_agent": 9e10,
+                "initial_glucose_mM": 111,
+                "initial_ammonium_mM": 92.9,
+                "injected_processes": "workspace/studies/cd2-pnnl-03-od10-batch/injection_vio_gfp_v0.json",
+                "reactor_config": "workspace/studies/cd2-pnnl-03-od10-batch/reactor_route1_pnnl_aerobic_top.json",
+                "aeration_schedule": "workspace/studies/cd2-pnnl-03-od10-batch/aeration_ramp_route1_density.json",
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_container_batch(["mbp-tracked-run1"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[MagicMock()])
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            job_id = await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mbp-run1"
+            )
+
+        assert job_id == JobId.ray("mbp-tracked-run1")
+        (call,) = mock_batch.submit_job.call_args_list
+        env = _container_env_of(call)
+        cmd = env["CONTAINER_JOB_CMD"]
+        assert "--seed 7" in cmd
+        assert "--cells-per-agent 90000000000.0" in cmd
+        assert "--initial-glucose-mM 111" in cmd
+        assert "--initial-ammonium-mM 92.9" in cmd
+        assert (
+            "--injected-processes /app/v2ecoli/workspace/studies/cd2-pnnl-03-od10-batch/injection_vio_gfp_v0.json"
+            in cmd
+        )
+        assert (
+            "--reactor-config /app/v2ecoli/workspace/studies/cd2-pnnl-03-od10-batch/"
+            "reactor_route1_pnnl_aerobic_top.json" in cmd
+        )
+        assert (
+            "--aeration-schedule /app/v2ecoli/workspace/studies/cd2-pnnl-03-od10-batch/"
+            "aeration_ramp_route1_density.json" in cmd
+        )
 
 
 @pytest.mark.asyncio
