@@ -887,7 +887,29 @@
 #           file-path arguments the runner enforces as absolute, given here as
 #           paths relative to V2ECOLI_DIR and resolved once server-side. All 7
 #           omitted (every existing caller) is byte-for-byte unaffected.
-__version__ = "0.9.106"
+# 0.9.107 -- fix: run_simulation_workflow now force-assigns experiment_id
+#            (config_data["experiment_id"] = unique_experiment_id), never
+#            setdefault (backlog item 117). A config template's own baked
+#            experiment_id used to win via setdefault's no-op -- harmless for
+#            a one-off dispatch, but any config reused/copied across runs
+#            (real, observed behavior) silently collides every such dispatch
+#            onto ONE S3 prefix, each exiting 0 and looking healthy. Real
+#            incidents: Dispatch 339 (Run 1) was submitted from a copied Run 2
+#            config whose own baked experiment_id was never re-pointed, so its
+#            real output landed under Run 2's folder (independently confirmed
+#            by cplong90, sms-ecoli#235, precise repro); Dispatch 340 had the
+#            mirror problem. unique_experiment_id already embeds the caller's
+#            own `experiment_id` query param as a substring, so a caller's
+#            naming intent survives the fix -- only a config file's own baked
+#            value stops winning. The DB's own SimulationRequest.experiment_id
+#            (a separate, top-level field) was ALREADY always unique_
+#            experiment_id; this makes config.experiment_id -- what a
+#            dispatch actually writes its S3 output under -- agree with it,
+#            closing the one real place they could diverge. New hermetic
+#            regression test (no Docker needed) drives run_simulation_workflow
+#            end to end with a config baking a stale experiment_id and asserts
+#            the two now agree and neither is the stale value.
+__version__ = "0.9.107"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
