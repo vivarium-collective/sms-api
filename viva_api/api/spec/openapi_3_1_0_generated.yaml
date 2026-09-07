@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.9.109
+  version: 0.9.110
 paths:
   /api/v1/simulations/discovery:
     get:
@@ -1262,9 +1262,9 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-09-07T01:33:42.971264'
+                  created_at: '2026-09-07T13:39:11.304587'
                 parca_config:
-                  outdir: /projects/SMS/sms_api/prod/sims
+                  outdir: .
                   operons: true
                   ribosome_fitting: true
                   rnapoly_fitting: true
@@ -1488,7 +1488,7 @@ paths:
     get:
       tags:
       - Compose Results
-      summary: Download compose simulation results as zip
+      summary: Download compose simulation results (zip on SLURM, tar.gz on Ray/Batch)
       operationId: compose-get-simulation-results
       parameters:
       - name: simulation_id
@@ -1499,9 +1499,13 @@ paths:
           title: Simulation Id
       responses:
         '200':
-          description: Results zip file
+          description: Results archive -- a zip on SLURM (SSH/SCP off the HPC filesystem),
+            a tar.gz on Ray/Batch (streamed from S3)
           content:
+            application/json:
+              schema: {}
             application/zip: {}
+            application/gzip: {}
         '422':
           description: Validation Error
           content:
@@ -3281,6 +3285,11 @@ components:
           type: string
           contentMediaType: application/octet-stream
           title: Uploaded File
+        analysis_options:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Analysis Options
       type: object
       required:
       - uploaded_file
@@ -3390,6 +3399,12 @@ components:
           - type: integer
           - type: 'null'
           title: Num Nodes
+        analysis_options:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Analysis Options
       type: object
       required:
       - document
@@ -4241,7 +4256,7 @@ components:
         parca_config:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: /projects/SMS/sms_api/prod/sims
+            outdir: .
             operons: true
             ribosome_fitting: true
             rnapoly_fitting: true
@@ -4269,7 +4284,7 @@ components:
         outdir:
           type: string
           title: Outdir
-          default: /projects/SMS/sms_api/prod/sims
+          default: .
         operons:
           type: boolean
           title: Operons
@@ -4673,7 +4688,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-09-07 01:33:42.896295'
+          default: '2026-09-07 13:39:11.251520'
         job_id:
           anyOf:
           - type: string
@@ -4715,7 +4730,7 @@ components:
         parca_options:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: /projects/SMS/sms_api/prod/sims
+            outdir: .
             operons: true
             ribosome_fitting: true
             rnapoly_fitting: true
