@@ -720,6 +720,9 @@ async def test_cancel_reaps_stragglers_and_still_deletes_the_head() -> None:
     from viva_api.common.models import JobId
 
     service, k8s = _svc_with_k8s()
+    # the head reads as already gone, so the wait returns at once -- otherwise this
+    # blocks for NF_HEAD_REAP_WAIT_SECONDS against an unconfigured mock
+    k8s.get_job_status.return_value = None
     with (
         patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
         patch.object(service, "_reap_campaign_batch_tasks", side_effect=RuntimeError("boom")) as reap,
@@ -728,3 +731,62 @@ async def test_cancel_reaps_stragglers_and_still_deletes_the_head() -> None:
         await service.cancel_job(JobId.k8s_nextflow("nf-sim159-run-a1b2-xyz123"))
     assert k8s.delete_job.call_count == 1, "the head must be deleted before the reap"
     assert reap.call_count == 1
+
+
+# --- the reap must be SEQUENCED after the head, not merely ordered ----------
+
+
+@pytest.mark.asyncio
+async def test_the_reap_waits_for_the_head_to_actually_be_gone() -> None:
+    """`delete_job` returns immediately while the pod lives out its grace period,
+    and a live Nextflow treats each terminated task as a FAILURE and RESUBMITS it.
+
+    Measured by hand while cancelling the 10x10: terminating 10 tasks against a
+    still-running head produced 9 fresh Batch jobs (`attempts: 0`), orphaned when
+    the head finally died. Raising the grace period (#473) WIDENED that window --
+    so the reap has to wait, not just come second."""
+    from viva_api.common.models import JobId
+
+    service, k8s = _svc_with_k8s()
+    # present twice, then gone
+    k8s.get_job_status.side_effect = [object(), object(), None]
+    order: list[str] = []
+    k8s.delete_job.side_effect = lambda *_a, **_k: order.append("delete")
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+        patch.object(service, "_reap_campaign_batch_tasks", side_effect=lambda *_a: order.append("reap") or 0),
+        patch("viva_api.simulation.simulation_service_ray.asyncio.sleep", new=AsyncMock()),
+    ):
+        await service.cancel_job(JobId.k8s_nextflow("nf-sim1-run-a1b2-xyz"))
+    assert order == ["delete", "reap"]
+    assert k8s.get_job_status.call_count >= 3, "must have polled until the head disappeared"
+
+
+@pytest.mark.asyncio
+async def test_a_head_that_never_dies_still_gets_reaped() -> None:
+    """Bounded, not indefinite: a cancel that never returns is its own failure,
+    and reaping late beats not reaping. The caller is warned that stragglers may
+    have been resubmitted."""
+    from viva_api.common.models import JobId
+
+    service, k8s = _svc_with_k8s()
+    k8s.get_job_status.return_value = object()  # never goes away
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+        patch.object(service, "_reap_campaign_batch_tasks", return_value=0) as reap,
+        patch("viva_api.simulation.simulation_service_ray.asyncio.sleep", new=AsyncMock()),
+        patch("viva_api.simulation.simulation_service_ray.time.monotonic", side_effect=[0.0, 0.0, 10_000.0, 10_000.0]),
+    ):
+        await service.cancel_job(JobId.k8s_nextflow("nf-sim1-run-a1b2-xyz"))
+    assert reap.call_count == 1
+
+
+def test_the_reap_wait_exceeds_the_grace_period() -> None:
+    """If the wait were shorter than the grace, it would time out while Nextflow
+    is still shutting down -- reaping into a live head, which is the bug."""
+    from viva_api.simulation.simulation_service_ray import (
+        NF_HEAD_REAP_WAIT_SECONDS,
+        NF_HEAD_TERMINATION_GRACE_SECONDS,
+    )
+
+    assert NF_HEAD_REAP_WAIT_SECONDS > NF_HEAD_TERMINATION_GRACE_SECONDS

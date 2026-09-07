@@ -513,6 +513,16 @@ def _scaled_memory(base_gb: int) -> str:
 # the guarantee, not the mechanism.
 NF_HEAD_TERMINATION_GRACE_SECONDS = 120
 
+# How long to wait for the deleted head Job to actually disappear before reaping.
+# Must EXCEED the grace period: `delete_job` returns immediately while the pod
+# lives out its grace, and a live Nextflow watching its tasks die treats each
+# termination as a task FAILURE and RESUBMITS it. Measured while cancelling the
+# 10x10 by hand: terminating 10 tasks against a still-running head produced 9
+# fresh jobs (attempts: 0) which were then orphaned when the head finally died.
+# So raising the grace period (viva-api#473) widened this window rather than
+# closing it -- the reap has to be SEQUENCED after the head, not merely ordered.
+NF_HEAD_REAP_WAIT_SECONDS = 150
+
 DEFAULT_NF_RESOURCES: dict[str, dict[str, Any]] = {
     # ParCa is the memory-hungry one and the reason this default exists.
     "parca": {"cpus": 8, "memory": _scaled_memory(32), "time": "4 h"},
@@ -3713,6 +3723,17 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             # assume, and say what was actually stopped.
             self._k8s.delete_job(job_id.value)
             logger.info("Deleted Nextflow head Job %s", job_id.value)
+            # WAIT for it to actually be gone. Reaping while Nextflow still runs
+            # makes it resubmit every task we terminate (see
+            # NF_HEAD_REAP_WAIT_SECONDS), so the reap would create the orphans it
+            # exists to prevent.
+            if not await self._await_head_gone(job_id.value):
+                logger.warning(
+                    "Nextflow head %s still present after %ss; reaping anyway -- it may "
+                    "resubmit tasks we terminate, so re-check for strays",
+                    job_id.value,
+                    NF_HEAD_REAP_WAIT_SECONDS,
+                )
             reaped = self._reap_campaign_batch_tasks(job_id.value)
             if reaped:
                 logger.warning(
@@ -3723,6 +3744,28 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             return
         self._batch().terminate_job(jobId=job_id.value, reason="cancelled via sms-api")
         logger.info("Terminated Ray Batch job %s", job_id.value)
+
+    async def _await_head_gone(self, job_name: str, timeout_s: float | None = None) -> bool:
+        """Block until the deleted head Job is gone. True if it went, False on timeout.
+
+        ``delete_job`` uses foreground propagation, so the Job object outlives its
+        pods -- `get_job_status` returning None therefore means the pod is gone too,
+        which is the condition that matters: a live Nextflow resubmits tasks we
+        terminate.
+
+        Bounded rather than indefinite: a cancel that never returns is its own
+        failure, and reaping late is better than not reaping.
+        """
+        deadline = time.monotonic() + (NF_HEAD_REAP_WAIT_SECONDS if timeout_s is None else timeout_s)
+        while time.monotonic() < deadline:
+            try:
+                if self._k8s is None or self._k8s.get_job_status(job_name) is None:
+                    return True
+            except Exception:
+                # A read failure is not evidence the head is gone; keep waiting.
+                logger.debug("polling head %s failed; retrying", job_name, exc_info=True)
+            await asyncio.sleep(2.0)
+        return self._k8s is None or self._k8s.get_job_status(job_name) is None
 
     def _reap_campaign_batch_tasks(self, head_job_name: str) -> int:
         """Terminate any Batch tasks still running for this campaign. Returns the count.
