@@ -1323,21 +1323,50 @@ class SimulationServiceRay(SimulationService):
             raise ValueError("nextflow_dispatch.composite_id is required")
 
         commit = simulator.git_commit_hash
-        experiment_id = str(ecoli_simulation.config.experiment_id)
+        # The RUN's own id, read from the simulation record rather than from the
+        # config. Since #450 force-assigns the config's `experiment_id` these agree,
+        # but they agree by way of a coupling nothing here would notice breaking --
+        # and this path keys a *cache* on it, so a silent re-collision would resume
+        # one campaign's tasks into another's. The record is the authority (viva-api#439).
+        run_id = str(ecoli_simulation.experiment_id)
         outdir = f"{V2ECOLI_DIR}/nf-render"
+
+        # Which campaign's work dir and session cache this dispatch joins.
+        #
+        # Every dispatch gets its own by default: two campaigns sharing one prefix
+        # share the cache that decides what gets recomputed, and because Nextflow
+        # task hashes are content-derived, a `-resume` in one could legitimately
+        # match and reuse a task from the other -- silently, reported as `Cached`.
+        #
+        # Which makes `-resume` explicit rather than implicit. Before #450 a config's
+        # baked `experiment_id` collided every dispatch onto one prefix, so a resume
+        # found the previous run's session by accident. Now it would find nothing,
+        # and Nextflow does not treat that as an error -- it warns "Option `-resume`
+        # is ignored" and silently re-runs the entire campaign at full cost. So a
+        # resume must NAME the run it continues.
+        resume = bool(nf_dispatch.get("resume", False))
+        resume_from = nf_dispatch.get("resume_from")
+        if resume and not resume_from:
+            raise ValueError(
+                "nextflow_dispatch.resume needs resume_from: the experiment_id of the run "
+                "whose work dir and session cache to continue (e.g. the previous dispatch's "
+                f"experiment_id; this run's own is {run_id!r}). Each dispatch gets its own "
+                "work dir, so a resume without one would silently re-run the whole campaign."
+            )
+        campaign_key = str(resume_from) if resume_from else run_id
 
         if self._k8s is None:
             raise RuntimeError(
                 "nextflow_dispatch runs its head as a K8s Job (it needs the batch-submit "
                 "ServiceAccount to submit Batch tasks), but k8s_job_namespace is not configured"
             )
-        runner_s3_uri = await self.stage_render_nf(experiment_id)
-        pbg_runner_s3_uri = await self.stage_runner(experiment_id)
+        runner_s3_uri = await self.stage_render_nf(run_id)
+        pbg_runner_s3_uri = await self.stage_runner(run_id)
         executor = str(nf_dispatch.get("executor", "local"))
         nf_params: dict[str, Any] | None = None
         work_dir = nf_dispatch.get("work_dir")
         if executor == "awsbatch":
-            nf_params = self._awsbatch_nf_params(commit, experiment_id)
+            nf_params = self._awsbatch_nf_params(commit, campaign_key)
             # Retry counts are the caller's to tune; the deployment's identity is not.
             for key in ("max_spot_attempts", "max_transfer_attempts", "max_retries"):
                 if nf_dispatch.get(key) is not None:
@@ -1359,14 +1388,21 @@ class SimulationServiceRay(SimulationService):
             # overrides `lineage` must not silently lose parca's memory scaling.
             resources=_merge_nf_resources(nf_dispatch.get("resources")),
             work_dir=work_dir,
-            resume=bool(nf_dispatch.get("resume", False)),
-            stage_out_s3=self._results_s3_uri(experiment_id),
-            session_s3=self._nf_session_s3_uri(experiment_id),
+            resume=resume,
+            stage_out_s3=self._results_s3_uri(run_id),
+            session_s3=self._nf_session_s3_uri(campaign_key),
             nextflow_args=nf_dispatch.get("nextflow_args"),
         )
-        job_name = self._nf_head_job_name(experiment_id)
-        self._k8s.create_job(self._nf_head_job(job_name, experiment_id, commit, command))
-        logger.info("Created Nextflow head Job %s for experiment %s", job_name, experiment_id)
+        # The Job names the RUN, never the campaign: each dispatch is its own pod,
+        # and a name colliding with a live Job fails the create outright.
+        job_name = self._nf_head_job_name(run_id)
+        self._k8s.create_job(self._nf_head_job(job_name, run_id, commit, command))
+        logger.info(
+            "Created Nextflow head Job %s for run %s (campaign %s)",
+            job_name,
+            run_id,
+            campaign_key,
+        )
         # NOT JobId.ray: the value is a Job name, and NOT JobId.k8s either --
         # that tag also selects vEcoli's output layout on the download path.
         return JobId.k8s_nextflow(job_name)
