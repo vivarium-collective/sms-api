@@ -370,3 +370,178 @@ async def test_submit_simulation_document_rejects_interval_past_the_new_cap(fast
         )
     assert response.status_code == 400
     assert "interval_time must be between" in response.json()["detail"]
+
+
+# --- T5a: GET /compose/v1/simulation/{id}/results is backend-aware ---
+#
+# Ray/Batch compose sims write straight to S3 (no zip ever exists); SLURM
+# compose sims still SSH/SCP a zip off the HPC filesystem. The route must
+# branch on the ComposeHpcRun.job_backend, the same way get_simulation_status
+# already resolves it, and leave the SLURM branch's behavior unchanged.
+
+
+@pytest.mark.asyncio
+async def test_get_results_ray_backend_streams_s3_tar_gz(fastapi_app: object) -> None:
+    """A compose sim whose HpcRun.job_backend == 'ray' must take the S3
+    streaming branch (never SSH/SCP) and produce a valid .tar.gz built from
+    every object under RayLayout.experiment_prefix(experiment_id) -- the sim
+    output AND a chained analysis manifest live under that same prefix
+    (compose-results-land-findings.md §4), so streaming "everything under the
+    prefix" is required to capture both in one dispatch."""
+    import io
+    import tarfile
+    from datetime import UTC, datetime
+    from unittest.mock import AsyncMock, patch
+
+    from viva_api.common.models import JobBackend
+    from viva_api.common.storage import data_layout
+    from viva_api.common.storage.file_service import FileService, ListingItem
+    from viva_api.compose.models import ComposeHpcRun, ComposeJobType
+    from viva_api.dependencies import get_file_service, set_file_service
+
+    experiment_id = "ray-exp-t5a"
+    prefix = data_layout.RayLayout.experiment_prefix(experiment_id)
+    now = datetime.now(UTC)
+    listing = [
+        ListingItem(Key=f"{prefix}/v2ecoli_seed00.zarr/.zattrs", LastModified=now, ETag="a", Size=3),
+        ListingItem(Key=f"{prefix}/summary.json", LastModified=now, ETag="b", Size=3),
+        # the chained analysis job's manifest -- lives under the SAME prefix
+        ListingItem(Key=f"{prefix}/analyses/ptools/_manifest.json", LastModified=now, ETag="c", Size=3),
+    ]
+    contents = {item.Key: f"{item.Key}-content".encode() for item in listing}
+
+    class _FakeFileService(FileService):
+        """Minimal in-memory FileService stub, mirroring the pattern in
+        tests/common/handlers/test_simulations_handler.py's _FakeFileService."""
+
+        async def download_file(self, s3_path: Any, file_path: Any = None) -> Any:  # pragma: no cover
+            raise NotImplementedError
+
+        async def upload_file(self, file_path: Any, s3_path: Any) -> Any:  # pragma: no cover
+            raise NotImplementedError
+
+        async def upload_bytes(self, file_contents: Any, s3_path: Any) -> Any:  # pragma: no cover
+            raise NotImplementedError
+
+        async def get_modified_date(self, s3_path: Any) -> Any:  # pragma: no cover
+            raise NotImplementedError
+
+        async def get_listing(self, s3_path: Any) -> list[ListingItem]:
+            key_prefix = str(s3_path.s3_path)
+            if not key_prefix.endswith("/"):
+                key_prefix += "/"
+            return [item for item in listing if item.Key.startswith(key_prefix)]
+
+        async def get_file_contents(self, s3_path: Any) -> bytes | None:
+            return contents.get(str(s3_path.s3_path))
+
+        async def delete_file(self, s3_path: Any) -> None:  # pragma: no cover
+            pass
+
+        async def close(self) -> None:
+            pass
+
+    saved_file_service = get_file_service()
+    set_file_service(_FakeFileService())
+
+    fake_db = MagicMock()
+    fake_hpc_run = ComposeHpcRun(
+        database_id=1,
+        slurmjobid=0,
+        job_id_ext="batch-job-1",
+        job_backend=JobBackend.RAY.value,
+        correlation_id="corr-ray-1",
+        job_type=ComposeJobType.SIMULATION,
+        sim_id=99,
+        simulator_id=1,
+    )
+    fake_db.get_hpc_db.return_value.get_hpcrun_by_ref = AsyncMock(return_value=fake_hpc_run)
+    fake_db.get_simulator_db.return_value.get_simulations_experiment_id = AsyncMock(return_value=experiment_id)
+
+    try:
+        with patch("viva_api.api.routers.compose._require_db", return_value=fake_db):
+            async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://testserver") as client:  # type: ignore[arg-type]
+                response = await client.get("/compose/v1/simulation/99/results")
+    finally:
+        set_file_service(saved_file_service)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/gzip"
+    assert response.headers["content-disposition"] == f'attachment; filename="{experiment_id}.tar.gz"'
+
+    with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as tar:
+        members = tar.getnames()
+
+    assert any(m.endswith("_manifest.json") for m in members), members
+    assert any(m.endswith("summary.json") for m in members), members
+    assert any(m.endswith(".zattrs") for m in members), members
+
+
+@pytest.mark.asyncio
+async def test_get_results_slurm_backend_keeps_the_ssh_scp_zip_branch(
+    fastapi_app: object, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A job_backend='slurm' compose sim must keep taking the pre-existing
+    SSH/SCP zip branch, unchanged by T5a -- proves the new Ray/Batch branch is
+    additive, not a replacement."""
+    import pathlib
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock, patch
+
+    from viva_api.common.models import SSHTarget
+    from viva_api.compose.models import ComposeHpcRun, ComposeJobType
+
+    experiment_id = "slurm-exp-t5a"
+
+    fake_db = MagicMock()
+    fake_hpc_run = ComposeHpcRun(
+        database_id=2,
+        slurmjobid=123,
+        job_backend="slurm",
+        correlation_id="corr-slurm-1",
+        job_type=ComposeJobType.SIMULATION,
+        sim_id=42,
+        simulator_id=1,
+    )
+    fake_db.get_hpc_db.return_value.get_hpcrun_by_ref = AsyncMock(return_value=fake_hpc_run)
+    fake_db.get_simulator_db.return_value.get_simulations_experiment_id = AsyncMock(return_value=experiment_id)
+
+    # The SLURM branch's local disk cache is hardcoded to /app/.results_cache
+    # (a path that only exists inside the deployed container) -- redirect just
+    # that one literal to a pytest tmp_path so this test can run locally
+    # without touching that unrelated, pre-existing hardcoding.
+    real_path_cls = pathlib.Path
+
+    def _redirecting_path(arg: Any, *args: Any, **kwargs: Any) -> Any:
+        if str(arg) == "/app/.results_cache/compose":
+            return tmp_path / "results_cache" / "compose"
+        return real_path_cls(arg, *args, **kwargs)
+
+    monkeypatch.setattr(compose_router, "Path", _redirecting_path)
+
+    async def _fake_scp_download(local_file: Any, remote_path: Any) -> None:
+        local_file.parent.mkdir(parents=True, exist_ok=True)
+        local_file.write_bytes(b"fake-zip-bytes")
+
+    fake_ssh_session = AsyncMock()
+    fake_ssh_session.scp_download = AsyncMock(side_effect=_fake_scp_download)
+
+    @asynccontextmanager
+    async def _fake_session_cm(*args: Any, **kwargs: Any) -> Any:
+        yield fake_ssh_session
+
+    fake_ssh_service = MagicMock()
+    fake_ssh_service.session = _fake_session_cm
+    fake_get_ssh_session_service = MagicMock(return_value=fake_ssh_service)
+
+    with (
+        patch("viva_api.api.routers.compose._require_db", return_value=fake_db),
+        patch("viva_api.dependencies.get_ssh_session_service", fake_get_ssh_session_service),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://testserver") as client:  # type: ignore[arg-type]
+            response = await client.get("/compose/v1/simulation/42/results")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert response.content == b"fake-zip-bytes"
+    fake_get_ssh_session_service.assert_called_once_with(SSHTarget.SLURM)

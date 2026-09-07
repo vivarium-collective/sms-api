@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Query, UploadFile
 from jinja2 import Template
-from starlette.responses import FileResponse
+from starlette.responses import FileResponse, StreamingResponse
 
 from viva_api.compose.database_service import ComposeDatabaseService
 from viva_api.compose.handlers import (
@@ -273,14 +273,21 @@ async def get_simulations_status_batch(ids: list[int] = Query()) -> list[Compose
 
 @router.get(
     path="/simulation/{simulation_id}/results",
-    response_class=FileResponse,
     operation_id="compose-get-simulation-results",
     tags=["Compose Results"],
-    summary="Download compose simulation results as zip",
-    responses={200: {"content": {"application/zip": {}}, "description": "Results zip file"}},
+    response_model=None,
+    summary="Download compose simulation results (zip on SLURM, tar.gz on Ray/Batch)",
+    responses={
+        200: {
+            "content": {"application/zip": {}, "application/gzip": {}},
+            "description": "Results archive -- a zip on SLURM (SSH/SCP off the HPC filesystem), "
+            "a tar.gz on Ray/Batch (streamed from S3)",
+        }
+    },
 )
-async def get_results(simulation_id: int) -> FileResponse:
-    from viva_api.common.models import SSHTarget
+async def get_results(simulation_id: int) -> FileResponse | StreamingResponse:
+    from viva_api.common.models import JobBackend, SSHTarget
+    from viva_api.common.s3_streaming import stream_s3_tar_gz_ray
     from viva_api.common.storage.file_paths import HPCFilePath
     from viva_api.compose.hpc_utils import get_compose_sim_results_path
     from viva_api.dependencies import get_ssh_session_service
@@ -291,6 +298,29 @@ async def get_results(simulation_id: int) -> FileResponse:
     except LookupError:
         raise HTTPException(404, f"Compose simulation {simulation_id} not found")
 
+    # Same accessor get_simulation_status uses to resolve the compose sim's HpcRun.
+    hpc_run = await db.get_hpc_db().get_hpcrun_by_ref(ref_id=simulation_id, job_type=ComposeJobType.SIMULATION)
+
+    if hpc_run is not None and hpc_run.job_backend != JobBackend.SLURM.value:
+        # Ray/Batch: the sim never zips anything -- it writes straight to S3, and a
+        # chained analysis job's manifest (analyses/<name>/_manifest.json) lands
+        # under the SAME experiment prefix (see simulation_service_ray.py's
+        # analysis-chaining branch), so streaming every object under
+        # RayLayout.experiment_prefix(experiment_id) captures both with a single
+        # dispatch -- mirroring get_simulation_outputs's proven Ray dispatch
+        # (common/handlers/simulations.py).
+        archive_name = f"{experiment_id}.tar.gz"
+        return StreamingResponse(
+            stream_s3_tar_gz_ray(experiment_id),
+            media_type="application/gzip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{archive_name}"',
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    # SLURM (or no HpcRun on record, matching the pre-existing default): unchanged
+    # SSH/SCP download of the zip the HPC-side job runner built.
     remote_path = get_compose_sim_results_path(experiment_id)
 
     # Download results from HPC via SCP to a local cache dir
