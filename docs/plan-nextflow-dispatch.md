@@ -1219,9 +1219,9 @@ M channels into one — which is what a flat sibling list cannot express at all 
 | **1c** — ParCa mode recorded out-of-band | unchanged |
 | **2** — handoff as a staged `path` at real cache size | mechanism proven in Phase 0 at 23 bytes; the profile exists as of #204, so this is now **blocked only on a deploy** |
 | **3** — `-resume` re-runs only the failed lineage | **now possible**: `deploy()` could not emit `-resume` at all until #203, and the profile it needed landed in #204. Blocked only on a deploy |
-| **4** — 336 renders and the gather gathers | renders ✅, gathers ✅ structurally; the "sees 336 sweeps" half needs execution |
-| **5** — head overhead < ~2 min | untested |
-| **6** — a task that emits nothing FAILS | implemented in `LineageStep` and in `render_nf`'s own guard |
+| **4** — 336 renders and the gather gathers | renders ✅, gathers ✅ structurally; the "sees 336 sweeps" half needs execution. **Now unblocked** — output is addressable as of 2026-09-07 |
+| **5** — head overhead < ~2 min | ✅ **implied**: a fully-cached resume completes in **73 s** end to end, which is almost entirely head |
+| **6** — a task that emits nothing FAILS | implemented in `LineageStep` and in `render_nf`'s own guard; eagmon's acceptance gate (v2ecoli#703/#708/#713) is the better mechanism |
 
 ### ⛔ Go/no-go 1b failed, and it is not a Nextflow problem
 
@@ -1441,13 +1441,87 @@ blocker and the other two were real bugs that had to be fixed anyway:
 guesses and two deploy cycles. Build the instrument after the FIRST failed
 hypothesis, not the third.
 
-### Still missing: `publishDir`
+### ✅ `publishDir` landed, and the campaign's output is now reachable (2026-09-07)
 
-Nothing publishes task outputs, so a successful campaign leaves its science in
-`s3://…/work/<hash>/sweep`. vEcoli's template has `params.publishDir`; the
-renderer supports it (`_directive_lines` special-cases the closure form); no
-Step declares one. Not needed for go/no-go 2 or 3 — those exercise task-to-task
-staging and the session cache — but required before a result can be *used*.
+Until today nothing published task outputs, so a campaign that exited 0 left its
+science in `s3://…/work/<hash>/sweep`. Measured on sim 392:
+
+| | objects | size |
+|---|---|---|
+| work dir `work/1d/8bdc05…/sweep/` | 43 | **633 MB** — the actual output |
+| the run's results prefix | 15 | 78 KB — `main.nf`, configs, session, log |
+
+The renderer had always supported it — `_directive_lines` special-cases the closure
+form *precisely* so `publishDir` can be one. No Step declared it.
+
+**v2ecoli#718** declares it on `LineageStep` and `AnalysisTaskStep`, and deliberately
+NOT on ParCa (its cache is a ~262 MB intermediate that the work dir exists to stage):
+
+```groovy
+publishDir { params.publish_dir ?: "results" }, mode: "copy", overwrite: true
+```
+
+A closure, not a literal: the destination is the RUN's own prefix, known only at
+dispatch. The `?:` keeps a bare `nextflow run` working locally. Every lineage
+publishes to the SAME target on purpose — the tree underneath is hive-partitioned,
+so copies interleave; per-task subdirs would break the gather.
+
+**A second defect rode alongside it.** `workflow_nf`'s own `experiment_id` parameter
+defaults to the literal `"workflow_nf"`, and that value becomes the `experiment_id=`
+partition. viva-api never passed one, so every campaign's parquet claimed the same
+id — the sms-ecoli#235 / #450 collision one layer down, *inside* the artifact where
+no dispatch surfaces it. **viva-api#457** defaults it to the run (not forces it).
+
+**Verified end to end** on sim 396 (0.9.109, simulator 157 → sms-ecoli `4cbe2c4` →
+v2ecoli `6eb4d675`):
+
+```
+before:  15 objects /  78 KB   experiment_id=workflow_nf
+after:   45 objects / 359 MB   experiment_id=sim157-nf-publish-verify-b669
+```
+
+Exactly one distinct `experiment_id=` across all 45 objects, and it is the run's own.
+
+### ⚠ #450 fixed the prefix collision and silently broke `-resume`
+
+Worth recording because the breakage was a *consequence of the right fix*, and it
+failed by succeeding. `run_simulation_workflow` moved from
+`config_data.setdefault("experiment_id", …)` to force-assign (viva-api#450). Correct
+— and it removed the accident that made `-resume` work: before it, a config's baked
+id collided every dispatch onto one prefix, so a resume found the previous session
+**by accident**. After it, each dispatch has its own prefix, a resume finds nothing,
+and Nextflow does not treat that as an error:
+
+```
+WARN: It appears you have never run this project before -- Option `-resume` is ignored
+```
+
+It re-runs the whole campaign at full cost, exit 0 — 19m54s in place of 73 s.
+
+**viva-api#452** keys work dir, session and Job name on `simulation.experiment_id`
+(the RECORD, not the config: they agree only via #450, a coupling nothing in the
+dispatcher would notice breaking, and this path keys a *cache*). Sharing a cache is
+now something a caller **names** — `nextflow_dispatch.resume_from` — and a bare
+`resume` is refused at dispatch rather than becoming a silent full re-run. A resumed
+run joins the campaign's work dir and session but keeps `publish_dir` and stage-out
+on **its own** run.
+
+Measured live: cold **19m54s** → resume **73 s**, same task hashes (`3e/dfd25e`,
+`1d/8bdc05`), both reported `Cached`.
+
+### The path finally has a CLI, and a validation boundary
+
+- **viva-api#446** — `atlantis composite nextflow`. Until now the path had no CLI
+  surface at all and every dispatch in §10's ladder was hand-written `curl`, against
+  CLAUDE.md's own EUTE rule. Carries `--resume-from`, `--executor`, `--no-launch`,
+  `--nextflow-arg`, `--resources`. `include_submit_image` also became **three-valued**
+  (omitted = build where possible, `true` = demand, `false` = skip): a plain `True`
+  default 400'd every SLURM-path upload, which the existing suite caught.
+- **viva-api#456** — a refused dispatch is a **400, not a 500**, and writes **no rows**.
+  The handler inserts a parca-dataset row and a simulation row *before* it submits, so
+  any dispatch-time raise left two rows describing a run that never started. The
+  boundary validator holds exactly what is answerable from the request — that property
+  is what lets it run before anything durable is written.
 
 ### A packaging trap worth stating once
 
@@ -1457,22 +1531,56 @@ pinning either lost the other. #204 was merged and #205 rebased onto it;
 `2efb2c4` is the first commit with both. A pin chain built from PR branch heads
 has to check the topology rather than assume it.
 
-### What is left, and it is all execution
+### What is left (updated 2026-09-07)
 
-No code gates remain. What remains needs a version bump, an image build, and a
-`sms-api-stanford-test` deploy, then §10's ladder in order:
+§10's ladder **has been run**, both justifying gates pass, and the output story is
+closed. The rungs below are kept for the record; none is outstanding.
 
-1. `-stub-run` against the `awsbatch` profile
-2. one trivial `echo` task — proves IAM, the S3 endpoint and the ECR pull **before any
-   science**, and closes §11.2 together with §11's remaining "does an emitted `time` land as
-   `attemptDurationSeconds` on a *submitted* job"
-3. `n_seeds=1, n_generations=1` — **go/no-go 2**, the staged handoff at real cache size
-   (90 MB + 165 MB, against Phase 0's 23-byte stand-in)
-4. kill the head, `-resume`, assert ParCa shows `CACHED` in the trace CSV — **go/no-go 3**
+1. ~~`-stub-run` against the `awsbatch` profile~~
+2. ~~one trivial `echo` task~~ — closed §11.2
+3. ~~`n_seeds=1, n_generations=1`~~ — **go/no-go 2 PASSED**: the 262 MB cache staged
+   task-to-task through the S3 work dir
+4. ~~kill the head, `-resume`, assert ParCa `CACHED`~~ — **go/no-go 3 PASSED**, twice:
+   76 s vs 19m22s on 2026-09-06, and again 73 s vs 19m54s on 2026-09-07 after
+   `resume_from` made the cache explicit
 
-Steps 3 and 4 are the two §8 calls the entire justification for a third path. **If either
-fails, stop** — that instruction is unchanged and is the point of running them before Run 4.
+**Deployed state**: sms-api **0.9.109** on `sms-api-stanford-test`; simulator **157**
+(sms-ecoli `4cbe2c4` → v2ecoli `6eb4d675`), both plain and `-submit` images.
 
-Risk 2 becomes live at step 4: `-resume` needs a durable **session cache**, not just a
-durable work dir, and `.nextflow/` sits on the head's local filesystem — an ephemeral pod.
-Plan its S3 sync around the run rather than discovering it on the first head OOM.
+#### The one gate that remains
+
+**Gate 4 — "the analysis sees N sweeps" at Run-4 scale.** It renders at 336 lineages
+and the gather is structurally correct; what has never happened is *executing* it and
+confirming the gather receives every sweep. This was previously blocked behind
+unusable output; it is not any more.
+
+The natural candidate is **Run 2's 10×10**, which is exactly `workflow_nf`'s shape
+(one variant, `n_seeds=10`, `n_generations=10`). Two caveats before spending the
+infra:
+
+- J3's metabolism swap (`ecoli-metabolism-redux`, excluded exchange data) is a
+  *config-level* change, while `variants` carries only `variant_name` / `new_genes` /
+  `bundle_overrides`, which reach **ParCa**. Render it with `--no-launch` first and
+  read the staged configs rather than assuming it threads.
+- Run 4's real 84 modifications are, per Alex, "not expressible in the sweep grammar
+  at all" — and `variants` is narrower than that grammar. The DAG scales; the
+  modifications may still not fit.
+
+Run 1's *cell-only* half fits; its coupled half is `reactor_bird_coupled` via
+`run_mbp_tracked.py`, a different topology this generator does not express. Run 3 is
+blocked upstream on a config pointing at a laptop-local fork path.
+
+#### Carried dependencies
+
+- **process-bigraph#205 is still OPEN** (`REVIEW_REQUIRED`, eagmon). v2ecoli `main`
+  and sms-ecoli `main` both pin `ce19811a` from its branch — do **not** delete
+  `fix/nextflow-script-quoting`. v2ecoli#716 tracks re-pinning to `main` once it lands.
+- **Gate 1b** (v2ecoli#693, seeds sharing a founder object) may now be addressable:
+  v2ecoli#712 added opt-in independent founders and sms-ecoli#243 wires them
+  (`--independent-founders` / `--founder-sim-data`, gated to the native
+  `ecoli_baseline` arm). Verified `af4ef87c` is inside the `6eb4d675` pin, so the
+  publishDir bump did not regress it. Still a property of the path CD2 runs today,
+  not of this plan.
+- **sms-ecoli#241 renamed `configs/three_arm/` → `configs/experiments/`** and dropped
+  the `_vecoli_free` suffix (the vEcoli-reference arm became `_vecoli_ref`). Any CD2
+  config path written before 2026-09-07 is stale.
