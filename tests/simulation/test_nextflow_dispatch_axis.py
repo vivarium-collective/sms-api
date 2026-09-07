@@ -647,3 +647,62 @@ async def test_a_resumed_run_publishes_to_its_own_prefix_not_the_campaigns() -> 
     assert "0000" not in params["publish_dir"], params["publish_dir"]
     # while the CACHE it joins is the campaign's -- the two must disagree here
     assert "0000" in params["work_dir"], params["work_dir"]
+
+
+# --- viva-api#472: a cancel must stop the WORK, not just the head -----------
+
+
+def test_the_head_gets_time_to_terminate_its_own_tasks() -> None:
+    """Nextflow's shutdown hook calls Batch TerminateJob once per in-flight task
+    on SIGTERM -- it is the only party that knows which tasks are this run's. The
+    default 30 s pod grace is not enough for a wide campaign: measured on
+    simulation 441, 8 of 10 lineage tasks survived the cancel, ran a further ~100
+    minutes, and filled host disk until the NEXT campaign began failing with
+    'No space left on device'."""
+    service, k8s = _svc_with_k8s()
+    from viva_api.simulation.simulation_service_ray import NF_HEAD_TERMINATION_GRACE_SECONDS
+
+    job = service._nf_head_job("nf-x", "exp", "abc1234", "true")
+    assert job.spec.template.spec.termination_grace_period_seconds == NF_HEAD_TERMINATION_GRACE_SECONDS
+    assert NF_HEAD_TERMINATION_GRACE_SECONDS > 30, "the default is what failed"
+
+
+def test_a_task_is_matched_to_its_campaign_by_the_work_dir() -> None:
+    """There is no per-campaign Batch tag, and job names are the PROCESS names
+    (`runs_v0lineage_v0_s3`) which repeat across campaigns. The S3 work dir is the
+    only campaign-unique thing every task carries."""
+    from viva_api.simulation.simulation_service_ray import _command_belongs_to_campaign
+
+    cmd = "aws s3 cp s3://b/nextflow/work/sim159-run-a1b2/work/ab/cd/.command.run - | bash"
+    assert _command_belongs_to_campaign(cmd, "sim159-run-a1b2")
+    # a DIFFERENT campaign's task must survive -- terminating another live run's
+    # work would be far worse than leaking one
+    assert not _command_belongs_to_campaign(cmd, "sim158-run-0000")
+    assert not _command_belongs_to_campaign(cmd, "")
+
+
+def test_the_campaign_key_survives_dns_sanitising() -> None:
+    """`_nf_head_job_name` lowercases and replaces non-alphanumerics, so the head
+    name and the raw work-dir segment are not equal; comparing them raw finds
+    nothing and the reap silently does nothing."""
+    from viva_api.simulation.simulation_service_ray import _command_belongs_to_campaign
+
+    assert _command_belongs_to_campaign("s3://b/nextflow/work/My_Exp_1/work/x", "my-exp-1")
+
+
+@pytest.mark.asyncio
+async def test_cancel_reaps_stragglers_and_still_deletes_the_head() -> None:
+    """The reap is the GUARANTEE, not the mechanism -- so a failure in it must not
+    stop the head from being deleted, and the ordinary case (Nextflow cleaned up)
+    reaps nothing."""
+    from viva_api.common.models import JobId
+
+    service, k8s = _svc_with_k8s()
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+        patch.object(service, "_reap_campaign_batch_tasks", side_effect=RuntimeError("boom")) as reap,
+        pytest.raises(RuntimeError),
+    ):
+        await service.cancel_job(JobId.k8s_nextflow("nf-sim159-run-a1b2-xyz123"))
+    assert k8s.delete_job.call_count == 1, "the head must be deleted before the reap"
+    assert reap.call_count == 1

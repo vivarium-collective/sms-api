@@ -507,6 +507,12 @@ def _scaled_memory(base_gb: int) -> str:
     return f"{{ task.exitStatus == 137 ? {base_gb}.GB * task.attempt : {base_gb}.GB }}"
 
 
+# Seconds the Nextflow head gets to shut down before SIGKILL. It terminates its
+# own Batch tasks in that window -- the only party that knows exactly which
+# tasks it submitted -- so this is the CORRECT path; the reap in cancel_job is
+# the guarantee, not the mechanism.
+NF_HEAD_TERMINATION_GRACE_SECONDS = 120
+
 DEFAULT_NF_RESOURCES: dict[str, dict[str, Any]] = {
     # ParCa is the memory-hungry one and the reason this default exists.
     "parca": {"cpus": 8, "memory": _scaled_memory(32), "time": "4 h"},
@@ -531,6 +537,23 @@ def _merge_nf_resources(
     for label, res in (overrides or {}).items():
         merged.setdefault(label, {}).update(res)
     return merged
+
+
+def _command_belongs_to_campaign(command: str, campaign_stem: str) -> bool:
+    """Does this Batch task's command reference the given campaign's work dir?
+
+    The work-dir segment is the raw experiment id; `campaign_stem` comes from the
+    head Job NAME, which is DNS-1123 sanitised (lowercased, non-alphanumerics to
+    dashes) and truncated to 63 chars. So compare sanitised-to-sanitised, and by
+    PREFIX because the truncation is lossy in one direction only.
+    """
+    if not campaign_stem:
+        return False
+    for segment in re.findall(r"/nextflow/work/([^/\s]+)", command):
+        safe = re.sub(r"[^a-z0-9-]+", "-", segment.lower()).strip("-")
+        if safe.startswith(campaign_stem) or campaign_stem.startswith(safe):
+            return True
+    return False
 
 
 class SimulationServiceRay(SimulationService):
@@ -1469,6 +1492,13 @@ class SimulationServiceRay(SimulationService):
                         # The whole reason the head is here and not on Batch.
                         service_account_name="batch-submit",
                         restart_policy="Never",
+                        # Nextflow's shutdown hook calls Batch TerminateJob once per
+                        # in-flight task on SIGTERM. The default 30 s is not enough for
+                        # a wide campaign, and the pod is SIGKILLed mid-way: measured on
+                        # simulation 441, where 8 of 10 lineage tasks survived the
+                        # cancel and ran for a further ~100 minutes, filling host disk
+                        # until they broke the NEXT campaign (viva-api#472).
+                        termination_grace_period_seconds=NF_HEAD_TERMINATION_GRACE_SECONDS,
                         containers=[
                             k8s_client.V1Container(
                                 name="nextflow-head",
@@ -3620,15 +3650,77 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         if job_id.backend == JobBackend.K8S_NEXTFLOW:
             if self._k8s is None:
                 raise RuntimeError(f"cannot cancel {job_id.value}: no K8sJobService configured")
-            # Deleting the Job SIGTERMs the head, which is how Nextflow is asked
-            # to shut down. Tasks it already submitted are NOT killed by this --
-            # Nextflow's own shutdown hook terminates them, and a hard pod kill
-            # would leave them running.
+            # Deleting the Job SIGTERMs the head, which asks Nextflow to shut
+            # down; its hook then terminates the tasks it submitted. That is the
+            # correct mechanism -- Nextflow is the only party that knows exactly
+            # which tasks belong to this run -- and the pod now gets
+            # NF_HEAD_TERMINATION_GRACE_SECONDS to do it.
+            #
+            # But it was OBSERVED not to happen (viva-api#472): on simulation 441,
+            # 8 of 10 lineage tasks outlived the cancel by ~100 minutes and filled
+            # host disk until a later campaign started failing. A cancel that
+            # leaves work running is worse than one that refuses, because the
+            # operator believes the resources are free. So we verify rather than
+            # assume, and say what was actually stopped.
             self._k8s.delete_job(job_id.value)
             logger.info("Deleted Nextflow head Job %s", job_id.value)
+            reaped = self._reap_campaign_batch_tasks(job_id.value)
+            if reaped:
+                logger.warning(
+                    "Nextflow head %s left %d Batch task(s) running after its grace period; terminated them directly",
+                    job_id.value,
+                    reaped,
+                )
             return
         self._batch().terminate_job(jobId=job_id.value, reason="cancelled via sms-api")
         logger.info("Terminated Ray Batch job %s", job_id.value)
+
+    def _reap_campaign_batch_tasks(self, head_job_name: str) -> int:
+        """Terminate any Batch tasks still running for this campaign. Returns the count.
+
+        Identified by the campaign's S3 WORK DIR, which every task carries in its
+        container command (`s3://.../nextflow/work/<campaign>/work/...`) -- there is
+        no per-campaign tag, and Batch job names are the process names
+        (`runs_v0lineage_v0_s3`), which repeat across campaigns.
+
+        The campaign key is recovered from the head Job name, which
+        `_nf_head_job_name` builds as `nf-<sanitised run id>-<rand>`. Sanitising the
+        work-dir segment the same way makes the two comparable.
+
+        Best-effort by design: this runs AFTER Nextflow has been asked to stop, so
+        finding nothing is the expected outcome and an error here must not mask the
+        cancel itself.
+        """
+        settings = get_settings()
+        queue = settings.batch_amd64_queue
+        if not queue:
+            return 0
+        stem = head_job_name[3:] if head_job_name.startswith("nf-") else head_job_name
+        stem = stem.rsplit("-", 1)[0]  # drop _rand_suffix
+        if not stem:
+            return 0
+
+        terminated = 0
+        try:
+            batch = self._batch()
+            for status in ("SUBMITTED", "PENDING", "RUNNABLE", "STARTING", "RUNNING"):
+                paginator = batch.list_jobs(jobQueue=queue, jobStatus=status)
+                ids = [j["jobId"] for j in paginator.get("jobSummaryList", [])]
+                for chunk in (ids[i : i + 100] for i in range(0, len(ids), 100)):
+                    if not chunk:
+                        continue
+                    for job in batch.describe_jobs(jobs=chunk).get("jobs", []):
+                        command = " ".join(job.get("container", {}).get("command", []) or [])
+                        if not _command_belongs_to_campaign(command, stem):
+                            continue
+                        batch.terminate_job(
+                            jobId=job["jobId"],
+                            reason=f"campaign {stem} cancelled via sms-api",
+                        )
+                        terminated += 1
+        except Exception:
+            logger.exception("Reaping Batch tasks for %s failed; the head is still deleted", head_job_name)
+        return terminated
 
     async def cancel_chain_campaign(self, campaign: HpcRun) -> None:
         """Cancel every seed's current in-flight job for a chain-dispatch
