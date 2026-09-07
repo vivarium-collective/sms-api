@@ -32,9 +32,7 @@ class DispatchValidationError(ValueError):
 def validate_nextflow_dispatch(nf_dispatch: Any) -> None:
     """Check a ``nextflow_dispatch`` block, or raise DispatchValidationError."""
     if not isinstance(nf_dispatch, dict):
-        raise DispatchValidationError(
-            f"nextflow_dispatch must be an object, got {type(nf_dispatch).__name__}"
-        )
+        raise DispatchValidationError(f"nextflow_dispatch must be an object, got {type(nf_dispatch).__name__}")
 
     if not nf_dispatch.get("composite_id"):
         raise DispatchValidationError(
