@@ -73,7 +73,7 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.108
+    newTag: 0.9.109
     # 2026-09-07: 0.9.106 -> 0.9.107, matching the app overlay bump (PR#450's
     # experiment_id force-assign fix, item 117) -- no new Alembic migration
     # this release, a handler-logic-only change (in-memory config_data build,
