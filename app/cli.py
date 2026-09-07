@@ -877,6 +877,15 @@ def simulator_latest(
     repo_url: str | None = Option(default=None, help="Git repo URL. Defaults to the configured default repo."),
     branch: str | None = Option(default=None, help="Git branch. Defaults to the configured default branch."),
     force: bool = Option(default=False, help="Force rebuild even if a completed build exists."),
+    submit_image: bool | None = Option(
+        default=None,
+        help="Also build the Nextflow HEAD image (<repo>:<sha>-submit) -- base + JRE + the nextflow "
+        "binary, which `atlantis composite nextflow` dispatches against. Built by default wherever "
+        "the backend can: it costs +72 MB and ~15 s (the two images share a deduplicated base), "
+        "while omitting it costs a dispatch that fails at the image pull plus a full rebuild. "
+        "Passing --submit-image DEMANDS it, so a backend that cannot build one fails now rather "
+        "than at dispatch. --no-submit-image skips it.",
+    ),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     import time
@@ -894,7 +903,9 @@ def simulator_latest(
 
     # 2. Upload (triggers build if new, or force rebuild)
     with console.status("[memphis.spinner]Uploading simulator..."):
-        uploaded = data_service.submit_upload_simulator(simulator=latest, force=force)
+        uploaded = data_service.submit_upload_simulator(
+            simulator=latest, force=force, include_submit_image=submit_image
+        )
     console.print(f"[memphis.label]Simulator ID:[/] {uploaded.database_id}")
 
     # 3. Poll build status with live feedback
@@ -1295,6 +1306,200 @@ def simulation_get(
     data_service = get_data_service(base_url=base_url)
     simulation = data_service.get_workflow(simulation_id=simulation_id)
     display_json(simulation.model_dump(), console)
+
+
+def _nf_json_object(raw: str, flag: str) -> dict[str, object]:
+    """Parse a raw-JSON CLI option that must be an object, or exit non-zero.
+
+    Both --params and --resources need the identical parse/shape/report, and
+    doing it inline twice is what pushed `composite_nextflow` past the
+    complexity ceiling. Failing here means nothing is dispatched.
+    """
+    console = get_console()
+    try:
+        parsed = _json_mod.loads(raw)
+    except _json_mod.JSONDecodeError as exc:
+        console.print(f"[memphis.error]{flag} is not valid JSON: {exc}[/]")
+        raise typer.Exit(1) from None
+    if not isinstance(parsed, dict):
+        console.print(f"[memphis.error]{flag} must be a JSON object.[/]")
+        raise typer.Exit(1)
+    return parsed
+
+
+def _nf_dispatch_payload(
+    *,
+    composite_id: str,
+    executor: str,
+    launch: bool,
+    resume: bool,
+    seeds: int | None,
+    generations: int | None,
+    include_analysis: bool | None,
+    params: str | None,
+    resources: str | None,
+    nextflow_arg: list[str],
+    work_dir: str | None,
+) -> dict[str, object]:
+    """Assemble `extra_params.nextflow_dispatch` from the CLI options.
+
+    Absent options are OMITTED rather than sent as null: this is a passthrough
+    API, so a null would override a deployment-derived default (work_dir,
+    resources) with nothing.
+    """
+    nf_params: dict[str, object] = {}
+    if seeds is not None:
+        nf_params["n_seeds"] = seeds
+    if generations is not None:
+        nf_params["n_generations"] = generations
+    if include_analysis is not None:
+        nf_params["include_analysis"] = include_analysis
+    if params:
+        nf_params.update(_nf_json_object(params, "--params"))
+
+    dispatch: dict[str, object] = {
+        "composite_id": composite_id,
+        "executor": executor,
+        "launch": launch,
+    }
+    if resume:
+        dispatch["resume"] = True
+    if nf_params:
+        dispatch["params"] = nf_params
+    if work_dir:
+        dispatch["work_dir"] = work_dir
+    if nextflow_arg:
+        dispatch["nextflow_args"] = list(nextflow_arg)
+    if resources:
+        dispatch["resources"] = _nf_json_object(resources, "--resources")
+    return dispatch
+
+
+@composite_cli.command(
+    "nextflow",
+    help="Submit a Nextflow campaign dispatch -- the task-granularity path, where Nextflow owns "
+    "the coarse DAG (ParCa -> N x M lineages -> analysis) and each task is one whole lineage.",
+)
+def composite_nextflow(
+    experiment_id: str = Argument(help="Unique experiment identifier."),
+    simulator_id: int = Argument(
+        help="Database ID of the simulator to use. Its `-submit` head image "
+        "must exist -- build with `atlantis simulator latest --submit-image`."
+    ),
+    composite_id: str = Option(
+        default="v2ecoli.composites.workflow_nf.workflow_nf",
+        help="Registered composite id. Note the DOUBLED tail: this generator registers as "
+        "'<module>.<name>', and unlike lineage_ray_batch it has no bare-module alias -- the "
+        "shortened form does not resolve.",
+    ),
+    executor: str = Option(
+        default="awsbatch",
+        help="Nextflow profile: 'awsbatch' (tasks on AWS Batch) or 'local' (tasks inside the head "
+        "pod -- useful to separate 'does the render work' from 'does the executor work').",
+    ),
+    launch: bool = Option(
+        default=True,
+        help="Actually run `nextflow run`. --no-launch renders main.nf + configs and stops, which "
+        "is the cheap way to inspect what WOULD run.",
+    ),
+    resume: bool = Option(
+        default=False,
+        help="Reuse cached successful tasks from this campaign's previous run instead of redoing "
+        "them. Needs the session this deployment persists to S3 alongside the work dir.",
+    ),
+    seeds: int | None = Option(default=None, help="n_seeds -- seed-lineages per variant."),
+    generations: int | None = Option(default=None, help="n_generations per lineage."),
+    include_analysis: bool | None = Option(
+        default=None,
+        help="Emit the analysis task that gathers every lineage's sweep. Off by default in the "
+        "composite, so the gather is NOT exercised unless you ask for it.",
+    ),
+    params: str | None = Option(
+        default=None,
+        help="Raw JSON object merged into the generator's parameters, over the named flags above. "
+        'Example: --params \'{"variants": [{"variant_name": "a"}], "max_duration_per_gen": 600}\'.',
+    ),
+    resources: str | None = Option(
+        default=None,
+        help="Raw JSON of per-label {cpus, memory, time} overrides, merged per KEY over the "
+        "deployment defaults (parca/lineage/analysis). Overriding one key keeps the rest -- "
+        'notably the memory closure that scales on OOM. Example: --resources \'{"lineage": {"time": "24 h"}}\'.',
+    ),
+    nextflow_arg: list[str] = Option(
+        default_factory=list,
+        help="Extra argument appended verbatim to `nextflow run`; repeat for multiple. "
+        "'-dump-hashes' prints each component of a task hash and is the only way to see WHY a "
+        "--resume did not match.",
+    ),
+    work_dir: str | None = Option(
+        default=None, help="Override the S3 work directory. Omit to use the deployment-derived one."
+    ),
+    simulation_config: str | None = Option(
+        default=None,
+        help="Config filename under the simulator repo's configs/ (e.g. 'mecillinam_wellmixed.json'). "
+        "sms-ecoli ships named configs only, so a dispatch there 404s without this.",
+    ),
+    description: str | None = Option(default=None, help="Custom description for this simulation run."),
+    tag: list[str] = Option(default_factory=list, help="Free-form tag for later filtering. Repeat for multiple."),
+    poll: bool = Option(default=False, help="Poll simulation status until completion."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    """POST /api/v1/simulations with extra_params.nextflow_dispatch.
+
+    Sibling of `composite run`, not a flag on it: that command dispatches
+    multi_node_dispatch (Ray actors in one Batch MNP job) and this one dispatches
+    nextflow_dispatch (a Nextflow head as a K8s Job, one Batch task per lineage).
+    They are different mechanisms with different parameters, and the server picks
+    on which key is present -- so keeping them separate here means neither
+    command grows flags that silently do nothing on the other path.
+    """
+    console = get_console()
+
+    dispatch = _nf_dispatch_payload(
+        composite_id=composite_id,
+        executor=executor,
+        launch=launch,
+        resume=resume,
+        seeds=seeds,
+        generations=generations,
+        include_analysis=include_analysis,
+        params=params,
+        resources=resources,
+        nextflow_arg=nextflow_arg,
+        work_dir=work_dir,
+    )
+
+    data_service = get_data_service(base_url=base_url)
+    with console.status("[memphis.spinner]Submitting Nextflow dispatch..."):
+        simulation = data_service.run_workflow(
+            experiment_id=experiment_id,
+            simulator_id=simulator_id,
+            description=description or f"sim{simulator_id}-{experiment_id}; nextflow; {composite_id}",
+            config_filename=simulation_config,
+            tags=list(tag) or None,
+            extra_params={"nextflow_dispatch": dispatch},
+        )
+
+    console.print(f"[memphis.success]Nextflow dispatch submitted![/]  ID: {simulation.database_id}")
+    display_json(simulation.model_dump(), console)
+
+    sim_id = simulation.database_id
+    if not poll:
+        console.print(f"\n[memphis.hint]Track progress:[/]  atlantis simulation status {sim_id}")
+        console.print(f"[memphis.hint]Head logs:[/]       atlantis simulation log {sim_id}")
+        console.print(f"[memphis.hint]Download data:[/]   atlantis simulation outputs {sim_id} --dest ./debug")
+        return
+
+    import time as _time_nf
+
+    console.print("\n[memphis.info]Polling simulation status...[/]")
+    status = "running"
+    while status not in ("completed", "failed", "cancelled", "unknown"):
+        _time_nf.sleep(30)
+        run = data_service.submit_get_workflow(simulation_id=sim_id)
+        status = str(getattr(run, "status", "unknown"))
+        console.print(f"  [memphis.dim]{status}[/]")
+    console.print(f"[memphis.success]Final status:[/] {status}")
 
 
 @simulation_cli.command("list", help="List simulations.")
