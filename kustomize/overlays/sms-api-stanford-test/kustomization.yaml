@@ -73,7 +73,11 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.110
+    newTag: 0.9.111
+    # 2026-09-07: 0.9.110 -> 0.9.111, viva-api#469 -- _submit_multi_node_composite
+    # and _submit_mbp_tracked_dispatch now tag every submitted job with
+    # CacheVariant (the variant name, or "stock"). No behavior change, no new
+    # Alembic migration this release.
     # 2026-09-07: 0.9.109 -> 0.9.110, chain-dispatch's own per-seed generation
     # submission now threads exchange_fluxes/exchange_flux_basis (item 105,
     # PR#459) -- no new Alembic migration this release, a pure passthrough
