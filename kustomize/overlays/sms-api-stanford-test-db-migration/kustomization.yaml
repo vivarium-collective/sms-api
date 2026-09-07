@@ -19,7 +19,12 @@ images:
     # multi_node_composite_id migration, 9c2e6b1f4a73) -- the app was deployed
     # slightly ahead of this Job (real, caught live via UndefinedColumnError
     # spam in the api pod's own logs, fixed the same few minutes).
-    newTag: 0.9.107
+    newTag: 0.9.110
+    # 2026-09-07: 0.9.107 -> 0.9.110, matching the app overlay bump (catching
+    # up 3 releases at once: 0.9.108/0.9.109 were Jim's nextflow/dispatch-
+    # validation work, 0.9.110 is PR#459's chain-dispatch exchange_fluxes
+    # threading, item 105) -- no new Alembic migration in any of the three
+    # releases, kept in lockstep per the standing version-sync checklist.
     # 2026-09-07: 0.9.105 -> 0.9.107, matching the app overlay bump (catching
     # up 2 releases at once: 0.9.106 was Jim's nextflow work, 0.9.107 is
     # PR#450's experiment_id force-assign fix, item 117) -- no new Alembic
