@@ -1215,13 +1215,13 @@ M channels into one — which is what a flat sibling list cannot express at all 
 | gate | status |
 |---|---|
 | **1** — per-variant caches | expressible now (`workflow_nf` puts strain inputs on **ParCa**), untested end to end |
-| **1b** — founders differ across seeds | ⛔ **measured, and it FAILS on the current Ray path** — see below |
+| **1b** — founders differ across seeds | ⛔ measured and FAILING, but now **expressible**: v2ecoli#731 (re-draw per seed) and #732 (pair a pre-built per-seed cache). Unverified on infrastructure |
 | **1c** — ParCa mode recorded out-of-band | unchanged |
 | **2** — handoff as a staged `path` at real cache size | mechanism proven in Phase 0 at 23 bytes; the profile exists as of #204, so this is now **blocked only on a deploy** |
 | **3** — `-resume` re-runs only the failed lineage | **now possible**: `deploy()` could not emit `-resume` at all until #203, and the profile it needed landed in #204. Blocked only on a deploy |
-| **4** — 336 renders and the gather gathers | renders ✅, gathers ✅ structurally. **Attempted at Run 2 scale 2026-09-07 and it failed — three separate blockers, all now fixed.** Re-run pending; see below |
+| **4** — 336 renders and the gather gathers | renders ✅, gathers ✅ structurally. **Four attempts at Run 2 scale on 2026-09-07; four blockers, each behind the last.** The fourth run is in flight; see below |
 | **5** — head overhead < ~2 min | ✅ **implied**: a fully-cached resume completes in **73 s** end to end, which is almost entirely head |
-| **6** — a task that emits nothing FAILS | implemented in `LineageStep` and in `render_nf`'s own guard; eagmon's acceptance gate (v2ecoli#703/#708/#713) is the better mechanism |
+| **6** — a task that emits nothing FAILS | implemented, and **the guard has a hole** — viva-api#467: `_has_emitted_output`'s zarr branch tests marker PRESENCE where the parquet and history branches test content. This path is not exposed (lineages emit `.pq`, and the parquet branch is checked first), but the gate is weaker than it reads |
 
 ### ⛔ Go/no-go 1b failed, and it is not a Nextflow problem
 
@@ -1583,39 +1583,93 @@ Both are the shape this path keeps producing, and both are now closed:
   That is how blocker 3 *and* process-bigraph#205 both shipped. The contract
   test is `nextflow run -preview` over a ≥2-variant document.
 
-### What is left
+### What is left (updated 2026-09-07, evening)
 
-**Gate 4, and only gate 4.** Simulator **158** (sms-ecoli `c2af6739` →
-v2ecoli `76610ece`) is the first image carrying all three fixes; the 10×10
-re-run against it is the outstanding step. The question it answers is the half
-that has never executed: *does the analysis task actually receive all N
-sweeps?* Ten distinct `lineage_seed=` partitions published **and** an analysis
-task that consumed them is what closes it.
+**Gate 4, still.** Four attempts today, four blockers, each only visible once the
+one before it was fixed:
 
-Everything else on the ladder is done: gates 2 and 3 pass, output is published
-and correctly partitioned, gate 5 is implied by a 73 s fully-cached resume, and
-gate 6's mechanism is eagmon's acceptance gate.
+| # | blocker | how it presented | fixed |
+|---|---|---|---|
+| 1 | `find_workspace_root` walks up from the task's **scratch cwd** | every lineage dies at import | sms-ecoli#256 |
+| 2 | the gather emits argv the real CLI rejects | argparse exit 2 **after** every lineage ran | v2ecoli#724 |
+| 3 | ≥2 variants render duplicate process names | `main.nf` will not compile | v2ecoli#723 |
+| 4 | `analysis_options` was a builder kwarg but **never a declared generator parameter** | override rejected; gather silently gets `{}` | v2ecoli#730 |
 
-#### Not a scientific Run 2
+Blocker 4 is the one worth carrying forward as a *pattern*. The parameter was
+accepted by `build_workflow_nf()` and threaded into the gather's node config,
+but `CompositeSpec.to_document(overrides=…)` validates against the **declared**
+parameters — so it was settable only in-process and fell back to `{}` on every
+dispatch. Two campaigns died on it: simulation 441 would have failed after ~3 h,
+and 475 failed at render in 30 s once the override was actually sent. A guard
+test now asserts every builder kwarg is a declared parameter.
 
-The re-run uses Run 2's *shape* — one variant, 10 seeds, 10 generations, J3's
-metabolism swap — but builds its **own** ParCa cache, where Run 2 proper uses
-the pre-built violacein bundle (`out/cache_vio_vecoli_free`). Its numbers must
-not go on the CD2 tracker as a Run 2 result.
+⇒ The general form, and this is the third instance today: **a value must be
+declared at every hop it crosses.** `LineageStep`'s whitelist, `LineageProcess`'s
+`config_schema`, the generator's `parameters`, and (in viva-api) an intermediate
+helper's signature each drop what they do not name — three of the four silently.
 
-#### Carried dependencies
+### The two scientific-correctness gaps are now closed in code (2026-09-07)
 
-- **Gate 1b** (v2ecoli#693, seeds sharing a founder object) is addressable via
-  v2ecoli#712 + sms-ecoli#243 (`--independent-founders`). Verified `af4ef87c`
-  is inside our pin. Still a property of the path CD2 runs today.
-- **process-bigraph#207** — the nested-composite naming defect behind blocker 3.
-- **sms-ecoli#241** renamed `configs/three_arm/` → `configs/experiments/`; any
-  CD2 config path written before 2026-09-07 is stale. Note also that
+Neither is verified on infrastructure. Both were found by asking what it would
+take to run CD2's actual payloads rather than their shape.
+
+**Independent founders (v2ecoli#731).** `independent_founders` existed in
+`baseline()` (#712) and appeared **zero times** in `workflow_nf` or
+`lineage_step` — no Nextflow campaign could reach it. The shape is one ParCa per
+variant feeding M lineages, so every seed loaded the same cached
+`initial_state`: M seeds were M copies of one founder. Threaded through all three
+layers, with `founder_sim_data` resolving task-locally to
+`cache/simData.cPickle` — verified against a real staged cache, not assumed.
+
+**Pre-built cache reuse (v2ecoli#732).** A campaign always computed its own
+ParCa, so it could not run Run 1 (ten pre-built per-seed K4 founder caches, staged
+at `ray-parca-cache/9f84e6b/`) or Run 2 (the violacein bundle) as designed.
+`cache_uri`, campaign-wide or per-variant with the variant winning — per-variant
+because Run 1 pairs a **different** cache per seed. Implemented in
+`ParcaTaskStep` so the node fetches instead of computing while keeping its
+`path "cache"` output: the rendered process list is identical either way, because
+a Nextflow input is fed by a channel, not a path.
+
+Together these make the two approaches to gate 1b **comparable on one
+infrastructure** rather than arguable: re-draw founders from the campaign's own
+sim_data, or pair one pre-built per-seed cache per variant, which is what
+@cplong90 does today across ten dispatches.
+
+**viva-api#468** puts all three knobs on the CLI (`--independent-founders`,
+`--cache-uri`, `--analysis-options`) instead of hand-written `--params` JSON.
+Client-side, so no deploy.
+
+### Gate 6 is weaker than it reads (viva-api#467, @cplong90)
+
+`_has_emitted_output` has three branches and one tests the wrong thing: the zarr
+branch returns True on `.zgroup` / `.zarray` / `zarr.json` / `.zattrs`, which are
+written when a store is **created**, before any row lands. So a run that opens a
+store and writes nothing satisfies `PBG_REQUIRE_OUTPUT` and exits 0.
+
+**This path is not exposed** — lineages emit hive-partitioned `.pq`, and the
+parquet branch (checked first) requires `st_size > 0`. Recorded because gate 6
+reads as "done" and is not, for any consumer emitting zarr.
+
+### Carried dependencies
+
+- **eagmon's #727** makes a standalone sweep self-describing for `sim_data`.
+  Molecular analyses need ParCa's `simData.cPickle`, which a sweep does not
+  carry; he hit `FileNotFoundError` analysing a real GovCloud Run 1 sweep. Our
+  gather is exactly that shape, and the J3 analysis set includes
+  `cd1_transcriptomics` / `cd1_proteomics`. **Not in simulator 159**, so the run
+  in flight can still hit it.
+- **process-bigraph#207** — `render_composite` descends into a nested composite
+  with the inner-only path. Worked around locally by #723; still open.
+- **eagmon's #449** asks that the Nextflow dispatch default analysis ON.
+  Flipping it alone would make every campaign fail its last node, since an empty
+  `analysis_options` produces no `analysis/` for Nextflow to collect. Either
+  default the options too, or reject at dispatch — noted on the issue.
+- **sms-ecoli#241** renamed `configs/three_arm/` → `configs/experiments/`, and
   `GET /simulations/discovery` lists only **top-level** `configs/*.json`, so a
-  nested config is invisible there while a *path* (`experiments/foo.json`)
-  dispatches fine.
-- **v2ecoli#683**'s trigger shape — `swap_processes` with no `cache_dir` in the
-  spec — is what the Nextflow path produces by construction, since the cache is
-  a staged input and cannot be named when the spec is written. Safe only because
-  the fix is present in every pin used (`6eb4d675`, `06eeae43`, `76610ece`,
-  checked); an image pinned before `81183852` would collapse silently here.
+  nested config is invisible there while a *path* dispatches fine.
+
+### One build away
+
+sms-ecoli pins v2ecoli at `6029c7fe`; founders, cache reuse and #727 all landed
+after it. Deliberately **not** bumped yet — the run in flight will likely want a
+fix of its own, and one build should carry everything rather than four.
