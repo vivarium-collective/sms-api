@@ -18,6 +18,7 @@ from viva_api.common.handlers.simulations import (
     _run_standalone_analysis_ray_native,
     fetch_omics_outputs,
     get_available_omics_output_paths,
+    run_simulation_workflow,
 )
 from viva_api.common.models import JobId, JobStatus
 from viva_api.common.simulator_defaults import RepoUrl
@@ -879,3 +880,69 @@ class TestRunNewGeneCache:
         assert call_kwargs["variant"] == "k4-induced"
         assert call_kwargs["rel_exp_adj"] == "1,2,4"
         assert call_kwargs["seed"] == 7
+
+
+@pytest.mark.asyncio
+async def test_run_simulation_workflow_forces_unique_experiment_id_over_a_configs_own_baked_value() -> None:
+    """Regression for backlog item 117 / sms-ecoli#235 (cplong90's own independent repro):
+    Dispatch 339 was submitted from a copied Run 2 config whose own baked `experiment_id`
+    was never re-pointed -- `config_data.setdefault("experiment_id", unique_experiment_id)`
+    is a no-op once a key already exists, so the config's own stale value won and Run 1's
+    real output landed under Run 2's S3 prefix. `unique_experiment_id` was already always
+    correct on the DB's own top-level `SimulationRequest.experiment_id` (set unconditionally
+    a few lines later) -- the bug was only ever that `config.experiment_id`, what a dispatch
+    actually writes its S3 output under, could silently disagree with it.
+
+    Fix: force-assign rather than setdefault. This test drives the real
+    `run_simulation_workflow` end to end (mocking only DB/service I/O, no Docker needed)
+    with a config template that bakes its own stale `experiment_id`, and asserts the two
+    values now agree and neither is the stale one.
+    """
+    simulator = SimulatorVersion(
+        database_id=53,
+        git_commit_hash="deadbeef",
+        git_repo_url=RepoUrl.SMS_ECOLI_REPO_URL,
+        git_branch="main",
+    )
+    mock_db_service = AsyncMock()
+    mock_db_service.get_simulator.return_value = simulator
+    mock_db_service.insert_parca_dataset.return_value = SimpleNamespace(database_id=158)
+    mock_db_service.get_hpcrun_id_by_correlation_id.return_value = None
+    inserted_simulation = _make_ray_simulation()
+    mock_db_service.insert_simulation.return_value = inserted_simulation
+
+    mock_ray_service = AsyncMock(spec=SimulationServiceRay)
+    # The exact real-world shape: a config file copied from another run, carrying that
+    # run's own stale, baked experiment_id -- the config content sms-ecoli#235 identifies.
+    mock_ray_service.read_config_template.return_value = (
+        '{"experiment_id": "cd2_run2_j3", "n_init_sims": 1, "generations": 10}'
+    )
+    mock_ray_service.submit_ecoli_simulation_job.return_value = JobId.ray("job-abc")
+
+    with (
+        patch("viva_api.common.handlers.simulations._verify_build_complete", new=AsyncMock()),
+        patch("viva_api.common.handlers.simulations.get_simulation_service_for_repo", return_value=None),
+        patch("viva_api.common.handlers.simulations.export_baseline_config"),
+        patch("viva_api.common.handlers.simulations.get_correlation_id", return_value="corr-1"),
+    ):
+        await run_simulation_workflow(
+            database_service=mock_db_service,
+            simulation_service=mock_ray_service,
+            simulator_id=53,
+            experiment_id="cd2-run1-k4-cellonly-lam050-founder-seed0",
+            simulation_config_filename="configs/cd2/run1_k4_cellonly.json",
+        )
+
+    mock_db_service.insert_simulation.assert_called_once()
+    request = mock_db_service.insert_simulation.call_args.kwargs["sim_request"]
+
+    # The stale, config-baked value must never win.
+    assert request.config.experiment_id != "cd2_run2_j3"
+    assert request.experiment_id != "cd2_run2_j3"
+    # The caller's own semantic label survives as a substring (unique_experiment_id's own
+    # construction embeds it) -- forcing the fix doesn't erase caller intent, it only stops
+    # a config template's own baked value from shadowing it.
+    assert "cd2-run1-k4-cellonly-lam050-founder-seed0" in request.config.experiment_id
+    # The one real bug: these two must now always agree. Before the fix, request.experiment_id
+    # was unique_experiment_id while request.config.experiment_id was the stale "cd2_run2_j3".
+    assert request.config.experiment_id == request.experiment_id

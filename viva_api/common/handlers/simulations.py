@@ -511,9 +511,23 @@ async def run_simulation_workflow(  # noqa: C901
     config_data = json.loads(config_str)
 
     # 3b. Ensure required fields exist (vanilla vEcoli configs may lack API placeholders)
-    config_data.setdefault("experiment_id", unique_experiment_id)
-    if config_data.get("experiment_id") is None:
-        config_data["experiment_id"] = unique_experiment_id
+    #
+    # experiment_id is force-assigned, never setdefault -- backlog item 117 (real incident:
+    # Dispatch 339/340's job-name cross-swap, independently reconfirmed by cplong90 as
+    # sms-ecoli#210's own experiment_id-collision issue and sms-ecoli#235's own precise
+    # repro -- Dispatch 339 was submitted from a copied Run 2 config whose own baked
+    # experiment_id was never re-pointed, so its output landed under Run 2's folder).
+    # A config template's own baked experiment_id used to win via setdefault's no-op --
+    # harmless for a one-off, but any config reused/copied across runs (real, observed
+    # behavior, not hypothetical) silently collides every dispatch onto ONE S3 prefix,
+    # each exiting 0 and looking healthy. unique_experiment_id already embeds the
+    # caller-supplied `experiment_id` query param as a substring (see its own construction
+    # 2 lines up), so a caller's naming intent survives -- only a config file's own baked
+    # value is what stops winning. The DB's own SimulationRequest.experiment_id (set
+    # unconditionally a few dozen lines down) was ALREADY always unique_experiment_id;
+    # this makes config.experiment_id -- what a dispatch actually writes its S3 output
+    # under -- agree with it, closing the one real place they could diverge.
+    config_data["experiment_id"] = unique_experiment_id
     config_data.setdefault("emitter", "parquet")
     config_data.setdefault("emitter_arg", {})
     # Always ensure emitter_arg.out_dir points to the HPC output path (vanilla configs use relative "out")
