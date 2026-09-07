@@ -294,7 +294,7 @@ def _parquet_has_real_data(p: Path) -> bool:
     crash the gate.
     """
     try:
-        import pyarrow.parquet as pq  # type: ignore[import-untyped]
+        import pyarrow.parquet as pq
 
         md = pq.ParquetFile(str(p)).metadata
         return bool(md.num_rows > 0 and md.num_columns > 1)

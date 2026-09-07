@@ -505,7 +505,7 @@ def test_has_emitted_output_false_for_empty_dir_or_only_final_state(tmp_path: Pa
     assert run_pbg._has_emitted_output(tmp_path) is False
 
 
-def _write_parquet(path: Path, columns: dict[str, list]) -> None:
+def _write_parquet(path: Path, columns: dict[str, list[float]]) -> None:
     import pyarrow as pa
     import pyarrow.parquet as pq
 
