@@ -303,7 +303,7 @@ async def get_results(simulation_id: int) -> FileResponse | StreamingResponse:
 
     if hpc_run is not None and hpc_run.job_backend != JobBackend.SLURM.value:
         # Ray/Batch: the sim never zips anything -- it writes straight to S3, and a
-        # chained analysis job's manifest (analyses/<name>/_manifest.json) lands
+        # chained analysis job's results (analyses/<name>/analysis.json) land
         # under the SAME experiment prefix (see simulation_service_ray.py's
         # analysis-chaining branch), so streaming every object under
         # RayLayout.experiment_prefix(experiment_id) captures both with a single

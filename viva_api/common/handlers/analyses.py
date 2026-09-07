@@ -313,26 +313,35 @@ async def handle_get_ray_analysis_status(
     ttl_seconds_after_finished=86400, an AWS Batch job ages out of describe_jobs)
     -- S3-exists is the durable, authoritative READY signal, matching
     analysis-results-design.md's own status-resolution plan. Falls back to a live
-    job-status check only to catch a failure that happened before the manifest
+    job-status check only to catch a failure that happened before the results
     could ever be written: an image-pull/scheduling error, or (for the dispatch
     DAG's analysis node) the simulation it depends on having failed.
+
+    The readiness artifact is ``analysis.json`` -- the file ``v2ecoli-analyze``
+    actually writes at its out_dir (== ``result_uri``). It carries a top-level
+    ``status`` of ``"OK"`` or ``"PARTIAL"`` (PARTIAL = some analyses failed but
+    the run completed); either means the job finished and results landed. v2ecoli
+    never writes a ``_manifest.json`` (an earlier version probed that phantom
+    filename, so this never flipped to READY on a real dispatch).
     """
     if record.status in (JobStatus.COMPLETED, JobStatus.FAILED):
         return AnalysisRun(id=record.database_id, status=record.status, error_log=record.error_message)
 
     file_service = get_file_service()
-    manifest_bytes = None
+    result_bytes = None
     if file_service is not None and record.result_uri:
-        manifest_key = data_layout.key_from_uri(f"{record.result_uri}/_manifest.json")
-        manifest_bytes = await file_service.get_file_contents(S3FilePath(s3_path=Path(manifest_key)))
-    if manifest_bytes is not None:
-        manifest = json.loads(manifest_bytes)
-        if manifest.get("written"):
+        result_key = data_layout.key_from_uri(f"{record.result_uri}/analysis.json")
+        result_bytes = await file_service.get_file_contents(S3FilePath(s3_path=Path(result_key)))
+    if result_bytes is not None:
+        result = json.loads(result_bytes)
+        if str(result.get("status", "")).upper() in ("OK", "PARTIAL"):
             await db_service.update_analysis_status(
                 record.database_id, AnalysisStatusDB.READY, result_uri=record.result_uri
             )
             return AnalysisRun(id=record.database_id, status=JobStatus.COMPLETED)
-        error_message = "; ".join(e.get("error", "") for e in manifest.get("errors", [])) or "analysis failed"
+        error_message = (
+            "; ".join(e.get("error", "") for e in result.get("errors", []) if isinstance(e, dict)) or "analysis failed"
+        )
         await db_service.update_analysis_status(
             record.database_id, AnalysisStatusDB.FAILED, error_message=error_message
         )

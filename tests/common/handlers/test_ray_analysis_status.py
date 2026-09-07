@@ -44,48 +44,48 @@ async def test_returns_terminal_status_without_any_probe() -> None:
 
 
 @pytest.mark.asyncio
-async def test_manifest_lookup_uses_a_bucket_relative_key_not_the_full_uri() -> None:
+async def test_results_lookup_uses_a_bucket_relative_key_not_the_full_uri() -> None:
     """Regression: record.result_uri is a full s3://<bucket>/... URI, but
     S3FilePath.s3_path is documented (and FileServiceS3 relies on it) as
     BUCKET-RELATIVE -- FileServiceS3 resolves the bucket separately from
     settings and uses s3_path.s3_path as the literal object key. Passing the
-    full URI straight into S3FilePath (via Path(f"{result_uri}/_manifest.json"))
+    full URI straight into S3FilePath (via Path(f"{result_uri}/analysis.json"))
     double-prefixed the bucket into the key AND, via Path()'s slash-collapsing,
     mangled "s3://" into "s3:/", so the constructed key never matched a real
-    object -- every manifest existence check silently 404'd regardless of
-    whether the manifest genuinely existed. Live-reproduced 2026-08-05:
+    object -- every results-file existence check silently 404'd regardless of
+    whether the file genuinely existed. Live-reproduced 2026-08-05:
     atlantis analysis status kept reporting "running" 20+ minutes after the
-    K8s pod had completed and written a real, valid manifest to S3. This test
-    inspects the ACTUAL key handed to get_file_contents (the prior test only
-    asserted on a hardcoded mock return value, which can't catch a wrong-key
-    bug since the mock ignores its input entirely)."""
+    K8s pod had completed and written a real, valid results file to S3. This
+    test inspects the ACTUAL key handed to get_file_contents (the prior test
+    only asserted on a hardcoded mock return value, which can't catch a
+    wrong-key bug since the mock ignores its input entirely).
+
+    Also pins the filename: v2ecoli-analyze writes ``analysis.json`` at its
+    out_dir, NOT ``_manifest.json`` (which it never emits -- an earlier version
+    probed that phantom and so never flipped to READY on a real dispatch)."""
     record = _make_record()
     db_service = AsyncMock()
-    manifest = (
-        b'{"written": ["s3://bucket/exp/analyses/analysis-exp1-ab12/doubling_time_distribution.json"], "errors": []}'
-    )
+    results = b'{"status": "OK", "summary": {"multivariant": {"growth_overlay": "ok"}}, "errors": []}'
     fake_file_service = AsyncMock()
-    fake_file_service.get_file_contents.return_value = manifest
+    fake_file_service.get_file_contents.return_value = results
 
     with patch("viva_api.common.handlers.analyses.get_file_service", return_value=fake_file_service):
         await handle_get_ray_analysis_status(db_service=db_service, record=record)
 
     fake_file_service.get_file_contents.assert_called_once()
     requested_path = str(fake_file_service.get_file_contents.call_args.args[0])
-    assert requested_path == "exp/analyses/analysis-exp1-ab12/_manifest.json"
+    assert requested_path == "exp/analyses/analysis-exp1-ab12/analysis.json"
     assert "s3:" not in requested_path
     assert "bucket" not in requested_path
 
 
 @pytest.mark.asyncio
-async def test_manifest_present_with_output_marks_ready() -> None:
+async def test_analysis_json_status_ok_marks_ready() -> None:
     record = _make_record()
     db_service = AsyncMock()
-    manifest = (
-        b'{"written": ["s3://bucket/exp/analyses/analysis-exp1-ab12/doubling_time_distribution.json"], "errors": []}'
-    )
+    results = b'{"status": "OK", "summary": {"multivariant": {"growth_overlay": "ok"}}, "errors": []}'
     fake_file_service = AsyncMock()
-    fake_file_service.get_file_contents.return_value = manifest
+    fake_file_service.get_file_contents.return_value = results
 
     with patch("viva_api.common.handlers.analyses.get_file_service", return_value=fake_file_service):
         result = await handle_get_ray_analysis_status(db_service=db_service, record=record)
@@ -99,12 +99,36 @@ async def test_manifest_present_with_output_marks_ready() -> None:
 
 
 @pytest.mark.asyncio
-async def test_manifest_present_with_only_errors_marks_failed() -> None:
+async def test_analysis_json_status_partial_still_marks_ready() -> None:
+    """PARTIAL = some analyses failed but the run COMPLETED and landed its
+    results -- a completed run, not a failed one. The per-analysis failures
+    are inline/structural, surfaced in the results, not a hard job failure."""
     record = _make_record()
     db_service = AsyncMock()
-    manifest = b'{"written": [], "errors": [{"name": "doubling_time_distribution", "error": "boom"}]}'
+    results = b'{"status": "PARTIAL", "errors": [{"name": "growth_overlay", "error": "boom"}]}'
     fake_file_service = AsyncMock()
-    fake_file_service.get_file_contents.return_value = manifest
+    fake_file_service.get_file_contents.return_value = results
+
+    with patch("viva_api.common.handlers.analyses.get_file_service", return_value=fake_file_service):
+        result = await handle_get_ray_analysis_status(db_service=db_service, record=record)
+
+    assert result.status == JobStatus.COMPLETED
+    db_service.update_analysis_status.assert_called_once_with(
+        1,
+        AnalysisStatusDB.READY,
+        result_uri=record.result_uri,
+    )
+
+
+@pytest.mark.asyncio
+async def test_analysis_json_present_without_ok_status_marks_failed() -> None:
+    """A present-but-malformed results file (no OK/PARTIAL status) is a hard
+    failure -- surface its top-level structural errors."""
+    record = _make_record()
+    db_service = AsyncMock()
+    results = b'{"errors": [{"name": "growth_overlay", "error": "boom"}]}'
+    fake_file_service = AsyncMock()
+    fake_file_service.get_file_contents.return_value = results
 
     with patch("viva_api.common.handlers.analyses.get_file_service", return_value=fake_file_service):
         result = await handle_get_ray_analysis_status(db_service=db_service, record=record)
