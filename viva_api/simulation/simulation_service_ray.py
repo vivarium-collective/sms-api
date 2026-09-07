@@ -1064,6 +1064,53 @@ class SimulationServiceRay(SimulationService):
         registry = f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
         return f"{registry}/{settings.ray_ecr_repository}:{commit}-submit"
 
+    def _awsbatch_nf_params(self, commit: str, experiment_id: str) -> dict[str, Any]:
+        """The `awsbatch` profile's inputs, derived from settings -- never from the request.
+
+        These name the deployment's queue, registry and work bucket, so they are
+        server-side facts rather than something a caller supplies. Missing ones raise
+        here, at dispatch, instead of surfacing as an AWS error minutes later inside a
+        Batch container.
+
+        ``container_image`` is the PLAIN science image, not the ``-submit`` head: only
+        the process running ``nextflow run`` needs a JVM, and the task container needs
+        only the AWS CLI to stage the S3 work dir (which v2ecoli's Dockerfile installs).
+
+        ``container_env`` carries ``PYTHONPATH``, which is not optional: Nextflow moves
+        the task's cwd off ``/app/v2ecoli``, and v2ecoli bare-imports ``scripts.*``
+        throughout. viva-api#359 fixed this for the chain/Ray paths by way of
+        ``PBG_RUNNER_ENV``, which a Nextflow-emitted process block has no idea exists.
+        It rides in ``container_env`` rather than a dedicated profile directive because
+        it is a fact about THIS image, not about AWS Batch -- process-bigraph#204 keeps
+        the profile free of any one consumer's layout.
+        """
+        settings = get_settings()
+        missing = [
+            name
+            for name, value in (
+                ("batch_amd64_queue", settings.batch_amd64_queue),
+                ("s3_work_bucket", settings.s3_work_bucket),
+                ("ecr_account_id", settings.ecr_account_id),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(
+                f"nextflow_dispatch executor='awsbatch' needs settings {', '.join(missing)}; "
+                f"without them the profile renders with nulls and fails at submission."
+            )
+        return {
+            "container_image": self._image_uri(commit),
+            "queue": settings.batch_amd64_queue,
+            "aws_region": settings.batch_region,
+            # GovCloud's S3 endpoint. Emitting it natively is what retires the `sed`
+            # that injects the same line into vEcoli's config.template
+            # (simulation_service_k8s.py).
+            "s3_endpoint": f"https://s3.{settings.batch_region}.amazonaws.com",
+            "container_env": {"PYTHONPATH": V2ECOLI_DIR},
+            "work_dir": f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/work",
+        }
+
     def _render_nf_command(
         self,
         *,
@@ -1073,6 +1120,8 @@ class SimulationServiceRay(SimulationService):
         executor: str,
         launch: bool,
         outdir: str,
+        nf_params: dict[str, Any] | None = None,
+        resources: dict[str, dict[str, Any]] | None = None,
         work_dir: str | None = None,
         resume: bool = False,
     ) -> str:
@@ -1086,6 +1135,15 @@ class SimulationServiceRay(SimulationService):
         overrides_flag = ""
         if params:
             overrides_flag = f" --overrides {shlex.quote(json.dumps(params))}"
+        # ``params`` parameterizes the COMPOSITE generator; ``nf_params`` configures
+        # NEXTFLOW itself (queue, image, region, work dir). Two different things that
+        # both got called "params" upstream, so they are kept separate on the wire.
+        nf_params_flag = ""
+        if nf_params:
+            nf_params_flag = f" --nf-params {shlex.quote(json.dumps(nf_params))}"
+        resources_flag = ""
+        if resources:
+            resources_flag = f" --resources {shlex.quote(json.dumps(resources))}"
         launch_flag = " --launch" if launch else ""
         resume_flag = " --resume" if resume else ""
         work_dir_flag = f" --work-dir {shlex.quote(work_dir)}" if work_dir else ""
@@ -1099,7 +1157,7 @@ class SimulationServiceRay(SimulationService):
             f" --outdir {shlex.quote(outdir)}"
             f" --executor {shlex.quote(executor)}"
             f" --trace {shlex.quote(outdir)}/trace.csv"
-            f"{overrides_flag}{launch_flag}{resume_flag}{work_dir_flag}"
+            f"{overrides_flag}{nf_params_flag}{resources_flag}{launch_flag}{resume_flag}{work_dir_flag}"
         )
 
     async def _submit_nextflow_dispatch(
@@ -1131,14 +1189,29 @@ class SimulationServiceRay(SimulationService):
 
         job_def = self._ensure_container_job_def(self._submit_image_uri(commit), f"{commit}-submit")
         runner_s3_uri = await self.stage_render_nf(experiment_id)
+        executor = str(nf_dispatch.get("executor", "local"))
+        nf_params: dict[str, Any] | None = None
+        work_dir = nf_dispatch.get("work_dir")
+        if executor == "awsbatch":
+            nf_params = self._awsbatch_nf_params(commit, experiment_id)
+            # Retry counts are the caller's to tune; the deployment's identity is not.
+            for key in ("max_spot_attempts", "max_transfer_attempts", "max_retries"):
+                if nf_dispatch.get(key) is not None:
+                    nf_params[key] = nf_dispatch[key]
+            # `-work-dir` on the command line wins over the profile's `workDir`; both
+            # are set so a config lifted out of the render dir and run by hand behaves
+            # the same as the dispatch did.
+            work_dir = work_dir or nf_params["work_dir"]
         command = self._render_nf_command(
             runner_s3_uri=runner_s3_uri,
             composite_id=str(composite_id),
             params=nf_dispatch.get("params"),
-            executor=str(nf_dispatch.get("executor", "local")),
+            executor=executor,
             launch=bool(nf_dispatch.get("launch", False)),
             outdir=outdir,
-            work_dir=nf_dispatch.get("work_dir"),
+            nf_params=nf_params,
+            resources=nf_dispatch.get("resources"),
+            work_dir=work_dir,
             resume=bool(nf_dispatch.get("resume", False)),
         )
         job_id = self._submit_container(

@@ -47,6 +47,9 @@ def _ray_settings() -> MagicMock:
         ray_num_nodes=3,
         ray_ecr_repository="v2ecoli",
         ecr_account_id="476270107793",
+        # Nextflow awsbatch profile inputs (Phase 4)
+        batch_amd64_queue="smscdk-vecoli-task-amd64",
+        s3_work_prefix="nextflow/work",
         ray_parca_mode="fast",
         ray_parca_cpus=8,
         ray_n_steps=600,
