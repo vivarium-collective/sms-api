@@ -2383,6 +2383,71 @@ class TestSeedGenerationCommand:
         assert "--composite-id v2ecoli.composites.reactor_bird_coupled.reactor_bird_coupled " in cmd
         assert "ecoli_baseline" not in cmd
 
+    def test_exchange_fluxes_omitted_by_default_byte_for_byte_unaffected(self) -> None:
+        """Backlog item 105 (K4 cell-only ensemble): a caller that doesn't pass
+        exchange_fluxes (every caller before this fix) builds the exact same
+        command as before -- pure additive passthrough, no behavior change."""
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+        ):
+            cmd = service._seed_generation_command(
+                seed=0,
+                generation_index=0,
+                experiment_id="exp-no-exchange-flux",
+                runner_s3_uri="s3://mybucket/vecoli-output/exp-no-exchange-flux/run_pbg.py",
+            )
+        assert "exchange_fluxes" not in cmd
+        assert "exchange_flux_basis" not in cmd
+
+    def test_exchange_fluxes_thread_into_overrides_when_present(self) -> None:
+        """Backlog item 105 (K4 cell-only ensemble, sms-ecoli#210): the actual
+        fix -- chain-dispatch's own generation-submission never threaded
+        exchange_fluxes/exchange_flux_basis at all (only pbg-native's
+        _submit_multi_node_composite, item106, had them), so a config relying
+        on the ExchangeFluxListener for a real product-flux measurement
+        silently produced no listeners__exchange_flux__* columns via this
+        route -- the exact gap that blocked the K4 cell-only ensemble."""
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+        ):
+            cmd = service._seed_generation_command(
+                seed=0,
+                generation_index=0,
+                experiment_id="exp-with-exchange-flux",
+                runner_s3_uri="s3://mybucket/vecoli-output/exp-with-exchange-flux/run_pbg.py",
+                exchange_fluxes={"violacein_exchange": "VIOLACEIN", "glucose_exchange": "GLC"},
+                exchange_flux_basis="gdcw",
+            )
+        overrides_json = cmd.split("--overrides ")[1].split(" -n 1")[0]
+        overrides = json.loads(shlex.split(overrides_json)[0])
+        assert overrides["exchange_fluxes"] == {"violacein_exchange": "VIOLACEIN", "glucose_exchange": "GLC"}
+        assert overrides["exchange_flux_basis"] == "gdcw"
+
+    def test_exchange_flux_basis_omitted_without_exchange_fluxes(self) -> None:
+        """A basis with no flux dict is a caller error this layer doesn't
+        validate (matches injected_processes/variants' own pure-passthrough
+        philosophy -- v2ecoli's own composite fails loud on a bad shape, not
+        this one) -- but it must not appear alone in overrides, since
+        _multi_node_composite_command's own established convention (this
+        file, ~line 440) nests it under `if exchange_fluxes:` too."""
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+        ):
+            cmd = service._seed_generation_command(
+                seed=0,
+                generation_index=0,
+                experiment_id="exp-basis-only",
+                runner_s3_uri="s3://mybucket/vecoli-output/exp-basis-only/run_pbg.py",
+                exchange_flux_basis="gdcw",
+            )
+        assert "exchange_flux_basis" not in cmd
+
     def test_stop_at_division_is_always_set(self) -> None:
         """Backlog item 103: without this, n_seeds=1/n_generations=1/no
         stop_at_division makes ecoli_baseline.baseline()'s own dispatch gate
@@ -3864,6 +3929,38 @@ class TestSubmitChainGeneration:
         assert overrides["injected_processes"] == injected
         assert overrides["variants"] == variants
 
+    async def test_submit_chain_generation_forwards_exchange_fluxes(self) -> None:
+        """Backlog item 105 (K4 cell-only ensemble, sms-ecoli#210): confirms
+        submit_chain_generation threads exchange_fluxes/exchange_flux_basis
+        into the real overrides payload rather than dropping them at this
+        layer -- the exact gap that silently produced no exchange-flux
+        measurement for a chain-dispatch config relying on it."""
+        mock_batch = _fake_container_batch(["s0g0"])
+        exchange_fluxes = {"violacein_exchange": "VIOLACEIN", "glucose_exchange": "GLC"}
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+        ):
+            service.submit_chain_generation(
+                seed=0,
+                generation_index=0,
+                experiment_id="exp-k4-cellonly",
+                commit="abc1234",
+                cache_s3="s3://mybucket/cache/abc1234",
+                runner_s3_uri="s3://mybucket/runner/run_pbg.py",
+                tags={"Project": "v2ecoli-comparison"},
+                exchange_fluxes=exchange_fluxes,
+                exchange_flux_basis="gdcw",
+            )
+        (call,) = mock_batch.submit_job.call_args_list
+        env = _container_env_of(call)
+        tokens = shlex.split(env["CONTAINER_JOB_CMD"])
+        overrides = json.loads(tokens[tokens.index("--overrides") + 1])
+        assert overrides["exchange_fluxes"] == exchange_fluxes
+        assert overrides["exchange_flux_basis"] == "gdcw"
+
     async def test_submit_chain_generation_forwards_composite_id(self) -> None:
         """Backlog item 105: JobScheduler passes composite_id through on every
         seed's every generation (re-derived from Simulation.config each tick,
@@ -3960,6 +4057,40 @@ class TestSubmitChainGeneration:
                 "--composite-id v2ecoli.composites.reactor_bird_coupled.reactor_bird_coupled "
                 in env["CONTAINER_JOB_CMD"]
             )
+
+    async def test_batch_forwards_exchange_fluxes_to_every_seed(self) -> None:
+        """Backlog item 105 (K4 cell-only ensemble): submit_chain_generation_batch's
+        own fan-out loop (the generation-0 burst) must pass the SAME
+        exchange_fluxes/exchange_flux_basis to every seed -- one campaign, one
+        config, matching the injected_processes/variants/composite_id precedent
+        immediately above."""
+        mock_batch = _fake_container_batch(["s0g0", "s1g0"])
+        exchange_fluxes = {"violacein_exchange": "VIOLACEIN"}
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.simulation.simulation_service_ray._SubmitJobPacer.wait", new=AsyncMock()),
+        ):
+            submitted = await service.submit_chain_generation_batch(
+                seeds=[0, 1],
+                generation_index=0,
+                experiment_id="exp-k4-cellonly-batch",
+                commit="abc1234",
+                cache_s3="s3://mybucket/cache/abc1234",
+                runner_s3_uri="s3://mybucket/runner/run_pbg.py",
+                tags={"Project": "v2ecoli-comparison"},
+                exchange_fluxes=exchange_fluxes,
+                exchange_flux_basis="gdcw",
+            )
+        assert submitted == {0: "s0g0", 1: "s1g0"}
+        for call in mock_batch.submit_job.call_args_list:
+            env = _container_env_of(call)
+            tokens = shlex.split(env["CONTAINER_JOB_CMD"])
+            overrides = json.loads(tokens[tokens.index("--overrides") + 1])
+            assert overrides["exchange_fluxes"] == exchange_fluxes
+            assert overrides["exchange_flux_basis"] == "gdcw"
 
     async def test_batch_fans_out_generation_zero_for_every_seed_paced_and_isolates_failures(self) -> None:
         """The one remaining genuine submission burst: every seed's

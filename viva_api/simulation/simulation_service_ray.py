@@ -1855,6 +1855,8 @@ class SimulationServiceRay(SimulationService):
         injected_processes: dict[str, Any] | None = None,
         variants: dict[str, Any] | None = None,
         composite_id: str | None = None,
+        exchange_fluxes: dict[str, Any] | None = None,
+        exchange_flux_basis: str | None = None,
     ) -> str:
         """Build ONE seed's ONE generation's command (backlog item 33 rework —
         per-seed independent job chains, mirroring vEcoli-private's own
@@ -1945,6 +1947,19 @@ class SimulationServiceRay(SimulationService):
         clobbering the last one's). ``daughter_state_out_path``/
         ``initial_carry_state_path`` already lived under a per-seed prefix
         (``daughter_state_uri``), unaffected by this.
+
+        ``exchange_fluxes``/``exchange_flux_basis`` (backlog item 105, the K4
+        cell-only ensemble): the SAME two params ``_submit_multi_node_composite``
+        already threads for pbg-native (item106) -- chain-dispatch never had
+        them. Without ``exchange_fluxes`` the composite's own ExchangeFluxListener
+        never mounts, so no ``listeners__exchange_flux__*`` columns are written
+        AT ALL, with no refusal -- a real, silent measurement gap this project's
+        own sms-ecoli collaborators (cplong90) documented precisely:
+        "an absent product column has the same artifact signature as a run that
+        never worked, and costs real time to tell apart." Pure passthrough,
+        both default ``None`` and are omitted from ``overrides`` entirely when
+        absent -- every existing caller builds the exact same command as before
+        these params existed.
         """
         daughter_state_out_path = data_layout.RayLayout.daughter_state_uri(experiment_id, seed, generation_index)
         initial_carry_state_path = (
@@ -1979,6 +1994,10 @@ class SimulationServiceRay(SimulationService):
             overrides["injected_processes"] = injected_processes
         if variants:
             overrides["variants"] = variants
+        if exchange_fluxes:
+            overrides["exchange_fluxes"] = exchange_fluxes
+            if exchange_flux_basis:
+                overrides["exchange_flux_basis"] = exchange_flux_basis
         env = PBG_RUNNER_ENV
         return (
             f"cd {V2ECOLI_DIR}"
@@ -2917,6 +2936,8 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         injected_processes: dict[str, Any] | None = None,
         variants: dict[str, Any] | None = None,
         composite_id: str | None = None,
+        exchange_fluxes: dict[str, Any] | None = None,
+        exchange_flux_basis: str | None = None,
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
     ) -> str:
@@ -2933,12 +2954,12 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         own per-seed S3 layout exactly (unchanged by this migration — see that
         method's docstring); only the job TYPE and dependency model change.
 
-        ``injected_processes``/``variants``/``composite_id`` (backlog items 93,
-        105): passed straight through to ``_seed_generation_command`` — see
-        that method's own docstring. ``JobScheduler`` is the real caller,
-        re-deriving all three from the campaign's own ``Simulation.config``
-        every tick (restart-safe, same as every other piece of per-tick state
-        here).
+        ``injected_processes``/``variants``/``composite_id``/``exchange_fluxes``/
+        ``exchange_flux_basis`` (backlog items 93, 105): passed straight through
+        to ``_seed_generation_command`` — see that method's own docstring.
+        ``JobScheduler`` is the real caller, re-deriving all five from the
+        campaign's own ``Simulation.config`` every tick (restart-safe, same as
+        every other piece of per-tick state here).
         """
         job_def = self._ensure_container_job_def(self._image_uri(commit), commit)
         return self._submit_container(
@@ -2952,6 +2973,8 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                 injected_processes=injected_processes,
                 variants=variants,
                 composite_id=composite_id,
+                exchange_fluxes=exchange_fluxes,
+                exchange_flux_basis=exchange_flux_basis,
             ),
             out_s3=data_layout.RayLayout.seed_results_uri(experiment_id, seed),
             out_dir=SIM_OUT_DIR,
@@ -2976,6 +2999,8 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         injected_processes: dict[str, Any] | None = None,
         variants: dict[str, Any] | None = None,
         composite_id: str | None = None,
+        exchange_fluxes: dict[str, Any] | None = None,
+        exchange_flux_basis: str | None = None,
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
     ) -> dict[int, str]:
@@ -2995,10 +3020,10 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         the superseded design's own "truncate just this seed's chain" failure
         semantics; other seeds are unaffected.
 
-        ``injected_processes``/``variants``/``composite_id`` (backlog items 93,
-        105): the SAME values for every seed in this batch — one campaign, one
-        config — forwarded to each seed's own ``submit_chain_generation`` call
-        below.
+        ``injected_processes``/``variants``/``composite_id``/``exchange_fluxes``/
+        ``exchange_flux_basis`` (backlog items 93, 105): the SAME values for
+        every seed in this batch — one campaign, one config — forwarded to each
+        seed's own ``submit_chain_generation`` call below.
         """
         pacer = _SubmitJobPacer()
         submit_client = boto3.client(
@@ -3022,6 +3047,8 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                     injected_processes=injected_processes,
                     variants=variants,
                     composite_id=composite_id,
+                    exchange_fluxes=exchange_fluxes,
+                    exchange_flux_basis=exchange_flux_basis,
                     expect_new_genes=expect_new_genes,
                     expect_bundle_overrides=expect_bundle_overrides,
                 )
