@@ -909,7 +909,7 @@
 #            regression test (no Docker needed) drives run_simulation_workflow
 #            end to end with a config baking a stale experiment_id and asserts
 #            the two now agree and neither is the stale value.
-__version__ = "0.9.107"
+__version__ = "0.9.108"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
@@ -976,3 +976,24 @@ __version__ = "0.9.107"
 #           itself already strain-specific since v2ecoli-parca received both flags
 #           one command earlier in the same chain. Restamping here was redundant
 #           even when it was once supported.
+#           0.9.108 -- chain-dispatch's own per-seed generation submission
+#           (_seed_generation_command / submit_chain_generation /
+#           submit_chain_generation_batch) never threaded exchange_fluxes/
+#           exchange_flux_basis at all (backlog item 105, the K4 cell-only
+#           ensemble) -- only pbg-native's _submit_multi_node_composite
+#           (item 106) had them. A chain-dispatch config relying on the
+#           ExchangeFluxListener for a real product-flux measurement (e.g.
+#           the K4 cell-only ensemble's founder caches, which cannot use
+#           pbg-native without breaking cache-pin compatibility) silently
+#           wrote no listeners__exchange_flux__* columns at all, with no
+#           refusal -- the exact "green, healthy, but scientifically empty"
+#           failure mode cplong90's own team documented precisely in
+#           run1_k4_cellonly.json's _provenance.exchange_flux_is_a_dispatch_
+#           flag. Two new optional params, re-derived from
+#           Simulation.config every JobScheduler tick (same restart-safe
+#           pattern as composite_id/cache_variant, item 105a/b) at both the
+#           generation-0 fanout and the per-generation advance call sites.
+#           Omitted (every existing caller) preserves today's behavior
+#           byte-for-byte. 6 new regression tests, matching the
+#           composite_id fix's own command-builder x2 / per-seed-submit x2
+#           / scheduler x2 coverage precedent.

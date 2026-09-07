@@ -565,11 +565,12 @@ class JobScheduler:
         full 3-phase state machine this is one third of.
 
         Backlog items 93, 105: ``injected_processes``/``variants``/
-        ``composite_id``/``cache_variant`` are re-derived from
-        ``simulation.config`` here, every tick, rather than persisted anywhere
-        new — ``simulation`` is already re-read fresh from the DB by ``_tick``
-        for every campaign, so this is restart-safe for free, matching how
-        every other piece of per-tick state already works here.
+        ``composite_id``/``cache_variant``/``exchange_fluxes``/
+        ``exchange_flux_basis`` are re-derived from ``simulation.config`` here,
+        every tick, rather than persisted anywhere new — ``simulation`` is
+        already re-read fresh from the DB by ``_tick`` for every campaign, so
+        this is restart-safe for free, matching how every other piece of
+        per-tick state already works here.
 
         ``cache_variant`` (item 105): selects a ``variant``-labeled ParCa
         cache (see ``SimulationServiceRay.cache_s3_uri`` /
@@ -577,6 +578,14 @@ class JobScheduler:
         e.g. a strain-specific induced-expression cache built on top of a
         prior ParCa run. ``None`` (every existing caller) preserves today's
         behavior byte-for-byte.
+
+        ``exchange_fluxes``/``exchange_flux_basis`` (backlog item 105, the K4
+        cell-only ensemble): the SAME two params ``_submit_multi_node_composite``
+        already threads for pbg-native (item106) — chain-dispatch never had
+        them, so a config relying on them (e.g. a real violacein-exchange-flux
+        measurement) silently produced no ``listeners__exchange_flux__*``
+        columns at all via this route, with no refusal. ``None`` (every
+        existing caller) preserves today's behavior byte-for-byte.
         """
         parca_info = await simulation_service_ray.get_job_status(fresh.job_id)
         if parca_info is None or parca_info.status not in (JobStatus.COMPLETED, JobStatus.FAILED):
@@ -606,6 +615,8 @@ class JobScheduler:
             injected_processes=injected_processes_from_config(simulation.config),
             variants=getattr(simulation.config, "variants", None) or None,
             composite_id=getattr(simulation.config, "composite_id", None) or None,
+            exchange_fluxes=getattr(simulation.config, "exchange_fluxes", None) or None,
+            exchange_flux_basis=getattr(simulation.config, "exchange_flux_basis", None) or None,
             expect_new_genes=expect_new_genes,
             expect_bundle_overrides=expect_bundle_overrides,
         )
@@ -650,12 +661,14 @@ class JobScheduler:
         ``_tick`` under the project's cyclomatic-complexity limit.
 
         Backlog items 93, 105: ``injected_processes``/``variants``/
-        ``composite_id``/``cache_variant`` are re-derived from
-        ``simulation.config`` once per tick (same campaign, same config, for
-        every seed advanced this tick) rather than persisted anywhere new —
-        see ``_advance_parca_gate``'s docstring for why re-deriving from the
+        ``composite_id``/``cache_variant``/``exchange_fluxes``/
+        ``exchange_flux_basis`` are re-derived from ``simulation.config`` once
+        per tick (same campaign, same config, for every seed advanced this
+        tick) rather than persisted anywhere new — see
+        ``_advance_parca_gate``'s docstring for why re-deriving from the
         already-fresh ``simulation`` row is restart-safe for free, and for
-        what ``cache_variant`` selects.
+        what ``cache_variant``/``exchange_fluxes``/``exchange_flux_basis``
+        each select.
         """
         in_flight = [jid for jid in current_job_ids if jid is not None]
         if not in_flight:
@@ -665,6 +678,8 @@ class JobScheduler:
         variants = getattr(simulation.config, "variants", None) or None
         composite_id = getattr(simulation.config, "composite_id", None) or None
         cache_variant = getattr(simulation.config, "cache_variant", None) or None
+        exchange_fluxes = getattr(simulation.config, "exchange_fluxes", None) or None
+        exchange_flux_basis = getattr(simulation.config, "exchange_flux_basis", None) or None
         expect_new_genes, expect_bundle_overrides = strain_from_config(simulation.config)
         next_gen_runner_s3_uri: str | None = None
         for seed, job_id in enumerate(current_job_ids):
@@ -694,6 +709,8 @@ class JobScheduler:
                 injected_processes=injected_processes,
                 variants=variants,
                 composite_id=composite_id,
+                exchange_fluxes=exchange_fluxes,
+                exchange_flux_basis=exchange_flux_basis,
                 expect_new_genes=expect_new_genes,
                 expect_bundle_overrides=expect_bundle_overrides,
             )
