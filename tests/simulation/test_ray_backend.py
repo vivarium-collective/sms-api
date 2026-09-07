@@ -1003,6 +1003,79 @@ class TestSubmitMultiNodeComposite:
         mock_cache_s3_uri.assert_called_once()
         assert mock_cache_s3_uri.call_args.kwargs.get("variant") is None
 
+    @pytest.mark.asyncio
+    async def test_cache_variant_tag_names_the_variant(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Chris (cplong90, sms-ecoli#210) flagged that omitting cache_variant
+        resolves to the stock cache with nothing on the job itself to show
+        which cache actually ran. CacheVariant makes the resolved choice
+        visible directly on the AWS Batch job instead of requiring a manual
+        decode of the staged S3 path."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {},
+                "cache_variant": "cd2-run2-j3",
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["composite-tag"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[MagicMock()])
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-tag-set"
+            )
+
+        (composite_call,) = mock_batch.submit_job.call_args_list
+        assert composite_call.kwargs["tags"]["CacheVariant"] == "cd2-run2-j3"
+
+    @pytest.mark.asyncio
+    async def test_omitted_cache_variant_tag_is_stock(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {"composite_id": "v2ecoli.composites.lineage_ray_batch", "num_nodes": 2, "params": {}},
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-tag", "composite-tag-stock"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-tag-stock"
+            )
+
+        _parca_call, composite_call = mock_batch.submit_job.call_args_list
+        assert composite_call.kwargs["tags"]["CacheVariant"] == "stock"
+
     def test_multi_node_composite_command_sets_pythonpath_for_injection_imports(self) -> None:
         """Direct unit test of _multi_node_composite_command's own command string
         (backlog item 93): a colony/multi-node composite can carry
@@ -3583,6 +3656,74 @@ class TestSubmitMbpTrackedDispatch:
         assert mock_batch.submit_job.call_count == 1
         (call,) = mock_batch.submit_job.call_args_list
         assert "dependsOn" not in call.kwargs
+
+    @pytest.mark.asyncio
+    async def test_cache_variant_tag_names_the_variant(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Mirrors TestSubmitMultiNodeComposite's own CacheVariant tag test
+        (the standing parity-check discipline) -- Chris (cplong90, sms-
+        ecoli#210) flagged that omitting cache_variant resolves to the stock
+        cache with nothing on the job itself to show which cache actually
+        ran."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "mbp_dispatch",
+            {"variant": "reactor-bird-coupled-batch-multigen", "cache_variant": "cd2-run1-k4-candidate-v1-lambda050"},
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_container_batch(["mbp-tag-set"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[MagicMock()])
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mbp-tag-set"
+            )
+
+        (call,) = mock_batch.submit_job.call_args_list
+        assert call.kwargs["tags"]["CacheVariant"] == "cd2-run1-k4-candidate-v1-lambda050"
+
+    @pytest.mark.asyncio
+    async def test_omitted_cache_variant_tag_is_stock(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "mbp_dispatch",
+            {"variant": "reactor-bird-coupled-batch-multigen"},
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_container_batch(["mbp-parca-tag", "mbp-tag-stock"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mbp-tag-stock"
+            )
+
+        _parca_call, mbp_call = mock_batch.submit_job.call_args_list
+        assert mbp_call.kwargs["tags"]["CacheVariant"] == "stock"
 
     @pytest.mark.asyncio
     async def test_forwards_the_real_run1_params_to_the_submitted_command(
