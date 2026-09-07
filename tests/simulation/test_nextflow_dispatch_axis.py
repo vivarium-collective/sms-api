@@ -751,10 +751,18 @@ async def test_the_reap_waits_for_the_head_to_actually_be_gone() -> None:
     # present twice, then gone
     k8s.get_job_status.side_effect = [object(), object(), None]
     order: list[str] = []
-    k8s.delete_job.side_effect = lambda *_a, **_k: order.append("delete")
+
+    def _note_delete(*_a: object, **_k: object) -> None:
+        order.append("delete")
+
+    def _note_reap(*_a: object) -> int:
+        order.append("reap")
+        return 0
+
+    k8s.delete_job.side_effect = _note_delete
     with (
         patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
-        patch.object(service, "_reap_campaign_batch_tasks", side_effect=lambda *_a: order.append("reap") or 0),
+        patch.object(service, "_reap_campaign_batch_tasks", side_effect=_note_reap),
         patch("viva_api.simulation.simulation_service_ray.asyncio.sleep", new=AsyncMock()),
     ):
         await service.cancel_job(JobId.k8s_nextflow("nf-sim1-run-a1b2-xyz"))
