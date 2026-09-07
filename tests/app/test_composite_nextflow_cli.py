@@ -146,3 +146,46 @@ def test_simulator_latest_passes_the_head_image_flag_three_valued() -> None:
         with patch("app.cli.get_data_service", return_value=svc), patch("time.sleep"):
             runner.invoke(cli_app, ["simulator", "latest", *args])
         assert svc.submit_upload_simulator.call_args.kwargs["include_submit_image"] is expected, args
+
+
+# --- the two capabilities the science needs, reachable without hand JSON -----
+
+
+def test_independent_founders_reaches_the_generator() -> None:
+    """v2ecoli#731. Without it an M-seed campaign is not M replicates: seeds
+    sharing a cache share a founder cell, so the spread is downstream
+    stochasticity, not cell-to-cell variability (v2ecoli#693) -- which is the
+    quantity a strain ranking rests on."""
+    assert _dispatch("--independent-founders")["params"]["independent_founders"] is True
+    assert _dispatch("--no-independent-founders")["params"]["independent_founders"] is False
+
+
+def test_cache_uri_reaches_the_generator() -> None:
+    """v2ecoli#732. CD2's Run 1 uses ten pre-built per-seed founder caches and
+    Run 2 the violacein bundle; a campaign that recomputes runs a different
+    experiment however green it looks."""
+    uri = "s3://bucket/ray-parca-cache/9f84e6b/"
+    assert _dispatch("--cache-uri", uri)["params"]["cache_uri"] == uri
+
+
+def test_analysis_options_reaches_the_generator_as_an_object() -> None:
+    """Not a string: the gather reads it out of a staged config. Without it
+    v2ecoli-analyze prints 'nothing to run', exits 0, writes no analysis/, and
+    the campaign fails its LAST node -- measured twice (simulations 441, 475)."""
+    d = _dispatch("--analysis-options", '{"multiseed": {"cd1_proteomics": {}}}')
+    assert d["params"]["analysis_options"] == {"multiseed": {"cd1_proteomics": {}}}
+
+
+def test_the_new_flags_are_absent_unless_given() -> None:
+    """A passthrough API: a null would override the composite's own default with
+    nothing. Absent means 'the generator decides'."""
+    d = _dispatch("--seeds", "2")
+    for key in ("independent_founders", "cache_uri", "analysis_options"):
+        assert key not in d["params"], key
+
+
+def test_raw_params_still_win_over_the_named_flags() -> None:
+    """--params is the escape hatch for anything without a flag, including
+    per-variant cache_uri, so it must stay last."""
+    d = _dispatch("--cache-uri", "s3://b/flag/", "--params", '{"cache_uri": "s3://b/raw/"}')
+    assert d["params"]["cache_uri"] == "s3://b/raw/"
