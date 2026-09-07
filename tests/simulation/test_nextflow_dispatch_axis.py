@@ -667,6 +667,28 @@ def test_the_head_gets_time_to_terminate_its_own_tasks() -> None:
     assert NF_HEAD_TERMINATION_GRACE_SECONDS > 30, "the default is what failed"
 
 
+def test_a_resumed_run_reaps_NOTHING_because_it_does_not_own_the_campaign() -> None:
+    """The one way the reap could destroy work rather than leak it.
+
+    `resume_from` makes run B write into campaign A's work dir, whose tasks may
+    belong to a DIFFERENT, still-running head. Matching by campaign would
+    terminate that live run. So ownership is EXACT: the head name (the run) must
+    equal the work-dir segment (the campaign), which holds only when this run
+    created the campaign.
+
+    A resumed run therefore reaps nothing and falls back to the grace period --
+    leaking a task is recoverable, destroying another campaign is not."""
+    from viva_api.simulation.simulation_service_ray import _command_belongs_to_campaign
+
+    task_in_campaign_a = "aws s3 cp s3://b/nextflow/work/sim159-run-a1b2/work/ab/cd/.command.run -"
+    # run B resumed campaign A; cancelling B must not touch A's tasks
+    assert not _command_belongs_to_campaign(task_in_campaign_a, "sim160-retry-c3d4")
+    # and a truncated or partial stem must not match either -- skip, never guess
+    assert not _command_belongs_to_campaign(task_in_campaign_a, "sim159-run-a1b")
+    # the run that OWNS the campaign still reaps
+    assert _command_belongs_to_campaign(task_in_campaign_a, "sim159-run-a1b2")
+
+
 def test_a_task_is_matched_to_its_campaign_by_the_work_dir() -> None:
     """There is no per-campaign Batch tag, and job names are the PROCESS names
     (`runs_v0lineage_v0_s3`) which repeat across campaigns. The S3 work dir is the

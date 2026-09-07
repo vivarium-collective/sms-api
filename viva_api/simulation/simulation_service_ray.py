@@ -540,18 +540,28 @@ def _merge_nf_resources(
 
 
 def _command_belongs_to_campaign(command: str, campaign_stem: str) -> bool:
-    """Does this Batch task's command reference the given campaign's work dir?
+    """Is this Batch task in a work dir this run OWNS OUTRIGHT?
 
-    The work-dir segment is the raw experiment id; `campaign_stem` comes from the
-    head Job NAME, which is DNS-1123 sanitised (lowercased, non-alphanumerics to
-    dashes) and truncated to 63 chars. So compare sanitised-to-sanitised, and by
-    PREFIX because the truncation is lossy in one direction only.
+    EXACT match after sanitising, and that strictness is the point. The work-dir
+    segment is the CAMPAIGN key; `campaign_stem` comes from the head Job name,
+    which is the RUN. They are equal only when the run created the campaign --
+    i.e. it was not a `resume_from`.
+
+    A resumed run writes into the campaign it joined, whose tasks may belong to a
+    DIFFERENT, still-running head. Reaping by campaign there would terminate
+    another live run's work. So a resumed run reaps nothing and falls back to the
+    grace period, which is the real fix anyway (viva-api#472): leaking a task is
+    recoverable, destroying someone else's campaign is not.
+
+    Sanitised both sides because `_nf_head_job_name` lowercases and replaces
+    non-alphanumerics -- comparing raw finds nothing and the reap silently does
+    nothing. A head name truncated at 63 chars also fails to match, and again
+    skips rather than guesses.
     """
     if not campaign_stem:
         return False
     for segment in re.findall(r"/nextflow/work/([^/\s]+)", command):
-        safe = re.sub(r"[^a-z0-9-]+", "-", segment.lower()).strip("-")
-        if safe.startswith(campaign_stem) or campaign_stem.startswith(safe):
+        if re.sub(r"[^a-z0-9-]+", "-", segment.lower()).strip("-") == campaign_stem:
             return True
     return False
 
