@@ -29,6 +29,7 @@ from viva_api.analysis.models import (
 )
 from viva_api.api import request_examples
 from viva_api.common import handlers
+from viva_api.common.dispatch_validation import DispatchValidationError
 from viva_api.common.gateway.utils import get_router_config
 from viva_api.common.storage import data_layout
 from viva_api.config import ComputeBackend, compute_backend_for_repo, get_job_backend, get_settings
@@ -355,6 +356,12 @@ async def run_simulation_workflow(
             tags=tags,
             extra_params=extra_params,
         )
+    except DispatchValidationError as e:
+        # A request the caller can fix. Deliberately narrower than `ValueError`:
+        # not every ValueError raised down this path is the caller's fault, and a
+        # 500 is the one status worth paging on.
+        logger.info("Rejected simulation dispatch: %s", e)
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.exception("Error running vEcoli simulation")
         raise HTTPException(status_code=500, detail=str(e)) from e

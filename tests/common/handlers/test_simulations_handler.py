@@ -11,6 +11,7 @@ import pytest_asyncio
 from fastapi import HTTPException
 
 from viva_api.analysis.models import TsvOutputFile
+from viva_api.common.dispatch_validation import DispatchValidationError
 from viva_api.common.handlers.simulations import (
     _S3_DOWNLOAD_CONCURRENCY,
     SimulationAnalysisResponseType,
@@ -946,3 +947,102 @@ async def test_run_simulation_workflow_forces_unique_experiment_id_over_a_config
     # The one real bug: these two must now always agree. Before the fix, request.experiment_id
     # was unique_experiment_id while request.config.experiment_id was the stale "cd2_run2_j3".
     assert request.config.experiment_id == request.experiment_id
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_dispatch_is_refused_before_anything_is_written() -> None:
+    """viva-api#455: a refused dispatch must not leave rows behind.
+
+    `run_simulation_workflow` inserts a parca-dataset row (step 5) and a
+    simulation row (step 6) and only submits at step 7, so a dispatch-time raise
+    used to leave two rows describing a run that never started -- observed live
+    as simulation 394, `sim153-nf-resume-guard-check-0eb7`, `job_id: None`.
+
+    `resume` without `resume_from` is answerable from the request alone, so it is
+    rejected before either insert. Asserting on the INSERTS rather than on the
+    raise is the point: raising was never the problem.
+    """
+    simulator = SimulatorVersion(
+        database_id=53,
+        git_commit_hash="deadbeef",
+        git_repo_url=RepoUrl.SMS_ECOLI_REPO_URL,
+        git_branch="main",
+    )
+    mock_db_service = AsyncMock()
+    mock_db_service.get_simulator.return_value = simulator
+    mock_db_service.insert_parca_dataset.return_value = SimpleNamespace(database_id=158)
+    mock_db_service.get_hpcrun_id_by_correlation_id.return_value = None
+    mock_db_service.insert_simulation.return_value = _make_ray_simulation()
+
+    mock_ray_service = AsyncMock(spec=SimulationServiceRay)
+    mock_ray_service.read_config_template.return_value = '{"n_init_sims": 1, "generations": 1}'
+
+    with (
+        patch("viva_api.common.handlers.simulations._verify_build_complete", new=AsyncMock()),
+        patch("viva_api.common.handlers.simulations.get_simulation_service_for_repo", return_value=None),
+        patch("viva_api.common.handlers.simulations.export_baseline_config"),
+        patch("viva_api.common.handlers.simulations.get_correlation_id", return_value="corr-1"),
+        pytest.raises(DispatchValidationError, match="resume_from"),
+    ):
+        await run_simulation_workflow(
+            database_service=mock_db_service,
+            simulation_service=mock_ray_service,
+            simulator_id=53,
+            experiment_id="nf-resume-guard-check",
+            simulation_config_filename="configs/mecillinam_wellmixed.json",
+            extra_params={
+                "nextflow_dispatch": {
+                    "composite_id": "v2ecoli.composites.workflow_nf.workflow_nf",
+                    "resume": True,
+                }
+            },
+        )
+
+    mock_db_service.insert_simulation.assert_not_called()
+    mock_db_service.insert_parca_dataset.assert_not_called()
+    mock_ray_service.submit_ecoli_simulation_job.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_well_formed_dispatch_still_reaches_the_submit() -> None:
+    """The guard must not swallow the ordinary case -- a validator that rejects
+    everything would pass the test above."""
+    simulator = SimulatorVersion(
+        database_id=53,
+        git_commit_hash="deadbeef",
+        git_repo_url=RepoUrl.SMS_ECOLI_REPO_URL,
+        git_branch="main",
+    )
+    mock_db_service = AsyncMock()
+    mock_db_service.get_simulator.return_value = simulator
+    mock_db_service.insert_parca_dataset.return_value = SimpleNamespace(database_id=158)
+    mock_db_service.get_hpcrun_id_by_correlation_id.return_value = None
+    mock_db_service.insert_simulation.return_value = _make_ray_simulation()
+
+    mock_ray_service = AsyncMock(spec=SimulationServiceRay)
+    mock_ray_service.read_config_template.return_value = '{"n_init_sims": 1, "generations": 1}'
+    mock_ray_service.submit_ecoli_simulation_job.return_value = JobId.ray("job-abc")
+
+    with (
+        patch("viva_api.common.handlers.simulations._verify_build_complete", new=AsyncMock()),
+        patch("viva_api.common.handlers.simulations.get_simulation_service_for_repo", return_value=None),
+        patch("viva_api.common.handlers.simulations.export_baseline_config"),
+        patch("viva_api.common.handlers.simulations.get_correlation_id", return_value="corr-1"),
+    ):
+        await run_simulation_workflow(
+            database_service=mock_db_service,
+            simulation_service=mock_ray_service,
+            simulator_id=53,
+            experiment_id="nf-ok",
+            simulation_config_filename="configs/mecillinam_wellmixed.json",
+            extra_params={
+                "nextflow_dispatch": {
+                    "composite_id": "v2ecoli.composites.workflow_nf.workflow_nf",
+                    "resume": True,
+                    "resume_from": "sim153-prior-run-0000",
+                }
+            },
+        )
+
+    mock_db_service.insert_simulation.assert_called_once()
+    mock_ray_service.submit_ecoli_simulation_job.assert_called_once()
