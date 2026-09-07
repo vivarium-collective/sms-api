@@ -135,9 +135,16 @@ def _parse_analysis_options(analysis_options: str | None) -> dict | None:  # typ
     if not analysis_options:
         return None
     try:
-        return json.loads(analysis_options)  # type: ignore[no-any-return]
+        parsed = json.loads(analysis_options)
     except (json.JSONDecodeError, ValueError):
         raise HTTPException(400, f"Invalid analysis_options JSON: {analysis_options}")
+    if not isinstance(parsed, dict):
+        # Syntactically-valid JSON that isn't an object (e.g. `42`, `[1,2]`) is just
+        # as unusable downstream (build_analysis_config/AnalysisConfigOptions both
+        # expect a mapping) -- reject it the same way as unparseable JSON rather than
+        # letting a non-dict silently ride through onto the request.
+        raise HTTPException(400, f"Invalid analysis_options JSON: {analysis_options}")
+    return parsed
 
 
 def _from_document(document: dict[str, object], batch_submission: bool = False) -> ComposeSimulationRequest:

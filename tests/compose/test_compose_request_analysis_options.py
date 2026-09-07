@@ -108,6 +108,23 @@ async def test_submit_simulation_rejects_invalid_analysis_options_json(fastapi_a
 
 
 @pytest.mark.asyncio
+async def test_submit_simulation_rejects_wrong_shape_analysis_options_json(fastapi_app: object) -> None:
+    """Syntactically-valid JSON that isn't an object (e.g. a bare number or a list)
+    must be rejected the same way unparseable JSON is -- it's just as unusable by
+    build_analysis_config/AnalysisConfigOptions downstream, both of which expect a
+    mapping. Parked finding from the T1 review: _parse_analysis_options used to only
+    catch JSONDecodeError, so `analysis_options=42` silently passed through as a
+    non-dict."""
+    async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://testserver") as client:  # type: ignore[arg-type]
+        response = await client.post(
+            "/compose/v1/simulation/run",
+            data={"analysis_options": "42"},
+            files={"uploaded_file": ("m.pbg", b'{"state": {}}', "application/json")},
+        )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_submit_simulation_document_threads_analysis_options(fastapi_app: object) -> None:
     """JSON-body transport (/simulation/run-document): analysis_options arrives
     as a native JSON dict on the body and must round-trip onto the constructed

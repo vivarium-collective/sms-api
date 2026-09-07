@@ -16,10 +16,13 @@ the runner source travels with the job without living in the image.
 
 import importlib.resources as _res
 import logging
+import random
+import string
 import tempfile
 from pathlib import Path
-from typing import override
+from typing import Any, override
 
+from viva_api.common import analysis_dag
 from viva_api.common.models import JobBackend, JobStatus
 from viva_api.common.storage import data_layout
 from viva_api.common.storage.file_paths import S3FilePath
@@ -27,6 +30,7 @@ from viva_api.compose.database_service import ComposeDatabaseService
 from viva_api.compose.models import ComposeHpcRun, ComposeJobStatus, ComposeSimulation, ComposeSimulatorVersion
 from viva_api.compose.simulation_service import ComposeSimulationService
 from viva_api.config import get_settings
+from viva_api.simulation.simulation_service_ray import ANALYSIS_OUT_DIR, V2ECOLI_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +54,10 @@ _JOBSTATUS_TO_COMPOSE: dict[JobStatus, ComposeJobStatus] = {
     JobStatus.CANCELLED: ComposeJobStatus.CANCELLED,
     JobStatus.UNKNOWN: ComposeJobStatus.UNKNOWN,
 }
+
+
+def _rand_suffix() -> str:
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
 
 
 class ComposeSimulationServiceRay(ComposeSimulationService):
@@ -207,7 +215,119 @@ class ComposeSimulationServiceRay(ComposeSimulationService):
             stage_dir=stage_dir,
         )
         logger.info("Submitted compose Ray job %s (experiment=%s)", batch_job_id, experiment_id)
+
+        if simulation.sim_request.analysis_options:
+            try:
+                await self._submit_analysis_job(
+                    simulation=simulation,
+                    experiment_id=experiment_id,
+                    sim_job_id=batch_job_id,
+                    commit=commit,
+                )
+            except Exception:
+                # Best-effort by design (mirrors analysis_dag.submit_analysis_dag_node's
+                # own contract) -- the compose sim job above is ALREADY submitted (and
+                # possibly running), so a failure resolving the analysis leg (a bad
+                # job-def setting, e.g.) must not fail this whole submission and orphan
+                # a real, expensive job. A submission failure INSIDE
+                # submit_analysis_dag_node is already caught there and recorded as a
+                # FAILED analyses row; this outer guard only catches failures BEFORE
+                # that point (job-def/cache resolution).
+                logger.exception(
+                    "Failed to chain the analysis DAG node onto compose sim %s (job %s)",
+                    experiment_id,
+                    batch_job_id,
+                )
         return batch_job_id
+
+    async def _submit_analysis_job(
+        self,
+        *,
+        simulation: ComposeSimulation,
+        experiment_id: str,
+        sim_job_id: str,
+        commit: str | None,
+    ) -> str | None:
+        """Chain the shared analysis DAG node onto this compose run's Batch sim job.
+
+        Thin compose-side wrapper around ``viva_api.common.analysis_dag.
+        submit_analysis_dag_node`` -- the SAME node the study Batch path submits
+        (``SimulationServiceRay._submit_analysis_job``), reused unmodified rather
+        than re-derived. This method owns only what's specific to compose:
+        resolving the run's OWN output-store prefix and ParCa cache from
+        ``experiment_id``/``commit`` (never a stock/unrelated per-commit path --
+        viva-api#448), and the ``analyses`` table's ``config`` record shape.
+
+        Gated by the caller on ``simulation.sim_request.analysis_options`` being
+        present -- absent/None means no analysis is chained, preserving today's
+        exact (no-op) behavior.
+
+        ``simulation_id`` on the recorded row is left ``None``: ``ORMAnalysis.
+        simulation_id`` is a real FK into the STUDY ``simulation`` table, not this
+        module's ``ComposeSimulation``/``ORMComposeSimulation`` id space -- writing
+        a compose row's database_id there would either point at an unrelated study
+        row or violate the FK outright. ``experiment_id`` (unique per compose run,
+        same as the study path) is what discovery keys off instead.
+        """
+        analysis_options = simulation.sim_request.analysis_options
+        if not analysis_options:
+            # Defensive -- the caller already gates on this, but keep this method
+            # self-sufficient (and mypy-narrowed to `dict[str, Any]` below).
+            return None
+        from viva_api.dependencies import get_database_service
+
+        database_service = get_database_service()
+        if database_service is None:
+            logger.error(
+                "Database service not initialized; skipping analysis chaining for compose experiment %s",
+                experiment_id,
+            )
+            return None
+
+        settings = get_settings()
+        # The SAME commit-or-deploy-tag key `_parca_staging` uses to stage this exact
+        # sim job's own ParCa cache -- i.e. this compose run's OWN cache, not a
+        # separately-derived stock path.
+        cache_key = commit or settings.compose_ray_image_tag
+        sweep_dir = data_layout.RayLayout.results_uri(experiment_id).rstrip("/")
+        sim_data_uri = f"{data_layout.RayLayout.parca_cache_uri(cache_key)}simData.cPickle"
+        analysis_name = f"compose-analysis-{experiment_id[:20]}-{_rand_suffix()}"
+        result_uri = f"{sweep_dir}/analyses/{analysis_name}"
+        job_def = self._ray._ensure_container_job_def(self._image_uri(commit), cache_key)
+        db_config: dict[str, Any] = {
+            "out_uri": sweep_dir,
+            "analysis_name": analysis_name,
+            "trigger": "compose-dispatch",
+            # ORMAnalysis.to_dto() unconditionally reads config["analysis_options"]
+            # (AnalysisConfigOptions requires experiment_id) -- mirror the shape the
+            # study path already writes so to_dto() doesn't KeyError.
+            "analysis_options": {
+                "experiment_id": [experiment_id],
+                **(analysis_options if isinstance(analysis_options, dict) else {}),
+            },
+        }
+        return await analysis_dag.submit_analysis_dag_node(
+            sweep_dir=sweep_dir,
+            analysis_options=analysis_options,
+            sim_data_uri=sim_data_uri,
+            result_out_dir=result_uri,
+            v2ecoli_dir=V2ECOLI_DIR,
+            submit_container=self._ray._submit_container,
+            job_definition=job_def,
+            job_name=f"compose-analysis-{experiment_id}-{_rand_suffix()}"[:128],
+            out_s3=data_layout.RayLayout.results_uri(experiment_id),
+            container_out_dir=ANALYSIS_OUT_DIR,
+            depends_on_job_id=sim_job_id,
+            depends_type="SEQUENTIAL",
+            tags={"Phase": "analysis", "Backend": "compose"},
+            database_service=database_service,
+            experiment_id=experiment_id,
+            analysis_name=analysis_name,
+            simulation_id=None,
+            backend="ray",
+            db_config=db_config,
+            result_uri=result_uri,
+        )
 
     @override
     async def build_container(
