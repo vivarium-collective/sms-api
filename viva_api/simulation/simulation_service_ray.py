@@ -47,6 +47,7 @@ import boto3
 from botocore.config import Config
 from pydantic import BaseModel
 
+from viva_api.common import analysis_dag
 from viva_api.common.dispatch_validation import validate_nextflow_dispatch
 from viva_api.common.hpc.job_service import JobStatusInfo
 from viva_api.common.hpc.k8s_job_service import K8sJobService
@@ -2011,8 +2012,6 @@ class SimulationServiceRay(SimulationService):
         self,
         *,
         experiment_id: str,
-        n_seeds: int,
-        n_generations: int,
         modules: dict[str, dict[str, Any]] | str,
         analysis_name: str,
         commit: str,
@@ -2037,37 +2036,36 @@ class SimulationServiceRay(SimulationService):
             the ParCa→sim edge already uses. No poller, no webhook, no external
             watcher: completion is an edge in the pipeline graph.
 
-        The node itself reuses the model image's existing, S3-native entrypoint
-        (``scripts/run_standalone_analysis.py`` → ``v2ecoli.workflow.analysis_runner.
-        run_analyses``) — the SAME function the composite's inline flush calls, reading
-        the hive-parquet in place through DuckDB/httpfs. No new analysis logic.
+        The node itself reuses the model image's own ``v2ecoli-analyze`` console
+        script (``v2ecoli.workflow.analysis_runner:main``) — the SAME function the
+        composite's inline flush calls (``run_analyses``), reading the hive-parquet
+        in place through DuckDB/httpfs. No new analysis logic. See
+        ``viva_api.common.analysis_dag`` for the real CLI surface this conforms to
+        (positional ``sweep_dir`` + ``--config`` — nothing else) and why the old
+        ``--out-uri``/``--n-seeds``/``--n-generations``/``--modules``/
+        ``--analysis-name`` flags folded into the ``--config`` JSON instead.
 
-        ``V2ECOLI_SIM_DATA`` points at the commit's ParCa cache in S3 because an S3
-        sweep has no co-located pickle to glob (``analysis_runner.resolve_sim_data``
-        only globs local paths) — identical to how ``SimulationServiceK8s.
-        submit_ray_native_analysis`` provisions the same script. Both this job and the
-        ParCa job derive that URI from the commit independently, so it needs no
+        ``sim_data`` points at the commit's ParCa cache in S3 (both via
+        ``V2ECOLI_SIM_DATA`` and ``config["sim_data_path"]``) because an S3 sweep
+        has no co-located pickle to glob (``analysis_runner.resolve_sim_data`` only
+        globs local paths) — identical to how ``SimulationServiceK8s.
+        submit_ray_native_analysis`` provisions the same script. Both this job and
+        the ParCa job derive that URI from the commit independently, so it needs no
         hand-off plumbing.
         """
         out_uri = self._results_s3_uri(experiment_id).rstrip("/")
         sim_data_uri = f"{data_layout.RayLayout.parca_cache_uri(commit)}simData.cPickle"
-        modules_arg = modules if isinstance(modules, str) else json.dumps(modules)
-        # --n-generations exists only to let the image resolve the "applicable"
-        # keyword; an explicit module mapping doesn't need it. Emitting it only in
-        # the keyword case keeps the explicit path runnable against ANY image that
-        # already ships the script, so a simulator built before the keyword landed
-        # still gets its configured analyses instead of dying on an unrecognized
-        # argument. Only the keyword default requires the newer image.
-        gens = f" --n-generations {int(n_generations)}" if isinstance(modules, str) else ""
-        return (
-            f"cd {V2ECOLI_DIR}"
-            f" && V2ECOLI_SIM_DATA={shlex.quote(sim_data_uri)}"
-            f" python scripts/run_standalone_analysis.py"
-            f" --out-uri {shlex.quote(out_uri)}"
-            f" --n-seeds {int(n_seeds)}"
-            f"{gens}"
-            f" --modules {shlex.quote(modules_arg)}"
-            f" --analysis-name {shlex.quote(analysis_name)}"
+        result_out_dir = f"{out_uri}/analyses/{analysis_name}"
+        config = analysis_dag.build_analysis_config(
+            analysis_options=modules,
+            out_dir=result_out_dir,
+            sim_data_path=sim_data_uri,
+        )
+        return analysis_dag.analysis_dag_command(
+            v2ecoli_dir=V2ECOLI_DIR,
+            sweep_dir=out_uri,
+            sim_data_uri=sim_data_uri,
+            config=config,
         )
 
     async def _submit_analysis_job(
@@ -2091,11 +2089,11 @@ class SimulationServiceRay(SimulationService):
         auto-triggered analysis must be exactly as discoverable as a hand-triggered
         one, not an invisible side effect.
 
-        Best-effort by design, but never SILENT: the simulation job(s) this depends
-        on are already submitted and running by the time this is reached, so
-        raising would orphan real, expensive jobs. A submission failure is logged
-        AND written to the analyses table as a FAILED row, so "the analysis never
-        ran" is a visible state rather than an absence.
+        Thin wrapper around ``viva_api.common.analysis_dag.submit_analysis_dag_node``
+        (backlog: made reusable so a compose backend can share the exact same node
+        instead of re-deriving its own argv) — this method owns only what's specific
+        to the study Batch path: resolving the sim-data/results URIs from ``commit``/
+        ``experiment_id``, and the ``analyses`` table's ``config`` record shape.
 
         ``sim_job_id`` is the single Batch job this analysis should natively
         ``dependsOn`` (item 24's original single-DAG-edge shape, still used by the
@@ -2112,6 +2110,7 @@ class SimulationServiceRay(SimulationService):
         out_uri = self._results_s3_uri(experiment_id).rstrip("/")
         result_uri = f"{out_uri}/analyses/{analysis_name}"
         modules = analysis_modules_for(simulation.config)
+        sim_data_uri = f"{data_layout.RayLayout.parca_cache_uri(commit)}simData.cPickle"
         params: dict[str, Any] = {
             "out_uri": out_uri,
             "n_seeds": int(n_seeds),
@@ -2127,54 +2126,32 @@ class SimulationServiceRay(SimulationService):
                 **(modules if isinstance(modules, dict) else {}),
             },
         }
-        try:
-            # Backlog item 71: the analysis DAG node has no real inter-node traffic
-            # either (was a 1-node MNP job) -- moves to the plain container-type
-            # path. `job_definition` must now be a container job def (see
-            # submit_campaign_analysis's _ensure_container_job_def call).
-            analysis_job_id = self._submit_container(
-                job_name=f"ray-analysis-{experiment_id}-{_rand_suffix()}"[:128],
-                job_definition=job_definition,
-                job_cmd=self._analysis_command(
-                    experiment_id=experiment_id,
-                    n_seeds=n_seeds,
-                    n_generations=n_generations,
-                    modules=modules,
-                    analysis_name=analysis_name,
-                    commit=commit,
-                ),
-                out_s3=self._results_s3_uri(experiment_id),
-                out_dir=ANALYSIS_OUT_DIR,
-                depends_on=[sim_job_id] if sim_job_id else None,
-                depends_type=depends_type,
-                tags=tags,
-            )
-        except Exception as e:
-            logger.exception("Analysis DAG node submission failed for %s", experiment_id)
-            await database_service.record_analysis(
-                experiment_id=experiment_id,
-                n_tp=None,
-                status=AnalysisStatusDB.FAILED,
-                config=params,
-                name=analysis_name,
-                simulation_id=simulation.database_id,
-                backend="ray",
-                result_uri=result_uri,
-                error_message=f"analysis job submission failed: {type(e).__name__}: {e}",
-            )
-            return None
-        await database_service.record_analysis(
+        # Backlog item 71: the analysis DAG node has no real inter-node traffic
+        # either (was a 1-node MNP job) -- moves to the plain container-type
+        # path. `job_definition` must now be a container job def (see
+        # submit_campaign_analysis's _ensure_container_job_def call).
+        return await analysis_dag.submit_analysis_dag_node(
+            sweep_dir=out_uri,
+            analysis_options=modules,
+            sim_data_uri=sim_data_uri,
+            result_out_dir=result_uri,
+            v2ecoli_dir=V2ECOLI_DIR,
+            submit_container=self._submit_container,
+            job_definition=job_definition,
+            job_name=f"ray-analysis-{experiment_id}-{_rand_suffix()}"[:128],
+            out_s3=self._results_s3_uri(experiment_id),
+            container_out_dir=ANALYSIS_OUT_DIR,
+            depends_on_job_id=sim_job_id,
+            depends_type=depends_type,
+            tags=tags,
+            database_service=database_service,
             experiment_id=experiment_id,
-            n_tp=None,
-            status=AnalysisStatusDB.COMPUTING,
-            config=params,
-            name=analysis_name,
+            analysis_name=analysis_name,
             simulation_id=simulation.database_id,
             backend="ray",
-            job_id_ext=str(analysis_job_id),
+            db_config=params,
             result_uri=result_uri,
         )
-        return analysis_job_id
 
     @override
     async def get_latest_commit_hash(
