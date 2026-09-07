@@ -59,6 +59,23 @@ async def get_simulator_versions() -> RegisteredSimulators:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+def _builds_head_image_unconditionally(service: object) -> bool:
+    """Does this backend build the Nextflow head image whether or not asked?
+
+    Only vEcoli's K8s path does: `_run_build` calls `_build_command(...,
+    submit_image=True)` as a literal on its amd64 branch, with no flag reaching
+    it. Asserted by NAME rather than by signature, because the absence of an
+    `include_submit_image` parameter is exactly what these two cases have in
+    common -- a signature check cannot tell "already does it" from "cannot".
+
+    Deliberately not a blanket True for every service lacking the parameter: on
+    a backend that neither accepts the flag nor builds the image, silently
+    accepting would produce a dispatch that fails minutes later at the image
+    pull -- the silent-success shape the caller asked us to avoid.
+    """
+    return type(service).__name__ == "SimulationServiceK8s"
+
+
 async def upload_simulator(  # noqa: C901
     commit_hash: str,
     git_repo_url: str,
@@ -66,7 +83,7 @@ async def upload_simulator(  # noqa: C901
     simulation_service_slurm: SimulationService | SimulationServiceHpc | None = None,
     database_service: DatabaseService | None = None,
     force: bool = False,
-    include_submit_image: bool = False,
+    include_submit_image: bool | None = None,
 ) -> SimulatorVersion:
     if not simulation_service_slurm:
         # Route the build to the simulator's backend (v2ecoli→Ray builds v2ecoli:<sha>,
@@ -118,20 +135,44 @@ async def upload_simulator(  # noqa: C901
         # Supported by the Ray build path (viva-api#423); other services ignore
         # a flag they do not accept, so ask by keyword only where it exists.
         build_kwargs: dict[str, object] = {"simulator_version": simulator}
-        if include_submit_image:
-            if (
-                "include_submit_image"
-                not in inspect.signature(simulation_service_slurm.submit_build_image_job).parameters
-            ):
+        if include_submit_image is not False:
+            # THREE-VALUED on purpose. True is a demand ("I am about to dispatch
+            # Nextflow at this commit"), None is the default preference ("build it
+            # where that is possible"). They must differ on a backend that cannot:
+            # a demand has to fail loudly here rather than at the Batch image pull
+            # minutes later, while the default must not turn every upload on the
+            # SLURM path into a 400.
+            demanded = include_submit_image is True
+            accepts_flag = (
+                "include_submit_image" in inspect.signature(simulation_service_slurm.submit_build_image_job).parameters
+            )
+            if accepts_flag:
+                build_kwargs["include_submit_image"] = True
+            elif _builds_head_image_unconditionally(simulation_service_slurm):
+                # Not an error: the request is ALREADY SATISFIED. vEcoli's build
+                # hardcodes `submit_image=True` on its amd64 branch
+                # (simulation_service_k8s.py) and its own docstring says it submits
+                # "ARM64 task + AMD64 submit". Refusing here rejected a request
+                # that the backend fulfils by construction.
+                logger.info(
+                    "include_submit_image: %s builds the head image unconditionally; nothing to add",
+                    type(simulation_service_slurm).__name__,
+                )
+            elif demanded:
                 raise HTTPException(
                     status_code=400,
                     detail=(
                         "include_submit_image is not supported by the build path for "
-                        f"{simulator.git_repo_url!r}. The Nextflow head image is built by the "
-                        "Ray/v2ecoli path; vEcoli builds its own -submit image unconditionally."
+                        f"{simulator.git_repo_url!r}, and that path does not build a Nextflow "
+                        "head image on its own. A Nextflow dispatch against this commit would "
+                        "fail at the container image pull."
                     ),
                 )
-            build_kwargs["include_submit_image"] = True
+            else:
+                logger.info(
+                    "include_submit_image: %s has no Nextflow head image; skipping (not requested explicitly)",
+                    type(simulation_service_slurm).__name__,
+                )
         build_job_id = await simulation_service_slurm.submit_build_image_job(**build_kwargs)  # type: ignore[arg-type]
         hpc_run = await database_service.insert_hpcrun(
             job_id=build_job_id,

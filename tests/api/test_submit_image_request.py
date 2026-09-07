@@ -68,12 +68,19 @@ async def test_flag_reaches_the_build_when_requested() -> None:
 
 
 @pytest.mark.asyncio
-async def test_default_build_does_not_pay_for_the_head_image() -> None:
-    """Off by default -- every build would otherwise carry a JRE + nextflow layer
-    it will never use."""
+async def test_default_build_now_asks_for_the_head_image() -> None:
+    """REVERSED once the Nextflow path became operational. It was off so no build
+    would carry a JRE + nextflow layer it will never use; measured across four
+    builds that layer is +72 MB and +15 s (ECR dedups the shared base), against a
+    dispatch that otherwise fails at the container image pull minutes in, plus a
+    full rebuild.
+
+    Note what does NOT change: the flag reaches a backend that accepts it, and
+    `test_unsupported_path_is_unaffected_when_not_asked` still holds -- the
+    default asks where asking is possible and stays silent where it is not."""
     svc, db, seen = _services(supports_flag=True)
     await _upload(svc, db)
-    assert seen["include_submit_image"] is False
+    assert seen["include_submit_image"] is True
 
 
 @pytest.mark.asyncio
