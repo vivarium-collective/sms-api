@@ -920,7 +920,16 @@
 #            visible directly on the AWS Batch job (describe-jobs) instead of
 #            requiring a manual decode of the staged S3 path. No behavior
 #            change; every existing caller's dispatch is unaffected.
-__version__ = "0.9.111"
+# 0.9.112 -- viva-api#448: analysis for both chain-dispatch (_submit_analysis_job
+#            / _analysis_command) and multi-node-composite (submit_multi_node_
+#            analysis / _multi_node_analysis_command) dispatches now threads
+#            cache_variant into V2ECOLI_SIM_DATA -- without it, a candidate
+#            strain's analysis silently read the plain per-commit STOCK
+#            simData (the multi-node path never staged a cache locally at all,
+#            so it fell through to the image's own stock knowledge-base
+#            build). None (every caller before #448) is byte-for-byte
+#            unaffected. 6 new regression tests.
+__version__ = "0.9.112"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in

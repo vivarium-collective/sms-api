@@ -1273,6 +1273,42 @@ class TestMultiNodeAnalysisCommand:
         tokens = shlex.split(cmd.split("&&", 1)[1])
         assert json.loads(tokens[tokens.index("--modules") + 1]) == modules
 
+    def test_sim_data_uri_omitted_is_byte_identical_to_before(self) -> None:
+        """viva-api#448's own new sim_data_uri param, unset, must not change
+        this command at all -- every caller before #448 relied on this exact
+        cd-then-python shape."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._multi_node_analysis_command(
+                experiment_id="exp1",
+                composite_id="v2ecoli.composites.ecoli_colony.ecoli_colony",
+                history_uri="s3://bucket/exp1",
+                out_uri="s3://bucket/exp1/analyses/a1",
+            )
+        assert "V2ECOLI_SIM_DATA" not in cmd
+        assert cmd.startswith(f"cd {V2ECOLI_DIR} && python scripts/run_multi_node_analysis.py")
+
+    def test_sim_data_uri_set_exports_it_before_the_script_runs(self) -> None:
+        """viva-api#448: this analysis node never stages a ParCa cache locally
+        (no stage_s3/stage_dir on its own dispatch) -- V2ECOLI_SIM_DATA is the
+        only way analysis_runner.resolve_sim_data can find a candidate
+        strain's real cache instead of falling through to the image's own
+        stock knowledge-base build."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._multi_node_analysis_command(
+                experiment_id="exp1",
+                composite_id="v2ecoli.composites.lineage_ray_batch",
+                history_uri="s3://bucket/exp1",
+                out_uri="s3://bucket/exp1/analyses/a1",
+                sim_data_uri="s3://mybucket/ray-parca-cache/abc/some-variant/simData.cPickle",
+            )
+        assert (
+            f"cd {V2ECOLI_DIR} && export "
+            "V2ECOLI_SIM_DATA=s3://mybucket/ray-parca-cache/abc/some-variant/simData.cPickle "
+            "&& python scripts/run_multi_node_analysis.py" in cmd
+        )
+
 
 class TestSubmitMultiNodeAnalysisExtraction:
     """submit_multi_node_analysis (item 109) extracts n_seeds/n_generations
@@ -1370,6 +1406,95 @@ class TestSubmitMultiNodeAnalysisExtraction:
         assert "--n-seeds" not in cmd
         assert "--modules" not in cmd
         assert "run_multi_node_analysis.py" in cmd
+
+    @pytest.mark.asyncio
+    async def test_cache_variant_on_multi_node_dispatch_reaches_the_analysis_sim_data(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """viva-api#448: this analysis node's own dispatch (_submit_container,
+        no stage_s3/stage_dir) never stages a cache locally, so without
+        threading cache_variant here too, a candidate-strain lineage_ray_batch
+        campaign's analysis silently reads the image's own stock
+        knowledge-base build instead of the real dispatch's cache -- the same
+        defect class #437 already closed on the dispatch side."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 4,
+                "params": {"n_seeds": 10, "n_generations": 10},
+                "cache_variant": "cd2-run4-carina-genotype7",
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        service = SimulationServiceRay()
+        captured: dict[str, Any] = {}
+
+        def fake_submit_container(*, job_cmd: str, **kw: Any) -> str:
+            captured["job_cmd"] = job_cmd
+            return "mnp-analysis-job-3"
+
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch.object(service, "_submit_container", side_effect=fake_submit_container),
+            patch.object(service, "_ensure_container_job_def", return_value="job-def:1"),
+            patch.object(service, "_image_uri", return_value="ghcr.io/example/image:abc"),
+        ):
+            await service.submit_multi_node_analysis(
+                simulation=simulation,
+                database_service=database_service,
+                commit="abc123",
+                composite_id="v2ecoli.composites.lineage_ray_batch",
+            )
+
+        cmd = captured["job_cmd"]
+        expected = "s3://mybucket/ray-parca-cache/abc123/cd2-run4-carina-genotype7/simData.cPickle"
+        assert f"export V2ECOLI_SIM_DATA={expected}" in cmd
+
+    @pytest.mark.asyncio
+    async def test_omitted_cache_variant_analysis_sim_data_is_the_stock_path(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Every caller before #448 (no cache_variant on multi_node_dispatch at
+        all) must resolve to byte-identical behavior: the plain per-commit
+        stock path, unaffected."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {"composite_id": "v2ecoli.composites.ecoli_colony.ecoli_colony", "num_nodes": 2, "params": {}},
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        service = SimulationServiceRay()
+        captured: dict[str, Any] = {}
+
+        def fake_submit_container(*, job_cmd: str, **kw: Any) -> str:
+            captured["job_cmd"] = job_cmd
+            return "mnp-analysis-job-4"
+
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch.object(service, "_submit_container", side_effect=fake_submit_container),
+            patch.object(service, "_ensure_container_job_def", return_value="job-def:1"),
+            patch.object(service, "_image_uri", return_value="ghcr.io/example/image:abc"),
+        ):
+            await service.submit_multi_node_analysis(
+                simulation=simulation,
+                database_service=database_service,
+                commit="abc123",
+                composite_id="v2ecoli.composites.ecoli_colony.ecoli_colony",
+            )
+
+        cmd = captured["job_cmd"]
+        assert "export V2ECOLI_SIM_DATA=s3://mybucket/ray-parca-cache/abc123/simData.cPickle" in cmd
 
 
 class TestSubmitMnpStandaloneQueueRouting:
@@ -1574,6 +1699,16 @@ class TestAnalysisCommand:
         assert "export V2ECOLI_SIM_DATA=s3://mybucket/ray-parca-cache/c0ffee/simData.cPickle" in cmd
         config = _cmd_config_json(cmd)
         assert config["sim_data_path"] == "s3://mybucket/ray-parca-cache/c0ffee/simData.cPickle"
+
+    def test_cache_variant_points_sim_data_at_the_variant_cache_not_stock(self) -> None:
+        """viva-api#448: a candidate-strain dispatch's analysis must read ITS
+        cache, not the plain per-commit stock one -- the exact same class of
+        bug #437 fixed on the dispatch side, just one hop downstream on the
+        analysis side."""
+        cmd = self._cmd(commit="c0ffee", cache_variant="cd2-run2-j3-candidate-v1-lambda075")
+        expected = "s3://mybucket/ray-parca-cache/c0ffee/cd2-run2-j3-candidate-v1-lambda075/simData.cPickle"
+        assert f"export V2ECOLI_SIM_DATA={expected}" in cmd
+        assert _cmd_config_json(cmd)["sim_data_path"] == expected
 
     def test_analysis_options_ride_in_config_and_survive_a_hostile_experiment_id(self) -> None:
         """experiment_id is a caller-supplied, unconstrained string, and the modules
@@ -4383,6 +4518,37 @@ class TestSubmitCampaignAnalysis:
         assert len(records) == 1
         assert records[0].job_id_ext == "analysis-999"
         assert records[0].backend == "ray"
+
+    async def test_cache_variant_on_the_simulation_reaches_the_real_analysis_command(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """viva-api#448: a chain-dispatch campaign's own top-level cache_variant
+        (job_scheduler.py's own already-proven getattr(simulation.config,
+        "cache_variant", ...) pattern) must reach the analysis job's own
+        sim_data pointer too, not just the sim jobs -- otherwise a candidate
+        strain campaign's analysis silently grades stock data."""
+        setattr(experiment_request.config, "cache_variant", "cd2-run1-k4-candidate-v1-lambda050")  # noqa: B010
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+        mock_batch = _fake_container_batch(["analysis-999"])
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+        ):
+            await service.submit_campaign_analysis(
+                simulation=simulation,
+                database_service=database_service,
+                commit="abc1234",
+                total_n_seeds=30,
+                n_generations=10,
+            )
+        (analysis_call,) = mock_batch.submit_job.call_args_list
+        cmd = _container_env_of(analysis_call)["CONTAINER_JOB_CMD"]
+        expected = "s3://mybucket/ray-parca-cache/abc1234/cd2-run1-k4-candidate-v1-lambda050/simData.cPickle"
+        assert f"export V2ECOLI_SIM_DATA={expected}" in cmd
 
     async def test_uses_the_originally_requested_seed_count_not_survivor_count(
         self,
