@@ -254,6 +254,13 @@ class ComposeSimulationRequest(BaseModel):
     # document; ComposeSimulation.sim_request is the same in-memory object the
     # whole way through the background dispatch), so no DB migration needed.
     num_nodes: int | None = None
+    # Analysis modules/config to run once this simulation completes, carried in
+    # from the compose-run request and persisted on the ComposeSimulation row
+    # (unlike num_nodes above) so a later task can chain the analysis job off of
+    # it. None preserves today's exact behavior: no analysis is chained. This
+    # task only carries and persists the field -- it does not submit any
+    # analysis job itself.
+    analysis_options: dict[str, Any] | None = None
 
 
 class ComposeDocumentSubmission(BaseModel):
@@ -276,6 +283,9 @@ class ComposeDocumentSubmission(BaseModel):
     # backends (e.g. SLURM/HPC) accept and ignore it, mirroring how
     # compute_backend itself is handled above.
     num_nodes: int | None = None
+    # See ComposeSimulationRequest.analysis_options above -- same field, JSON-body
+    # transport's native shape (a dict, not a stringified Form field).
+    analysis_options: dict[str, Any] | None = None
 
 
 class ComposeSimulationResults(BaseModel):

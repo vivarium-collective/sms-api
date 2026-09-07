@@ -117,6 +117,7 @@ async def run_compose_simulation(
         experiment_id=experiment_id,
         simulator_version=simulator_version,
         document=document_content,
+        analysis_options=simulation_request.analysis_options,
     )
 
     # Insert the durable status row BEFORE returning 200 — not in the background task — so a

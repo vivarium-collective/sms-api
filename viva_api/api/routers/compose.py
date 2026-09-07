@@ -6,7 +6,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Query, UploadFile
 from jinja2 import Template
 from starlette.responses import FileResponse
 
@@ -127,6 +127,19 @@ async def _parse_upload(uploaded_file: UploadFile, batch_submission: bool = Fals
     )
 
 
+def _parse_analysis_options(analysis_options: str | None) -> dict | None:  # type: ignore[type-arg]
+    """The upload transport is multipart, so ``analysis_options`` arrives as a
+    plain Form field carrying a JSON string (mirroring ``run_v2ecoli``'s own
+    ``features`` field) rather than a native dict body -- parse it here, same
+    as that existing pattern, defaulting to None when absent/empty."""
+    if not analysis_options:
+        return None
+    try:
+        return json.loads(analysis_options)  # type: ignore[no-any-return]
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(400, f"Invalid analysis_options JSON: {analysis_options}")
+
+
 def _from_document(document: dict[str, object], batch_submission: bool = False) -> ComposeSimulationRequest:
     """The JSON-body sibling of ``_parse_upload``: write the inline document to
     a temp ``.pbg`` file (plain JSON — ``run_pbg.py`` reads it via
@@ -182,6 +195,7 @@ async def submit_simulation(
     simulator_id: int | None = None,
     compute_backend: ComputeBackend | None = None,
     extra_pip_deps: list[str] | None = Query(default=None),
+    analysis_options: str | None = Form(default=None),
 ) -> ComposeSimulationExperiment:
     if interval_time < 0 or interval_time > MAX_INTERVAL_TIME:
         raise HTTPException(400, f"interval_time must be between 0 and {MAX_INTERVAL_TIME:g}")
@@ -189,6 +203,7 @@ async def submit_simulation(
     simulation_request.end_time_point = interval_time
     simulation_request.simulator_id = simulator_id
     simulation_request.compute_backend = compute_backend
+    simulation_request.analysis_options = _parse_analysis_options(analysis_options)
     return await _dispatch_submission(simulation_request, background_tasks, extra_pip_deps)
 
 
@@ -214,6 +229,7 @@ async def submit_simulation_document(
     simulation_request.simulator_id = body.simulator_id
     simulation_request.compute_backend = body.compute_backend
     simulation_request.num_nodes = body.num_nodes
+    simulation_request.analysis_options = body.analysis_options
     return await _dispatch_submission(simulation_request, background_tasks, body.extra_pip_deps)
 
 

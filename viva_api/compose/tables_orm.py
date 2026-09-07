@@ -150,6 +150,12 @@ class ORMComposeSimulation(ComposeBase):
     # For standalone .pbg files, this stores the JSON directly.
     # For .sbml files, this stores the SBML XML as a string.
     document: Mapped[str | None] = mapped_column(nullable=True)
+    # Analysis modules/config to chain off this simulation once it completes,
+    # carried in from the compose-run request (ComposeSimulationRequest.
+    # analysis_options). None means no analysis is chained. Persisted here
+    # (unlike e.g. num_nodes, which stays purely in-memory on sim_request) so a
+    # later task can read it back and submit the analysis job.
+    analysis_options: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
 
 
 # ---------------------------------------------------------------------------
