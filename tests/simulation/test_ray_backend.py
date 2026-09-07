@@ -3039,6 +3039,39 @@ class TestParcaCommand:
             )
         assert "--new-genes violacein_MG1655_M5 --bundle-overrides models/parca/composed_overlay.tsv" in cmd
 
+    def test_omitted_rnaseq_source_is_byte_identical_to_before(self) -> None:
+        """None must build byte-for-byte the same command as before this param
+        existed -- same contract as new_genes/bundle_overrides above."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            assert service._parca_command(rnaseq_source=None) == service._parca_command()
+
+    def test_rnaseq_source_appends_the_flag(self) -> None:
+        """A bundle_overrides manifest can itself REQUIRE this flag to have any
+        effect (rung5-lambda-075/overrides.tsv's own header: "READ BY NOTHING
+        without that flag... the scenario silently becomes its own control") --
+        confirmed real gap, item 106/#166 chassis-provenance thread."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(rnaseq_source="experimental")
+        assert "--rnaseq-source experimental" in cmd
+        assert "--new-genes" not in cmd
+        assert "--bundle-overrides" not in cmd
+
+    def test_new_genes_bundle_overrides_and_rnaseq_source_all_append(self) -> None:
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(
+                new_genes="violacein_gfp",
+                bundle_overrides="workspace/studies/cd2-pnnl-01-bundle-scenarios/bundles/rung5-lambda-075/overrides.tsv",
+                rnaseq_source="experimental",
+            )
+        assert (
+            "--new-genes violacein_gfp "
+            "--bundle-overrides workspace/studies/cd2-pnnl-01-bundle-scenarios/bundles/rung5-lambda-075/overrides.tsv "
+            "--rnaseq-source experimental"
+        ) in cmd
+
     def test_strain_flags_do_not_reach_the_build_cache_step(self) -> None:
         """SUPERSEDES the old test_strain_flags_reach_the_build_cache_step
         (v2ecoli#676-era design). scripts/build_cache.py's own real current CLI
@@ -4123,6 +4156,33 @@ class TestChainDispatchSubmission:
         (parca_call,) = mock_batch.submit_job.call_args_list
         env = _container_env_of(parca_call)
         assert "--new-genes violacein_MG1655_M5" in env["CONTAINER_JOB_CMD"]
+
+    async def test_forwards_rnaseq_source_to_parca_when_config_sets_it(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Item 106/#166 chassis-provenance thread: parca_options.rnaseq_source must reach the
+        ParCa command chain-dispatch actually submits -- a real bundle_overrides manifest
+        (sms-ecoli's rung5-lambda-075/overrides.tsv) is a documented no-op without it, same
+        silent-wrong-build class of gap as new_genes/bundle_overrides above."""
+        setattr(experiment_request.config, "n_init_sims", 2)  # noqa: B010
+        experiment_request.config.generations = 3
+        setattr(experiment_request.config.parca_options, "rnaseq_source", "experimental")  # noqa: B010
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+        mock_batch = _fake_container_batch(["parca-1"])
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+        ):
+            await service.submit_chain_dispatch_job(ecoli_simulation=simulation, database_service=database_service)
+
+        (parca_call,) = mock_batch.submit_job.call_args_list
+        env = _container_env_of(parca_call)
+        assert "--rnaseq-source experimental" in env["CONTAINER_JOB_CMD"]
 
     async def test_writes_initial_campaign_row_with_empty_per_seed_state(
         self,

@@ -929,7 +929,19 @@
 #            so it fell through to the image's own stock knowledge-base
 #            build). None (every caller before #448) is byte-for-byte
 #            unaffected. 6 new regression tests.
-__version__ = "0.9.112"
+# 0.9.113 -- _parca_command gains an rnaseq_source passthrough (ParcaOptions.
+#            rnaseq_source -> v2ecoli-parca's own --rnaseq-source flag), threaded
+#            through submit_chain_dispatch_job and run_simulation_workflow's
+#            comparison-ensemble path, same shape as the existing new_genes/
+#            bundle_overrides passthroughs (items 93/104). Real, confirmed gap:
+#            at least one live bundle_overrides manifest (sms-ecoli's own
+#            rung5-lambda-075/overrides.tsv, part of the CD2 Run 2 J3/K4
+#            translation-efficiency rebuild recipe) is a documented no-op
+#            without this flag -- "READ BY NOTHING... the scenario silently
+#            becomes its own control" -- the same silent-wrong-build failure
+#            class new_genes/bundle_overrides were declared to close. Default
+#            None is byte-for-byte unaffected. 4 new regression tests.
+__version__ = "0.9.113"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in

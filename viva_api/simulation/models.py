@@ -204,6 +204,17 @@ class ParcaOptions(BaseModel):
     # simulation_service_ray.py — same as new_genes, it MUST be a declared field or
     # it never survives SimulationConfig construction (the item-104 silent drop).
     bundle_overrides: str | None = None
+    # rnaseq_source: passed straight through to v2ecoli-parca's own
+    # `--rnaseq-source` flag (default "reference"; "experimental" is the only
+    # other value it accepts, cli/parca.py). Real gap this closes: a
+    # bundle_overrides manifest can itself REQUIRE "experimental" to have any
+    # effect at all (rung5-lambda-075/overrides.tsv's own header: "READ BY
+    # NOTHING without that flag... the scenario silently becomes its own
+    # control") -- omitting it doesn't error, it silently no-ops the override,
+    # exactly the CD2 audit P0-2 failure mode new_genes/bundle_overrides were
+    # declared for. Read back via getattr(config.parca_options,
+    # "rnaseq_source", None) in simulation_service_ray.py, same as those two.
+    rnaseq_source: str | None = None
     debug_parca: bool = False
     load_intermediate: str | None = None
     save_intermediates: bool = False

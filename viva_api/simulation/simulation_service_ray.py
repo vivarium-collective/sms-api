@@ -969,7 +969,9 @@ class SimulationServiceRay(SimulationService):
         logger.info("Submitted container job %s (id=%s) to %s", job_name, batch_job_id, settings.ray_container_queue)
         return batch_job_id
 
-    def _parca_command(self, *, new_genes: str | None = None, bundle_overrides: str | None = None) -> str:
+    def _parca_command(
+        self, *, new_genes: str | None = None, bundle_overrides: str | None = None, rnaseq_source: str | None = None
+    ) -> str:
         """Run ParCa, then hydrate the sim-input bundle into PARCA_CACHE_DIR (out/cache).
 
         v2ecoli's sim loads ``out/cache/{initial_state.json, sim_data_cache.dill, ...}`` via
@@ -994,6 +996,18 @@ class SimulationServiceRay(SimulationService):
         ParCa silently built from defaults and any keys the overrides supply were absent.
         Default ``None`` builds byte-for-byte the same command as before this param existed.
 
+        ``rnaseq_source`` (backlog item 106/#166 chassis-provenance thread): a legacy
+        config's own ``parca_options.rnaseq_source`` -- generic passthrough to
+        ``v2ecoli-parca``'s own ``--rnaseq-source {reference,experimental}`` flag
+        (default ``"reference"``). Real, confirmed gap this closes: at least one
+        real ``bundle_overrides`` manifest (sms-ecoli's
+        ``cd2-pnnl-01-bundle-scenarios/bundles/rung5-lambda-075/overrides.tsv``)
+        is a no-op without it -- its own header: "READ BY NOTHING without that
+        flag... the scenario silently becomes its own control". Same silent-
+        wrong-build failure mode as new_genes/bundle_overrides being dropped.
+        Default ``None`` builds byte-for-byte the same command as before this
+        param existed.
+
         Also copies the gzipped RAW fitted state (``parca_state.pkl.gz``) into
         ``PARCA_CACHE_DIR`` itself (backlog item 105), so it rides along in the
         existing ``out_dir``/``out_s3`` sync instead of being discarded with the
@@ -1016,10 +1030,12 @@ class SimulationServiceRay(SimulationService):
         settings = get_settings()
         new_genes_flag = f" --new-genes {shlex.quote(new_genes)}" if new_genes and new_genes != "off" else ""
         bundle_overrides_flag = f" --bundle-overrides {shlex.quote(bundle_overrides)}" if bundle_overrides else ""
+        rnaseq_source_flag = f" --rnaseq-source {shlex.quote(rnaseq_source)}" if rnaseq_source else ""
         command = (
             f"cd {V2ECOLI_DIR}"
             f" && v2ecoli-parca --mode {settings.ray_parca_mode} --cpus {settings.ray_parca_cpus}"
-            f" -o {PARCA_SIMDATA_DIR} --cache-dir {PARCA_CACHE_DIR}{new_genes_flag}{bundle_overrides_flag}"
+            f" -o {PARCA_SIMDATA_DIR} --cache-dir {PARCA_CACHE_DIR}"
+            f"{new_genes_flag}{bundle_overrides_flag}{rnaseq_source_flag}"
             f" && gzip -f -k {PARCA_SIMDATA_DIR}/parca_state.pkl"
             f" && python scripts/build_cache.py"
             f" --fixture {PARCA_SIMDATA_DIR}/parca_state.pkl.gz"
@@ -2584,10 +2600,16 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         # Backlog item 104: same generic bundle_overrides passthrough, same
         # upstream-vEcoli exemption as new_genes above.
         bundle_overrides = None if is_upstream else getattr(config.parca_options, "bundle_overrides", None)
+        # Same generic rnaseq_source passthrough (item 106/#166 chassis-provenance
+        # thread) -- a bundle_overrides manifest can itself require this to have
+        # any effect at all; same upstream-vEcoli exemption as the two above.
+        rnaseq_source = None if is_upstream else getattr(config.parca_options, "rnaseq_source", None)
         parca_command = (
             self._upstream_parca_command()
             if is_upstream
-            else self._parca_command(new_genes=new_genes, bundle_overrides=bundle_overrides)
+            else self._parca_command(
+                new_genes=new_genes, bundle_overrides=bundle_overrides, rnaseq_source=rnaseq_source
+            )
         )
 
         # Only the composite-driven comparison-ensemble path can still reach here
@@ -3306,10 +3328,15 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         # survived on the stored request but was never forwarded, so ParCa built
         # from defaults only and any keys the overrides supply were absent.
         bundle_overrides = getattr(config.parca_options, "bundle_overrides", None)
+        # Same generic rnaseq_source passthrough (item 106/#166 chassis-provenance
+        # thread), same reasoning as new_genes/bundle_overrides above.
+        rnaseq_source = getattr(config.parca_options, "rnaseq_source", None)
         parca_job_id = self._submit_container(
             job_name=f"ray-parca-{commit}-{_rand_suffix()}",
             job_definition=container_job_def,
-            job_cmd=self._parca_command(new_genes=new_genes, bundle_overrides=bundle_overrides),
+            job_cmd=self._parca_command(
+                new_genes=new_genes, bundle_overrides=bundle_overrides, rnaseq_source=rnaseq_source
+            ),
             out_s3=cache_s3,
             out_dir=PARCA_CACHE_DIR,
             tags={**base_tags, "Phase": "parca"},
