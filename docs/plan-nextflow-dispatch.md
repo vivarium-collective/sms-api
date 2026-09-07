@@ -1219,7 +1219,7 @@ M channels into one — which is what a flat sibling list cannot express at all 
 | **1c** — ParCa mode recorded out-of-band | unchanged |
 | **2** — handoff as a staged `path` at real cache size | mechanism proven in Phase 0 at 23 bytes; the profile exists as of #204, so this is now **blocked only on a deploy** |
 | **3** — `-resume` re-runs only the failed lineage | **now possible**: `deploy()` could not emit `-resume` at all until #203, and the profile it needed landed in #204. Blocked only on a deploy |
-| **4** — 336 renders and the gather gathers | renders ✅, gathers ✅ structurally; the "sees 336 sweeps" half needs execution. **Now unblocked** — output is addressable as of 2026-09-07 |
+| **4** — 336 renders and the gather gathers | renders ✅, gathers ✅ structurally. **Attempted at Run 2 scale 2026-09-07 and it failed — three separate blockers, all now fixed.** Re-run pending; see below |
 | **5** — head overhead < ~2 min | ✅ **implied**: a fully-cached resume completes in **73 s** end to end, which is almost entirely head |
 | **6** — a task that emits nothing FAILS | implemented in `LineageStep` and in `render_nf`'s own guard; eagmon's acceptance gate (v2ecoli#703/#708/#713) is the better mechanism |
 
@@ -1531,56 +1531,91 @@ pinning either lost the other. #204 was merged and #205 rebased onto it;
 `2efb2c4` is the first commit with both. A pin chain built from PR branch heads
 has to check the topology rather than assume it.
 
-### What is left (updated 2026-09-07)
+### Gate 4 was attempted at Run 2 scale, and it took three fixes (2026-09-07)
 
-§10's ladder **has been run**, both justifying gates pass, and the output story is
-closed. The rungs below are kept for the record; none is outstanding.
+Simulation **399** — J3's shape, `n_seeds=10 × n_generations=10`, one variant,
+`--include-analysis`, on simulator 157. **It failed**, and the failure was
+worth more than the run would have been: it surfaced three independent
+blockers, none of which any prior campaign could have hit.
 
-1. ~~`-stub-run` against the `awsbatch` profile~~
-2. ~~one trivial `echo` task~~ — closed §11.2
-3. ~~`n_seeds=1, n_generations=1`~~ — **go/no-go 2 PASSED**: the 262 MB cache staged
-   task-to-task through the S3 work dir
-4. ~~kill the head, `-resume`, assert ParCa `CACHED`~~ — **go/no-go 3 PASSED**, twice:
-   76 s vs 19m22s on 2026-09-06, and again 73 s vs 19m54s on 2026-09-07 after
-   `resume_from` made the cache explicit
+The DAG itself was never the problem. ParCa succeeded and **all ten lineages
+fanned out in parallel** (11 tasks submitted). Everything below is task-level.
 
-**Deployed state**: sms-api **0.9.109** on `sms-api-stanford-test`; simulator **157**
-(sms-ecoli `4cbe2c4` → v2ecoli `6eb4d675`), both plain and `-submit` images.
+| # | blocker | found by | fixed in |
+|---|---|---|---|
+| 1 | lineage tasks die at import: `find_workspace_root` walks up from the task's **scratch cwd**, so `/app/v2ecoli` — which IS the workspace root — is never reached | executing the campaign | sms-ecoli#255 → #256 |
+| 2 | the gather emits argv the real `v2ecoli-analyze` rejects (`--experiment-id` / `--out-dir`), dying at argparse **after** every lineage has run | eagmon's forward audit | v2ecoli#722 → #724 |
+| 3 | ≥2 variants render **duplicate process names**; `main.nf` will not compile | eagmon's forward audit | v2ecoli#721 → #723 |
 
-#### The one gate that remains
+The two halves are complementary: blocker 1 only appears when you *run* it,
+blockers 2 and 3 only when you *read forward* past where the run stops.
 
-**Gate 4 — "the analysis sees N sweeps" at Run-4 scale.** It renders at 336 lineages
-and the gather is structurally correct; what has never happened is *executing* it and
-confirming the gather receives every sweep. This was previously blocked behind
-unusable output; it is not any more.
+#### Blocker 1 is the cwd hazard's FIFTH occurrence
 
-The natural candidate is **Run 2's 10×10**, which is exactly `workflow_nf`'s shape
-(one variant, `n_seeds=10`, `n_generations=10`). Two caveats before spending the
-infra:
+An import path → a script path → a resolver inside a script → a resolver inside
+a library the task imports → and now **a resolver inside a library imported
+conditionally**, on a branch most runs never take. `build_native_redux_config`
+is reached only when `injected_processes` is set, so every campaign before this
+one — mecillinam, 1 seed × 1 generation — passed cleanly. Adding J3's
+metabolism swap killed all ten lineages at once.
 
-- J3's metabolism swap (`ecoli-metabolism-redux`, excluded exchange data) is a
-  *config-level* change, while `variants` carries only `variant_name` / `new_genes` /
-  `bundle_overrides`, which reach **ParCa**. Render it with `--no-launch` first and
-  read the staged configs rather than assuming it threads.
-- Run 4's real 84 modifications are, per Alex, "not expressible in the sweep grammar
-  at all" — and `variants` is narrower than that grammar. The DAG scales; the
-  modifications may still not fit.
+The fix is the same countermeasure Chris endorsed on v2ecoli#705: let the
+caller **declare** the root (`V2E_ROOT`, already set on every awsbatch task)
+rather than have the library detect it. Unset, it is the old cwd walk unchanged.
 
-Run 1's *cell-only* half fits; its coupled half is `reactor_bird_coupled` via
-`run_mbp_tracked.py`, a different topology this generator does not express. Run 3 is
-blocked upstream on a config pointing at a laptop-local fork path.
+#### Blocker 3's real cause is the renderer, and it is still open
+
+`_path_to_step_name` already joins the **full** path, so `(runs_v0,
+lineage_s0)` would be unique by construction — the recursion into a nested
+composite simply drops the ancestor. v2ecoli#723 makes the leaf names unique at
+the source, which is correct regardless; the general nested-composite defect is
+filed as **process-bigraph#207** and any consumer can still hit it.
+
+#### Two failure modes worth carrying forward
+
+Both are the shape this path keeps producing, and both are now closed:
+
+- with no `analysis_options`, `v2ecoli-analyze` prints *"nothing to run"* and
+  returns **0** — a gather that reports success having gathered nothing. Closed
+  structurally: `analysis/` exists only on success, so Nextflow's own
+  missing-output check catches it.
+- a render-shape assertion cannot tell a valid script from one Groovy rejects.
+  That is how blocker 3 *and* process-bigraph#205 both shipped. The contract
+  test is `nextflow run -preview` over a ≥2-variant document.
+
+### What is left
+
+**Gate 4, and only gate 4.** Simulator **158** (sms-ecoli `c2af6739` →
+v2ecoli `76610ece`) is the first image carrying all three fixes; the 10×10
+re-run against it is the outstanding step. The question it answers is the half
+that has never executed: *does the analysis task actually receive all N
+sweeps?* Ten distinct `lineage_seed=` partitions published **and** an analysis
+task that consumed them is what closes it.
+
+Everything else on the ladder is done: gates 2 and 3 pass, output is published
+and correctly partitioned, gate 5 is implied by a 73 s fully-cached resume, and
+gate 6's mechanism is eagmon's acceptance gate.
+
+#### Not a scientific Run 2
+
+The re-run uses Run 2's *shape* — one variant, 10 seeds, 10 generations, J3's
+metabolism swap — but builds its **own** ParCa cache, where Run 2 proper uses
+the pre-built violacein bundle (`out/cache_vio_vecoli_free`). Its numbers must
+not go on the CD2 tracker as a Run 2 result.
 
 #### Carried dependencies
 
-- **process-bigraph#205 is still OPEN** (`REVIEW_REQUIRED`, eagmon). v2ecoli `main`
-  and sms-ecoli `main` both pin `ce19811a` from its branch — do **not** delete
-  `fix/nextflow-script-quoting`. v2ecoli#716 tracks re-pinning to `main` once it lands.
-- **Gate 1b** (v2ecoli#693, seeds sharing a founder object) may now be addressable:
-  v2ecoli#712 added opt-in independent founders and sms-ecoli#243 wires them
-  (`--independent-founders` / `--founder-sim-data`, gated to the native
-  `ecoli_baseline` arm). Verified `af4ef87c` is inside the `6eb4d675` pin, so the
-  publishDir bump did not regress it. Still a property of the path CD2 runs today,
-  not of this plan.
-- **sms-ecoli#241 renamed `configs/three_arm/` → `configs/experiments/`** and dropped
-  the `_vecoli_free` suffix (the vEcoli-reference arm became `_vecoli_ref`). Any CD2
-  config path written before 2026-09-07 is stale.
+- **Gate 1b** (v2ecoli#693, seeds sharing a founder object) is addressable via
+  v2ecoli#712 + sms-ecoli#243 (`--independent-founders`). Verified `af4ef87c`
+  is inside our pin. Still a property of the path CD2 runs today.
+- **process-bigraph#207** — the nested-composite naming defect behind blocker 3.
+- **sms-ecoli#241** renamed `configs/three_arm/` → `configs/experiments/`; any
+  CD2 config path written before 2026-09-07 is stale. Note also that
+  `GET /simulations/discovery` lists only **top-level** `configs/*.json`, so a
+  nested config is invisible there while a *path* (`experiments/foo.json`)
+  dispatches fine.
+- **v2ecoli#683**'s trigger shape — `swap_processes` with no `cache_dir` in the
+  spec — is what the Nextflow path produces by construction, since the cache is
+  a staged input and cannot be named when the spec is written. Safe only because
+  the fix is present in every pin used (`6eb4d675`, `06eeae43`, `76610ece`,
+  checked); an image pinned before `81183852` would collapse silently here.
