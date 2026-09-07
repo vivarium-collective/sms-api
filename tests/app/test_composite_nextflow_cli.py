@@ -82,6 +82,20 @@ def test_resume_and_nextflow_args_reach_the_dispatch() -> None:
     assert d["nextflow_args"] == ["-dump-hashes", "-ansi-log"]
 
 
+def test_resume_from_reaches_the_dispatch_and_implies_resume() -> None:
+    """Since #450 each dispatch has its own work dir, so a resume must name the
+    run it continues -- the server refuses one that does not (viva-api#452).
+    Naming a run and then not resuming it is never what was meant."""
+    d = _dispatch("--resume-from", "sim143-nf-ladder-e2-7f3a")
+    assert d["resume_from"] == "sim143-nf-ladder-e2-7f3a"
+    assert d["resume"] is True
+
+
+def test_resume_from_is_absent_unless_given() -> None:
+    """A null would reach a passthrough API as a named campaign of None."""
+    assert "resume_from" not in _dispatch("--resume")
+
+
 def test_absent_options_are_omitted_not_sent_as_null() -> None:
     """On a passthrough API a null is not the same as an absent key."""
     d = _dispatch()

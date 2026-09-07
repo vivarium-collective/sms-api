@@ -1333,6 +1333,7 @@ def _nf_dispatch_payload(
     executor: str,
     launch: bool,
     resume: bool,
+    resume_from: str | None,
     seeds: int | None,
     generations: int | None,
     include_analysis: bool | None,
@@ -1362,8 +1363,13 @@ def _nf_dispatch_payload(
         "executor": executor,
         "launch": launch,
     }
-    if resume:
+    # --resume-from implies --resume: naming a run to continue and then not
+    # continuing it is never what was meant, and the reverse (a resume with
+    # nothing to resume) is refused server-side rather than silently re-running.
+    if resume or resume_from:
         dispatch["resume"] = True
+    if resume_from:
+        dispatch["resume_from"] = resume_from
     if nf_params:
         dispatch["params"] = nf_params
     if work_dir:
@@ -1404,8 +1410,15 @@ def composite_nextflow(
     ),
     resume: bool = Option(
         default=False,
-        help="Reuse cached successful tasks from this campaign's previous run instead of redoing "
-        "them. Needs the session this deployment persists to S3 alongside the work dir.",
+        help="Reuse cached successful tasks from a previous run instead of redoing them. "
+        "Requires --resume-from: since #450 every dispatch gets its own work dir, so a resume "
+        "has to name the run it continues (without one Nextflow warns and silently re-runs "
+        "the whole campaign, which the server refuses).",
+    ),
+    resume_from: str | None = Option(
+        default=None,
+        help="The experiment_id of the run whose work dir and session cache to continue -- the "
+        "`experiment_id` printed by any dispatch. Implies --resume.",
     ),
     seeds: int | None = Option(default=None, help="n_seeds -- seed-lineages per variant."),
     generations: int | None = Option(default=None, help="n_generations per lineage."),
@@ -1460,6 +1473,7 @@ def composite_nextflow(
         executor=executor,
         launch=launch,
         resume=resume,
+        resume_from=resume_from,
         seeds=seeds,
         generations=generations,
         include_analysis=include_analysis,
