@@ -47,6 +47,7 @@ import boto3
 from botocore.config import Config
 from pydantic import BaseModel
 
+from viva_api.common.dispatch_validation import validate_nextflow_dispatch
 from viva_api.common.hpc.job_service import JobStatusInfo
 from viva_api.common.hpc.k8s_job_service import K8sJobService
 from viva_api.common.hpc.local_task_service import LocalTaskService
@@ -1338,9 +1339,10 @@ class SimulationServiceRay(SimulationService):
         if simulator is None:
             raise ValueError(f"Simulator {ecoli_simulation.simulator_id} not found")
 
+        # Re-checked here, not only at the API boundary: this method is also
+        # reachable directly, and it is the last point before a Job is created.
+        validate_nextflow_dispatch(nf_dispatch)
         composite_id = nf_dispatch.get("composite_id")
-        if not composite_id:
-            raise ValueError("nextflow_dispatch.composite_id is required")
 
         commit = simulator.git_commit_hash
         # The RUN's own id, read from the simulation record rather than from the
@@ -1366,13 +1368,6 @@ class SimulationServiceRay(SimulationService):
         # resume must NAME the run it continues.
         resume = bool(nf_dispatch.get("resume", False))
         resume_from = nf_dispatch.get("resume_from")
-        if resume and not resume_from:
-            raise ValueError(
-                "nextflow_dispatch.resume needs resume_from: the experiment_id of the run "
-                "whose work dir and session cache to continue (e.g. the previous dispatch's "
-                f"experiment_id; this run's own is {run_id!r}). Each dispatch gets its own "
-                "work dir, so a resume without one would silently re-run the whole campaign."
-            )
         campaign_key = str(resume_from) if resume_from else run_id
 
         if self._k8s is None:
