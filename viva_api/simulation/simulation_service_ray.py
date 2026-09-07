@@ -1635,6 +1635,10 @@ class SimulationServiceRay(SimulationService):
             "ExperimentId": experiment_id[:255],
             "Variant": str(variant)[:255],
             "Commit": str(commit)[:12],
+            # Makes the resolved cache choice visible on the job itself (sms-
+            # ecoli#210, cplong90) -- "stock" or the requested variant name,
+            # instead of requiring a manual decode of the staged S3 path.
+            "CacheVariant": str(cache_variant or "stock")[:255],
             "Team": getattr(settings, "cost_team_tag", None) or "covertlab",
         }
 
@@ -2791,6 +2795,10 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             "ExperimentId": str(experiment_id)[:255],
             "CompositeId": str(composite_id)[:255],
             "Commit": str(commit)[:12],
+            # Makes the resolved cache choice visible on the job itself (sms-
+            # ecoli#210, cplong90) -- "stock" or the requested variant name,
+            # instead of requiring a manual decode of the staged S3 path.
+            "CacheVariant": str(cache_variant or "stock")[:255],
             "Team": getattr(settings, "cost_team_tag", None) or "covertlab",
         }
 

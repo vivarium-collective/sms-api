@@ -909,7 +909,18 @@
 #            regression test (no Docker needed) drives run_simulation_workflow
 #            end to end with a config baking a stale experiment_id and asserts
 #            the two now agree and neither is the stale value.
-__version__ = "0.9.110"
+# 0.9.111 -- _submit_multi_node_composite and _submit_mbp_tracked_dispatch now
+#            tag every submitted job with CacheVariant (the requested variant
+#            name, or "stock" when cache_variant is omitted). Chris (cplong90,
+#            sms-ecoli#210) flagged that omitting cache_variant resolves to the
+#            stock per-commit cache with nothing on the job itself to show
+#            which cache actually ran -- the real cause on his side was his own
+#            dispatch generator silently dropping the field, already fixed
+#            there, not a viva-api defect. This tag makes the resolved choice
+#            visible directly on the AWS Batch job (describe-jobs) instead of
+#            requiring a manual decode of the staged S3 path. No behavior
+#            change; every existing caller's dispatch is unaffected.
+__version__ = "0.9.111"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
