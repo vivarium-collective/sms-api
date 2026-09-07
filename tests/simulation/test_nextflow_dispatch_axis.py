@@ -21,7 +21,12 @@ from viva_api.simulation.simulation_service_ray import SimulationServiceRay
 def _sim(**extras: Any) -> MagicMock:
     sim = MagicMock()
     cfg = MagicMock()
+    # The two are DELIBERATELY different here. #450 force-assigns the config's
+    # experiment_id to the record's, so on a live dispatch they agree -- but the
+    # Nextflow path keys a cache on this, and a fixture where they agree cannot
+    # tell "reads the record" from "reads the config that happens to match".
     cfg.experiment_id = "exp-nf"
+    sim.experiment_id = "sim133-exp-nf-a1b2"
     cfg.generations = 1
     # getattr(config, name, None) must miss for anything not explicitly given
     for name in ("nextflow_dispatch", "multi_node_dispatch", "composite", "mbp_dispatch"):
@@ -289,7 +294,7 @@ async def test_head_job_name_is_a_valid_dns_label() -> None:
 
     service, k8s = _svc_with_k8s()
     sim = _sim()
-    sim.config.experiment_id = "Test_Experiment_NF_2026"
+    sim.experiment_id = "Test_Experiment_NF_2026"
     with (
         patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
         patch.object(service, "stage_render_nf", new=AsyncMock(return_value="s3://b/e/r.py")),
@@ -496,3 +501,90 @@ def test_nextflow_args_pass_through_as_quoted_json() -> None:
 
 def test_no_nextflow_args_by_default() -> None:
     assert "--nextflow-args" not in _command()
+
+
+# --- viva-api#439: what is keyed per RUN, and what per CAMPAIGN --------------
+
+
+@pytest.mark.asyncio
+async def test_work_dir_and_session_come_from_the_record_not_the_config() -> None:
+    """The record is the authority.
+
+    #450 force-assigns the config's `experiment_id` to the record's, so reading
+    either would pass on a live dispatch today. But that is a coupling nothing
+    here would notice breaking, and this path keys a CACHE on it: a re-collision
+    would let one campaign's `-resume` reuse another's tasks, silently, reported
+    as `Cached`.
+    """
+    _, k8s = await _dispatch(executor="awsbatch")
+    cmd = k8s.create_job.call_args[0][0].spec.template.spec.containers[0].command[2]
+    assert "sim133-exp-nf-a1b2" in cmd
+    # not under the config's own baked value
+    assert "/exp-nf/work" not in cmd
+    assert "/exp-nf/session" not in cmd
+
+
+@pytest.mark.asyncio
+async def test_two_dispatches_of_one_config_do_not_share_a_work_dir() -> None:
+    """The hazard this issue is about. Nextflow task hashes are content-derived,
+    so two campaigns sharing a work dir and session can legitimately match each
+    other's tasks -- and a reused task is reported as `Cached`, not as an error."""
+    cmds = []
+    for run in ("sim133-exp-nf-a1b2", "sim133-exp-nf-c3d4"):
+        service, k8s = _svc_with_k8s()
+        sim = _sim()
+        sim.experiment_id = run
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch.object(service, "stage_render_nf", new=AsyncMock(return_value="s3://b/e/r.py")),
+            patch.object(service, "stage_runner", new=AsyncMock(return_value="s3://b/e/run_pbg.py")),
+        ):
+            await service._submit_nextflow_dispatch(
+                sim, _db(), {"composite_id": "v2ecoli.composites.workflow_nf.workflow_nf", "executor": "awsbatch"}
+            )
+        cmds.append(k8s.create_job.call_args[0][0].spec.template.spec.containers[0].command[2])
+    assert cmds[0] != cmds[1]
+    assert "sim133-exp-nf-a1b2" in cmds[0] and "sim133-exp-nf-a1b2" not in cmds[1]
+
+
+@pytest.mark.asyncio
+async def test_a_resume_without_a_run_to_resume_is_refused() -> None:
+    """Nextflow does NOT treat a missing session as an error -- it warns
+    "Option `-resume` is ignored" and re-runs the whole campaign at full cost.
+    Before #450 a config's baked id collided every dispatch onto one prefix, so a
+    resume found the previous session by accident; now it would find nothing.
+    Silently re-running an entire campaign is exactly the failure this refuses."""
+    with pytest.raises(ValueError, match="resume_from"):
+        await _dispatch(resume=True)
+
+
+@pytest.mark.asyncio
+async def test_resume_from_joins_that_runs_work_dir_and_session() -> None:
+    """Sharing a cache is now something a caller NAMES, rather than something
+    that happens because two runs came from the same config file."""
+    prior = "sim133-exp-nf-0000"
+    _, k8s = await _dispatch(executor="awsbatch", resume=True, resume_from=prior)
+    cmd = k8s.create_job.call_args[0][0].spec.template.spec.containers[0].command[2]
+    assert f"/{prior}/work" in cmd
+    assert f"/{prior}/session" in cmd
+    assert "--resume" in cmd
+
+
+@pytest.mark.asyncio
+async def test_a_resumed_run_still_stages_out_under_its_own_id() -> None:
+    """Joining a campaign's cache must not redirect this run's RESULTS into the
+    older run's output prefix -- that would be the prefix collision again, in
+    the one place the caller cannot see it."""
+    _, k8s = await _dispatch(executor="awsbatch", resume=True, resume_from="sim133-exp-nf-0000")
+    cmd = k8s.create_job.call_args[0][0].spec.template.spec.containers[0].command[2]
+    assert "sim133-exp-nf-a1b2" in cmd
+
+
+@pytest.mark.asyncio
+async def test_the_head_job_is_named_for_the_run_not_the_campaign() -> None:
+    """Two resumes of one campaign are two pods; a name collision with a live
+    Job fails the create outright."""
+    job_id, k8s = await _dispatch(resume=True, resume_from="sim133-exp-nf-0000")
+    assert "a1b2" in job_id.value, "the Job must be named for the run"
+    assert "0000" not in job_id.value, "not for the campaign it resumes"
+    assert k8s.create_job.call_args[0][0].metadata.name == job_id.value
