@@ -176,15 +176,25 @@ async def get_simulator_status(simulator_id: int) -> HpcRun:
 async def insert_simulator_version(
     simulator: Simulator,
     force: bool = False,
-    include_submit_image: bool = False,
+    include_submit_image: bool | None = None,
 ) -> SimulatorVersion:
     """``include_submit_image``: also build the Nextflow HEAD image beside the task
     image (base + JRE + the nextflow binary, pushed as ``<repo>:<sha>-submit``).
 
     Only the process that runs ``nextflow run`` needs a JVM -- Batch TASKS run the
     plain science image, which already carries the AWS CLI Nextflow needs to stage
-    an S3 work dir. So this is a thin derived layer, and it is OFF by default
-    because every build would otherwise pay for it.
+    an S3 work dir. So this is a thin derived layer.
+
+    **Omitted now means "build it where possible"**, changed once the Nextflow path
+    became operational. It was off on the reasoning that "every build would otherwise
+    pay for it"; measured across four builds that cost is **+72 MB and +15 s** (ECR
+    dedups the ~5.7 GB base the two images share), against a dispatch that otherwise
+    fails at the container image pull plus a full rebuild. vEcoli's build path has
+    always built its own ``-submit`` image unconditionally, so this makes the paths agree.
+
+    Three-valued: ``true`` DEMANDS the image and 400s on a backend that cannot build
+    one; omitted builds it where the backend can and skips quietly where it cannot;
+    ``false`` skips it.
     """
     # verify simulator request
     handlers.simulators.verify_simulator_payload(simulator)

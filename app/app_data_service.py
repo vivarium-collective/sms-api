@@ -303,9 +303,24 @@ class E2EDataService:
                 f"Could not get the latest simulator from the repo {repo_url} on branch {branch}"
             ) from e
 
-    def submit_upload_simulator(self, simulator: Simulator, force: bool = False) -> SimulatorVersion:
+    def submit_upload_simulator(
+        self, simulator: Simulator, force: bool = False, include_submit_image: bool | None = None
+    ) -> SimulatorVersion:
+        """``include_submit_image`` also builds the Nextflow HEAD image (`<repo>:<sha>-submit`).
+
+        Three-valued, and the param is sent ONLY when set: ``None`` leaves the
+        server on its default (build it wherever the backend can), ``True``
+        demands it and fails on a backend that cannot, ``False`` skips it.
+        Measured across four builds the image costs +72 MB and +15 s (ECR dedups
+        the shared base), against a dispatch that otherwise fails at the Batch
+        image pull minutes in, plus a full rebuild.
+        """
         try:
-            params = {"force": "true"} if force else {}
+            params = {}
+            if force:
+                params["force"] = "true"
+            if include_submit_image is not None:
+                params["include_submit_image"] = "true" if include_submit_image else "false"
             uploaded_response = self.client.post(
                 url="/core/v1/simulator/upload", json=simulator.model_dump(), params=params
             )

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.9.87
+  version: 0.9.109
 paths:
   /api/v1/simulations/discovery:
     get:
@@ -1172,6 +1172,43 @@ paths:
       tags:
       - EcoliSim
       summary: Upload a new simulator (vEcoli) version.
+      description: '``include_submit_image``: also build the Nextflow HEAD image beside
+        the task
+
+        image (base + JRE + the nextflow binary, pushed as ``<repo>:<sha>-submit``).
+
+
+        Only the process that runs ``nextflow run`` needs a JVM -- Batch TASKS run
+        the
+
+        plain science image, which already carries the AWS CLI Nextflow needs to stage
+
+        an S3 work dir. So this is a thin derived layer.
+
+
+        **Omitted now means "build it where possible"**, changed once the Nextflow
+        path
+
+        became operational. It was off on the reasoning that "every build would otherwise
+
+        pay for it"; measured across four builds that cost is **+72 MB and +15 s**
+        (ECR
+
+        dedups the ~5.7 GB base the two images share), against a dispatch that otherwise
+
+        fails at the container image pull plus a full rebuild. vEcoli''s build path
+        has
+
+        always built its own ``-submit`` image unconditionally, so this makes the
+        paths agree.
+
+
+        Three-valued: ``true`` DEMANDS the image and 400s on a backend that cannot
+        build
+
+        one; omitted builds it where the backend can and skips quietly where it cannot;
+
+        ``false`` skips it.'
       operationId: insert-simulator-version
       parameters:
       - name: force
@@ -1181,6 +1218,14 @@ paths:
           type: boolean
           default: false
           title: Force
+      - name: include_submit_image
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Include Submit Image
       requestBody:
         required: true
         content:
@@ -1217,9 +1262,21 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-09-03T09:56:47.824844'
+                  created_at: '2026-09-07T01:33:42.971264'
                 parca_config:
                   outdir: /projects/SMS/sms_api/prod/sims
+                  operons: true
+                  ribosome_fitting: true
+                  rnapoly_fitting: true
+                  remove_rrna_operons: false
+                  remove_rrff: false
+                  stable_rrna: false
+                  new_genes: 'off'
+                  debug_parca: false
+                  save_intermediates: false
+                  intermediates_directory: ''
+                  variable_elongation_transcription: true
+                  variable_elongation_translation: false
       responses:
         '200':
           description: Successful Response
@@ -4185,6 +4242,18 @@ components:
           $ref: '#/components/schemas/ParcaOptions'
           default:
             outdir: /projects/SMS/sms_api/prod/sims
+            operons: true
+            ribosome_fitting: true
+            rnapoly_fitting: true
+            remove_rrna_operons: false
+            remove_rrff: false
+            stable_rrna: false
+            new_genes: 'off'
+            debug_parca: false
+            save_intermediates: false
+            intermediates_directory: ''
+            variable_elongation_transcription: true
+            variable_elongation_translation: false
       additionalProperties: true
       type: object
       required:
@@ -4192,11 +4261,79 @@ components:
       title: ParcaDatasetRequest
     ParcaOptions:
       properties:
+        cpus:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Cpus
         outdir:
           type: string
           title: Outdir
           default: /projects/SMS/sms_api/prod/sims
-      additionalProperties: true
+        operons:
+          type: boolean
+          title: Operons
+          default: true
+        ribosome_fitting:
+          type: boolean
+          title: Ribosome Fitting
+          default: true
+        rnapoly_fitting:
+          type: boolean
+          title: Rnapoly Fitting
+          default: true
+        remove_rrna_operons:
+          type: boolean
+          title: Remove Rrna Operons
+          default: false
+        remove_rrff:
+          type: boolean
+          title: Remove Rrff
+          default: false
+        stable_rrna:
+          type: boolean
+          title: Stable Rrna
+          default: false
+        new_genes:
+          type: string
+          title: New Genes
+          default: 'off'
+        bundle_overrides:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bundle Overrides
+        debug_parca:
+          type: boolean
+          title: Debug Parca
+          default: false
+        load_intermediate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Load Intermediate
+        save_intermediates:
+          type: boolean
+          title: Save Intermediates
+          default: false
+        intermediates_directory:
+          type: string
+          title: Intermediates Directory
+          default: ''
+        variable_elongation_transcription:
+          type: boolean
+          title: Variable Elongation Transcription
+          default: true
+        variable_elongation_translation:
+          type: boolean
+          title: Variable Elongation Translation
+          default: false
+        include_violacein_reactions:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Include Violacein Reactions
+      additionalProperties: false
       type: object
       title: ParcaOptions
     ProcessAddress:
@@ -4536,7 +4673,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-09-03 09:56:47.764130'
+          default: '2026-09-07 01:33:42.896295'
         job_id:
           anyOf:
           - type: string
@@ -4579,6 +4716,18 @@ components:
           $ref: '#/components/schemas/ParcaOptions'
           default:
             outdir: /projects/SMS/sms_api/prod/sims
+            operons: true
+            ribosome_fitting: true
+            rnapoly_fitting: true
+            remove_rrna_operons: false
+            remove_rrff: false
+            stable_rrna: false
+            new_genes: 'off'
+            debug_parca: false
+            save_intermediates: false
+            intermediates_directory: ''
+            variable_elongation_transcription: true
+            variable_elongation_translation: false
         analysis_options:
           $ref: '#/components/schemas/AnalysisOptions'
           default: {}
