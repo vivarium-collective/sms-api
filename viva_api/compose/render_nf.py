@@ -64,6 +64,111 @@ def _assert_rendered(outdir: Path) -> None:
             f"empty workflow. A composite whose nodes are all unrenderable produces a file that "
             f"Nextflow accepts and that does nothing."
         )
+    _assert_compiles(outdir)
+
+
+def _assert_compiles(outdir: Path) -> None:
+    """Ask Nextflow whether the file it will be handed actually parses.
+
+    The presence check above is not enough, and that is not hypothetical: a
+    render once produced the right sub-workflow structure, the right staged
+    configs and exit 0, while emitting a `script:` block containing Groovy
+    SOURCE rather than a string. `main.nf` contained "process ", so every guard
+    passed; `nextflow run` then failed to compile the whole file. Only running
+    the parser catches that class, and the head image already has the binary.
+
+    Uses ``-preview``, which compiles the script and builds the DAG while
+    executing NO processes -- verified: it returns 1 with "Script compilation
+    error" on a bad file, and 0 with zero ``executor >`` lines on a good one.
+    (``nextflow config`` would not do: it parses nextflow.config only and never
+    looks at main.nf.)
+
+    Always ``-profile local``, whatever the render targets. Every profile is
+    emitted, so it always resolves, and it removes any possibility of a
+    validation step touching AWS.
+
+    What it does NOT catch: a script that compiles but whose Groovy
+    interpolation fails when the task materialises -- ``${VAR:-default}`` in a
+    ``script:`` block, say. Those surface only on execution. This closes the
+    compile-time class, which is the one that reached production.
+
+    Skipped when `nextflow` is absent -- the plain task image has no JVM, and
+    render-only callers are legitimate.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    nextflow = shutil.which("nextflow")
+    if nextflow is None:
+        return
+    # Run from a THROWAWAY cwd, never from `outdir`.
+    #
+    # Nextflow writes `.nextflow/history` into its LAUNCH directory, and a bare
+    # `-resume` resumes the LAST entry there. Launching this probe in `outdir`
+    # appended the probe's own run -- with its own session id -- after the real
+    # campaign's. Nextflow seeds every task hash with `session.uniqueId`, so the
+    # next `-resume` adopted the PROBE's session, every hash changed, and a
+    # completed 262 MB ParCa was re-run. Measured: the saved history's last row
+    # was `nextflow run main.nf -profile local -preview`.
+    #
+    # `projectDir` follows the SCRIPT's location, not the cwd, so an absolute
+    # main.nf keeps `file("${projectDir}/…config.json")` resolving while the
+    # session artefacts land somewhere we throw away.
+    with tempfile.TemporaryDirectory(prefix="nf-preview-") as probe_cwd:
+        probe = subprocess.run(  # noqa: S603  (fixed argv, resolved binary)
+            [nextflow, "run", str((outdir / "main.nf").resolve()), "-profile", "local", "-preview"],
+            cwd=probe_cwd,
+            capture_output=True,
+            text=True,
+            # Nextflow's banner is UTF-8; under a C/POSIX locale -- which a
+            # container very often has -- `text=True` decodes as ascii and raises
+            # UnicodeDecodeError, turning a passing render into a crash.
+            encoding="utf-8",
+            errors="replace",
+        )
+    if probe.returncode != 0:
+        raise SystemExit(f"render_nf: the rendered workflow does not compile.\n{(probe.stdout + probe.stderr)[-2000:]}")
+
+
+def _load_run_pbg() -> tuple[Any, Any, Any]:
+    """Import ``run_pbg``'s resolver, in-process OR as a staged sibling script.
+
+    This module runs in two places, and only one of them has ``viva_api``:
+
+    * in the api pod, as ``viva_api.compose.render_nf`` -- the package import works;
+    * **staged into the SIMULATOR image** as a bare ``/tmp/render_nf.py``, where
+      ``viva_api`` is not installed and never will be.
+
+    ``run_pbg`` is deliberately stdlib-only at module scope for exactly this
+    reason, and is staged beside this file. So fall back to importing it as a
+    top-level module from this file's own directory.
+
+    The package import is tried FIRST so that in-process callers get the same
+    module object the rest of the app uses, rather than a second copy under a
+    different name.
+    """
+    try:
+        from viva_api.compose.run_pbg import _build_core, _resolve_document, _workspace_core
+    except ModuleNotFoundError:
+        here = str(Path(__file__).resolve().parent)
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        try:
+            # Resolvable only in the STAGED layout, where run_pbg.py sits beside
+            # this file; mypy cannot see a module that exists only at runtime.
+            from run_pbg import (  # type: ignore[no-redef,import-not-found]
+                _build_core,
+                _resolve_document,
+                _workspace_core,
+            )
+        except ModuleNotFoundError as exc:  # pragma: no cover - staging bug
+            raise SystemExit(
+                f"render_nf: could not import run_pbg. It is neither installed as "
+                f"viva_api.compose.run_pbg nor staged beside {__file__}. The dispatcher "
+                f"must stage BOTH scripts; see stage_render_nf."
+            ) from exc
+    return _build_core, _resolve_document, _workspace_core
 
 
 def render(
@@ -80,6 +185,7 @@ def render(
     report: str | None = None,
     trace: str | None = None,
     weblog_url: str | None = None,
+    nextflow_args: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build the document, render it, and (optionally) run ``nextflow``.
 
@@ -92,9 +198,23 @@ def render(
     from process_bigraph import Composite
     from process_bigraph.nextflow_deploy import deploy
 
-    from viva_api.compose.run_pbg import _build_core, _resolve_document
+    _build_core, _resolve_document, _workspace_core = _load_run_pbg()
 
-    core = _build_core()
+    # EXACTLY run_pbg's own selection (run_pbg.py:688). The generic core registers
+    # only process-bigraph's base types plus the emitter links; a workspace's own
+    # builder registers much more -- v2ecoli's registers ECOLI_TYPES and several
+    # process/step links. Addresses resolve dynamically, but registered TYPES do
+    # not, so building against the generic core fails on a document that uses
+    # them: `no link found at address: {'protocol': 'local', 'data': 'composite'}`,
+    # which is a nested Composite -- i.e. every sub-workflow this path exists to
+    # emit.
+    #
+    # Tested against None explicitly rather than `or`: a Core is a registry-ish
+    # object that may define __bool__/__len__, and `or` would silently discard a
+    # valid-but-empty one. Same reasoning as run_pbg's comment there.
+    core = _workspace_core()
+    if core is None:
+        core = _build_core()
     document, core = _resolve_document(None, composite_id, overrides or {}, core)
     composite = Composite(document, core=core)
 
@@ -111,6 +231,7 @@ def render(
         report=report,
         trace=trace,
         weblog_url=weblog_url,
+        nextflow_args=nextflow_args,
     )
     _assert_rendered(outdir)
 
@@ -149,6 +270,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report", default=None)
     parser.add_argument("--trace", default=None, help="Write a trace CSV; a reused task shows CACHED there.")
     parser.add_argument("--weblog-url", default=None)
+    parser.add_argument(
+        "--nextflow-args",
+        default=None,
+        help="JSON array appended to the `nextflow run` command verbatim, e.g. "
+        "'[\"-dump-hashes\"]'. A LIST, never a string: a string would have to be "
+        "shell-split, and quoting is exactly where that goes wrong silently.",
+    )
     args = parser.parse_args(argv)
 
     overrides = json.loads(args.overrides) if args.overrides else None
@@ -165,6 +293,7 @@ def main(argv: list[str] | None = None) -> int:
         report=args.report,
         trace=args.trace,
         weblog_url=args.weblog_url,
+        nextflow_args=json.loads(args.nextflow_args) if args.nextflow_args else None,
     )
     print(json.dumps(summary, indent=2))
     return 0

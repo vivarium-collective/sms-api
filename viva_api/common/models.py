@@ -47,6 +47,7 @@ class JobBackend(StrEnumBase):
     K8S = "k8s"
     LOCAL = "local"  # In-process async task (e.g. SSH build on submit node)
     RAY = "ray"  # AWS Batch multi-node-parallel job running a transient Ray cluster
+    K8S_NEXTFLOW = "k8s_nextflow"  # Nextflow HEAD as a K8s Job; its TASKS run on AWS Batch
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,19 @@ class JobId:
     def ray(cls, batch_job_id: str) -> "JobId":
         """Tag an AWS Batch (multi-node-parallel Ray) job id."""
         return cls(value=batch_job_id, backend=JobBackend.RAY)
+
+    @classmethod
+    def k8s_nextflow(cls, job_name: str) -> "JobId":
+        """A Nextflow HEAD running as a K8s Job, whose TASKS run on AWS Batch.
+
+        Deliberately distinct from ``k8s()`` even though both name a K8s Job in
+        the same namespace, because the backend tag does more than say how to
+        poll: it also selects the OUTPUT LAYOUT on the download path. This
+        dispatch writes v2ecoli/Ray-shaped output, so tagging it ``K8S`` would
+        poll correctly and then serve the wrong tree -- a failure that looks
+        like success until someone opens the archive.
+        """
+        return cls(value=job_name, backend=JobBackend.K8S_NEXTFLOW)
 
     @property
     def as_slurm_int(self) -> int:

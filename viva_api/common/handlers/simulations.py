@@ -1345,9 +1345,11 @@ async def get_simulation_outputs(
 
     # Dispatch based on backend
     hpc_run = await db_service.get_hpcrun_by_ref(ref_id=simulation_id, job_type=JobType.SIMULATION)
-    if hpc_run and hpc_run.job_id.backend == JobBackend.RAY:
+    if hpc_run and hpc_run.job_id.backend in (JobBackend.RAY, JobBackend.K8S_NEXTFLOW):
         # Ray backend: stream the xarray/zarr ensemble outputs (seed_NN/store.zarr +
         # summary.json) directly from S3. FILE mode falls back to streaming.
+        # K8S_NEXTFLOW belongs here, not with K8S below: its head is a K8s Job but
+        # its OUTPUT is v2ecoli-shaped, and this branch is chosen by layout.
         archive_name = f"{experiment_id}.tar.gz"
         return StreamingResponse(
             _stream_s3_tar_gz_ray(experiment_id),
@@ -1610,7 +1612,9 @@ async def get_simulation_log(db_service: DatabaseService, simulation_id: int, tr
     if hpc_run is None:
         raise ValueError(f"No HPC run found for simulation {simulation_id}")
 
-    if hpc_run.job_id.backend == JobBackend.K8S:
+    if hpc_run.job_id.backend in (JobBackend.K8S, JobBackend.K8S_NEXTFLOW):
+        # Both are K8s Jobs, so the log comes from the same place -- unlike the
+        # output layout above, which differs between them.
         log_content = await _get_k8s_log(hpc_run, db_service, simulation_id)
     elif hpc_run.job_id.backend == JobBackend.RAY:
         log_content = await _get_ray_log(hpc_run, db_service, simulation_id)

@@ -130,6 +130,9 @@ def get_simulation_service_for_job(job_id: "JobId") -> "SimulationService | None
         JobBackend.SLURM: ComputeBackend.SLURM,
         JobBackend.K8S: ComputeBackend.BATCH,
         JobBackend.RAY: ComputeBackend.RAY,
+        # The head is a K8s Job, but the RAY service created it and owns the
+        # output layout, so it is the one that must answer for it.
+        JobBackend.K8S_NEXTFLOW: ComputeBackend.RAY,
     }
     backend = mapping.get(job_id.backend)
     if backend is not None and backend in global_simulation_services:
@@ -232,12 +235,21 @@ def _init_simulation_service(job_backend: str, settings: Settings) -> None:
     set_local_task_service(shared_local)
     registry: dict[ComputeBackend, SimulationService] = {}
 
-    # AWS Batch + Nextflow (K8s) — built when a K8s namespace is configured.
+    # One K8sJobService, shared. The Ray backend needs it too: its Nextflow
+    # dispatch runs the HEAD as a K8s Job so the head inherits the `batch-submit`
+    # ServiceAccount's IRSA identity, which is the only identity here that may
+    # submit Batch jobs. A Batch-hosted head runs as `ray-mnp-job`, which has S3
+    # and no `batch:*` at all.
+    k8s_job_service = None
     if settings.k8s_job_namespace:
         from viva_api.common.hpc.k8s_job_service import K8sJobService
-        from viva_api.simulation.simulation_service_k8s import SimulationServiceK8s
 
         k8s_job_service = K8sJobService(namespace=settings.k8s_job_namespace)
+
+    # AWS Batch + Nextflow (K8s) — built when a K8s namespace is configured.
+    if k8s_job_service is not None:
+        from viva_api.simulation.simulation_service_k8s import SimulationServiceK8s
+
         registry[ComputeBackend.BATCH] = SimulationServiceK8s(
             k8s_job_service=k8s_job_service, local_task_service=shared_local
         )
@@ -247,7 +259,9 @@ def _init_simulation_service(job_backend: str, settings: Settings) -> None:
     if settings.ray_mnp_queue:
         from viva_api.simulation.simulation_service_ray import SimulationServiceRay
 
-        registry[ComputeBackend.RAY] = SimulationServiceRay(local_task_service=shared_local)
+        registry[ComputeBackend.RAY] = SimulationServiceRay(
+            local_task_service=shared_local, k8s_job_service=k8s_job_service
+        )
         logger.info("✓ Backend registered: ray (AWS Batch MNP)")
 
     # SLURM has no separate enable flag — build it when it's the deployment default.

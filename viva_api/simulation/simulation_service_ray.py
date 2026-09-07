@@ -34,6 +34,7 @@ import importlib.resources as _res
 import json
 import logging
 import random
+import re
 import shlex
 import string
 import tempfile
@@ -47,6 +48,7 @@ from botocore.config import Config
 from pydantic import BaseModel
 
 from viva_api.common.hpc.job_service import JobStatusInfo
+from viva_api.common.hpc.k8s_job_service import K8sJobService
 from viva_api.common.hpc.local_task_service import LocalTaskService
 from viva_api.common.models import JobBackend, JobId, JobStatus
 from viva_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
@@ -484,11 +486,64 @@ def _batch_exit_code(job: dict[str, Any]) -> str | None:
     return str(exit_code) if exit_code is not None else None
 
 
+# Per-label resources for the Nextflow dispatch. NOT optional in practice: a
+# dispatch that supplies none emits no `withLabel` block, so nf-amazon's
+# auto-registered job definition takes ITS defaults (~1 GB, no timeout) and
+# ParCa is killed with exit 137 before it does anything. Measured on simulation
+# 355 -- three times, because `maxRetries` retried an OOM at the same size.
+#
+# `memory` is a Groovy CLOSURE (process-bigraph#205) that RAISES memory on 137
+# specifically. Scaling on every failure would multiply memory for faults that
+# have nothing to do with it; scaling on nothing makes the retries pointless.
+# vEcoli's `scaledMemory` makes the same distinction.
+#
+# Sizes are anchored on what the chain/Ray paths actually run with -- their base
+# job definitions request 16 vCPU / 60000 MB -- rather than invented. A caller
+# may override any label via `nextflow_dispatch.resources`.
+def _scaled_memory(base_gb: int) -> str:
+    """Groovy: `base` normally, `base * attempt` after an OOM."""
+    return f"{{ task.exitStatus == 137 ? {base_gb}.GB * task.attempt : {base_gb}.GB }}"
+
+
+DEFAULT_NF_RESOURCES: dict[str, dict[str, Any]] = {
+    # ParCa is the memory-hungry one and the reason this default exists.
+    "parca": {"cpus": 8, "memory": _scaled_memory(32), "time": "4 h"},
+    # A lineage is the LONG one -- hours of simulated generations -- so `time`
+    # matters here more than anywhere: it is the only bound on a runaway task
+    # (plan-nextflow-dispatch §11.1), and Spot reclaim already retries 10x.
+    "lineage": {"cpus": 4, "memory": _scaled_memory(16), "time": "12 h"},
+    "analysis": {"cpus": 4, "memory": _scaled_memory(16), "time": "2 h"},
+}
+
+
+def _merge_nf_resources(
+    overrides: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    """DEFAULT_NF_RESOURCES with per-label overrides merged in.
+
+    Merged rather than replaced, and merged per KEY within a label: overriding
+    `lineage.time` must not drop `lineage.memory` and take the run back to
+    nf-amazon's ~1 GB, which is the failure this whole default exists to stop.
+    """
+    merged = {label: dict(res) for label, res in DEFAULT_NF_RESOURCES.items()}
+    for label, res in (overrides or {}).items():
+        merged.setdefault(label, {}).update(res)
+    return merged
+
+
 class SimulationServiceRay(SimulationService):
     """Ray-on-Batch (MNP) implementation of SimulationService."""
 
-    def __init__(self, local_task_service: LocalTaskService | None = None) -> None:
+    def __init__(
+        self,
+        local_task_service: LocalTaskService | None = None,
+        k8s_job_service: "K8sJobService | None" = None,
+    ) -> None:
         self._local = local_task_service or LocalTaskService()
+        # Only the Nextflow dispatch uses this: its HEAD runs as a K8s Job so it
+        # inherits the `batch-submit` ServiceAccount's IRSA identity. Every other
+        # path here submits to Batch directly and needs no cluster access.
+        self._k8s = k8s_job_service
 
     def _batch(self) -> Any:
         return boto3.client("batch", region_name=get_settings().batch_region)
@@ -1107,9 +1162,20 @@ class SimulationServiceRay(SimulationService):
             # that injects the same line into vEcoli's config.template
             # (simulation_service_k8s.py).
             "s3_endpoint": f"https://s3.{settings.batch_region}.amazonaws.com",
-            "container_env": {"PYTHONPATH": V2ECOLI_DIR},
+            "container_env": {"PYTHONPATH": V2ECOLI_DIR, "V2E_ROOT": V2ECOLI_DIR},
             "work_dir": f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/work",
         }
+
+    def _nf_session_s3_uri(self, experiment_id: str) -> str:
+        """Where this campaign's Nextflow session cache lives between dispatches.
+
+        Beside the work dir and keyed the same way, because the two are only
+        useful together: `-resume` matches a task by its hash in the SESSION and
+        then reuses the outputs in the WORK DIR. Either one alone resumes
+        nothing.
+        """
+        settings = get_settings()
+        return f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/session"
 
     def _render_nf_command(
         self,
@@ -1120,10 +1186,14 @@ class SimulationServiceRay(SimulationService):
         executor: str,
         launch: bool,
         outdir: str,
+        pbg_runner_s3_uri: str,
         nf_params: dict[str, Any] | None = None,
         resources: dict[str, dict[str, Any]] | None = None,
         work_dir: str | None = None,
         resume: bool = False,
+        stage_out_s3: str | None = None,
+        session_s3: str | None = None,
+        nextflow_args: list[str] | None = None,
     ) -> str:
         """The container command: fetch the compiler, render, optionally launch.
 
@@ -1141,23 +1211,78 @@ class SimulationServiceRay(SimulationService):
         nf_params_flag = ""
         if nf_params:
             nf_params_flag = f" --nf-params {shlex.quote(json.dumps(nf_params))}"
+        # Verbatim passthrough to `nextflow run` -- `-dump-hashes` above all, which
+        # prints each component of a task hash and is the only way to see WHY a
+        # `-resume` did not match. A list, never a string, for the same reason
+        # deploy() insists on one.
+        nextflow_args_flag = ""
+        if nextflow_args:
+            nextflow_args_flag = f" --nextflow-args {shlex.quote(json.dumps(list(nextflow_args)))}"
         resources_flag = ""
         if resources:
             resources_flag = f" --resources {shlex.quote(json.dumps(resources))}"
         launch_flag = " --launch" if launch else ""
         resume_flag = " --resume" if resume else ""
         work_dir_flag = f" --work-dir {shlex.quote(work_dir)}" if work_dir else ""
+        # On the Batch container path an entrypoint synced out_dir -> out_s3. A
+        # K8s pod has no such entrypoint, so the command stages its own results
+        # -- and MUST preserve the exit code, or a failed render would be
+        # reported as a success by the trailing copy. `|| true` on the copy
+        # keeps a staging hiccup from masking a run that actually worked.
+        # `-resume` needs a durable SESSION, not just a durable work dir. Nextflow
+        # keeps `.nextflow/history` and its cache DB in the LAUNCH directory --
+        # here an ephemeral pod -- so a second dispatch starts with no record of
+        # the first and reports, verbatim:
+        #
+        #   WARN: It appears you have never run this project before
+        #         -- Option `-resume` is ignored
+        #
+        # and re-runs a ParCa whose output is sitting complete in the work dir.
+        # Measured on simulation 359; plan-nextflow-dispatch risk 2 called it.
+        # So the session is restored before the run and saved after, keyed by the
+        # same experiment the work dir is.
+        session_restore = ""
+        session_save = ""
+        if session_s3:
+            session_restore = (
+                f" && (aws s3 cp --recursive {shlex.quote(session_s3)} {shlex.quote(outdir)}/.nextflow"
+                f" --only-show-errors 2>/dev/null || true)"
+            )
+            # Saved unconditionally -- a FAILED run's session is exactly the one a
+            # `-resume` needs, so guarding this on success would defeat the point.
+            session_save = (
+                f" ; aws s3 cp --recursive {shlex.quote(outdir)}/.nextflow {shlex.quote(session_s3)}"
+                f" --only-show-errors || true"
+            )
+
+        stage_out = ""
+        if stage_out_s3:
+            stage_out = (
+                f" ; NF_EXIT=$?"
+                f"{session_save}"
+                f" ; aws s3 cp --recursive {shlex.quote(outdir)} {shlex.quote(stage_out_s3)}"
+                f" --only-show-errors || true"
+                f" ; exit $NF_EXIT"
+            )
         # A trace is how a resumed run is told apart from a repeated one: a reused
         # task reports CACHED there and nowhere else.
         return (
             f"cd {V2ECOLI_DIR}"
+            f"{session_restore}"
             f" && aws s3 cp {shlex.quote(runner_s3_uri)} /tmp/render_nf.py"
+            # render_nf reuses run_pbg's resolver, and the simulator image has no
+            # `viva_api` -- so the sibling it imports has to be staged too, into
+            # the SAME directory. Staging only render_nf fails at import, after a
+            # successful pull and a clean start.
+            f" && aws s3 cp {shlex.quote(pbg_runner_s3_uri)} /tmp/run_pbg.py"
             f" && python /tmp/render_nf.py"
             f" --composite-id {shlex.quote(composite_id)}"
             f" --outdir {shlex.quote(outdir)}"
             f" --executor {shlex.quote(executor)}"
             f" --trace {shlex.quote(outdir)}/trace.csv"
             f"{overrides_flag}{nf_params_flag}{resources_flag}{launch_flag}{resume_flag}{work_dir_flag}"
+            f"{nextflow_args_flag}"
+            f"{stage_out}"
         )
 
     async def _submit_nextflow_dispatch(
@@ -1170,10 +1295,24 @@ class SimulationServiceRay(SimulationService):
     ) -> JobId:
         """Compile a registered composite to a Nextflow workflow and run it.
 
-        The third dispatch path (docs/plan-nextflow-dispatch.md). Runs as a
-        CONTAINER job on the Nextflow HEAD image -- reusing ``_submit_container``
-        exactly as the plan specifies, so Phase 3 is verified with
-        ``executor='local'`` before Phase 4 introduces the awsbatch executor.
+        The third dispatch path (docs/plan-nextflow-dispatch.md). The HEAD runs
+        as a **K8s Job**, not as a Batch container job, and that is a permission
+        fact rather than a preference:
+
+        * A Batch-hosted head runs under the job definition's ``jobRoleArn``,
+          which on this stack is ``smsvpctest-ray-mnp-job`` -- S3 on the shared
+          bucket and **no ``batch:*`` whatsoever**. It could pull its image,
+          parse its config and start, then fail at the first task submission.
+        * None of the four roles viva-api may ``iam:PassRole`` fixes that: two
+          carry no ``batch:*``, and the two that do (the IRSA submit role, the
+          compute role) trust the EKS OIDC provider and ``ec2.amazonaws.com``
+          respectively, so neither can be an ECS/Batch task role at all.
+        * A K8s Job with ``serviceAccountName: batch-submit`` inherits the IRSA
+          identity that **is** allowed to submit -- the same one vEcoli's
+          Nextflow head has always used (``simulation_service_k8s.py``).
+
+        It also fits the workload: the head submits and waits, so it wants
+        500m/1Gi for hours, not a 16-vCPU Batch instance held idle.
         """
         simulator = await database_service.get_simulator(simulator_id=ecoli_simulation.simulator_id)
         if simulator is None:
@@ -1187,8 +1326,13 @@ class SimulationServiceRay(SimulationService):
         experiment_id = str(ecoli_simulation.config.experiment_id)
         outdir = f"{V2ECOLI_DIR}/nf-render"
 
-        job_def = self._ensure_container_job_def(self._submit_image_uri(commit), f"{commit}-submit")
+        if self._k8s is None:
+            raise RuntimeError(
+                "nextflow_dispatch runs its head as a K8s Job (it needs the batch-submit "
+                "ServiceAccount to submit Batch tasks), but k8s_job_namespace is not configured"
+            )
         runner_s3_uri = await self.stage_render_nf(experiment_id)
+        pbg_runner_s3_uri = await self.stage_runner(experiment_id)
         executor = str(nf_dispatch.get("executor", "local"))
         nf_params: dict[str, Any] | None = None
         work_dir = nf_dispatch.get("work_dir")
@@ -1204,32 +1348,103 @@ class SimulationServiceRay(SimulationService):
             work_dir = work_dir or nf_params["work_dir"]
         command = self._render_nf_command(
             runner_s3_uri=runner_s3_uri,
+            pbg_runner_s3_uri=pbg_runner_s3_uri,
             composite_id=str(composite_id),
             params=nf_dispatch.get("params"),
             executor=executor,
             launch=bool(nf_dispatch.get("launch", False)),
             outdir=outdir,
             nf_params=nf_params,
-            resources=nf_dispatch.get("resources"),
+            # Defaults MERGED per label, not replaced wholesale: a caller who
+            # overrides `lineage` must not silently lose parca's memory scaling.
+            resources=_merge_nf_resources(nf_dispatch.get("resources")),
             work_dir=work_dir,
             resume=bool(nf_dispatch.get("resume", False)),
+            stage_out_s3=self._results_s3_uri(experiment_id),
+            session_s3=self._nf_session_s3_uri(experiment_id),
+            nextflow_args=nf_dispatch.get("nextflow_args"),
         )
-        job_id = self._submit_container(
-            job_name=f"nf-dispatch-{experiment_id}-{_rand_suffix()}"[:128],
-            job_definition=job_def,
-            job_cmd=command,
-            out_s3=self._results_s3_uri(experiment_id),
-            out_dir=outdir,
-            tags={
-                "Project": "v2ecoli-nextflow-dispatch",
-                "ExperimentId": experiment_id[:255],
-                "CompositeId": str(composite_id)[:255],
-                "Commit": str(commit)[:12],
-            },
+        job_name = self._nf_head_job_name(experiment_id)
+        self._k8s.create_job(self._nf_head_job(job_name, experiment_id, commit, command))
+        logger.info("Created Nextflow head Job %s for experiment %s", job_name, experiment_id)
+        # NOT JobId.ray: the value is a Job name, and NOT JobId.k8s either --
+        # that tag also selects vEcoli's output layout on the download path.
+        return JobId.k8s_nextflow(job_name)
+
+    @staticmethod
+    def _nf_head_job_name(experiment_id: str) -> str:
+        """A DNS-1123 label: lowercase alphanumerics and '-', at most 63 chars.
+
+        K8s rejects the underscores and uppercase that experiment ids carry, and
+        it rejects them at create time -- so the sanitising happens here rather
+        than surfacing as an ApiException on a dispatch that otherwise worked.
+        """
+        safe = re.sub(r"[^a-z0-9-]+", "-", experiment_id.lower()).strip("-")
+        return f"nf-{safe}-{_rand_suffix()}"[:63].rstrip("-")
+
+    def _nf_head_job(self, job_name: str, experiment_id: str, commit: str, command: str) -> Any:
+        """The head Job, modelled on vEcoli's (``simulation_service_k8s.py``).
+
+        ``backoff_limit=0`` deliberately: a half-finished Nextflow run is not
+        safely restartable from scratch, and re-running the head would resubmit
+        every task. Recovery is ``-resume`` on a NEW dispatch, which reuses the
+        cached successful tasks -- that is the whole point of the session cache.
+        """
+        from kubernetes import client as k8s_client
+
+        settings = get_settings()
+        return k8s_client.V1Job(
+            metadata=k8s_client.V1ObjectMeta(
+                name=job_name,
+                labels={
+                    "app": "sms-api",
+                    "job-type": "nextflow-head",
+                    "experiment-id": re.sub(r"[^a-z0-9.-]+", "-", experiment_id.lower())[:63],
+                },
+            ),
+            spec=k8s_client.V1JobSpec(
+                backoff_limit=0,
+                ttl_seconds_after_finished=86400,  # 24h, for log access after it ends
+                template=k8s_client.V1PodTemplateSpec(
+                    spec=k8s_client.V1PodSpec(
+                        # The whole reason the head is here and not on Batch.
+                        service_account_name="batch-submit",
+                        restart_policy="Never",
+                        containers=[
+                            k8s_client.V1Container(
+                                name="nextflow-head",
+                                image=self._submit_image_uri(commit),
+                                command=["/bin/bash", "-c", command],
+                                env=[
+                                    k8s_client.V1EnvVar(name="AWS_DEFAULT_REGION", value=settings.batch_region),
+                                    k8s_client.V1EnvVar(name="AWS_REGION", value=settings.batch_region),
+                                    k8s_client.V1EnvVar(name="AWS_STS_REGIONAL_ENDPOINTS", value="regional"),
+                                    k8s_client.V1EnvVar(name="NXF_ANSI_LOG", value="false"),
+                                    # The head RESOLVES the composite, so it needs the
+                                    # workspace's own core builder and import root -- the
+                                    # generic core registers only process-bigraph's base
+                                    # types, and a nested Composite then fails to realize
+                                    # (`no link found at address: local:composite`).
+                                    # These live in PBG_RUNNER_ENV for the chain/Ray
+                                    # paths (#359), which a K8s Job never sees; §Phase 0
+                                    # of the plan predicted exactly this for PYTHONPATH.
+                                    k8s_client.V1EnvVar(name="PBG_CORE_BUILDER", value=V2ECOLI_CORE_BUILDER),
+                                    k8s_client.V1EnvVar(name="PYTHONPATH", value=V2ECOLI_DIR),
+                                    # The checkout root, for artefacts that ship in the
+                                    # repo rather than the wheel (v2ecoli resolves
+                                    # scripts/build_cache.py against it at RENDER time).
+                                    k8s_client.V1EnvVar(name="V2E_ROOT", value=V2ECOLI_DIR),
+                                ],
+                                resources=k8s_client.V1ResourceRequirements(
+                                    requests={"cpu": "500m", "memory": "1Gi"},
+                                    limits={"cpu": "1", "memory": "2Gi"},
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+            ),
         )
-        # JobId.ray, like every other Batch-backed path here: the poller tracks it
-        # with describe_jobs regardless of which mechanism submitted it.
-        return JobId.ray(job_id)
 
     def _mbp_tracked_command(
         self,
@@ -3225,9 +3440,18 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
 
     @override
     async def get_job_status(self, job_id: JobId) -> JobStatusInfo | None:
-        """Status — LOCAL (prebuilt-image placeholder) or AWS Batch describe_jobs."""
+        """Status — LOCAL, a K8s-hosted Nextflow head, or AWS Batch describe_jobs."""
         if job_id.backend == JobBackend.LOCAL:
             return self._local.get_status(job_id.value)
+        if job_id.backend == JobBackend.K8S_NEXTFLOW:
+            if self._k8s is None:
+                raise RuntimeError(
+                    f"job {job_id.value} is a K8s-hosted Nextflow head, but this service has no "
+                    f"K8sJobService (k8s_job_namespace unset)"
+                )
+            # The value is a Job NAME, not a Batch job id -- describe_jobs would
+            # return an empty list and this would report None rather than fail.
+            return self._k8s.get_job_status(job_id.value)
 
         response = self._batch().describe_jobs(jobs=[job_id.value])
         jobs = response.get("jobs", [])
@@ -3322,6 +3546,16 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         if job_id.backend == JobBackend.LOCAL:
             self._local.cancel(job_id.value)
             logger.info("Cancelled local task %s", job_id.value)
+            return
+        if job_id.backend == JobBackend.K8S_NEXTFLOW:
+            if self._k8s is None:
+                raise RuntimeError(f"cannot cancel {job_id.value}: no K8sJobService configured")
+            # Deleting the Job SIGTERMs the head, which is how Nextflow is asked
+            # to shut down. Tasks it already submitted are NOT killed by this --
+            # Nextflow's own shutdown hook terminates them, and a hard pod kill
+            # would leave them running.
+            self._k8s.delete_job(job_id.value)
+            logger.info("Deleted Nextflow head Job %s", job_id.value)
             return
         self._batch().terminate_job(jobId=job_id.value, reason="cancelled via sms-api")
         logger.info("Terminated Ray Batch job %s", job_id.value)

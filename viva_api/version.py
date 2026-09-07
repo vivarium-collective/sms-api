@@ -887,7 +887,7 @@
 #           file-path arguments the runner enforces as absolute, given here as
 #           paths relative to V2ECOLI_DIR and resolved once server-side. All 7
 #           omitted (every existing caller) is byte-for-byte unaffected.
-__version__ = "0.9.105"
+__version__ = "0.9.106"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
