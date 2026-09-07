@@ -830,6 +830,80 @@ class TestSubmitMultiNodeComposite:
         assert composite_call.kwargs["tags"]["CompositeId"] == "some_workspace.composites.some_multi_node_composite"
 
     @pytest.mark.asyncio
+    async def test_require_clean_chain_reaches_the_composite_job_env(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Item 106/#166 chassis-provenance thread (v2ecoli#735): a sibling of
+        cache_variant inside multi_node_dispatch -- the actual mechanism Run 2/
+        Run 4 dispatch through -- must reach the composite job's own env as the
+        unprefixed V2E_REQUIRE_CLEAN_CHAIN, not the parca sub-job's."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "some_workspace.composites.some_multi_node_composite",
+                "num_nodes": 2,
+                "params": {},
+                "require_clean_chain": True,
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-7", "composite-7"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-clean-chain"
+            )
+
+        parca_call, composite_call = mock_batch.submit_job.call_args_list
+        assert _env_of(composite_call)["V2E_REQUIRE_CLEAN_CHAIN"] == "1"
+        # ParCa sub-job (the "off"/stock-cache branch) never claims a clean chain --
+        # nothing has been staged yet for it to verify.
+        assert "V2E_REQUIRE_CLEAN_CHAIN" not in _env_of(parca_call)
+
+    @pytest.mark.asyncio
+    async def test_omitted_require_clean_chain_is_byte_identical_to_before(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {"composite_id": "some_workspace.composites.some_multi_node_composite", "num_nodes": 2, "params": {}},
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-8", "composite-8"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-no-clean-chain"
+            )
+
+        _parca_call, composite_call = mock_batch.submit_job.call_args_list
+        assert "V2E_REQUIRE_CLEAN_CHAIN" not in _env_of(composite_call)
+
+    @pytest.mark.asyncio
     async def test_cache_variant_reaches_the_staged_cache_uri(
         self,
         experiment_request: "SimulationRequest",
@@ -2396,6 +2470,27 @@ def test_stage_out_env_expect_vars_follow_the_prefix() -> None:
     assert "CONTAINER_EXPECT_NEW_GENES" in _env_names(env)
 
 
+def test_stage_out_env_omits_require_clean_chain_by_default() -> None:
+    """Item 106/#166 (v2ecoli#735): default False emits nothing -- byte-identical
+    to before this param existed, for both prefixes."""
+    svc = SimulationServiceRay()
+    for prefix in ("RAY", "CONTAINER"):
+        env = svc._stage_out_env(prefix=prefix, out_dir="/o", out_s3="s3://o")
+        assert "V2E_REQUIRE_CLEAN_CHAIN" not in _env_names(env)
+
+
+def test_stage_out_env_require_clean_chain_is_unprefixed() -> None:
+    """Unlike every other var this helper emits, V2E_REQUIRE_CLEAN_CHAIN is NOT
+    prefixed by RAY_/CONTAINER_ -- it's read directly by v2ecoli's own
+    os.environ.get("V2E_REQUIRE_CLEAN_CHAIN"), not by the entrypoint scripts."""
+    svc = SimulationServiceRay()
+    for prefix in ("RAY", "CONTAINER"):
+        env = svc._stage_out_env(prefix=prefix, out_dir="/o", out_s3="s3://o", require_clean_chain=True)
+        d = _env_names(env)
+        assert d["V2E_REQUIRE_CLEAN_CHAIN"] == "1"
+        assert f"{prefix}_REQUIRE_CLEAN_CHAIN" not in d
+
+
 class TestSeedGenerationCommand:
     """_seed_generation_command builds ONE seed's ONE generation's command —
     replacing the per-generation-array design's own _wave_sim_command. Unlike
@@ -2990,6 +3085,11 @@ class TestParcaCommand:
     (byte-identical when unset; the real flag when set)."""
 
     def test_no_options_is_byte_identical_to_before(self) -> None:
+        """Baseline updated for item 106/#166's chassis-provenance sidecar copy
+        (v2ecoli#735) -- unconditional and non-fatal (`|| true`), unlike every
+        other option here which is opt-in-only. See
+        test_sidecar_copy_is_present_and_non_fatal below for that addition's own
+        dedicated coverage."""
         service = SimulationServiceRay()
         with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
             cmd = service._parca_command()
@@ -3003,7 +3103,23 @@ class TestParcaCommand:
             f" && python scripts/build_cache.py"
             f" --fixture {PARCA_SIMDATA_DIR}/parca_state.pkl.gz --cache {PARCA_CACHE_DIR}"
             f" && cp {PARCA_SIMDATA_DIR}/parca_state.pkl.gz {PARCA_CACHE_DIR}/parca_state.pkl.gz"
+            f" && (cp {PARCA_SIMDATA_DIR}/parca_state.provenance.json"
+            f" {PARCA_CACHE_DIR}/parca_state.provenance.json 2>/dev/null || true)"
         )
+
+    def test_sidecar_copy_is_present_and_non_fatal(self) -> None:
+        """The chassis-provenance sidecar copy (item 106/#166, v2ecoli#735) is
+        unconditional (present with or without any other option) and non-fatal
+        (`|| true`) -- a pre-#735 v2ecoli image never writes this file, so every
+        dispatch must keep working unchanged until it does."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(new_genes="violacein_MG1655_M5")
+        assert f"cp {PARCA_SIMDATA_DIR}/parca_state.provenance.json" in cmd
+        assert "|| true" in cmd
+        # The sidecar copy must not break the leading &&-chain's own
+        # short-circuit semantics for the real cache build steps before it.
+        assert cmd.index("build_cache.py") < cmd.index("parca_state.provenance.json")
 
     def test_preserves_raw_fitted_state_for_new_gene_cache_consumption(self) -> None:
         """Backlog item 105: the raw parca_state.pkl.gz must ride along in the

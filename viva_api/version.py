@@ -941,7 +941,25 @@
 #            becomes its own control" -- the same silent-wrong-build failure
 #            class new_genes/bundle_overrides were declared to close. Default
 #            None is byte-for-byte unaffected. 4 new regression tests.
-__version__ = "0.9.113"
+# 0.9.114 -- item 106/#166 chassis-provenance thread (v2ecoli#735, Eran's own
+#            interface handoff): _parca_command now non-fatally copies the
+#            chassis-provenance sidecar (parca_state.provenance.json) alongside
+#            parca_state.pkl.gz into PARCA_CACHE_DIR (a pre-#735 v2ecoli image
+#            never writes it, so `|| true` keeps every dispatch working
+#            unchanged until it does). ParcaOptions.require_clean_chain (and a
+#            sibling multi_node_dispatch.require_clean_chain field) opt a
+#            dispatch into emitting the unprefixed V2E_REQUIRE_CLEAN_CHAIN=1
+#            env var v2ecoli's own verify_cache_version reads directly --
+#            threaded through submit_ecoli_simulation_job's comparison-
+#            ensemble/phase0 path and _submit_multi_node_composite (the actual
+#            mechanism Run 2/Run 4 dispatch through). Default False emits
+#            nothing on every path -- most existing callers don't pass
+#            v2ecoli's own sources= yet (v2ecoli's own PR 3), so requiring this
+#            unconditionally would hard-fail all of them, including Run 4's
+#            already-built new-gene caches. This is viva-api's own PR 4 of
+#            Eran's 4-PR chassis-provenance split (PRs 1+2 v2ecoli core, PR 3
+#            sms-ecoli hooks, both his). 7 new regression tests.
+__version__ = "0.9.114"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
