@@ -1327,6 +1327,30 @@ def _nf_json_object(raw: str, flag: str) -> dict[str, object]:
     return parsed
 
 
+def _nf_generator_params(
+    *,
+    seeds: int | None,
+    generations: int | None,
+    include_analysis: bool | None,
+    params: str | None,
+) -> dict[str, object]:
+    """The composite generator's own parameters: named flags, then raw --params over them.
+
+    Only what was actually given. An omitted flag must not reach the generator as
+    a None and override the composite's own default with nothing.
+    """
+    nf_params: dict[str, object] = {}
+    if seeds is not None:
+        nf_params["n_seeds"] = seeds
+    if generations is not None:
+        nf_params["n_generations"] = generations
+    if include_analysis is not None:
+        nf_params["include_analysis"] = include_analysis
+    if params:
+        nf_params.update(_nf_json_object(params, "--params"))
+    return nf_params
+
+
 def _nf_dispatch_payload(
     *,
     composite_id: str,
@@ -1348,15 +1372,9 @@ def _nf_dispatch_payload(
     API, so a null would override a deployment-derived default (work_dir,
     resources) with nothing.
     """
-    nf_params: dict[str, object] = {}
-    if seeds is not None:
-        nf_params["n_seeds"] = seeds
-    if generations is not None:
-        nf_params["n_generations"] = generations
-    if include_analysis is not None:
-        nf_params["include_analysis"] = include_analysis
-    if params:
-        nf_params.update(_nf_json_object(params, "--params"))
+    nf_params = _nf_generator_params(
+        seeds=seeds, generations=generations, include_analysis=include_analysis, params=params
+    )
 
     dispatch: dict[str, object] = {
         "composite_id": composite_id,
