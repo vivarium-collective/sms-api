@@ -909,7 +909,7 @@
 #            regression test (no Docker needed) drives run_simulation_workflow
 #            end to end with a config baking a stale experiment_id and asserts
 #            the two now agree and neither is the stale value.
-__version__ = "0.9.107"
+__version__ = "0.9.108"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
