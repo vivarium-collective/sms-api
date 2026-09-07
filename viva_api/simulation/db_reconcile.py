@@ -170,6 +170,11 @@ async def _marker_hpcrun_external_job_ids(conn: AsyncConnection) -> bool:
     return await _column_exists(conn, "hpcrun", "external_job_ids")
 
 
+async def _marker_compose_simulation_analysis_options(conn: AsyncConnection) -> bool:
+    """True once ``compose_simulation.analysis_options`` exists (f76e43d01841)."""
+    return await _column_exists(conn, "compose_simulation", "analysis_options")
+
+
 # (revision, human-readable marker description, async predicate)
 # One marker per revision reachable by a legacy create_all database. New entries
 # are needed ONLY while create_all still bootstraps prod DBs (see module docstring):
@@ -188,6 +193,7 @@ LEGACY_FINGERPRINTS: list[tuple[str, str]] = [
     ("9c2e6b1f4a73", "hpcrun.multi_node_composite_id column exists"),
     ("b4d7e9c02a15", "table 'env_worker_task' exists"),
     ("c7d1f3a9b2e4", "hpcrun.external_job_ids column exists"),
+    ("f76e43d01841", "compose_simulation.analysis_options column exists"),
 ]
 _LEGACY_PREDICATES = [
     _marker_baseline,
@@ -202,6 +208,7 @@ _LEGACY_PREDICATES = [
     _marker_hpcrun_multi_node_composite_id,
     _marker_env_worker_task,
     _marker_hpcrun_external_job_ids,
+    _marker_compose_simulation_analysis_options,
 ]
 
 

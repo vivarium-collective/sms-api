@@ -143,6 +143,24 @@ def _container_env_of(call: Any) -> dict[str, str]:
     return {e["name"]: e["value"] for e in call.kwargs["containerOverrides"]["environment"]}
 
 
+async def _raw_analysis_configs(database_service: "DatabaseServiceSQL", simulation_id: int) -> list[dict[str, Any]]:
+    """Raw ``analysis.config`` JSONB for a simulation's analysis rows.
+
+    ``ExperimentAnalysisDTO.config`` (what ``list_analyses`` returns) narrows to
+    just ``analysis_options`` (``ORMAnalysis.to_dto()``), so fields like
+    ``n_seeds``/``n_generations`` that ride the SAME raw ``config`` dict but
+    outside ``analysis_options`` aren't visible through it -- query the ORM row
+    directly to check the full recorded shape.
+    """
+    from sqlalchemy import select
+
+    from viva_api.simulation.tables_orm import ORMAnalysis
+
+    async with database_service.async_sessionmaker() as session:
+        result = await session.execute(select(ORMAnalysis).where(ORMAnalysis.simulation_id == simulation_id))
+        return [dict(row.config) for row in result.scalars().all()]
+
+
 class TestJobIdRay:
     def test_ray_factory(self) -> None:
         job_id = JobId.ray("abc-123")
@@ -1415,15 +1433,33 @@ class TestAnalysisModulesFor:
         assert analysis_modules_for(empty) == "applicable"
 
 
+def _cmd_final_segment(cmd: str) -> str:
+    """The last ``&&``-chained shell segment -- the actual ``v2ecoli-analyze``
+    invocation, with no ``cd``/``export``/``echo`` noise ahead of it."""
+    return cmd.rsplit(" && ", 1)[-1]
+
+
+def _cmd_config_json(cmd: str) -> dict[str, Any]:
+    """Recover the JSON payload the command ``echo``'s into ``$tmp_config``."""
+    echo_segment = next(s.strip() for s in cmd.split(" && ") if s.strip().startswith("echo "))
+    quoted = echo_segment[len("echo ") :].rsplit(" > ", 1)[0]
+    return dict(json.loads(shlex.split(quoted)[0]))
+
+
 class TestAnalysisCommand:
-    """_analysis_command builds the analysis DAG node's workload."""
+    """_analysis_command builds the analysis DAG node's workload.
+
+    Real CLI surface (confirmed against v2ecoli@main, console-script target
+    v2ecoli.workflow.analysis_runner:main): EXACTLY `v2ecoli-analyze [--config
+    CONFIG] sweep_dir`. No --out-uri/--n-seeds/--n-generations/--modules/
+    --analysis-name -- those flags never existed on this CLI and would exit 2.
+    The old flags fold into the --config JSON instead (see
+    viva_api.common.analysis_dag)."""
 
     def _cmd(self, **kw: Any) -> str:
         service = SimulationServiceRay()
         defaults: dict[str, Any] = {
             "experiment_id": "sim47-real-experiment",
-            "n_seeds": 4,
-            "n_generations": 3,
             "modules": "applicable",
             "analysis_name": "analysis-sim47-abc123",
             "commit": "deadbeef",
@@ -1434,43 +1470,62 @@ class TestAnalysisCommand:
         ):
             return service._analysis_command(**{**defaults, **kw})
 
-    def test_runs_the_model_images_own_s3_native_analysis_entrypoint(self) -> None:
+    def test_runs_v2ecoli_analyze_with_positional_sweep_dir_and_config_only(self) -> None:
         cmd = self._cmd()
-        assert "python scripts/run_standalone_analysis.py" in cmd
-        # The sweep prefix is the SAME one the sim job syncs its output to, with no
-        # trailing slash (run_standalone_analysis rstrips it to build result_uri).
-        assert "--out-uri s3://mybucket/vecoli-output/sim47-real-experiment " in cmd + " "
-        assert "--n-seeds 4" in cmd
-        assert "--n-generations 3" in cmd
-        assert "--analysis-name analysis-sim47-abc123" in cmd
+        final = _cmd_final_segment(cmd)
+        tokens = shlex.split(final)
+        assert tokens[0] == "v2ecoli-analyze"
+        # The sweep dir is the SAME prefix the sim job syncs its output to, with no
+        # trailing slash.
+        assert tokens[1] == "s3://mybucket/vecoli-output/sim47-real-experiment"
+        assert tokens[2] == "--config"
+        # None of the stale flags this CLI never had.
+        for stale_flag in (
+            "--out-uri",
+            "--n-seeds",
+            "--n-generations",
+            "--modules",
+            "--analysis-name",
+            "--experiment-id",
+            "--out-dir",
+        ):
+            assert stale_flag not in cmd
 
-    def test_points_sim_data_at_the_commits_parca_cache(self) -> None:
+    def test_points_sim_data_at_the_commits_parca_cache_via_env_and_config(self) -> None:
         """An s3:// sweep has no co-located sim_data pickle to glob, so the DuckDB
         analyses would raise FileNotFoundError without this pointer. Both this job
-        and the ParCa job derive the URI from the commit — no hand-off plumbing."""
+        and the ParCa job derive the URI from the commit — no hand-off plumbing.
+        Threaded through BOTH the env var (the already-proven fallback) and the
+        config JSON's sim_data_path -- never a stock/default per-commit path."""
         cmd = self._cmd(commit="c0ffee")
-        assert "V2ECOLI_SIM_DATA=s3://mybucket/ray-parca-cache/c0ffee/simData.cPickle" in cmd
+        assert "export V2ECOLI_SIM_DATA=s3://mybucket/ray-parca-cache/c0ffee/simData.cPickle" in cmd
+        config = _cmd_config_json(cmd)
+        assert config["sim_data_path"] == "s3://mybucket/ray-parca-cache/c0ffee/simData.cPickle"
 
-    def test_explicit_modules_ride_as_json_and_survive_a_hostile_experiment_id(self) -> None:
+    def test_analysis_options_ride_in_config_and_survive_a_hostile_experiment_id(self) -> None:
         """experiment_id is a caller-supplied, unconstrained string, and the modules
         blob is JSON — both must reach the container as DATA, never shell syntax."""
         hostile = "exp'; touch /tmp/analysis-command-canary; echo '$(echo pwned)"
         modules = {"multiseed": {"cd1_metabolomics": {"generation_lower_bound": 5}}}
         cmd = self._cmd(experiment_id=hostile, modules=modules)
-        tokens = shlex.split(cmd.split("&&", 1)[1].replace("V2ECOLI_SIM_DATA=", "", 1))
-        assert json.loads(tokens[tokens.index("--modules") + 1]) == modules
-        assert tokens[tokens.index("--out-uri") + 1].endswith(hostile)
+        config = _cmd_config_json(cmd)
+        assert config["analysis_options"] == modules
+        final = _cmd_final_segment(cmd)
+        assert shlex.split(final)[1].endswith(hostile)
         assert "touch /tmp/analysis-command-canary" not in shlex.split(cmd)
 
-    def test_n_generations_is_emitted_only_for_the_applicable_keyword(self) -> None:
-        """--n-generations exists solely to resolve `applicable`, and is the ONE
-        flag a simulator image built before that keyword landed would reject
-        (argparse: unrecognized argument). Emitting it only in the keyword case
-        keeps an explicit module mapping runnable against ANY image that already
-        ships the script, so a pre-existing build still gets its configured
-        analyses instead of failing the whole node."""
-        assert "--n-generations" in self._cmd(modules="applicable")
-        assert "--n-generations" not in self._cmd(modules={"multiseed": {"cd1_fluxomics": {}}})
+    def test_config_out_dir_is_the_analysis_names_own_write_location(self) -> None:
+        """The new CLI has no --analysis-name to derive its own out_dir from, so
+        the caller pre-resolves the exact same location the old --out-uri +
+        --analysis-name pair used to produce together."""
+        cmd = self._cmd(analysis_name="analysis-sim47-abc123")
+        config = _cmd_config_json(cmd)
+        assert config["out_dir"] == "s3://mybucket/vecoli-output/sim47-real-experiment/analyses/analysis-sim47-abc123"
+
+    def test_applicable_keyword_rides_as_a_bare_string_in_analysis_options(self) -> None:
+        cmd = self._cmd(modules="applicable")
+        config = _cmd_config_json(cmd)
+        assert config["analysis_options"] == "applicable"
 
 
 @pytest.mark.asyncio
@@ -4195,7 +4250,13 @@ class TestSubmitCampaignAnalysis:
     ) -> None:
         """Matches the superseded design's own resolved semantics: analysis
         modules resolve 'applicable' against the campaign's INTENDED shape,
-        not however many chains actually survived to completion."""
+        not however many chains actually survived to completion.
+
+        n_seeds no longer rides the command at all (the real v2ecoli-analyze CLI
+        infers it from the sweep's own hive partitions -- see
+        viva_api.common.analysis_dag), but the analyses TABLE record shape is
+        unchanged (hard constraint: no behavior change beyond the argv fix), so
+        it's still checked there instead."""
         simulation = await database_service.insert_simulation(sim_request=experiment_request)
         mock_batch = _fake_container_batch(["analysis-999"])
         service = SimulationServiceRay()
@@ -4211,8 +4272,10 @@ class TestSubmitCampaignAnalysis:
                 total_n_seeds=1000,  # the originally requested total, even if fewer chains actually succeeded
                 n_generations=10,
             )
-        env = _container_env_of(mock_batch.submit_job.call_args_list[0])
-        assert "--n-seeds 1000" in env["CONTAINER_JOB_CMD"]
+        cmd = _container_env_of(mock_batch.submit_job.call_args_list[0])["CONTAINER_JOB_CMD"]
+        assert "--n-seeds" not in cmd
+        configs = await _raw_analysis_configs(database_service, simulation.database_id)
+        assert configs[0]["n_seeds"] == 1000
 
     async def test_configured_analysis_options_reach_the_analysis_job(
         self,
@@ -4222,7 +4285,7 @@ class TestSubmitCampaignAnalysis:
         """REGRESSION (item 24, retargeted for backlog item 33): config.
         analysis_options (set by the run endpoint from the caller's
         --analysis-options, and by the workbench from a study's spec.analyses)
-        must reach the analysis job's --modules flag. Originally verified
+        must reach the analysis job's --config JSON. Originally verified
         through submit_ecoli_simulation_job's own inline array-path analysis
         submission (now removed -- that shape's analysis fires exclusively
         through submit_campaign_analysis, exercised directly here)."""
@@ -4247,10 +4310,9 @@ class TestSubmitCampaignAnalysis:
                 n_generations=3,
             )
         cmd = _container_env_of(mock_batch.submit_job.call_args_list[0])["CONTAINER_JOB_CMD"]
-        tokens = shlex.split(cmd.split("&&", 1)[1].replace("V2ECOLI_SIM_DATA=", "", 1))
-        assert json.loads(tokens[tokens.index("--modules") + 1]) == {
-            "multiseed": {"cd1_fluxomics": {"generation_lower_bound": 5}}
-        }
+        assert "--modules" not in cmd
+        config = _cmd_config_json(cmd)
+        assert config["analysis_options"] == {"multiseed": {"cd1_fluxomics": {"generation_lower_bound": 5}}}
 
     async def test_a_failed_analysis_submission_is_recorded_not_swallowed(
         self,

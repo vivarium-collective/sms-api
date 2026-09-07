@@ -105,6 +105,7 @@ class SimulatorDatabaseService(ABC):
         experiment_id: str,
         simulator_version: ComposeSimulatorVersion,
         document: str | None = None,
+        analysis_options: dict[str, Any] | None = None,
     ) -> ComposeSimulation:
         pass
 
@@ -197,12 +198,14 @@ class SimulatorORMExecutor(SimulatorDatabaseService):
         experiment_id: str,
         simulator_version: ComposeSimulatorVersion,
         document: str | None = None,
+        analysis_options: dict[str, Any] | None = None,
     ) -> ComposeSimulation:
         async with self.async_session_maker() as session, session.begin():
             orm = ORMComposeSimulation(
                 experiment_id=experiment_id,
                 simulator_id=simulator_version.database_id,
                 document=document,
+                analysis_options=analysis_options,
             )
             session.add(orm)
             await session.flush()
