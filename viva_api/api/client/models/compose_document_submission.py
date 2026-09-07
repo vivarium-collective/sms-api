@@ -8,6 +8,9 @@ from ..models.compute_backend import ComputeBackend
 from ..types import UNSET, Unset
 
 if TYPE_CHECKING:
+    from ..models.compose_document_submission_analysis_options_type_0 import (
+        ComposeDocumentSubmissionAnalysisOptionsType0,
+    )
     from ..models.compose_document_submission_document import ComposeDocumentSubmissionDocument
 
 
@@ -30,6 +33,7 @@ class ComposeDocumentSubmission:
             compute_backend (Union[ComputeBackend, None, Unset]):
             extra_pip_deps (Union[None, Unset, list[str]]):
             num_nodes (Union[None, Unset, int]):
+            analysis_options (Union['ComposeDocumentSubmissionAnalysisOptionsType0', None, Unset]):
     """
 
     document: "ComposeDocumentSubmissionDocument"
@@ -39,9 +43,14 @@ class ComposeDocumentSubmission:
     compute_backend: Union[ComputeBackend, None, Unset] = UNSET
     extra_pip_deps: Union[None, Unset, list[str]] = UNSET
     num_nodes: Union[None, Unset, int] = UNSET
+    analysis_options: Union["ComposeDocumentSubmissionAnalysisOptionsType0", None, Unset] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.compose_document_submission_analysis_options_type_0 import (
+            ComposeDocumentSubmissionAnalysisOptionsType0,
+        )
+
         document = self.document.to_dict()
 
         interval_time = self.interval_time
@@ -77,6 +86,14 @@ class ComposeDocumentSubmission:
         else:
             num_nodes = self.num_nodes
 
+        analysis_options: Union[None, Unset, dict[str, Any]]
+        if isinstance(self.analysis_options, Unset):
+            analysis_options = UNSET
+        elif isinstance(self.analysis_options, ComposeDocumentSubmissionAnalysisOptionsType0):
+            analysis_options = self.analysis_options.to_dict()
+        else:
+            analysis_options = self.analysis_options
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
@@ -94,11 +111,16 @@ class ComposeDocumentSubmission:
             field_dict["extra_pip_deps"] = extra_pip_deps
         if num_nodes is not UNSET:
             field_dict["num_nodes"] = num_nodes
+        if analysis_options is not UNSET:
+            field_dict["analysis_options"] = analysis_options
 
         return field_dict
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.compose_document_submission_analysis_options_type_0 import (
+            ComposeDocumentSubmissionAnalysisOptionsType0,
+        )
         from ..models.compose_document_submission_document import ComposeDocumentSubmissionDocument
 
         d = dict(src_dict)
@@ -160,6 +182,25 @@ class ComposeDocumentSubmission:
 
         num_nodes = _parse_num_nodes(d.pop("num_nodes", UNSET))
 
+        def _parse_analysis_options(
+            data: object,
+        ) -> Union["ComposeDocumentSubmissionAnalysisOptionsType0", None, Unset]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                analysis_options_type_0 = ComposeDocumentSubmissionAnalysisOptionsType0.from_dict(data)
+
+                return analysis_options_type_0
+            except:  # noqa: E722
+                pass
+            return cast(Union["ComposeDocumentSubmissionAnalysisOptionsType0", None, Unset], data)
+
+        analysis_options = _parse_analysis_options(d.pop("analysis_options", UNSET))
+
         compose_document_submission = cls(
             document=document,
             interval_time=interval_time,
@@ -168,6 +209,7 @@ class ComposeDocumentSubmission:
             compute_backend=compute_backend,
             extra_pip_deps=extra_pip_deps,
             num_nodes=num_nodes,
+            analysis_options=analysis_options,
         )
 
         compose_document_submission.additional_properties = d
