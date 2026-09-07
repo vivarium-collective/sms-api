@@ -588,3 +588,62 @@ async def test_the_head_job_is_named_for_the_run_not_the_campaign() -> None:
     assert "a1b2" in job_id.value, "the Job must be named for the run"
     assert "0000" not in job_id.value, "not for the campaign it resumes"
     assert k8s.create_job.call_args[0][0].metadata.name == job_id.value
+
+
+# --- viva-api#439 follow-ups: the partition key and the publish target -------
+
+
+def _dispatched_nf_params(k8s: MagicMock) -> dict[str, Any]:
+    """The `--nf-params` payload from the rendered head command."""
+    cmd = k8s.create_job.call_args[0][0].spec.template.spec.containers[0].command[2]
+    return dict(json.loads(cmd.split("--nf-params ", 1)[1].split(" --")[0].strip("'")))
+
+
+@pytest.mark.asyncio
+async def test_the_generator_gets_the_runs_experiment_id() -> None:
+    """`workflow_nf` defaults its own `experiment_id` to the literal string
+    "workflow_nf", and that value becomes the `experiment_id=` HIVE PARTITION the
+    emitters write. Left unset, every campaign's parquet claims the same id --
+    observed on sim 392 as `history/experiment_id=workflow_nf/...`. Same collision
+    as sms-ecoli#235 / #450, one layer down: inside the artifact rather than in
+    its prefix."""
+    _, k8s = await _dispatch(executor="awsbatch")
+    cmd = k8s.create_job.call_args[0][0].spec.template.spec.containers[0].command[2]
+    # `--overrides` carries the COMPOSITE generator's params; `--nf-params` is the
+    # Nextflow profile. Both were called "params" upstream, hence the two names.
+    payload = cmd.split("--overrides ", 1)[1].split(" --")[0].strip("'")
+    assert json.loads(payload)["experiment_id"] == "sim133-exp-nf-a1b2"
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_experiment_id_still_wins() -> None:
+    """Defaulted, not forced. A caller re-running into an existing partition
+    layout must be able to say so."""
+    _, k8s = await _dispatch(executor="awsbatch", params={"experiment_id": "chosen-by-caller"})
+    cmd = k8s.create_job.call_args[0][0].spec.template.spec.containers[0].command[2]
+    payload = cmd.split("--overrides ", 1)[1].split(" --")[0].strip("'")
+    assert json.loads(payload)["experiment_id"] == "chosen-by-caller"
+
+
+@pytest.mark.asyncio
+async def test_publish_dir_points_at_the_runs_own_results_prefix() -> None:
+    """`publishDir` reads `params.publish_dir`; without it set, v2ecoli's fallback
+    publishes to a task-local `results` dir that dies with the pod."""
+    service, _ = _svc_with_k8s()
+    with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+        expected = service._results_s3_uri("sim133-exp-nf-a1b2").rstrip("/")
+    _, k8s = await _dispatch(executor="awsbatch")
+    assert _dispatched_nf_params(k8s)["publish_dir"] == expected
+
+
+@pytest.mark.asyncio
+async def test_a_resumed_run_publishes_to_its_own_prefix_not_the_campaigns() -> None:
+    """A resume reuses another run's cached TASKS; its RESULTS are still its own.
+    Publishing into the campaign's prefix would recreate the very collision this
+    whole line of work removed."""
+    _, k8s = await _dispatch(executor="awsbatch", resume=True, resume_from="sim133-exp-nf-0000")
+    params = _dispatched_nf_params(k8s)
+    assert "sim133-exp-nf-a1b2" in params["publish_dir"]
+    assert "0000" not in params["publish_dir"], params["publish_dir"]
+    # while the CACHE it joins is the campaign's -- the two must disagree here
+    assert "0000" in params["work_dir"], params["work_dir"]

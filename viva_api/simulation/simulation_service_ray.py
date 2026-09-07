@@ -1177,6 +1177,26 @@ class SimulationServiceRay(SimulationService):
         settings = get_settings()
         return f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/session"
 
+    @staticmethod
+    def _nf_generator_params(params: dict[str, Any] | None, run_id: str) -> dict[str, Any]:
+        """The composite generator's parameters, with `experiment_id` defaulted to the run.
+
+        `workflow_nf` defaults its own `experiment_id` to the literal string
+        "workflow_nf", and that value is not cosmetic: it becomes the
+        `experiment_id=` HIVE PARTITION the emitters write. Left unset, every
+        campaign's parquet claims the same experiment_id -- observed on sim 392 as
+        `sweep/workflow_nf/history/experiment_id=workflow_nf/...`.
+
+        That is the same collision Chris and Alex spent a day chasing on the Ray
+        path (sms-ecoli#235, viva-api#450), reappearing one layer down, inside the
+        artifact rather than in its S3 prefix.
+
+        A caller may still set it explicitly; this only supplies the default.
+        """
+        merged = dict(params or {})
+        merged.setdefault("experiment_id", run_id)
+        return merged
+
     def _render_nf_command(
         self,
         *,
@@ -1375,11 +1395,18 @@ class SimulationServiceRay(SimulationService):
             # are set so a config lifted out of the render dir and run by hand behaves
             # the same as the dispatch did.
             work_dir = work_dir or nf_params["work_dir"]
+            # Where `publishDir` copies task outputs. Without it a campaign that
+            # exits 0 leaves its science in the work dir under a content hash --
+            # measured at 633 MB across 43 objects, against 78 KB of render
+            # artifacts in the results prefix (viva-api#439's verification).
+            # The RUN's prefix, not the campaign's: a resumed run reuses another
+            # run's cached TASKS, but its results are its own.
+            nf_params["publish_dir"] = self._results_s3_uri(run_id).rstrip("/")
         command = self._render_nf_command(
             runner_s3_uri=runner_s3_uri,
             pbg_runner_s3_uri=pbg_runner_s3_uri,
             composite_id=str(composite_id),
-            params=nf_dispatch.get("params"),
+            params=self._nf_generator_params(nf_dispatch.get("params"), run_id),
             executor=executor,
             launch=bool(nf_dispatch.get("launch", False)),
             outdir=outdir,
