@@ -2059,6 +2059,7 @@ class SimulationServiceRay(SimulationService):
         modules: dict[str, dict[str, Any]] | str,
         analysis_name: str,
         commit: str,
+        cache_variant: str | None = None,
     ) -> str:
         """Build the analysis DAG node's command: the ported analyses over the S3 sweep.
 
@@ -2096,9 +2097,16 @@ class SimulationServiceRay(SimulationService):
         submit_ray_native_analysis`` provisions the same script. Both this job and
         the ParCa job derive that URI from the commit independently, so it needs no
         hand-off plumbing.
+
+        ``cache_variant`` (viva-api#448): the dispatch's own variant, if any — an
+        analysis without it silently reads the plain per-commit (stock) simData
+        even when the real simulation ran against a real strain's own cache,
+        grading a candidate strain against stock data with no error. None (every
+        caller before #448) is unaffected, matching the dispatch-side guard's own
+        `cache_variant=None` default.
         """
         out_uri = self._results_s3_uri(experiment_id).rstrip("/")
-        sim_data_uri = f"{data_layout.RayLayout.parca_cache_uri(commit)}simData.cPickle"
+        sim_data_uri = f"{data_layout.RayLayout.parca_cache_uri(commit, variant=cache_variant)}simData.cPickle"
         result_out_dir = f"{out_uri}/analyses/{analysis_name}"
         config = analysis_dag.build_analysis_config(
             analysis_options=modules,
@@ -2124,6 +2132,7 @@ class SimulationServiceRay(SimulationService):
         n_generations: int,
         depends_type: str | None,
         tags: dict[str, str],
+        cache_variant: str | None = None,
     ) -> str | None:
         """Submit the analysis DAG node and record it, returning its Batch job id.
 
@@ -2138,6 +2147,10 @@ class SimulationServiceRay(SimulationService):
         instead of re-deriving its own argv) — this method owns only what's specific
         to the study Batch path: resolving the sim-data/results URIs from ``commit``/
         ``experiment_id``, and the ``analyses`` table's ``config`` record shape.
+
+        ``cache_variant`` (viva-api#448): forwarded to the sim_data URI so a
+        strain-specific dispatch's analysis reads its own cache, not the plain
+        per-commit stock one. None (every caller before #448) is unaffected.
 
         ``sim_job_id`` is the single Batch job this analysis should natively
         ``dependsOn`` (item 24's original single-DAG-edge shape, still used by the
@@ -2154,7 +2167,7 @@ class SimulationServiceRay(SimulationService):
         out_uri = self._results_s3_uri(experiment_id).rstrip("/")
         result_uri = f"{out_uri}/analyses/{analysis_name}"
         modules = analysis_modules_for(simulation.config)
-        sim_data_uri = f"{data_layout.RayLayout.parca_cache_uri(commit)}simData.cPickle"
+        sim_data_uri = f"{data_layout.RayLayout.parca_cache_uri(commit, variant=cache_variant)}simData.cPickle"
         params: dict[str, Any] = {
             "out_uri": out_uri,
             "n_seeds": int(n_seeds),
@@ -3352,6 +3365,11 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         # Backlog item 71: _submit_analysis_job now submits via _submit_container,
         # so this must resolve a container job def, not an MNP one.
         container_job_def = self._ensure_container_job_def(self._image_uri(commit), commit)
+        # viva-api#448: same getattr(simulation.config, "cache_variant", ...)
+        # pattern job_scheduler.py's own chain-dispatch cache-staging already uses
+        # — without it, a strain-specific campaign's analysis silently reads the
+        # plain per-commit stock simData instead of its own real cache.
+        cache_variant = getattr(simulation.config, "cache_variant", None)
         return await self._submit_analysis_job(
             simulation=simulation,
             database_service=database_service,
@@ -3362,6 +3380,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             n_generations=n_generations,
             depends_type=None,
             tags={**base_tags, "Phase": "analysis"},
+            cache_variant=cache_variant,
         )
 
     def _multi_node_analysis_command(
@@ -3374,6 +3393,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         n_seeds: int | None = None,
         n_generations: int = 1,
         modules: dict[str, dict[str, Any]] | str | None = None,
+        sim_data_uri: str | None = None,
     ) -> str:
         """Build the "Analysis flush" DAG node's command for a generic
         multi-node process-bigraph composite dispatch (backlog item 88).
@@ -3405,9 +3425,21 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         ``json.loads`` and handing back the bare word as if it were a real
         module mapping -- a real bug caught here before shipping, not a
         theoretical one.
+
+        ``sim_data_uri`` (viva-api#448): exported as ``V2ECOLI_SIM_DATA`` before
+        the script runs, the SAME fallback ``_analysis_command``'s own analysis
+        node relies on (``analysis_runner.resolve_sim_data``'s resolution order:
+        a co-located pickle, then this env var, then the image's own stock
+        knowledge-base build). This node's own analysis container never stages
+        a ParCa cache locally (no ``stage_s3``/``stage_dir`` on its dispatch),
+        so without this a candidate strain's analysis silently falls through to
+        the stock knowledge-base build. None (every caller before #448)
+        preserves the exact prior fallback-only behavior.
         """
-        cmd = (
-            f"cd {V2ECOLI_DIR}"
+        cmd = f"cd {V2ECOLI_DIR}"
+        if sim_data_uri:
+            cmd += f" && export V2ECOLI_SIM_DATA={shlex.quote(sim_data_uri)}"
+        cmd += (
             f" && python scripts/run_multi_node_analysis.py"
             f" --composite-id {shlex.quote(composite_id)}"
             f" --history-uri {shlex.quote(history_uri)}"
@@ -3457,6 +3489,12 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         n_seeds = dispatch_params.get("n_seeds")
         n_generations = int(dispatch_params.get("n_generations") or 1)
         modules = analysis_modules_for(simulation.config)
+        # viva-api#448: cache_variant is a SIBLING of params on multi_node_dispatch
+        # (the same shape _submit_multi_node_composite's own guard reads) -- without
+        # threading it here too, a candidate strain's analysis silently reads the
+        # image's own stock knowledge-base build instead of the real dispatch's cache.
+        cache_variant = mnp_dispatch.get("cache_variant") if isinstance(mnp_dispatch, dict) else None
+        sim_data_uri = f"{self.cache_s3_uri(commit, variant=cache_variant)}simData.cPickle"
         analysis_name = f"analysis-mnp-{experiment_id[:20]}-{_rand_suffix()}"
         results_uri = self._results_s3_uri(experiment_id).rstrip("/")
         result_uri = f"{results_uri}/analyses/{analysis_name}"
@@ -3493,6 +3531,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                     n_seeds=n_seeds,
                     n_generations=n_generations,
                     modules=modules,
+                    sim_data_uri=sim_data_uri,
                 ),
                 out_s3=self._results_s3_uri(experiment_id),
                 out_dir=ANALYSIS_OUT_DIR,
