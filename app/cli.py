@@ -1332,6 +1332,9 @@ def _nf_generator_params(
     seeds: int | None,
     generations: int | None,
     include_analysis: bool | None,
+    independent_founders: bool | None,
+    cache_uri: str | None,
+    analysis_options: str | None,
     params: str | None,
 ) -> dict[str, object]:
     """The composite generator's own parameters: named flags, then raw --params over them.
@@ -1346,6 +1349,12 @@ def _nf_generator_params(
         nf_params["n_generations"] = generations
     if include_analysis is not None:
         nf_params["include_analysis"] = include_analysis
+    if independent_founders is not None:
+        nf_params["independent_founders"] = independent_founders
+    if cache_uri:
+        nf_params["cache_uri"] = cache_uri
+    if analysis_options:
+        nf_params["analysis_options"] = _nf_json_object(analysis_options, "--analysis-options")
     if params:
         nf_params.update(_nf_json_object(params, "--params"))
     return nf_params
@@ -1361,6 +1370,9 @@ def _nf_dispatch_payload(
     seeds: int | None,
     generations: int | None,
     include_analysis: bool | None,
+    independent_founders: bool | None,
+    cache_uri: str | None,
+    analysis_options: str | None,
     params: str | None,
     resources: str | None,
     nextflow_arg: list[str],
@@ -1373,7 +1385,13 @@ def _nf_dispatch_payload(
     resources) with nothing.
     """
     nf_params = _nf_generator_params(
-        seeds=seeds, generations=generations, include_analysis=include_analysis, params=params
+        seeds=seeds,
+        generations=generations,
+        include_analysis=include_analysis,
+        independent_founders=independent_founders,
+        cache_uri=cache_uri,
+        analysis_options=analysis_options,
+        params=params,
     )
 
     dispatch: dict[str, object] = {
@@ -1440,6 +1458,28 @@ def composite_nextflow(
     ),
     seeds: int | None = Option(default=None, help="n_seeds -- seed-lineages per variant."),
     generations: int | None = Option(default=None, help="n_generations per lineage."),
+    independent_founders: bool | None = Option(
+        default=None,
+        help="Re-draw a founder cell per seed instead of every seed loading the ONE cached "
+        "initial_state. Without it an M-seed campaign is not M replicates: seeds sharing a "
+        "cache share a founder, so the spread is downstream stochasticity only, not "
+        "cell-to-cell variability (v2ecoli#693). Slower -- it regenerates initial conditions "
+        "per seed.",
+    ),
+    cache_uri: str | None = Option(
+        default=None,
+        help="Use an EXISTING ParCa cache (e.g. s3://.../ray-parca-cache/<commit>/) instead of "
+        "computing one. Required to run a campaign as designed rather than approximately: CD2's "
+        "Run 1 uses pre-built per-seed founder caches and Run 2 the violacein bundle. Per-variant "
+        "caches go in --params variants[].cache_uri, which wins over this.",
+    ),
+    analysis_options: str | None = Option(
+        default=None,
+        help="Raw JSON of the analyses the gather runs. WITHOUT it the gather has nothing to run "
+        "and the campaign fails its last node -- v2ecoli-analyze prints 'nothing to run', exits 0, "
+        "and writes no analysis/ for Nextflow to collect. Usually copied from the simulation "
+        "config's own analysis_options block.",
+    ),
     include_analysis: bool | None = Option(
         default=None,
         help="Emit the analysis task that gathers every lineage's sweep. Off by default in the "
@@ -1495,6 +1535,9 @@ def composite_nextflow(
         seeds=seeds,
         generations=generations,
         include_analysis=include_analysis,
+        independent_founders=independent_founders,
+        cache_uri=cache_uri,
+        analysis_options=analysis_options,
         params=params,
         resources=resources,
         nextflow_arg=nextflow_arg,
