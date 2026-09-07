@@ -276,21 +276,59 @@ def _env_truthy(value: str | None) -> bool:
     return value.strip().lower() not in ("0", "false", "no", "off", "")
 
 
+# zarr metadata files. A store always has these; they are written at construction,
+# BEFORE any data chunk. Their presence proves a store exists, not that data landed.
+_ZARR_METADATA_NAMES = (".zgroup", ".zarray", ".zattrs", ".zmetadata", "zarr.json")
+
+
+def _parquet_has_real_data(p: Path) -> bool:
+    """True when a parquet file holds real emitted data, not just the always-emitted
+    ``global_time`` column. An emitter with no declared emit_paths emits ONLY
+    ``global_time`` (process_bigraph adds it unconditionally), yielding a non-empty
+    but data-less 1-column file — the CD2 Run 2 / mecillinam failure. A real emit
+    has global_time PLUS at least one observable, i.e. >1 column and >0 rows.
+
+    Reads only the parquet footer (cheap). pyarrow is imported lazily so this module
+    stays stdlib-only at import time (it is staged into the simulator image); if the
+    file cannot be parsed as parquet, fall back to the old size>0 signal rather than
+    crash the gate.
+    """
+    try:
+        import pyarrow.parquet as pq  # type: ignore[import-untyped]
+
+        md = pq.ParquetFile(str(p)).metadata
+        return bool(md.num_rows > 0 and md.num_columns > 1)
+    except Exception:
+        return p.stat().st_size > 0
+
+
+def _zarr_has_chunk(results_dir: Path) -> bool:
+    """True when a zarr store under *results_dir* holds at least one real data chunk
+    — a non-metadata file with size>0 — rather than only root metadata markers. The
+    XArrayEmitter writes the store's metadata at construction; if the view has no
+    leaves or no populated tick lands, no chunk ever follows, leaving a metadata-only
+    store (the CD2 Run 4 failure). Symmetric with the parquet size>0 check.
+    """
+    for p in results_dir.rglob("*"):
+        if p.is_file() and ".zarr" in str(p) and p.name not in _ZARR_METADATA_NAMES and p.stat().st_size > 0:
+            return True
+    return False
+
+
 def _has_emitted_output(results_dir: Path) -> bool:
-    """True when *results_dir* holds REAL emitted output — a non-empty parquet or
-    zarr store, or a non-empty in-memory ``emitter_history.json`` — as opposed to
-    only the always-written ``final_state.json`` fallback (which is deliberately
-    NOT counted here).
+    """True when *results_dir* holds REAL emitted output — a parquet with data
+    beyond ``global_time``, a zarr store with a real chunk, or a non-empty in-memory
+    ``emitter_history.json`` — as opposed to only the always-written
+    ``final_state.json`` fallback (NOT counted) or a data-less emit (a global_time-only
+    parquet or a chunk-less zarr store), which a run with undeclared emit_paths
+    produces and which must NOT be mistaken for success.
     """
     for pattern in ("*.pq", "*.parquet"):
         for p in results_dir.rglob(pattern):
-            if p.is_file() and p.stat().st_size > 0:
+            if p.is_file() and p.stat().st_size > 0 and _parquet_has_real_data(p):
                 return True
-    # A zarr store is a directory tree; any of these marker files means a real store.
-    for marker in (".zgroup", ".zarray", "zarr.json", ".zattrs"):
-        for p in results_dir.rglob(marker):
-            if p.is_file():
-                return True
+    if _zarr_has_chunk(results_dir):
+        return True
     history = results_dir / "emitter_history.json"
     if history.is_file() and history.stat().st_size > 0:
         try:
@@ -309,7 +347,7 @@ _SHARED_OUTPUT_WAIT_SECONDS = 90
 _SHARED_OUTPUT_POLL_SECONDS = 15
 
 _OUTPUT_SUFFIXES = (".pq", ".parquet")
-_ZARR_MARKERS = (".zgroup", ".zarray", "zarr.json", ".zattrs")
+_ZARR_MARKERS = _ZARR_METADATA_NAMES
 
 
 def _has_emitted_output_shared(out_s3: str) -> bool | None:
@@ -353,7 +391,14 @@ def _has_emitted_output_shared(out_s3: str) -> bool | None:
         key = parts[3]
         if size > 0 and key.endswith(_OUTPUT_SUFFIXES):
             return True
-        if key.rsplit("/", 1)[-1] in _ZARR_MARKERS:
+        # A real zarr CHUNK (a non-metadata file with data) — NOT just a store's
+        # marker. The XArrayEmitter writes markers at construction, before any data;
+        # counting a marker alone lets a chunk-less (empty-view) store pass. Match
+        # the local gate's _zarr_has_chunk. (Column-level emptiness of a parquet — a
+        # global_time-only emit — is caught by the per-node local gate, which can read
+        # the footer; an S3 listing cannot, so parquet stays size>0 here.)
+        base = key.rsplit("/", 1)[-1]
+        if size > 0 and ".zarr" in key and base not in _ZARR_MARKERS:
             return True
         if size > 0 and key.endswith("emitter_history.json"):
             return True

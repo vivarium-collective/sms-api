@@ -505,6 +505,50 @@ def test_has_emitted_output_false_for_empty_dir_or_only_final_state(tmp_path: Pa
     assert run_pbg._has_emitted_output(tmp_path) is False
 
 
+def _write_parquet(path: Path, columns: dict[str, list]) -> None:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.table(columns), str(path))
+
+
+def test_has_emitted_output_false_for_global_time_only_parquet(tmp_path: Path) -> None:
+    """A parquet with ONLY global_time (the always-emitted port) is an empty emit
+    — undeclared emit_paths — and must NOT count as real output, even though it is
+    a non-empty file. This is the CD2 Run 2 / mecillinam failure: a ~500-byte,
+    1-column, global_time-only history that slipped through the old size>0 gate."""
+    _write_parquet(tmp_path / "history" / "1.pq", {"global_time": [0.0, 1.0]})
+    assert run_pbg._has_emitted_output(tmp_path) is False
+
+
+def test_has_emitted_output_true_for_real_data_parquet(tmp_path: Path) -> None:
+    _write_parquet(
+        tmp_path / "history" / "1.pq",
+        {"global_time": [0.0, 1.0], "listeners__mass__dry_mass": [300.0, 320.0]},
+    )
+    assert run_pbg._has_emitted_output(tmp_path) is True
+
+
+def test_has_emitted_output_false_for_zarr_markers_without_chunk(tmp_path: Path) -> None:
+    """A zarr store whose root metadata was written at construction but which never
+    received a data chunk (empty view / one-tick collapse) is an empty emit. The
+    old gate returned True on the marker's mere existence — the CD2 Run 4 failure."""
+    store = tmp_path / "v2ecoli_seed0.zarr"
+    store.mkdir()
+    (store / "zarr.json").write_text("{}")
+    (store / ".zattrs").write_text("{}")
+    assert run_pbg._has_emitted_output(tmp_path) is False
+
+
+def test_has_emitted_output_true_for_zarr_with_chunk(tmp_path: Path) -> None:
+    store = tmp_path / "v2ecoli_seed0.zarr"
+    (store / "c" / "0").mkdir(parents=True)
+    (store / "zarr.json").write_text("{}")
+    (store / "c" / "0" / "0").write_bytes(b"\x00\x01\x02\x03")  # a real data chunk
+    assert run_pbg._has_emitted_output(tmp_path) is True
+
+
 def test_run_raises_when_require_output_set_and_nothing_emitted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
