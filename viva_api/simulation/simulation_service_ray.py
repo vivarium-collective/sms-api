@@ -530,7 +530,12 @@ DEFAULT_NF_RESOURCES: dict[str, dict[str, Any]] = {
     # matters here more than anywhere: it is the only bound on a runaway task
     # (plan-nextflow-dispatch §11.1), and Spot reclaim already retries 10x.
     "lineage": {"cpus": 4, "memory": _scaled_memory(16), "time": "12 h"},
-    "analysis": {"cpus": 4, "memory": _scaled_memory(16), "time": "2 h"},
+    # The gather loads EVERY sweep's history into one DuckDB, so its memory
+    # grows with N x M while a lineage's does not. Measured on simulation 574
+    # (the first gather to complete, a 3x2): 16 GB was OOM-killed at 1 min
+    # (exit 137) and the x-attempt retry at 32 GB finished in 2 min. A base that
+    # only works through the retry is not a base -- and Run 4 is 336 lineages.
+    "analysis": {"cpus": 4, "memory": _scaled_memory(32), "time": "2 h"},
 }
 
 

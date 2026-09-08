@@ -796,3 +796,22 @@ async def test_reap_paginates_and_scans_every_queue() -> None:
         c.kwargs["jobId"] for c in batch.terminate_job.call_args_list if c.kwargs["jobId"].endswith(("-p2-0", "-p2-10"))
     }
     assert not foreign, "another campaign's tasks were terminated"
+
+
+def test_the_gather_starts_above_the_size_a_3x2_oom_killed() -> None:
+    """Simulation 574, the first gather ever to complete: attempt 1 at 16 GB
+    died with exit 137 after a minute; the x-attempt retry at 32 GB took 2 min.
+    The gather loads every sweep's history at once, so it scales with N x M
+    where a lineage does not -- a base that only works via the retry is not a
+    base. Pinned so a tidy-up cannot quietly take it back to 16."""
+    import re
+
+    from viva_api.simulation.simulation_service_ray import _merge_nf_resources
+
+    mem = _merge_nf_resources(None)["analysis"]["memory"]
+    m = re.search(r"(\d+)\.GB \* task\.attempt", mem)
+    assert m is not None, mem
+    base = int(m.group(1))
+    assert base >= 32, mem
+    # and it still scales on 137 specifically, not on every failure
+    assert "task.exitStatus == 137" in mem
