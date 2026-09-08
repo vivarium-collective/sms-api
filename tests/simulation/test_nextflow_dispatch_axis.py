@@ -713,18 +713,86 @@ def test_the_campaign_key_survives_dns_sanitising() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cancel_reaps_stragglers_and_still_deletes_the_head() -> None:
-    """The reap is the GUARANTEE, not the mechanism -- so a failure in it must not
-    stop the head from being deleted, and the ordinary case (Nextflow cleaned up)
-    reaps nothing."""
+async def test_cancel_deletes_the_head_and_does_NOT_reap_inline() -> None:
+    """The reap is the scheduler's job now. Done inside the cancel request it
+    ran while the head was still in its grace period -- Nextflow then treated
+    each termination as a task failure and RESUBMITTED it (terminating 10
+    tasks produced 9 fresh jobs) -- and a pod restart mid-cancel lost it."""
     from viva_api.common.models import JobId
 
     service, k8s = _svc_with_k8s()
     with (
         patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
-        patch.object(service, "_reap_campaign_batch_tasks", side_effect=RuntimeError("boom")) as reap,
-        pytest.raises(RuntimeError),
+        patch.object(service, "reap_cancelled_campaign", new=AsyncMock()) as reap,
+        patch.object(service, "_terminate_campaign_tasks") as terminate,
     ):
         await service.cancel_job(JobId.k8s_nextflow("nf-sim159-run-a1b2-xyz123"))
-    assert k8s.delete_job.call_count == 1, "the head must be deleted before the reap"
-    assert reap.call_count == 1
+    assert k8s.delete_job.call_count == 1
+    reap.assert_not_awaited()
+    terminate.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reap_defers_while_the_head_still_exists() -> None:
+    """Reaping into a live head is the resubmission race. ``None`` means 'not
+    yet', and nothing may touch Batch until the Job is actually gone."""
+    service, k8s = _svc_with_k8s()
+    k8s.get_job_status.return_value = MagicMock()  # 404 would be None
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+        patch.object(service, "_batch") as batch,
+    ):
+        assert await service.reap_cancelled_campaign("nf-sim159-run-a1b2-xyz123") is None
+    batch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reap_paginates_and_scans_every_queue() -> None:
+    """The two defects of the inline reap. `list_jobs` caps a page at 100 and a
+    Run-4 campaign is 336 tasks; and tasks may sit on either queue."""
+    service, k8s = _svc_with_k8s()
+    k8s.get_job_status.return_value = None  # head gone
+
+    mine = "aws s3 cp s3://b/nextflow/work/sim159-run-a1b2/work/ab/cd/.command.run - | bash"
+    other = "aws s3 cp s3://b/nextflow/work/sim158-run-0000/work/ab/cd/.command.run - | bash"
+
+    def list_jobs(jobQueue: str, jobStatus: str, nextToken: str | None = None) -> dict[str, Any]:
+        if jobStatus != "RUNNING":
+            return {"jobSummaryList": []}
+        if nextToken is None:
+            return {"jobSummaryList": [{"jobId": f"{jobQueue}-p1-{i}"} for i in range(100)], "nextToken": "t"}
+        return {"jobSummaryList": [{"jobId": f"{jobQueue}-p2-{i}"} for i in range(20)]}
+
+    def describe_jobs(jobs: list[str]) -> dict[str, Any]:
+        # every 10th task on page 2 belongs to another campaign
+        return {
+            "jobs": [
+                {
+                    "jobId": j,
+                    "container": {"command": [other if (j.endswith("-p2-0") or j.endswith("-p2-10")) else mine]},
+                }
+                for j in jobs
+            ]
+        }
+
+    batch = MagicMock()
+    batch.list_jobs.side_effect = list_jobs
+    batch.describe_jobs.side_effect = describe_jobs
+    settings = MagicMock(batch_amd64_queue="q-amd", batch_arm64_queue="q-arm", batch_region="r")
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", return_value=settings),
+        patch.object(service, "_batch", return_value=batch),
+    ):
+        reaped = await service.reap_cancelled_campaign("nf-sim159-run-a1b2-xyz123")
+
+    # 120 per queue, minus the 2 foreign tasks on page 2, on BOTH queues
+    assert reaped == 2 * (120 - 2)
+    assert batch.terminate_job.call_count == reaped
+    queues_scanned = {c.kwargs["jobQueue"] for c in batch.list_jobs.call_args_list}
+    assert queues_scanned == {"q-amd", "q-arm"}
+    # page 2 was actually fetched (the inline reap never followed nextToken)
+    assert any(c.kwargs.get("nextToken") == "t" for c in batch.list_jobs.call_args_list)
+    foreign = {
+        c.kwargs["jobId"] for c in batch.terminate_job.call_args_list if c.kwargs["jobId"].endswith(("-p2-0", "-p2-10"))
+    }
+    assert not foreign, "another campaign's tasks were terminated"

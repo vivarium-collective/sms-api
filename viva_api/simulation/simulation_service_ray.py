@@ -3779,64 +3779,73 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             # leaves work running is worse than one that refuses, because the
             # operator believes the resources are free. So we verify rather than
             # assume, and say what was actually stopped.
+            #
+            # The reap that guarantees it is NOT here any more. Done inline it was
+            # synchronous inside the cancel request (a pod restart mid-cancel lost
+            # the intent), scanned one queue, did not paginate, and -- worst --
+            # ran while the head was still in its grace period, so Nextflow saw
+            # each termination as a task failure and RESUBMITTED it (measured:
+            # terminating 10 tasks produced 9 fresh jobs). The handler writes
+            # CANCELLED after this returns; ``JobScheduler``'s
+            # ``reconcile_cancelled_nextflow_campaigns`` then reaps from that
+            # row every tick, only once the head is actually gone.
             self._k8s.delete_job(job_id.value)
             logger.info("Deleted Nextflow head Job %s", job_id.value)
-            reaped = self._reap_campaign_batch_tasks(job_id.value)
-            if reaped:
-                logger.warning(
-                    "Nextflow head %s left %d Batch task(s) running after its grace period; terminated them directly",
-                    job_id.value,
-                    reaped,
-                )
             return
         self._batch().terminate_job(jobId=job_id.value, reason="cancelled via sms-api")
         logger.info("Terminated Ray Batch job %s", job_id.value)
 
-    def _reap_campaign_batch_tasks(self, head_job_name: str) -> int:
-        """Terminate any Batch tasks still running for this campaign. Returns the count.
+    async def reap_cancelled_campaign(self, head_job_name: str) -> int | None:
+        """Terminate Batch tasks that outlived a cancelled Nextflow head.
 
-        Identified by the campaign's S3 WORK DIR, which every task carries in its
-        container command (`s3://.../nextflow/work/<campaign>/work/...`) -- there is
-        no per-campaign tag, and Batch job names are the process names
-        (`runs_v0lineage_v0_s3`), which repeat across campaigns.
+        Returns ``None`` when the head Job still exists -- it is inside its
+        termination grace period and Nextflow's own shutdown hook is terminating
+        tasks. Reaping THEN is worse than waiting: Nextflow treats each external
+        termination as a task failure and resubmits it (viva-api#478's finding).
+        The caller retries next tick. Otherwise returns how many were terminated.
 
-        The campaign key is recovered from the head Job name, which
-        `_nf_head_job_name` builds as `nf-<sanitised run id>-<rand>`. Sanitising the
-        work-dir segment the same way makes the two comparable.
+        Tasks are identified by the campaign's S3 WORK DIR, which every task
+        carries in its container command -- there is no per-campaign tag, and
+        Batch job names are the process names, which repeat across campaigns.
+        The campaign key is recovered from the head Job name
+        (``_nf_head_job_name`` builds ``nf-<sanitised run id>-<rand>``); the
+        EXACT-match rule in ``_command_belongs_to_campaign`` is what keeps a
+        resumed run from reaping the campaign it joined.
 
-        Best-effort by design: this runs AFTER Nextflow has been asked to stop, so
-        finding nothing is the expected outcome and an error here must not mask the
-        cancel itself.
+        Scans EVERY configured task queue and paginates ``list_jobs`` (the API
+        caps a page at 100; a Run-4-scale campaign is 336 tasks), the two
+        defects of the inline reap this replaces.
         """
-        settings = get_settings()
-        queue = settings.batch_amd64_queue
-        if not queue:
-            return 0
+        if self._k8s is not None and self._k8s.get_job_status(head_job_name) is not None:
+            return None
         stem = head_job_name[3:] if head_job_name.startswith("nf-") else head_job_name
         stem = stem.rsplit("-", 1)[0]  # drop _rand_suffix
-        if not stem:
+        settings = get_settings()
+        queues = [q for q in (settings.batch_amd64_queue, settings.batch_arm64_queue) if q]
+        if not stem or not queues:
             return 0
+        return await asyncio.to_thread(self._terminate_campaign_tasks, queues, stem)
 
+    def _terminate_campaign_tasks(self, queues: list[str], stem: str) -> int:
+        batch = self._batch()
         terminated = 0
-        try:
-            batch = self._batch()
+        for queue in queues:
             for status in ("SUBMITTED", "PENDING", "RUNNABLE", "STARTING", "RUNNING"):
-                paginator = batch.list_jobs(jobQueue=queue, jobStatus=status)
-                ids = [j["jobId"] for j in paginator.get("jobSummaryList", [])]
-                for chunk in (ids[i : i + 100] for i in range(0, len(ids), 100)):
-                    if not chunk:
-                        continue
-                    for job in batch.describe_jobs(jobs=chunk).get("jobs", []):
-                        command = " ".join(job.get("container", {}).get("command", []) or [])
-                        if not _command_belongs_to_campaign(command, stem):
-                            continue
-                        batch.terminate_job(
-                            jobId=job["jobId"],
-                            reason=f"campaign {stem} cancelled via sms-api",
-                        )
-                        terminated += 1
-        except Exception:
-            logger.exception("Reaping Batch tasks for %s failed; the head is still deleted", head_job_name)
+                kwargs: dict[str, Any] = {"jobQueue": queue, "jobStatus": status}
+                while True:
+                    response = batch.list_jobs(**kwargs)
+                    ids = [j["jobId"] for j in response.get("jobSummaryList", [])]
+                    for chunk in (ids[i : i + 100] for i in range(0, len(ids), 100)):
+                        for job in batch.describe_jobs(jobs=chunk).get("jobs", []):
+                            command = " ".join(job.get("container", {}).get("command", []) or [])
+                            if not _command_belongs_to_campaign(command, stem):
+                                continue
+                            batch.terminate_job(jobId=job["jobId"], reason=f"campaign {stem} cancelled via sms-api")
+                            terminated += 1
+                    next_token = response.get("nextToken")
+                    if not next_token:
+                        break
+                    kwargs["nextToken"] = next_token
         return terminated
 
     async def cancel_chain_campaign(self, campaign: HpcRun) -> None:

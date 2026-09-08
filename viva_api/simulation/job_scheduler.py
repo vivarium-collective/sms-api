@@ -148,6 +148,10 @@ class JobScheduler:
             except Exception:
                 logger.exception("Error during orphaned local-task reconciliation")
             try:
+                await self.reconcile_cancelled_nextflow_campaigns()
+            except Exception:
+                logger.exception("Error during cancelled-Nextflow-campaign reconciliation")
+            try:
                 await self.update_running_jobs()
             except Exception:
                 logger.exception("Error during job polling")
@@ -238,6 +242,37 @@ class JobScheduler:
                 await self._reconcile_orphaned_local_run(hpc_run)
             except Exception:
                 logger.exception("Error reconciling orphaned LOCAL HpcRun %s", hpc_run.database_id)
+
+    # How long after a cancel the scheduler keeps re-checking Batch for tasks that
+    # outlived the head. Bounds the per-tick scan; well past any grace period.
+    NEXTFLOW_CANCEL_REAP_WINDOW = datetime.timedelta(hours=24)
+
+    async def reconcile_cancelled_nextflow_campaigns(self) -> None:
+        """Terminate Batch tasks that outlived a cancelled Nextflow head
+        (viva-api#472, replacing the inline reap of #473/#474/#478).
+
+        The intent lives in the DB row (``status == CANCELLED``, written by the
+        cancel handler), so this survives a pod restart mid-cancel -- the case
+        the inline reap could not. It is idempotent and retried every tick, and
+        it defers while the head still exists (``reap_cancelled_campaign``
+        returns ``None``): reaping into a live head makes Nextflow resubmit the
+        tasks we terminate. Same stateless shape as ``reconcile_local_tasks``.
+        """
+        if self.simulation_service_ray is None:
+            return
+        since = datetime.datetime.now(datetime.UTC) - self.NEXTFLOW_CANCEL_REAP_WINDOW
+        rows = await self.database_service.list_recently_cancelled_nextflow_hpcruns(since)
+        for hpc_run in rows:
+            head = hpc_run.job_id.value
+            try:
+                reaped = await self.simulation_service_ray.reap_cancelled_campaign(head)
+            except Exception:
+                logger.exception("Error reaping Batch tasks for cancelled Nextflow head %s", head)
+                continue
+            if reaped is None:
+                logger.info("Nextflow head %s still terminating; will re-check next tick", head)
+            elif reaped:
+                logger.warning("Nextflow head %s left %d Batch task(s) running; terminated them", head, reaped)
 
     async def _reconcile_orphaned_local_run(self, hpc_run: HpcRun) -> None:
         age = _hpcrun_age_seconds(hpc_run)
