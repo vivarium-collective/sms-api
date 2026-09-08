@@ -1,8 +1,8 @@
 # Nextflow as a third dispatch path: coarse outer DAG, process-bigraph inner engine
 
-**Status (2026-09-08): Phases 0–3 are BUILT AND MERGED, and gate 4 — the gate that decides
-whether this path is justified — is CLOSED (simulation 574; see act 2).** Remaining open:
-gate 1b on infrastructure, and 336-scale for the gather. See §12 for what landed and what each go/no-go now needs. What follows below is the
+**Status (2026-09-08): Phases 0–3 are BUILT AND MERGED; gate 4 — the gate that decides
+whether this path is justified — is CLOSED (simulation 574), and gate 1b is CLOSED
+(simulation 577); see act 2.** Remaining open: 336-scale for the gather. See §12 for what landed and what each go/no-go now needs. What follows below is the
 original design, preserved with its corrections inline — the reasoning is what makes the
 implementation reviewable, so it is not rewritten in hindsight.
 
@@ -1221,7 +1221,7 @@ M channels into one — which is what a flat sibling list cannot express at all 
 | gate | status |
 |---|---|
 | **1** — per-variant caches | expressible now (`workflow_nf` puts strain inputs on **ParCa**), untested end to end |
-| **1b** — founders differ across seeds | ⛔ measured and FAILING, but now **expressible**: v2ecoli#731 (re-draw per seed) and #732 (pair a pre-built per-seed cache). Unverified on infrastructure |
+| **1b** — founders differ across seeds | ✅ **CLOSED 2026-09-08 by simulation 577** (`--independent-founders`, v2ecoli#731): 30.3–30.7 % of 16,321 bulk counts differ at t=0 between seeds, vs 1.4–1.6 % for the shared-founder control (sim 574). #732's pre-built-cache route was verified earlier by the J3 probe. Evidence in [act 2 §E](plan-nextflow-act2.md) |
 | **1c** — ParCa mode recorded out-of-band | unchanged |
 | **2** — handoff as a staged `path` at real cache size | mechanism proven in Phase 0 at 23 bytes; the profile exists as of #204, so this is now **blocked only on a deploy** |
 | **3** — `-resume` re-runs only the failed lineage | **now possible**: `deploy()` could not emit `-resume` at all until #203, and the profile it needed landed in #204. Blocked only on a deploy |

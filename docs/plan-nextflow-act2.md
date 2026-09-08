@@ -5,9 +5,10 @@ sms-ecoli `1c66700` → v2ecoli `b9942d78`) completed end to end: ParCa → thre
 the gather, with the analyses receiving **all three sweeps** and their sim_data. Seven
 blockers were found and cleared in sequence to get here. Phases 1 and 2 are done — the
 cancel reconciler and the 32 GB gather default are both live on `smsvpctest` (0.9.122).
-What remains is content-level (Phase 3: #449, `cd1_exchange_fluxes` vs the redux listener
-set), Phase 4 (ordinal identity), Phase 5 hygiene, and two things not yet demonstrated:
-gate 1b on infrastructure and the gather at 336-scale. Everything
+**Gate 1b is also closed** (sim 577, 14:5xZ): independent founders verified on
+infrastructure. What remains is content-level (Phase 3: #449, the `cd1_exchange_fluxes`
+column pending verification on a ≥ #741 image), Phase 4 (ordinal identity), Phase 5 hygiene,
+and one thing not yet demonstrated: the gather at 336-scale. Everything
 else here is inventory — every known shortcoming of the Nextflow dispatch path,
 with what is measured, what is assumed, and who owns it.
 
@@ -304,10 +305,24 @@ above stands.
 
 ### E. Science correctness
 
-- **Gate 1b / v2ecoli#693** — seeds sharing a `cache_dir` share a founder object. Now
-  expressible two ways, **#731** (re-draw per seed) and **#732** (per-seed pre-built
-  cache), but only #732 is verified on infrastructure. The J3 probe got distinct
-  founders from the *caches*, not from #731's re-draw. **#731 remains unverified.**
+- ~~**Gate 1b / v2ecoli#693**~~ — **CLOSED 2026-09-08 by simulation 577** (`sim167-gate1b-
+  founders-3x1-fc4d`: 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574).
+  Both routes are now verified on infrastructure — #732 (pre-built per-seed caches) by the J3
+  probe, and **#731 (re-draw per seed) by 577**. Measured as act 1 specified, pairwise
+  `bulk__count` at `global_time == 0` over 16,321 species, against sim 574 as the
+  shared-founder control:
+
+  | | species differing | total-count difference |
+  |---|---|---|
+  | control, sim 574 (shared founder) | 221 / 255 / 249 — **1.4–1.6 %** | 68–183 molecules |
+  | gate 1b, sim 577 (`--independent-founders`) | 4,941 / 4,997 / 5,005 — **30.3–30.7 %** | 4.2×10⁸ – 5.7×10⁹ molecules |
+
+  Twenty-fold more species differ and the totals differ by billions of molecules: three
+  different cells, not one cell with sub-timestep drift. The flag was confirmed to reach all
+  three staged lineage configs (`independent_founders: true`, `founder_sim_data:
+  cache/simData.cPickle`) before the run — read from the `stage-<session>/` work dir, since the
+  output-prefix copies land only at stage-out. Cost: lineages 33–38 min for one generation
+  (574's were 77–91 for two), so the re-draw is not visibly expensive at this scale.
 - ParCa caches are keyed **commit + variant** and are a deliberately *shared*
   resource. Any dispatch-identity token must **not** enter cache paths, or reuse
   breaks and @cplong90's staged caches are stranded. (This is why F resolves to
@@ -538,4 +553,5 @@ stays current.
 | 2026-09-08 | viva-api#495: gather base memory 16 → 32 GB (the size 574's successful retry ran at) |
 | 2026-09-08 | 12-hour sync at 13:15Z: sms-ecoli `main` → `bc0ff34e` (v2ecoli `e4db5e67`: #741 emit-robustness, #743 coupled emit, #738); simulator 167 predates it. @eagmon: `external_exchange_fluxes` is emitted at ≥ #741 — my redux diagnosis superseded, pending verification on a newer image. Runs 1–4 dispatching on MNP (Alex), where analyses need a manual flush; the Nextflow gather auto-runs. Alex closed the `media` question (not urgent; MNP/chain have their own routes). @cplong90 independently confirmed the J3 probe consumed the prebuilt founder caches correctly |
 | 2026-09-08 | Gate 1b run dispatched: sim **577** (`sim167-gate1b-founders-3x1-fc4d`), 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574 — the shared-founder control, in which seeds differ in only **1.4–1.6 %** of 16,321 bulk counts at t=0 |
+| 2026-09-08 | **GATE 1b CLOSED — sim 577 COMPLETED ~14:50Z.** Independent founders: 30.3–30.7 % of 16,321 bulk counts differ at t=0 between seeds, vs 1.4–1.6 % for the shared-founder control (574). v2ecoli#731 verified on infrastructure |
 | 2026-09-08 | **0.9.122 deployed** (#498): the 32 GB default is live on `smsvpctest`; verified on the pod. 0.9.120/0.9.121 were @AlexPatrie's intervening rolls and predated #495 |
