@@ -1018,6 +1018,10 @@ class SimulationServiceRay(SimulationService):
         new_genes: str | None = None,
         bundle_overrides: str | list[str] | None = None,
         rnaseq_source: str | None = None,
+        bundle_manifest_path: str | None = None,
+        build_combined_bundle_manifest: bool = False,
+        include_violacein_bundle: bool = False,
+        deterministic_hash_seed: bool = False,
     ) -> str:
         """Run ParCa, then hydrate the sim-input bundle into PARCA_CACHE_DIR (out/cache).
 
@@ -1063,6 +1067,42 @@ class SimulationServiceRay(SimulationService):
         Default ``None`` builds byte-for-byte the same command as before this
         param existed.
 
+        ``bundle_manifest_path`` (item 451/#166, Run 4 founder-chassis rebuild):
+        generic passthrough to ``v2ecoli-parca``'s own ``--bundle-manifest-path
+        PATH`` flag -- the BASE reference-bundle manifest, distinct from
+        ``bundle_overrides`` above (which layers on top of whatever base is in
+        effect; this flag replaces the base itself). Real, confirmed need:
+        sms-ecoli's own declared recipe for Run 4's violacein founder chassis
+        (``scripts/build_run4_founder_caches.py``'s own module docstring) is
+        ``--bundle-manifest-path out/combined_violacein.tsv --new-genes
+        violacein_MG1655_M5`` -- unreachable from a remote dispatch without this
+        flag. Default ``None`` builds byte-for-byte the same command as before
+        this param existed.
+
+        ``build_combined_bundle_manifest``/``include_violacein_bundle`` (item
+        451/#166): when the first is set, prepends a real invocation of
+        sms-ecoli's own ``scripts/build_combined_bundle_manifest.py``
+        (``--include-violacein`` when the second is also set) ahead of the
+        ``v2ecoli-parca`` call, so the combined manifest -- a deliberately
+        machine-local, gitignored build artifact per that script's own notes,
+        never committed -- gets generated fresh inside THIS remote container
+        before ParCa reads it, then points ``--bundle-manifest-path`` at the
+        generator's own known default output
+        (``out/combined_bundle_manifest.tsv``). Mutually exclusive with passing
+        ``bundle_manifest_path`` directly -- set one or the other, not both.
+        Default ``False`` is a pure no-op.
+
+        ``deterministic_hash_seed`` (item 451/#166): when set, prepends
+        ``PYTHONHASHSEED=0`` to the ``v2ecoli-parca`` invocation. Real, confirmed
+        need: Run 4's own founder-chassis recipe explicitly requires it (same
+        module docstring as above) -- Python's hash randomization can otherwise
+        perturb dict/set iteration order inside ParCa's own reconstruction code,
+        which the recipe treats as a determinism requirement for a chassis meant
+        to be deterministically re-derived. Opt-in rather than unconditional:
+        changing hash-seed behavior for every existing ParCa dispatch is a
+        bigger, untested behavioral change than this fix's own scope calls for.
+        Default ``False`` is a pure no-op.
+
         Also copies the chassis-provenance sidecar (``parca_state.provenance.json``,
         item 106/#166, v2ecoli#735) alongside the raw state, non-fatally -- a
         pre-#735 v2ecoli image never writes this file, so the ``|| true`` keeps
@@ -1089,6 +1129,11 @@ class SimulationServiceRay(SimulationService):
         ``v2ecoli-parca`` received both flags one command earlier in this same chain.
         Restamping here would be redundant even where it was once supported.
         """
+        if bundle_manifest_path and build_combined_bundle_manifest:
+            raise ValueError(
+                "bundle_manifest_path and build_combined_bundle_manifest are mutually exclusive -- "
+                "set one or the other, not both."
+            )
         settings = get_settings()
         new_genes_flag = f" --new-genes {shlex.quote(new_genes)}" if new_genes and new_genes != "off" else ""
         bundle_overrides_list = (
@@ -1096,12 +1141,24 @@ class SimulationServiceRay(SimulationService):
         )
         bundle_overrides_flag = "".join(f" --bundle-overrides {shlex.quote(path)}" for path in bundle_overrides_list)
         rnaseq_source_flag = f" --rnaseq-source {shlex.quote(rnaseq_source)}" if rnaseq_source else ""
+        combined_manifest_prefix = ""
+        effective_bundle_manifest_path = bundle_manifest_path
+        if build_combined_bundle_manifest:
+            violacein_flag = " --include-violacein" if include_violacein_bundle else ""
+            combined_manifest_prefix = f"python scripts/build_combined_bundle_manifest.py{violacein_flag} && "
+            effective_bundle_manifest_path = "out/combined_bundle_manifest.tsv"
+        bundle_manifest_path_flag = (
+            f" --bundle-manifest-path {shlex.quote(effective_bundle_manifest_path)}"
+            if effective_bundle_manifest_path
+            else ""
+        )
+        hash_seed_prefix = "PYTHONHASHSEED=0 " if deterministic_hash_seed else ""
         command = (
             f"cd {V2ECOLI_DIR}"
-            f" && v2ecoli-parca --mode {settings.ray_parca_mode}"
+            f" && {combined_manifest_prefix}{hash_seed_prefix}v2ecoli-parca --mode {settings.ray_parca_mode}"
             f" --cpus {settings.ray_parca_cpus}"
             f" -o {PARCA_SIMDATA_DIR} --cache-dir {PARCA_CACHE_DIR}"
-            f"{new_genes_flag}{bundle_overrides_flag}{rnaseq_source_flag}"
+            f"{new_genes_flag}{bundle_overrides_flag}{rnaseq_source_flag}{bundle_manifest_path_flag}"
             f" && gzip -f -k {PARCA_SIMDATA_DIR}/parca_state.pkl"
             f" && python scripts/build_cache.py"
             f" --fixture {PARCA_SIMDATA_DIR}/parca_state.pkl.gz"
@@ -2678,11 +2735,31 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         require_clean_chain = (
             False if is_upstream else bool(getattr(config.parca_options, "require_clean_chain", False))
         )
+        # Same generic bundle_manifest_path/build_combined_bundle_manifest/
+        # include_violacein_bundle/deterministic_hash_seed passthrough (item
+        # 451/#166, Run 4 founder-chassis rebuild) -- same upstream-vEcoli
+        # exemption as new_genes/bundle_overrides/rnaseq_source above.
+        bundle_manifest_path = None if is_upstream else getattr(config.parca_options, "bundle_manifest_path", None)
+        build_combined_bundle_manifest = (
+            False if is_upstream else bool(getattr(config.parca_options, "build_combined_bundle_manifest", False))
+        )
+        include_violacein_bundle = (
+            False if is_upstream else bool(getattr(config.parca_options, "include_violacein_bundle", False))
+        )
+        deterministic_hash_seed = (
+            False if is_upstream else bool(getattr(config.parca_options, "deterministic_hash_seed", False))
+        )
         parca_command = (
             self._upstream_parca_command()
             if is_upstream
             else self._parca_command(
-                new_genes=new_genes, bundle_overrides=bundle_overrides, rnaseq_source=rnaseq_source
+                new_genes=new_genes,
+                bundle_overrides=bundle_overrides,
+                rnaseq_source=rnaseq_source,
+                bundle_manifest_path=bundle_manifest_path,
+                build_combined_bundle_manifest=build_combined_bundle_manifest,
+                include_violacein_bundle=include_violacein_bundle,
+                deterministic_hash_seed=deterministic_hash_seed,
             )
         )
 

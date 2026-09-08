@@ -237,6 +237,41 @@ class ParcaOptions(BaseModel):
     # v2ecoli#735 lands. Read back via getattr(config.parca_options,
     # "require_clean_chain", False) in simulation_service_ray.py.
     require_clean_chain: bool = False
+    # bundle_manifest_path (item 451/#166, Run 4 founder-chassis rebuild): passed
+    # straight through to v2ecoli-parca's own `--bundle-manifest-path PATH` flag
+    # -- the BASE reference-bundle manifest, distinct from `bundle_overrides`
+    # above (which layers ON TOP of whatever base is in effect; this flag
+    # REPLACES the base itself). Real, confirmed need: sms-ecoli's own declared
+    # recipe for Run 4's violacein founder chassis
+    # (scripts/build_run4_founder_caches.py's own module docstring) is
+    # `--bundle-manifest-path out/combined_violacein.tsv --new-genes
+    # violacein_MG1655_M5` -- a bundle-overrides-only remote dispatch cannot
+    # express this at all. Mutually exclusive with build_combined_bundle_
+    # manifest below -- set one or the other, not both. Default None builds
+    # byte-for-byte the same command as before this field existed.
+    bundle_manifest_path: str | None = None
+    # build_combined_bundle_manifest / include_violacein_bundle (item 451/#166):
+    # when the first is True, the remote dispatch generates the combined
+    # manifest itself via sms-ecoli's own `scripts/build_combined_bundle_
+    # manifest.py` (a deliberately machine-local, gitignored build artifact per
+    # that script's own docstring -- regenerated fresh in THIS container ahead
+    # of the real v2ecoli-parca invocation, never committed) and points
+    # `--bundle-manifest-path` at its own default output
+    # (`out/combined_bundle_manifest.tsv`). `include_violacein_bundle` passes
+    # that generator's own `--include-violacein` flag -- required for Run 4's
+    # founder chassis specifically. Default False on both is a pure no-op.
+    build_combined_bundle_manifest: bool = False
+    include_violacein_bundle: bool = False
+    # deterministic_hash_seed (item 451/#166): emits `PYTHONHASHSEED=0` ahead of
+    # the `v2ecoli-parca` invocation. Real, confirmed need: Run 4's own founder-
+    # chassis recipe explicitly requires it (same module docstring as above) --
+    # Python's hash randomization can otherwise perturb dict/set iteration order
+    # inside ParCa's own reconstruction code, which the recipe treats as a
+    # determinism requirement for a chassis meant to be deterministically
+    # re-derived. Opt-in rather than unconditional: changing hash-seed behavior
+    # for every existing ParCa dispatch is a bigger, untested behavioral change
+    # than this fix's own scope calls for. Default False is a pure no-op.
+    deterministic_hash_seed: bool = False
     debug_parca: bool = False
     load_intermediate: str | None = None
     save_intermediates: bool = False

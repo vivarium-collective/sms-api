@@ -1041,7 +1041,30 @@
 #            unaffected. 6 new regression tests. Renumbered twice: 0.9.115
 #            (displaced by Jim's #481/#483) -> 0.9.116 (displaced by #486/#487
 #            merging first while this PR was still open) -> 0.9.119.
-__version__ = "0.9.119"
+# 0.9.120 -- item 451/#166, Run 4 founder-chassis rebuild: _parca_command gains
+#            bundle_manifest_path/build_combined_bundle_manifest/
+#            include_violacein_bundle/deterministic_hash_seed passthroughs.
+#            Real, confirmed need: sms-ecoli's own declared recipe for Run 4's
+#            violacein founder chassis (scripts/build_run4_founder_caches.py's
+#            own module docstring) is `python scripts/build_combined_bundle_
+#            manifest.py --include-violacein && PYTHONHASHSEED=0 v2ecoli-parca
+#            --mode full --new-genes violacein_MG1655_M5 --bundle-manifest-path
+#            out/combined_violacein.tsv` -- none of these four levers existed on
+#            a remote dispatch before this. bundle_manifest_path/
+#            build_combined_bundle_manifest are mutually exclusive (same
+#            contract as before); build_combined_bundle_manifest regenerates
+#            the manifest fresh in-container (a deliberately machine-local,
+#            gitignored build artifact per that script's own notes, never
+#            committed) rather than trying to ship a pre-built one.
+#            deterministic_hash_seed is a separate opt-in (not tied to the
+#            other three) since it's a real, independent requirement of this
+#            same recipe. All four default to no-ops -- every existing caller
+#            byte-for-byte unaffected. This is a second attempt at a design
+#            first built (then discarded) earlier this session for a DIFFERENT
+#            consumer (Run 2's J3 chassis, which turned out to need
+#            bundle_overrides list support instead, #486) -- reused here
+#            against its own real, verified use case. 12 new regression tests.
+__version__ = "0.9.120"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
