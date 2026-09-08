@@ -1198,8 +1198,33 @@ paths:
       tags:
       - EcoliSim
       summary: Upload a new simulator (vEcoli) version.
-      description: '``include_submit_image``: also build the Nextflow HEAD image beside
-        the task
+      description: '``stage_private_fork``/``vecoli_private_commit``: stage vEcoli-private
+        -- not the
+
+        public vEcoli mirror -- as this image''s own wrapped ``/app/vEcoli`` fork,
+        so a config''s
+
+        ``!ParameterSerializer[...]`` tag whose value only exists in the private fork''s
+        own
+
+        param_store can resolve on a remote dispatch. Off by default (identical build
+        to
+
+        before these params existed). ``vecoli_private_commit`` is REQUIRED when
+
+        ``stage_private_fork`` is True -- no "latest" auto-resolution, so the exact
+        commit
+
+        staged is always an explicit, visible choice. 400s if the resolved build path
+        for
+
+        ``simulator.git_repo_url`` does not support it (only the v2ecoli/sms-ecoli
+        Ray path
+
+        wraps a separate vEcoli fork inside its own image at all).
+
+
+        ``include_submit_image``: also build the Nextflow HEAD image beside the task
 
         image (base + JRE + the nextflow binary, pushed as ``<repo>:<sha>-submit``).
 
@@ -1252,6 +1277,21 @@ paths:
           - type: boolean
           - type: 'null'
           title: Include Submit Image
+      - name: stage_private_fork
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Stage Private Fork
+      - name: vecoli_private_commit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Vecoli Private Commit
       requestBody:
         required: true
         content:
@@ -1288,9 +1328,9 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-09-08T12:02:45.878565'
+                  created_at: '2026-09-08T15:37:07.866098'
                 parca_config:
-                  outdir: .
+                  outdir: /projects/SMS/sms_api/prod/sims
                   operons: true
                   ribosome_fitting: true
                   rnapoly_fitting: true
@@ -4286,7 +4326,7 @@ components:
         parca_config:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: .
+            outdir: /projects/SMS/sms_api/prod/sims
             operons: true
             ribosome_fitting: true
             rnapoly_fitting: true
@@ -4318,7 +4358,7 @@ components:
         outdir:
           type: string
           title: Outdir
-          default: .
+          default: /projects/SMS/sms_api/prod/sims
         operons:
           type: boolean
           title: Operons
@@ -4751,7 +4791,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-09-08 12:02:45.819246'
+          default: '2026-09-08 15:37:07.801120'
         job_id:
           anyOf:
           - type: string
@@ -4793,7 +4833,7 @@ components:
         parca_options:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: .
+            outdir: /projects/SMS/sms_api/prod/sims
             operons: true
             ribosome_fitting: true
             rnapoly_fitting: true

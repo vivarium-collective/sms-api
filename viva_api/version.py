@@ -1111,7 +1111,29 @@
 #            resolution). 8 new regression tests, matching new-gene-cache's
 #            own command-builder x3 / submit x1 / handler x4 coverage
 #            precedent.
-__version__ = "0.9.125"
+# 0.9.126 -- stage_private_fork/vecoli_private_commit (Run 3's Dispatch 580
+#            blocker): every simulator built via the standard Ray DooD path
+#            has always staged the PUBLIC vEcoli mirror as its own wrapped
+#            /app/vEcoli, never vEcoli-private, regardless of pinned commit
+#            -- _build_command never passed -s to docker/build-and-push-
+#            ecr.sh, so the default investigation.yaml's own commit-less
+#            comparison.reference always fell through to the Dockerfile's
+#            public default. New opt-in _build_command/_run_build/
+#            submit_build_image_job param generates the fork-staging spec
+#            INLINE (a heredoc, no checked-in file to go stale) and reuses
+#            the outer clone's own PAT via the recipe's existing --secret
+#            path (vEcoli-private is private, same org). vecoli_private_
+#            commit is REQUIRED when set True -- no "latest" auto-
+#            resolution, so the exact commit staged is always an explicit,
+#            visible choice, not another silent moving target. Wired end to
+#            end: /simulator/upload route -> upload_simulator handler
+#            (same reflective inspect.signature dispatch + fail-loud 400
+#            pattern as include_submit_image) -> service methods, plus
+#            app_data_service.py + `atlantis simulator latest
+#            --stage-private-fork/--vecoli-private-commit`. 13 new
+#            regression tests (build-command script content, handler
+#            dispatch/fail-loud, CLI wiring).
+__version__ = "0.9.126"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in

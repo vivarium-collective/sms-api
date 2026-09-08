@@ -54,7 +54,7 @@ from viva_api.common.hpc.job_service import JobStatusInfo
 from viva_api.common.hpc.k8s_job_service import K8sJobService
 from viva_api.common.hpc.local_task_service import LocalTaskService
 from viva_api.common.models import JobBackend, JobId, JobStatus
-from viva_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO
+from viva_api.common.simulator_defaults import DEFAULT_BRANCH, DEFAULT_REPO, RepoUrl
 from viva_api.common.storage import data_layout
 from viva_api.common.storage.file_paths import S3FilePath
 from viva_api.config import get_settings
@@ -2428,6 +2428,8 @@ class SimulationServiceRay(SimulationService):
         *,
         include_new_gene_data: bool = False,
         include_submit_image: bool = False,
+        stage_private_fork: bool = False,
+        vecoli_private_commit: str | None = None,
     ) -> JobId:
         """Build the self-contained v2ecoli Ray image via a DooD Batch job.
 
@@ -2439,6 +2441,10 @@ class SimulationServiceRay(SimulationService):
 
         ``include_new_gene_data`` (item 87): False for every existing caller -- identical
         build to before this param existed. See ``_build_command``'s own docstring.
+
+        ``stage_private_fork``/``vecoli_private_commit``: False for every existing caller --
+        identical build to before these params existed. See ``_build_command``'s own
+        docstring.
         """
         commit = simulator_version.git_commit_hash
         return self._local.submit(
@@ -2446,6 +2452,8 @@ class SimulationServiceRay(SimulationService):
                 simulator_version,
                 include_new_gene_data=include_new_gene_data,
                 include_submit_image=include_submit_image,
+                stage_private_fork=stage_private_fork,
+                vecoli_private_commit=vecoli_private_commit,
             ),
             name=f"ray-build-{commit}",
         )
@@ -2456,6 +2464,8 @@ class SimulationServiceRay(SimulationService):
         *,
         include_new_gene_data: bool = False,
         include_submit_image: bool = False,
+        stage_private_fork: bool = False,
+        vecoli_private_commit: str | None = None,
     ) -> list[str]:
         """DooD build command: clone v2ecoli@commit, run its build-and-push recipe.
 
@@ -2471,13 +2481,46 @@ class SimulationServiceRay(SimulationService):
         as a Docker BuildKit secret (never a plain env/build-arg baked into a layer) so the
         image can stage private new-gene data for a ``--composite vecoli`` ParCa build that
         declares one. No new credential -- reuses this same Secrets Manager entry.
+
+        ``stage_private_fork``/``vecoli_private_commit``: stage vEcoli-private -- not the
+        Dockerfile's public default (``CovertLab/vEcoli@master``) -- as the image's own
+        wrapped ``/app/vEcoli`` fork, via the SAME ``-s <spec>`` mechanism
+        docker/build-and-push-ecr.sh already supports for any fork comparison. Every
+        existing build reaches this recipe with no ``-s`` at all, so it silently falls
+        through to that public default regardless of the simulator's own pinned commit --
+        a raw ``!ParameterSerializer[...]`` tag whose value only exists in the private
+        fork's own param_store (e.g. antibiotic-transport parameters) can never resolve on
+        any remote dispatch today. The spec is generated INLINE in this same script (a
+        heredoc, not a checked-in file) so there is nothing to go stale. Reuses the SAME
+        PAT already fetched for the outer clone (vEcoli-private is private, same org) via
+        the recipe's own ``--secret id=github_pat`` path -- no new credential.
+        ``vecoli_private_commit`` is REQUIRED when ``stage_private_fork`` is True:
+        deliberately no "latest" auto-resolution, so which commit gets staged is always an
+        explicit, visible choice made by the caller, never a silent moving target.
         """
+        if stage_private_fork and not vecoli_private_commit:
+            raise ValueError("vecoli_private_commit is required when stage_private_fork is True")
         settings = get_settings()
         commit = simulator_version.git_commit_hash
         branch = simulator_version.git_branch
         repo_url = simulator_version.git_repo_url
         build_flags = " -g" if include_new_gene_data else ""
-        unset_pat = "" if include_new_gene_data else "unset GH_PAT\n"
+        if stage_private_fork:
+            build_flags += " -s /tmp/vecoli-private-fork.yaml"
+        keep_pat = include_new_gene_data or stage_private_fork
+        unset_pat = "" if keep_pat else "unset GH_PAT\n"
+        private_fork_spec_block = ""
+        if stage_private_fork:
+            private_fork_spec_block = f"""\
+cat > /tmp/vecoli-private-fork.yaml <<'SPEC'
+comparison:
+  reference:
+    repo: {RepoUrl.VECOLI_PRIVATE_REPO_URL}
+    commit: {vecoli_private_commit}
+    extra_deps:
+      - jax
+SPEC
+"""
         script = f"""\
 set -ex
 export USER=${{USER:-sms-api}}
@@ -2500,7 +2543,7 @@ unset CLONE_URL
 cd /build/v2ecoli
 git checkout {commit}
 
-# The v2ecoli image is self-contained (bundles the AWS CLI + Ray entrypoint); its own
+{private_fork_spec_block}# The v2ecoli image is self-contained (bundles the AWS CLI + Ray entrypoint); its own
 # recipe builds + pushes v2ecoli:<sha> and the :latest deploy tag the MNP job def uses.
 bash docker/build-and-push-ecr.sh -i {commit} -r {settings.ray_ecr_repository} -R {settings.batch_region}{build_flags}
 """
@@ -2548,6 +2591,8 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         *,
         include_new_gene_data: bool = False,
         include_submit_image: bool = False,
+        stage_private_fork: bool = False,
+        vecoli_private_commit: str | None = None,
     ) -> None:
         """Submit the DooD v2ecoli image build to Batch (amd64 queue) and poll it."""
         settings = get_settings()
@@ -2559,6 +2604,8 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                 simulator_version,
                 include_new_gene_data=include_new_gene_data,
                 include_submit_image=include_submit_image,
+                stage_private_fork=stage_private_fork,
+                vecoli_private_commit=vecoli_private_commit,
             ),
         )
         # viva-api#414: persist the Batch handle on this task's HpcRun row so
