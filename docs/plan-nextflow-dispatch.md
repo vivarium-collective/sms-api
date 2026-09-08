@@ -1224,7 +1224,7 @@ M channels into one — which is what a flat sibling list cannot express at all 
 | **1c** — ParCa mode recorded out-of-band | unchanged |
 | **2** — handoff as a staged `path` at real cache size | mechanism proven in Phase 0 at 23 bytes; the profile exists as of #204, so this is now **blocked only on a deploy** |
 | **3** — `-resume` re-runs only the failed lineage | **now possible**: `deploy()` could not emit `-resume` at all until #203, and the profile it needed landed in #204. Blocked only on a deploy |
-| **4** — 336 renders and the gather gathers | renders ✅, gathers ✅ structurally. **Still open. Five blockers to date, each visible only once the one before it cleared**; the fifth (every lineage emitting a directory named `sweep`) is fixed but unmerged. Tracked in [act 2 §A](plan-nextflow-act2.md) |
+| **4** — 336 renders and the gather gathers | renders ✅, gathers ✅ structurally. **Still open. Six blockers to date, each visible only once the one before it cleared.** Sim 562 got the furthest yet — all three lineages SUCCEEDED with real data — before the gather collided on the run_step port manifest that blocker 5's glob also matched (v2ecoli#739). Tracked in [act 2 §A.6](plan-nextflow-act2.md) |
 | **5** — head overhead < ~2 min | ✅ **implied**: a fully-cached resume completes in **73 s** end to end, which is almost entirely head |
 | **6** — a task that emits nothing FAILS | ✅ **now genuinely holds**, via viva-api#475 (eagmon, 2026-09-07): parquet requires >1 column and >0 rows, zarr requires a real chunk. ⚠ My earlier note here — that #467's hole was "not exposed" — **was wrong**; a `global_time`-only parquet is >0 bytes and passed the very check I cited as protective, and three real dispatches reported success having written nothing. See act 2 §D |
 
@@ -1673,8 +1673,9 @@ act 2 §D.
   Molecular analyses need ParCa's `simData.cPickle`, which a sweep does not
   carry; he hit `FileNotFoundError` analysing a real GovCloud Run 1 sweep. Our
   gather is exactly that shape, and the J3 analysis set includes
-  `cd1_transcriptomics` / `cd1_proteomics`. **Not in simulator 159**, so the run
-  in flight can still hit it.
+  `cd1_transcriptomics` / `cd1_proteomics`. ~~**Not in simulator 159**, so the run
+  in flight can still hit it.~~ *In simulator 161 (sms-ecoli `5fff5c79`) and later —
+  but the gather has still never run, so #727 remains unexercised.*
 - **process-bigraph#207** — `render_composite` descends into a nested composite
   with the inner-only path. Worked around locally by #723; still open.
 - **eagmon's #449** asks that the Nextflow dispatch default analysis ON.

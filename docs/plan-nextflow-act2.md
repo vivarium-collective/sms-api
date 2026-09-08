@@ -1,7 +1,8 @@
 # Nextflow dispatch, act 2: closing gate 4 and the shortcomings behind it
 
-**Status (2026-09-08): gate 4 is still open. Five blockers have been found and
-cleared in sequence; the fifth is fixed locally and not yet merged.** Everything
+**Status (2026-09-08 04:00Z): gate 4 is still open. Six blockers have been found
+and cleared in sequence; the sixth (v2ecoli#739) is merging. Phase 2 — the cancel
+reconciler — is merged, deployed as 0.9.115, and verified live.** Everything
 else here is inventory — every known shortcoming of the Nextflow dispatch path,
 with what is measured, what is assumed, and who owns it.
 
@@ -48,7 +49,8 @@ was cleared:
 | 2 | founders shared across seeds | expressible, v2ecoli#731 / #732 |
 | 3 | pre-built cache not reachable | fixed, v2ecoli#732 |
 | 4 | nested-composite path (PBG#207) | worked around, v2ecoli#723 |
-| 5 | **every lineage emits a directory named `sweep`** | **fixed locally, unmerged** — see A |
+| 5 | every lineage emits a directory named `sweep` | fixed, v2ecoli#736 — **confirmed**: all 3 lineages of sim 562 SUCCEEDED with distinct dirs |
+| 6 | **the fix for 5 also captures the port manifest `sweep_dir.json`** | **fixed, v2ecoli#739** — see A.6 |
 
 ---
 
@@ -120,7 +122,50 @@ been wrong twice on exactly this reasoning, the consumers were verified directly
 3-seed single-variant shape compiles clean (DAG: `parca_v0`, three
 `runs_v0:lineage_v0_s*`, `analysis`).
 
-### B. Cancel does not reliably stop the work
+#### A.6 — Blocker 6: the fix for 5 collides one file over (sim 562, 2026-09-08 03:33Z)
+
+The re-run on simulator 161 got further than any campaign before it: `parca_v0`
+hit the (schema-3) cache in 3 min, and **all three lineages SUCCEEDED** — 94 m, 94 m,
+73 m, real 64–69 MB parquet chunks under `sweep_v0_s1/` and `sweep_v0_s2/`. Blocker 5
+is genuinely fixed. Then the gather failed at staging:
+
+```
+Process `analysis` input file name collision --
+There are multiple input files for each of the following file names: sweep_dir.json
+```
+
+`run_step` writes each output port's value manifest as `<port>.json` — for the port
+`sweep_dir`, that is `sweep_dir.json` — into the *same* work dir, and my glob
+`path "sweep_*"` matches it. So every lineage emitted two items into the channel:
+its distinct directory **and** an identically named manifest. The gather collided on
+the manifest exactly as 513 had collided on the directory. `publishDir` even copied
+the manifest to the results prefix as if it were output, and the abort interrupted
+seed 0's in-flight publish (`sleep interrupted`) — its 552 MB is intact in work dir
+`e4/6166eb`.
+
+> ⚠ Same lesson, third time: `-preview` compiles the DAG and cannot see staging
+> collisions, which are a runtime property. And my blocker-5 contract test asserted
+> the *directory* names were distinct — it never asked what *else* the glob matched.
+
+**Fix (v2ecoli#739):** encode the invariant instead of another naming rule — the value
+of this port *is a directory*: `path "sweep_*", type: "dir"`. No file can match. The
+new test is structural: for every Step's declared output glob, `fnmatch("<port>.json",
+glob)` must be false or the decl must be typed `dir`.
+
+**Upstream (process-bigraph#208):** the renderer's own default decl is literally
+`path "<port>.json"`, and the manifest is emitted regardless of override, so any
+override glob that begins with the port name sweeps it up. A dotfile manifest
+(`.<port>.json`) is invisible to Nextflow globs by default and removes the footgun
+at the source.
+
+### B. ~~Cancel does not reliably stop the work~~ — resolved by Phase 2 (viva-api#481, verified live 2026-09-08)
+
+> Kept as written because the defect table below is the specification #481 was
+> built against. Every row is now addressed: the reap runs from the scheduler off
+> the CANCELLED row (restart-safe), paginates, scans every queue, defers while the
+> head exists, and a resumed run still reaps nothing it does not own. The live
+> test is under Phase 2.
+
 
 - **#472** filed, closed by **#473** (grace period 30→120 s, plus a reap) and
   **#474** (reap only a campaign the run owns outright). Both deployed in **0.9.112**.
@@ -266,26 +311,52 @@ collapse in flight.
 
 The only change needed to answer the gate; everything else can follow.
 
-1. Rebase `fix/lineage-output-name-collision` (1 behind `origin/main`: #734, ptools
-   windowing, touches none of these files), commit, PR, merge.
-2. Add the structural test from **G** — every `_FORWARDED` key reachable from the
-   generator's `parameters`.
-3. Re-pin sms-ecoli. ⚠ The pin keeps moving — verify it rather than trusting any
-   note, this one included. As of 2026-09-08 both `pyproject.toml` and `uv.lock` on
-   sms-ecoli `main` read **`5f6a7d54`** (#734, ptools windowing), which succeeded
-   `32ca56da` (#733) and `5836ff2f` (#263). **Pin forward from `5f6a7d54`.**
-4. Rebuild the simulator image; re-run the 3×2.
+1. ~~Rebase, commit, PR, merge~~ — **done**, v2ecoli#736 (`2d20a158`).
+2. ~~Structural test from **G**~~ — **done** in #736; it found **seven** unreachable
+   keys, not one (see G).
+3. ~~Re-pin sms-ecoli~~ — **done**, sms-ecoli#270 (`5fff5c79`), pinned forward from the
+   *verified* `5f6a7d54`. ⚠ The pin keeps moving; verify it against `origin/main`'s
+   `pyproject.toml` + `uv.lock` before every bump, never a recorded note.
+4. ~~Rebuild; re-run the 3×2~~ — **done**: simulator 161, simulation 562 → **blocker 6**
+   (A.6).
+5. **Now:** merge v2ecoli#739 → re-pin → rebuild → re-run with
+   `--resume-from sim161-gate4-3x2-6ff7` (the three 94-minute lineages are cached
+   *if* the task hash survives the image change; if not, they re-run — either way
+   the gather is what has never executed).
 
 **Gate 4 closes only if** the `analysis` process actually executes, `analysis.json`
 publishes, **three** distinct `lineage_seed=` partitions appear, and the history
 satisfies #475's criterion (>1 column, >0 rows). Compare against the recorded
 failure: `sim160-gate4-3x2-f07a`, 89 objects, `lineage_seed=1` and `=2` only.
 
-### Phase 2 — Replace the cancel reap with scheduler reconciliation
+*Status (2026-09-08 03:33Z):* sim 562 satisfied the lineage half — three SUCCEEDED,
+real 64–69 MB chunks — and failed at the gather's staging (blocker 6, A.6). **Still
+open.** Next attempt: a `--resume-from sim161-gate4-3x2-6ff7` re-run once
+v2ecoli#739 is in a simulator.
 
-**Decided: close #478 unmerged** and do this properly. Until it lands, 0.9.112 keeps
-#473's grace period and #474's ownership guard, so **the resubmission race is live** —
-worth knowing if anyone cancels a campaign meanwhile.
+### Phase 2 — Replace the cancel reap with scheduler reconciliation — ✅ DONE, VERIFIED LIVE
+
+**viva-api#481** merged, deployed to `smsvpctest` as **0.9.115** (#483), and verified
+against the case the old code could not survive (sim 567, 2026-09-08 02:29–02:32Z):
+
+```
+02:29:36Z  DELETE /simulations/567/cancel → 200 in 0.14 s      (inline reap: up to ~150 s)
+02:29:38Z  api pod restarted → new ReplicaSet; the pod that took the cancel is gone
+02:31:20Z  NEW pod: "head … still terminating; will re-check next tick"  ×4
+02:31:41Z  NEW pod: "head … left 2 Batch task(s) running; terminated them"
+02:31:56Z  head GONE; both tasks FAILED, reason "campaign … cancelled via sms-api"
+```
+
+No resubmission (contrast the inline reap: terminating 10 produced 9 fresh). The
+concurrently running 562 was untouched. Evidence on #481. One presentation gap found
+on the way: `GET /simulations/{id}/status` says `"unknown"` for a cancelled campaign
+because it re-derives from the (deleted) head Job instead of trusting the terminal DB
+row — **viva-api#484**.
+
+*Original design, kept for the record:* **Decided: close #478 unmerged** and do this
+properly. Until it lands, 0.9.112 keeps #473's grace period and #474's ownership guard,
+so **the resubmission race is live** — worth knowing if anyone cancels a campaign
+meanwhile.
 
 Reuse the existing orphan-reconciliation idiom in
 `viva_api/simulation/job_scheduler.py`: `_polling_loop` already runs every 30 s and
@@ -325,7 +396,10 @@ derivation — paths are constrained by **E** and by resume sharing a work dir:
 - ~~#467~~ — fixed by eagmon in #475; close the issue citing the PR.
 - Close **#478** unmerged, recording *why* on the thread so its sequencing insight
   survives the closure.
-- Declare `emit_paths` in `workflow_nf`'s generator parameters (**G**).
+- Declare `emit_paths` in `workflow_nf`'s generator parameters (**G**) — and the other
+  six unreachable keys, `media` first.
+- **viva-api#484** — `/status` should trust a terminal DB row before asking the backend.
+- **process-bigraph#208** — dotfile the port manifest so no output glob can catch it.
 - `discovery` should list nested configs, or document that nested paths are accepted.
 - Guard `test_cli_e2e.py` behind an explicit opt-in env var so an open tunnel cannot
   turn it into 5 phantom failures.
@@ -355,4 +429,7 @@ stays current.
 | 2026-09-08 | viva-api#467 closed (fixed by #475); #478 already closed unmerged |
 | 2026-09-08 | v2ecoli#735 merged — `cache_version` schema 3 is now live, so shared commit+variant caches are **rekeyed**. `cache_uri` campaigns are unaffected |
 | 2026-09-08 | Pin correction: @AlexPatrie's review of #480 flagged my `32ca56da` note as stale — correct, but the SHA he gave (`3132543e`) is #691 from 09-04, **53 commits behind**. Verified against sms-ecoli's `pyproject.toml` + `uv.lock`: the real pin is `5f6a7d54` (#734) |
+| 2026-09-08 | v2ecoli#736 merged (`2d20a158`); sms-ecoli#270 re-pins to it; simulator **161** built; the 3×2 re-run dispatched as sim **562** |
+| 2026-09-08 | **Phase 2 shipped**: viva-api#481 merged, deployed as 0.9.115 (#483 — first build raced the bump; rebuilt the same tag from a `main` that had it). **Live cancel + pod-restart test PASSED** on sim 567: the pod that never received the cancel reaped both tasks at 02:31:41Z; no resubmission. viva-api#484 filed for the `/status` presentation gap |
+| 2026-09-08 | **sim 562 FAILED at 03:33Z with blocker 6** (A.6): all three lineages SUCCEEDED (94/94/73 m, real data), then the gather collided on `sweep_dir.json` — the run_step port manifest my `sweep_*` glob also matched. Fixed as v2ecoli#739 (`type: "dir"` + a structural fnmatch test); process-bigraph#208 filed upstream. Seed 0's 552 MB is intact in its work dir |
 | 2026-09-08 | v2ecoli#737 (@eagmon) **closes item H** — the one-tick collapse was a pre-emit crash (native derivers not recognised as Steps), not a silent empty emit; `PBG_REQUIRE_OUTPUT` had refused it correctly. Also fixes the pint `Quantity > float` crash on AA media |
