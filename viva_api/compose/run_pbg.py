@@ -625,6 +625,29 @@ def _redirect_emitters(node: Any, results_dir: Path) -> int:
     redirected (0 is a legitimate answer — a document need not declare one; it is
     also the correct answer for a document whose only emitter is a non-file-backed
     one, e.g. ``RAMEmitter`` — see ``_NON_FILE_BACKED_EMITTER_CLASSES``).
+
+    **Exception: an ``out_uri``-keyed (xarray/zarr) emitter goes straight to S3
+    instead, when ``RAY_OUT_S3`` is set.** Every other file-backed emitter's local
+    write is safe to leave best-effort-synced (``ray-batch-entrypoint.sh``'s
+    ``start_output_sync``, "never fails the job on its own") because its own chunks
+    are independent files — losing an unsynced local buffer on a node change costs
+    nothing structurally. zarr is not: ``viva_emitters.xarray_emitter.zarr_writer.
+    _check_group`` requires the PREVIOUS generation's own group to still exist in
+    the SAME store when the next generation opens it, and this process's own
+    filesystem is not authoritative on a multi-node run — Ray places ``ray:``-
+    addressed actors wherever it likes (viva-api#419, ``_assert_emitted_output``
+    below hit this exact fact from the read side). If the actor owning a seed's
+    lineage gets restarted on a different node between generations, that node's
+    local disk never had the previous generation's zarr group, and
+    ``_check_group`` fails loudly — the real cause of CD2 Dispatch 665/666 (dies
+    around generation 3-4 on a multi-hour run; never surfaces on a short 1-2
+    generation run, which is why Run 4's dispatches never hit it). zarr/fsspec
+    write ``s3://`` URIs natively — v2ecoli's own ``_open_xarray_emitter`` already
+    branches on ``out_is_s3``, just never previously handed a real one — so
+    routing it straight to the same shared prefix every node's periodic sync
+    targets gives it real, durable, node-independent state instead of a single
+    node's disk. Falls back to the shared local redirect when ``RAY_OUT_S3`` is
+    unset (e.g. a non-Batch/local dev context), so nothing changes there.
     """
     redirected = 0
     if isinstance(node, dict):
@@ -642,9 +665,15 @@ def _redirect_emitters(node: Any, results_dir: Path) -> int:
             # Reuse whichever key this emitter already speaks; default to out_dir.
             key = next((k for k in _EMITTER_OUT_KEYS if k in config), "out_dir")
             before = config.get(key)
-            config[key] = str(results_dir)
-            redirected += 1
-            print(f"run_pbg: redirected emitter {address} {key}: {before!r} -> {results_dir}")
+            out_s3 = (os.environ.get("RAY_OUT_S3") or "").strip()
+            if key == "out_uri" and out_s3:
+                config[key] = out_s3
+                redirected += 1
+                print(f"run_pbg: redirected emitter {address} {key}: {before!r} -> {out_s3} (S3-direct)")
+            else:
+                config[key] = str(results_dir)
+                redirected += 1
+                print(f"run_pbg: redirected emitter {address} {key}: {before!r} -> {results_dir}")
         for value in node.values():
             redirected += _redirect_emitters(value, results_dir)
     elif isinstance(node, list):

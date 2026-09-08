@@ -338,6 +338,54 @@ def test_redirect_emitters_still_counts_a_real_file_backed_emitter_alongside_a_r
     assert doc["parquet"]["config"]["out_dir"] == str(tmp_path / "out")
 
 
+# --- _redirect_emitters: xarray goes straight to S3 (CD2 Dispatch 665/666 fix) ---
+
+
+def test_redirect_emitters_routes_xarray_straight_to_s3_when_ray_out_s3_is_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """zarr's own cross-generation continuity check (viva_emitters.xarray_emitter.
+    zarr_writer._check_group) needs the PREVIOUS generation's group to still exist
+    in the SAME store. The local-then-periodic-sync path every other file-backed
+    emitter uses is best-effort and this process's own filesystem is not
+    authoritative on a multi-node run (viva-api#419) -- if the actor owning a
+    seed's lineage gets restarted on a different node between generations, the
+    local redirect silently loses the previous generation's zarr group and
+    _check_group fails loudly (real incident: CD2 Dispatch 665/666). Routing
+    straight to RAY_OUT_S3 (the same shared, node-independent prefix every node's
+    periodic sync already targets) fixes this at the source."""
+    monkeypatch.setenv("RAY_OUT_S3", "s3://smsvpctest-shared/vecoli-output/exp-123/")
+    doc: dict[str, Any] = {"e": {"address": "local:XArrayEmitter", "config": {"out_uri": "s3://old/place"}}}
+    n = run_pbg._redirect_emitters(doc, tmp_path / "out")
+    assert n == 1
+    assert doc["e"]["config"]["out_uri"] == "s3://smsvpctest-shared/vecoli-output/exp-123/"
+
+
+def test_redirect_emitters_leaves_parquet_on_the_local_results_dir_even_when_ray_out_s3_is_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The S3-direct routing above is xarray-specific (out_uri), not a blanket
+    "prefer RAY_OUT_S3 whenever it's set": ParquetEmitter's own independent chunk
+    files are safe under the existing local-then-best-effort-sync path, and
+    changing that unnecessarily would be a real, untested behavior change to
+    every other MNP composite dispatch."""
+    monkeypatch.setenv("RAY_OUT_S3", "s3://smsvpctest-shared/vecoli-output/exp-123/")
+    doc: dict[str, Any] = {"e": {"address": "local:ParquetEmitter", "config": {}}}
+    run_pbg._redirect_emitters(doc, tmp_path / "out")
+    assert doc["e"]["config"]["out_dir"] == str(tmp_path / "out")
+
+
+def test_redirect_emitters_falls_back_to_local_for_xarray_when_ray_out_s3_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-Batch/local dev context has no RAY_OUT_S3 -- xarray must keep working
+    exactly as before (the local redirect), not raise or silently drop the key."""
+    monkeypatch.delenv("RAY_OUT_S3", raising=False)
+    doc: dict[str, Any] = {"e": {"address": "local:XArrayEmitter", "config": {"out_uri": "s3://old/place"}}}
+    run_pbg._redirect_emitters(doc, tmp_path)
+    assert doc["e"]["config"]["out_uri"] == str(tmp_path)
+
+
 # --- _persist_emitter_history: the in-memory-emitter fallback (backlog item 88) ---
 
 
