@@ -65,6 +65,8 @@ from viva_api.simulation.models import (
     SimulationRequest,
     SimulationRun,
     SimulatorVersion,
+    VariantCacheJob,
+    VariantCacheRequest,
     VecoliSource,
 )
 from viva_api.simulation.simulation_service import SimulationService
@@ -917,6 +919,57 @@ async def run_new_gene_cache(
         fixed_media=request.fixed_media,
     )
     return NewGeneCacheJob(
+        job_id=str(job_id),
+        commit=commit,
+        variant=request.variant,
+        cache_s3_uri=simulation_service.cache_s3_uri(commit, variant=request.variant),
+    )
+
+
+async def run_variant_cache(
+    request: VariantCacheRequest,
+    simulation_service: SimulationService | None = None,
+    database_service: DatabaseService | None = None,
+) -> VariantCacheJob:
+    """Backlog item 451: submit ``build_variant_cache.py`` against a COMPLETED
+    ParCa dataset's cache -- the native-gene sibling of ``run_new_gene_cache``
+    above (see ``SimulationServiceRay.submit_variant_cache_job`` for the
+    mechanism). Same structure, same gates, same v1-scoped deliberate lack of
+    HpcRun/DB tracking -- see ``run_new_gene_cache``'s own docstring for the
+    reasoning behind each; not re-explained here since it applies unchanged.
+    """
+    if not simulation_service:
+        # Same reasoning as run_new_gene_cache: this handler always wants Ray
+        # specifically, so ask for it by name rather than trusting whatever
+        # the deployment calls "default" (get_simulation_service()).
+        simulation_service = get_simulation_service_for_backend(ComputeBackend.RAY)
+    if simulation_service is None:
+        logger.exception("Simulation service is not initialized")
+        raise HTTPException(status_code=404, detail="Simulation service is not initialized")
+    if not isinstance(simulation_service, SimulationServiceRay):
+        raise HTTPException(
+            status_code=501,
+            detail="variant-cache jobs require the Ray/Batch simulation service",
+        )
+    if not database_service:
+        database_service = get_database_service()
+    if database_service is None:
+        logger.exception("Simulation database service is not initialized")
+        raise HTTPException(status_code=404, detail="Simulation database service is not initialized")
+
+    parca_dataset = await database_service.get_parca_dataset(request.parca_dataset_id)
+    if parca_dataset is None:
+        raise HTTPException(status_code=404, detail=f"Parca dataset {request.parca_dataset_id} not found.")
+    commit = parca_dataset.parca_dataset_request.simulator_version.git_commit_hash
+
+    job_id = await simulation_service.submit_variant_cache_job(
+        commit=commit,
+        variant=request.variant,
+        perturbations=request.perturbations,
+        seed=request.seed,
+        fixed_media=request.fixed_media,
+    )
+    return VariantCacheJob(
         job_id=str(job_id),
         commit=commit,
         variant=request.variant,

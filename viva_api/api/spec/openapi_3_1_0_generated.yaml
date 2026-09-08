@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.9.110
+  version: 0.9.125
 paths:
   /api/v1/simulations/discovery:
     get:
@@ -603,6 +603,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NewGeneCacheJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/parca/variant-cache:
+    post:
+      tags:
+      - EcoliSim
+      summary: Stamp native-gene perturbations onto a completed ParCa dataset's cache
+        (backlog item 451)
+      operationId: run-variant-cache
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VariantCacheRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VariantCacheJob'
         '422':
           description: Validation Error
           content:
@@ -1262,7 +1288,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-09-07T13:39:11.304587'
+                  created_at: '2026-09-08T12:02:45.878565'
                 parca_config:
                   outdir: .
                   operons: true
@@ -1272,6 +1298,10 @@ paths:
                   remove_rrff: false
                   stable_rrna: false
                   new_genes: 'off'
+                  require_clean_chain: false
+                  build_combined_bundle_manifest: false
+                  include_violacein_bundle: false
+                  deterministic_hash_seed: false
                   debug_parca: false
                   save_intermediates: false
                   intermediates_directory: ''
@@ -4264,6 +4294,10 @@ components:
             remove_rrff: false
             stable_rrna: false
             new_genes: 'off'
+            require_clean_chain: false
+            build_combined_bundle_manifest: false
+            include_violacein_bundle: false
+            deterministic_hash_seed: false
             debug_parca: false
             save_intermediates: false
             intermediates_directory: ''
@@ -4316,8 +4350,37 @@ components:
         bundle_overrides:
           anyOf:
           - type: string
+          - items:
+              type: string
+            type: array
           - type: 'null'
           title: Bundle Overrides
+        rnaseq_source:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rnaseq Source
+        require_clean_chain:
+          type: boolean
+          title: Require Clean Chain
+          default: false
+        bundle_manifest_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bundle Manifest Path
+        build_combined_bundle_manifest:
+          type: boolean
+          title: Build Combined Bundle Manifest
+          default: false
+        include_violacein_bundle:
+          type: boolean
+          title: Include Violacein Bundle
+          default: false
+        deterministic_hash_seed:
+          type: boolean
+          title: Deterministic Hash Seed
+          default: false
         debug_parca:
           type: boolean
           title: Debug Parca
@@ -4688,7 +4751,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-09-07 13:39:11.251520'
+          default: '2026-09-08 12:02:45.819246'
         job_id:
           anyOf:
           - type: string
@@ -4738,6 +4801,10 @@ components:
             remove_rrff: false
             stable_rrna: false
             new_genes: 'off'
+            require_clean_chain: false
+            build_combined_bundle_manifest: false
+            include_violacein_bundle: false
+            deterministic_hash_seed: false
             debug_parca: false
             save_intermediates: false
             intermediates_directory: ''
@@ -5111,6 +5178,78 @@ components:
       - msg
       - type
       title: ValidationError
+    VariantCacheJob:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        commit:
+          type: string
+          title: Commit
+        variant:
+          type: string
+          title: Variant
+        cache_s3_uri:
+          type: string
+          title: Cache S3 Uri
+      additionalProperties: true
+      type: object
+      required:
+      - job_id
+      - commit
+      - variant
+      - cache_s3_uri
+      title: VariantCacheJob
+      description: 'Response for a submitted variant-cache job. Same v1-scoped shape
+        as
+
+        ``NewGeneCacheJob`` -- no HpcRun/DB tracking, poll the returned ``job_id``
+
+        directly against the compute backend.'
+    VariantCacheRequest:
+      properties:
+        parca_dataset_id:
+          type: integer
+          title: Parca Dataset Id
+        variant:
+          type: string
+          title: Variant
+        perturbations:
+          additionalProperties:
+            type: number
+          type: object
+          title: Perturbations
+        seed:
+          type: integer
+          title: Seed
+          default: 0
+        fixed_media:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Fixed Media
+      additionalProperties: true
+      type: object
+      required:
+      - parca_dataset_id
+      - variant
+      - perturbations
+      title: VariantCacheRequest
+      description: 'Backlog item 451: stamp NATIVE-gene translation-efficiency perturbations
+
+        onto a COMPLETED ParCa dataset''s cache (``scripts/build_variant_cache.py``,
+
+        the sibling mechanism to ``NewGeneCacheRequest`` above -- native-gene
+
+        knockouts/knockdowns/overexpression instead of a new gene''s own induction
+
+        level -- see ``SimulationServiceRay.submit_variant_cache_job``). Ray/Batch
+
+        backend only; the source dataset must already have SUCCEEDED (not
+
+        re-validated here, same pure-passthrough philosophy as
+
+        ``NewGeneCacheRequest``).'
     ViewerLaunch:
       properties:
         uid:

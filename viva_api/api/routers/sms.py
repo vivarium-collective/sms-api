@@ -49,6 +49,8 @@ from viva_api.simulation.models import (
     SimulationObservableIndex,
     SimulationObservables,
     SimulationRun,
+    VariantCacheJob,
+    VariantCacheRequest,
     VecoliSource,
 )
 from viva_api.simulation.observable_reader import list_observables_async, read_observables_async
@@ -542,6 +544,23 @@ async def run_new_gene_cache(request: NewGeneCacheRequest = Body(...)) -> NewGen
         raise
     except Exception as e:
         logger.exception("Error running new-gene-cache job")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.post(
+    path="/parca/variant-cache",
+    response_model=VariantCacheJob,
+    operation_id="run-variant-cache",
+    tags=["EcoliSim"],
+    summary="Stamp native-gene perturbations onto a completed ParCa dataset's cache (backlog item 451)",
+)
+async def run_variant_cache(request: VariantCacheRequest = Body(...)) -> VariantCacheJob:
+    try:
+        return await handlers.simulations.run_variant_cache(request=request)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error running variant-cache job")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
