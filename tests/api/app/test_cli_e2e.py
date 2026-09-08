@@ -12,7 +12,7 @@ Run with:
     uv run pytest tests/api/app/test_cli_e2e.py -v -s
 
 Skip behavior:
-- Skips entirely if localhost:8080 is not reachable
+- Opt-in: set VIVA_LIVE_E2E=1. Skips entirely otherwise, or if localhost:8080 is not reachable
 - Skips entirely if AWS credentials are not configured
 """
 
@@ -66,7 +66,15 @@ def _aws_credentials_valid() -> bool:
         return False
 
 
-_skip_no_api = pytest.mark.skipif(not _api_is_reachable(), reason=f"API not reachable at {API_BASE_URL}")
+# Opt-in, not auto-detect. localhost:8080 is the SSM tunnel to a LIVE deployment;
+# with a tunnel open, `uv run pytest` used to run this file against real
+# infrastructure and report phantom failures (five, on 2026-09-08). Reachability
+# is necessary, not sufficient: the developer has to ask for it.
+_LIVE_OPT_IN = os.environ.get("VIVA_LIVE_E2E") == "1"
+_skip_no_api = pytest.mark.skipif(
+    not _LIVE_OPT_IN or not _api_is_reachable(),
+    reason=f"live E2E is opt-in: set VIVA_LIVE_E2E=1 with the API reachable at {API_BASE_URL}",
+)
 _skip_no_aws = pytest.mark.skipif(not _aws_credentials_valid(), reason="AWS credentials not configured")
 
 # ---------------------------------------------------------------------------
