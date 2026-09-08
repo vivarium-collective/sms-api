@@ -3406,6 +3406,84 @@ class TestParcaCommand:
             "--rnaseq-source experimental"
         ) in cmd
 
+    def test_bundle_manifest_path_appends_the_flag(self) -> None:
+        """Item 451/#166: Run 4's own founder-chassis recipe needs
+        --bundle-manifest-path -- a base-manifest-replacing flag, distinct from
+        --bundle-overrides (which layers on top)."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(bundle_manifest_path="out/combined_violacein.tsv")
+        assert "--bundle-manifest-path out/combined_violacein.tsv" in cmd
+        assert "--bundle-overrides" not in cmd
+
+    def test_omitted_bundle_manifest_path_is_byte_identical_to_before(self) -> None:
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            assert service._parca_command(bundle_manifest_path=None) == service._parca_command()
+
+    def test_build_combined_bundle_manifest_generates_and_points_at_default_output(self) -> None:
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(build_combined_bundle_manifest=True)
+        assert "python scripts/build_combined_bundle_manifest.py && " in cmd
+        assert cmd.index("build_combined_bundle_manifest.py") < cmd.index("v2ecoli-parca")
+        assert "--bundle-manifest-path out/combined_bundle_manifest.tsv" in cmd
+        assert "--include-violacein" not in cmd
+
+    def test_include_violacein_bundle_passes_the_generator_flag(self) -> None:
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(build_combined_bundle_manifest=True, include_violacein_bundle=True)
+        assert "build_combined_bundle_manifest.py --include-violacein && " in cmd
+
+    def test_include_violacein_bundle_alone_is_a_no_op(self) -> None:
+        """include_violacein_bundle only matters when build_combined_bundle_manifest is also set."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(include_violacein_bundle=True)
+            assert cmd == service._parca_command()
+
+    def test_bundle_manifest_path_and_build_combined_bundle_manifest_are_mutually_exclusive(self) -> None:
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            pytest.raises(ValueError, match="mutually exclusive"),
+        ):
+            service._parca_command(
+                bundle_manifest_path="out/combined_violacein.tsv", build_combined_bundle_manifest=True
+            )
+
+    def test_deterministic_hash_seed_prepends_pythonhashseed(self) -> None:
+        """Item 451/#166: Run 4's own founder-chassis recipe explicitly requires
+        PYTHONHASHSEED=0 for a deterministically re-derivable chassis."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(deterministic_hash_seed=True)
+        assert "PYTHONHASHSEED=0 v2ecoli-parca" in cmd
+
+    def test_omitted_deterministic_hash_seed_is_byte_identical_to_before(self) -> None:
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            assert service._parca_command(deterministic_hash_seed=False) == service._parca_command()
+
+    def test_run4_founder_chassis_recipe_end_to_end(self) -> None:
+        """The exact real recipe from scripts/build_run4_founder_caches.py's own
+        module docstring: build_combined_bundle_manifest(--include-violacein) +
+        PYTHONHASHSEED=0 + --new-genes violacein_MG1655_M5 +
+        --bundle-manifest-path out/combined_bundle_manifest.tsv."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(
+                new_genes="violacein_MG1655_M5",
+                build_combined_bundle_manifest=True,
+                include_violacein_bundle=True,
+                deterministic_hash_seed=True,
+            )
+        assert "build_combined_bundle_manifest.py --include-violacein && " in cmd
+        assert "PYTHONHASHSEED=0 v2ecoli-parca" in cmd
+        assert "--new-genes violacein_MG1655_M5" in cmd
+        assert "--bundle-manifest-path out/combined_bundle_manifest.tsv" in cmd
+
     def test_strain_flags_do_not_reach_the_build_cache_step(self) -> None:
         """SUPERSEDES the old test_strain_flags_reach_the_build_cache_step
         (v2ecoli#676-era design). scripts/build_cache.py's own real current CLI
