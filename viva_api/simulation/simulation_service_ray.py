@@ -33,6 +33,7 @@ import copy
 import importlib.resources as _res
 import json
 import logging
+import math
 import random
 import re
 import shlex
@@ -2915,6 +2916,17 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         # composite's OWN documented contract is
         # `n_generations * max_duration_per_gen` of total simulated time.
         #
+        # Complementary to, NOT colliding with, sms-ecoli#283 (cplong90,
+        # merged same session): that PR fixes the CLIENT side -- sms-ecoli's
+        # own scripts/gen_cd2_cellonly_dispatches.py now derives and emits a
+        # correct `steps` value in every generated request row. This fix is
+        # the SERVER-side backstop for any request that still omits or
+        # under-computes it (a different generator, a hand-built request, an
+        # older still-in-flight config) -- belt-and-suspenders on two
+        # independent layers of the same pipeline, not two attempts at the
+        # same fix. `math.ceil` here matches that PR's own more rigorous
+        # `math.ceil` choice over a truncating `int()`.
+        #
         # This dispatch method never references any one composite by name (see
         # its own docstring) and has no remote visibility into a composite's
         # registered parameter schema (composite_spec resolution happens
@@ -2932,9 +2944,15 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         # with the caller's own explicit `steps` so a deliberately larger
         # value is never clamped down. A composite that never sets
         # `n_generations` is completely unaffected (today's exact behavior).
+        # `math.ceil`, not `int()` truncation (sms-ecoli#283, cplong90, same
+        # bug independently fixed on the generator side): int() on a non-
+        # integral product (an off-3600.0 max_duration_per_gen) would round
+        # DOWN, handing the run marginally less than the required interval --
+        # math.ceil always rounds up, so the clamp can only ever give a
+        # composite AT LEAST what its own contract demands, never less.
         if "n_generations" in params:
             required_run_interval = int(params["n_generations"]) * float(params.get("max_duration_per_gen", 3600.0))
-            steps = max(steps, int(required_run_interval))
+            steps = max(steps, math.ceil(required_run_interval))
         # cache_variant (item 105, mirrors chain-dispatch's own already-proven
         # job_scheduler.py pattern -- getattr(simulation.config, "cache_variant",
         # ...)): selects a variant-labeled derived ParCa cache (POST

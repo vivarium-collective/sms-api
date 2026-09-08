@@ -1014,7 +1014,13 @@
 #            n_generations is completely unaffected. Interim fix pending
 #            Eran's own proposed document-level `required_run_interval`
 #            contract (not yet merged), which would make this fully
-#            composite-generic. 4 new regression tests.
+#            composite-generic. Uses `math.ceil` (not a truncating `int()`) on
+#            the computed interval, matching sms-ecoli#283 (cplong90)'s own
+#            more rigorous choice -- that PR is the CLIENT-side complement to
+#            this one (its own generator now derives and emits a correct
+#            `steps` in every request row); this fix is the server-side
+#            backstop for anything that still omits or under-computes it.
+#            4 new regression tests.
 __version__ = "0.9.118"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
