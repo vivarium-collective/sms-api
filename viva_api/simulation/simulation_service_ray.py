@@ -681,6 +681,7 @@ class SimulationServiceRay(SimulationService):
         batch_client: Any = None,
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
+        require_clean_chain: bool = False,
     ) -> str:
         """Submit a Ray MNP job via boto3, mirroring sms-cdk scripts/ray_batch_submit.sh.
 
@@ -722,6 +723,7 @@ class SimulationServiceRay(SimulationService):
             log_s3_prefix=settings.ray_log_s3_prefix,
             expect_new_genes=expect_new_genes,
             expect_bundle_overrides=expect_bundle_overrides,
+            require_clean_chain=require_clean_chain,
         )
         # Ray's own documented safety net (not a bespoke workaround): by default Ray
         # refuses to start its plasma object store when the container's /dev/shm is
@@ -814,6 +816,7 @@ class SimulationServiceRay(SimulationService):
         log_s3_prefix: str | None = None,
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
+        require_clean_chain: bool = False,
     ) -> list[dict[str, str]]:
         """Shared stage/output/log env-var construction for both the MNP (``RAY_*``)
         and container (``CONTAINER_*``) submission paths (backlog item 71) -- same
@@ -829,6 +832,19 @@ class SimulationServiceRay(SimulationService):
         a real strain -- ``off``/empty is wild-type and emits nothing, so a
         wild-type run is byte-identical to before and the entrypoint check stays
         inert until a real strain is requested.
+
+        ``require_clean_chain`` (item 106/#166 chassis-provenance thread, v2ecoli#735):
+        emitted verbatim as ``V2E_REQUIRE_CLEAN_CHAIN`` -- UNPREFIXED, unlike every
+        other var this helper emits -- because it is read directly by v2ecoli's own
+        ``os.environ.get("V2E_REQUIRE_CLEAN_CHAIN")`` (``save_sim_input``/
+        ``save_cache``/``verify_cache_version``), not by the ``RAY_*``/``CONTAINER_*``
+        entrypoint scripts this helper otherwise targets. Default ``False`` emits
+        nothing -- byte-identical to before this param existed -- because most
+        existing callers (``new_gene_cache``, ``variant_cache``,
+        ``build_condition_cache``, ``run_comparison_ensemble``) don't pass
+        ``sources=`` yet (that wiring is v2ecoli's own PR 3); setting this
+        unconditionally would hard-fail every one of them the moment v2ecoli#735
+        lands, including Run 4's own already-built new-gene caches.
         """
         env: list[dict[str, str]] = [
             {"name": f"{prefix}_OUT_DIR", "value": out_dir},
@@ -847,6 +863,8 @@ class SimulationServiceRay(SimulationService):
         bo = (expect_bundle_overrides or "").strip()
         if bo and bo != "off":
             env.append({"name": f"{prefix}_EXPECT_BUNDLE_OVERRIDES", "value": bo})
+        if require_clean_chain:
+            env.append({"name": "V2E_REQUIRE_CLEAN_CHAIN", "value": "1"})
         return env
 
     def _ensure_container_job_def(self, image: str, commit: str) -> str:
@@ -911,6 +929,7 @@ class SimulationServiceRay(SimulationService):
         batch_client: Any = None,
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
+        require_clean_chain: bool = False,
     ) -> str:
         """Submit a plain, standalone AWS Batch container-type job (backlog item 71).
 
@@ -944,6 +963,7 @@ class SimulationServiceRay(SimulationService):
                 log_s3_prefix=settings.ray_log_s3_prefix,
                 expect_new_genes=expect_new_genes,
                 expect_bundle_overrides=expect_bundle_overrides,
+                require_clean_chain=require_clean_chain,
             ),
         ]
 
@@ -969,7 +989,9 @@ class SimulationServiceRay(SimulationService):
         logger.info("Submitted container job %s (id=%s) to %s", job_name, batch_job_id, settings.ray_container_queue)
         return batch_job_id
 
-    def _parca_command(self, *, new_genes: str | None = None, bundle_overrides: str | None = None) -> str:
+    def _parca_command(
+        self, *, new_genes: str | None = None, bundle_overrides: str | None = None, rnaseq_source: str | None = None
+    ) -> str:
         """Run ParCa, then hydrate the sim-input bundle into PARCA_CACHE_DIR (out/cache).
 
         v2ecoli's sim loads ``out/cache/{initial_state.json, sim_data_cache.dill, ...}`` via
@@ -994,6 +1016,25 @@ class SimulationServiceRay(SimulationService):
         ParCa silently built from defaults and any keys the overrides supply were absent.
         Default ``None`` builds byte-for-byte the same command as before this param existed.
 
+        ``rnaseq_source`` (backlog item 106/#166 chassis-provenance thread): a legacy
+        config's own ``parca_options.rnaseq_source`` -- generic passthrough to
+        ``v2ecoli-parca``'s own ``--rnaseq-source {reference,experimental}`` flag
+        (default ``"reference"``). Real, confirmed gap this closes: at least one
+        real ``bundle_overrides`` manifest (sms-ecoli's
+        ``cd2-pnnl-01-bundle-scenarios/bundles/rung5-lambda-075/overrides.tsv``)
+        is a no-op without it -- its own header: "READ BY NOTHING without that
+        flag... the scenario silently becomes its own control". Same silent-
+        wrong-build failure mode as new_genes/bundle_overrides being dropped.
+        Default ``None`` builds byte-for-byte the same command as before this
+        param existed.
+
+        Also copies the chassis-provenance sidecar (``parca_state.provenance.json``,
+        item 106/#166, v2ecoli#735) alongside the raw state, non-fatally -- a
+        pre-#735 v2ecoli image never writes this file, so the ``|| true`` keeps
+        every dispatch working unchanged until that lands; once it does, the
+        sidecar rides the same S3 sync ``parca_state.pkl.gz`` already does,
+        without this command needing to change again.
+
         Also copies the gzipped RAW fitted state (``parca_state.pkl.gz``) into
         ``PARCA_CACHE_DIR`` itself (backlog item 105), so it rides along in the
         existing ``out_dir``/``out_s3`` sync instead of being discarded with the
@@ -1016,15 +1057,19 @@ class SimulationServiceRay(SimulationService):
         settings = get_settings()
         new_genes_flag = f" --new-genes {shlex.quote(new_genes)}" if new_genes and new_genes != "off" else ""
         bundle_overrides_flag = f" --bundle-overrides {shlex.quote(bundle_overrides)}" if bundle_overrides else ""
+        rnaseq_source_flag = f" --rnaseq-source {shlex.quote(rnaseq_source)}" if rnaseq_source else ""
         command = (
             f"cd {V2ECOLI_DIR}"
             f" && v2ecoli-parca --mode {settings.ray_parca_mode} --cpus {settings.ray_parca_cpus}"
-            f" -o {PARCA_SIMDATA_DIR} --cache-dir {PARCA_CACHE_DIR}{new_genes_flag}{bundle_overrides_flag}"
+            f" -o {PARCA_SIMDATA_DIR} --cache-dir {PARCA_CACHE_DIR}"
+            f"{new_genes_flag}{bundle_overrides_flag}{rnaseq_source_flag}"
             f" && gzip -f -k {PARCA_SIMDATA_DIR}/parca_state.pkl"
             f" && python scripts/build_cache.py"
             f" --fixture {PARCA_SIMDATA_DIR}/parca_state.pkl.gz"
             f" --cache {PARCA_CACHE_DIR}"
             f" && cp {PARCA_SIMDATA_DIR}/parca_state.pkl.gz {PARCA_CACHE_DIR}/parca_state.pkl.gz"
+            f" && (cp {PARCA_SIMDATA_DIR}/parca_state.provenance.json"
+            f" {PARCA_CACHE_DIR}/parca_state.provenance.json 2>/dev/null || true)"
         )
         # A config that requests a real strain (new_genes != "off") MUST produce a
         # command that carries the flag — otherwise ParCa silently builds wild-type
@@ -2584,10 +2629,22 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         # Backlog item 104: same generic bundle_overrides passthrough, same
         # upstream-vEcoli exemption as new_genes above.
         bundle_overrides = None if is_upstream else getattr(config.parca_options, "bundle_overrides", None)
+        # Same generic rnaseq_source passthrough (item 106/#166 chassis-provenance
+        # thread) -- a bundle_overrides manifest can itself require this to have
+        # any effect at all; same upstream-vEcoli exemption as the two above.
+        rnaseq_source = None if is_upstream else getattr(config.parca_options, "rnaseq_source", None)
+        # Same generic require_clean_chain passthrough (item 106/#166, v2ecoli#735) --
+        # opt-in only (default False emits nothing, see _stage_out_env's own
+        # docstring): most existing callers don't pass v2ecoli's own `sources=` yet.
+        require_clean_chain = (
+            False if is_upstream else bool(getattr(config.parca_options, "require_clean_chain", False))
+        )
         parca_command = (
             self._upstream_parca_command()
             if is_upstream
-            else self._parca_command(new_genes=new_genes, bundle_overrides=bundle_overrides)
+            else self._parca_command(
+                new_genes=new_genes, bundle_overrides=bundle_overrides, rnaseq_source=rnaseq_source
+            )
         )
 
         # Only the composite-driven comparison-ensemble path can still reach here
@@ -2668,6 +2725,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             # off/None (wild-type) emits nothing, so this is inert for non-strain runs.
             expect_new_genes=new_genes,
             expect_bundle_overrides=bundle_overrides,
+            require_clean_chain=require_clean_chain,
         )
         logger.info(
             "Ray simulation %s: parca job %s -> sim job %s (%d nodes)",
@@ -2826,6 +2884,10 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         # only chain-dispatch did. None preserves today's behavior byte-for-
         # byte (cache_s3_uri's own variant=None default).
         cache_variant = mnp_dispatch.get("cache_variant") or None
+        # require_clean_chain (item 106/#166, v2ecoli#735): opt-in per-dispatch --
+        # a sibling of cache_variant, same reasoning as _stage_out_env's own
+        # docstring. False (omitted) is byte-for-byte today's behavior.
+        require_clean_chain = bool(mnp_dispatch.get("require_clean_chain", False))
 
         simulator = await database_service.get_simulator(simulator_id=ecoli_simulation.simulator_id)
         if simulator is None:
@@ -2918,6 +2980,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             stage_dir=PARCA_CACHE_DIR,
             depends_on=[parca_job_id] if parca_job_id else None,
             tags={**base_tags, "Phase": "composite"},
+            require_clean_chain=require_clean_chain,
         )
         logger.info(
             "Multi-node composite %s (%s): parca job %s -> composite job %s (%d nodes)",
@@ -3306,10 +3369,15 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         # survived on the stored request but was never forwarded, so ParCa built
         # from defaults only and any keys the overrides supply were absent.
         bundle_overrides = getattr(config.parca_options, "bundle_overrides", None)
+        # Same generic rnaseq_source passthrough (item 106/#166 chassis-provenance
+        # thread), same reasoning as new_genes/bundle_overrides above.
+        rnaseq_source = getattr(config.parca_options, "rnaseq_source", None)
         parca_job_id = self._submit_container(
             job_name=f"ray-parca-{commit}-{_rand_suffix()}",
             job_definition=container_job_def,
-            job_cmd=self._parca_command(new_genes=new_genes, bundle_overrides=bundle_overrides),
+            job_cmd=self._parca_command(
+                new_genes=new_genes, bundle_overrides=bundle_overrides, rnaseq_source=rnaseq_source
+            ),
             out_s3=cache_s3,
             out_dir=PARCA_CACHE_DIR,
             tags={**base_tags, "Phase": "parca"},
