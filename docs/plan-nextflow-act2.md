@@ -371,6 +371,15 @@ above stands.
   is `experiment_id=lineage_ray_batch` (the #450/#457 class); and the Nextflow path is
   parquet-only by construction (`_emit_xarray` never runs — 574/577/679 completed), so it is
   genuinely outside this bug. Any MNP re-fire needs `emitter: parquet` until eagmon's fix.
+  **Root cause found by Alex (22:16Z) — it was viva-api, not the emitter:** `run_pbg.py`'s
+  `_redirect_emitters()` pointed the xarray store at the same local `PBG_RESULTS_DIR` that
+  `ray-batch-entrypoint.sh` syncs to S3 best-effort every 30 s, so a node change lost the
+  previous generation's zarr groups (parquet survives that because each chunk is an
+  independent file). Fixed in **viva-api#520** (xarray gets a direct S3 `out_uri`), deployed
+  as **0.9.127**. **Scope check for this path:** the Nextflow head reuses only `run_pbg`'s
+  resolver; a lineage runs via `process_bigraph.run_step` and Nextflow uploads the task's
+  outputs itself — `_redirect_emitters` is never on the lineage path, which is the measured
+  form of "parquet-only by construction".
 - **`inputs_hash` bound (@cplong90, #166 14:37Z):** the `cache_version` guard *can condemn a
   pin but cannot clear one* — the condemning half is trustworthy, the clearing half is not.
   A cache that passes the guard is not thereby proven to match the pin. (This is why F resolves to
@@ -635,6 +644,7 @@ stays current.
 | 2026-09-08 | Gate 1b run dispatched: sim **577** (`sim167-gate1b-founders-3x1-fc4d`), 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574 — the shared-founder control, in which seeds differ in only **1.4–1.6 %** of 16,321 bulk counts at t=0 |
 | 2026-09-08 | **GATE 1b CLOSED — sim 577 COMPLETED ~14:50Z.** Independent founders: 30.3–30.7 % of 16,321 bulk counts differ at t=0 between seeds, vs 1.4–1.6 % for the shared-founder control (574). v2ecoli#731 verified on infrastructure |
 | 2026-09-08 | 7-hour sync 19:40Z: Alex superseded the "stale caches" line — fresh K4/J3 chassis at commit `2fddfcb8`, Run 1 cell-only (665) and **Run 2 (666, 8 gens)** dispatched on MNP; Run 1 coupled on its 3rd re-fire past v2ecoli#745/sms-ecoli#289; Run 4's second config needs a chassis rebuild (680); Run 3 unchanged. Cluster 0.9.125. @cplong90: `inputs_hash` can condemn but not clear a pin. New code not touching this path: viva-api#502/#504/#506, v2ecoli#744/#745 |
+| 2026-09-08 | Alex: no collision with 683 — "go ahead" (22:05Z). Xarray root cause = viva-api `run_pbg._redirect_emitters` (#520, deployed 0.9.127; cluster rolled 0.9.126 → 0.9.127 for #513/#520). Alex's exact-match 4-gen re-fire (681) reached gen 3 clean. 683 at 60 min: 10/10 lineages RUNNING, 0 retries |
 | 2026-09-08 | **Nextflow Run 2 dispatched: sim 683** (shape A on simulator 172; mirrors 666's spec with independent founders; parquet-only, gather in-campaign). Announced on #166 |
 | 2026-09-08 | **Alex's Run 2 (sim 666) FAILED 21:08Z** — the 665 xarray bug at the generation-4→5 boundary (seed 6, `emitstep_gen=4` missing). My "not exposed" claim retracted on #166 with the traceback; parquet history 0–4 for all 10 seeds is intact. v2ecoli#746 merged (`7cb19315`) |
 | 2026-09-08 | Phase 5 pass while 666 runs: v2ecoli#746 (16 lineage knobs declared — G closed), viva-api#514 (#484), viva-api#515 (e2e opt-in). Run 2 hedge command pre-staged in both shapes with `exchange_fluxes` in `injected_processes` |
