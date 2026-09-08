@@ -959,7 +959,7 @@
 #            already-built new-gene caches. This is viva-api's own PR 4 of
 #            Eran's 4-PR chassis-provenance split (PRs 1+2 v2ecoli core, PR 3
 #            sms-ecoli hooks, both his). 7 new regression tests.
-__version__ = "0.9.114"
+__version__ = "0.9.115"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in

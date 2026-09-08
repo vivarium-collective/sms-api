@@ -73,7 +73,7 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.112
+    newTag: 0.9.115
     # 2026-09-07: 0.9.110 -> 0.9.111, viva-api#469 -- _submit_multi_node_composite
     # and _submit_mbp_tracked_dispatch now tag every submitted job with
     # CacheVariant (the variant name, or "stock"). No behavior change, no new
