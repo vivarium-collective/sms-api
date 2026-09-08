@@ -1,7 +1,8 @@
 # Nextflow dispatch, act 2: closing gate 4 and the shortcomings behind it
 
-**Status (2026-09-08 04:00Z): gate 4 is still open. Six blockers have been found
-and cleared in sequence; the sixth (v2ecoli#739) is merging. Phase 2 — the cancel
+**Status (2026-09-08 06:40Z): gate 4 is still open, but for the first time the
+gather has RUN. Seven blockers found and cleared in sequence; the seventh
+(v2ecoli#742, the gather had no sim_data) is merging. Phase 2 — the cancel
 reconciler — is merged, deployed as 0.9.115, and verified live.** Everything
 else here is inventory — every known shortcoming of the Nextflow dispatch path,
 with what is measured, what is assumed, and who owns it.
@@ -50,7 +51,8 @@ was cleared:
 | 3 | pre-built cache not reachable | fixed, v2ecoli#732 |
 | 4 | nested-composite path (PBG#207) | worked around, v2ecoli#723 |
 | 5 | every lineage emits a directory named `sweep` | fixed, v2ecoli#736 — **confirmed**: all 3 lineages of sim 562 SUCCEEDED with distinct dirs |
-| 6 | **the fix for 5 also captures the port manifest `sweep_dir.json`** | **fixed, v2ecoli#739** — see A.6 |
+| 6 | the fix for 5 also captures the port manifest `sweep_dir.json` | fixed, v2ecoli#739 — **confirmed**: sim 570 staged all three sweeps, 1.62 GB published, `lineage_seed=0/1/2` |
+| 7 | **the gather has no `simData.cPickle` — `resolve_sim_data` fails** | **fixed, v2ecoli#742** — see A.7 |
 
 ---
 
@@ -157,6 +159,44 @@ glob)` must be false or the decl must be typed `dir`.
 override glob that begins with the port name sweeps it up. A dotfile manifest
 (`.<port>.json`) is invisible to Nextflow globs by default and removes the footgun
 at the source.
+
+#### A.7 — Blocker 7: the gather ran, and had no sim_data (sim 570, 2026-09-08 06:09Z)
+
+The re-run on simulator 164 (v2ecoli#739 in) cleared blocker 6 completely: all three
+sweeps staged, **143 objects / 1,621,594,959 bytes published**, `sweep_v0_s0/s1/s2`
+with `lineage_seed=0/1/2`. Then — **for the first time in this path's history — the
+`analysis` process was submitted and executed.** Four attempts (the retry policy),
+each exiting 1 in under a minute:
+
+```
+FileNotFoundError: could not resolve sim_data for '.' (the Analysis steps need the
+ParCa simData.cPickle). Checked, in order: a sweep-local sim_data*.cPickle;
+$V2ECOLI_SIM_DATA; the sweep's run_identity.json 'sim_data' pointer; and
+out/kb|workflow/simData.cPickle.
+```
+
+This is inventory item **C**'s "#727 has never been reached" — reached. None of the
+four resolution routes can succeed in a Nextflow gather task: the sweeps carry only
+`configuration/` and `history/` (no pickle, no `run_identity.json`, so #727's pointer
+has nothing to read); `$V2ECOLI_SIM_DATA` is threaded on the **Ray** analysis path only
+(viva-api#448); `out/kb` is not in a task work dir. The cache that *holds* the pickle
+is staged into every lineage as `path cache` — and never into the gather.
+
+**Fix (v2ecoli#742):** stage it there too. `AnalysisTaskStep` takes one `cache_v{i}`
+input per variant, wired from `parca_v{i}`'s cache store, exactly as the lineages do;
+`resolve_sim_data`'s *first* branch — the sweep-local glob, "the exact pairing,
+preferred" — then finds `cache/simData.cPickle`. Verified against the real ParCa work
+dir that the cache contains it (84,719,053 bytes). Single repo, no env plumbing, and
+the analyses read the very cache the lineages ran from.
+
+*Known limit, not new:* a multi-variant campaign stages N caches all named `cache`,
+and `resolve_sim_data` takes the first hit — the same open question as #448.
+
+**Also learned on this run — `-resume` needs a FOURTH thing aligned:** the same
+container image. 570 was dispatched with `--resume-from sim161-gate4-3x2-6ff7`, and
+every task re-ran (`parca_v0` hash `47/f9b132` → `96/7962d8`): the container is part of
+Nextflow's task hash. A fix that needs a new image can never reuse the previous
+campaign's lineages. Budget the full re-run.
 
 ### B. ~~Cancel does not reliably stop the work~~ — resolved by Phase 2 (viva-api#481, verified live 2026-09-08)
 
@@ -319,20 +359,21 @@ The only change needed to answer the gate; everything else can follow.
    `pyproject.toml` + `uv.lock` before every bump, never a recorded note.
 4. ~~Rebuild; re-run the 3×2~~ — **done**: simulator 161, simulation 562 → **blocker 6**
    (A.6).
-5. **Now:** merge v2ecoli#739 → re-pin → rebuild → re-run with
-   `--resume-from sim161-gate4-3x2-6ff7` (the three 94-minute lineages are cached
-   *if* the task hash survives the image change; if not, they re-run — either way
-   the gather is what has never executed).
+5. ~~merge v2ecoli#739 → re-pin → rebuild → re-run~~ — **done**: sms-ecoli#281,
+   simulator 164, simulation 570 → blocker 6 cleared, gather RAN, **blocker 7** (A.7).
+   The image change re-hashed every task, so nothing was cached (see A.7).
+6. **Now:** merge v2ecoli#742 → re-pin → rebuild → re-run (full ~95 min again).
 
 **Gate 4 closes only if** the `analysis` process actually executes, `analysis.json`
 publishes, **three** distinct `lineage_seed=` partitions appear, and the history
 satisfies #475's criterion (>1 column, >0 rows). Compare against the recorded
 failure: `sim160-gate4-3x2-f07a`, 89 objects, `lineage_seed=1` and `=2` only.
 
-*Status (2026-09-08 03:33Z):* sim 562 satisfied the lineage half — three SUCCEEDED,
-real 64–69 MB chunks — and failed at the gather's staging (blocker 6, A.6). **Still
-open.** Next attempt: a `--resume-from sim161-gate4-3x2-6ff7` re-run once
-v2ecoli#739 is in a simulator.
+*Status (2026-09-08 06:09Z):* sim 570 satisfied the lineage half **and** the
+staging half — three sweeps published, `analysis` submitted and executed — and failed
+inside the analysis on sim_data resolution (blocker 7, A.7). **Still open**, but every
+structural criterion is now met; what remains is the gather's *content*. Next attempt
+once v2ecoli#742 is in a simulator.
 
 ### Phase 2 — Replace the cancel reap with scheduler reconciliation — ✅ DONE, VERIFIED LIVE
 
@@ -432,4 +473,6 @@ stays current.
 | 2026-09-08 | v2ecoli#736 merged (`2d20a158`); sms-ecoli#270 re-pins to it; simulator **161** built; the 3×2 re-run dispatched as sim **562** |
 | 2026-09-08 | **Phase 2 shipped**: viva-api#481 merged, deployed as 0.9.115 (#483 — first build raced the bump; rebuilt the same tag from a `main` that had it). **Live cancel + pod-restart test PASSED** on sim 567: the pod that never received the cancel reaped both tasks at 02:31:41Z; no resubmission. viva-api#484 filed for the `/status` presentation gap |
 | 2026-09-08 | **sim 562 FAILED at 03:33Z with blocker 6** (A.6): all three lineages SUCCEEDED (94/94/73 m, real data), then the gather collided on `sweep_dir.json` — the run_step port manifest my `sweep_*` glob also matched. Fixed as v2ecoli#739 (`type: "dir"` + a structural fnmatch test); process-bigraph#208 filed upstream. Seed 0's 552 MB is intact in its work dir |
+| 2026-09-08 | v2ecoli#739 merged; sms-ecoli#281 re-pins (base had moved to `a9cf24ed` under me — verified forward); simulator **164**; resumed re-run as sim **570** — nothing cached (image change re-hashes every task) |
+| 2026-09-08 | **sim 570 FAILED at 06:09Z with blocker 7** (A.7) — but blocker 6 is confirmed fixed (1.62 GB, three sweeps) and **the gather ran for the first time ever**. It died in `resolve_sim_data`: the ParCa cache was never staged into the gather. Fixed as v2ecoli#742 |
 | 2026-09-08 | v2ecoli#737 (@eagmon) **closes item H** — the one-tick collapse was a pre-emit crash (native derivers not recognised as Steps), not a silent empty emit; `PBG_REQUIRE_OUTPUT` had refused it correctly. Also fixes the pint `Quantity > float` crash on AA media |
