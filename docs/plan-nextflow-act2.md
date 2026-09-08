@@ -565,9 +565,15 @@ derivation — paths are constrained by **E** and by resume sharing a work dir:
 - ~~#467~~ — fixed by eagmon in #475; close the issue citing the PR.
 - ~~Close **#478** unmerged, recording *why* on the thread~~ — done; superseded by #481,
   and the thread links forward to it.
-- Declare `emit_paths` in `workflow_nf`'s generator parameters (**G**) — and the other
-  six unreachable keys, `media` first.
-- **viva-api#484** — `/status` should trust a terminal DB row before asking the backend.
+- ~~Declare `emit_paths` in `workflow_nf`'s generator parameters (**G**) — and the other
+  six unreachable keys, `media` first.~~ — **done, v2ecoli#746**: all sixteen forwarded
+  lineage knobs (the seven unreachable ones *and* the nine that only rode inside
+  `injected_processes`, `exchange_fluxes` among them) are declared generator parameters,
+  threaded into every lineage config only when set. `_KNOWN_UNREACHABLE` is empty and
+  asserted to stay so. Needs a sms-ecoli re-pin + simulator before a dispatch can use them;
+  until then `injected_processes` remains the route on simulator 172.
+- ~~**viva-api#484**~~ — **fixed, viva-api#514**: a terminal HpcRun row is reported without
+  asking a backend job that may already be gone. Takes effect on the next api deploy.
 - **process-bigraph#208** — dotfile the port manifest so no output glob can catch it.
 - **Instrument caution from @cplong90 (sms-ecoli#166, 02:02Z), general to PBG artifacts:**
   `final_state.json` cannot render any config field whose schema resolves to a bare `Node` —
@@ -577,8 +583,8 @@ derivation — paths are constrained by **E** and by resume sharing a work dir:
   `inject.py` copies are MNP-path issues; `LineageStep` invokes once via `run_step` and does not
   take `-n`.)
 - `discovery` should list nested configs, or document that nested paths are accepted.
-- Guard `test_cli_e2e.py` behind an explicit opt-in env var so an open tunnel cannot
-  turn it into 5 phantom failures.
+- ~~Guard `test_cli_e2e.py` behind an explicit opt-in env var~~ — **done, viva-api#515**:
+  `VIVA_LIVE_E2E=1` is required; verified the file skips with the tunnel open.
 
 ### Coordination
 
@@ -619,6 +625,7 @@ stays current.
 | 2026-09-08 | Gate 1b run dispatched: sim **577** (`sim167-gate1b-founders-3x1-fc4d`), 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574 — the shared-founder control, in which seeds differ in only **1.4–1.6 %** of 16,321 bulk counts at t=0 |
 | 2026-09-08 | **GATE 1b CLOSED — sim 577 COMPLETED ~14:50Z.** Independent founders: 30.3–30.7 % of 16,321 bulk counts differ at t=0 between seeds, vs 1.4–1.6 % for the shared-founder control (574). v2ecoli#731 verified on infrastructure |
 | 2026-09-08 | 7-hour sync 19:40Z: Alex superseded the "stale caches" line — fresh K4/J3 chassis at commit `2fddfcb8`, Run 1 cell-only (665) and **Run 2 (666, 8 gens)** dispatched on MNP; Run 1 coupled on its 3rd re-fire past v2ecoli#745/sms-ecoli#289; Run 4's second config needs a chassis rebuild (680); Run 3 unchanged. Cluster 0.9.125. @cplong90: `inputs_hash` can condemn but not clear a pin. New code not touching this path: viva-api#502/#504/#506, v2ecoli#744/#745 |
+| 2026-09-08 | Phase 5 pass while 666 runs: v2ecoli#746 (16 lineage knobs declared — G closed), viva-api#514 (#484), viva-api#515 (e2e opt-in). Run 2 hedge command pre-staged in both shapes with `exchange_fluxes` in `injected_processes` |
 | 2026-09-08 | 20:40Z: answered @cplong90 and @AlexPatrie on #166 with measurements — 666 is parquet (not xarray-exposed); 679 omitted `exchange_fluxes` (gap 1, mine — must ride in `injected_processes` on this path); `cd1_exchange_fluxes` hard-binds `external_exchange_fluxes`, absent even on 666 (gap 2, the redux binding, @eagmon). Hedge offer for a Nextflow Run 2 replication stands |
 | 2026-09-08 | **sim 679** (`sim172-exch-verify-2x1-6add`, simulator 172 = sms-ecoli `7e7fce1` / v2ecoli `e4db5e67`) COMPLETED 19:34Z: image validated for Run 2 — 10 analyses `ok`, gather **succeeded first try at 32 GB** (#495 live), 101 objects / 678 MB. `cd1_exchange_fluxes` still 10/11: schema read shows redux emits `estimated_exchange_dmdt__*`, never `external_exchange_fluxes` (classic does). Redux binding → @eagmon |
 | 2026-09-08 | Team status (Alex, [sms-ecoli#166 at 15:04Z](https://github.com/CovertLabEcoli/sms-ecoli/issues/166#issuecomment-5587273617), MNP path): Run 1 coupled **10/10 proven**, content-verified; Run 4 `minimal` **42/42** and `_with_trp` **41/42** (genotype 7: `NegativeCountsError`, WATER in `ecoli-rna-degradation`, to the science team); Run 1 cell-only and Run 2 blocked on **stale founder caches** (old v2ecoli pin) — fresh chassis rebuilding; Run 3: #741 now surfaces two real bugs (Eran's). Chris on the Run 1 data: "looking great so far" |
