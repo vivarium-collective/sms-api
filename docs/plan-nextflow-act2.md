@@ -353,14 +353,18 @@ above stands.
   is dispatched on MNP as Dispatch 666** (10 seeds, `n_generations: 8` — @cplong90 notes the
   proven J3 baseline used 4; Alex confirmed 8 deliberately). Still no *completed* Run 2 proof
   on either path; MNP's is running.
-- **Run 2 on MNP (sim 666) is on the parquet emitter, not xarray — measured 20:02Z.** Its
-  params carry no `emitter`; its S3 tree has zero zarr objects and hive parquet history
-  through generation 3 for all 10 seeds (233 files / 10.8 GB). The `AsyncZarrBufferWriter`
-  bug that killed 665 (explicit `emitter: xarray`) cannot reach it. Also observed: 666's hive
-  key is `experiment_id=lineage_ray_batch` (the fallback), so MNP runs without an explicit
-  `experiment_id` share a partition key — the #450/#457 class, kept apart today only by the
-  per-dispatch prefix. The Nextflow path is parquet-only by construction (`emitter` is one
-  of the seven keys a campaign cannot set), which happens to be the safe side of that bug.
+- ~~**Run 2 on MNP (sim 666) is on the parquet emitter, not xarray — measured 20:02Z.**~~
+  **Wrong, and corrected on #166 at 21:2xZ.** 666 FAILED at 21:08:02Z of exactly the 665
+  bug: `lineage.py:586 _emit_xarray → zarr_writer.py:573 _check_group →
+  FileNotFoundError … lineage_seed=6/emitstep_gen=4` inside seed 6's Ray actor, re-raised
+  through `composite.run`, whole 10-node job exit 1. The MNP lineage runs **both** emitters;
+  the xarray store is only *opened* at a generation boundary, so "no zarr objects yet" at
+  20:02Z was not evidence of not being exposed — reading `_emit_xarray`'s call site would have
+  been. Four 66-byte `zarr.json` files appeared at 21:07:40Z, no generation-4 success marker.
+  The parquet half is intact: 10/10 seeds, generations 0–4, ~11 GB. Still true: 666's hive key
+  is `experiment_id=lineage_ray_batch` (the #450/#457 class); and the Nextflow path is
+  parquet-only by construction (`_emit_xarray` never runs — 574/577/679 completed), so it is
+  genuinely outside this bug. Any MNP re-fire needs `emitter: parquet` until eagmon's fix.
 - **`inputs_hash` bound (@cplong90, #166 14:37Z):** the `cache_version` guard *can condemn a
   pin but cannot clear one* — the condemning half is trustworthy, the clearing half is not.
   A cache that passes the guard is not thereby proven to match the pin. (This is why F resolves to
@@ -625,6 +629,7 @@ stays current.
 | 2026-09-08 | Gate 1b run dispatched: sim **577** (`sim167-gate1b-founders-3x1-fc4d`), 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574 — the shared-founder control, in which seeds differ in only **1.4–1.6 %** of 16,321 bulk counts at t=0 |
 | 2026-09-08 | **GATE 1b CLOSED — sim 577 COMPLETED ~14:50Z.** Independent founders: 30.3–30.7 % of 16,321 bulk counts differ at t=0 between seeds, vs 1.4–1.6 % for the shared-founder control (574). v2ecoli#731 verified on infrastructure |
 | 2026-09-08 | 7-hour sync 19:40Z: Alex superseded the "stale caches" line — fresh K4/J3 chassis at commit `2fddfcb8`, Run 1 cell-only (665) and **Run 2 (666, 8 gens)** dispatched on MNP; Run 1 coupled on its 3rd re-fire past v2ecoli#745/sms-ecoli#289; Run 4's second config needs a chassis rebuild (680); Run 3 unchanged. Cluster 0.9.125. @cplong90: `inputs_hash` can condemn but not clear a pin. New code not touching this path: viva-api#502/#504/#506, v2ecoli#744/#745 |
+| 2026-09-08 | **Alex's Run 2 (sim 666) FAILED 21:08Z** — the 665 xarray bug at the generation-4→5 boundary (seed 6, `emitstep_gen=4` missing). My "not exposed" claim retracted on #166 with the traceback; parquet history 0–4 for all 10 seeds is intact. v2ecoli#746 merged (`7cb19315`) |
 | 2026-09-08 | Phase 5 pass while 666 runs: v2ecoli#746 (16 lineage knobs declared — G closed), viva-api#514 (#484), viva-api#515 (e2e opt-in). Run 2 hedge command pre-staged in both shapes with `exchange_fluxes` in `injected_processes` |
 | 2026-09-08 | 20:40Z: answered @cplong90 and @AlexPatrie on #166 with measurements — 666 is parquet (not xarray-exposed); 679 omitted `exchange_fluxes` (gap 1, mine — must ride in `injected_processes` on this path); `cd1_exchange_fluxes` hard-binds `external_exchange_fluxes`, absent even on 666 (gap 2, the redux binding, @eagmon). Hedge offer for a Nextflow Run 2 replication stands |
 | 2026-09-08 | **sim 679** (`sim172-exch-verify-2x1-6add`, simulator 172 = sms-ecoli `7e7fce1` / v2ecoli `e4db5e67`) COMPLETED 19:34Z: image validated for Run 2 — 10 analyses `ok`, gather **succeeded first try at 32 GB** (#495 live), 101 objects / 678 MB. `cd1_exchange_fluxes` still 10/11: schema read shows redux emits `estimated_exchange_dmdt__*`, never `external_exchange_fluxes` (classic does). Redux binding → @eagmon |
