@@ -73,7 +73,10 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.123
+    newTag: 0.9.124
+    # 2026-09-08: 0.9.123 -> 0.9.124, viva-api#504 -- lenient simulation-list:
+    # tolerate a legacy stored config (strip extra-forbidden parca_options keys)
+    # instead of 500ing GET /api/v1/simulations; strict creation + per-id detail kept.
     # 2026-09-08: 0.9.122 -> 0.9.123, viva-api#502 -- _stage_out_env's
     # expect_bundle_overrides now accepts str | list[str] (a caller reading
     # config.parca_options.bundle_overrides directly, bypassing

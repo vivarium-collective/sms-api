@@ -1,10 +1,12 @@
 import contextlib
+import copy
 import datetime
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from typing import Any, cast, override
 
+from pydantic import ValidationError
 from sqlalchemy import ColumnElement, CursorResult, Result, and_, or_, select, text
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -1002,15 +1004,66 @@ class DatabaseServiceSQL(DatabaseService):
     def _build_simulations(orm_simulations: list[ORMSimulation]) -> list[Simulation]:
         simulations: list[Simulation] = []
         for orm_simulation in orm_simulations:
-            simulation = Simulation(
-                simulation_config_filename=orm_simulation.config_filename,
-                experiment_id=orm_simulation.experiment_id,
-                database_id=orm_simulation.id,
-                simulator_id=orm_simulation.simulator_id,
-                parca_dataset_id=orm_simulation.parca_dataset_id,
-                config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
-                tags=list(orm_simulation.tags),
-            )
+            try:
+                simulation = Simulation(
+                    simulation_config_filename=orm_simulation.config_filename,
+                    experiment_id=orm_simulation.experiment_id,
+                    database_id=orm_simulation.id,
+                    simulator_id=orm_simulation.simulator_id,
+                    parca_dataset_id=orm_simulation.parca_dataset_id,
+                    config=SimulationConfig(**orm_simulation.config),  # type: ignore[arg-type]
+                    tags=list(orm_simulation.tags),
+                )
+            except ValidationError as exc:
+                # A stored config that no longer passes STRICT validation (e.g. a
+                # parca_options key since made extra="forbid") must not 500 the whole
+                # list — one legacy record would otherwise hide every run from every
+                # client. Strip ONLY the extra-forbidden keys the error names and
+                # re-parse strictly, so the record still enumerates with a valid
+                # (type-correct) config and no serialization warnings. Strict
+                # validation still gates creation and the per-id detail path
+                # (get_simulation / get_simulation_by_experiment_id), so this is a
+                # lenient LIST + strict DETAIL, not a global loosening.
+                offending = [err["loc"] for err in exc.errors() if err["type"] == "extra_forbidden"]
+                logger.warning(
+                    "list: simulation id=%s (experiment_id=%s) has a stored config that "
+                    "fails strict validation; listing it with legacy fields dropped. "
+                    "Offending: %s",
+                    orm_simulation.id,
+                    orm_simulation.experiment_id,
+                    "; ".join(".".join(str(p) for p in err["loc"]) for err in exc.errors()),
+                )
+                cleaned = copy.deepcopy(dict(orm_simulation.config))
+                for loc in offending:
+                    *parents, key = loc
+                    node: Any = cleaned
+                    for parent in parents:
+                        node = node.get(parent) if isinstance(node, dict) else None
+                    if isinstance(node, dict):
+                        node.pop(key, None)
+                try:
+                    simulation = Simulation(
+                        simulation_config_filename=orm_simulation.config_filename,
+                        experiment_id=orm_simulation.experiment_id,
+                        database_id=orm_simulation.id,
+                        simulator_id=orm_simulation.simulator_id,
+                        parca_dataset_id=orm_simulation.parca_dataset_id,
+                        config=SimulationConfig(**cleaned),  # type: ignore[arg-type]
+                        tags=list(orm_simulation.tags),
+                    )
+                except ValidationError:
+                    # A non-extra validation error (e.g. a changed field type) —
+                    # last resort: enumerate with an unvalidated construct so the
+                    # list still never 500s on a single bad record.
+                    simulation = Simulation.model_construct(
+                        simulation_config_filename=orm_simulation.config_filename,
+                        experiment_id=orm_simulation.experiment_id,
+                        database_id=orm_simulation.id,
+                        simulator_id=orm_simulation.simulator_id,
+                        parca_dataset_id=orm_simulation.parca_dataset_id,
+                        config=SimulationConfig.model_construct(**orm_simulation.config),  # type: ignore[arg-type]
+                        tags=list(orm_simulation.tags),
+                    )
             simulations.append(simulation)
         return simulations
 

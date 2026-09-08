@@ -1096,7 +1096,10 @@
 #            already normalizes to a string before this. 2 new regression tests.
 # 0.9.122 -- (undocumented at authoring time; no changelog entry found for this
 #            bump in this file's own history)
-__version__ = "0.9.123"
+# 0.9.124 — lenient simulation-list: tolerate a legacy stored config (strip
+#            extra-forbidden parca_options keys) instead of 500ing the whole
+#            GET /api/v1/simulations; strict creation + per-id detail preserved
+__version__ = "0.9.124"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
