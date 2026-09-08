@@ -1310,6 +1310,7 @@ async def test_a_terminal_row_is_reported_without_asking_a_backend_that_may_be_g
         error_message=None,
     )
     db = MagicMock()
+    db.get_simulation = AsyncMock(return_value=MagicMock())  # the handler resolves the record first
     db.get_hpcrun_by_ref = AsyncMock(return_value=row)
     service = MagicMock()
     service.get_job_status = AsyncMock(return_value=None)  # the head is gone
