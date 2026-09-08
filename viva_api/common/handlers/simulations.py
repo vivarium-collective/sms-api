@@ -1015,6 +1015,15 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
             id=int(id), status=hpc_run.status or JobStatus.RUNNING, error_message=hpc_run.error_message
         )
 
+    # A terminal row is the answer. The backend job may be GONE by now -- a
+    # cancelled Nextflow head is deleted, a finished K8s Job is garbage-collected
+    # -- and asking it returns None, which the branch below reports as UNKNOWN
+    # (viva-api#484: a cancelled campaign read "unknown" a minute after the
+    # cancel handler itself had answered "cancelled"). The write a few lines
+    # down exists precisely so this read need not hit the backend again.
+    if hpc_run.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+        return SimulationRun(id=int(id), status=hpc_run.status, error_message=hpc_run.error_message)
+
     # Route to the service that owns this run (by the run's backend), not the global default.
     simulation_service = get_simulation_service_for_job(hpc_run.job_id)
     if simulation_service is None:
