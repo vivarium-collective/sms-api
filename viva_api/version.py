@@ -1133,7 +1133,40 @@
 #            --stage-private-fork/--vecoli-private-commit`. 13 new
 #            regression tests (build-command script content, handler
 #            dispatch/fail-loud, CLI wiring).
-__version__ = "0.9.126"
+# 0.9.127 -- fix: run_pbg.py's _redirect_emitters() now routes an xarray/zarr
+#            emitter (out_uri) straight to RAY_OUT_S3 instead of the shared
+#            local results_dir every other file-backed emitter uses (real
+#            root cause of CD2 Dispatch 665/666, both failing around
+#            generation 3-4 on a multi-hour lineage_ray_batch/mbp_dispatch
+#            run). The local-then-periodic-best-effort-sync path
+#            (ray-batch-entrypoint.sh's start_output_sync, "never fails the
+#            job on its own") is safe for parquet's independent chunk files
+#            but not for zarr: viva_emitters.xarray_emitter.zarr_writer.
+#            _check_group requires the PREVIOUS generation's own group to
+#            still exist in the SAME store, and this process's own
+#            filesystem is not authoritative on a multi-node run -- Ray
+#            places ray:-addressed actors wherever it likes (viva-api#419,
+#            already documented by this file's own _assert_emitted_output).
+#            If the actor owning a seed's lineage gets restarted on a
+#            different node between generations, the new node's local disk
+#            never had the previous generation's zarr group, and
+#            _check_group fails loudly. Confirmed via a local, no-AWS
+#            reproduction (XArrayEmitter driven through 8 successive
+#            generations against a persistent local store) that the
+#            emitter's own generation-boundary logic is otherwise correct --
+#            this is a dispatch-infrastructure gap, not a pbg-emitters bug.
+#            Explains the depth correlation exactly: Run 4's short
+#            n_generations=2 dispatches (83 real successes) never run long
+#            enough to hit a real actor restart; K4/J3's 4-8 generation
+#            dispatches run for hours. v2ecoli's own _open_xarray_emitter
+#            already has out_is_s3-aware branching -- this is the first time
+#            it's ever actually exercised. Falls back to the existing local
+#            redirect when RAY_OUT_S3 is unset (local/non-Batch dev
+#            contexts unaffected). Every other file-backed emitter
+#            (ParquetEmitter, SQLiteEmitter, ...) is completely unaffected --
+#            confirmed by a dedicated regression test that RAY_OUT_S3 being
+#            set does not change parquet's own redirect target. 3 new tests.
+__version__ = "0.9.127"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
