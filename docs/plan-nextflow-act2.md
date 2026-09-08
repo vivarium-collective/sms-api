@@ -90,6 +90,12 @@ was cleared:
 infrastructure), nothing about 336-scale (the 255-arity wall was measured at render time; the
 gather has now run at N=3), and nothing about the science in the TSVs.
 
+**FIRED 2026-09-08 21:42Z — simulation 683** (`sim172-run2-j3-10x8-founders-4626`), shape 1
+below, after MNP's 666 died of the xarray bug: `mecillinam_wellmixed.json`, Alex's fresh J3
+chassis via `cache_uri`, redux swap, `exchange_fluxes` + basis inside `injected_processes`,
+10 seeds × 8 generations (mirroring 666's spec), `--independent-founders`, gather on.
+Announced on #166. Expected terminal ~03:00–04:00Z.
+
 **Next milestone on this path — a Run 2, and it is now a coordination decision.** Alex's
 MNP Run 2 (Dispatch 666) is running, so a Nextflow Run 2 is no longer the only route to the
 deliverable; its value would be (a) the gather running as part of the campaign — MNP needs a
@@ -629,6 +635,7 @@ stays current.
 | 2026-09-08 | Gate 1b run dispatched: sim **577** (`sim167-gate1b-founders-3x1-fc4d`), 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574 — the shared-founder control, in which seeds differ in only **1.4–1.6 %** of 16,321 bulk counts at t=0 |
 | 2026-09-08 | **GATE 1b CLOSED — sim 577 COMPLETED ~14:50Z.** Independent founders: 30.3–30.7 % of 16,321 bulk counts differ at t=0 between seeds, vs 1.4–1.6 % for the shared-founder control (574). v2ecoli#731 verified on infrastructure |
 | 2026-09-08 | 7-hour sync 19:40Z: Alex superseded the "stale caches" line — fresh K4/J3 chassis at commit `2fddfcb8`, Run 1 cell-only (665) and **Run 2 (666, 8 gens)** dispatched on MNP; Run 1 coupled on its 3rd re-fire past v2ecoli#745/sms-ecoli#289; Run 4's second config needs a chassis rebuild (680); Run 3 unchanged. Cluster 0.9.125. @cplong90: `inputs_hash` can condemn but not clear a pin. New code not touching this path: viva-api#502/#504/#506, v2ecoli#744/#745 |
+| 2026-09-08 | **Nextflow Run 2 dispatched: sim 683** (shape A on simulator 172; mirrors 666's spec with independent founders; parquet-only, gather in-campaign). Announced on #166 |
 | 2026-09-08 | **Alex's Run 2 (sim 666) FAILED 21:08Z** — the 665 xarray bug at the generation-4→5 boundary (seed 6, `emitstep_gen=4` missing). My "not exposed" claim retracted on #166 with the traceback; parquet history 0–4 for all 10 seeds is intact. v2ecoli#746 merged (`7cb19315`) |
 | 2026-09-08 | Phase 5 pass while 666 runs: v2ecoli#746 (16 lineage knobs declared — G closed), viva-api#514 (#484), viva-api#515 (e2e opt-in). Run 2 hedge command pre-staged in both shapes with `exchange_fluxes` in `injected_processes` |
 | 2026-09-08 | 20:40Z: answered @cplong90 and @AlexPatrie on #166 with measurements — 666 is parquet (not xarray-exposed); 679 omitted `exchange_fluxes` (gap 1, mine — must ride in `injected_processes` on this path); `cd1_exchange_fluxes` hard-binds `external_exchange_fluxes`, absent even on 666 (gap 2, the redux binding, @eagmon). Hedge offer for a Nextflow Run 2 replication stands |
