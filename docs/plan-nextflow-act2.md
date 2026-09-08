@@ -457,9 +457,9 @@ calls `reconcile_local_tasks()` alongside `_reconcile_orphaned_build` /
   one. @eagmon's call (item C / #448).
 - ~~**Raise the `analysis` label's base memory**~~ — **done, viva-api#495**:
   `DEFAULT_NF_RESOURCES["analysis"]` 16 → **32 GB** base (still `×attempt` on 137), with a
-  test pinning ≥ 32. ⚠ It is a *default in the api image*, so it takes effect on the next
-  api deploy — `smsvpctest` 0.9.119 still dispatches gathers at 16 GB until then. A
-  caller can front-run it today with `nextflow_dispatch.resources.analysis.memory`.
+  test pinning ≥ 32. **Live on `smsvpctest` as of 0.9.122** (deploy #498, 12:31Z; the
+  pod's `analysis` line verified as `_scaled_memory(32)`). The db-migration overlay,
+  which two intervening deploys had left at 0.9.115, is back in step.
 
 ### Phase 4 — Ordinal identity instead of string matching
 
@@ -516,5 +516,6 @@ stays current.
 | 2026-09-08 | **sim 570 FAILED at 06:09Z with blocker 7** (A.7) — but blocker 6 is confirmed fixed (1.62 GB, three sweeps) and **the gather ran for the first time ever**. It died in `resolve_sim_data`: the ParCa cache was never staged into the gather. Fixed as v2ecoli#742 |
 | 2026-09-08 | v2ecoli#742 merged; sms-ecoli#285 re-pins; simulator **167**; sim **574** dispatched 06:53Z (the CLI showed a bare "HTTP Error" both for the build and the dispatch — a tunnel transport failure on the *response*; the server had done the work each time. Check before retrying) |
 | 2026-09-08 | **GATE 4 CLOSED — sim 574 COMPLETED 08:40:42Z.** Three sweeps, gather ran, `cd1_*` multiseed TSVs carry seeds 0/1/2 × gens 0/1, 1.65 GB + 32 MB analysis. `analysis.json` PARTIAL (10/11; `cd1_exchange_fluxes` binder error on the redux listener set → @eagmon). Gather OOM'd at 16 GB, retry at 32 GB succeeded — raise the label's base memory |
-| 2026-09-08 | viva-api#495: gather base memory 16 → 32 GB (the size 574's successful retry ran at); needs an api deploy to reach `smsvpctest` |
+| 2026-09-08 | viva-api#495: gather base memory 16 → 32 GB (the size 574's successful retry ran at) |
+| 2026-09-08 | **0.9.122 deployed** (#498): the 32 GB default is live on `smsvpctest`; verified on the pod. 0.9.120/0.9.121 were @AlexPatrie's intervening rolls and predated #495 |
 | 2026-09-08 | v2ecoli#737 (@eagmon) **closes item H** — the one-tick collapse was a pre-emit crash (native derivers not recognised as Steps), not a silent empty emit; `PBG_REQUIRE_OUTPUT` had refused it correctly. Also fixes the pint `Quantity > float` crash on AA media |
