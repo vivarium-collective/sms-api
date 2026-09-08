@@ -89,6 +89,11 @@ was cleared:
 infrastructure), nothing about 336-scale (the 255-arity wall was measured at render time; the
 gather has now run at N=3), and nothing about the science in the TSVs.
 
+**Next milestone on this path — the real Run 2.** Once Alex's fresh J3 founder caches land:
+10 seeds × 10 generations, `j3`, `--include-analysis`, `--cache-uri` pointing at the new
+per-seed caches. It is both a CD2 deliverable and the first scale step past N=3 (100
+lineages) on the path whose gather runs as part of the campaign.
+
 **What gate 4 buys that the team's other path does not (recorded 2026-09-08 13:00Z):** CD2
 Runs 1–4 are being dispatched on `lineage_ray_batch`/MNP, where — per @eagmon's readiness audit,
 GATE 1 — *analyses do not auto-trigger*; every run needs a manual flush after it lands. On this
@@ -325,7 +330,14 @@ above stands.
   (574's were 77–91 for two), so the re-draw is not visibly expensive at this scale.
 - ParCa caches are keyed **commit + variant** and are a deliberately *shared*
   resource. Any dispatch-identity token must **not** enter cache paths, or reuse
-  breaks and @cplong90's staged caches are stranded. (This is why F resolves to
+  breaks and @cplong90's staged caches are stranded.
+- **The staged J3 founder caches the J3 probe reused are pinned to an old v2ecoli
+  commit** (Alex, Slack 2026-09-08 09:50/11:05). The probe ran on simulator 160, which
+  predates #735; on any image at or past #735, `cache_version` schema 3 refuses
+  cross-commit reuse, so the same `--cache-uri` dispatch would fail loudly today. Fresh J3
+  founder caches are being rebuilt on Alex's side (queued behind the K4 chassis at
+  `ray-parca-cache/2fddfcb8…/cd2-run1-k4-chassis/`). **Nobody has a real Run 2 proof on
+  either path yet** — the probe never claimed to be one. (This is why F resolves to
   attribution rather than path derivation.)
 - **v2ecoli#735** (open, eagmon) moves `compute_cache_version` to **schema 3**,
   folding chassis provenance into `inputs_hash`. This **rekeys every shared
@@ -553,5 +565,6 @@ stays current.
 | 2026-09-08 | viva-api#495: gather base memory 16 → 32 GB (the size 574's successful retry ran at) |
 | 2026-09-08 | 12-hour sync at 13:15Z: sms-ecoli `main` → `bc0ff34e` (v2ecoli `e4db5e67`: #741 emit-robustness, #743 coupled emit, #738); simulator 167 predates it. @eagmon: `external_exchange_fluxes` is emitted at ≥ #741 — my redux diagnosis superseded, pending verification on a newer image. Runs 1–4 dispatching on MNP (Alex), where analyses need a manual flush; the Nextflow gather auto-runs. Alex closed the `media` question (not urgent; MNP/chain have their own routes). @cplong90 independently confirmed the J3 probe consumed the prebuilt founder caches correctly |
 | 2026-09-08 | Gate 1b run dispatched: sim **577** (`sim167-gate1b-founders-3x1-fc4d`), 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574 — the shared-founder control, in which seeds differ in only **1.4–1.6 %** of 16,321 bulk counts at t=0 |
+| 2026-09-08 | Team status (Alex, [sms-ecoli#166 at 15:04Z](https://github.com/CovertLabEcoli/sms-ecoli/issues/166#issuecomment-5587273617), MNP path): Run 1 coupled **10/10 proven**, content-verified; Run 4 `minimal` **42/42** and `_with_trp` **41/42** (genotype 7: `NegativeCountsError`, WATER in `ecoli-rna-degradation`, to the science team); Run 1 cell-only and Run 2 blocked on **stale founder caches** (old v2ecoli pin) — fresh chassis rebuilding; Run 3: #741 now surfaces two real bugs (Eran's). Chris on the Run 1 data: "looking great so far" |
 | 2026-09-08 | **GATE 1b CLOSED — sim 577 COMPLETED ~14:50Z.** Independent founders: 30.3–30.7 % of 16,321 bulk counts differ at t=0 between seeds, vs 1.4–1.6 % for the shared-founder control (574). v2ecoli#731 verified on infrastructure |
 | 2026-09-08 | **0.9.122 deployed** (#498): the 32 GB default is live on `smsvpctest`; verified on the pod. 0.9.120/0.9.121 were @AlexPatrie's intervening rolls and predated #495 |
