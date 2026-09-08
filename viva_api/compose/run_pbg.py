@@ -666,7 +666,15 @@ def _redirect_emitters(node: Any, results_dir: Path) -> int:
             key = next((k for k in _EMITTER_OUT_KEYS if k in config), "out_dir")
             before = config.get(key)
             out_s3 = (os.environ.get("RAY_OUT_S3") or "").strip()
-            if key == "out_uri" and out_s3:
+            # Belt-and-suspenders on the class itself, not just the key: `key` picks
+            # out_dir first if a config ever carried BOTH out_dir and out_uri (no
+            # real emitter_arg does today, confirmed against every real K4/J3/Run3/
+            # Run4 dispatch config, but nothing stops one from arising later) --
+            # that would silently mask a real xarray emitter behind the old local
+            # redirect, exactly as silently as the bug this fix closes. Checking the
+            # actual registered class name removes the guesswork entirely.
+            is_xarray = key == "out_uri" and isinstance(address, str) and address.split(":")[-1] == "XArrayEmitter"
+            if is_xarray and out_s3:
                 config[key] = out_s3
                 redirected += 1
                 print(f"run_pbg: redirected emitter {address} {key}: {before!r} -> {out_s3} (S3-direct)")

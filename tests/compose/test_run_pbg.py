@@ -386,6 +386,21 @@ def test_redirect_emitters_falls_back_to_local_for_xarray_when_ray_out_s3_unset(
     assert doc["e"]["config"]["out_uri"] == str(tmp_path)
 
 
+def test_redirect_emitters_checks_the_actual_class_not_just_the_out_uri_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """cd2-worker review of #520: `key` picks out_dir first if a config ever
+    carried BOTH out_dir and out_uri, which would silently mask a real xarray
+    emitter behind the old local redirect. No real emitter_arg does that today,
+    but a hypothetical non-XArrayEmitter class that happens to speak out_uri
+    (with no out_dir key at all) must ALSO not take the S3-direct branch --
+    only the real, registered XArrayEmitter class does."""
+    monkeypatch.setenv("RAY_OUT_S3", "s3://smsvpctest-shared/vecoli-output/exp-123/")
+    doc: dict[str, Any] = {"e": {"address": "local:SomeOtherEmitter", "config": {"out_uri": "s3://old/place"}}}
+    run_pbg._redirect_emitters(doc, tmp_path / "out")
+    assert doc["e"]["config"]["out_uri"] == str(tmp_path / "out")
+
+
 # --- _persist_emitter_history: the in-memory-emitter fallback (backlog item 88) ---
 
 
