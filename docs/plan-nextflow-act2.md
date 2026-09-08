@@ -1,9 +1,11 @@
 # Nextflow dispatch, act 2: closing gate 4 and the shortcomings behind it
 
-**Status (2026-09-08 06:40Z): gate 4 is still open, but for the first time the
-gather has RUN. Seven blockers found and cleared in sequence; the seventh
-(v2ecoli#742, the gather had no sim_data) is merging. Phase 2 — the cancel
-reconciler — is merged, deployed as 0.9.115, and verified live.** Everything
+**Status (2026-09-08 08:41Z): GATE 4 IS CLOSED.** Simulation **574** (simulator 167,
+sms-ecoli `1c66700` → v2ecoli `b9942d78`) completed end to end: ParCa → three lineages →
+the gather, with the analyses receiving **all three sweeps** and their sim_data. Seven
+blockers were found and cleared in sequence to get here. Phase 2 — the cancel
+reconciler — is merged, deployed, and verified live. What remains is content-level
+(see "Gate 4 — the evidence" and Phase 3). Everything
 else here is inventory — every known shortcoming of the Nextflow dispatch path,
 with what is measured, what is assumed, and who owns it.
 
@@ -52,7 +54,37 @@ was cleared:
 | 4 | nested-composite path (PBG#207) | worked around, v2ecoli#723 |
 | 5 | every lineage emits a directory named `sweep` | fixed, v2ecoli#736 — **confirmed**: all 3 lineages of sim 562 SUCCEEDED with distinct dirs |
 | 6 | the fix for 5 also captures the port manifest `sweep_dir.json` | fixed, v2ecoli#739 — **confirmed**: sim 570 staged all three sweeps, 1.62 GB published, `lineage_seed=0/1/2` |
-| 7 | **the gather has no `simData.cPickle` — `resolve_sim_data` fails** | **fixed, v2ecoli#742** — see A.7 |
+| 7 | the gather has no `simData.cPickle` — `resolve_sim_data` fails | fixed, v2ecoli#742 — **confirmed**: sim 574's gather resolved sim_data and completed |
+
+#### Gate 4 — the evidence (sim 574, `sim167-gate4-3x2-b7-95aa`, completed 08:40:42Z)
+
+| criterion | measured |
+|---|---|
+| three lineages render and run | `parca_v0` 4 m (cache hit); lineages **77 / 83 / 91 min**, all SUCCEEDED |
+| three sweeps published | `sweep_v0_s0/s1/s2`, **`lineage_seed=0/1/2`** (30 objects each); **197 objects / 1,654,087,569 bytes** total |
+| the gather executes | `analysis` SUCCEEDED (2 min on the retry — see below) |
+| **the analyses receive all N sweeps** | `analysis/ptools/cd1_proteomics__variant=0.tsv` columns: `Cell: 0_0_0, 0_1_00, 1_0_0, 1_1_00, 2_0_0, 2_1_00` — **seeds 0, 1, 2 × generations 0, 1** |
+| `analysis.json` publishes | 8,428,358 bytes; `analysis/` = **51 objects / 32.1 MB** incl. per-cell `ptools_*` TSVs for all six cells |
+| history is real (#475) | smallest chunk: **244 columns × 127 rows** |
+
+**Two findings on the way through, neither a blocker:**
+
+- **`analysis.json` reports `PARTIAL`: 10 of 11 analyses `ok`.** `multiseed/cd1_exchange_fluxes`
+  fails with `Binder Error: Referenced column "listeners__fba_results__external_exchange_fluxes"
+  not found` — the `j3` variant swaps in `ecoli-metabolism-redux`, whose listeners emit
+  `base_reaction_fluxes` / `solution_fluxes` / `estimated_fluxes` but not that column. An
+  analysis-vs-redux listener mismatch, i.e. item **C** (#448 territory), not a dispatch defect.
+  Handed to @eagmon on sms-ecoli#166.
+- **The gather OOMs at 16 GB and needs the retry.** First attempt: exit **137**
+  (`OutOfMemoryError: Container killed due to memory usage`) after 1 min; the awsbatch profile's
+  `memory = { task.exitStatus == 137 ? 16.GB * task.attempt : 16.GB }` gave the retry 32 GB and it
+  finished in 2 min. So the exit-status-keyed scaling act 1 flagged as missing **is in place and
+  worked** — but a 3×2 already needs it, and Run 4 is 336 lineages. Raise the `analysis` label's
+  base memory before a real campaign relies on the retry.
+
+**What gate 4 does *not* say:** nothing about founders (gate 1b, #731 still unverified on
+infrastructure), nothing about 336-scale (the 255-arity wall was measured at render time; the
+gather has now run at N=3), and nothing about the science in the TSVs.
 
 ---
 
@@ -362,18 +394,16 @@ The only change needed to answer the gate; everything else can follow.
 5. ~~merge v2ecoli#739 → re-pin → rebuild → re-run~~ — **done**: sms-ecoli#281,
    simulator 164, simulation 570 → blocker 6 cleared, gather RAN, **blocker 7** (A.7).
    The image change re-hashed every task, so nothing was cached (see A.7).
-6. **Now:** merge v2ecoli#742 → re-pin → rebuild → re-run (full ~95 min again).
+6. ~~merge v2ecoli#742 → re-pin → rebuild → re-run~~ — **done**: sms-ecoli#285 (`1c66700a`),
+   simulator **167**, simulation **574 COMPLETED**. Gate 4 closed; evidence above.
 
 **Gate 4 closes only if** the `analysis` process actually executes, `analysis.json`
 publishes, **three** distinct `lineage_seed=` partitions appear, and the history
 satisfies #475's criterion (>1 column, >0 rows). Compare against the recorded
 failure: `sim160-gate4-3x2-f07a`, 89 objects, `lineage_seed=1` and `=2` only.
 
-*Status (2026-09-08 06:09Z):* sim 570 satisfied the lineage half **and** the
-staging half — three sweeps published, `analysis` submitted and executed — and failed
-inside the analysis on sim_data resolution (blocker 7, A.7). **Still open**, but every
-structural criterion is now met; what remains is the gather's *content*. Next attempt
-once v2ecoli#742 is in a simulator.
+✅ **Closed 2026-09-08 08:40Z by simulation 574** — every criterion measured; see
+"Gate 4 — the evidence" under §A.
 
 ### Phase 2 — Replace the cancel reap with scheduler reconciliation — ✅ DONE, VERIFIED LIVE
 
@@ -418,9 +448,15 @@ calls `reconcile_local_tasks()` alongside `_reconcile_orphaned_build` /
 - **#449**: default `analysis_options` from the simulation config's own block, *and*
   reject `include_analysis` with empty options at the API boundary. The boundary check
   is the cheap half and needs no science decision (same shape as #456).
-- Confirm **#727** actually satisfies the molecular analyses (`cd1_transcriptomics`,
-  `cd1_proteomics`) once the gather runs — if not, that is a gap in the fix, not a
-  missing dependency.
+- ~~Confirm **#727** actually satisfies the molecular analyses~~ — **it does**: sim 574's
+  `cd1_transcriptomics` and `cd1_proteomics` both `ok`, via the staged cache (#742) rather
+  than #727's identity pointer, which the Nextflow sweeps never carry.
+- **`cd1_exchange_fluxes` vs `ecoli-metabolism-redux`**: the analysis binds
+  `listeners__fba_results__external_exchange_fluxes`, which the redux listener set does
+  not emit. Either the analysis learns the redux column names or redux emits the classic
+  one. @eagmon's call (item C / #448).
+- **Raise the `analysis` label's base memory** (`workflow_nf` resources / the awsbatch
+  profile): a 3×2 gather already OOMs at 16 GB and only survives on the ×attempt retry.
 
 ### Phase 4 — Ordinal identity instead of string matching
 
@@ -475,4 +511,6 @@ stays current.
 | 2026-09-08 | **sim 562 FAILED at 03:33Z with blocker 6** (A.6): all three lineages SUCCEEDED (94/94/73 m, real data), then the gather collided on `sweep_dir.json` — the run_step port manifest my `sweep_*` glob also matched. Fixed as v2ecoli#739 (`type: "dir"` + a structural fnmatch test); process-bigraph#208 filed upstream. Seed 0's 552 MB is intact in its work dir |
 | 2026-09-08 | v2ecoli#739 merged; sms-ecoli#281 re-pins (base had moved to `a9cf24ed` under me — verified forward); simulator **164**; resumed re-run as sim **570** — nothing cached (image change re-hashes every task) |
 | 2026-09-08 | **sim 570 FAILED at 06:09Z with blocker 7** (A.7) — but blocker 6 is confirmed fixed (1.62 GB, three sweeps) and **the gather ran for the first time ever**. It died in `resolve_sim_data`: the ParCa cache was never staged into the gather. Fixed as v2ecoli#742 |
+| 2026-09-08 | v2ecoli#742 merged; sms-ecoli#285 re-pins; simulator **167**; sim **574** dispatched 06:53Z (the CLI showed a bare "HTTP Error" both for the build and the dispatch — a tunnel transport failure on the *response*; the server had done the work each time. Check before retrying) |
+| 2026-09-08 | **GATE 4 CLOSED — sim 574 COMPLETED 08:40:42Z.** Three sweeps, gather ran, `cd1_*` multiseed TSVs carry seeds 0/1/2 × gens 0/1, 1.65 GB + 32 MB analysis. `analysis.json` PARTIAL (10/11; `cd1_exchange_fluxes` binder error on the redux listener set → @eagmon). Gather OOM'd at 16 GB, retry at 32 GB succeeded — raise the label's base memory |
 | 2026-09-08 | v2ecoli#737 (@eagmon) **closes item H** — the one-tick collapse was a pre-emit crash (native derivers not recognised as Steps), not a silent empty emit; `PBG_REQUIRE_OUTPUT` had refused it correctly. Also fixes the pint `Quantity > float` crash on AA media |

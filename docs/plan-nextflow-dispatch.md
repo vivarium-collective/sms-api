@@ -1,7 +1,8 @@
 # Nextflow as a third dispatch path: coarse outer DAG, process-bigraph inner engine
 
-**Status (2026-09-05): Phases 0–3 are BUILT AND MERGED; the remaining gates are execution
-gates.** See §12 for what landed and what each go/no-go now needs. What follows below is the
+**Status (2026-09-08): Phases 0–3 are BUILT AND MERGED, and gate 4 — the gate that decides
+whether this path is justified — is CLOSED (simulation 574; see act 2).** Remaining open:
+gate 1b on infrastructure, and 336-scale for the gather. See §12 for what landed and what each go/no-go now needs. What follows below is the
 original design, preserved with its corrections inline — the reasoning is what makes the
 implementation reviewable, so it is not rewritten in hindsight.
 
@@ -1224,7 +1225,7 @@ M channels into one — which is what a flat sibling list cannot express at all 
 | **1c** — ParCa mode recorded out-of-band | unchanged |
 | **2** — handoff as a staged `path` at real cache size | mechanism proven in Phase 0 at 23 bytes; the profile exists as of #204, so this is now **blocked only on a deploy** |
 | **3** — `-resume` re-runs only the failed lineage | **now possible**: `deploy()` could not emit `-resume` at all until #203, and the profile it needed landed in #204. Blocked only on a deploy |
-| **4** — 336 renders and the gather gathers | renders ✅, **stages ✅ (sim 570: three sweeps, 1.62 GB)**, and the gather **executed for the first time** — then failed inside the analysis on sim_data resolution (the ParCa cache was staged into every lineage but never into the gather; v2ecoli#742). **Still open; seven blockers to date.** Tracked in [act 2 §A.7](plan-nextflow-act2.md) |
+| **4** — 336 renders and the gather gathers | ✅ **CLOSED 2026-09-08 by simulation 574** at 3×2: three sweeps published, the gather executed, and the multiseed analyses carry seeds 0/1/2 × generations 0/1 — `analysis/` 51 objects / 32 MB, 1.65 GB total. Seven blockers cleared in sequence to get here. Not yet exercised at 336 (rendering was; the gather has run at N=3). Evidence in [act 2](plan-nextflow-act2.md) "Gate 4 — the evidence" |
 | **5** — head overhead < ~2 min | ✅ **implied**: a fully-cached resume completes in **73 s** end to end, which is almost entirely head |
 | **6** — a task that emits nothing FAILS | ✅ **now genuinely holds**, via viva-api#475 (eagmon, 2026-09-07): parquet requires >1 column and >0 rows, zarr requires a real chunk. ⚠ My earlier note here — that #467's hole was "not exposed" — **was wrong**; a `global_time`-only parquet is >0 bytes and passed the very check I cited as protective, and three real dispatches reported success having written nothing. See act 2 §D |
 
