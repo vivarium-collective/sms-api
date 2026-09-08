@@ -33,6 +33,7 @@ import copy
 import importlib.resources as _res
 import json
 import logging
+import math
 import random
 import re
 import shlex
@@ -2900,6 +2901,58 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         num_nodes = int(mnp_dispatch.get("num_nodes") or 1)
         params = dict(mnp_dispatch.get("params") or {})
         steps = int(mnp_dispatch.get("steps") or 1)
+        # required_run_interval (item 105/#166, the K4-canary "under-run" empty-
+        # emit bug: sms-ecoli#166 comment 5579146363, eagmon): `steps` silently
+        # defaulting to 1 above is a REAL bug for a lineage-shaped composite --
+        # `Composite.run(steps)` takes TOTAL SIMULATED TIME to advance, not a
+        # tick count (confirmed from build_lineage_ray_batch_document's own
+        # docstring and lineage_ray_batch's own @composite_generator schema,
+        # v2ecoli/composites/lineage_ray_batch.py:35-67), and every
+        # `ray:LineageProcess` node's own `interval` is `max_duration_per_gen`
+        # -- process-bigraph only invokes a process whose next event falls
+        # inside the run window, so `steps=1` against a 3600s interval invokes
+        # nothing and nothing emits (reproduced: run(1) -> 0 rows, run(3600) ->
+        # 1 row -- matches Dispatch 438's real final_state exactly). The
+        # composite's OWN documented contract is
+        # `n_generations * max_duration_per_gen` of total simulated time.
+        #
+        # Complementary to, NOT colliding with, sms-ecoli#283 (cplong90,
+        # merged same session): that PR fixes the CLIENT side -- sms-ecoli's
+        # own scripts/gen_cd2_cellonly_dispatches.py now derives and emits a
+        # correct `steps` value in every generated request row. This fix is
+        # the SERVER-side backstop for any request that still omits or
+        # under-computes it (a different generator, a hand-built request, an
+        # older still-in-flight config) -- belt-and-suspenders on two
+        # independent layers of the same pipeline, not two attempts at the
+        # same fix. `math.ceil` here matches that PR's own more rigorous
+        # `math.ceil` choice over a truncating `int()`.
+        #
+        # This dispatch method never references any one composite by name (see
+        # its own docstring) and has no remote visibility into a composite's
+        # registered parameter schema (composite_spec resolution happens
+        # inside the container, not here) -- so this can't be made fully
+        # composite-generic without Eran's own proposed document-level
+        # `required_run_interval` contract (not yet merged as of this note).
+        # Interim, deliberately narrow fix: `n_generations` in `params` is the
+        # signal that this IS a lineage-shaped request (only composites that
+        # follow this convention set it at all); `max_duration_per_gen`
+        # defaults to 3600.0 if the caller relies on the composite's own
+        # default rather than setting it explicitly (the same default value
+        # every real lineage/batch document-builder in v2ecoli declares:
+        # lineage_ray_batch.py/batch_lineage_ray.py/workflow_nf.py/
+        # lineage_step.py, confirmed by direct read, not assumed). `max()`
+        # with the caller's own explicit `steps` so a deliberately larger
+        # value is never clamped down. A composite that never sets
+        # `n_generations` is completely unaffected (today's exact behavior).
+        # `math.ceil`, not `int()` truncation (sms-ecoli#283, cplong90, same
+        # bug independently fixed on the generator side): int() on a non-
+        # integral product (an off-3600.0 max_duration_per_gen) would round
+        # DOWN, handing the run marginally less than the required interval --
+        # math.ceil always rounds up, so the clamp can only ever give a
+        # composite AT LEAST what its own contract demands, never less.
+        if "n_generations" in params:
+            required_run_interval = int(params["n_generations"]) * float(params.get("max_duration_per_gen", 3600.0))
+            steps = max(steps, math.ceil(required_run_interval))
         # cache_variant (item 105, mirrors chain-dispatch's own already-proven
         # job_scheduler.py pattern -- getattr(simulation.config, "cache_variant",
         # ...)): selects a variant-labeled derived ParCa cache (POST

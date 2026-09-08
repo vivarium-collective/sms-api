@@ -830,6 +830,163 @@ class TestSubmitMultiNodeComposite:
         assert composite_call.kwargs["tags"]["CompositeId"] == "some_workspace.composites.some_multi_node_composite"
 
     @pytest.mark.asyncio
+    async def test_n_generations_in_params_computes_required_run_interval(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """The K4-canary empty-emit bug (sms-ecoli#166 comment 5579146363,
+        eagmon): a lineage-shaped composite's own contract is
+        `n_generations * max_duration_per_gen` of TOTAL SIMULATED TIME, not a
+        tick count -- `steps` silently defaulting to 1 invokes nothing (every
+        ray:LineageProcess node's own interval is max_duration_per_gen, and
+        process-bigraph only invokes a process whose next event falls inside
+        the run window). `steps` omitted here -> computed from n_generations
+        (3) x the composite's own documented max_duration_per_gen default
+        (3600.0) = 10800."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {"n_seeds": 10, "n_generations": 3},
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-10", "composite-10"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-required"
+            )
+
+        _parca_call, composite_call = mock_batch.submit_job.call_args_list
+        cmd = _env_of(composite_call)["RAY_JOB_CMD"]
+        assert "-n 10800" in cmd
+
+    @pytest.mark.asyncio
+    async def test_n_generations_honors_explicit_max_duration_per_gen(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {"n_generations": 2, "max_duration_per_gen": 100.0},
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-11", "composite-11"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-explicit-mdpg"
+            )
+
+        _parca_call, composite_call = mock_batch.submit_job.call_args_list
+        cmd = _env_of(composite_call)["RAY_JOB_CMD"]
+        assert "-n 200" in cmd
+
+    @pytest.mark.asyncio
+    async def test_explicit_steps_larger_than_required_run_interval_is_not_clamped_down(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """max(steps, required_run_interval): a caller's own deliberately
+        larger steps value must survive, never get clamped down to the
+        computed minimum."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {"n_generations": 1, "max_duration_per_gen": 100.0},
+                "steps": 999,
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-12", "composite-12"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-not-clamped"
+            )
+
+        _parca_call, composite_call = mock_batch.submit_job.call_args_list
+        cmd = _env_of(composite_call)["RAY_JOB_CMD"]
+        assert "-n 999" in cmd
+
+    @pytest.mark.asyncio
+    async def test_no_n_generations_in_params_is_byte_identical_to_before(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """A composite that never declares n_generations (e.g. a colony
+        composite with its own unrelated params) is completely unaffected --
+        steps stays at its own explicit value/silent default exactly as
+        before this fix."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {"composite_id": "some_workspace.composites.colony", "num_nodes": 2, "params": {"n_cells": 6}},
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-13", "composite-13"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-unaffected"
+            )
+
+        _parca_call, composite_call = mock_batch.submit_job.call_args_list
+        cmd = _env_of(composite_call)["RAY_JOB_CMD"]
+        assert "-n 1" in cmd
+
+    @pytest.mark.asyncio
     async def test_require_clean_chain_reaches_the_composite_job_env(
         self,
         experiment_request: "SimulationRequest",
