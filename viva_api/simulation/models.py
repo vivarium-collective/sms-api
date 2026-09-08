@@ -198,12 +198,24 @@ class ParcaOptions(BaseModel):
     # simulation_service_ray.py — it MUST be a declared field or it never survives
     # SimulationConfig construction.
     new_genes: str = "off"
-    # bundle_overrides: a bundle-overrides manifest path (backlog item 104) passed
-    # straight through to v2ecoli-parca's `--bundle-overrides` flag. Read back via
+    # bundle_overrides: one or more bundle-overrides manifest paths (backlog item
+    # 104, extended item 106) passed straight through to v2ecoli-parca's own
+    # `--bundle-overrides` flag (cli/parca.py, action="append" -- confirmed from
+    # SourceBundle.__init__'s own docstring/type hint, Optional[Union[PathLike,
+    # list]]: overrides stack IN ORDER on top of v2ecoli's defaults, they don't
+    # replace them). A single string is still accepted for every existing caller
+    # (byte-for-byte unchanged: one value -> one flag); a list emits one
+    # `--bundle-overrides PATH` per entry, IN ORDER. Real gap this closes: sms-
+    # ecoli's own declared recipe for rebuilding the J3/K4 CD2 candidate chassis
+    # (workspace/studies/cd2-pnnl-01-bundle-scenarios/sims/run_scenarios.sh,
+    # scenario rung5_lam075) stacks TWO overrides in the same command --
+    # `--new-genes violacein_gfp --bundle-overrides .../vio-gfp/overrides.tsv
+    # --bundle-overrides .../rung5-lambda-075/overrides.tsv --rnaseq-source
+    # experimental` -- which a single-string field cannot express at all; a
+    # remote dispatch could only ever apply one of the two layers. Read back via
     # getattr(config.parca_options, "bundle_overrides", None) in
-    # simulation_service_ray.py — same as new_genes, it MUST be a declared field or
-    # it never survives SimulationConfig construction (the item-104 silent drop).
-    bundle_overrides: str | None = None
+    # simulation_service_ray.py, same as new_genes.
+    bundle_overrides: str | list[str] | None = None
     # rnaseq_source: passed straight through to v2ecoli-parca's own
     # `--rnaseq-source` flag (default "reference"; "experimental" is the only
     # other value it accepts, cli/parca.py). Real gap this closes: a

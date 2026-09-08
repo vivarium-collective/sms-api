@@ -293,7 +293,16 @@ def strain_from_config(config: Any) -> tuple[str | None, str | None]:
     parca_options = getattr(config, "parca_options", None)
 
     def _norm(value: Any) -> str | None:
-        s = value.strip() if isinstance(value, str) else None
+        # bundle_overrides can now be a list (multiple stacked --bundle-overrides
+        # flags, see ParcaOptions.bundle_overrides) -- joined with "," for this
+        # single EXPECT_* env-var string. No consumer reads *_EXPECT_BUNDLE_
+        # OVERRIDES yet (confirmed empirically: no match for that name anywhere
+        # in v2ecoli), so this is a viva-api-only convention pending a real
+        # verifier, not a wire format anything downstream already expects.
+        if isinstance(value, list):
+            s: str | None = ",".join(str(v).strip() for v in value if str(v).strip()) or None
+        else:
+            s = value.strip() if isinstance(value, str) else None
         return None if not s or s == "off" else s
 
     return (
@@ -990,7 +999,11 @@ class SimulationServiceRay(SimulationService):
         return batch_job_id
 
     def _parca_command(
-        self, *, new_genes: str | None = None, bundle_overrides: str | None = None, rnaseq_source: str | None = None
+        self,
+        *,
+        new_genes: str | None = None,
+        bundle_overrides: str | list[str] | None = None,
+        rnaseq_source: str | None = None,
     ) -> str:
         """Run ParCa, then hydrate the sim-input bundle into PARCA_CACHE_DIR (out/cache).
 
@@ -1007,14 +1020,22 @@ class SimulationServiceRay(SimulationService):
         or passing ``"off"`` builds byte-for-byte the same command as before this param
         existed). No caller-side change required for any dispatch that doesn't set it.
 
-        ``bundle_overrides`` (backlog item 104): a legacy config's own
-        ``parca_options.bundle_overrides`` (a bundle-overrides manifest path, e.g. a composed
-        new-gene overlay) -- generic passthrough to ``v2ecoli-parca``'s own
-        ``--bundle-overrides PATH`` flag (``cli/parca.py``, ``action="append"``). Same
-        "missed in the new_genes pass" class of gap this mirrors exactly (sms-ecoli#184 /
-        viva-api#365): the value survived on the stored request but was never read here, so
-        ParCa silently built from defaults and any keys the overrides supply were absent.
-        Default ``None`` builds byte-for-byte the same command as before this param existed.
+        ``bundle_overrides`` (backlog item 104, extended item 106): a legacy
+        config's own ``parca_options.bundle_overrides`` -- generic passthrough to
+        ``v2ecoli-parca``'s own ``--bundle-overrides PATH`` flag (``cli/parca.py``,
+        ``action="append"``). Same "missed in the new_genes pass" class of gap
+        this mirrors exactly (sms-ecoli#184 / viva-api#365): the value survived on
+        the stored request but was never read here, so ParCa silently built from
+        defaults and any keys the overrides supply were absent. Accepts a single
+        string (one flag, byte-for-byte the original behavior) OR a list of
+        strings (one ``--bundle-overrides PATH`` per entry, IN ORDER) -- real,
+        confirmed need: sms-ecoli's own declared recipe for the CD2 J3/K4
+        candidate chassis (``cd2-pnnl-01-bundle-scenarios/sims/run_scenarios.sh``,
+        scenario ``rung5_lam075``) stacks TWO overrides in one command
+        (``--bundle-overrides .../vio-gfp/overrides.tsv --bundle-overrides
+        .../rung5-lambda-075/overrides.tsv``); a single-string field could only
+        ever carry one of the two layers. Default ``None`` builds byte-for-byte
+        the same command as before this param existed.
 
         ``rnaseq_source`` (backlog item 106/#166 chassis-provenance thread): a legacy
         config's own ``parca_options.rnaseq_source`` -- generic passthrough to
@@ -1056,11 +1077,15 @@ class SimulationServiceRay(SimulationService):
         """
         settings = get_settings()
         new_genes_flag = f" --new-genes {shlex.quote(new_genes)}" if new_genes and new_genes != "off" else ""
-        bundle_overrides_flag = f" --bundle-overrides {shlex.quote(bundle_overrides)}" if bundle_overrides else ""
+        bundle_overrides_list = (
+            [bundle_overrides] if isinstance(bundle_overrides, str) else list(bundle_overrides or [])
+        )
+        bundle_overrides_flag = "".join(f" --bundle-overrides {shlex.quote(path)}" for path in bundle_overrides_list)
         rnaseq_source_flag = f" --rnaseq-source {shlex.quote(rnaseq_source)}" if rnaseq_source else ""
         command = (
             f"cd {V2ECOLI_DIR}"
-            f" && v2ecoli-parca --mode {settings.ray_parca_mode} --cpus {settings.ray_parca_cpus}"
+            f" && v2ecoli-parca --mode {settings.ray_parca_mode}"
+            f" --cpus {settings.ray_parca_cpus}"
             f" -o {PARCA_SIMDATA_DIR} --cache-dir {PARCA_CACHE_DIR}"
             f"{new_genes_flag}{bundle_overrides_flag}{rnaseq_source_flag}"
             f" && gzip -f -k {PARCA_SIMDATA_DIR}/parca_state.pkl"
