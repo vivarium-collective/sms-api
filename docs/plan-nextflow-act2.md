@@ -1,11 +1,13 @@
 # Nextflow dispatch, act 2: closing gate 4 and the shortcomings behind it
 
-**Status (2026-09-08 08:41Z): GATE 4 IS CLOSED.** Simulation **574** (simulator 167,
+**Status (2026-09-08 12:40Z): GATE 4 IS CLOSED.** Simulation **574** (simulator 167,
 sms-ecoli `1c66700` → v2ecoli `b9942d78`) completed end to end: ParCa → three lineages →
 the gather, with the analyses receiving **all three sweeps** and their sim_data. Seven
-blockers were found and cleared in sequence to get here. Phase 2 — the cancel
-reconciler — is merged, deployed, and verified live. What remains is content-level
-(see "Gate 4 — the evidence" and Phase 3). Everything
+blockers were found and cleared in sequence to get here. Phases 1 and 2 are done — the
+cancel reconciler and the 32 GB gather default are both live on `smsvpctest` (0.9.122).
+What remains is content-level (Phase 3: #449, `cd1_exchange_fluxes` vs the redux listener
+set), Phase 4 (ordinal identity), Phase 5 hygiene, and two things not yet demonstrated:
+gate 1b on infrastructure and the gather at 336-scale. Everything
 else here is inventory — every known shortcoming of the Nextflow dispatch path,
 with what is measured, what is assumed, and who owns it.
 
@@ -90,7 +92,7 @@ gather has now run at N=3), and nothing about the science in the TSVs.
 
 ## The inventory
 
-### A. Blocking gate 4 — the lineage output name collides
+### A. ~~Blocking gate 4 — the lineage output name collides~~ — resolved (blockers 5, 6, 7; gate 4 closed by sim 574)
 
 Every lineage emits a directory named literally `sweep`: `lineage_step.py` declares
 `nextflow_port_decls = {"sweep_dir": 'path "sweep"'}` and each node's config sets
@@ -509,6 +511,7 @@ stays current.
 | 2026-09-08 | viva-api#467 closed (fixed by #475); #478 already closed unmerged |
 | 2026-09-08 | v2ecoli#735 merged — `cache_version` schema 3 is now live, so shared commit+variant caches are **rekeyed**. `cache_uri` campaigns are unaffected |
 | 2026-09-08 | Pin correction: @AlexPatrie's review of #480 flagged my `32ca56da` note as stale — correct, but the SHA he gave (`3132543e`) is #691 from 09-04, **53 commits behind**. Verified against sms-ecoli's `pyproject.toml` + `uv.lock`: the real pin is `5f6a7d54` (#734) |
+| 2026-09-08 | v2ecoli#737 (@eagmon) **closes item H** — the one-tick collapse was a pre-emit crash (native derivers not recognised as Steps), not a silent empty emit; `PBG_REQUIRE_OUTPUT` had refused it correctly. Also fixes the pint `Quantity > float` crash on AA media |
 | 2026-09-08 | v2ecoli#736 merged (`2d20a158`); sms-ecoli#270 re-pins to it; simulator **161** built; the 3×2 re-run dispatched as sim **562** |
 | 2026-09-08 | **Phase 2 shipped**: viva-api#481 merged, deployed as 0.9.115 (#483 — first build raced the bump; rebuilt the same tag from a `main` that had it). **Live cancel + pod-restart test PASSED** on sim 567: the pod that never received the cancel reaped both tasks at 02:31:41Z; no resubmission. viva-api#484 filed for the `/status` presentation gap |
 | 2026-09-08 | **sim 562 FAILED at 03:33Z with blocker 6** (A.6): all three lineages SUCCEEDED (94/94/73 m, real data), then the gather collided on `sweep_dir.json` — the run_step port manifest my `sweep_*` glob also matched. Fixed as v2ecoli#739 (`type: "dir"` + a structural fnmatch test); process-bigraph#208 filed upstream. Seed 0's 552 MB is intact in its work dir |
@@ -518,4 +521,3 @@ stays current.
 | 2026-09-08 | **GATE 4 CLOSED — sim 574 COMPLETED 08:40:42Z.** Three sweeps, gather ran, `cd1_*` multiseed TSVs carry seeds 0/1/2 × gens 0/1, 1.65 GB + 32 MB analysis. `analysis.json` PARTIAL (10/11; `cd1_exchange_fluxes` binder error on the redux listener set → @eagmon). Gather OOM'd at 16 GB, retry at 32 GB succeeded — raise the label's base memory |
 | 2026-09-08 | viva-api#495: gather base memory 16 → 32 GB (the size 574's successful retry ran at) |
 | 2026-09-08 | **0.9.122 deployed** (#498): the 32 GB default is live on `smsvpctest`; verified on the pod. 0.9.120/0.9.121 were @AlexPatrie's intervening rolls and predated #495 |
-| 2026-09-08 | v2ecoli#737 (@eagmon) **closes item H** — the one-tick collapse was a pre-emit crash (native derivers not recognised as Steps), not a silent empty emit; `PBG_REQUIRE_OUTPUT` had refused it correctly. Also fixes the pint `Quantity > float` crash on AA media |
