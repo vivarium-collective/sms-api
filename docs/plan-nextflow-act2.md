@@ -158,7 +158,14 @@ override glob that begins with the port name sweeps it up. A dotfile manifest
 (`.<port>.json`) is invisible to Nextflow globs by default and removes the footgun
 at the source.
 
-### B. Cancel does not reliably stop the work
+### B. ~~Cancel does not reliably stop the work~~ — resolved by Phase 2 (viva-api#481, verified live 2026-09-08)
+
+> Kept as written because the defect table below is the specification #481 was
+> built against. Every row is now addressed: the reap runs from the scheduler off
+> the CANCELLED row (restart-safe), paginates, scans every queue, defers while the
+> head exists, and a resumed run still reaps nothing it does not own. The live
+> test is under Phase 2.
+
 
 - **#472** filed, closed by **#473** (grace period 30→120 s, plus a reap) and
   **#474** (reap only a campaign the run owns outright). Both deployed in **0.9.112**.
@@ -321,6 +328,11 @@ The only change needed to answer the gate; everything else can follow.
 publishes, **three** distinct `lineage_seed=` partitions appear, and the history
 satisfies #475's criterion (>1 column, >0 rows). Compare against the recorded
 failure: `sim160-gate4-3x2-f07a`, 89 objects, `lineage_seed=1` and `=2` only.
+
+*Status (2026-09-08 03:33Z):* sim 562 satisfied the lineage half — three SUCCEEDED,
+real 64–69 MB chunks — and failed at the gather's staging (blocker 6, A.6). **Still
+open.** Next attempt: a `--resume-from sim161-gate4-3x2-6ff7` re-run once
+v2ecoli#739 is in a simulator.
 
 ### Phase 2 — Replace the cancel reap with scheduler reconciliation — ✅ DONE, VERIFIED LIVE
 

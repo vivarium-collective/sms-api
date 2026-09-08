@@ -1673,8 +1673,9 @@ act 2 §D.
   Molecular analyses need ParCa's `simData.cPickle`, which a sweep does not
   carry; he hit `FileNotFoundError` analysing a real GovCloud Run 1 sweep. Our
   gather is exactly that shape, and the J3 analysis set includes
-  `cd1_transcriptomics` / `cd1_proteomics`. **Not in simulator 159**, so the run
-  in flight can still hit it.
+  `cd1_transcriptomics` / `cd1_proteomics`. ~~**Not in simulator 159**, so the run
+  in flight can still hit it.~~ *In simulator 161 (sms-ecoli `5fff5c79`) and later —
+  but the gather has still never run, so #727 remains unexercised.*
 - **process-bigraph#207** — `render_composite` descends into a nested composite
   with the inner-only path. Worked around locally by #723; still open.
 - **eagmon's #449** asks that the Nextflow dispatch default analysis ON.
