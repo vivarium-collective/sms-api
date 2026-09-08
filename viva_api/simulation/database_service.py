@@ -246,6 +246,19 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
+    async def list_recently_cancelled_nextflow_hpcruns(self, since: datetime.datetime) -> list[HpcRun]:
+        """Return CANCELLED HpcRun rows for Nextflow heads (``job_backend ==
+        k8s_nextflow``) whose ``end_time`` is at or after ``since``.
+
+        The set ``JobScheduler.reconcile_cancelled_nextflow_campaigns`` re-checks
+        each tick for Batch tasks that outlived their head (viva-api#472). Bounded
+        by ``since`` so the scan cost does not grow with the table; a row with no
+        ``end_time`` was cancelled before the handler stamped one and is out of
+        scope by construction.
+        """
+        pass
+
+    @abstractmethod
     async def list_active_multi_node_composites(self) -> list[HpcRun]:
         """Return active (PENDING/RUNNING) HpcRun rows tracking a generic
         multi-node process-bigraph composite dispatch
@@ -1015,6 +1028,19 @@ class DatabaseServiceSQL(DatabaseService):
             stmt = select(ORMHpcRun).where(
                 ORMHpcRun.status.in_([JobStatusDB.PENDING, JobStatusDB.RUNNING]),
                 ORMHpcRun.chain_n_generations.is_not(None),
+            )
+            result: Result[tuple[ORMHpcRun]] = await session.execute(stmt)
+            orm_hpcruns = result.scalars().all()
+            return [orm_hpcrun.to_hpc_run() for orm_hpcrun in orm_hpcruns]
+
+    @override
+    async def list_recently_cancelled_nextflow_hpcruns(self, since: datetime.datetime) -> list[HpcRun]:
+        async with self.async_sessionmaker() as session:
+            stmt = select(ORMHpcRun).where(
+                ORMHpcRun.status == JobStatusDB.CANCELLED,
+                ORMHpcRun.job_backend == JobBackend.K8S_NEXTFLOW.value,
+                ORMHpcRun.end_time.is_not(None),
+                ORMHpcRun.end_time >= since.replace(tzinfo=None),
             )
             result: Result[tuple[ORMHpcRun]] = await session.execute(stmt)
             orm_hpcruns = result.scalars().all()

@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import gzip
 import io
 import json
@@ -1061,10 +1062,14 @@ async def cancel_simulation(
     else:
         await service.cancel_job(hpc_run.job_id)
 
-    # Update the database record
+    # Update the database record. ``end_time`` is stamped here because it is the
+    # anchor ``JobScheduler.reconcile_cancelled_nextflow_campaigns`` windows on
+    # when it re-checks Batch for tasks that outlived a Nextflow head
+    # (viva-api#472); a CANCELLED row with no end_time is invisible to it.
     update = JobStatusUpdate(
         job_id=hpc_run.job_id,
         status=JobStatus.CANCELLED,
+        end_time=datetime.datetime.now(datetime.UTC).isoformat(),
     )
     await db_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, update=update)
 

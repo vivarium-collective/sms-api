@@ -1785,3 +1785,113 @@ export AWS_SECRET_ACCESS_KEY="{settings.storage_qumulo_secret_access_key}"
         # Close services
         await storage_service.close()
         await scheduler.stop_polling()
+
+
+class TestReconcileCancelledNextflowCampaigns:
+    """viva-api#472's real fix: the reap lives in the scheduler, keyed on the
+    CANCELLED row, so it survives a pod restart and defers while the head is
+    still terminating."""
+
+    @staticmethod
+    async def _cancelled_nf_row(database_service: DatabaseServiceSQL, head: str, *, age: datetime.timedelta) -> HpcRun:
+        from viva_api.simulation.models import JobType
+
+        simulation, _chain = await insert_chain_campaign_job(
+            database_service, job_id_ext=f"seed-{head}", chain_n_generations=1, n_seeds=1
+        )
+        row = await database_service.insert_hpcrun(
+            job_id=JobId.k8s_nextflow(head),
+            job_type=JobType.SIMULATION,
+            ref_id=simulation.database_id,
+            correlation_id="N/A",
+        )
+        ended = datetime.datetime.now(datetime.UTC) - age
+        await database_service.update_hpcrun_status(
+            hpcrun_id=row.database_id,
+            update=JobStatusUpdate(job_id=row.job_id, status=JobStatus.CANCELLED, end_time=ended.isoformat()),
+        )
+        return row
+
+    @pytest.mark.asyncio
+    async def test_is_a_noop_without_a_ray_service(self) -> None:
+        mock_database = MagicMock()
+        mock_database.list_recently_cancelled_nextflow_hpcruns = AsyncMock()
+        scheduler = JobScheduler(
+            messaging_service=MagicMock(), database_service=mock_database, simulation_service_ray=None
+        )
+        await scheduler.reconcile_cancelled_nextflow_campaigns()
+        mock_database.list_recently_cancelled_nextflow_hpcruns.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_reaps_a_recently_cancelled_head_by_its_job_name(self, database_service: DatabaseServiceSQL) -> None:
+        """The case the inline reap could not survive: the cancel happened, the
+        pod restarted, and nothing else would ever look again."""
+        await self._cancelled_nf_row(database_service, "nf-sim159-run-a1b2-xyz123", age=datetime.timedelta(minutes=3))
+        mock_ray = _mock_ray_service()
+        mock_ray.reap_cancelled_campaign = AsyncMock(return_value=8)
+        scheduler = JobScheduler(
+            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
+        )
+
+        await scheduler.reconcile_cancelled_nextflow_campaigns()
+
+        mock_ray.reap_cancelled_campaign.assert_awaited_once_with("nf-sim159-run-a1b2-xyz123")
+
+    @pytest.mark.asyncio
+    async def test_a_head_still_terminating_is_retried_not_forced(self, database_service: DatabaseServiceSQL) -> None:
+        """``None`` from the service means the K8s Job still exists. The
+        scheduler must accept that and come back next tick, never escalate."""
+        await self._cancelled_nf_row(database_service, "nf-sim160-run-c3d4-abc999", age=datetime.timedelta(seconds=10))
+        mock_ray = _mock_ray_service()
+        mock_ray.reap_cancelled_campaign = AsyncMock(return_value=None)
+        scheduler = JobScheduler(
+            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
+        )
+
+        await scheduler.reconcile_cancelled_nextflow_campaigns()
+        await scheduler.reconcile_cancelled_nextflow_campaigns()
+
+        # keyed on the head name: the shared DB fixture carries rows from sibling tests
+        heads = [c.args[0] for c in mock_ray.reap_cancelled_campaign.await_args_list]
+        assert heads.count("nf-sim160-run-c3d4-abc999") == 2
+
+    @pytest.mark.asyncio
+    async def test_old_cancellations_fall_out_of_the_window(self, database_service: DatabaseServiceSQL) -> None:
+        """Bounded scan: a row cancelled well past the window is not re-checked
+        forever. Also proves the query keys on end_time, not on status alone."""
+        await self._cancelled_nf_row(
+            database_service,
+            "nf-sim100-old-0000-zzz000",
+            age=JobScheduler.NEXTFLOW_CANCEL_REAP_WINDOW + datetime.timedelta(hours=1),
+        )
+        mock_ray = _mock_ray_service()
+        mock_ray.reap_cancelled_campaign = AsyncMock(return_value=0)
+        scheduler = JobScheduler(
+            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
+        )
+
+        await scheduler.reconcile_cancelled_nextflow_campaigns()
+
+        heads = [c.args[0] for c in mock_ray.reap_cancelled_campaign.await_args_list]
+        assert "nf-sim100-old-0000-zzz000" not in heads
+
+    @pytest.mark.asyncio
+    async def test_one_failing_reap_does_not_stop_the_others(self, database_service: DatabaseServiceSQL) -> None:
+        await self._cancelled_nf_row(database_service, "nf-sim1-a-1111-aaa111", age=datetime.timedelta(minutes=1))
+        await self._cancelled_nf_row(database_service, "nf-sim2-b-2222-bbb222", age=datetime.timedelta(minutes=1))
+        mock_ray = _mock_ray_service()
+
+        async def reap(head: str) -> int:
+            if head == "nf-sim1-a-1111-aaa111":
+                raise RuntimeError("batch down")
+            return 1
+
+        mock_ray.reap_cancelled_campaign = AsyncMock(side_effect=reap)
+        scheduler = JobScheduler(
+            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
+        )
+
+        await scheduler.reconcile_cancelled_nextflow_campaigns()
+
+        heads = {c.args[0] for c in mock_ray.reap_cancelled_campaign.await_args_list}
+        assert {"nf-sim1-a-1111-aaa111", "nf-sim2-b-2222-bbb222"} <= heads
