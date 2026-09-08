@@ -137,6 +137,9 @@ PARCA_SIMDATA_DIR = f"{V2ECOLI_DIR}/out/sim_data"
 # Backlog item 105: scripts/build_new_gene_cache.py's own output dir, mirroring
 # its DEFAULT_CACHE_DIR ("out/cache-new-genes") -- see submit_new_gene_cache_job.
 NEW_GENE_INDUCED_CACHE_DIR = f"{V2ECOLI_DIR}/out/cache-new-genes"
+# Backlog item 451: scripts/build_variant_cache.py's own output dir, mirroring
+# its DEFAULT_CACHE_DIR ("out/cache-variant") -- see submit_variant_cache_job.
+VARIANT_CACHE_DIR = f"{V2ECOLI_DIR}/out/cache-variant"
 SIM_OUT_DIR = f"{V2ECOLI_DIR}/.pbg/runs/phase0-xarray"
 # ecoli_baseline.baseline()'s injection branch (taken whenever injected_processes
 # is passed) does `from scripts._compare.inject import (...)` -- a bare absolute
@@ -1243,6 +1246,45 @@ class SimulationServiceRay(SimulationService):
             f" --expression {expression} --translation-efficiency {translation_efficiency}"
             f" --seed {seed}"
             f"{rel_exp_flag}{rel_trl_flag}{media_flag}{fixed_media_flag}"
+        )
+
+    def _build_variant_cache_command(
+        self,
+        *,
+        perturbations: dict[str, float],
+        seed: int = 0,
+        fixed_media: str | None = None,
+    ) -> str:
+        """Run ``scripts/build_variant_cache.py`` against an ALREADY-STAGED commit
+        cache (backlog item 451 -- the other half of a design screen from
+        ``_build_new_gene_cache_command`` above: NATIVE-gene translation-efficiency
+        perturbations, not a new-gene induction level).
+
+        Sibling of ``_build_new_gene_cache_command`` in every structural respect:
+        hydrates the raw ``parca_state.pkl.gz`` a prior ``_parca_command`` run left
+        in ``PARCA_CACHE_DIR`` (staged into this job via ``stage_s3``/``stage_dir``
+        -- see ``submit_variant_cache_job``) and writes a NEW, derived cache bundle
+        to ``VARIANT_CACHE_DIR`` with the given native genes perturbed via
+        ``v2ecoli.perturbations.build_variant_cache`` (see that script's own
+        docstring for why this cache route, not a config-level override, is
+        required for a multi-generation study). ``perturbations`` is the one
+        required knob the script itself requires (a gene-id -> multiplier JSON
+        object); ``seed``/``fixed_media`` are its own optional knobs.
+
+        Caller (``submit_variant_cache_job``) is responsible for staging the
+        SOURCE commit's cache and for writing the output to a ``variant``-labeled
+        S3 key, never the bare commit-only path a plain baseline stage would read
+        -- identical contract to ``submit_new_gene_cache_job``.
+        """
+        fixed_media_flag = f" --fixed-media {shlex.quote(fixed_media)}" if fixed_media else ""
+        return (
+            f"cd {V2ECOLI_DIR}"
+            f" && python scripts/build_variant_cache.py"
+            f" --state {PARCA_CACHE_DIR}/parca_state.pkl.gz"
+            f" --cache {VARIANT_CACHE_DIR}"
+            f" --perturbations {shlex.quote(json.dumps(perturbations))}"
+            f" --seed {seed}"
+            f"{fixed_media_flag}"
         )
 
     def _upstream_parca_command(self, *, config_path: str | None = None) -> str:
@@ -2598,6 +2640,50 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             stage_dir=PARCA_CACHE_DIR,
             out_s3=self.cache_s3_uri(commit, variant=variant),
             out_dir=NEW_GENE_INDUCED_CACHE_DIR,
+        )
+        return JobId.ray(job_id)
+
+    async def submit_variant_cache_job(
+        self,
+        *,
+        commit: str,
+        variant: str,
+        perturbations: dict[str, float],
+        seed: int = 0,
+        fixed_media: str | None = None,
+    ) -> JobId:
+        """Submit ``build_variant_cache.py`` as a standalone container job
+        (backlog item 451), stamping NATIVE-gene translation-efficiency
+        perturbations onto a commit's already-built ParCa cache and capturing
+        the result to a ``variant``-labeled S3 key. Sibling of
+        ``submit_new_gene_cache_job`` -- identical 1-node container shape,
+        same job-def, same image, same stage-in-then-run structure; the only
+        difference is which script runs and what it perturbs (native genes
+        here, a new gene's own induction level there).
+
+        ``variant`` is REQUIRED for the same reason as ``submit_new_gene_cache_job``'s
+        own docstring: every caller is, by construction, building a derived
+        cache, so there is no default call that should land on the bare
+        commit-only key.
+
+        The source commit's cache MUST already exist (any ``_parca_command``
+        run for this commit) -- that precondition is the CALLER's
+        responsibility, not re-validated here, matching this class's existing
+        pure-passthrough philosophy.
+        """
+        job_def = self._ensure_container_job_def(self._image_uri(commit), commit)
+        job_id = self._submit_container(
+            job_name=f"variant-cache-{commit}-{_rand_suffix()}",
+            job_definition=job_def,
+            job_cmd=self._build_variant_cache_command(
+                perturbations=perturbations,
+                seed=seed,
+                fixed_media=fixed_media,
+            ),
+            stage_s3=self.cache_s3_uri(commit),
+            stage_dir=PARCA_CACHE_DIR,
+            out_s3=self.cache_s3_uri(commit, variant=variant),
+            out_dir=VARIANT_CACHE_DIR,
         )
         return JobId.ray(job_id)
 

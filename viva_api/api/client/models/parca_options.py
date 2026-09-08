@@ -21,7 +21,13 @@ class ParcaOptions:
         remove_rrff (Union[Unset, bool]):  Default: False.
         stable_rrna (Union[Unset, bool]):  Default: False.
         new_genes (Union[Unset, str]):  Default: 'off'.
-        bundle_overrides (Union[None, Unset, str]):
+        bundle_overrides (Union[None, Unset, list[str], str]):
+        rnaseq_source (Union[None, Unset, str]):
+        require_clean_chain (Union[Unset, bool]):  Default: False.
+        bundle_manifest_path (Union[None, Unset, str]):
+        build_combined_bundle_manifest (Union[Unset, bool]):  Default: False.
+        include_violacein_bundle (Union[Unset, bool]):  Default: False.
+        deterministic_hash_seed (Union[Unset, bool]):  Default: False.
         debug_parca (Union[Unset, bool]):  Default: False.
         load_intermediate (Union[None, Unset, str]):
         save_intermediates (Union[Unset, bool]):  Default: False.
@@ -40,7 +46,13 @@ class ParcaOptions:
     remove_rrff: Union[Unset, bool] = False
     stable_rrna: Union[Unset, bool] = False
     new_genes: Union[Unset, str] = "off"
-    bundle_overrides: Union[None, Unset, str] = UNSET
+    bundle_overrides: Union[None, Unset, list[str], str] = UNSET
+    rnaseq_source: Union[None, Unset, str] = UNSET
+    require_clean_chain: Union[Unset, bool] = False
+    bundle_manifest_path: Union[None, Unset, str] = UNSET
+    build_combined_bundle_manifest: Union[Unset, bool] = False
+    include_violacein_bundle: Union[Unset, bool] = False
+    deterministic_hash_seed: Union[Unset, bool] = False
     debug_parca: Union[Unset, bool] = False
     load_intermediate: Union[None, Unset, str] = UNSET
     save_intermediates: Union[Unset, bool] = False
@@ -72,11 +84,34 @@ class ParcaOptions:
 
         new_genes = self.new_genes
 
-        bundle_overrides: Union[None, Unset, str]
+        bundle_overrides: Union[None, Unset, list[str], str]
         if isinstance(self.bundle_overrides, Unset):
             bundle_overrides = UNSET
+        elif isinstance(self.bundle_overrides, list):
+            bundle_overrides = self.bundle_overrides
+
         else:
             bundle_overrides = self.bundle_overrides
+
+        rnaseq_source: Union[None, Unset, str]
+        if isinstance(self.rnaseq_source, Unset):
+            rnaseq_source = UNSET
+        else:
+            rnaseq_source = self.rnaseq_source
+
+        require_clean_chain = self.require_clean_chain
+
+        bundle_manifest_path: Union[None, Unset, str]
+        if isinstance(self.bundle_manifest_path, Unset):
+            bundle_manifest_path = UNSET
+        else:
+            bundle_manifest_path = self.bundle_manifest_path
+
+        build_combined_bundle_manifest = self.build_combined_bundle_manifest
+
+        include_violacein_bundle = self.include_violacein_bundle
+
+        deterministic_hash_seed = self.deterministic_hash_seed
 
         debug_parca = self.debug_parca
 
@@ -123,6 +158,18 @@ class ParcaOptions:
             field_dict["new_genes"] = new_genes
         if bundle_overrides is not UNSET:
             field_dict["bundle_overrides"] = bundle_overrides
+        if rnaseq_source is not UNSET:
+            field_dict["rnaseq_source"] = rnaseq_source
+        if require_clean_chain is not UNSET:
+            field_dict["require_clean_chain"] = require_clean_chain
+        if bundle_manifest_path is not UNSET:
+            field_dict["bundle_manifest_path"] = bundle_manifest_path
+        if build_combined_bundle_manifest is not UNSET:
+            field_dict["build_combined_bundle_manifest"] = build_combined_bundle_manifest
+        if include_violacein_bundle is not UNSET:
+            field_dict["include_violacein_bundle"] = include_violacein_bundle
+        if deterministic_hash_seed is not UNSET:
+            field_dict["deterministic_hash_seed"] = deterministic_hash_seed
         if debug_parca is not UNSET:
             field_dict["debug_parca"] = debug_parca
         if load_intermediate is not UNSET:
@@ -169,14 +216,48 @@ class ParcaOptions:
 
         new_genes = d.pop("new_genes", UNSET)
 
-        def _parse_bundle_overrides(data: object) -> Union[None, Unset, str]:
+        def _parse_bundle_overrides(data: object) -> Union[None, Unset, list[str], str]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, list):
+                    raise TypeError()
+                bundle_overrides_type_1 = cast(list[str], data)
+
+                return bundle_overrides_type_1
+            except:  # noqa: E722
+                pass
+            return cast(Union[None, Unset, list[str], str], data)
+
+        bundle_overrides = _parse_bundle_overrides(d.pop("bundle_overrides", UNSET))
+
+        def _parse_rnaseq_source(data: object) -> Union[None, Unset, str]:
             if data is None:
                 return data
             if isinstance(data, Unset):
                 return data
             return cast(Union[None, Unset, str], data)
 
-        bundle_overrides = _parse_bundle_overrides(d.pop("bundle_overrides", UNSET))
+        rnaseq_source = _parse_rnaseq_source(d.pop("rnaseq_source", UNSET))
+
+        require_clean_chain = d.pop("require_clean_chain", UNSET)
+
+        def _parse_bundle_manifest_path(data: object) -> Union[None, Unset, str]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, str], data)
+
+        bundle_manifest_path = _parse_bundle_manifest_path(d.pop("bundle_manifest_path", UNSET))
+
+        build_combined_bundle_manifest = d.pop("build_combined_bundle_manifest", UNSET)
+
+        include_violacein_bundle = d.pop("include_violacein_bundle", UNSET)
+
+        deterministic_hash_seed = d.pop("deterministic_hash_seed", UNSET)
 
         debug_parca = d.pop("debug_parca", UNSET)
 
@@ -217,6 +298,12 @@ class ParcaOptions:
             stable_rrna=stable_rrna,
             new_genes=new_genes,
             bundle_overrides=bundle_overrides,
+            rnaseq_source=rnaseq_source,
+            require_clean_chain=require_clean_chain,
+            bundle_manifest_path=bundle_manifest_path,
+            build_combined_bundle_manifest=build_combined_bundle_manifest,
+            include_violacein_bundle=include_violacein_bundle,
+            deterministic_hash_seed=deterministic_hash_seed,
             debug_parca=debug_parca,
             load_intermediate=load_intermediate,
             save_intermediates=save_intermediates,

@@ -20,6 +20,7 @@ from viva_api.simulation.simulation_service_ray import (
     PARCA_SIMDATA_DIR,
     SIM_OUT_DIR,
     V2ECOLI_DIR,
+    VARIANT_CACHE_DIR,
     SimulationServiceRay,
     analysis_modules_for,
     injected_processes_from_config,
@@ -3655,6 +3656,78 @@ class TestSubmitNewGeneCacheJob:
         assert env["CONTAINER_STAGE_S3"] != env["CONTAINER_OUT_S3"]
         assert "k4-induced" in env["CONTAINER_OUT_S3"]
         assert "k4-induced" not in env["CONTAINER_STAGE_S3"]
+
+
+class TestBuildVariantCacheCommand:
+    """_build_variant_cache_command's own flag-assembly (backlog item 451) --
+    the native-gene sibling of TestBuildNewGeneCacheCommand above, for
+    scripts/build_variant_cache.py (Run 4's second required config's own
+    native-overexpression design screen)."""
+
+    def test_required_flags_only(self) -> None:
+        service = SimulationServiceRay()
+        cmd = service._build_variant_cache_command(perturbations={"EG10073": 10.0, "EG10074": 1.0})
+        assert cmd == (
+            f"cd {V2ECOLI_DIR}"
+            f" && python scripts/build_variant_cache.py"
+            f" --state {PARCA_CACHE_DIR}/parca_state.pkl.gz"
+            f" --cache {VARIANT_CACHE_DIR}"
+            f' --perturbations \'{{"EG10073": 10.0, "EG10074": 1.0}}\''
+            f" --seed 0"
+        )
+
+    def test_optional_flags_all_append(self) -> None:
+        service = SimulationServiceRay()
+        cmd = service._build_variant_cache_command(
+            perturbations={"EG10073": 0.0},
+            seed=7,
+            fixed_media="minimal_plus_amino_acids",
+        )
+        assert "--seed 7" in cmd
+        assert "--fixed-media minimal_plus_amino_acids" in cmd
+
+    def test_reads_the_raw_state_parca_command_preserves(self) -> None:
+        """Same matched-pair contract as new-gene-cache's own equivalent test --
+        the --state path this command reads must be exactly the path
+        _parca_command's own new cp step writes to."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            parca_cmd = service._parca_command()
+        cache_cmd = service._build_variant_cache_command(perturbations={"EG10073": 1.0})
+        written_path = f"{PARCA_CACHE_DIR}/parca_state.pkl.gz"
+        assert written_path in parca_cmd
+        assert f"--state {written_path}" in cache_cmd
+
+
+@pytest.mark.asyncio
+class TestSubmitVariantCacheJob:
+    """submit_variant_cache_job (backlog item 451): sibling of
+    submit_new_gene_cache_job, composing a caller-chosen native-gene
+    perturbation set on top of an already-built commit cache."""
+
+    async def test_submits_via_the_container_path_with_stage_in(self) -> None:
+        mock_batch = _fake_container_batch(["variant-cache-999"])
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+        ):
+            job_id = await service.submit_variant_cache_job(
+                commit="abc1234",
+                variant="strain-design-1",
+                perturbations={"EG10073": 10.0},
+            )
+        assert job_id == JobId.ray("variant-cache-999")
+        call = mock_batch.submit_job.call_args
+        assert "containerOverrides" in call.kwargs
+        env = _container_env_of(call)
+        assert "build_variant_cache.py" in env["CONTAINER_JOB_CMD"]
+        # Same non-collision contract as new-gene-cache: stages FROM the plain
+        # commit cache (source), writes TO the variant cache (derived).
+        assert env["CONTAINER_STAGE_S3"] != env["CONTAINER_OUT_S3"]
+        assert "strain-design-1" in env["CONTAINER_OUT_S3"]
+        assert "strain-design-1" not in env["CONTAINER_STAGE_S3"]
 
 
 class TestRaySubmitImage:

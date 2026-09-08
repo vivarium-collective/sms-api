@@ -883,6 +883,100 @@ class TestRunNewGeneCache:
         assert call_kwargs["seed"] == 7
 
 
+class TestRunVariantCache:
+    """run_variant_cache (backlog item 451): the REST-layer handler for
+    ``POST /parca/variant-cache``, the native-gene sibling of
+    TestRunNewGeneCache above. Same structure/gates -- mirrored here rather
+    than re-explaining, since the underlying reasoning (Ray-by-name
+    resolution, no HpcRun precondition) is identical."""
+
+    @pytest.mark.asyncio
+    async def test_resolves_ray_by_name_not_deployment_default(self) -> None:
+        from viva_api.common.handlers.simulations import run_variant_cache
+        from viva_api.simulation.models import VariantCacheRequest
+
+        mock_ray = AsyncMock(spec=SimulationServiceRay)
+        mock_ray.submit_variant_cache_job.return_value = JobId.ray("variant-cache-2")
+        mock_ray.cache_s3_uri.return_value = "s3://bucket/ray-parca-cache/82e1b1e/strain-design-1/"
+        mock_db = AsyncMock()
+        mock_db.get_parca_dataset.return_value = _make_parca_dataset()
+
+        with patch("viva_api.common.handlers.simulations.get_simulation_service_for_backend") as mock_resolve:
+            mock_resolve.return_value = mock_ray
+            result = await run_variant_cache(
+                request=VariantCacheRequest(
+                    parca_dataset_id=158, variant="strain-design-1", perturbations={"EG10073": 10.0}
+                ),
+                database_service=mock_db,
+            )
+
+        mock_resolve.assert_called_once_with(ComputeBackend.RAY)
+        assert result.job_id == "variant-cache-2"
+        assert result.commit == "82e1b1e"
+
+    @pytest.mark.asyncio
+    async def test_unknown_parca_dataset_404s(self) -> None:
+        from viva_api.common.handlers.simulations import run_variant_cache
+        from viva_api.simulation.models import VariantCacheRequest
+
+        mock_ray = AsyncMock(spec=SimulationServiceRay)
+        mock_db = AsyncMock()
+        mock_db.get_parca_dataset.return_value = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await run_variant_cache(
+                request=VariantCacheRequest(parca_dataset_id=99999, variant="x", perturbations={"EG10073": 1.0}),
+                simulation_service=mock_ray,
+                database_service=mock_db,
+            )
+        assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_non_ray_backend_501s(self) -> None:
+        from viva_api.common.handlers.simulations import run_variant_cache
+        from viva_api.simulation.models import VariantCacheRequest
+
+        with pytest.raises(HTTPException) as exc_info:
+            await run_variant_cache(
+                request=VariantCacheRequest(
+                    parca_dataset_id=158, variant="strain-design-1", perturbations={"EG10073": 1.0}
+                ),
+                simulation_service=AsyncMock(spec=SimulationServiceK8s),
+                database_service=AsyncMock(),
+            )
+        assert exc_info.value.status_code == 501
+
+    @pytest.mark.asyncio
+    async def test_forwards_all_request_fields_to_the_service_layer(self) -> None:
+        from viva_api.common.handlers.simulations import run_variant_cache
+        from viva_api.simulation.models import VariantCacheRequest
+
+        mock_ray = AsyncMock(spec=SimulationServiceRay)
+        mock_ray.submit_variant_cache_job.return_value = JobId.ray("j")
+        mock_ray.cache_s3_uri.return_value = "s3://x/"
+        mock_db = AsyncMock()
+        mock_db.get_parca_dataset.return_value = _make_parca_dataset(commit="f64994e")
+
+        await run_variant_cache(
+            request=VariantCacheRequest(
+                parca_dataset_id=158,
+                variant="strain-design-1",
+                perturbations={"EG10073": 10.0, "EG10074": 0.0},
+                seed=7,
+                fixed_media="minimal",
+            ),
+            simulation_service=mock_ray,
+            database_service=mock_db,
+        )
+
+        call_kwargs = mock_ray.submit_variant_cache_job.call_args.kwargs
+        assert call_kwargs["commit"] == "f64994e"
+        assert call_kwargs["variant"] == "strain-design-1"
+        assert call_kwargs["perturbations"] == {"EG10073": 10.0, "EG10074": 0.0}
+        assert call_kwargs["seed"] == 7
+        assert call_kwargs["fixed_media"] == "minimal"
+
+
 @pytest.mark.asyncio
 async def test_run_simulation_workflow_forces_unique_experiment_id_over_a_configs_own_baked_value() -> None:
     """Regression for backlog item 117 / sms-ecoli#235 (cplong90's own independent repro):

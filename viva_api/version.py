@@ -1099,7 +1099,19 @@
 # 0.9.124 — lenient simulation-list: tolerate a legacy stored config (strip
 #            extra-forbidden parca_options keys) instead of 500ing the whole
 #            GET /api/v1/simulations; strict creation + per-id detail preserved
-__version__ = "0.9.124"
+# 0.9.125 -- POST /parca/variant-cache (backlog item 451): the native-gene
+#            sibling of /parca/new-gene-cache, for Run 4's second required
+#            config (fss_pathway_oe_native_oe_carina.json's own native-gene
+#            design screen). Mirrors the new-gene-cache mechanism 1:1 --
+#            VariantCacheRequest/VariantCacheJob models, _build_variant_
+#            cache_command/submit_variant_cache_job (runs sms-ecoli#288's
+#            new scripts/build_variant_cache.py against an already-staged
+#            commit cache, no fresh ParCa run needed), run_variant_cache
+#            handler (same Ray-only gate, same parca_dataset_id -> commit
+#            resolution). 8 new regression tests, matching new-gene-cache's
+#            own command-builder x3 / submit x1 / handler x4 coverage
+#            precedent.
+__version__ = "0.9.125"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in

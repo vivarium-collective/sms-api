@@ -349,6 +349,36 @@ class NewGeneCacheJob(BaseModel):
     cache_s3_uri: str  # where the derived cache lands once the job succeeds
 
 
+class VariantCacheRequest(BaseModel):
+    """Backlog item 451: stamp NATIVE-gene translation-efficiency perturbations
+    onto a COMPLETED ParCa dataset's cache (``scripts/build_variant_cache.py``,
+    the sibling mechanism to ``NewGeneCacheRequest`` above -- native-gene
+    knockouts/knockdowns/overexpression instead of a new gene's own induction
+    level -- see ``SimulationServiceRay.submit_variant_cache_job``). Ray/Batch
+    backend only; the source dataset must already have SUCCEEDED (not
+    re-validated here, same pure-passthrough philosophy as
+    ``NewGeneCacheRequest``).
+    """
+
+    parca_dataset_id: int
+    variant: str  # non-collision label for the derived cache's S3 key -- see RayLayout.parca_cache_uri
+    perturbations: dict[str, float]  # gene_id -> multiplier; 0 is a knockout, >1 an overexpression
+    seed: int = 0
+    fixed_media: str | None = None
+
+
+class VariantCacheJob(BaseModel):
+    """Response for a submitted variant-cache job. Same v1-scoped shape as
+    ``NewGeneCacheJob`` -- no HpcRun/DB tracking, poll the returned ``job_id``
+    directly against the compute backend.
+    """
+
+    job_id: str
+    commit: str
+    variant: str
+    cache_s3_uri: str  # where the derived cache lands once the job succeeds
+
+
 class WorkerEvent(BaseModel):
     database_id: int | None = None  # Unique identifier for the worker event (created by the database)
     created_at: str | None = None  # ISO format datetime string (created by the database)

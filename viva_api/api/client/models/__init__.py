@@ -114,6 +114,9 @@ from .task_submit_request_params_type_0 import TaskSubmitRequestParamsType0
 from .tsv_output_file import TsvOutputFile
 from .validation_error import ValidationError
 from .validation_error_context import ValidationErrorContext
+from .variant_cache_job import VariantCacheJob
+from .variant_cache_request import VariantCacheRequest
+from .variant_cache_request_perturbations import VariantCacheRequestPerturbations
 from .viewer_launch import ViewerLaunch
 from .viewer_launch_ctx_type_0 import ViewerLaunchCtxType0
 from .viz_doc import VizDoc
@@ -233,6 +236,9 @@ __all__ = (
     "TsvOutputFile",
     "ValidationError",
     "ValidationErrorContext",
+    "VariantCacheJob",
+    "VariantCacheRequest",
+    "VariantCacheRequestPerturbations",
     "ViewerLaunch",
     "ViewerLaunchCtxType0",
     "VizDoc",
