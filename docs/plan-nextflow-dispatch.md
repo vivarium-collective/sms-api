@@ -13,6 +13,11 @@ and shipped identically in PBG **1.8.3**), v2ecoli and sms-ecoli working trees, 
 vEcoli's `runscripts/nextflow/`. The three claims left unverified have since been checked
 against nf-amazon's bytecode and live GovCloud infrastructure — see §11.
 
+> **Act 2 — execution and open shortcomings: [`plan-nextflow-act2.md`](plan-nextflow-act2.md).**
+> That document tracks gate 4 and everything still broken; this one remains the design
+> reference. Corrections to claims made here are recorded there rather than silently
+> patched in, except where a statement was flatly wrong — see gate 6 below.
+>
 > Companion documents: [`plan-chain-dispatch-generations.md`](plan-chain-dispatch-generations.md)
 > (the three current dispatch paths, and what is still open on chain-dispatch) and
 > sms-ecoli's `docs/govcloud_pbg_native_design.md` (Eran, on branch
@@ -1219,9 +1224,9 @@ M channels into one — which is what a flat sibling list cannot express at all 
 | **1c** — ParCa mode recorded out-of-band | unchanged |
 | **2** — handoff as a staged `path` at real cache size | mechanism proven in Phase 0 at 23 bytes; the profile exists as of #204, so this is now **blocked only on a deploy** |
 | **3** — `-resume` re-runs only the failed lineage | **now possible**: `deploy()` could not emit `-resume` at all until #203, and the profile it needed landed in #204. Blocked only on a deploy |
-| **4** — 336 renders and the gather gathers | renders ✅, gathers ✅ structurally. **Four attempts at Run 2 scale on 2026-09-07; four blockers, each behind the last.** The fourth run is in flight; see below |
+| **4** — 336 renders and the gather gathers | renders ✅, gathers ✅ structurally. **Still open. Five blockers to date, each visible only once the one before it cleared**; the fifth (every lineage emitting a directory named `sweep`) is fixed but unmerged. Tracked in [act 2 §A](plan-nextflow-act2.md) |
 | **5** — head overhead < ~2 min | ✅ **implied**: a fully-cached resume completes in **73 s** end to end, which is almost entirely head |
-| **6** — a task that emits nothing FAILS | implemented, and **the guard has a hole** — viva-api#467: `_has_emitted_output`'s zarr branch tests marker PRESENCE where the parquet and history branches test content. This path is not exposed (lineages emit `.pq`, and the parquet branch is checked first), but the gate is weaker than it reads |
+| **6** — a task that emits nothing FAILS | ✅ **now genuinely holds**, via viva-api#475 (eagmon, 2026-09-07): parquet requires >1 column and >0 rows, zarr requires a real chunk. ⚠ My earlier note here — that #467's hole was "not exposed" — **was wrong**; a `global_time`-only parquet is >0 bytes and passed the very check I cited as protective, and three real dispatches reported success having written nothing. See act 2 §D |
 
 ### ⛔ Go/no-go 1b failed, and it is not a Nextflow problem
 
@@ -1639,16 +1644,28 @@ sim_data, or pair one pre-built per-seed cache per variant, which is what
 `--cache-uri`, `--analysis-options`) instead of hand-written `--params` JSON.
 Client-side, so no deploy.
 
-### Gate 6 is weaker than it reads (viva-api#467, @cplong90)
+### Gate 6 is weaker than it reads (viva-api#467, @cplong90) — FIXED, and my triage was wrong
 
 `_has_emitted_output` has three branches and one tests the wrong thing: the zarr
 branch returns True on `.zgroup` / `.zarray` / `zarr.json` / `.zattrs`, which are
 written when a store is **created**, before any row lands. So a run that opens a
 store and writes nothing satisfies `PBG_REQUIRE_OUTPUT` and exits 0.
 
-**This path is not exposed** — lineages emit hive-partitioned `.pq`, and the
-parquet branch (checked first) requires `st_size > 0`. Recorded because gate 6
-reads as "done" and is not, for any consumer emitting zarr.
+~~**This path is not exposed** — lineages emit hive-partitioned `.pq`, and the
+parquet branch (checked first) requires `st_size > 0`.~~
+
+⚠ **That was wrong, and it mattered.** eagmon's viva-api#475 (merged 2026-09-07)
+found a *second* hole in the branch I had cited as protective: a `global_time`-only
+parquet is **>0 bytes**, so `st_size > 0` passes it. Three GovCloud dispatches
+(Run 2 10×10, Run 3 mecillinam, Run 4) reported success having written no usable
+history. #475 closes both — parquet now requires >1 column and >0 rows, zarr a real
+chunk.
+
+The mistake was method, not detail: I traced the branch order, found a guard, and
+stopped — never asking what a *passing* file could contain. The Nextflow lineage
+path turned out not to be afflicted (J3's history is 47.6 MB multi-column chunks),
+but that was luck confirmed after the fact, not the reasoning given. Full account in
+act 2 §D.
 
 ### Carried dependencies
 
@@ -1673,3 +1690,8 @@ reads as "done" and is not, for any consumer emitting zarr.
 sms-ecoli pins v2ecoli at `6029c7fe`; founders, cache reuse and #727 all landed
 after it. Deliberately **not** bumped yet — the run in flight will likely want a
 fix of its own, and one build should carry everything rather than four.
+
+*Superseded 2026-09-08:* the pin has since moved three times — #263 to `5836ff2f`,
+@AlexPatrie's #264 to `32ca56da` (#733, Run 3 debug), and #267 to **`5f6a7d54`**
+(#734, ptools windowing), which is where `pyproject.toml` and `uv.lock` sit now.
+The next bump goes forward from `5f6a7d54`. Act 2 Phase 1 carries this.
