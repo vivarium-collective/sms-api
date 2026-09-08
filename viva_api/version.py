@@ -1081,7 +1081,22 @@
 #            for this one nested, model-backed key -- every other extra_params
 #            key keeps its existing top-level setdefault, byte-for-byte
 #            unchanged. 4 new regression tests.
-__version__ = "0.9.122"
+# 0.9.123 -- _stage_out_env's expect_bundle_overrides now accepts str | list[str],
+#            matching ParcaOptions.bundle_overrides (#486). Real gap: a caller
+#            reading config.parca_options.bundle_overrides directly (not through
+#            strain_from_config's own _norm-based string normalization) could
+#            hand this helper a raw list, crashing `bo = (expect_bundle_overrides
+#            or "").strip()` with AttributeError: 'list' object has no attribute
+#            'strip'. Caught live firing a real K4/J3 chassis rebuild whose
+#            recipe stacks two --bundle-overrides files (item 106) via
+#            _submit_mnp's own comparison-ensemble path. Widened the two
+#            call-through wrappers (_submit_mnp, _submit_container) to match;
+#            left submit_chain_generation/_batch's own str-only signature
+#            unchanged -- their real caller (JobScheduler, via strain_from_config)
+#            already normalizes to a string before this. 2 new regression tests.
+# 0.9.122 -- (undocumented at authoring time; no changelog entry found for this
+#            bump in this file's own history)
+__version__ = "0.9.123"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
