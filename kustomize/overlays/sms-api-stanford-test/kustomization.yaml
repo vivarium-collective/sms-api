@@ -73,7 +73,13 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.125
+    newTag: 0.9.126
+    # 2026-09-08: 0.9.125 -> 0.9.126, viva-api#513 -- Bug A fix: stage
+    # vEcoli-private (not the public mirror) as /app/vEcoli. Adds a required
+    # (fail-loud, no floating-to-master-tip default) vecoli_private_commit
+    # param -- an implicit default was Bug A's own root cause one level up.
+    # Unblocks Run 3's native-cocktail dispatch once a compatible commit is
+    # identified (asked cplong90 directly, sms-ecoli#166).
     # 2026-09-08: 0.9.124 -> 0.9.125, viva-api#506 -- POST /parca/variant-cache,
     # the native-gene design-screen endpoint for Run 4's second required config
     # (item 451). Additive only; every existing caller unaffected.
