@@ -695,7 +695,7 @@ class SimulationServiceRay(SimulationService):
         retry_strategy: dict[str, Any] | None = None,
         batch_client: Any = None,
         expect_new_genes: str | None = None,
-        expect_bundle_overrides: str | None = None,
+        expect_bundle_overrides: str | list[str] | None = None,
         require_clean_chain: bool = False,
         lineage_debug_division: bool = False,
     ) -> str:
@@ -832,7 +832,7 @@ class SimulationServiceRay(SimulationService):
         stage_dir: str | None = None,
         log_s3_prefix: str | None = None,
         expect_new_genes: str | None = None,
-        expect_bundle_overrides: str | None = None,
+        expect_bundle_overrides: str | list[str] | None = None,
         require_clean_chain: bool = False,
         lineage_debug_division: bool = False,
     ) -> list[dict[str, str]]:
@@ -850,6 +850,18 @@ class SimulationServiceRay(SimulationService):
         a real strain -- ``off``/empty is wild-type and emits nothing, so a
         wild-type run is byte-identical to before and the entrypoint check stays
         inert until a real strain is requested.
+
+        ``expect_bundle_overrides`` accepts a list (backlog items 93/104/106,
+        ``ParcaOptions.bundle_overrides`` accepts a list as of #486, for a strain
+        recipe that stacks multiple ``--bundle-overrides`` files) -- joined with
+        ``","`` for the single env var, same normalization ``strain_from_config``'s
+        own ``_norm`` helper already applies for the job-scheduler verification
+        path. Real, confirmed gap this closes: a caller reaching this helper
+        DIRECTLY with a list (e.g. via ``getattr(config.parca_options,
+        "bundle_overrides", None)``, not through ``strain_from_config``) crashed
+        with ``AttributeError: 'list' object has no attribute 'strip'`` -- caught
+        live firing a real K4/J3 chassis rebuild whose recipe genuinely needs two
+        stacked override files.
 
         ``require_clean_chain`` (item 106/#166 chassis-provenance thread, v2ecoli#735):
         emitted verbatim as ``V2E_REQUIRE_CLEAN_CHAIN`` -- UNPREFIXED, unlike every
@@ -884,7 +896,10 @@ class SimulationServiceRay(SimulationService):
         ng = (expect_new_genes or "").strip()
         if ng and ng != "off":
             env.append({"name": f"{prefix}_EXPECT_NEW_GENES", "value": ng})
-        bo = (expect_bundle_overrides or "").strip()
+        bo_raw = (
+            ",".join(expect_bundle_overrides) if isinstance(expect_bundle_overrides, list) else expect_bundle_overrides
+        )
+        bo = (bo_raw or "").strip()
         if bo and bo != "off":
             env.append({"name": f"{prefix}_EXPECT_BUNDLE_OVERRIDES", "value": bo})
         if require_clean_chain:
@@ -954,7 +969,7 @@ class SimulationServiceRay(SimulationService):
         retry_strategy: dict[str, Any] | None = None,
         batch_client: Any = None,
         expect_new_genes: str | None = None,
-        expect_bundle_overrides: str | None = None,
+        expect_bundle_overrides: str | list[str] | None = None,
         require_clean_chain: bool = False,
         lineage_debug_division: bool = False,
     ) -> str:

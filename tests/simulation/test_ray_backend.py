@@ -2599,6 +2599,45 @@ def test_stage_out_env_emits_expect_vars_for_a_real_strain() -> None:
     assert d["RAY_EXPECT_BUNDLE_OVERRIDES"] == "models/parca/composed_overlay.tsv"
 
 
+def test_stage_out_env_expect_bundle_overrides_accepts_a_list() -> None:
+    """Regression: a caller reaching _stage_out_env directly with
+    config.parca_options.bundle_overrides (str | list[str] | None as of #486),
+    not through strain_from_config's own _norm-based string normalization,
+    crashed with AttributeError: 'list' object has no attribute 'strip' --
+    caught live firing a real K4/J3 chassis rebuild whose recipe genuinely
+    stacks two --bundle-overrides files. Joined with "," matching _norm's own
+    convention for the single env var."""
+    svc = SimulationServiceRay()
+    env = svc._stage_out_env(
+        prefix="RAY",
+        out_dir="/o",
+        out_s3="s3://o",
+        expect_new_genes="violacein_gfp",
+        expect_bundle_overrides=[
+            "workspace/studies/cd2-pnnl-01-bundle-scenarios/bundles/vio-gfp/overrides.tsv",
+            "workspace/studies/cd2-pnnl-01-bundle-scenarios/bundles/rung5-lambda-050/overrides.tsv",
+        ],
+    )
+    d = _env_names(env)
+    assert d["RAY_EXPECT_BUNDLE_OVERRIDES"] == (
+        "workspace/studies/cd2-pnnl-01-bundle-scenarios/bundles/vio-gfp/overrides.tsv,"
+        "workspace/studies/cd2-pnnl-01-bundle-scenarios/bundles/rung5-lambda-050/overrides.tsv"
+    )
+
+
+def test_stage_out_env_expect_bundle_overrides_empty_list_is_wild_type() -> None:
+    """An empty list joins to "" -- same wild-type/no-expectation behavior as
+    None or "", not a crash or a spurious empty EXPECT_BUNDLE_OVERRIDES var."""
+    svc = SimulationServiceRay()
+    env = svc._stage_out_env(
+        prefix="RAY",
+        out_dir="/o",
+        out_s3="s3://o",
+        expect_bundle_overrides=[],
+    )
+    assert "RAY_EXPECT_BUNDLE_OVERRIDES" not in _env_names(env)
+
+
 @pytest.mark.parametrize("wild", [None, "", "off", "  off  "])
 def test_stage_out_env_omits_expect_vars_for_wild_type(wild: str | None) -> None:
     """off/empty/None is wild-type -> no expectation, byte-identical to before."""
