@@ -73,7 +73,11 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.119
+    newTag: 0.9.120
+    # 2026-09-08: 0.9.119 -> 0.9.120, viva-api#490 -- Run 4's founder-chassis
+    # rebuild support (bundle_manifest_path/build_combined_bundle_manifest/
+    # include_violacein_bundle/deterministic_hash_seed). No new Alembic
+    # migration this release.
     # 2026-09-08: 0.9.115 -> 0.9.119, viva-api#486/#487/#482 -- Run 2's
     # bundle_overrides list-support (chassis-rebuild fix), Run 1's
     # required_run_interval fix (K4-canary/lineage under-run), and the
