@@ -101,8 +101,10 @@ manual flush — and (b) an independent replication. Two shapes, both exercised:
    compositions** (the J3 probe's shape scaled up): same founders as 666 — a replication —
    at the cost of 10 caches staged into the gather (all named `cache`; first-hit sim_data is
    fine here because all 10 share one simData).
-Either way `cd1_exchange_fluxes` comes back 10/11 until the redux binding lands. ~8 h of
-lineage time on the same Spot queue as Alex's fan-outs. Not fired without a decision.
+Either way `cd1_exchange_fluxes` comes back 10/11 until the redux binding lands, and either
+way the variant must carry `exchange_fluxes` + `exchange_flux_basis` in `injected_processes`
+(679 did not). ~8 h of lineage time on the same Spot queue as Alex's fan-outs. Not fired
+without a decision.
 
 **What gate 4 buys that the team's other path does not (recorded 2026-09-08 13:00Z):** CD2
 Runs 1–4 are being dispatched on `lineage_ray_batch`/MNP, where — per @eagmon's readiness audit,
@@ -351,6 +353,14 @@ above stands.
   is dispatched on MNP as Dispatch 666** (10 seeds, `n_generations: 8` — @cplong90 notes the
   proven J3 baseline used 4; Alex confirmed 8 deliberately). Still no *completed* Run 2 proof
   on either path; MNP's is running.
+- **Run 2 on MNP (sim 666) is on the parquet emitter, not xarray — measured 20:02Z.** Its
+  params carry no `emitter`; its S3 tree has zero zarr objects and hive parquet history
+  through generation 3 for all 10 seeds (233 files / 10.8 GB). The `AsyncZarrBufferWriter`
+  bug that killed 665 (explicit `emitter: xarray`) cannot reach it. Also observed: 666's hive
+  key is `experiment_id=lineage_ray_batch` (the fallback), so MNP runs without an explicit
+  `experiment_id` share a partition key — the #450/#457 class, kept apart today only by the
+  per-dispatch prefix. The Nextflow path is parquet-only by construction (`emitter` is one
+  of the seven keys a campaign cannot set), which happens to be the safe side of that bug.
 - **`inputs_hash` bound (@cplong90, #166 14:37Z):** the `cache_version` guard *can condemn a
   pin but cannot clear one* — the condemning half is trustworthy, the clearing half is not.
   A cache that passes the guard is not thereby proven to match the pin. (This is why F resolves to
@@ -518,6 +528,22 @@ calls `reconcile_local_tasks()` alongside `_reconcile_orphaned_build` /
   **It matters for the real Run 2, which is a redux run** — as the analysis stands the
   deliverable will be 10/11. Needs a redux-aware binding in `cd1_exchange_fluxes`; handed
   to @eagmon with the column names (item C / #448).
+
+  **20:40Z — it is two gaps, not one (settled against Alex's Run 2, sim 666):**
+  1. *Mine:* sim 679's dispatch carried no `exchange_fluxes`/`exchange_flux_basis`, so the
+     `ExchangeFluxListener` never mounted and 679 has no `listeners__exchange_flux__*`
+     columns — two KPIs unanswerable. On `workflow_nf` those keys reach a lineage **only via
+     `injected_processes`** (item **G**, biting concretely). Every Nextflow re-fire must carry
+     `exchange_fluxes: {glucose_exchange: GLC, violacein_exchange: VIOLACEIN}` and
+     `exchange_flux_basis: gdcw` inside the variant's `injected_processes`.
+  2. *The analysis's:* `cd1_exchange_fluxes.py:43` hard-binds
+     `listeners__fba_results__external_exchange_fluxes`. Sim 666 — which *did* carry the
+     config — has `listeners__exchange_flux__{glucose,violacein}_exchange` and 53
+     `estimated_exchange_dmdt__*` columns (incl. `VIOLACEIN[c]`) and **still no
+     `external_exchange_fluxes`** (247 columns). So 666's own analysis pass will fail the same
+     way. The redux binding is needed regardless; @cplong90's spec: compartment-agnostic
+     `estimated_exchange_dmdt__` prefix (violacein is the one `[c]` exchange) and flip the
+     LP-raw sign.
 - ~~**Raise the `analysis` label's base memory**~~ — **done, viva-api#495**:
   `DEFAULT_NF_RESOURCES["analysis"]` 16 → **32 GB** base (still `×attempt` on 137), with a
   test pinning ≥ 32. **Live on `smsvpctest` as of 0.9.122** (deploy #498, 12:31Z; the
@@ -593,5 +619,6 @@ stays current.
 | 2026-09-08 | Gate 1b run dispatched: sim **577** (`sim167-gate1b-founders-3x1-fc4d`), 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574 — the shared-founder control, in which seeds differ in only **1.4–1.6 %** of 16,321 bulk counts at t=0 |
 | 2026-09-08 | **GATE 1b CLOSED — sim 577 COMPLETED ~14:50Z.** Independent founders: 30.3–30.7 % of 16,321 bulk counts differ at t=0 between seeds, vs 1.4–1.6 % for the shared-founder control (574). v2ecoli#731 verified on infrastructure |
 | 2026-09-08 | 7-hour sync 19:40Z: Alex superseded the "stale caches" line — fresh K4/J3 chassis at commit `2fddfcb8`, Run 1 cell-only (665) and **Run 2 (666, 8 gens)** dispatched on MNP; Run 1 coupled on its 3rd re-fire past v2ecoli#745/sms-ecoli#289; Run 4's second config needs a chassis rebuild (680); Run 3 unchanged. Cluster 0.9.125. @cplong90: `inputs_hash` can condemn but not clear a pin. New code not touching this path: viva-api#502/#504/#506, v2ecoli#744/#745 |
+| 2026-09-08 | 20:40Z: answered @cplong90 and @AlexPatrie on #166 with measurements — 666 is parquet (not xarray-exposed); 679 omitted `exchange_fluxes` (gap 1, mine — must ride in `injected_processes` on this path); `cd1_exchange_fluxes` hard-binds `external_exchange_fluxes`, absent even on 666 (gap 2, the redux binding, @eagmon). Hedge offer for a Nextflow Run 2 replication stands |
 | 2026-09-08 | **sim 679** (`sim172-exch-verify-2x1-6add`, simulator 172 = sms-ecoli `7e7fce1` / v2ecoli `e4db5e67`) COMPLETED 19:34Z: image validated for Run 2 — 10 analyses `ok`, gather **succeeded first try at 32 GB** (#495 live), 101 objects / 678 MB. `cd1_exchange_fluxes` still 10/11: schema read shows redux emits `estimated_exchange_dmdt__*`, never `external_exchange_fluxes` (classic does). Redux binding → @eagmon |
 | 2026-09-08 | Team status (Alex, [sms-ecoli#166 at 15:04Z](https://github.com/CovertLabEcoli/sms-ecoli/issues/166#issuecomment-5587273617), MNP path): Run 1 coupled **10/10 proven**, content-verified; Run 4 `minimal` **42/42** and `_with_trp` **41/42** (genotype 7: `NegativeCountsError`, WATER in `ecoli-rna-degradation`, to the science team); Run 1 cell-only and Run 2 blocked on **stale founder caches** (old v2ecoli pin) — fresh chassis rebuilding; Run 3: #741 now surfaces two real bugs (Eran's). Chris on the Run 1 data: "looking great so far" |
