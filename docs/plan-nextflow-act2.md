@@ -88,6 +88,12 @@ was cleared:
 infrastructure), nothing about 336-scale (the 255-arity wall was measured at render time; the
 gather has now run at N=3), and nothing about the science in the TSVs.
 
+**What gate 4 buys that the team's other path does not (recorded 2026-09-08 13:00Z):** CD2
+Runs 1–4 are being dispatched on `lineage_ray_batch`/MNP, where — per @eagmon's readiness audit,
+GATE 1 — *analyses do not auto-trigger*; every run needs a manual flush after it lands. On this
+path the gather is a node in the DAG: sim 574's `analysis/` was published by the campaign itself.
+That is the concrete operational difference, now measured on both sides.
+
 ---
 
 ## The inventory
@@ -453,10 +459,13 @@ calls `reconcile_local_tasks()` alongside `_reconcile_orphaned_build` /
 - ~~Confirm **#727** actually satisfies the molecular analyses~~ — **it does**: sim 574's
   `cd1_transcriptomics` and `cd1_proteomics` both `ok`, via the staged cache (#742) rather
   than #727's identity pointer, which the Nextflow sweeps never carry.
-- **`cd1_exchange_fluxes` vs `ecoli-metabolism-redux`**: the analysis binds
-  `listeners__fba_results__external_exchange_fluxes`, which the redux listener set does
-  not emit. Either the analysis learns the redux column names or redux emits the classic
-  one. @eagmon's call (item C / #448).
+- ~~**`cd1_exchange_fluxes` vs `ecoli-metabolism-redux`**~~ — **my diagnosis was superseded
+  the same morning.** @eagmon (sms-ecoli#166, 12:39Z): `fba_results.external_exchange_fluxes`
+  *does* exist and is captured by the whole-`listeners` declared emit at v2ecoli ≥ `087a030c`
+  (#741); pre-#741 output dropped it. Simulator 167 predates #741, which is why 574's gather
+  saw the column missing. **To verify, not assume:** the next Nextflow campaign on an image at
+  or past `087a030c` should take `analysis.json` from 10/11 to 11/11 with no analysis change.
+  If it does not, the redux reading comes back.
 - ~~**Raise the `analysis` label's base memory**~~ — **done, viva-api#495**:
   `DEFAULT_NF_RESOURCES["analysis"]` 16 → **32 GB** base (still `×attempt` on 137), with a
   test pinning ≥ 32. **Live on `smsvpctest` as of 0.9.122** (deploy #498, 12:31Z; the
@@ -482,6 +491,13 @@ derivation — paths are constrained by **E** and by resume sharing a work dir:
   six unreachable keys, `media` first.
 - **viva-api#484** — `/status` should trust a terminal DB row before asking the backend.
 - **process-bigraph#208** — dotfile the port manifest so no output glob can catch it.
+- **Instrument caution from @cplong90 (sms-ecoli#166, 02:02Z), general to PBG artifacts:**
+  `final_state.json` cannot render any config field whose schema resolves to a bare `Node` —
+  `_type: "quote"` fields *and* `{}`-default fields with no `_type` — so `injected_processes`
+  and `exchange_fluxes` read `{}` on a perfectly healthy run. Read the container log, not the
+  artifact, when asking what reached a node. (His `-n`-is-simulated-time finding and the three
+  `inject.py` copies are MNP-path issues; `LineageStep` invokes once via `run_step` and does not
+  take `-n`.)
 - `discovery` should list nested configs, or document that nested paths are accepted.
 - Guard `test_cli_e2e.py` behind an explicit opt-in env var so an open tunnel cannot
   turn it into 5 phantom failures.
@@ -520,4 +536,6 @@ stays current.
 | 2026-09-08 | v2ecoli#742 merged; sms-ecoli#285 re-pins; simulator **167**; sim **574** dispatched 06:53Z (the CLI showed a bare "HTTP Error" both for the build and the dispatch — a tunnel transport failure on the *response*; the server had done the work each time. Check before retrying) |
 | 2026-09-08 | **GATE 4 CLOSED — sim 574 COMPLETED 08:40:42Z.** Three sweeps, gather ran, `cd1_*` multiseed TSVs carry seeds 0/1/2 × gens 0/1, 1.65 GB + 32 MB analysis. `analysis.json` PARTIAL (10/11; `cd1_exchange_fluxes` binder error on the redux listener set → @eagmon). Gather OOM'd at 16 GB, retry at 32 GB succeeded — raise the label's base memory |
 | 2026-09-08 | viva-api#495: gather base memory 16 → 32 GB (the size 574's successful retry ran at) |
+| 2026-09-08 | 12-hour sync at 13:15Z: sms-ecoli `main` → `bc0ff34e` (v2ecoli `e4db5e67`: #741 emit-robustness, #743 coupled emit, #738); simulator 167 predates it. @eagmon: `external_exchange_fluxes` is emitted at ≥ #741 — my redux diagnosis superseded, pending verification on a newer image. Runs 1–4 dispatching on MNP (Alex), where analyses need a manual flush; the Nextflow gather auto-runs. Alex closed the `media` question (not urgent; MNP/chain have their own routes). @cplong90 independently confirmed the J3 probe consumed the prebuilt founder caches correctly |
+| 2026-09-08 | Gate 1b run dispatched: sim **577** (`sim167-gate1b-founders-3x1-fc4d`), 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574 — the shared-founder control, in which seeds differ in only **1.4–1.6 %** of 16,321 bulk counts at t=0 |
 | 2026-09-08 | **0.9.122 deployed** (#498): the 32 GB default is live on `smsvpctest`; verified on the pod. 0.9.120/0.9.121 were @AlexPatrie's intervening rolls and predated #495 |
