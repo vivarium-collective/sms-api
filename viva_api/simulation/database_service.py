@@ -1061,7 +1061,7 @@ class DatabaseServiceSQL(DatabaseService):
                         database_id=orm_simulation.id,
                         simulator_id=orm_simulation.simulator_id,
                         parca_dataset_id=orm_simulation.parca_dataset_id,
-                        config=SimulationConfig.model_construct(**orm_simulation.config),
+                        config=SimulationConfig.model_construct(**orm_simulation.config),  # type: ignore[arg-type]
                         tags=list(orm_simulation.tags),
                     )
             simulations.append(simulation)

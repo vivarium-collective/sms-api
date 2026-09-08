@@ -10,12 +10,16 @@ of failing the list. Creation + the per-id detail path stay strict.
 """
 
 from types import SimpleNamespace
+from typing import Any
+
+import pytest
+from pydantic import ValidationError
 
 from viva_api.simulation.database_service import DatabaseServiceSQL
 from viva_api.simulation.models import ParcaOptions, SimulationConfig
 
 
-def _orm(sim_id: int, config: dict) -> SimpleNamespace:
+def _orm(sim_id: int, config: dict[str, Any]) -> SimpleNamespace:
     # _build_simulations only reads attributes off the ORM row, so a stub is enough.
     return SimpleNamespace(
         id=sim_id,
@@ -28,16 +32,13 @@ def _orm(sim_id: int, config: dict) -> SimpleNamespace:
     )
 
 
-def test_parca_options_still_forbids_extra_on_creation():
+def test_parca_options_still_forbids_extra_on_creation() -> None:
     """Guard the intent: ParcaOptions stays strict so creation catches typos."""
-    import pytest
-    from pydantic import ValidationError
-
     with pytest.raises(ValidationError):
-        ParcaOptions(outdir="/x", rnaseq_manifest_path="$ECOLI_SOURCES/data/manifest.tsv")
+        ParcaOptions(outdir="/x", rnaseq_manifest_path="$ECOLI_SOURCES/data/manifest.tsv")  # type: ignore[call-arg]
 
 
-def test_list_tolerates_a_legacy_config_and_still_enumerates_it():
+def test_list_tolerates_a_legacy_config_and_still_enumerates_it() -> None:
     legacy = _orm(
         1,
         {
@@ -48,7 +49,7 @@ def test_list_tolerates_a_legacy_config_and_still_enumerates_it():
     ok = _orm(2, {"experiment_id": "clean-run", "parca_options": {"outdir": "/y"}})
 
     # The whole point: this does NOT raise even though row 1 fails strict validation.
-    sims = DatabaseServiceSQL._build_simulations([legacy, ok])
+    sims = DatabaseServiceSQL._build_simulations([legacy, ok])  # type: ignore[list-item]
 
     assert [s.experiment_id for s in sims] == ["legacy-run", "clean-run"]
     # The legacy record still lists, with the offending key dropped from the view
