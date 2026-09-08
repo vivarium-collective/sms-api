@@ -1691,6 +1691,7 @@ sms-ecoli pins v2ecoli at `6029c7fe`; founders, cache reuse and #727 all landed
 after it. Deliberately **not** bumped yet — the run in flight will likely want a
 fix of its own, and one build should carry everything rather than four.
 
-*Superseded 2026-09-08:* the pin has since moved twice — #263 to `5836ff2f`, then
-@AlexPatrie's #264 to `32ca56da` (Run 3 debug instrumentation). The next bump goes
-forward from `32ca56da`. Act 2 Phase 1 carries this.
+*Superseded 2026-09-08:* the pin has since moved three times — #263 to `5836ff2f`,
+@AlexPatrie's #264 to `32ca56da` (#733, Run 3 debug), and #267 to **`5f6a7d54`**
+(#734, ptools windowing), which is where `pyproject.toml` and `uv.lock` sit now.
+The next bump goes forward from `5f6a7d54`. Act 2 Phase 1 carries this.

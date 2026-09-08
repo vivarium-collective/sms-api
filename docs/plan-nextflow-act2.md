@@ -258,8 +258,10 @@ The only change needed to answer the gate; everything else can follow.
    windowing, touches none of these files), commit, PR, merge.
 2. Add the structural test from **G** — every `_FORWARDED` key reachable from the
    generator's `parameters`.
-3. Re-pin sms-ecoli. ⚠ The pin moved: @AlexPatrie's #264 took it to `32ca56da`, past
-   #263's `5836ff2f`. **Pin forward from 32ca56da**, do not resurrect the older base.
+3. Re-pin sms-ecoli. ⚠ The pin keeps moving — verify it rather than trusting any
+   note, this one included. As of 2026-09-08 both `pyproject.toml` and `uv.lock` on
+   sms-ecoli `main` read **`5f6a7d54`** (#734, ptools windowing), which succeeded
+   `32ca56da` (#733) and `5836ff2f` (#263). **Pin forward from `5f6a7d54`.**
 4. Rebuild the simulator image; re-run the 3×2.
 
 **Gate 4 closes only if** the `analysis` process actually executes, `analysis.json`
@@ -337,3 +339,7 @@ stays current.
 | 2026-09-07 | eagmon's #475 closes the empty-emit holes; corrects my "not exposed" reading of #467 (**D**) |
 | 2026-09-08 | Blocker 5 fixed locally: `path "sweep_*"` + `out_dir = sweep_v{vi}_s{seed}`. 4 contract tests pass, `nextflow -preview` clean. **Unmerged** |
 | 2026-09-08 | This document written; act 1 cross-linked |
+| 2026-09-08 | v2ecoli#736 opened (blocker 5 + the structural test). Classifying `_FORWARDED` found the gap is **7 keys**, not just `emit_paths` — `media` among them, so a `workflow_nf` campaign cannot select media. Flagged on sms-ecoli#166 |
+| 2026-09-08 | viva-api#467 closed (fixed by #475); #478 already closed unmerged |
+| 2026-09-08 | v2ecoli#735 merged — `cache_version` schema 3 is now live, so shared commit+variant caches are **rekeyed**. `cache_uri` campaigns are unaffected |
+| 2026-09-08 | Pin correction: @AlexPatrie's review of #480 flagged my `32ca56da` note as stale — correct, but the SHA he gave (`3132543e`) is #691 from 09-04, **53 commits behind**. Verified against sms-ecoli's `pyproject.toml` + `uv.lock`: the real pin is `5f6a7d54` (#734) |
