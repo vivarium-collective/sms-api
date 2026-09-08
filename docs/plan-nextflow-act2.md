@@ -487,13 +487,22 @@ calls `reconcile_local_tasks()` alongside `_reconcile_orphaned_build` /
 - ~~Confirm **#727** actually satisfies the molecular analyses~~ — **it does**: sim 574's
   `cd1_transcriptomics` and `cd1_proteomics` both `ok`, via the staged cache (#742) rather
   than #727's identity pointer, which the Nextflow sweeps never carry.
-- ~~**`cd1_exchange_fluxes` vs `ecoli-metabolism-redux`**~~ — **my diagnosis was superseded
-  the same morning.** @eagmon (sms-ecoli#166, 12:39Z): `fba_results.external_exchange_fluxes`
-  *does* exist and is captured by the whole-`listeners` declared emit at v2ecoli ≥ `087a030c`
-  (#741); pre-#741 output dropped it. Simulator 167 predates #741, which is why 574's gather
-  saw the column missing. **To verify, not assume:** the next Nextflow campaign on an image at
-  or past `087a030c` should take `analysis.json` from 10/11 to 11/11 with no analysis change.
-  If it does not, the redux reading comes back.
+- **`cd1_exchange_fluxes` vs `ecoli-metabolism-redux` — verified 2026-09-08 19:34Z (sim 679),
+  and it IS the redux listener set.** I had marked this "superseded" on @eagmon's reading that
+  the column is emitted at ≥ #741; the verification run on simulator 172 (v2ecoli `e4db5e67`)
+  came back **10/11 with the same binder error**, so I read the history schemas directly:
+
+  | run | metabolism | `fba_results` cols | `external_exchange_fluxes` |
+  |---|---|---|---|
+  | sim 679 (Nextflow, `j3` → redux, `e4db5e67`) | redux | 65 | **absent** |
+  | Run 4 genotype 2 `_with_trp` (MNP, simulator 166) | classic | 18 | **present** |
+
+  Redux emits per-molecule `estimated_exchange_dmdt__<MOLECULE>[p]` columns instead. Both
+  readings were right within scope: the whole-`listeners` emit carries everything redux
+  *produces*; redux never produces that column name. Not a pin issue, not a path issue.
+  **It matters for the real Run 2, which is a redux run** — as the analysis stands the
+  deliverable will be 10/11. Needs a redux-aware binding in `cd1_exchange_fluxes`; handed
+  to @eagmon with the column names (item C / #448).
 - ~~**Raise the `analysis` label's base memory**~~ — **done, viva-api#495**:
   `DEFAULT_NF_RESOURCES["analysis"]` 16 → **32 GB** base (still `×attempt` on 137), with a
   test pinning ≥ 32. **Live on `smsvpctest` as of 0.9.122** (deploy #498, 12:31Z; the
@@ -568,4 +577,5 @@ stays current.
 | 2026-09-08 | 12-hour sync at 13:15Z: sms-ecoli `main` → `bc0ff34e` (v2ecoli `e4db5e67`: #741 emit-robustness, #743 coupled emit, #738); simulator 167 predates it. @eagmon: `external_exchange_fluxes` is emitted at ≥ #741 — my redux diagnosis superseded, pending verification on a newer image. Runs 1–4 dispatching on MNP (Alex), where analyses need a manual flush; the Nextflow gather auto-runs. Alex closed the `media` question (not urgent; MNP/chain have their own routes). @cplong90 independently confirmed the J3 probe consumed the prebuilt founder caches correctly |
 | 2026-09-08 | Gate 1b run dispatched: sim **577** (`sim167-gate1b-founders-3x1-fc4d`), 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574 — the shared-founder control, in which seeds differ in only **1.4–1.6 %** of 16,321 bulk counts at t=0 |
 | 2026-09-08 | **GATE 1b CLOSED — sim 577 COMPLETED ~14:50Z.** Independent founders: 30.3–30.7 % of 16,321 bulk counts differ at t=0 between seeds, vs 1.4–1.6 % for the shared-founder control (574). v2ecoli#731 verified on infrastructure |
+| 2026-09-08 | **sim 679** (`sim172-exch-verify-2x1-6add`, simulator 172 = sms-ecoli `7e7fce1` / v2ecoli `e4db5e67`) COMPLETED 19:34Z: image validated for Run 2 — 10 analyses `ok`, gather **succeeded first try at 32 GB** (#495 live), 101 objects / 678 MB. `cd1_exchange_fluxes` still 10/11: schema read shows redux emits `estimated_exchange_dmdt__*`, never `external_exchange_fluxes` (classic does). Redux binding → @eagmon |
 | 2026-09-08 | Team status (Alex, [sms-ecoli#166 at 15:04Z](https://github.com/CovertLabEcoli/sms-ecoli/issues/166#issuecomment-5587273617), MNP path): Run 1 coupled **10/10 proven**, content-verified; Run 4 `minimal` **42/42** and `_with_trp` **41/42** (genotype 7: `NegativeCountsError`, WATER in `ecoli-rna-degradation`, to the science team); Run 1 cell-only and Run 2 blocked on **stale founder caches** (old v2ecoli pin) — fresh chassis rebuilding; Run 3: #741 now surfaces two real bugs (Eran's). Chris on the Run 1 data: "looking great so far" |
