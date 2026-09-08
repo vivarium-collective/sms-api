@@ -1064,7 +1064,24 @@
 #            consumer (Run 2's J3 chassis, which turned out to need
 #            bundle_overrides list support instead, #486) -- reused here
 #            against its own real, verified use case. 12 new regression tests.
-__version__ = "0.9.120"
+# 0.9.121 -- run_simulation_workflow's extra_params fallback layer now deep-
+#            merges parca_options PER SUB-FIELD instead of the generic top-
+#            level setdefault. Real, confirmed gap: config_data.setdefault(
+#            "parca_options", extra_params_value) is a no-op whenever the
+#            config template's own JSON already declares a parca_options
+#            block at all -- true of essentially every real config with
+#            meaningful ParCa settings -- so an extra_params.parca_options
+#            override was silently discarded WHOLESALE, not merged. Caught
+#            live firing a real Run 4 chassis rebuild (0.9.120's own new
+#            fields) whose new_genes/bundle_overrides happened to
+#            coincidentally match the template's own baked-in values, masking
+#            that the override itself never took effect at all. Fix keeps the
+#            same "template's own explicit value always wins" contract this
+#            function's docstring already promises, applied one level deeper
+#            for this one nested, model-backed key -- every other extra_params
+#            key keeps its existing top-level setdefault, byte-for-byte
+#            unchanged. 4 new regression tests.
+__version__ = "0.9.121"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in

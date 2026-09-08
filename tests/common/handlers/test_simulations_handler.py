@@ -1046,3 +1046,149 @@ async def test_a_well_formed_dispatch_still_reaches_the_submit() -> None:
 
     mock_db_service.insert_simulation.assert_called_once()
     mock_ray_service.submit_ecoli_simulation_job.assert_called_once()
+
+
+class TestExtraParamsParcaOptionsDeepMerge:
+    """Real, confirmed gap: config_data.setdefault("parca_options", extra_params_value)
+    is a no-op whenever the config template's own JSON already declares a
+    parca_options block at all -- true of essentially every real config with
+    meaningful ParCa settings. extra_params.parca_options now merges PER
+    SUB-FIELD instead, so a new sub-field (e.g. a field the template's own
+    parca_options block never mentions) survives, while the template's own
+    explicit sub-field still wins -- same "template wins" contract the
+    surrounding fallback-layer docstring already promises, applied one level
+    deeper. Caught live firing a real Run 4 chassis rebuild whose new_genes/
+    bundle_overrides happened to coincidentally match the template's own
+    baked-in values, masking that the override itself never took effect."""
+
+    @staticmethod
+    def _mocks(config_template: str) -> tuple[AsyncMock, AsyncMock]:
+        simulator = SimulatorVersion(
+            database_id=53,
+            git_commit_hash="deadbeef",
+            git_repo_url=RepoUrl.SMS_ECOLI_REPO_URL,
+            git_branch="main",
+        )
+        mock_db_service = AsyncMock()
+        mock_db_service.get_simulator.return_value = simulator
+        mock_db_service.insert_parca_dataset.return_value = SimpleNamespace(database_id=158)
+        mock_db_service.get_hpcrun_id_by_correlation_id.return_value = None
+        mock_db_service.insert_simulation.return_value = _make_ray_simulation()
+
+        mock_ray_service = AsyncMock(spec=SimulationServiceRay)
+        mock_ray_service.read_config_template.return_value = config_template
+        mock_ray_service.submit_ecoli_simulation_job.return_value = JobId.ray("job-abc")
+        return mock_db_service, mock_ray_service
+
+    @pytest.mark.asyncio
+    async def test_new_sub_field_survives_against_a_template_with_its_own_parca_options(self) -> None:
+        """The real Run 4 shape: the template already has its own parca_options
+        block (new_genes/bundle_overrides), and extra_params supplies a field
+        the template never mentions at all (deterministic_hash_seed) -- must
+        survive, not be silently dropped by the old whole-object setdefault."""
+        mock_db_service, mock_ray_service = self._mocks(
+            '{"n_init_sims": 1, "generations": 1, "parca_options": '
+            '{"cpus": 6, "new_genes": "violacein_MG1655_M5", '
+            '"bundle_overrides": "models/parca/violacein_bundle_overrides.tsv"}}'
+        )
+        with (
+            patch("viva_api.common.handlers.simulations._verify_build_complete", new=AsyncMock()),
+            patch("viva_api.common.handlers.simulations.get_simulation_service_for_repo", return_value=None),
+            patch("viva_api.common.handlers.simulations.export_baseline_config"),
+            patch("viva_api.common.handlers.simulations.get_correlation_id", return_value="corr-1"),
+        ):
+            await run_simulation_workflow(
+                database_service=mock_db_service,
+                simulation_service=mock_ray_service,
+                simulator_id=53,
+                experiment_id="run4-chassis",
+                simulation_config_filename="configs/pathway_expression_carina_final.json",
+                extra_params={
+                    "parca_options": {
+                        "build_combined_bundle_manifest": True,
+                        "include_violacein_bundle": True,
+                        "deterministic_hash_seed": True,
+                    }
+                },
+            )
+
+        sim_request = mock_db_service.insert_simulation.call_args.kwargs["sim_request"]
+        parca_options = sim_request.config.parca_options
+        assert parca_options.build_combined_bundle_manifest is True
+        assert parca_options.include_violacein_bundle is True
+        assert parca_options.deterministic_hash_seed is True
+        # The template's own explicit values are untouched.
+        assert parca_options.new_genes == "violacein_MG1655_M5"
+        assert parca_options.bundle_overrides == "models/parca/violacein_bundle_overrides.tsv"
+
+    @pytest.mark.asyncio
+    async def test_templates_own_explicit_sub_field_still_wins(self) -> None:
+        """Same 'template wins' contract as every other extra_params key --
+        applied per sub-field now, not lost entirely the moment the template
+        happens to declare parca_options at all."""
+        mock_db_service, mock_ray_service = self._mocks(
+            '{"n_init_sims": 1, "generations": 1, "parca_options": {"new_genes": "violacein_MG1655_M5"}}'
+        )
+        with (
+            patch("viva_api.common.handlers.simulations._verify_build_complete", new=AsyncMock()),
+            patch("viva_api.common.handlers.simulations.get_simulation_service_for_repo", return_value=None),
+            patch("viva_api.common.handlers.simulations.export_baseline_config"),
+            patch("viva_api.common.handlers.simulations.get_correlation_id", return_value="corr-1"),
+        ):
+            await run_simulation_workflow(
+                database_service=mock_db_service,
+                simulation_service=mock_ray_service,
+                simulator_id=53,
+                experiment_id="run4-chassis-2",
+                simulation_config_filename="configs/pathway_expression_carina_final.json",
+                extra_params={"parca_options": {"new_genes": "some_other_strain"}},
+            )
+
+        sim_request = mock_db_service.insert_simulation.call_args.kwargs["sim_request"]
+        assert sim_request.config.parca_options.new_genes == "violacein_MG1655_M5"
+
+    @pytest.mark.asyncio
+    async def test_parca_options_extra_params_survives_when_template_has_none_at_all(self) -> None:
+        """A template with no parca_options block at all -- extra_params.parca_options
+        becomes the whole block (the pre-existing setdefault behavior, unchanged)."""
+        mock_db_service, mock_ray_service = self._mocks('{"n_init_sims": 1, "generations": 1}')
+        with (
+            patch("viva_api.common.handlers.simulations._verify_build_complete", new=AsyncMock()),
+            patch("viva_api.common.handlers.simulations.get_simulation_service_for_repo", return_value=None),
+            patch("viva_api.common.handlers.simulations.export_baseline_config"),
+            patch("viva_api.common.handlers.simulations.get_correlation_id", return_value="corr-1"),
+        ):
+            await run_simulation_workflow(
+                database_service=mock_db_service,
+                simulation_service=mock_ray_service,
+                simulator_id=53,
+                experiment_id="no-template-parca-options",
+                simulation_config_filename="configs/mecillinam_wellmixed.json",
+                extra_params={"parca_options": {"new_genes": "violacein_MG1655_M5"}},
+            )
+
+        sim_request = mock_db_service.insert_simulation.call_args.kwargs["sim_request"]
+        assert sim_request.config.parca_options.new_genes == "violacein_MG1655_M5"
+
+    @pytest.mark.asyncio
+    async def test_non_parca_options_keys_are_unaffected(self) -> None:
+        """The generic setdefault loop for every OTHER extra_params key is
+        untouched -- same byte-for-byte behavior as before this fix."""
+        mock_db_service, mock_ray_service = self._mocks('{"n_init_sims": 1, "generations": 1}')
+        with (
+            patch("viva_api.common.handlers.simulations._verify_build_complete", new=AsyncMock()),
+            patch("viva_api.common.handlers.simulations.get_simulation_service_for_repo", return_value=None),
+            patch("viva_api.common.handlers.simulations.export_baseline_config"),
+            patch("viva_api.common.handlers.simulations.get_correlation_id", return_value="corr-1"),
+        ):
+            await run_simulation_workflow(
+                database_service=mock_db_service,
+                simulation_service=mock_ray_service,
+                simulator_id=53,
+                experiment_id="cache-variant-passthrough",
+                simulation_config_filename="configs/mecillinam_wellmixed.json",
+                extra_params={"cache_variant": "cd2-run4-carina-genotype2"},
+            )
+
+        sim_request = mock_db_service.insert_simulation.call_args.kwargs["sim_request"]
+        assert getattr(sim_request.config, "cache_variant", None) == "cd2-run4-carina-genotype2"

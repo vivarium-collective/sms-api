@@ -691,8 +691,34 @@ async def run_simulation_workflow(  # noqa: C901
     # setdefault, not assignment: a key already set by the config template or one of
     # the named parameters above always wins — extra_params can only fill gaps, never
     # override something this function already explicitly computed.
+    #
+    # parca_options gets a PER-SUB-FIELD setdefault instead of the generic top-level
+    # one below. Real, confirmed gap: config_data.setdefault("parca_options", {...})
+    # is a no-op whenever the config template's own JSON already declares a
+    # `parca_options` block at all -- true of essentially every real config with
+    # meaningful ParCa settings (e.g. pathway_expression_carina_final.json's own
+    # `{"cpus": 6, "new_genes": "violacein_MG1655_M5", "bundle_overrides": ...}`) --
+    # so an extra_params.parca_options override was SILENTLY DISCARDED WHOLESALE,
+    # not merged, for any such template: caught live firing a real Run 4 chassis
+    # rebuild whose new_genes/bundle_overrides happened to coincidentally match the
+    # template's own baked-in values, masking that the override itself never took
+    # effect at all. This keeps the same "template's own explicit value always
+    # wins" contract the docstring above already promises -- just applied at the
+    # sub-field level for this one nested, model-backed key, instead of failing
+    # the whole object the moment the template mentions parca_options for ANY
+    # reason.
     if extra_params:
+        extra_parca_options = extra_params.get("parca_options")
+        if isinstance(extra_parca_options, dict):
+            template_parca_options = config_data.get("parca_options")
+            if isinstance(template_parca_options, dict):
+                for sub_key, sub_value in extra_parca_options.items():
+                    template_parca_options.setdefault(sub_key, sub_value)
+            else:
+                config_data["parca_options"] = dict(extra_parca_options)
         for key, value in extra_params.items():
+            if key == "parca_options":
+                continue
             config_data.setdefault(key, value)
 
     config = SimulationConfig(**config_data)
