@@ -73,7 +73,7 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.122
+    newTag: 0.9.124
     # 2026-09-08: 0.9.120 -> 0.9.121, viva-api#492 -- extra_params.parca_options
     # now deep-merges per sub-field instead of a whole-object setdefault (a real,
     # previously-silent override-drop against any config template that already
