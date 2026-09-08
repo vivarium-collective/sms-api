@@ -959,7 +959,38 @@
 #            already-built new-gene caches. This is viva-api's own PR 4 of
 #            Eran's 4-PR chassis-provenance split (PRs 1+2 v2ecoli core, PR 3
 #            sms-ecoli hooks, both his). 7 new regression tests.
-__version__ = "0.9.115"
+# 0.9.116 -- RESERVED by PR#482 (feat/item-run3-lineage-debug-division), open/
+#            unmerged as of this entry -- skipped here on purpose to avoid a
+#            repeat of the exact 0.9.115 collision both that PR and Jim's
+#            #481/#483 independently hit (see the 0.9.115 entry below). If
+#            #482 merges first, main's real next number becomes 0.9.118 and
+#            this entry (0.9.117) needs a rebase-time renumber, same as before.
+# 0.9.117 -- ParcaOptions.bundle_overrides (items 93/104/106) now accepts a
+#            list of paths, not only a single string -- _parca_command emits
+#            one `--bundle-overrides PATH` flag per entry, IN ORDER (matches
+#            SourceBundle.__init__'s own docstring/type hint, action="append").
+#            Real, confirmed gap: sms-ecoli's own declared recipe for
+#            rebuilding the CD2 J3 candidate chassis (cd2-pnnl-01-bundle-
+#            scenarios/sims/run_scenarios.sh, scenario rung5_lam075) stacks
+#            TWO overrides in one v2ecoli-parca invocation (--new-genes
+#            violacein_gfp --bundle-overrides .../vio-gfp/overrides.tsv
+#            --bundle-overrides .../rung5-lambda-075/overrides.tsv --rnaseq-
+#            source experimental) -- a single-string field could only ever
+#            carry one of the two layers, so no remote dispatch could
+#            reproduce this recipe at all. strain_from_config's own _norm
+#            helper updated to join a list (",") rather than silently return
+#            None for it, so *_EXPECT_BUNDLE_OVERRIDES keeps reflecting the
+#            real strain request instead of regressing to the pre-item-104
+#            silent-drop failure mode for this one input shape. A bare string
+#            (every existing caller) is byte-for-byte unaffected. Superseded a
+#            speculative bundle_manifest_path/build_combined_bundle_manifest
+#            design (sms-ecoli#278's own combined-manifest script) considered
+#            first -- reading sms-ecoli's actual declared recipe directly
+#            showed the real gap was list support, not a merged base manifest;
+#            #278 remains real, merged sms-ecoli infra, just not what this
+#            fix needed. 7 new regression tests (_parca_command flag assembly
+#            x4, strain_from_config x2, single-string/list equivalence x1).
+__version__ = "0.9.117"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in

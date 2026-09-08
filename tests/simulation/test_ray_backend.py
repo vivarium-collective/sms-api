@@ -2857,6 +2857,28 @@ class TestStrainFromConfig:
         cfg = SimpleNamespace(parca_options=SimpleNamespace(new_genes="violacein"))
         assert strain_from_config(cfg) == ("violacein", None)
 
+    def test_bundle_overrides_list_is_joined_not_silently_dropped(self) -> None:
+        """bundle_overrides can now be a list (ParcaOptions.bundle_overrides,
+        item 106). _norm used to only handle isinstance(value, str); a list
+        would previously fall through to None -- silently losing the EXPECT_*
+        signal for a run that legitimately stacked two overrides, the exact
+        "declared but not read" failure class this whole helper exists to
+        prevent for new_genes/bundle_overrides individually."""
+        cfg = SimpleNamespace(
+            parca_options=SimpleNamespace(
+                new_genes="violacein_gfp",
+                bundle_overrides=["bundles/vio-gfp/overrides.tsv", "bundles/rung5-lambda-075/overrides.tsv"],
+            )
+        )
+        assert strain_from_config(cfg) == (
+            "violacein_gfp",
+            "bundles/vio-gfp/overrides.tsv,bundles/rung5-lambda-075/overrides.tsv",
+        )
+
+    def test_bundle_overrides_empty_list_is_none(self) -> None:
+        cfg = SimpleNamespace(parca_options=SimpleNamespace(new_genes=None, bundle_overrides=[]))
+        assert strain_from_config(cfg) == (None, None)
+
 
 class TestInjectedProcessesFromConfig:
     """injected_processes_from_config (backlog item 93): the shared helper
@@ -3154,6 +3176,45 @@ class TestParcaCommand:
                 new_genes="violacein_MG1655_M5", bundle_overrides="models/parca/composed_overlay.tsv"
             )
         assert "--new-genes violacein_MG1655_M5 --bundle-overrides models/parca/composed_overlay.tsv" in cmd
+
+    def test_bundle_overrides_list_appends_one_flag_per_entry_in_order(self) -> None:
+        """Real gap (item 106): sms-ecoli's own declared recipe for the CD2 J3
+        candidate chassis (cd2-pnnl-01-bundle-scenarios/sims/run_scenarios.sh,
+        scenario rung5_lam075) stacks TWO --bundle-overrides flags in one
+        v2ecoli-parca invocation -- a single-string field could only ever carry
+        one of the two layers, silently dropping the other."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            cmd = service._parca_command(
+                new_genes="violacein_gfp",
+                bundle_overrides=[
+                    "workspace/studies/cd2-pnnl-01-bundle-scenarios/bundles/vio-gfp/overrides.tsv",
+                    "workspace/studies/cd2-pnnl-01-bundle-scenarios/bundles/rung5-lambda-075/overrides.tsv",
+                ],
+                rnaseq_source="experimental",
+            )
+        assert (
+            "--new-genes violacein_gfp "
+            "--bundle-overrides workspace/studies/cd2-pnnl-01-bundle-scenarios/bundles/vio-gfp/overrides.tsv "
+            "--bundle-overrides workspace/studies/cd2-pnnl-01-bundle-scenarios/bundles/rung5-lambda-075/overrides.tsv "
+            "--rnaseq-source experimental"
+        ) in cmd
+        # exactly two, not deduped/collapsed
+        assert cmd.count("--bundle-overrides") == 2
+
+    def test_bundle_overrides_empty_list_is_byte_identical_to_none(self) -> None:
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            assert service._parca_command(bundle_overrides=[]) == service._parca_command()
+
+    def test_bundle_overrides_single_element_list_matches_bare_string(self) -> None:
+        """A 1-element list and the equivalent bare string must build the exact
+        same command -- the list form is additive, not a parallel code path."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            as_list = service._parca_command(bundle_overrides=["models/parca/composed_overlay.tsv"])
+            as_str = service._parca_command(bundle_overrides="models/parca/composed_overlay.tsv")
+        assert as_list == as_str
 
     def test_omitted_rnaseq_source_is_byte_identical_to_before(self) -> None:
         """None must build byte-for-byte the same command as before this param
