@@ -963,34 +963,59 @@
 #            unmerged as of this entry -- skipped here on purpose to avoid a
 #            repeat of the exact 0.9.115 collision both that PR and Jim's
 #            #481/#483 independently hit (see the 0.9.115 entry below). If
-#            #482 merges first, main's real next number becomes 0.9.118 and
-#            this entry (0.9.117) needs a rebase-time renumber, same as before.
-# 0.9.117 -- ParcaOptions.bundle_overrides (items 93/104/106) now accepts a
-#            list of paths, not only a single string -- _parca_command emits
-#            one `--bundle-overrides PATH` flag per entry, IN ORDER (matches
-#            SourceBundle.__init__'s own docstring/type hint, action="append").
-#            Real, confirmed gap: sms-ecoli's own declared recipe for
-#            rebuilding the CD2 J3 candidate chassis (cd2-pnnl-01-bundle-
-#            scenarios/sims/run_scenarios.sh, scenario rung5_lam075) stacks
-#            TWO overrides in one v2ecoli-parca invocation (--new-genes
-#            violacein_gfp --bundle-overrides .../vio-gfp/overrides.tsv
-#            --bundle-overrides .../rung5-lambda-075/overrides.tsv --rnaseq-
-#            source experimental) -- a single-string field could only ever
-#            carry one of the two layers, so no remote dispatch could
-#            reproduce this recipe at all. strain_from_config's own _norm
-#            helper updated to join a list (",") rather than silently return
-#            None for it, so *_EXPECT_BUNDLE_OVERRIDES keeps reflecting the
-#            real strain request instead of regressing to the pre-item-104
-#            silent-drop failure mode for this one input shape. A bare string
-#            (every existing caller) is byte-for-byte unaffected. Superseded a
-#            speculative bundle_manifest_path/build_combined_bundle_manifest
-#            design (sms-ecoli#278's own combined-manifest script) considered
-#            first -- reading sms-ecoli's actual declared recipe directly
-#            showed the real gap was list support, not a merged base manifest;
-#            #278 remains real, merged sms-ecoli infra, just not what this
-#            fix needed. 7 new regression tests (_parca_command flag assembly
-#            x4, strain_from_config x2, single-string/list equivalence x1).
-__version__ = "0.9.117"
+#            #482 merges first, main's real next number after 0.9.118 below
+#            becomes 0.9.119 and that PR needs a rebase-time renumber.
+#           0.9.117 -- ParcaOptions.bundle_overrides (items 93/104/106) now accepts a
+#           list of paths, not only a single string -- _parca_command emits
+#           one `--bundle-overrides PATH` flag per entry, IN ORDER (matches
+#           SourceBundle.__init__'s own docstring/type hint, action="append").
+#           Real, confirmed gap: sms-ecoli's own declared recipe for
+#           rebuilding the CD2 J3 candidate chassis (cd2-pnnl-01-bundle-
+#           scenarios/sims/run_scenarios.sh, scenario rung5_lam075) stacks
+#           TWO overrides in one v2ecoli-parca invocation (--new-genes
+#           violacein_gfp --bundle-overrides .../vio-gfp/overrides.tsv
+#           --bundle-overrides .../rung5-lambda-075/overrides.tsv --rnaseq-
+#           source experimental) -- a single-string field could only ever
+#           carry one of the two layers, so no remote dispatch could
+#           reproduce this recipe at all. strain_from_config's own _norm
+#           helper updated to join a list (",") rather than silently return
+#           None for it, so *_EXPECT_BUNDLE_OVERRIDES keeps reflecting the
+#           real strain request instead of regressing to the pre-item-104
+#           silent-drop failure mode for this one input shape. A bare string
+#           (every existing caller) is byte-for-byte unaffected. Superseded a
+#           speculative bundle_manifest_path/build_combined_bundle_manifest
+#           design (sms-ecoli#278's own combined-manifest script) considered
+#           first -- reading sms-ecoli's actual declared recipe directly
+#           showed the real gap was list support, not a merged base manifest;
+#           #278 remains real, merged sms-ecoli infra, just not what this
+#           fix needed. 7 new regression tests (_parca_command flag assembly
+#           x4, strain_from_config x2, single-string/list equivalence x1).
+# 0.9.118 -- _submit_multi_node_composite's `steps` (item 105/#166, the
+#            K4-canary "under-run" empty-emit bug: sms-ecoli#166 comment
+#            5579146363, eagmon) now computes a real `required_run_interval`
+#            (`n_generations * max_duration_per_gen`, the composite's own
+#            documented contract -- Composite.run(steps) takes TOTAL
+#            SIMULATED TIME, not a tick count) whenever `params` sets
+#            `n_generations`, and clamps to `max(explicit_steps, required)`
+#            rather than leaving `steps` at its silent default of 1. Every
+#            `ray:LineageProcess` node's own `interval` is `max_duration_per_
+#            gen`; process-bigraph only invokes a process whose next event
+#            falls inside the run window, so `steps=1` invoked nothing and
+#            nothing emitted (reproduced: run(1) -> 0 rows, run(3600) -> 1 --
+#            matches Dispatch 438's real final_state exactly). Deliberately
+#            narrow (not composite-generic): this dispatch method has no
+#            remote visibility into a composite's own registered parameter
+#            schema, so `n_generations` in `params` is the signal this IS a
+#            lineage-shaped request; `max_duration_per_gen` falls back to
+#            3600.0, the same default every real v2ecoli lineage/batch
+#            document-builder declares (confirmed by direct read of
+#            lineage_ray_batch.py/batch_lineage_ray.py/workflow_nf.py/
+#            lineage_step.py, not assumed). A composite that never sets
+#            n_generations is completely unaffected. Interim fix pending
+#            Eran's own proposed document-level `required_run_interval`
+#            contract (not yet merged), which would make this fully
+#            composite-generic. 4 new regression tests.
+__version__ = "0.9.118"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
