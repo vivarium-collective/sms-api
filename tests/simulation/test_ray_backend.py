@@ -4617,6 +4617,53 @@ class TestSubmitChainGeneration:
         )
         assert overrides["daughter_state_out_path"] == "s3://mybucket/vecoli-output/exp-1/daughter-state/seed2/gen1.pkl"
 
+    async def test_submit_chain_generation_omits_lineage_debug_division_by_default(self) -> None:
+        """Item 106/#210 (v2ecoli#733): default False emits nothing -- byte-identical
+        to before this param existed."""
+        mock_batch = _fake_container_batch(["s2g1"])
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+        ):
+            service.submit_chain_generation(
+                seed=2,
+                generation_index=1,
+                experiment_id="exp-1",
+                commit="abc1234",
+                cache_s3="s3://mybucket/cache/abc1234",
+                runner_s3_uri="s3://mybucket/runner/run_pbg.py",
+                tags={"Project": "v2ecoli-comparison", "Phase": "sim"},
+            )
+        (call,) = mock_batch.submit_job.call_args_list
+        assert "LINEAGE_DEBUG_DIVISION" not in _container_env_of(call)
+
+    async def test_submit_chain_generation_forwards_lineage_debug_division(self) -> None:
+        """Item 106/#210 (v2ecoli#733): the real, previously-missing gap this closes --
+        chain-dispatch's own job submission had no way to set this at all, blocking
+        Run 3's real diagnostic dispatch. Emitted unprefixed (LineageProcess reads it
+        directly via os.environ.get), same as V2E_REQUIRE_CLEAN_CHAIN."""
+        mock_batch = _fake_container_batch(["s2g1"])
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+        ):
+            service.submit_chain_generation(
+                seed=2,
+                generation_index=1,
+                experiment_id="exp-1",
+                commit="abc1234",
+                cache_s3="s3://mybucket/cache/abc1234",
+                runner_s3_uri="s3://mybucket/runner/run_pbg.py",
+                tags={"Project": "v2ecoli-comparison", "Phase": "sim"},
+                lineage_debug_division=True,
+            )
+        (call,) = mock_batch.submit_job.call_args_list
+        assert _container_env_of(call)["LINEAGE_DEBUG_DIVISION"] == "1"
+
     async def test_submit_chain_generation_forwards_injected_processes_and_variants(self) -> None:
         """Backlog item 93: JobScheduler passes these through on every seed's
         every generation (re-derived from Simulation.config each tick) --

@@ -639,6 +639,9 @@ class JobScheduler:
         runner_s3_uri = await simulation_service_ray.stage_runner(experiment_id)
         cache_variant = getattr(simulation.config, "cache_variant", None) or None
         expect_new_genes, expect_bundle_overrides = strain_from_config(simulation.config)
+        # lineage_debug_division (item 106/#210, v2ecoli#733): opt-in diagnostic,
+        # same re-derive-from-config-every-tick reasoning as cache_variant above.
+        lineage_debug_division = bool(getattr(simulation.config, "lineage_debug_division", False))
         submitted = await simulation_service_ray.submit_chain_generation_batch(
             seeds=list(range(n_seeds)),
             generation_index=0,
@@ -654,6 +657,7 @@ class JobScheduler:
             exchange_flux_basis=getattr(simulation.config, "exchange_flux_basis", None) or None,
             expect_new_genes=expect_new_genes,
             expect_bundle_overrides=expect_bundle_overrides,
+            lineage_debug_division=lineage_debug_division,
         )
         for seed in range(n_seeds):
             if seed in submitted:
@@ -716,6 +720,7 @@ class JobScheduler:
         exchange_fluxes = getattr(simulation.config, "exchange_fluxes", None) or None
         exchange_flux_basis = getattr(simulation.config, "exchange_flux_basis", None) or None
         expect_new_genes, expect_bundle_overrides = strain_from_config(simulation.config)
+        lineage_debug_division = bool(getattr(simulation.config, "lineage_debug_division", False))
         next_gen_runner_s3_uri: str | None = None
         for seed, job_id in enumerate(current_job_ids):
             if job_id is None:
@@ -748,6 +753,7 @@ class JobScheduler:
                 exchange_flux_basis=exchange_flux_basis,
                 expect_new_genes=expect_new_genes,
                 expect_bundle_overrides=expect_bundle_overrides,
+                lineage_debug_division=lineage_debug_division,
             )
             current_generation[seed] = gen + 1
 

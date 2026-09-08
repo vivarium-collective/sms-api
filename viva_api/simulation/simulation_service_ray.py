@@ -692,6 +692,7 @@ class SimulationServiceRay(SimulationService):
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
         require_clean_chain: bool = False,
+        lineage_debug_division: bool = False,
     ) -> str:
         """Submit a Ray MNP job via boto3, mirroring sms-cdk scripts/ray_batch_submit.sh.
 
@@ -734,6 +735,7 @@ class SimulationServiceRay(SimulationService):
             expect_new_genes=expect_new_genes,
             expect_bundle_overrides=expect_bundle_overrides,
             require_clean_chain=require_clean_chain,
+            lineage_debug_division=lineage_debug_division,
         )
         # Ray's own documented safety net (not a bespoke workaround): by default Ray
         # refuses to start its plasma object store when the container's /dev/shm is
@@ -827,6 +829,7 @@ class SimulationServiceRay(SimulationService):
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
         require_clean_chain: bool = False,
+        lineage_debug_division: bool = False,
     ) -> list[dict[str, str]]:
         """Shared stage/output/log env-var construction for both the MNP (``RAY_*``)
         and container (``CONTAINER_*``) submission paths (backlog item 71) -- same
@@ -855,6 +858,12 @@ class SimulationServiceRay(SimulationService):
         ``sources=`` yet (that wiring is v2ecoli's own PR 3); setting this
         unconditionally would hard-fail every one of them the moment v2ecoli#735
         lands, including Run 4's own already-built new-gene caches.
+
+        ``lineage_debug_division`` (item 106/#210, v2ecoli#733): emitted verbatim as
+        ``LINEAGE_DEBUG_DIVISION`` -- UNPREFIXED, same reasoning as
+        ``require_clean_chain`` above -- v2ecoli's own
+        ``LineageProcess._run_until_division`` reads it directly via
+        ``os.environ.get``. Opt-in diagnostic only; default ``False`` emits nothing.
         """
         env: list[dict[str, str]] = [
             {"name": f"{prefix}_OUT_DIR", "value": out_dir},
@@ -875,6 +884,8 @@ class SimulationServiceRay(SimulationService):
             env.append({"name": f"{prefix}_EXPECT_BUNDLE_OVERRIDES", "value": bo})
         if require_clean_chain:
             env.append({"name": "V2E_REQUIRE_CLEAN_CHAIN", "value": "1"})
+        if lineage_debug_division:
+            env.append({"name": "LINEAGE_DEBUG_DIVISION", "value": "1"})
         return env
 
     def _ensure_container_job_def(self, image: str, commit: str) -> str:
@@ -940,6 +951,7 @@ class SimulationServiceRay(SimulationService):
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
         require_clean_chain: bool = False,
+        lineage_debug_division: bool = False,
     ) -> str:
         """Submit a plain, standalone AWS Batch container-type job (backlog item 71).
 
@@ -974,6 +986,7 @@ class SimulationServiceRay(SimulationService):
                 expect_new_genes=expect_new_genes,
                 expect_bundle_overrides=expect_bundle_overrides,
                 require_clean_chain=require_clean_chain,
+                lineage_debug_division=lineage_debug_division,
             ),
         ]
 
@@ -3119,6 +3132,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         exchange_flux_basis: str | None = None,
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
+        lineage_debug_division: bool = False,
     ) -> str:
         """Submit ONE seed's ONE generation as a standalone container-type job
         (backlog item 71 Phase 4) — the app-level-gated replacement for the
@@ -3163,6 +3177,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             batch_client=batch_client,
             expect_new_genes=expect_new_genes,
             expect_bundle_overrides=expect_bundle_overrides,
+            lineage_debug_division=lineage_debug_division,
         )
 
     async def submit_chain_generation_batch(
@@ -3182,6 +3197,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         exchange_flux_basis: str | None = None,
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
+        lineage_debug_division: bool = False,
     ) -> dict[int, str]:
         """Submit the SAME generation index for MULTIPLE seeds at once,
         TPS-paced below the account-wide ``SubmitJob`` rate limit (reuses
@@ -3230,6 +3246,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                     exchange_flux_basis=exchange_flux_basis,
                     expect_new_genes=expect_new_genes,
                     expect_bundle_overrides=expect_bundle_overrides,
+                    lineage_debug_division=lineage_debug_division,
                 )
             except Exception:
                 logger.exception(

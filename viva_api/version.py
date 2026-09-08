@@ -959,12 +959,14 @@
 #            already-built new-gene caches. This is viva-api's own PR 4 of
 #            Eran's 4-PR chassis-provenance split (PRs 1+2 v2ecoli core, PR 3
 #            sms-ecoli hooks, both his). 7 new regression tests.
-# 0.9.116 -- RESERVED by PR#482 (feat/item-run3-lineage-debug-division), open/
-#            unmerged as of this entry -- skipped here on purpose to avoid a
-#            repeat of the exact 0.9.115 collision both that PR and Jim's
-#            #481/#483 independently hit (see the 0.9.115 entry below). If
-#            #482 merges first, main's real next number after 0.9.118 below
-#            becomes 0.9.119 and that PR needs a rebase-time renumber.
+# 0.9.116 -- NEVER SHIPPED. Originally reserved by this same PR (feat/item-
+#            run3-lineage-debug-division); #486 and #487 merged first and
+#            claimed 0.9.117/0.9.118 while this PR was still open, so this
+#            entry moved to 0.9.119 below (its own second renumber -- it was
+#            0.9.115 before that, displaced by Jim's #481/#483). The number
+#            0.9.116 is intentionally never used; left as a documented gap
+#            rather than reused, so history stays traceable to what was
+#            actually built at each real release.
 #           0.9.117 -- ParcaOptions.bundle_overrides (items 93/104/106) now accepts a
 #           list of paths, not only a single string -- _parca_command emits
 #           one `--bundle-overrides PATH` flag per entry, IN ORDER (matches
@@ -1021,7 +1023,25 @@
 #            `steps` in every request row); this fix is the server-side
 #            backstop for anything that still omits or under-computes it.
 #            4 new regression tests.
-__version__ = "0.9.118"
+# 0.9.119 -- item 106/#210 Run 3 diagnostic: a new lineage_debug_division opt-in
+#            (SimulationConfig extra field, same undeclared extra="allow" shape
+#            as cache_variant -- no ParcaOptions/models.py change needed) emits
+#            the unprefixed LINEAGE_DEBUG_DIVISION=1 env var v2ecoli's own
+#            LineageProcess._run_until_division (v2ecoli#733) reads directly via
+#            os.environ.get. Threaded through _stage_out_env, _submit_container,
+#            submit_chain_generation/_batch, and both of job_scheduler.py's
+#            chain-dispatch call sites (generation-0 fan-out and per-seed
+#            advance), re-derived from Simulation.config on every tick, matching
+#            the existing cache_variant/exchange_fluxes restart-safe pattern.
+#            Exists to let a real chain-dispatch generation job run with
+#            instrumentation on, to determine whether Dispatch 439:Run 3's
+#            unexplained one-tick collapse is a division-detection bug (this
+#            flag would show it) versus something else. Default False emits
+#            nothing on every path -- every existing caller byte-for-byte
+#            unaffected. 6 new regression tests. Renumbered twice: 0.9.115
+#            (displaced by Jim's #481/#483) -> 0.9.116 (displaced by #486/#487
+#            merging first while this PR was still open) -> 0.9.119.
+__version__ = "0.9.119"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in

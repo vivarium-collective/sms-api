@@ -105,6 +105,7 @@ async def insert_chain_campaign_job(
     cache_variant: str | None = None,
     exchange_fluxes: dict[str, object] | None = None,
     exchange_flux_basis: str | None = None,
+    lineage_debug_division: bool | None = None,
 ) -> tuple[Simulation, HpcRun]:
     """Insert a Simulation + a chain-dispatch-campaign-shaped HpcRun row
     (backlog item 71 Phase 4 — app-level per-seed gating), the fixture shape
@@ -138,6 +139,10 @@ async def insert_chain_campaign_job(
     exercising the same restart-safe re-derivation
     ``_advance_parca_gate``/``_advance_seed_generations`` already do for
     ``composite_id``/``cache_variant``.
+
+    ``lineage_debug_division`` (item 106/#210, v2ecoli#733): same default-None,
+    same shape — set to give the inserted Simulation's own config the Run 3
+    diagnostic opt-in, exercising the same restart-safe re-derivation.
     """
     latest_commit_hash = str(uuid.uuid4())
     simulator = await database_service.insert_simulator(
@@ -163,6 +168,8 @@ async def insert_chain_campaign_job(
         setattr(config, "exchange_fluxes", exchange_fluxes)  # noqa: B010
     if exchange_flux_basis is not None:
         setattr(config, "exchange_flux_basis", exchange_flux_basis)  # noqa: B010
+    if lineage_debug_division is not None:
+        setattr(config, "lineage_debug_division", lineage_debug_division)  # noqa: B010
     simulation_request = SimulationRequest(
         simulation_config_filename="config_filename",
         experiment_id=experiment_id,
@@ -637,6 +644,60 @@ class TestAdvanceChainCampaign:
         call_kwargs = mock_ray.submit_chain_generation.call_args.kwargs
         assert call_kwargs["exchange_fluxes"] == {"violacein_exchange": "VIOLACEIN"}
         assert call_kwargs["exchange_flux_basis"] == "gdcw"
+
+    @pytest.mark.asyncio
+    async def test_generation_zero_fanout_forwards_lineage_debug_division(
+        self, database_service: DatabaseServiceSQL
+    ) -> None:
+        """Item 106/#210 (v2ecoli#733): the real gap this closes -- Run 3's
+        diagnostic dispatch needs LINEAGE_DEBUG_DIVISION=1 to reach the actual
+        generation jobs JobScheduler submits, not just a hand-built one-off."""
+        _simulation, hpcrun = await insert_chain_campaign_job(
+            database_service,
+            job_id_ext="parca-done-run3-debug",
+            chain_n_generations=3,
+            n_seeds=2,
+            lineage_debug_division=True,
+        )
+        mock_ray = _mock_ray_service()
+        mock_ray.get_job_status.return_value = JobStatusInfo(
+            job_id=JobId.ray("parca-done-run3-debug"), status=JobStatus.COMPLETED
+        )
+        mock_ray.submit_chain_generation_batch.return_value = {0: "s0g0", 1: "s1g0"}
+        scheduler = JobScheduler(
+            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
+        )
+
+        await scheduler._advance_chain_campaign(hpcrun, mock_ray)
+
+        call_kwargs = mock_ray.submit_chain_generation_batch.call_args.kwargs
+        assert call_kwargs["lineage_debug_division"] is True
+
+    @pytest.mark.asyncio
+    async def test_seed_advance_forwards_lineage_debug_division(self, database_service: DatabaseServiceSQL) -> None:
+        """Same gap, phase 2 (every generation after generation 0) -- otherwise
+        the diagnostic would silently stop firing past the first generation."""
+        _simulation, hpcrun = await insert_chain_campaign_job(
+            database_service,
+            job_id_ext="parca-1-run3-debug",
+            chain_n_generations=3,
+            n_seeds=1,
+            chain_parca_done=True,
+            chain_current_job_ids=["s0g0"],
+            chain_current_generation=[0],
+            lineage_debug_division=True,
+        )
+        mock_ray = _mock_ray_service()
+        mock_ray.get_batch_job_statuses = MagicMock(return_value={"s0g0": JobStatus.COMPLETED})
+        mock_ray.submit_chain_generation = MagicMock(return_value="s0g1")
+        scheduler = JobScheduler(
+            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
+        )
+
+        await scheduler._advance_chain_campaign(hpcrun, mock_ray)
+
+        call_kwargs = mock_ray.submit_chain_generation.call_args.kwargs
+        assert call_kwargs["lineage_debug_division"] is True
 
     @pytest.mark.asyncio
     async def test_seed_succeeds_on_its_last_generation_resolves_the_seed(
