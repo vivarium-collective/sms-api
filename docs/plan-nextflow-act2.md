@@ -227,15 +227,27 @@ chunks — but it bites the moment anyone wants to *trim* emissions on a large c
 than vigilance: one test asserting every `_FORWARDED` key is reachable from the
 generator's `parameters` would have caught all four at once.
 
-### H. Active science-side unknown (not ours, but it gates "it just works")
+### H. ~~Active science-side unknown~~ — root-caused and fixed (v2ecoli#737)
 
-**Run 3's one-tick collapse** — dispatch 439 collapses after `global_time ≈ 1.0` with
-no exception. @AlexPatrie's v2ecoli#733 (merged) adds opt-in
-`LINEAGE_DEBUG_DIVISION=1` instrumentation; root cause still unknown.
+**Run 3's one-tick collapse** — dispatch 439 collapsing after `global_time ≈ 1.0` —
+is fixed by @eagmon's v2ecoli#737 (merged 2026-09-08 01:15Z), which root-caused it
+from the live CloudWatch tracebacks rather than from the #733 instrumentation:
 
-Recorded here because a campaign can pass gate 4 **structurally** — analysis runs,
-partitions publish — and still carry one-tick data. A green gate 4 should not be
-over-read while this is open.
+- **It was never silent.** The injected/swap runs *crashed before emitting*
+  (`non-advancing interval: 0.0` → `composite CRASHED at 1s in generation 1`), and
+  `PBG_REQUIRE_OUTPUT` correctly refused success. The output gate did its job.
+- Cause: `_should_inject_as_step` recognised a Step only via
+  `issubclass(vivarium.Step)`, which is False for a **v2ecoli-native deriver** like
+  the native `ecoli-metabolism-redux`.
+- #737 also fixes `metabolism.py:841`, where `boundary.external[aa] > threshold`
+  compared a pint `Quantity` against a float — which is why only the
+  amino-acid-supplemented (`_with_trp`) arm crashed and plain `minimal` never did.
+
+**Why this still matters to gate 4:** the general caution stands — a campaign can
+pass gate 4 *structurally* (analysis runs, partitions publish) while carrying
+degenerate data — so the gate-4 criterion keeps its "history must satisfy #475's
+>1-column, >0-row test" clause. What is no longer true is that we have an unexplained
+collapse in flight.
 
 ### I. Operational
 
@@ -343,3 +355,4 @@ stays current.
 | 2026-09-08 | viva-api#467 closed (fixed by #475); #478 already closed unmerged |
 | 2026-09-08 | v2ecoli#735 merged — `cache_version` schema 3 is now live, so shared commit+variant caches are **rekeyed**. `cache_uri` campaigns are unaffected |
 | 2026-09-08 | Pin correction: @AlexPatrie's review of #480 flagged my `32ca56da` note as stale — correct, but the SHA he gave (`3132543e`) is #691 from 09-04, **53 commits behind**. Verified against sms-ecoli's `pyproject.toml` + `uv.lock`: the real pin is `5f6a7d54` (#734) |
+| 2026-09-08 | v2ecoli#737 (@eagmon) **closes item H** — the one-tick collapse was a pre-emit crash (native derivers not recognised as Steps), not a silent empty emit; `PBG_REQUIRE_OUTPUT` had refused it correctly. Also fixes the pint `Quantity > float` crash on AA media |
