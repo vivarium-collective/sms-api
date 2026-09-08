@@ -886,6 +886,19 @@ def simulator_latest(
         "Passing --submit-image DEMANDS it, so a backend that cannot build one fails now rather "
         "than at dispatch. --no-submit-image skips it.",
     ),
+    stage_private_fork: bool = Option(
+        default=False,
+        help="Stage vEcoli-private (not the public vEcoli mirror) as this image's own wrapped "
+        "/app/vEcoli fork, so a config's !ParameterSerializer[...] tag whose value only exists "
+        "in the private fork's own param_store can resolve. Off by default. Requires "
+        "--vecoli-private-commit. Only the v2ecoli/sms-ecoli Ray build path supports this.",
+    ),
+    vecoli_private_commit: str | None = Option(
+        default=None,
+        help="The vEcoli-private commit to stage when --stage-private-fork is set. Required "
+        "together with it -- no 'latest' auto-resolution, so the exact commit staged is "
+        "always an explicit, visible choice.",
+    ),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
     import time
@@ -904,7 +917,11 @@ def simulator_latest(
     # 2. Upload (triggers build if new, or force rebuild)
     with console.status("[memphis.spinner]Uploading simulator..."):
         uploaded = data_service.submit_upload_simulator(
-            simulator=latest, force=force, include_submit_image=submit_image
+            simulator=latest,
+            force=force,
+            include_submit_image=submit_image,
+            stage_private_fork=stage_private_fork,
+            vecoli_private_commit=vecoli_private_commit,
         )
     console.print(f"[memphis.label]Simulator ID:[/] {uploaded.database_id}")
 

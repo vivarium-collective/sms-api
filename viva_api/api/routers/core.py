@@ -177,8 +177,20 @@ async def insert_simulator_version(
     simulator: Simulator,
     force: bool = False,
     include_submit_image: bool | None = None,
+    stage_private_fork: bool = False,
+    vecoli_private_commit: str | None = None,
 ) -> SimulatorVersion:
-    """``include_submit_image``: also build the Nextflow HEAD image beside the task
+    """``stage_private_fork``/``vecoli_private_commit``: stage vEcoli-private -- not the
+    public vEcoli mirror -- as this image's own wrapped ``/app/vEcoli`` fork, so a config's
+    ``!ParameterSerializer[...]`` tag whose value only exists in the private fork's own
+    param_store can resolve on a remote dispatch. Off by default (identical build to
+    before these params existed). ``vecoli_private_commit`` is REQUIRED when
+    ``stage_private_fork`` is True -- no "latest" auto-resolution, so the exact commit
+    staged is always an explicit, visible choice. 400s if the resolved build path for
+    ``simulator.git_repo_url`` does not support it (only the v2ecoli/sms-ecoli Ray path
+    wraps a separate vEcoli fork inside its own image at all).
+
+    ``include_submit_image``: also build the Nextflow HEAD image beside the task
     image (base + JRE + the nextflow binary, pushed as ``<repo>:<sha>-submit``).
 
     Only the process that runs ``nextflow run`` needs a JVM -- Batch TASKS run the
@@ -230,6 +242,8 @@ async def insert_simulator_version(
             database_service=db_service,
             force=force,
             include_submit_image=include_submit_image,
+            stage_private_fork=stage_private_fork,
+            vecoli_private_commit=vecoli_private_commit,
         )
     except Exception as e:
         logger.exception("Error inserting simulator version.")

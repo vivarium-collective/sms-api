@@ -13,7 +13,7 @@ class ParcaOptions:
     """
     Attributes:
         cpus (Union[None, Unset, int]):
-        outdir (Union[Unset, str]):  Default: '.'.
+        outdir (Union[Unset, str]):  Default: '/projects/SMS/sms_api/prod/sims'.
         operons (Union[Unset, bool]):  Default: True.
         ribosome_fitting (Union[Unset, bool]):  Default: True.
         rnapoly_fitting (Union[Unset, bool]):  Default: True.
@@ -38,7 +38,7 @@ class ParcaOptions:
     """
 
     cpus: Union[None, Unset, int] = UNSET
-    outdir: Union[Unset, str] = "."
+    outdir: Union[Unset, str] = "/projects/SMS/sms_api/prod/sims"
     operons: Union[Unset, bool] = True
     ribosome_fitting: Union[Unset, bool] = True
     rnapoly_fitting: Union[Unset, bool] = True

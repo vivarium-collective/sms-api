@@ -2360,6 +2360,49 @@ class TestSimulationServiceRayBuild:
         # believes it's supplying one.
         assert "unset GH_PAT" not in script
 
+    def test_build_command_default_never_stages_private_fork(self) -> None:
+        """Regression: every existing build must stay byte-for-byte unaffected -- no -s
+        flag, no inline spec heredoc, PAT still unset exactly as before this param
+        existed."""
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            script = service._build_command(_v2ecoli_simulator())[2]
+        assert " -s " not in script
+        assert "vecoli-private-fork.yaml" not in script
+        assert script.count("unset GH_PAT") == 1
+
+    def test_build_command_stage_private_fork_requires_a_commit(self) -> None:
+        """No 'latest' auto-resolution: which commit gets staged must always be an
+        explicit, visible choice, never a silent moving target -- fail fast in Python,
+        not deep inside a generated shell script."""
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            pytest.raises(ValueError, match="vecoli_private_commit"),
+        ):
+            service._build_command(_v2ecoli_simulator(), stage_private_fork=True)
+
+    def test_build_command_stage_private_fork_passes_s_and_keeps_pat_exported(self) -> None:
+        service = SimulationServiceRay()
+        with patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings):
+            script = service._build_command(
+                _v2ecoli_simulator(), stage_private_fork=True, vecoli_private_commit="deadbee"
+            )[2]
+        assert (
+            "docker/build-and-push-ecr.sh -i abc1234 -r v2ecoli -R us-gov-west-1"
+            " -s /tmp/vecoli-private-fork.yaml" in script
+        )
+        # The spec is generated INLINE (a heredoc) -- nothing checked into a repo to go
+        # stale -- and names the real private fork + the exact requested commit.
+        assert "cat > /tmp/vecoli-private-fork.yaml <<'SPEC'" in script
+        assert "repo: https://github.com/CovertLabEcoli/vEcoli-private" in script
+        assert "commit: deadbee" in script
+        # vEcoli-private is a private repo under the same org as the outer clone -- same
+        # PAT, kept exported, no second credential.
+        assert "unset GH_PAT" not in script
+        # The heredoc must land BEFORE the recipe invocation that consumes it via -s.
+        assert script.index("cat > /tmp/vecoli-private-fork.yaml") < script.index("docker/build-and-push-ecr.sh")
+
     def test_sim_command_composite_defaults_to_single_generation(self) -> None:
         """Selecting an engine must NOT imply the 16-gen comparison default."""
         service = SimulationServiceRay()

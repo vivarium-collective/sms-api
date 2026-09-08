@@ -304,7 +304,12 @@ class E2EDataService:
             ) from e
 
     def submit_upload_simulator(
-        self, simulator: Simulator, force: bool = False, include_submit_image: bool | None = None
+        self,
+        simulator: Simulator,
+        force: bool = False,
+        include_submit_image: bool | None = None,
+        stage_private_fork: bool = False,
+        vecoli_private_commit: str | None = None,
     ) -> SimulatorVersion:
         """``include_submit_image`` also builds the Nextflow HEAD image (`<repo>:<sha>-submit`).
 
@@ -314,6 +319,11 @@ class E2EDataService:
         Measured across four builds the image costs +72 MB and +15 s (ECR dedups
         the shared base), against a dispatch that otherwise fails at the Batch
         image pull minutes in, plus a full rebuild.
+
+        ``stage_private_fork``/``vecoli_private_commit``: stage vEcoli-private -- not the
+        public vEcoli mirror -- as this image's own wrapped ``/app/vEcoli`` fork. Off by
+        default. ``vecoli_private_commit`` is REQUIRED when ``stage_private_fork`` is True
+        -- the server 400s otherwise rather than silently floating to "latest".
         """
         try:
             params = {}
@@ -321,6 +331,10 @@ class E2EDataService:
                 params["force"] = "true"
             if include_submit_image is not None:
                 params["include_submit_image"] = "true" if include_submit_image else "false"
+            if stage_private_fork:
+                params["stage_private_fork"] = "true"
+                if vecoli_private_commit:
+                    params["vecoli_private_commit"] = vecoli_private_commit
             uploaded_response = self.client.post(
                 url="/core/v1/simulator/upload", json=simulator.model_dump(), params=params
             )

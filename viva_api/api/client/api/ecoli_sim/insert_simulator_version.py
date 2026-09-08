@@ -16,6 +16,8 @@ def _get_kwargs(
     body: Simulator,
     force: Union[Unset, bool] = False,
     include_submit_image: Union[None, Unset, bool] = UNSET,
+    stage_private_fork: Union[Unset, bool] = False,
+    vecoli_private_commit: Union[None, Unset, str] = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
 
@@ -29,6 +31,15 @@ def _get_kwargs(
     else:
         json_include_submit_image = include_submit_image
     params["include_submit_image"] = json_include_submit_image
+
+    params["stage_private_fork"] = stage_private_fork
+
+    json_vecoli_private_commit: Union[None, Unset, str]
+    if isinstance(vecoli_private_commit, Unset):
+        json_vecoli_private_commit = UNSET
+    else:
+        json_vecoli_private_commit = vecoli_private_commit
+    params["vecoli_private_commit"] = json_vecoli_private_commit
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -80,10 +91,22 @@ def sync_detailed(
     body: Simulator,
     force: Union[Unset, bool] = False,
     include_submit_image: Union[None, Unset, bool] = UNSET,
+    stage_private_fork: Union[Unset, bool] = False,
+    vecoli_private_commit: Union[None, Unset, str] = UNSET,
 ) -> Response[Union[HTTPValidationError, SimulatorVersion]]:
     r"""Upload a new simulator (vEcoli) version.
 
-     ``include_submit_image``: also build the Nextflow HEAD image beside the task
+     ``stage_private_fork``/``vecoli_private_commit``: stage vEcoli-private -- not the
+    public vEcoli mirror -- as this image's own wrapped ``/app/vEcoli`` fork, so a config's
+    ``!ParameterSerializer[...]`` tag whose value only exists in the private fork's own
+    param_store can resolve on a remote dispatch. Off by default (identical build to
+    before these params existed). ``vecoli_private_commit`` is REQUIRED when
+    ``stage_private_fork`` is True -- no \"latest\" auto-resolution, so the exact commit
+    staged is always an explicit, visible choice. 400s if the resolved build path for
+    ``simulator.git_repo_url`` does not support it (only the v2ecoli/sms-ecoli Ray path
+    wraps a separate vEcoli fork inside its own image at all).
+
+    ``include_submit_image``: also build the Nextflow HEAD image beside the task
     image (base + JRE + the nextflow binary, pushed as ``<repo>:<sha>-submit``).
 
     Only the process that runs ``nextflow run`` needs a JVM -- Batch TASKS run the
@@ -104,6 +127,8 @@ def sync_detailed(
     Args:
         force (Union[Unset, bool]):  Default: False.
         include_submit_image (Union[None, Unset, bool]):
+        stage_private_fork (Union[Unset, bool]):  Default: False.
+        vecoli_private_commit (Union[None, Unset, str]):
         body (Simulator):
 
     Raises:
@@ -118,6 +143,8 @@ def sync_detailed(
         body=body,
         force=force,
         include_submit_image=include_submit_image,
+        stage_private_fork=stage_private_fork,
+        vecoli_private_commit=vecoli_private_commit,
     )
 
     response = client.get_httpx_client().request(
@@ -133,10 +160,22 @@ def sync(
     body: Simulator,
     force: Union[Unset, bool] = False,
     include_submit_image: Union[None, Unset, bool] = UNSET,
+    stage_private_fork: Union[Unset, bool] = False,
+    vecoli_private_commit: Union[None, Unset, str] = UNSET,
 ) -> Optional[Union[HTTPValidationError, SimulatorVersion]]:
     r"""Upload a new simulator (vEcoli) version.
 
-     ``include_submit_image``: also build the Nextflow HEAD image beside the task
+     ``stage_private_fork``/``vecoli_private_commit``: stage vEcoli-private -- not the
+    public vEcoli mirror -- as this image's own wrapped ``/app/vEcoli`` fork, so a config's
+    ``!ParameterSerializer[...]`` tag whose value only exists in the private fork's own
+    param_store can resolve on a remote dispatch. Off by default (identical build to
+    before these params existed). ``vecoli_private_commit`` is REQUIRED when
+    ``stage_private_fork`` is True -- no \"latest\" auto-resolution, so the exact commit
+    staged is always an explicit, visible choice. 400s if the resolved build path for
+    ``simulator.git_repo_url`` does not support it (only the v2ecoli/sms-ecoli Ray path
+    wraps a separate vEcoli fork inside its own image at all).
+
+    ``include_submit_image``: also build the Nextflow HEAD image beside the task
     image (base + JRE + the nextflow binary, pushed as ``<repo>:<sha>-submit``).
 
     Only the process that runs ``nextflow run`` needs a JVM -- Batch TASKS run the
@@ -157,6 +196,8 @@ def sync(
     Args:
         force (Union[Unset, bool]):  Default: False.
         include_submit_image (Union[None, Unset, bool]):
+        stage_private_fork (Union[Unset, bool]):  Default: False.
+        vecoli_private_commit (Union[None, Unset, str]):
         body (Simulator):
 
     Raises:
@@ -172,6 +213,8 @@ def sync(
         body=body,
         force=force,
         include_submit_image=include_submit_image,
+        stage_private_fork=stage_private_fork,
+        vecoli_private_commit=vecoli_private_commit,
     ).parsed
 
 
@@ -181,10 +224,22 @@ async def asyncio_detailed(
     body: Simulator,
     force: Union[Unset, bool] = False,
     include_submit_image: Union[None, Unset, bool] = UNSET,
+    stage_private_fork: Union[Unset, bool] = False,
+    vecoli_private_commit: Union[None, Unset, str] = UNSET,
 ) -> Response[Union[HTTPValidationError, SimulatorVersion]]:
     r"""Upload a new simulator (vEcoli) version.
 
-     ``include_submit_image``: also build the Nextflow HEAD image beside the task
+     ``stage_private_fork``/``vecoli_private_commit``: stage vEcoli-private -- not the
+    public vEcoli mirror -- as this image's own wrapped ``/app/vEcoli`` fork, so a config's
+    ``!ParameterSerializer[...]`` tag whose value only exists in the private fork's own
+    param_store can resolve on a remote dispatch. Off by default (identical build to
+    before these params existed). ``vecoli_private_commit`` is REQUIRED when
+    ``stage_private_fork`` is True -- no \"latest\" auto-resolution, so the exact commit
+    staged is always an explicit, visible choice. 400s if the resolved build path for
+    ``simulator.git_repo_url`` does not support it (only the v2ecoli/sms-ecoli Ray path
+    wraps a separate vEcoli fork inside its own image at all).
+
+    ``include_submit_image``: also build the Nextflow HEAD image beside the task
     image (base + JRE + the nextflow binary, pushed as ``<repo>:<sha>-submit``).
 
     Only the process that runs ``nextflow run`` needs a JVM -- Batch TASKS run the
@@ -205,6 +260,8 @@ async def asyncio_detailed(
     Args:
         force (Union[Unset, bool]):  Default: False.
         include_submit_image (Union[None, Unset, bool]):
+        stage_private_fork (Union[Unset, bool]):  Default: False.
+        vecoli_private_commit (Union[None, Unset, str]):
         body (Simulator):
 
     Raises:
@@ -219,6 +276,8 @@ async def asyncio_detailed(
         body=body,
         force=force,
         include_submit_image=include_submit_image,
+        stage_private_fork=stage_private_fork,
+        vecoli_private_commit=vecoli_private_commit,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -232,10 +291,22 @@ async def asyncio(
     body: Simulator,
     force: Union[Unset, bool] = False,
     include_submit_image: Union[None, Unset, bool] = UNSET,
+    stage_private_fork: Union[Unset, bool] = False,
+    vecoli_private_commit: Union[None, Unset, str] = UNSET,
 ) -> Optional[Union[HTTPValidationError, SimulatorVersion]]:
     r"""Upload a new simulator (vEcoli) version.
 
-     ``include_submit_image``: also build the Nextflow HEAD image beside the task
+     ``stage_private_fork``/``vecoli_private_commit``: stage vEcoli-private -- not the
+    public vEcoli mirror -- as this image's own wrapped ``/app/vEcoli`` fork, so a config's
+    ``!ParameterSerializer[...]`` tag whose value only exists in the private fork's own
+    param_store can resolve on a remote dispatch. Off by default (identical build to
+    before these params existed). ``vecoli_private_commit`` is REQUIRED when
+    ``stage_private_fork`` is True -- no \"latest\" auto-resolution, so the exact commit
+    staged is always an explicit, visible choice. 400s if the resolved build path for
+    ``simulator.git_repo_url`` does not support it (only the v2ecoli/sms-ecoli Ray path
+    wraps a separate vEcoli fork inside its own image at all).
+
+    ``include_submit_image``: also build the Nextflow HEAD image beside the task
     image (base + JRE + the nextflow binary, pushed as ``<repo>:<sha>-submit``).
 
     Only the process that runs ``nextflow run`` needs a JVM -- Batch TASKS run the
@@ -256,6 +327,8 @@ async def asyncio(
     Args:
         force (Union[Unset, bool]):  Default: False.
         include_submit_image (Union[None, Unset, bool]):
+        stage_private_fork (Union[Unset, bool]):  Default: False.
+        vecoli_private_commit (Union[None, Unset, str]):
         body (Simulator):
 
     Raises:
@@ -272,5 +345,7 @@ async def asyncio(
             body=body,
             force=force,
             include_submit_image=include_submit_image,
+            stage_private_fork=stage_private_fork,
+            vecoli_private_commit=vecoli_private_commit,
         )
     ).parsed

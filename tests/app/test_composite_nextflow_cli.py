@@ -148,6 +148,29 @@ def test_simulator_latest_passes_the_head_image_flag_three_valued() -> None:
         assert svc.submit_upload_simulator.call_args.kwargs["include_submit_image"] is expected, args
 
 
+def test_simulator_latest_passes_the_private_fork_flags() -> None:
+    """--stage-private-fork/--vecoli-private-commit must reach submit_upload_simulator
+    the same way --submit-image already does -- omitted stays False/None (identical
+    build to before these flags existed), passed reaches the data service verbatim."""
+    svc = MagicMock()
+    svc.submit_get_latest_simulator.return_value = MagicMock()
+    svc.submit_upload_simulator.return_value = MagicMock(database_id=1)
+    svc.submit_get_simulator_build_status.return_value = "completed"
+
+    with patch("app.cli.get_data_service", return_value=svc), patch("time.sleep"):
+        runner.invoke(cli_app, ["simulator", "latest"])
+    assert svc.submit_upload_simulator.call_args.kwargs["stage_private_fork"] is False
+    assert svc.submit_upload_simulator.call_args.kwargs["vecoli_private_commit"] is None
+
+    with patch("app.cli.get_data_service", return_value=svc), patch("time.sleep"):
+        runner.invoke(
+            cli_app,
+            ["simulator", "latest", "--stage-private-fork", "--vecoli-private-commit", "deadbee"],
+        )
+    assert svc.submit_upload_simulator.call_args.kwargs["stage_private_fork"] is True
+    assert svc.submit_upload_simulator.call_args.kwargs["vecoli_private_commit"] == "deadbee"
+
+
 # --- the two capabilities the science needs, reachable without hand JSON -----
 
 

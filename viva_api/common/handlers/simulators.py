@@ -84,6 +84,8 @@ async def upload_simulator(  # noqa: C901
     database_service: DatabaseService | None = None,
     force: bool = False,
     include_submit_image: bool | None = None,
+    stage_private_fork: bool = False,
+    vecoli_private_commit: str | None = None,
 ) -> SimulatorVersion:
     if not simulation_service_slurm:
         # Route the build to the simulator's backend (v2ecoli→Ray builds v2ecoli:<sha>,
@@ -173,6 +175,33 @@ async def upload_simulator(  # noqa: C901
                     "include_submit_image: %s has no Nextflow head image; skipping (not requested explicitly)",
                     type(simulation_service_slurm).__name__,
                 )
+        # ``stage_private_fork``: stage vEcoli-private (not the public vEcoli mirror) as
+        # the image's own wrapped /app/vEcoli fork, so a config's !ParameterSerializer[...]
+        # tag whose value only lives in the private fork's param_store can actually
+        # resolve. Plain boolean, always explicit by request -- there is no legitimate
+        # "silently skip" case the way there was for include_submit_image (nobody should
+        # get a differently-sourced fork than the one they asked for without knowing).
+        # Only the Ray build path wraps a separate vEcoli fork inside its own image at all.
+        if stage_private_fork:
+            if not vecoli_private_commit:
+                raise HTTPException(
+                    status_code=400,
+                    detail="vecoli_private_commit is required when stage_private_fork is True",
+                )
+            accepts_flag = (
+                "stage_private_fork" in inspect.signature(simulation_service_slurm.submit_build_image_job).parameters
+            )
+            if not accepts_flag:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "stage_private_fork is not supported by the build path for "
+                        f"{simulator.git_repo_url!r} -- only the v2ecoli/sms-ecoli Ray build "
+                        "path wraps a separate vEcoli fork inside its own image."
+                    ),
+                )
+            build_kwargs["stage_private_fork"] = True
+            build_kwargs["vecoli_private_commit"] = vecoli_private_commit
         build_job_id = await simulation_service_slurm.submit_build_image_job(**build_kwargs)  # type: ignore[arg-type]
         hpc_run = await database_service.insert_hpcrun(
             job_id=build_job_id,
