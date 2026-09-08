@@ -6,11 +6,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from typing import Any, cast, override
 
+from pydantic import ValidationError
 from sqlalchemy import ColumnElement, CursorResult, Result, and_, or_, select, text
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import InstrumentedAttribute
-from pydantic import ValidationError
 
 from viva_api.analysis.models import AnalysisConfig, ExperimentAnalysisDTO
 from viva_api.common.hpc.job_service import JobStatusUpdate

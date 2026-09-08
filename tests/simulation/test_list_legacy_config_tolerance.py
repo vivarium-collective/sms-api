@@ -8,6 +8,7 @@ response — hiding every run from every client. `_build_simulations` now degrad
 that single record (strips the extra-forbidden keys, re-parses strictly) instead
 of failing the list. Creation + the per-id detail path stay strict.
 """
+
 from types import SimpleNamespace
 
 from viva_api.simulation.database_service import DatabaseServiceSQL
@@ -37,10 +38,13 @@ def test_parca_options_still_forbids_extra_on_creation():
 
 
 def test_list_tolerates_a_legacy_config_and_still_enumerates_it():
-    legacy = _orm(1, {
-        "experiment_id": "legacy-run",
-        "parca_options": {"outdir": "/x", "rnaseq_manifest_path": "m", "rnaseq_source": "experimental"},
-    })
+    legacy = _orm(
+        1,
+        {
+            "experiment_id": "legacy-run",
+            "parca_options": {"outdir": "/x", "rnaseq_manifest_path": "m", "rnaseq_source": "experimental"},
+        },
+    )
     ok = _orm(2, {"experiment_id": "clean-run", "parca_options": {"outdir": "/y"}})
 
     # The whole point: this does NOT raise even though row 1 fails strict validation.
