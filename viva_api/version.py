@@ -1081,7 +1081,7 @@
 #            for this one nested, model-backed key -- every other extra_params
 #            key keeps its existing top-level setdefault, byte-for-byte
 #            unchanged. 4 new regression tests.
-__version__ = "0.9.121"
+__version__ = "0.9.122"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
