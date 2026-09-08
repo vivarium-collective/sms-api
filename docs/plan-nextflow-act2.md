@@ -379,7 +379,7 @@ collapse in flight.
 
 ## The plan
 
-### Phase 1 — Unblock gate 4: give each lineage a distinct output name
+### Phase 1 — Unblock gate 4: give each lineage a distinct output name — ✅ DONE (gate 4 closed by sim 574)
 
 The only change needed to answer the gate; everything else can follow.
 
@@ -474,8 +474,8 @@ derivation — paths are constrained by **E** and by resume sharing a work dir:
 ### Phase 5 — Hygiene
 
 - ~~#467~~ — fixed by eagmon in #475; close the issue citing the PR.
-- Close **#478** unmerged, recording *why* on the thread so its sequencing insight
-  survives the closure.
+- ~~Close **#478** unmerged, recording *why* on the thread~~ — done; superseded by #481,
+  and the thread links forward to it.
 - Declare `emit_paths` in `workflow_nf`'s generator parameters (**G**) — and the other
   six unreachable keys, `media` first.
 - **viva-api#484** — `/status` should trust a terminal DB row before asking the backend.
