@@ -1286,3 +1286,35 @@ class TestExtraParamsParcaOptionsDeepMerge:
 
         sim_request = mock_db_service.insert_simulation.call_args.kwargs["sim_request"]
         assert getattr(sim_request.config, "cache_variant", None) == "cd2-run4-carina-genotype2"
+
+
+@pytest.mark.asyncio
+async def test_a_terminal_row_is_reported_without_asking_a_backend_that_may_be_gone() -> None:
+    """viva-api#484. A cancelled Nextflow campaign's head Job is deleted by the
+    cancel itself, so `get_job_status` returns None and the plain path reported
+    UNKNOWN -- one minute after the cancel handler had answered "cancelled".
+    The DB row is the answer for any terminal status; the backend is not asked."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from viva_api.common.handlers import simulations as handlers
+    from viva_api.common.models import JobId, JobStatus
+    from viva_api.simulation.models import HpcRun, JobType
+
+    row = HpcRun(
+        database_id=1,
+        job_id=JobId.k8s_nextflow("nf-sim1-x-abcd-zzz111"),
+        correlation_id="N/A",
+        job_type=JobType.SIMULATION,
+        ref_id=567,
+        status=JobStatus.CANCELLED,
+        error_message=None,
+    )
+    db = MagicMock()
+    db.get_simulation = AsyncMock(return_value=MagicMock())  # the handler resolves the record first
+    db.get_hpcrun_by_ref = AsyncMock(return_value=row)
+    service = MagicMock()
+    service.get_job_status = AsyncMock(return_value=None)  # the head is gone
+    with patch.object(handlers, "get_simulation_service_for_job", return_value=service):
+        run = await handlers.get_simulation_status(db_service=db, id=567)
+    assert run.status == JobStatus.CANCELLED
+    service.get_job_status.assert_not_awaited()
