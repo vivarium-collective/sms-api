@@ -754,12 +754,30 @@ def _check_required_run_interval(spec: Any, overrides: dict[str, Any] | None, st
     by its own contract; any other composite is untouched. Fail loud rather
     than silently stretch the run -- the caller asked for a duration, and a
     wrong one is a bug in the request, not something to paper over.
+
+    **Exempt when ``stop_at_division`` is set (CD2 Run 3, chain-dispatch,
+    sms-ecoli#166).** Chain-dispatch's own per-generation job submission
+    (``_seed_generation_command``) always hardcodes ``-n 1`` deliberately --
+    with ``stop_at_division: True`` (item 103), ``LineageProcess`` advances to
+    a real division INTERNALLY regardless of the nominal step count; ``steps``
+    there is a "go" signal, not a simulated-time budget this check's own
+    ``n_generations * max_duration_per_gen`` contract assumes. That contract
+    is exactly right for MNP's ``lineage_ray_batch`` (one continuous
+    invocation covering every generation, no early exit) -- it does not hold
+    for chain-dispatch's per-generation-job shape, where each job legitimately
+    runs `-n 1`. ``stop_at_division`` is precisely the signal that
+    distinguishes this from Dispatch 438's own actual failure shape (no
+    ``n_generations``, no ``steps``, and no ``stop_at_division`` either, so
+    nothing makes the run advance) -- so checking it here cannot reopen that
+    bug.
     """
     declared = _declared_params(spec)
     if "n_generations" not in declared:
         return
     merged = {k: (v or {}).get("default") for k, v in declared.items()}
     merged.update(overrides or {})
+    if merged.get("stop_at_division"):
+        return  # self-terminates at a real division; steps is a trigger, not a budget
     try:
         n_generations = int(merged.get("n_generations") or 1)
         max_duration = float(merged.get("max_duration_per_gen") or 3600.0)

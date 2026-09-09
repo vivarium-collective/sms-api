@@ -1176,7 +1176,22 @@
 #            max_duration_per_gen -- the under-run hole the API-side clamp
 #            (87e5ca04) cannot see when the request omits n_generations too.
 #            viva-api#525. Also #514 (/status short-circuit), #515 (e2e opt-in).
-__version__ = "0.9.128"
+# 0.9.129 -- fix(run_pbg): _check_required_run_interval (0.9.128/#525) now
+#            exempts composites whose merged overrides carry
+#            stop_at_division=True (CD2 Run 3, chain-dispatch, sms-ecoli#166,
+#            Dispatch 720/721). Chain-dispatch's own per-generation job
+#            submission (_seed_generation_command) always hardcodes -n 1
+#            deliberately -- stop_at_division makes LineageProcess advance to
+#            a real division INTERNALLY regardless of the nominal step count,
+#            so steps there is a "go" signal, not the simulated-time budget
+#            the n_generations x max_duration_per_gen contract assumes (true
+#            for MNP's one-continuous-invocation lineage_ray_batch, not for
+#            chain-dispatch's per-generation-job shape). stop_at_division is
+#            exactly the signal distinguishing this from Dispatch 438's own
+#            real failure shape (no n_generations, no steps, and no
+#            stop_at_division either, so nothing makes the run advance) --
+#            checking it here cannot reopen that bug. 4 new/extended tests.
+__version__ = "0.9.129"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in

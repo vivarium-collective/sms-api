@@ -1265,6 +1265,24 @@ def test_required_run_interval_uses_the_overrides_when_given() -> None:
     _check_required_run_interval(_LINEAGE, {"n_generations": 2, "max_duration_per_gen": 1200.0}, 2400)
 
 
+def test_stop_at_division_is_exempt_from_the_under_run_check() -> None:
+    """CD2 Run 3 (chain-dispatch, sms-ecoli#166): each per-generation job
+    hardcodes -n 1 deliberately (_seed_generation_command) -- stop_at_division
+    makes LineageProcess advance to a real division internally, so steps is a
+    trigger, not a simulated-time budget. Must not reopen Dispatch 438 (no
+    stop_at_division at all, the real under-run this check exists for)."""
+    from viva_api.compose.run_pbg import _check_required_run_interval
+
+    _check_required_run_interval(_LINEAGE, {"stop_at_division": True}, 1)  # exempt: fine
+    _check_required_run_interval(
+        _LINEAGE, {"n_generations": 10, "stop_at_division": True}, 1
+    )  # exempt regardless of n_generations
+    with pytest.raises(SystemExit, match="refusing to under-run.*-n 1 < required 3600"):
+        _check_required_run_interval(_LINEAGE, {"stop_at_division": False}, 1)  # explicit False still checked
+    with pytest.raises(SystemExit, match="refusing to under-run.*-n 1 < required 3600"):
+        _check_required_run_interval(_LINEAGE, {}, 1)  # Dispatch 438's own shape: still refused
+
+
 def test_non_lineage_composites_are_never_checked() -> None:
     from viva_api.compose.run_pbg import _check_required_run_interval
 
