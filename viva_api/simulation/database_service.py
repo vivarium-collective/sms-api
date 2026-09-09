@@ -43,6 +43,34 @@ from viva_api.simulation.tables_orm import (
 logger = logging.getLogger(__name__)
 
 
+def parca_options_from_stored(stored: Any) -> ParcaOptions:
+    """Parse a STORED ``parca_config`` row tolerantly.
+
+    ``ParcaOptions`` is deliberately ``extra="forbid"`` so an unknown key on a NEW
+    request fails loudly. But rows written by another build of this service (a
+    branch that declared, say, ``rnaseq_manifest_path``) sit in the same table,
+    and re-parsing them strictly made ``GET /simulation/parca/versions`` 500 for
+    everyone (measured on smsvpctest 2026-09-09: three ``rnaseq_*`` keys on one
+    row). Same fix shape as #504 for the simulation list: strip ONLY the keys
+    the validation error names as ``extra_forbidden``, re-parse strictly, and
+    say so in the log. Anything else still raises.
+    """
+    data = dict(stored or {})
+    try:
+        return ParcaOptions(**data)
+    except ValidationError as exc:
+        offending = [err["loc"][0] for err in exc.errors() if err["type"] == "extra_forbidden" and err["loc"]]
+        if not offending:
+            raise
+        logger.warning(
+            "parca_config row carries keys this build does not declare; ignoring for read: %s",
+            sorted(str(k) for k in offending),
+        )
+        for k in offending:
+            data.pop(k, None)
+        return ParcaOptions(**data)
+
+
 class DatabaseService(ABC):
     @abstractmethod
     async def insert_analysis(
@@ -734,7 +762,7 @@ class DatabaseServiceSQL(DatabaseService):
             )
             parca_dataset_request = ParcaDatasetRequest(
                 simulator_version=simulator_version,
-                parca_config=ParcaOptions(**orm_parca_dataset.parca_config),  # type: ignore[arg-type]
+                parca_config=parca_options_from_stored(orm_parca_dataset.parca_config),
             )
             parca_dataset = ParcaDataset(
                 database_id=orm_parca_dataset_id,
@@ -760,7 +788,7 @@ class DatabaseServiceSQL(DatabaseService):
                 database_id=orm_parca_dataset.id,
                 parca_dataset_request=ParcaDatasetRequest(
                     simulator_version=simulator_version,
-                    parca_config=ParcaOptions(**orm_parca_dataset.parca_config),  # type: ignore[arg-type]
+                    parca_config=parca_options_from_stored(orm_parca_dataset.parca_config),
                 ),
                 remote_archive_path=orm_parca_dataset.remote_archive_path,
             )
@@ -792,7 +820,7 @@ class DatabaseServiceSQL(DatabaseService):
                         database_id=orm_parca_dataset.id,
                         parca_dataset_request=ParcaDatasetRequest(
                             simulator_version=simulator_version,
-                            parca_config=ParcaOptions(**orm_parca_dataset.parca_config),  # type: ignore[arg-type]
+                            parca_config=parca_options_from_stored(orm_parca_dataset.parca_config),
                         ),
                         remote_archive_path=orm_parca_dataset.remote_archive_path,
                     )
