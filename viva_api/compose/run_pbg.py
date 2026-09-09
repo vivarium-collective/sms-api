@@ -406,7 +406,7 @@ def _has_emitted_output_shared(out_s3: str) -> bool | None:
     return False
 
 
-def _assert_emitted_output(results_dir: Path) -> None:
+def _assert_emitted_output(results_dir: Path, redirected_from_s3: list[str] | None = None) -> None:
     """Fail the run (``SystemExit(1)``) when it produced no emitted output.
 
     Gated by ``PBG_REQUIRE_OUTPUT`` (set by sms-api's Ray/compose dispatch, where
@@ -422,39 +422,65 @@ def _assert_emitted_output(results_dir: Path) -> None:
     compose path already guards this (``compose/simulation_service.py:94-95``);
     this is the stronger Ray/compose equivalent — ``final_state.json`` ALWAYS
     exists here, so it asserts on the emitted store, not on that fallback.
+
+    ``redirected_from_s3`` (the ``_redirect_emitters`` return value's own second
+    element) covers a DIFFERENT real gap from ``RAY_OUT_S3`` below, confirmed on
+    real infra 2026-09-09 (Dispatch 727:Run 3, seed0): a ``LineageProcess``-driven
+    chain-dispatch composite builds its OWN per-generation parquet emitter
+    independently (``v2ecoli/workflow/lineage.py``'s ``_build_generation`` calls
+    ``set_parquet_emitter_override`` itself, reading its OWN ``config["out_dir"]``
+    — a plain config value on a ``local:LineageProcess`` node, which
+    ``_redirect_emitters`` never touches since that address has no "emitter" in
+    it) — so it can, and in that real run did, keep writing straight to the
+    ORIGINAL pre-redirect S3 destination, verified (``_assert_generation_emitted``/
+    ``_assert_history_landed`` in that same module) INTERNALLY, while this
+    process's own local ``results_dir`` — the only thing the check below used to
+    look at — stayed empty. ``RAY_OUT_S3`` doesn't cover this: it's set only for
+    multi-node Ray dispatch, never for chain-dispatch's single-node-per-generation
+    jobs, so there was previously no cross-check available at all for this shape,
+    and a genuinely successful ~360MB run was reported a hard failure. Checking
+    each emitter's own pre-redirect location closes this generically, without
+    needing to know whether a document is LineageProcess-shaped, MNP-shaped, or
+    anything else — see ``_redirect_emitters``'s own docstring.
     """
     if not _env_truthy(os.environ.get("PBG_REQUIRE_OUTPUT")):
         return
     if _has_emitted_output(results_dir):
         return
 
-    # This process's OWN filesystem is not authoritative on a multi-node run (viva-api#419).
-    # Ray places `ray:`-addressed actors wherever it likes, and the emitters write on the node
-    # that actually hosts the actor -- which need not be this one. Twice on 2026-09-04 a
-    # fully successful lineage run was failed here because Ray put every actor on a peer and
-    # the driver checked an empty directory; the run's ~700 MB of parquet was already in S3.
-    #
-    # What IS authoritative is the shared prefix every node syncs into (RAY_OUT_S3, see the
-    # image's ray-batch entrypoint). Consult it before failing.
+    # This process's OWN filesystem is not authoritative (viva-api#419, and see this
+    # function's own docstring above for the chain-dispatch/LineageProcess instance of the
+    # same underlying fact: the node/process that actually ran an emitter's flush need not be
+    # this one, or need not have honored the local redirect at all). Twice on 2026-09-04 a
+    # fully successful multi-node lineage run was failed here because Ray put every actor on a
+    # peer and the driver checked an empty directory; the run's ~700 MB of parquet was already
+    # in S3. What IS authoritative is wherever the run's own emitter(s) really wrote: the
+    # shared prefix every MNP node syncs into (RAY_OUT_S3), AND/OR each emitter's own
+    # pre-redirect S3 location (redirected_from_s3) for a document that had one. Consult all
+    # of them, under one shared deadline, before failing.
     out_s3 = (os.environ.get("RAY_OUT_S3") or "").strip()
-    if out_s3:
+    candidates = list(dict.fromkeys([*([out_s3] if out_s3 else []), *(redirected_from_s3 or [])]))
+    if candidates:
         deadline = time.monotonic() + _SHARED_OUTPUT_WAIT_SECONDS
-        unreachable = False
+        any_reachable = False
         while True:
-            found = _has_emitted_output_shared(out_s3)
-            if found:
-                return
-            unreachable = found is None
+            for candidate in candidates:
+                found = _has_emitted_output_shared(candidate)
+                if found:
+                    return
+                if found is not None:
+                    any_reachable = True
             if time.monotonic() >= deadline:
                 break
             time.sleep(_SHARED_OUTPUT_POLL_SECONDS)
+        shown = ", ".join(candidates)
         where = (
-            f"and the shared prefix {out_s3} could not be listed"
-            if unreachable
-            else f"nor under the shared prefix {out_s3} (checked for {_SHARED_OUTPUT_WAIT_SECONDS}s)"
+            f"nor under any checked shared prefix ({shown}) (checked for {_SHARED_OUTPUT_WAIT_SECONDS}s)"
+            if any_reachable
+            else f"and the checked shared prefix(es) ({shown}) could not be listed"
         )
     else:
-        where = "and no shared prefix (RAY_OUT_S3) is configured to cross-check"
+        where = "and no shared prefix (RAY_OUT_S3) or redirected emitter S3 location is available to cross-check"
 
     raise SystemExit(
         f"run_pbg: PBG_REQUIRE_OUTPUT is set but the run produced no emitted output under "
@@ -609,7 +635,7 @@ def _assert_run_advanced(results_dir: Path) -> None:
         )
 
 
-def _redirect_emitters(node: Any, results_dir: Path) -> int:
+def _redirect_emitters(node: Any, results_dir: Path) -> tuple[int, list[str]]:
     """Point every emitter step's output location at *results_dir*, recursively.
 
     A document's emitter usually resolves its own output location relative to the
@@ -622,10 +648,17 @@ def _redirect_emitters(node: Any, results_dir: Path) -> int:
     So we rewrite the location key in the loaded document before constructing the
     Composite. Any pre-existing value is overridden rather than preserved: it was
     computed in the authoring environment, and inside this container the ONLY
-    directory that reaches S3 is ``results_dir``. Returns the number of emitters
-    redirected (0 is a legitimate answer — a document need not declare one; it is
-    also the correct answer for a document whose only emitter is a non-file-backed
-    one, e.g. ``RAMEmitter`` — see ``_NON_FILE_BACKED_EMITTER_CLASSES``).
+    directory that reaches S3 is ``results_dir``. Returns ``(count, original_s3_
+    locations)``: ``count`` is the number of emitters redirected (0 is a
+    legitimate answer — a document need not declare one; it is also the correct
+    answer for a document whose only emitter is a non-file-backed one, e.g.
+    ``RAMEmitter`` — see ``_NON_FILE_BACKED_EMITTER_CLASSES``), unchanged from
+    the old int-returning signature. ``original_s3_locations`` is the (possibly
+    empty, possibly smaller than ``count``) subset of pre-redirect location
+    values that looked like a real ``s3://`` URI — extra cross-check candidates
+    for ``_assert_emitted_output``, see that function's own docstring for why a
+    redirected document's real output can still land at its ORIGINAL location
+    instead of ``results_dir``.
 
     **Exception: an ``out_uri``-keyed (xarray/zarr) emitter goes straight to S3
     instead, when ``RAY_OUT_S3`` is set.** Every other file-backed emitter's local
@@ -650,7 +683,8 @@ def _redirect_emitters(node: Any, results_dir: Path) -> int:
     node's disk. Falls back to the shared local redirect when ``RAY_OUT_S3`` is
     unset (e.g. a non-Batch/local dev context), so nothing changes there.
     """
-    redirected = 0
+    count = 0
+    s3_locations: list[str] = []
     if isinstance(node, dict):
         address = node.get("address")
         is_file_backed = (
@@ -675,20 +709,26 @@ def _redirect_emitters(node: Any, results_dir: Path) -> int:
             # redirect, exactly as silently as the bug this fix closes. Checking the
             # actual registered class name removes the guesswork entirely.
             is_xarray = key == "out_uri" and isinstance(address, str) and address.split(":")[-1] == "XArrayEmitter"
+            if isinstance(before, str) and before.startswith("s3://"):
+                s3_locations.append(before)
             if is_xarray and out_s3:
                 config[key] = out_s3
-                redirected += 1
+                count += 1
                 print(f"run_pbg: redirected emitter {address} {key}: {before!r} -> {out_s3} (S3-direct)")
             else:
                 config[key] = str(results_dir)
-                redirected += 1
+                count += 1
                 print(f"run_pbg: redirected emitter {address} {key}: {before!r} -> {results_dir}")
         for value in node.values():
-            redirected += _redirect_emitters(value, results_dir)
+            sub_count, sub_locations = _redirect_emitters(value, results_dir)
+            count += sub_count
+            s3_locations.extend(sub_locations)
     elif isinstance(node, list):
         for item in node:
-            redirected += _redirect_emitters(item, results_dir)
-    return redirected
+            sub_count, sub_locations = _redirect_emitters(item, results_dir)
+            count += sub_count
+            s3_locations.extend(sub_locations)
+    return count, s3_locations
 
 
 def _lookup_spec(composite_id: str) -> Any:
@@ -898,7 +938,7 @@ def run(
         core = register_protocol_types(core)
         # Emitters must write where the entrypoint syncs from, not where the authoring
         # workspace would have put them.
-        n_redirected = _redirect_emitters(document, results_dir)
+        n_redirected, redirected_from_s3 = _redirect_emitters(document, results_dir)
         composite = Composite(document, core=core)  # full-path local:! addresses resolve via importlib
     composite.run(steps)
     _flush_emitters(composite)
@@ -917,7 +957,7 @@ def run(
     # for. Under PBG_REQUIRE_OUTPUT (set by sms-api's Ray/compose dispatch), refuse
     # to exit 0 when only final_state.json was produced. Runs AFTER final_state is
     # written so it survives as a postmortem artifact even on this failure.
-    _assert_emitted_output(results_dir)
+    _assert_emitted_output(results_dir, redirected_from_s3)
     # P0-3 (effect, not just presence): a run can emit a non-empty store yet not have
     # advanced — a one-tick collapse (sms-ecoli#210 §3d / #375 §3e). Under
     # PBG_MIN_GLOBAL_TIME (opt-in), refuse to exit 0 unless real simulated time elapsed.

@@ -1191,7 +1191,29 @@
 #            real failure shape (no n_generations, no steps, and no
 #            stop_at_division either, so nothing makes the run advance) --
 #            checking it here cannot reopen that bug. 4 new/extended tests.
-__version__ = "0.9.129"
+#           0.9.129 -- fix: _assert_emitted_output now also cross-checks each
+#            file-backed emitter's own pre-redirect S3 location, not just
+#            RAY_OUT_S3. Found on real infra: Dispatch 727:Run 3 seed0
+#            (2026-09-09) genuinely succeeded -- a real division, a real
+#            checkpoint, ~360MB of real parquet history landed in S3 -- yet
+#            was reported a hard failure. Root cause: a LineageProcess-driven
+#            chain-dispatch composite builds its OWN per-generation parquet
+#            emitter independently (lineage.py's _build_generation reads its
+#            OWN config["out_dir"], a plain value on a local:LineageProcess
+#            node _redirect_emitters never touches, since that address has no
+#            "emitter" in it) and can keep writing straight to the ORIGINAL
+#            pre-redirect S3 destination -- verified internally by
+#            LineageProcess's own _assert_generation_emitted/
+#            _assert_history_landed -- while this process's local results_dir
+#            stayed empty. RAY_OUT_S3 doesn't cover this: it's MNP-only, never
+#            set for chain-dispatch's single-node-per-generation jobs, so
+#            there was previously no cross-check available for this shape at
+#            all. _redirect_emitters now returns (count, original_s3_
+#            locations) instead of a bare count; _assert_emitted_output polls
+#            every candidate (RAY_OUT_S3 plus each redirected emitter's own
+#            pre-redirect s3:// location) under the same shared deadline
+#            before failing. 8 new/extended tests.
+__version__ = "0.9.130"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
