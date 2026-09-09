@@ -262,6 +262,7 @@ def plan_campaign(
     base_url: str = "http://localhost:8080",
     tag: str = "cd2-nextflow",
     description: str = "",
+    legacy_image: bool = False,
 ) -> CampaignPlan:
     if run not in RUN_CONFIGS:
         raise TranslationError(f"unknown run {run!r}")
@@ -300,13 +301,22 @@ def plan_campaign(
         }
     specs = variant_specs(variants or [{"variant_name": f"run{run}"}], inj)
     params: dict[str, Any] = {"variants": specs}
-    if media:
-        params["media"] = media
-    if "time_step" in cfg and cfg["time_step"] is not None:
-        params["time_step"] = cfg["time_step"]
-    if fluxes:
-        params["exchange_fluxes"] = fluxes
-        params["exchange_flux_basis"] = EXCHANGE_FLUX_BASIS
+    # Top-level lineage knobs (media, time_step, exchange_fluxes, ...) exist on
+    # workflow_nf only since v2ecoli#746 (simulators >= 178). On an older image
+    # CompositeSpec.to_document RAISES `KeyError: unknown override(s)` for them
+    # (sim 732 on simulator 173), so --legacy-image emits none of them; the
+    # injection block above still carries the fluxes, which is all a pre-#746
+    # LineageProcess reads anyway. `media` cannot be set on such an image.
+    if not legacy_image:
+        if media:
+            params["media"] = media
+        if "time_step" in cfg and cfg["time_step"] is not None:
+            params["time_step"] = cfg["time_step"]
+        if fluxes:
+            params["exchange_fluxes"] = fluxes
+            params["exchange_flux_basis"] = EXCHANGE_FLUX_BASIS
+    elif media:
+        raise TranslationError("--media needs a #746 image (simulator >= 178); a legacy image cannot set it")
     return CampaignPlan(
         label=label,
         simulator_id=simulator_id,
@@ -355,6 +365,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--description", default="")
     p.add_argument("--base-url", default="http://localhost:8080")
     p.add_argument("--emit", choices=("cli", "json", "both"), default="both")
+    p.add_argument(
+        "--legacy-image",
+        action="store_true",
+        help="simulator predates v2ecoli#746 (< 178): emit no top-level lineage knobs",
+    )
     a = p.parse_args(argv)
 
     cfg = load_workflow_config(a.sms_ecoli / RUN_CONFIGS[a.run])
@@ -390,6 +405,7 @@ def main(argv: list[str] | None = None) -> int:
         base_url=a.base_url,
         tag=a.tag,
         description=a.description,
+        legacy_image=a.legacy_image,
     )
     if a.emit in ("json", "both"):
         print(
