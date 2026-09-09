@@ -104,6 +104,12 @@ def _env_at(call: Any, index: int) -> dict[str, str]:
     return {e["name"]: e["value"] for e in ov["containerOverrides"]["environment"]}
 
 
+def _overrides_from_run_pbg_cmd(cmd: str) -> dict[str, Any]:
+    """Parse the ``--overrides '<json>'`` payload out of a run_pbg.py command."""
+    tokens = shlex.split(cmd.split("python /tmp/run_pbg.py", 1)[1])
+    return dict(json.loads(tokens[tokens.index("--overrides") + 1]))
+
+
 def _env_of(call: Any) -> dict[str, str]:
     """Head (node 0) environment dict."""
     return _env_at(call, 0)
@@ -833,6 +839,96 @@ class TestSubmitMultiNodeComposite:
         assert "experiment_id" not in json.dumps({"n_cells": 6, "env_size": 20})
 
         assert composite_call.kwargs["tags"]["CompositeId"] == "some_workspace.composites.some_multi_node_composite"
+
+    @pytest.mark.asyncio
+    async def test_multi_node_dispatch_threads_top_level_swap_processes_into_composite_params(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """sms-ecoli#166 (2026-09-09): a config's top-level ``swap_processes`` /
+        ``exclude_processes`` (the committed CD2 Run 4 shape) must reach the
+        multi-node composite as ``params.injected_processes`` -- it never did,
+        so every ``lineage_ray_batch`` Run 4 dispatch ran classic metabolism
+        while its stored config declared the redux swap (787's traceback in
+        ``v2ecoli/processes/metabolism.py``; 744's classic-only FBA listeners)."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "swap_processes",
+            {"ecoli-metabolism": "ecoli-metabolism-redux"},
+        )
+        setattr(experiment_request.config, "exclude_processes", ["exchange_data"])  # noqa: B010
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 4,
+                "params": {"media": "minimal_plus_tryptophan", "emitter": "parquet", "n_seeds": 4, "n_generations": 8},
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-swap", "composite-swap"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-swap"
+            )
+
+        _parca_call, composite_call = mock_batch.submit_job.call_args_list
+        cmd = _env_of(composite_call)["RAY_JOB_CMD"]
+        params = _overrides_from_run_pbg_cmd(cmd)
+        assert params["media"] == "minimal_plus_tryptophan"
+        assert params["injected_processes"]["swap_processes"] == {"ecoli-metabolism": "ecoli-metabolism-redux"}
+        assert params["injected_processes"]["exclude_processes"] == ["exchange_data"]
+        assert params["injected_processes"]["fork_repo"] == ""
+
+    @pytest.mark.asyncio
+    async def test_multi_node_dispatch_keeps_explicit_params_injected_processes(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Explicit ``params.injected_processes`` wins over the config's own flat
+        keys, and a config with no injection intent produces params without the
+        key at all (byte-for-byte the pre-fix command)."""
+        explicit = {"swap_processes": {"ecoli-metabolism": "custom-metabolism"}, "fork_repo": ""}
+        setattr(experiment_request.config, "swap_processes", {"ecoli-metabolism": "ecoli-metabolism-redux"})  # noqa: B010
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {"media": "minimal", "injected_processes": explicit},
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+        mock_batch = _fake_multi_node_batch(["parca-x", "composite-x"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-mnp-explicit"
+            )
+        _parca_call, composite_call = mock_batch.submit_job.call_args_list
+        params = _overrides_from_run_pbg_cmd(_env_of(composite_call)["RAY_JOB_CMD"])
+        assert params["injected_processes"] == explicit
 
     @pytest.mark.asyncio
     async def test_n_generations_in_params_computes_required_run_interval(
