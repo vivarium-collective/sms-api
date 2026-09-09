@@ -1191,7 +1191,7 @@
 #            real failure shape (no n_generations, no steps, and no
 #            stop_at_division either, so nothing makes the run advance) --
 #            checking it here cannot reopen that bug. 4 new/extended tests.
-__version__ = "0.9.129"
+__version__ = "0.9.130"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
