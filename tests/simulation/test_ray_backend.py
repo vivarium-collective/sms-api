@@ -827,6 +827,10 @@ class TestSubmitMultiNodeComposite:
         assert "RAY_SHARDS_DEFAULT=32" in cmd
         # No colony/composite-specific hardcoding anywhere in the built command.
         assert "colony" not in cmd.lower()
+        # The run's identity rides as its own flag, NOT inside --overrides: run_pbg
+        # injects it only if the composite declares experiment_id (sms-ecoli#166).
+        assert f"--experiment-id {shlex.quote(str(simulation.config.experiment_id))}" in cmd
+        assert "experiment_id" not in json.dumps({"n_cells": 6, "env_size": 20})
 
         assert composite_call.kwargs["tags"]["CompositeId"] == "some_workspace.composites.some_multi_node_composite"
 

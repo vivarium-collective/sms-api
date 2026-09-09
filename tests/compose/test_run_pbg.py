@@ -1213,3 +1213,80 @@ def test_run_registers_protocols_on_the_core_that_survives_core_extensions(
 
     assert json.loads(out.read_text())["protocols_registered_on_final_core"] is True
     assert getattr(new_core, "protocols_registered", False) is True
+
+
+# --- schema-aware guards (sms-ecoli#166: MNP run identity + required run interval) ---
+
+
+class _Spec:
+    def __init__(self, parameters: dict[str, Any]) -> None:
+        self.parameters = parameters
+
+
+_LINEAGE = _Spec({
+    "n_generations": {"type": "integer", "default": 1},
+    "max_duration_per_gen": {"type": "float", "default": 3600.0},
+    "experiment_id": {"type": "string", "default": "lineage_ray_batch"},
+    "seed": {"type": "integer", "default": 0},
+})
+_COLONY = _Spec({"n_cells": {"type": "integer", "default": 4}})
+
+
+def test_run_identity_is_injected_only_when_the_composite_declares_it() -> None:
+    from viva_api.compose.run_pbg import _apply_declared_run_identity
+
+    assert _apply_declared_run_identity(_LINEAGE, {"seed": 3}, "sim172-run2-ab12") == {
+        "seed": 3,
+        "experiment_id": "sim172-run2-ab12",
+    }
+    # a composite that never declares it must NOT receive it (to_document would raise)
+    assert _apply_declared_run_identity(_COLONY, {"n_cells": 6}, "sim172-run2-ab12") == {"n_cells": 6}
+    # an explicit override always wins; None/"" identity is a no-op
+    assert _apply_declared_run_identity(_LINEAGE, {"experiment_id": "mine"}, "other")["experiment_id"] == "mine"
+    assert _apply_declared_run_identity(_LINEAGE, {}, None) == {}
+
+
+def test_lineage_composite_refuses_to_under_run_even_with_all_defaults() -> None:
+    """The hole the API-side clamp cannot see: n_generations AND steps both omitted."""
+    from viva_api.compose.run_pbg import _check_required_run_interval
+
+    with pytest.raises(SystemExit, match="refusing to under-run.*-n 1 < required 3600"):
+        _check_required_run_interval(_LINEAGE, {}, 1)
+    _check_required_run_interval(_LINEAGE, {}, 3600)  # exactly the contract: fine
+
+
+def test_required_run_interval_uses_the_overrides_when_given() -> None:
+    from viva_api.compose.run_pbg import _check_required_run_interval
+
+    with pytest.raises(SystemExit, match="required 14400"):
+        _check_required_run_interval(_LINEAGE, {"n_generations": 4}, 3600)
+    with pytest.raises(SystemExit, match="required 2400"):
+        _check_required_run_interval(_LINEAGE, {"n_generations": 2, "max_duration_per_gen": 1200.0}, 2399)
+    _check_required_run_interval(_LINEAGE, {"n_generations": 2, "max_duration_per_gen": 1200.0}, 2400)
+
+
+def test_non_lineage_composites_are_never_checked() -> None:
+    from viva_api.compose.run_pbg import _check_required_run_interval
+
+    _check_required_run_interval(_COLONY, {"n_cells": 6}, 1)  # a colony's 1 step is its own business
+
+
+def test_main_threads_experiment_id_through_to_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    from viva_api.compose import run_pbg
+
+    seen: dict[str, Any] = {}
+
+    def fake_run(
+        input_file: str | None,
+        steps: int,
+        composite_id: str | None = None,
+        overrides: dict[str, Any] | None = None,
+        experiment_id: str | None = None,
+        **kw: Any,
+    ) -> Path:
+        seen.update(steps=steps, composite_id=composite_id, overrides=overrides, experiment_id=experiment_id)
+        return Path("/dev/null")
+
+    monkeypatch.setattr(run_pbg, "run", fake_run)
+    run_pbg.main(["--composite-id", "x.y", "--overrides", '{"seed": 1}', "-n", "7200", "--experiment-id", "sim1-r2-ab"])
+    assert seen == {"steps": 7200, "composite_id": "x.y", "overrides": {"seed": 1}, "experiment_id": "sim1-r2-ab"}

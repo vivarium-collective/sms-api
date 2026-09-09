@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -690,6 +691,91 @@ def _redirect_emitters(node: Any, results_dir: Path) -> int:
     return redirected
 
 
+def _lookup_spec(composite_id: str) -> Any:
+    """Resolve a registered composite spec, forcing package discovery once if needed."""
+    from process_bigraph.composite_spec import discover_specs
+    from process_bigraph.composite_spec import get as get_spec
+
+    spec = get_spec(composite_id)
+    if spec is None:
+        # The defining module may not have been imported yet (its
+        # @composite_generator/@composite_spec decorator only fires on
+        # import) — discover_specs() walks every installed
+        # bigraph-schema-dependent package to force that, then retry once.
+        discover_specs()
+        spec = get_spec(composite_id)
+    if spec is None:
+        raise SystemExit(f"run_pbg: no composite registered as {composite_id!r}")
+    return spec
+
+
+def _declared_params(spec: Any) -> dict[str, Any]:
+    params = getattr(spec, "parameters", None) or {}
+    return dict(params) if isinstance(params, dict) else {}
+
+
+def _apply_declared_run_identity(
+    spec: Any, overrides: dict[str, Any] | None, experiment_id: str | None
+) -> dict[str, Any]:
+    """Thread the dispatch's ``experiment_id`` into the overrides -- but ONLY when
+    the composite declares that parameter.
+
+    Why here and not on the API side: ``CompositeSpec.to_document`` raises
+    ``KeyError("unknown override(s)")`` for any key the generator does not
+    declare, and the API has no view of a composite's schema (resolution
+    happens in this container). So a blanket server-side default would break
+    every composite that never heard of ``experiment_id``. Without it, every
+    lineage-shaped MNP dispatch that omits the key falls back to the
+    generator's literal default -- ``lineage_ray_batch`` -> the hive partition
+    ``experiment_id=lineage_ray_batch`` on EVERY campaign (sms-ecoli#166: Runs
+    1/2/4 all landed under the same key), which is exactly the collision
+    ``_nf_generator_params`` already prevents on the Nextflow path. An explicit
+    override always wins.
+    """
+    merged = dict(overrides or {})
+    if experiment_id and "experiment_id" in _declared_params(spec) and not merged.get("experiment_id"):
+        merged["experiment_id"] = experiment_id
+    return merged
+
+
+def _check_required_run_interval(spec: Any, overrides: dict[str, Any] | None, steps: int) -> None:
+    """Refuse to under-run a lineage-shaped composite.
+
+    ``Composite.run(steps)`` advances TOTAL SIMULATED TIME, and every
+    ``ray:LineageProcess`` node's own ``interval`` is ``max_duration_per_gen``,
+    so a run shorter than ``n_generations * max_duration_per_gen`` invokes
+    nothing and emits nothing -- yet exits 0 (Dispatch 438; sms-ecoli#166,
+    eagmon's comment 5579146363). The API clamps ``steps`` up when the request
+    carries ``n_generations`` (viva-api 87e5ca04), but it cannot see the
+    composite's DEFAULTS, so a request that omits ``n_generations`` (default 1)
+    and ``steps`` (default 1) still slips through as a 1-second run. This
+    runner CAN see the declared parameters, so it is the one place the check
+    is generic: any composite that declares ``n_generations`` is lineage-shaped
+    by its own contract; any other composite is untouched. Fail loud rather
+    than silently stretch the run -- the caller asked for a duration, and a
+    wrong one is a bug in the request, not something to paper over.
+    """
+    declared = _declared_params(spec)
+    if "n_generations" not in declared:
+        return
+    merged = {k: (v or {}).get("default") for k, v in declared.items()}
+    merged.update(overrides or {})
+    try:
+        n_generations = int(merged.get("n_generations") or 1)
+        max_duration = float(merged.get("max_duration_per_gen") or 3600.0)
+    except (TypeError, ValueError):
+        return  # not ours to validate; the generator will
+    required = math.ceil(n_generations * max_duration)
+    if steps < required:
+        raise SystemExit(
+            f"run_pbg: refusing to under-run lineage-shaped composite: -n {steps} < required "
+            f"{required} (= n_generations {n_generations} x max_duration_per_gen {max_duration:g} s). "
+            "`-n` is TOTAL SIMULATED SECONDS, not a tick count; a shorter run invokes no "
+            "generation and emits nothing. Set multi_node_dispatch.steps (or n_generations in "
+            "params so the API can derive it)."
+        )
+
+
 def _resolve_document(
     input_file: str | None, composite_id: str | None, overrides: dict[str, Any] | None, core: Any
 ) -> tuple[dict[str, Any], Any]:
@@ -722,19 +808,8 @@ def _resolve_document(
     """
     if composite_id:
         from process_bigraph.composite_generator import apply_core_extensions
-        from process_bigraph.composite_spec import discover_specs
-        from process_bigraph.composite_spec import get as get_spec
 
-        spec = get_spec(composite_id)
-        if spec is None:
-            # The defining module may not have been imported yet (its
-            # @composite_generator/@composite_spec decorator only fires on
-            # import) — discover_specs() walks every installed
-            # bigraph-schema-dependent package to force that, then retry once.
-            discover_specs()
-            spec = get_spec(composite_id)
-        if spec is None:
-            raise SystemExit(f"run_pbg: no composite registered as {composite_id!r}")
+        spec = _lookup_spec(composite_id)
         core = apply_core_extensions(spec, core)
         document: dict[str, Any] = spec.to_document(overrides=overrides or {}, core=core)
         return document, core
@@ -751,6 +826,7 @@ def run(
     *,
     composite_id: str | None = None,
     overrides: dict[str, Any] | None = None,
+    experiment_id: str | None = None,
 ) -> Path:
     """Get a document (static file, or built from ``composite_id`` + ``overrides``),
     run it ``steps`` times, write ``final_state.json``.
@@ -770,6 +846,13 @@ def run(
     core = _workspace_core()
     if core is None:
         core = _build_core()
+    if composite_id:
+        # Both guards need the composite's DECLARED parameters, which only this
+        # side of the container boundary can see. Do them before the emitter
+        # override below, which reads overrides["experiment_id"] itself.
+        spec = _lookup_spec(composite_id)
+        overrides = _apply_declared_run_identity(spec, overrides, experiment_id)
+        _check_required_run_interval(spec, overrides, steps)
     with _v2ecoli_parquet_emitter_override(results_dir, overrides):
         document, core = _resolve_document(input_file, composite_id, overrides, core)
         # Neither _workspace_core()/_build_core() nor a composite's own
@@ -831,11 +914,23 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--overrides", default=None, help="JSON object of composite-generator parameter overrides")
     parser.add_argument("-o", "--output", default=str(RESULTS_DIR))
     parser.add_argument("-n", "--steps", type=int, default=1)
+    parser.add_argument(
+        "--experiment-id",
+        dest="experiment_id",
+        default=None,
+        help="dispatch identity; injected into overrides only if the composite declares experiment_id",
+    )
     args = parser.parse_args(argv)
     if bool(args.input_file) == bool(args.composite_id):
         parser.error("exactly one of input_file or --composite-id is required")
     overrides = json.loads(args.overrides) if args.overrides else None
-    run(args.input_file, args.steps, composite_id=args.composite_id, overrides=overrides)
+    run(
+        args.input_file,
+        args.steps,
+        composite_id=args.composite_id,
+        overrides=overrides,
+        experiment_id=args.experiment_id,
+    )
 
 
 if __name__ == "__main__":

@@ -3077,6 +3077,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         steps: int,
         runner_s3_uri: str,
         n_shards_default: int | None,
+        experiment_id: str | None = None,
     ) -> str:
         """Head-node command for a multi-node process-bigraph composite dispatch
         (backlog item 88).
@@ -3103,12 +3104,20 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         env = PBG_RUNNER_ENV
         if n_shards_default:
             env = f"{env} RAY_SHARDS_DEFAULT={int(n_shards_default)}"
+        # --experiment-id: the run's identity, handed to run_pbg.py rather than
+        # stuffed into params -- CompositeSpec.to_document raises on any key the
+        # generator does not declare, and only the container can see the
+        # schema. run_pbg injects it iff the composite declares experiment_id;
+        # otherwise lineage-shaped composites default to the literal
+        # "lineage_ray_batch" and every campaign's hive partition collides
+        # (sms-ecoli#166). Same collision _nf_generator_params fixes for Nextflow.
+        ident = f" --experiment-id {shlex.quote(str(experiment_id))}" if experiment_id else ""
         return (
             f"cd {V2ECOLI_DIR}"
             f" && aws s3 cp {runner_s3_uri} /tmp/run_pbg.py"
             f" && {env} python /tmp/run_pbg.py"
             f" --composite-id {shlex.quote(composite_id)}"
-            f" --overrides {shlex.quote(json.dumps(params))} -n {int(steps)}"
+            f" --overrides {shlex.quote(json.dumps(params))} -n {int(steps)}{ident}"
         )
 
     async def _submit_multi_node_composite(
@@ -3294,6 +3303,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                 steps=steps,
                 runner_s3_uri=runner_s3_uri,
                 n_shards_default=n_shards_default,
+                experiment_id=str(experiment_id),
             ),
             out_s3=self._results_s3_uri(experiment_id),
             out_dir=SIM_OUT_DIR,
