@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import logging
 
+from viva_api.common.dispatch_validation import resolve_task_env
 from viva_api.common.hpc.job_service import JobStatusUpdate
 from viva_api.common.hpc.local_task_service import LocalTaskService
 from viva_api.common.hpc.slurm_service import SlurmService
@@ -658,6 +659,7 @@ class JobScheduler:
             expect_new_genes=expect_new_genes,
             expect_bundle_overrides=expect_bundle_overrides,
             lineage_debug_division=lineage_debug_division,
+            task_env=resolve_task_env(simulation.config),
         )
         for seed in range(n_seeds):
             if seed in submitted:
@@ -754,6 +756,7 @@ class JobScheduler:
                 expect_new_genes=expect_new_genes,
                 expect_bundle_overrides=expect_bundle_overrides,
                 lineage_debug_division=lineage_debug_division,
+                task_env=resolve_task_env(simulation.config),
             )
             current_generation[seed] = gen + 1
 
