@@ -1628,6 +1628,61 @@ class TestSeedOverrideCacheStaging:
         cmd = _env_of(composite_call)["RAY_JOB_CMD"]
         assert "/already/local/path" in cmd
 
+    @pytest.mark.asyncio
+    async def test_missing_cache_variant_still_fails_loud_even_with_seed_overrides_set(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Regression for a real review finding (cd2-questions, 2026-09-09):
+        seed_overrides staging must run AFTER the cache_variant existence
+        check, not alongside cache_s3's own computation -- otherwise staging
+        real objects into cache_s3's own prefix (under _seed_overrides/<seed>/)
+        would make an UNBUILT chassis's own get_listing() come back non-empty,
+        silently defeating the guard test_cache_variant_missing_content_
+        fails_loud_instead_of_building_stock exists to prove. Both guards must
+        hold at once: missing chassis content still raises, and no S3 copy
+        happens before that raise."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {
+                    "seed_overrides": {"0": {"cache_dir": "s3://otherbucket/founders/seed0"}},
+                },
+                "cache_variant": "cd2-run1-k4-candidate-v1-lambda050",
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch([])
+        mock_s3 = MagicMock()
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[])  # nothing staged at this commit yet
+
+        def _boto3_client(service_name: str, **_kwargs: Any) -> MagicMock:
+            return mock_s3 if service_name == "s3" else mock_batch
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", side_effect=_boto3_client),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+            pytest.raises(ValueError, match="cd2-run1-k4-candidate-v1-lambda050"),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-guard-order"
+            )
+
+        # The guard raised BEFORE any seed-override staging happened -- no S3
+        # copy leaked ahead of the existence check, and nothing was submitted.
+        assert not mock_s3.copy_object.called
+        mock_batch.submit_job.assert_not_called()
+
 
 class TestMultiNodeAnalysisCommand:
     """Item 109: _multi_node_analysis_command tries a hive-parquet read

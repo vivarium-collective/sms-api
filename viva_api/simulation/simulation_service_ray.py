@@ -3304,21 +3304,6 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         cache_s3 = self.cache_s3_uri(commit, variant=cache_variant)
         runner_s3_uri = await self.stage_runner(experiment_id)
 
-        # seed_overrides[*].cache_dir (item 115/106): a raw s3:// URI naming a
-        # PER-SEED founder cache, distinct from the base cache_s3 above -- stage
-        # each one under cache_s3's own prefix (picked up by the existing single
-        # stage_s3->stage_dir sync below) and rewrite the override to the local
-        # path it resolves to. See _stage_seed_override_caches's own docstring
-        # for the real bug this closes. A request with no seed_overrides (every
-        # existing caller) is completely unaffected.
-        seed_overrides = params.get("seed_overrides")
-        if seed_overrides:
-            params["seed_overrides"] = self._stage_seed_override_caches(
-                seed_overrides=seed_overrides,
-                cache_s3=cache_s3,
-                stage_dir=PARCA_CACHE_DIR,
-            )
-
         base_tags = {
             "Project": "v2ecoli-multi-node-composite",
             "ExperimentId": str(experiment_id)[:255],
@@ -3375,6 +3360,26 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                 out_s3=cache_s3,
                 out_dir=PARCA_CACHE_DIR,
                 tags={**base_tags, "Phase": "parca"},
+            )
+
+        # seed_overrides[*].cache_dir (item 115/106): a raw s3:// URI naming a
+        # PER-SEED founder cache, distinct from the base cache_s3 above -- stage
+        # each one under cache_s3's own prefix (picked up by the existing single
+        # stage_s3->stage_dir sync below) and rewrite the override to the local
+        # path it resolves to. See _stage_seed_override_caches's own docstring
+        # for the real bug this closes. A request with no seed_overrides (every
+        # existing caller) is completely unaffected. Deliberately AFTER the
+        # cache_variant existence-check above (not alongside cache_s3's own
+        # computation) -- staging real objects into cache_s3's own prefix
+        # before that guard's get_listing() call would make an UNBUILT
+        # chassis's prefix look non-empty, silently defeating the exact
+        # fail-loud check the guard's own comment cites Dispatch 339/340 for.
+        seed_overrides = params.get("seed_overrides")
+        if seed_overrides:
+            params["seed_overrides"] = self._stage_seed_override_caches(
+                seed_overrides=seed_overrides,
+                cache_s3=cache_s3,
+                stage_dir=PARCA_CACHE_DIR,
             )
 
         composite_job_id = self._submit_mnp(
