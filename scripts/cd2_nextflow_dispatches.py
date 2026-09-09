@@ -245,6 +245,46 @@ def founder_variants(mapping: dict[str, Any], arm: str, prefix: str) -> list[dic
     return out
 
 
+def run3_sweep_variants(
+    base_cfg: dict[str, Any], sms_ecoli: Path, campaign_id: str
+) -> tuple[list[dict[str, Any]], int, int]:
+    """One variant per (mecillinam, sulfadiazine) dose combo, from sms-ecoli#299's own generator.
+
+    ``sms_modules.bridge.antibiotic_cocktail_sweep.build_all_combo_configs`` resolves the
+    36-point grid the way vEcoli-private's ``antibiotic_cocktail_timeline`` does -- one
+    complete config per combo, ``field_timeline.timeline`` populated, scale bumped to the
+    real 4 seeds x 20 generations. On the MNP path that is 36 dispatches; here it is ONE
+    campaign whose variants each carry their own resolved injection block (the campaign
+    id names the run, so the per-combo ``experiment_id`` the generator stamps is dropped
+    -- the ``variant=`` partition is the combo's identity). Returns
+    ``(variants, n_seeds, n_generations)``.
+    """
+    import importlib.util
+
+    mod_path = sms_ecoli / "sms_modules" / "bridge" / "antibiotic_cocktail_sweep.py"
+    if not mod_path.exists():
+        raise TranslationError(f"{mod_path} not found -- needs sms-ecoli >= #299")
+    spec = importlib.util.spec_from_file_location("antibiotic_cocktail_sweep", mod_path)
+    if spec is None or spec.loader is None:
+        raise TranslationError(f"cannot load {mod_path}")
+    sweep: Any = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = sweep
+    spec.loader.exec_module(sweep)
+    base = {**base_cfg, "experiment_id": base_cfg.get("experiment_id") or campaign_id}  # the generator indexes it
+    combos = sweep.build_all_combo_configs(base)
+    variants: list[dict[str, Any]] = []
+    for i, combo in enumerate(combos):
+        tl = combo["injected_processes"]["process_configs"]["field_timeline"]["timeline"]
+        mec = next(v["mecillinam"] for _, v in tl if "mecillinam" in v)
+        sulf = next(v["sulfadiazine"] for _, v in tl if "sulfadiazine" in v)
+        cfg = {k: v for k, v in combo.items() if k not in ("experiment_id", "_note", "_provenance")}
+        inj = injected_processes_for(cfg, campaign_id)
+        if not inj:
+            raise TranslationError(f"combo {i}: no injection block came out of the generated config")
+        variants.append({"variant_name": f"combo{i:02d}_mec{mec:g}_sulf{sulf:g}", "injected_processes": inj})
+    return variants, int(combos[0]["n_init_sims"]), int(combos[0]["generations"])
+
+
 def plan_campaign(
     *,
     run: str,
@@ -333,6 +373,34 @@ def plan_campaign(
     )
 
 
+def resolve_variants(a: argparse.Namespace, cfg: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Turn the CLI's founder / cache / sweep / JSON options into the variant list (and default seeds/gens)."""
+    variants: list[dict[str, Any]] | None = None
+    if a.founders:
+        variants = founder_variants(json.loads(a.founders.read_text()), FOUNDER_ARMS[a.run], f"run{a.run}")
+        if a.seeds is None:
+            a.seeds = 1
+    if a.cache_variants or a.cache_template:
+        names = [n.strip() for n in (a.cache_variants or "").split(",") if n.strip()]
+        if a.cache_template:
+            if not a.cache_range or "-" not in a.cache_range:
+                raise SystemExit("--cache-template needs --cache-range first-last")
+            lo, hi = (int(x) for x in a.cache_range.split("-", 1))
+            names += expand_template(a.cache_template, lo, hi)
+        variants = cache_variants(names, a.cache_commit or "", f"run{a.run}", a.cache_root)
+        if a.seeds is None:
+            a.seeds = int(cfg.get("n_init_sims") or 1)
+    if a.run3_sweep:
+        if a.run != "3":
+            raise SystemExit("--run3-sweep is for --run 3")
+        variants, sweep_seeds, sweep_gens = run3_sweep_variants(cfg, a.sms_ecoli, a.label)
+        a.seeds = a.seeds if a.seeds is not None else sweep_seeds
+        a.generations = a.generations if a.generations is not None else sweep_gens
+    if a.variants_json:
+        variants = json.loads(a.variants_json)
+    return variants
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--run", required=True, choices=sorted(RUN_CONFIGS))
@@ -347,6 +415,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--founders", type=Path, help="Runs 1/2: DI's founder_ensemble_mapping.json (shape B)")
     p.add_argument("--cache-uri", help="shape A: one chassis cache for every seed (pair with --independent-founders)")
     p.add_argument("--independent-founders", action="store_true")
+    p.add_argument(
+        "--run3-sweep", action="store_true", help="Run 3: one variant per mec x sulf dose combo (sms-ecoli#299 grid)"
+    )
     p.add_argument(
         "--variants-json",
         help="Runs 3/4: JSON list of variant specs (name, new_genes, bundle_overrides, cache_uri, config_overrides)",
@@ -373,23 +444,7 @@ def main(argv: list[str] | None = None) -> int:
     a = p.parse_args(argv)
 
     cfg = load_workflow_config(a.sms_ecoli / RUN_CONFIGS[a.run])
-    variants: list[dict[str, Any]] | None = None
-    if a.founders:
-        variants = founder_variants(json.loads(a.founders.read_text()), FOUNDER_ARMS[a.run], f"run{a.run}")
-        if a.seeds is None:
-            a.seeds = 1
-    if a.cache_variants or a.cache_template:
-        names = [n.strip() for n in (a.cache_variants or "").split(",") if n.strip()]
-        if a.cache_template:
-            if not a.cache_range or "-" not in a.cache_range:
-                raise SystemExit("--cache-template needs --cache-range first-last")
-            lo, hi = (int(x) for x in a.cache_range.split("-", 1))
-            names += expand_template(a.cache_template, lo, hi)
-        variants = cache_variants(names, a.cache_commit or "", f"run{a.run}", a.cache_root)
-        if a.seeds is None:
-            a.seeds = int(cfg.get("n_init_sims") or 1)
-    if a.variants_json:
-        variants = json.loads(a.variants_json)
+    variants = resolve_variants(a, cfg)
     plan = plan_campaign(
         run=a.run,
         cfg=cfg,
