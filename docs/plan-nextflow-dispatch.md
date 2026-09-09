@@ -15,6 +15,7 @@ vEcoli's `runscripts/nextflow/`. The three claims left unverified have since bee
 against nf-amazon's bytecode and live GovCloud infrastructure — see §11.
 
 > **Act 2 — execution and open shortcomings: [`plan-nextflow-act2.md`](plan-nextflow-act2.md).**
+> **Act 3** — [`plan-nextflow-act3.md`](plan-nextflow-act3.md): taking all four CD2 workloads across (Runs 1/3/4 after Run 2), the translator from the team's configs to campaigns, and the phase gates. The three documents form one sequence: act 1 = design + gates, act 2 = execution record, act 3 = the workloads.
 > That document tracks gate 4 and everything still broken; this one remains the design
 > reference. Corrections to claims made here are recorded there rather than silently
 > patched in, except where a statement was flatly wrong — see gate 6 below.
