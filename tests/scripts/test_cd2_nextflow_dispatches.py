@@ -267,3 +267,34 @@ def test_legacy_image_emits_no_top_level_knobs_but_keeps_fluxes_in_the_injection
         t.plan_campaign(
             run="4", cfg=FLAT, label="x", simulator_id=166, simulation_config="c", media="minimal", legacy_image=True
         )
+
+
+def test_run3_sweep_is_one_variant_per_dose_combo_with_its_own_resolved_timeline() -> None:
+    repo = Path("/Users/jimschaff/Documents/workspace/sms-ecoli")
+    if not (repo / "sms_modules/bridge/antibiotic_cocktail_sweep.py").exists():
+        pytest.skip("sms-ecoli >= #299 not available")
+    base = {**NESTED, "generations": 1, "n_init_sims": 1}
+    base["injected_processes"] = {
+        **NESTED["injected_processes"],
+        "process_configs": {"gillespie": {"bulk_species": True}, "field_timeline": {"bins": [1, 1], "timeline": []}},
+    }
+    variants, seeds, gens = t.run3_sweep_variants(base, repo, "mec-sweep")
+    assert len(variants) == 36 and (seeds, gens) == (4, 20)
+    names = [v["variant_name"] for v in variants]
+    assert names[0] == "combo00_mec0_sulf0" and names[-1] == "combo35_mec0.1_sulf1" and len(set(names)) == 36
+    tl = variants[7]["injected_processes"]["process_configs"]["field_timeline"]["timeline"]
+    assert tl == [[10000.0, {"mecillinam": 1e-05}], [10000.0, {"sulfadiazine": 0.0001}]]
+    assert variants[7]["injected_processes"]["add_processes"] == ["permeability", "gillespie"]
+    assert all("experiment_id" not in v for v in variants)
+    plan = t.plan_campaign(
+        run="3",
+        cfg=base,
+        label="mec-sweep",
+        simulator_id=181,
+        simulation_config="c",
+        variants=variants,
+        n_seeds=seeds,
+        n_generations=gens,
+    )
+    assert plan.n_seeds == 4 and plan.n_generations == 20 and len(plan.params["variants"]) == 36
+    assert "exchange_fluxes" not in plan.params
