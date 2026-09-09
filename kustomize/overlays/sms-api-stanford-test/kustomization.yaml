@@ -73,7 +73,17 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.129
+    newTag: 0.9.130
+    # 2026-09-09: 0.9.129 -> 0.9.130, viva-api#543 -- _assert_emitted_output now
+    # also cross-checks each file-backed emitter's own pre-redirect S3 location,
+    # not just RAY_OUT_S3 (MNP-only, never set for chain-dispatch). Found live:
+    # Dispatch 727:Run 3 seed0 genuinely succeeded (a real division, a real
+    # checkpoint, ~360MB of real parquet history in S3) but was reported a hard
+    # failure -- LineageProcess's own per-generation parquet emitter writes
+    # straight to its original pre-redirect S3 destination (a plain config value
+    # on a local:LineageProcess node _redirect_emitters never touches), with no
+    # cross-check previously available for that dispatch shape at all. Purely
+    # additive; the proven RAY_OUT_S3/MNP path (#520) is unchanged.
     # 2026-09-09: 0.9.128 -> 0.9.129, viva-api#536 -- _check_required_run_interval
     # (0.9.128/#525) now exempts composites whose merged overrides carry
     # stop_at_division=True. Chain-dispatch's own per-generation job submission
