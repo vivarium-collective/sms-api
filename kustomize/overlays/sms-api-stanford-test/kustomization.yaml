@@ -73,7 +73,19 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.131
+    newTag: 0.9.132
+    # 2026-09-09: 0.9.131 -> 0.9.132, viva-api#558 -- _submit_multi_node_composite
+    # now stages each seed_overrides[*].cache_dir S3 prefix under the dispatch's
+    # own cache_s3 (server-side copy under a _seed_overrides/<seed>/ subpath),
+    # then rewrites the override to the local path it resolves to via the
+    # EXISTING recursive stage_s3->stage_dir sync -- no new env var, no
+    # entrypoint change, no image rebuild. Real bug (item 106): a raw s3://
+    # override URI was passed straight through to v2ecoli's plain
+    # os.path.exists() cache check, unconditionally failing regardless of
+    # whether the object existed -- confirmed on 2 real dispatches (733/738),
+    # each failing on a different seed. Staging runs AFTER the cache_variant
+    # existence guard (a real ordering bug found in review, fixed before merge)
+    # so it can't mask a genuinely-unbuilt chassis.
     # 2026-09-09: 0.9.130 -> 0.9.131, viva-api#550 -- _lineage_generation_duration_total
     # now also reads BatchBaselineRunner's own batch.wall_s, not just
     # summary.generations[].duration. Found live firing 0.9.130 itself: Dispatch
