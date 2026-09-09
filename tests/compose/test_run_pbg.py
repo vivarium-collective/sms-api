@@ -969,6 +969,54 @@ def test_assert_run_advanced_still_raises_on_a_real_lineage_one_tick_collapse(
         run_pbg._assert_run_advanced(tmp_path)
 
 
+def test_lineage_generation_duration_total_reads_batch_baseline_runner_wall_s(tmp_path: Path) -> None:
+    """The second, independently-real shape (2026-09-09, Dispatch 736:Run 3):
+    BatchBaselineRunner-driven chain-dispatch (mecillinam_wellmixed.json and every
+    other config using local:v2ecoli.steps.batch_baseline_runner.BatchBaselineRunner)
+    reports real elapsed time as batch.wall_s, not summary.generations[].duration."""
+    _write_final_state(
+        tmp_path,
+        {
+            "global_time": 1.0,
+            "batch": {"completed": True, "n_seeds": 1, "n_generations": 1, "wall_s": 2528.0},
+        },
+    )
+    assert run_pbg._lineage_generation_duration_total(tmp_path) == 2528.0
+
+
+def test_lineage_generation_duration_total_sums_both_shapes_together(tmp_path: Path) -> None:
+    """The two shapes are independent signals of the same underlying fact (real
+    elapsed time) and are summed together like every other duration source,
+    not treated as mutually exclusive alternatives."""
+    _write_final_state(
+        tmp_path,
+        {
+            "global_time": 1.0,
+            "batch": {"wall_s": 2528.0},
+            "seed_0000": {"summary": {"generations": [{"duration": 1800.0, "divided": True}]}},
+        },
+    )
+    assert run_pbg._lineage_generation_duration_total(tmp_path) == 4328.0
+
+
+def test_lineage_generation_duration_total_ignores_a_non_numeric_wall_s(tmp_path: Path) -> None:
+    _write_final_state(tmp_path, {"global_time": 1.0, "batch": {"wall_s": "not-a-number"}})
+    assert run_pbg._lineage_generation_duration_total(tmp_path) is None
+    _write_final_state(tmp_path, {"global_time": 1.0, "batch": {"wall_s": True}})  # bool is an int subclass
+    assert run_pbg._lineage_generation_duration_total(tmp_path) is None
+
+
+def test_assert_run_advanced_passes_a_real_batch_baseline_runner_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reproduces Dispatch 736:Run 3 seed0 exactly: a real division at t=2528s
+    under BatchBaselineRunner's own batch.wall_s shape, global_time misleadingly
+    reads 1.0 -- the effect check must not treat this as a one-tick collapse."""
+    monkeypatch.setenv("PBG_MIN_GLOBAL_TIME", "100")
+    _write_final_state(tmp_path, {"global_time": 1.0, "batch": {"wall_s": 2528.0}})
+    run_pbg._assert_run_advanced(tmp_path)  # must not raise
+
+
 def test_run_raises_when_min_global_time_set_but_run_did_not_advance(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

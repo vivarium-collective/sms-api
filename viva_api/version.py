@@ -1213,7 +1213,24 @@
 #            every candidate (RAY_OUT_S3 plus each redirected emitter's own
 #            pre-redirect s3:// location) under the same shared deadline
 #            before failing. 8 new/extended tests.
-__version__ = "0.9.130"
+#           0.9.130 -- fix: _lineage_generation_duration_total now also reads
+#            BatchBaselineRunner's own batch.wall_s, not just
+#            summary.generations[].duration. Found on real infra firing 0.9.130
+#            itself: Dispatch 736:Run 3 seed0 -- the emit-gate fix (above)
+#            worked (zero trace of the old error), but execution then reached
+#            a DIFFERENT, previously-masked gate (_assert_run_advanced /
+#            PBG_MIN_GLOBAL_TIME, the "one-tick collapse" detector) and STILL
+#            failed: "the run advanced only 1.0 of simulated time" despite a
+#            real division at t=2528s. mecillinam_wellmixed.json's actual top-
+#            level process is local:v2ecoli.steps.batch_baseline_runner.
+#            BatchBaselineRunner, which reports its real elapsed time as
+#            {"batch": {"wall_s": ...}} -- a different shape from
+#            LineageProcess's own direct summary.generations return, which the
+#            walk never matched, so this path always fell back to the outer
+#            composite's own misleading global_time=1.0. Never visible before
+#            0.9.130 itself, since _assert_emitted_output always failed FIRST
+#            for this exact dispatch shape. 4 new/extended tests.
+__version__ = "0.9.131"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
