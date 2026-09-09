@@ -247,3 +247,23 @@ def test_exchange_fluxes_ride_in_the_injection_block_too_for_pre_746_images() ->
     assert plan.params["exchange_fluxes"] == t.VIOLACEIN_EXCHANGE_FLUXES  # and the #746 knob is still set
     run3 = t.plan_campaign(run="3", cfg=NESTED, label="mec", simulator_id=181, simulation_config="c")
     assert "exchange_fluxes" not in run3.params["variants"][0]["injected_processes"]
+
+
+def test_legacy_image_emits_no_top_level_knobs_but_keeps_fluxes_in_the_injection_block() -> None:
+    """sim 732 on simulator 173: to_document raised KeyError on the #746 knobs."""
+    plan = t.plan_campaign(
+        run="1",
+        cfg={**FLAT, "time_step": 1.0},
+        label="k4",
+        simulator_id=173,
+        simulation_config="c",
+        variants=[{"variant_name": "s0", "cache_uri": "s3://b/s0"}],
+        legacy_image=True,
+    )
+    assert set(plan.params) == {"variants"}
+    inj = plan.params["variants"][0]["injected_processes"]
+    assert inj["exchange_fluxes"] == t.VIOLACEIN_EXCHANGE_FLUXES
+    with pytest.raises(t.TranslationError, match="media needs a #746 image"):
+        t.plan_campaign(
+            run="4", cfg=FLAT, label="x", simulator_id=166, simulation_config="c", media="minimal", legacy_image=True
+        )
