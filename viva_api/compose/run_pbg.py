@@ -516,8 +516,8 @@ def _final_global_time(results_dir: Path) -> float | None:
 
 
 def _lineage_generation_duration_total(results_dir: Path) -> float | None:
-    """Sum ``duration`` across every ``summary.generations`` entry found anywhere
-    in the run's ``final_state.json``, or ``None`` if no such shape is present.
+    """Sum real elapsed simulated time found anywhere in the run's
+    ``final_state.json``, or ``None`` if no such shape is present.
 
     v2ecoli's ``LineageProcess`` (chain-dispatch's ``stop_at_division`` route,
     and pbg-native's ``lineage_ray_batch``) does not report elapsed simulated
@@ -536,6 +536,20 @@ def _lineage_generation_duration_total(results_dir: Path) -> float | None:
     dispatch 297 (real division at t=2527s, `global_time` read back as 1.0).
     Recursive rather than path-specific, since a lineage node's own key in the
     document varies by composite/seed.
+
+    A SECOND, independently-real shape covered here since 2026-09-09: chain-
+    dispatch's actual top-level process for ``mecillinam_wellmixed.json`` (and
+    every other ``BatchBaselineRunner``-driven composite,
+    ``address: local:v2ecoli.steps.batch_baseline_runner.BatchBaselineRunner``)
+    reports its own real elapsed time as ``{"batch": {"wall_s": ..., ...}}``, a
+    DIFFERENT top-level shape from ``LineageProcess``'s own direct
+    ``summary.generations`` return — the walk above never matched it, so this
+    path always fell back to the misleading ``global_time`` and 1.0. Confirmed
+    live: Dispatch 736:Run 3 seed0, real division at t=2528s, ``final_state.
+    json``'s own ``batch.wall_s`` == 2528.0 (matching the separately-uploaded
+    ``summary.json``'s own ``duration`` exactly), while ``global_time`` == 1.0.
+    Never visible before viva-api#543 (this file's own emit-output gate,
+    checked FIRST, always failed first for this exact dispatch shape).
     """
     fs = results_dir / "final_state.json"
     if not fs.is_file():
@@ -552,6 +566,7 @@ def _lineage_generation_duration_total(results_dir: Path) -> float | None:
             summary = node.get("summary")
             if isinstance(summary, dict):
                 durations.extend(_durations_from_generations(summary.get("generations")))
+            durations.extend(_duration_from_batch_wall_s(node.get("batch")))
             for value in node.values():
                 _walk(value)
         elif isinstance(node, list):
@@ -560,6 +575,18 @@ def _lineage_generation_duration_total(results_dir: Path) -> float | None:
 
     _walk(state)
     return sum(durations) if durations else None
+
+
+def _duration_from_batch_wall_s(batch: Any) -> list[float]:
+    """Extract a valid numeric ``wall_s`` from a ``BatchBaselineRunner``-shaped
+    ``batch`` node — 0 or 1 values, list-returning to match
+    ``_durations_from_generations``'s own ``durations.extend(...)`` call shape."""
+    if not isinstance(batch, dict):
+        return []
+    wall_s = batch.get("wall_s")
+    if isinstance(wall_s, bool) or not isinstance(wall_s, int | float):
+        return []
+    return [float(wall_s)]
 
 
 def _durations_from_generations(generations: Any) -> list[float]:
