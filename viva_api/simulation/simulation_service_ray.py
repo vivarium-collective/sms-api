@@ -3120,6 +3120,75 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             f" --overrides {shlex.quote(json.dumps(params))} -n {int(steps)}{ident}"
         )
 
+    def _stage_seed_override_caches(
+        self,
+        *,
+        seed_overrides: dict[Any, dict[str, Any]],
+        cache_s3: str,
+        stage_dir: str,
+    ) -> dict[Any, dict[str, Any]]:
+        """Server-side copy each ``seed_overrides[*].cache_dir`` S3 prefix under
+        this dispatch's own ``cache_s3`` prefix, then rewrite ``cache_dir`` to the
+        LOCAL path it resolves to once the existing single ``stage_s3``->``stage_dir``
+        sync (``ray-batch-entrypoint.sh``'s ``stage_inputs``, a recursive
+        ``aws s3 sync``) pulls it down on every node.
+
+        Real bug this fixes (backlog item 106, 2026-09-09): ``seed_overrides[*].
+        cache_dir`` is a raw ``s3://`` URI, but ``_submit_mnp`` only ever stages ONE
+        ``(stage_s3, stage_dir)`` pair -- the dispatch's own base/chassis cache.
+        v2ecoli's ``build_lineage_ray_batch_document`` passes an override's
+        ``cache_dir`` straight through to ``LineageProcess.config["cache_dir"]``
+        unmodified (``v2ecoli/workflow/batch_lineage_ray.py`` line ~247), and
+        ``read_cache_version`` does a plain ``os.path.exists()`` on it
+        (``v2ecoli/library/cache_version.py`` line ~575) -- unconditionally False
+        for an ``s3://`` string regardless of whether the real object exists,
+        raising ``StaleCacheError``. Confirmed via direct source trace plus two
+        independent real dispatches (database_id 733/738) each hitting this on a
+        different seed (Ray's own non-deterministic task ordering picks whichever
+        seed's generation-build task runs first before the job aborts).
+
+        Copying each override's own prefix INTO the already-staged ``cache_s3``
+        prefix (under a ``_seed_overrides/<seed>/`` subpath) means the EXISTING
+        recursive sync already pulls it down — no new env var, no
+        entrypoint-script change, no image rebuild. The only new work is a
+        server-side S3->S3 copy plus rewriting each override's own ``cache_dir``
+        to the resulting local path. A ``cache_dir`` that isn't an ``s3://`` URI
+        (already local, or absent) passes through unchanged.
+        """
+        dest_bucket = get_settings().s3_work_bucket
+        dest_prefix = data_layout.key_from_uri(cache_s3).rstrip("/")
+        s3_client = boto3.client("s3", region_name=get_settings().storage_s3_region)
+        rewritten: dict[Any, dict[str, Any]] = {}
+        for seed, seed_override in seed_overrides.items():
+            seed_override = dict(seed_override)
+            cache_dir = seed_override.get("cache_dir")
+            if isinstance(cache_dir, str) and cache_dir.startswith("s3://"):
+                src_bucket, _, src_prefix = cache_dir.removeprefix("s3://").partition("/")
+                src_prefix = src_prefix.rstrip("/")
+                dest_seed_prefix = f"{dest_prefix}/_seed_overrides/{seed}"
+                paginator = s3_client.get_paginator("list_objects_v2")
+                copied = 0
+                for page in paginator.paginate(Bucket=src_bucket, Prefix=f"{src_prefix}/"):
+                    for obj in page.get("Contents", []):
+                        rel_key = obj["Key"][len(src_prefix) + 1 :]
+                        s3_client.copy_object(
+                            Bucket=dest_bucket,
+                            Key=f"{dest_seed_prefix}/{rel_key}",
+                            CopySource={"Bucket": src_bucket, "Key": obj["Key"]},
+                        )
+                        copied += 1
+                logger.info(
+                    "Staged seed_overrides[%s].cache_dir (%d objects) from %s to s3://%s/%s",
+                    seed,
+                    copied,
+                    cache_dir,
+                    dest_bucket,
+                    dest_seed_prefix,
+                )
+                seed_override["cache_dir"] = f"{stage_dir}/_seed_overrides/{seed}"
+            rewritten[seed] = seed_override
+        return rewritten
+
     async def _submit_multi_node_composite(
         self,
         ecoli_simulation: Simulation,
@@ -3234,6 +3303,21 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
 
         cache_s3 = self.cache_s3_uri(commit, variant=cache_variant)
         runner_s3_uri = await self.stage_runner(experiment_id)
+
+        # seed_overrides[*].cache_dir (item 115/106): a raw s3:// URI naming a
+        # PER-SEED founder cache, distinct from the base cache_s3 above -- stage
+        # each one under cache_s3's own prefix (picked up by the existing single
+        # stage_s3->stage_dir sync below) and rewrite the override to the local
+        # path it resolves to. See _stage_seed_override_caches's own docstring
+        # for the real bug this closes. A request with no seed_overrides (every
+        # existing caller) is completely unaffected.
+        seed_overrides = params.get("seed_overrides")
+        if seed_overrides:
+            params["seed_overrides"] = self._stage_seed_override_caches(
+                seed_overrides=seed_overrides,
+                cache_s3=cache_s3,
+                stage_dir=PARCA_CACHE_DIR,
+            )
 
         base_tags = {
             "Project": "v2ecoli-multi-node-composite",
