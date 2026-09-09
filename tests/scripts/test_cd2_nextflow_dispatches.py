@@ -18,7 +18,7 @@ t: Any = importlib.util.module_from_spec(_spec)
 sys.modules[_spec.name] = t  # @dataclass resolves the module through sys.modules
 _spec.loader.exec_module(t)
 
-FLAT = {  # Runs 1/2/4 shape
+FLAT: dict[str, Any] = {  # Runs 1/2/4 shape
     "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
     "exclude_processes": ["exchange_data"],
     "generations": 10,
@@ -26,7 +26,7 @@ FLAT = {  # Runs 1/2/4 shape
     "emitter": "parquet",
     "analysis_options": {"multiseed": {"cd1_exchange_fluxes": {"generation_lower_bound": 5}}, "single": {}},
 }
-NESTED = {  # Run 3 shape
+NESTED: dict[str, Any] = {  # Run 3 shape
     "generations": 8,
     "n_init_sims": 1,
     "injected_processes": {
@@ -38,7 +38,9 @@ NESTED = {  # Run 3 shape
     },
     "analysis_options": {"multivariant": {"antibiotic_mic": {"skip_n_gens": 1}}},
 }
-MAPPING = {"k4_cell_only": {"rows": [{"seed": s, "cache_s3_uri": f"s3://b/founder-seed{s}"} for s in range(3)]}}
+MAPPING: dict[str, Any] = {
+    "k4_cell_only": {"rows": [{"seed": s, "cache_s3_uri": f"s3://b/founder-seed{s}"} for s in range(3)]}
+}
 
 
 def test_flat_config_becomes_variants_carrying_the_apis_own_injection_block() -> None:
@@ -273,7 +275,7 @@ def test_run3_sweep_is_one_variant_per_dose_combo_with_its_own_resolved_timeline
     repo = Path("/Users/jimschaff/Documents/workspace/sms-ecoli")
     if not (repo / "sms_modules/bridge/antibiotic_cocktail_sweep.py").exists():
         pytest.skip("sms-ecoli >= #299 not available")
-    base = {**NESTED, "generations": 1, "n_init_sims": 1}
+    base: dict[str, Any] = {**NESTED, "generations": 1, "n_init_sims": 1}
     base["injected_processes"] = {
         **NESTED["injected_processes"],
         "process_configs": {"gillespie": {"bulk_species": True}, "field_timeline": {"bins": [1, 1], "timeline": []}},
