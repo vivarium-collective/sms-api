@@ -90,6 +90,13 @@ was cleared:
 infrastructure), nothing about 336-scale (the 255-arity wall was measured at render time; the
 gather has now run at N=3), and nothing about the science in the TSVs.
 
+**Reframed 2026-09-09 00:30Z:** Alex's Dispatch **681** (10 seeds × **4** generations — the
+actual Run 2 deliverable spec; 666's 8 was above it) **COMPLETED on MNP at 23:38Z**, all 10
+seeds with code-enforced completion markers, never reaching the xarray bug's depth. So 683
+is no longer the only route to a Run 2: it is a replication *above* spec (8 generations),
+with independent founders, and **the first in-campaign gather at N=10** — the thing MNP still
+needs a manual flush for.
+
 **FIRED 2026-09-08 21:42Z — simulation 683** (`sim172-run2-j3-10x8-founders-4626`), shape 1
 below, after MNP's 666 died of the xarray bug: `mecillinam_wellmixed.json`, Alex's fresh J3
 chassis via `cache_uri`, redux swap, `exchange_fluxes` + basis inside `injected_processes`,
@@ -380,6 +387,13 @@ above stands.
   resolver; a lineage runs via `process_bigraph.run_step` and Nextflow uploads the task's
   outputs itself — `_redirect_emitters` is never on the lineage path, which is the measured
   form of "parquet-only by construction".
+- **Ray actor-pooling bug (Run 3's real root cause, Alex 23:41Z / eagmon 00:10Z) — not on
+  this path, by mechanism.** `process_bigraph/protocols/ray.py` `RayProtocolRuntime._pool_for`
+  keys actor pools by class name only, so two same-class processes in one cell whose
+  `inputs()`/`outputs()` depend on their config share cached `_inputs`/`_outputs`. The Nextflow
+  path registers no `ray:` protocol — a `LineageStep` runs `LineageProcess` in-process via
+  `run_step`, and the gather is a script — the same reason eagmon gave for Run 4's
+  non-exposure (each genotype its own dispatch, `LineageProcess` the only `ray:` class).
 - **`inputs_hash` bound (@cplong90, #166 14:37Z):** the `cache_version` guard *can condemn a
   pin but cannot clear one* — the condemning half is trustworthy, the clearing half is not.
   A cache that passes the guard is not thereby proven to match the pin. (This is why F resolves to
@@ -644,6 +658,7 @@ stays current.
 | 2026-09-08 | Gate 1b run dispatched: sim **577** (`sim167-gate1b-founders-3x1-fc4d`), 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574 — the shared-founder control, in which seeds differ in only **1.4–1.6 %** of 16,321 bulk counts at t=0 |
 | 2026-09-08 | **GATE 1b CLOSED — sim 577 COMPLETED ~14:50Z.** Independent founders: 30.3–30.7 % of 16,321 bulk counts differ at t=0 between seeds, vs 1.4–1.6 % for the shared-founder control (574). v2ecoli#731 verified on infrastructure |
 | 2026-09-08 | 7-hour sync 19:40Z: Alex superseded the "stale caches" line — fresh K4/J3 chassis at commit `2fddfcb8`, Run 1 cell-only (665) and **Run 2 (666, 8 gens)** dispatched on MNP; Run 1 coupled on its 3rd re-fire past v2ecoli#745/sms-ecoli#289; Run 4's second config needs a chassis rebuild (680); Run 3 unchanged. Cluster 0.9.125. @cplong90: `inputs_hash` can condemn but not clear a pin. New code not touching this path: viva-api#502/#504/#506, v2ecoli#744/#745 |
+| 2026-09-09 | 4-hour sync 00:28Z: **Run 2 proven on MNP** (681, 10×4, 23:38Z); Run 4 fully done incl. its second config (32/32) and eagmon's sign-off; Run 1 coupled seed 0 complete; Run 1 cell-only re-fire (701) in flight on the #520 fix; Run 3 root cause = PBG `ray:` actor pooling (not this path); viva-api#484 closed by #514; eagmon has not yet picked up the redux binding. 683 at 155 min: 10/10 RUNNING, 0 retries |
 | 2026-09-08 | Alex: no collision with 683 — "go ahead" (22:05Z). Xarray root cause = viva-api `run_pbg._redirect_emitters` (#520, deployed 0.9.127; cluster rolled 0.9.126 → 0.9.127 for #513/#520). Alex's exact-match 4-gen re-fire (681) reached gen 3 clean. 683 at 60 min: 10/10 lineages RUNNING, 0 retries |
 | 2026-09-08 | **Nextflow Run 2 dispatched: sim 683** (shape A on simulator 172; mirrors 666's spec with independent founders; parquet-only, gather in-campaign). Announced on #166 |
 | 2026-09-08 | **Alex's Run 2 (sim 666) FAILED 21:08Z** — the 665 xarray bug at the generation-4→5 boundary (seed 6, `emitstep_gen=4` missing). My "not exposed" claim retracted on #166 with the traceback; parquet history 0–4 for all 10 seeds is intact. v2ecoli#746 merged (`7cb19315`) |
