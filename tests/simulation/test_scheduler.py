@@ -201,6 +201,7 @@ def _mock_ray_service() -> MagicMock:
     mock_ray.get_job_status = AsyncMock()
     mock_ray.stage_runner = AsyncMock(return_value="s3://mybucket/runner/run_pbg.py")
     mock_ray.submit_chain_generation_batch = AsyncMock()
+    mock_ray.submit_chain_lineage_batch = AsyncMock()
     mock_ray.submit_campaign_analysis = AsyncMock(return_value="analysis-job-id")
     mock_ray.submit_multi_node_analysis = AsyncMock(return_value="mnp-analysis-job-id")
     mock_ray.cache_s3_uri = MagicMock(return_value="s3://mybucket/cache/commit")
@@ -248,7 +249,7 @@ class TestAdvanceChainCampaign:
 
         await scheduler._advance_chain_campaign(hpcrun, mock_ray)
 
-        mock_ray.submit_chain_generation_batch.assert_not_awaited()
+        mock_ray.submit_chain_lineage_batch.assert_not_awaited()
         refetched = await database_service.get_hpcrun(hpcrun.database_id)
         assert refetched is not None
         assert refetched.status == JobStatus.RUNNING
@@ -256,7 +257,7 @@ class TestAdvanceChainCampaign:
         assert refetched.chain_current_job_ids == [None, None, None, None]
 
     @pytest.mark.asyncio
-    async def test_parca_succeeded_fans_out_generation_zero_for_every_seed(
+    async def test_parca_succeeded_fans_out_one_whole_lineage_job_per_seed(
         self, database_service: DatabaseServiceSQL
     ) -> None:
         _simulation, hpcrun = await insert_chain_campaign_job(
@@ -264,34 +265,38 @@ class TestAdvanceChainCampaign:
         )
         mock_ray = _mock_ray_service()
         mock_ray.get_job_status.return_value = JobStatusInfo(job_id=JobId.ray("parca-done"), status=JobStatus.COMPLETED)
-        mock_ray.submit_chain_generation_batch.return_value = {0: "s0g0", 1: "s1g0", 2: "s2g0"}
+        mock_ray.submit_chain_lineage_batch.return_value = {0: "s0", 1: "s1", 2: "s2"}
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
         )
 
         await scheduler._advance_chain_campaign(hpcrun, mock_ray)
 
-        mock_ray.submit_chain_generation_batch.assert_awaited_once()
-        call_kwargs = mock_ray.submit_chain_generation_batch.call_args.kwargs
+        # ONE whole-lineage job per seed (all generations in one LineageProcess),
+        # not one gen-0 job per seed -- this is what makes lineage_time_offset
+        # accumulate so a field_timeline dose fires.
+        mock_ray.submit_chain_lineage_batch.assert_awaited_once()
+        mock_ray.submit_chain_generation_batch.assert_not_awaited()
+        call_kwargs = mock_ray.submit_chain_lineage_batch.call_args.kwargs
         assert call_kwargs["seeds"] == [0, 1, 2]
-        assert call_kwargs["generation_index"] == 0
+        assert call_kwargs["n_generations"] == 3
+        assert "generation_index" not in call_kwargs
 
         refetched = await database_service.get_hpcrun(hpcrun.database_id)
         assert refetched is not None
         assert refetched.chain_parca_done is True
-        assert refetched.chain_current_job_ids == ["s0g0", "s1g0", "s2g0"]
-        assert refetched.chain_current_generation == [0, 0, 0]
+        assert refetched.chain_current_job_ids == ["s0", "s1", "s2"]
         assert refetched.status == JobStatus.RUNNING  # campaign itself not terminal yet
 
     @pytest.mark.asyncio
-    async def test_parca_generation_zero_partial_submission_failure_leaves_that_seed_unresolved_at_zero(
+    async def test_parca_lineage_partial_submission_failure_leaves_that_seed_unresolved(
         self, database_service: DatabaseServiceSQL
     ) -> None:
-        """A seed whose generation-0 submission itself fails (even after
-        retry-on-throttle) gets no entry in submit_chain_generation_batch's
+        """A seed whose lineage submission itself fails (even after
+        retry-on-throttle) gets no entry in submit_chain_lineage_batch's
         returned mapping -- its chain_current_job_ids slot stays None, which
         correctly makes it "already resolved, contributed nothing" once every
-        OTHER seed also resolves, mirroring the pre-Phase-4 design's own
+        OTHER seed also resolves, mirroring the per-generation design's own
         "seed contributes nothing to chain_final_job_ids" semantics."""
         _simulation, hpcrun = await insert_chain_campaign_job(
             database_service, job_id_ext="parca-done-2", chain_n_generations=2, n_seeds=2
@@ -300,7 +305,7 @@ class TestAdvanceChainCampaign:
         mock_ray.get_job_status.return_value = JobStatusInfo(
             job_id=JobId.ray("parca-done-2"), status=JobStatus.COMPLETED
         )
-        mock_ray.submit_chain_generation_batch.return_value = {0: "s0g0"}  # seed 1 failed to submit
+        mock_ray.submit_chain_lineage_batch.return_value = {0: "s0"}  # seed 1 failed to submit
 
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
@@ -309,7 +314,7 @@ class TestAdvanceChainCampaign:
 
         refetched = await database_service.get_hpcrun(hpcrun.database_id)
         assert refetched is not None
-        assert refetched.chain_current_job_ids == ["s0g0", None]
+        assert refetched.chain_current_job_ids == ["s0", None]
         assert refetched.status == JobStatus.RUNNING  # seed 0 still in flight -- not terminal
 
     @pytest.mark.asyncio
@@ -325,7 +330,7 @@ class TestAdvanceChainCampaign:
 
         await scheduler._advance_chain_campaign(hpcrun, mock_ray)
 
-        mock_ray.submit_chain_generation_batch.assert_not_awaited()
+        mock_ray.submit_chain_lineage_batch.assert_not_awaited()
         refetched = await database_service.get_hpcrun(hpcrun.database_id)
         assert refetched is not None
         assert refetched.status == JobStatus.FAILED
@@ -333,37 +338,42 @@ class TestAdvanceChainCampaign:
         assert refetched.chain_parca_done is False
 
     @pytest.mark.asyncio
-    async def test_seed_succeeds_and_advances_to_its_next_generation(
+    async def test_seed_whole_lineage_job_completing_resolves_the_seed(
         self, database_service: DatabaseServiceSQL
     ) -> None:
+        """A seed runs its WHOLE lineage in one job now, so a terminal COMPLETED
+        state resolves that seed (no per-generation advancement, no new
+        submission) -- its job id goes to chain_final_job_ids and its
+        chain_current_job_ids slot to None. A seed whose job is not yet visible
+        is left alone this tick."""
         _simulation, hpcrun = await insert_chain_campaign_job(
             database_service,
             job_id_ext="parca-1",
             chain_n_generations=3,
             n_seeds=2,
             chain_parca_done=True,
-            chain_current_job_ids=["s0g0", "s1g0"],
+            chain_current_job_ids=["s0", "s1"],
             chain_current_generation=[0, 0],
         )
         mock_ray = _mock_ray_service()
-        mock_ray.get_batch_job_statuses = MagicMock(return_value={"s0g0": JobStatus.COMPLETED})  # s1g0 not yet visible
-        mock_ray.submit_chain_generation = MagicMock(return_value="s0g1")
+        mock_ray.get_batch_job_statuses = MagicMock(return_value={"s0": JobStatus.COMPLETED})  # s1 not yet visible
+        # Phase 2 must NOT submit anything now -- these exist only to prove they
+        # are never called (the whole lineage already ran in the seed's one job).
+        mock_ray.submit_chain_generation = MagicMock()
+        mock_ray.submit_chain_lineage = MagicMock()
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
         )
 
         await scheduler._advance_chain_campaign(hpcrun, mock_ray)
 
-        mock_ray.submit_chain_generation.assert_called_once()
-        call_kwargs = mock_ray.submit_chain_generation.call_args.kwargs
-        assert call_kwargs["seed"] == 0
-        assert call_kwargs["generation_index"] == 1
+        mock_ray.submit_chain_generation.assert_not_called()
+        mock_ray.submit_chain_lineage.assert_not_called()
 
         refetched = await database_service.get_hpcrun(hpcrun.database_id)
         assert refetched is not None
-        assert refetched.chain_current_job_ids == ["s0g1", "s1g0"]  # seed 0 advanced, seed 1 untouched
-        assert refetched.chain_current_generation == [1, 0]
-        assert refetched.chain_final_job_ids == []
+        assert refetched.chain_current_job_ids == [None, "s1"]  # seed 0 resolved, seed 1 untouched
+        assert refetched.chain_final_job_ids == ["s0"]
 
     @pytest.mark.asyncio
     async def test_generation_zero_fanout_forwards_injected_processes_and_variants(
@@ -386,15 +396,15 @@ class TestAdvanceChainCampaign:
         mock_ray.get_job_status.return_value = JobStatusInfo(
             job_id=JobId.ray("parca-done-run4"), status=JobStatus.COMPLETED
         )
-        mock_ray.submit_chain_generation_batch.return_value = {0: "s0g0", 1: "s1g0"}
+        mock_ray.submit_chain_lineage_batch.return_value = {0: "s0", 1: "s1"}
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
         )
 
         await scheduler._advance_chain_campaign(hpcrun, mock_ray)
 
-        mock_ray.submit_chain_generation_batch.assert_awaited_once()
-        call_kwargs = mock_ray.submit_chain_generation_batch.call_args.kwargs
+        mock_ray.submit_chain_lineage_batch.assert_awaited_once()
+        call_kwargs = mock_ray.submit_chain_lineage_batch.call_args.kwargs
         assert call_kwargs["injected_processes"] == {
             "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
             "add_processes": [],
@@ -417,14 +427,14 @@ class TestAdvanceChainCampaign:
         mock_ray.get_job_status.return_value = JobStatusInfo(
             job_id=JobId.ray("parca-done-plain"), status=JobStatus.COMPLETED
         )
-        mock_ray.submit_chain_generation_batch.return_value = {0: "s0g0", 1: "s1g0"}
+        mock_ray.submit_chain_lineage_batch.return_value = {0: "s0", 1: "s1"}
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
         )
 
         await scheduler._advance_chain_campaign(hpcrun, mock_ray)
 
-        call_kwargs = mock_ray.submit_chain_generation_batch.call_args.kwargs
+        call_kwargs = mock_ray.submit_chain_lineage_batch.call_args.kwargs
         assert call_kwargs["injected_processes"] is None
         assert call_kwargs["variants"] is None
         assert call_kwargs["composite_id"] is None
@@ -447,86 +457,18 @@ class TestAdvanceChainCampaign:
         mock_ray.get_job_status.return_value = JobStatusInfo(
             job_id=JobId.ray("parca-done-run1"), status=JobStatus.COMPLETED
         )
-        mock_ray.submit_chain_generation_batch.return_value = {0: "s0g0", 1: "s1g0"}
+        mock_ray.submit_chain_lineage_batch.return_value = {0: "s0", 1: "s1"}
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
         )
 
         await scheduler._advance_chain_campaign(hpcrun, mock_ray)
 
-        call_kwargs = mock_ray.submit_chain_generation_batch.call_args.kwargs
+        call_kwargs = mock_ray.submit_chain_lineage_batch.call_args.kwargs
         assert call_kwargs["composite_id"] == "v2ecoli.composites.reactor_bird_coupled.reactor_bird_coupled"
 
     @pytest.mark.asyncio
-    async def test_seed_advance_forwards_injected_processes_and_variants(
-        self, database_service: DatabaseServiceSQL
-    ) -> None:
-        """Backlog item 93: _advance_seed_generations (phase 2 -- every
-        generation AFTER generation 0) must forward the same config-derived
-        injected_processes/variants on every per-seed advance, not just the
-        generation-0 burst -- otherwise a swap/new-gene composite would
-        regress to the stock process the moment the campaign moves past its
-        first generation."""
-        _simulation, hpcrun = await insert_chain_campaign_job(
-            database_service,
-            job_id_ext="parca-1",
-            chain_n_generations=3,
-            n_seeds=1,
-            chain_parca_done=True,
-            chain_current_job_ids=["s0g0"],
-            chain_current_generation=[0],
-            swap_processes={"ecoli-metabolism": "ecoli-metabolism-redux"},
-        )
-        mock_ray = _mock_ray_service()
-        mock_ray.get_batch_job_statuses = MagicMock(return_value={"s0g0": JobStatus.COMPLETED})
-        mock_ray.submit_chain_generation = MagicMock(return_value="s0g1")
-        scheduler = JobScheduler(
-            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
-        )
-
-        await scheduler._advance_chain_campaign(hpcrun, mock_ray)
-
-        call_kwargs = mock_ray.submit_chain_generation.call_args.kwargs
-        assert call_kwargs["injected_processes"] == {
-            "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
-            "add_processes": [],
-            "exclude_processes": [],
-            "fork_repo": "",
-        }
-        assert call_kwargs["variants"] is None
-
-    @pytest.mark.asyncio
-    async def test_seed_advance_forwards_composite_id(self, database_service: DatabaseServiceSQL) -> None:
-        """Backlog item 105: _advance_seed_generations (phase 2 -- every
-        generation AFTER generation 0) must forward the same config-derived
-        composite_id on every per-seed advance, not just the generation-0
-        burst -- otherwise a reactor_bird_coupled campaign would silently
-        regress to ecoli_baseline the moment it moves past its first
-        generation."""
-        _simulation, hpcrun = await insert_chain_campaign_job(
-            database_service,
-            job_id_ext="parca-1-run1",
-            chain_n_generations=3,
-            n_seeds=1,
-            chain_parca_done=True,
-            chain_current_job_ids=["s0g0"],
-            chain_current_generation=[0],
-            composite_id="v2ecoli.composites.reactor_bird_coupled.reactor_bird_coupled",
-        )
-        mock_ray = _mock_ray_service()
-        mock_ray.get_batch_job_statuses = MagicMock(return_value={"s0g0": JobStatus.COMPLETED})
-        mock_ray.submit_chain_generation = MagicMock(return_value="s0g1")
-        scheduler = JobScheduler(
-            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
-        )
-
-        await scheduler._advance_chain_campaign(hpcrun, mock_ray)
-
-        call_kwargs = mock_ray.submit_chain_generation.call_args.kwargs
-        assert call_kwargs["composite_id"] == "v2ecoli.composites.reactor_bird_coupled.reactor_bird_coupled"
-
-    @pytest.mark.asyncio
-    async def test_generation_zero_fanout_forwards_cache_variant(self, database_service: DatabaseServiceSQL) -> None:
+    async def test_lineage_fanout_forwards_cache_variant(self, database_service: DatabaseServiceSQL) -> None:
         """Backlog item 105: _advance_parca_gate re-derives cache_variant from
         the campaign's own Simulation.config and resolves cache_s3_uri with it
         for the generation-0 fan-out -- the mechanism a strain-specific
@@ -542,7 +484,7 @@ class TestAdvanceChainCampaign:
         mock_ray.get_job_status.return_value = JobStatusInfo(
             job_id=JobId.ray("parca-done-k4"), status=JobStatus.COMPLETED
         )
-        mock_ray.submit_chain_generation_batch.return_value = {0: "s0g0", 1: "s1g0"}
+        mock_ray.submit_chain_lineage_batch.return_value = {0: "s0", 1: "s1"}
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
         )
@@ -553,37 +495,7 @@ class TestAdvanceChainCampaign:
         assert any(c.kwargs.get("variant") == "k4-induced" for c in cache_uri_calls)
 
     @pytest.mark.asyncio
-    async def test_seed_advance_forwards_cache_variant(self, database_service: DatabaseServiceSQL) -> None:
-        """Backlog item 105: _advance_seed_generations (phase 2 -- every
-        generation AFTER generation 0) must forward the same config-derived
-        cache_variant on every per-seed advance, not just the generation-0
-        burst -- otherwise a strain-specific campaign would silently regress
-        to the plain commit cache the moment it moves past its first
-        generation."""
-        _simulation, hpcrun = await insert_chain_campaign_job(
-            database_service,
-            job_id_ext="parca-1-k4",
-            chain_n_generations=3,
-            n_seeds=1,
-            chain_parca_done=True,
-            chain_current_job_ids=["s0g0"],
-            chain_current_generation=[0],
-            cache_variant="k4-induced",
-        )
-        mock_ray = _mock_ray_service()
-        mock_ray.get_batch_job_statuses = MagicMock(return_value={"s0g0": JobStatus.COMPLETED})
-        mock_ray.submit_chain_generation = MagicMock(return_value="s0g1")
-        scheduler = JobScheduler(
-            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
-        )
-
-        await scheduler._advance_chain_campaign(hpcrun, mock_ray)
-
-        cache_uri_calls = mock_ray.cache_s3_uri.call_args_list
-        assert any(c.kwargs.get("variant") == "k4-induced" for c in cache_uri_calls)
-
-    @pytest.mark.asyncio
-    async def test_generation_zero_fanout_forwards_exchange_fluxes(self, database_service: DatabaseServiceSQL) -> None:
+    async def test_lineage_fanout_forwards_exchange_fluxes(self, database_service: DatabaseServiceSQL) -> None:
         """Backlog item 105 (K4 cell-only ensemble): _advance_parca_gate
         re-derives exchange_fluxes/exchange_flux_basis from the campaign's own
         Simulation.config (same restart-safe pattern as composite_id/
@@ -602,56 +514,22 @@ class TestAdvanceChainCampaign:
         mock_ray.get_job_status.return_value = JobStatusInfo(
             job_id=JobId.ray("parca-done-k4-cellonly"), status=JobStatus.COMPLETED
         )
-        mock_ray.submit_chain_generation_batch.return_value = {0: "s0g0", 1: "s1g0"}
+        mock_ray.submit_chain_lineage_batch.return_value = {0: "s0", 1: "s1"}
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
         )
 
         await scheduler._advance_chain_campaign(hpcrun, mock_ray)
 
-        call_kwargs = mock_ray.submit_chain_generation_batch.call_args.kwargs
+        call_kwargs = mock_ray.submit_chain_lineage_batch.call_args.kwargs
         assert call_kwargs["exchange_fluxes"] == {"violacein_exchange": "VIOLACEIN"}
         assert call_kwargs["exchange_flux_basis"] == "gdcw"
 
     @pytest.mark.asyncio
-    async def test_seed_advance_forwards_exchange_fluxes(self, database_service: DatabaseServiceSQL) -> None:
-        """Backlog item 105 (K4 cell-only ensemble): _advance_seed_generations
-        (phase 2 -- every generation AFTER generation 0) must forward the same
-        config-derived exchange_fluxes/exchange_flux_basis on every per-seed
-        advance, not just the generation-0 burst -- otherwise the K4
-        cell-only ensemble's ExchangeFluxListener would silently stop
-        mounting the moment the campaign moves past its first generation."""
-        _simulation, hpcrun = await insert_chain_campaign_job(
-            database_service,
-            job_id_ext="parca-1-k4-cellonly",
-            chain_n_generations=3,
-            n_seeds=1,
-            chain_parca_done=True,
-            chain_current_job_ids=["s0g0"],
-            chain_current_generation=[0],
-            exchange_fluxes={"violacein_exchange": "VIOLACEIN"},
-            exchange_flux_basis="gdcw",
-        )
-        mock_ray = _mock_ray_service()
-        mock_ray.get_batch_job_statuses = MagicMock(return_value={"s0g0": JobStatus.COMPLETED})
-        mock_ray.submit_chain_generation = MagicMock(return_value="s0g1")
-        scheduler = JobScheduler(
-            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
-        )
-
-        await scheduler._advance_chain_campaign(hpcrun, mock_ray)
-
-        call_kwargs = mock_ray.submit_chain_generation.call_args.kwargs
-        assert call_kwargs["exchange_fluxes"] == {"violacein_exchange": "VIOLACEIN"}
-        assert call_kwargs["exchange_flux_basis"] == "gdcw"
-
-    @pytest.mark.asyncio
-    async def test_generation_zero_fanout_forwards_lineage_debug_division(
-        self, database_service: DatabaseServiceSQL
-    ) -> None:
+    async def test_lineage_fanout_forwards_lineage_debug_division(self, database_service: DatabaseServiceSQL) -> None:
         """Item 106/#210 (v2ecoli#733): the real gap this closes -- Run 3's
         diagnostic dispatch needs LINEAGE_DEBUG_DIVISION=1 to reach the actual
-        generation jobs JobScheduler submits, not just a hand-built one-off."""
+        lineage jobs JobScheduler submits, not just a hand-built one-off."""
         _simulation, hpcrun = await insert_chain_campaign_job(
             database_service,
             job_id_ext="parca-done-run3-debug",
@@ -663,40 +541,14 @@ class TestAdvanceChainCampaign:
         mock_ray.get_job_status.return_value = JobStatusInfo(
             job_id=JobId.ray("parca-done-run3-debug"), status=JobStatus.COMPLETED
         )
-        mock_ray.submit_chain_generation_batch.return_value = {0: "s0g0", 1: "s1g0"}
+        mock_ray.submit_chain_lineage_batch.return_value = {0: "s0", 1: "s1"}
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
         )
 
         await scheduler._advance_chain_campaign(hpcrun, mock_ray)
 
-        call_kwargs = mock_ray.submit_chain_generation_batch.call_args.kwargs
-        assert call_kwargs["lineage_debug_division"] is True
-
-    @pytest.mark.asyncio
-    async def test_seed_advance_forwards_lineage_debug_division(self, database_service: DatabaseServiceSQL) -> None:
-        """Same gap, phase 2 (every generation after generation 0) -- otherwise
-        the diagnostic would silently stop firing past the first generation."""
-        _simulation, hpcrun = await insert_chain_campaign_job(
-            database_service,
-            job_id_ext="parca-1-run3-debug",
-            chain_n_generations=3,
-            n_seeds=1,
-            chain_parca_done=True,
-            chain_current_job_ids=["s0g0"],
-            chain_current_generation=[0],
-            lineage_debug_division=True,
-        )
-        mock_ray = _mock_ray_service()
-        mock_ray.get_batch_job_statuses = MagicMock(return_value={"s0g0": JobStatus.COMPLETED})
-        mock_ray.submit_chain_generation = MagicMock(return_value="s0g1")
-        scheduler = JobScheduler(
-            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
-        )
-
-        await scheduler._advance_chain_campaign(hpcrun, mock_ray)
-
-        call_kwargs = mock_ray.submit_chain_generation.call_args.kwargs
+        call_kwargs = mock_ray.submit_chain_lineage_batch.call_args.kwargs
         assert call_kwargs["lineage_debug_division"] is True
 
     @pytest.mark.asyncio
@@ -888,7 +740,7 @@ class TestAdvanceChainCampaign:
         await scheduler._advance_chain_campaign(hpcrun, mock_ray)
 
         mock_ray.get_job_status.assert_not_awaited()
-        mock_ray.submit_chain_generation_batch.assert_not_awaited()
+        mock_ray.submit_chain_lineage_batch.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_update_chain_campaigns_processes_every_active_campaign_row(
@@ -912,18 +764,18 @@ class TestAdvanceChainCampaign:
 
         mock_ray = _mock_ray_service()
         mock_ray.get_job_status.side_effect = _parca_status
-        mock_ray.submit_chain_generation_batch.return_value = {0: "a-s0g0", 1: "a-s1g0"}
+        mock_ray.submit_chain_lineage_batch.return_value = {0: "a-s0", 1: "a-s1"}
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
         )
 
         await scheduler.update_chain_campaigns()
 
-        # Campaign A: ParCa done -> generation 0 fanned out for both seeds.
+        # Campaign A: ParCa done -> one whole-lineage job fanned out per seed.
         refetched_a = await database_service.get_hpcrun(hpcrun_a.database_id)
         assert refetched_a is not None
         assert refetched_a.chain_parca_done is True
-        assert refetched_a.chain_current_job_ids == ["a-s0g0", "a-s1g0"]
+        assert refetched_a.chain_current_job_ids == ["a-s0", "a-s1"]
 
         # Campaign B: ParCa still running -> left untouched.
         refetched_b = await database_service.get_hpcrun(hpcrun_b.database_id)
@@ -937,39 +789,37 @@ class TestAdvanceChainCampaign:
     ) -> None:
         """The explicit regression property backlog item 71 Phase 4's plan
         requires: two overlapping poll ticks against the SAME campaign (e.g. a
-        rolling restart briefly running two pods) must not both submit the
-        same generation. Real concurrent execution (asyncio.gather, not a
+        rolling restart briefly running two pods) must not both fan out the
+        whole-lineage jobs. Real concurrent execution (asyncio.gather, not a
         sequential double-call) against the REAL Postgres advisory lock
         (DatabaseService.advance_chain_campaign) -- a mock database could not
         exercise this property at all, since the lock is real SQL, not
-        orchestration logic."""
+        orchestration logic. With one job per seed's whole lineage, the
+        double-submit risk is the ParCa-gate fan-out (submit_chain_lineage_batch),
+        not any per-generation follow-up."""
         _simulation, hpcrun = await insert_chain_campaign_job(
             database_service,
-            job_id_ext="parca-1",
+            job_id_ext="parca-done-concurrent",
             chain_n_generations=3,
-            n_seeds=1,
-            chain_parca_done=True,
-            chain_current_job_ids=["s0g0"],
-            chain_current_generation=[0],
+            n_seeds=2,
+            # ParCa NOT yet marked done: both ticks race to fan out the lineage.
         )
-        submit_calls: list[tuple[int, int]] = []
+        fanout_calls: list[list[int]] = []
 
-        def _statuses(job_ids: list[str]) -> dict[str, JobStatus]:
-            return dict.fromkeys(job_ids, JobStatus.COMPLETED)
-
-        def _submit(seed: int, generation_index: int, **_kwargs: object) -> str:
-            submit_calls.append((seed, generation_index))
-            return f"s{seed}g{generation_index}"
+        async def _fanout(*, seeds: list[int], **_kwargs: object) -> dict[int, str]:
+            fanout_calls.append(list(seeds))
+            return {s: f"s{s}" for s in seeds}
 
         mock_ray = _mock_ray_service()
+        mock_ray.get_job_status.return_value = JobStatusInfo(
+            job_id=JobId.ray("parca-done-concurrent"), status=JobStatus.COMPLETED
+        )
         # Real concurrent Postgres access is what actually serializes these two
         # ticks (advance_chain_campaign's pg_advisory_xact_lock blocks the
         # second task at the DB level until the first's transaction commits) --
-        # no artificial delay needed here to create the race; the two
-        # asyncio.gather'd coroutines already start together, and the lock
-        # itself provides the mutual exclusion under test.
-        mock_ray.get_batch_job_statuses = MagicMock(side_effect=_statuses)
-        mock_ray.submit_chain_generation = MagicMock(side_effect=_submit)
+        # the two asyncio.gather'd coroutines start together, and the lock itself
+        # provides the mutual exclusion under test.
+        mock_ray.submit_chain_lineage_batch = AsyncMock(side_effect=_fanout)
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
         )
@@ -979,25 +829,19 @@ class TestAdvanceChainCampaign:
             scheduler._advance_chain_campaign(hpcrun, mock_ray),
         )
 
-        # THE regression property: generation 1 for seed 0 must have been
-        # submitted exactly ONCE, never twice. Without the advisory lock, both
-        # ticks would read the SAME stale ["s0g0"]/[0] state concurrently and
-        # both independently decide to submit generation 1 -- a real
-        # double-submit that would race on the same deterministic S3 daughter-
-        # state key. With the lock, the second tick's fresh re-read (acquired
-        # only after the first tick's write commits) sees the campaign has
-        # ALREADY moved past generation 1, so it correctly advances the
-        # campaign further instead (this mock reports every job id as
-        # instantly COMPLETED, so tick B legitimately submits generation 2 —
-        # real forward progress, not a stall, just never the SAME generation
-        # a concurrent tick already claimed).
-        assert submit_calls.count((0, 1)) == 1
-        assert submit_calls.count((0, 2)) == 1
+        # THE regression property: the whole-lineage fan-out must have happened
+        # exactly ONCE. Without the advisory lock, both ticks would read the SAME
+        # stale chain_parca_done=False state concurrently and both fan out every
+        # seed's lineage -- a real double-submit. With the lock, the second tick's
+        # fresh re-read (after the first tick's write commits) sees
+        # chain_parca_done=True already, so it moves on to polling instead of
+        # re-fanning-out.
+        assert len(fanout_calls) == 1
 
         refetched = await database_service.get_hpcrun(hpcrun.database_id)
         assert refetched is not None
-        assert refetched.chain_current_job_ids == ["s0g2"]
-        assert refetched.chain_current_generation == [2]
+        assert refetched.chain_parca_done is True
+        assert refetched.chain_current_job_ids == ["s0", "s1"]
 
 
 async def insert_multi_node_composite_job(
@@ -1179,7 +1023,7 @@ class TestUpdateMultiNodeJobs:
         assert untouched_chain is not None
         assert untouched_chain.status == JobStatus.RUNNING
         assert untouched_chain.chain_current_job_ids == [None]
-        mock_ray.submit_chain_generation_batch.assert_not_awaited()
+        mock_ray.submit_chain_lineage_batch.assert_not_awaited()
 
 
 @pytest.mark.integration

@@ -542,19 +542,16 @@ class JobScheduler:
                     current_generation=current_generation,
                     final_job_ids=final_job_ids,
                     n_seeds=n_seeds,
+                    n_generations=n_generations,
                 )
 
-            # ParCa already done -- batch-poll every seed's current in-flight job,
-            # advancing or resolving each one (mutates both lists in place).
+            # ParCa already done -- batch-poll every seed's in-flight whole-lineage
+            # job and resolve each one that reached a terminal state (mutates both
+            # lists in place).
             await self._advance_seed_generations(
                 simulation_service_ray,
-                simulation=simulation,
-                commit=commit,
-                experiment_id=experiment_id,
                 current_job_ids=current_job_ids,
-                current_generation=current_generation,
                 final_job_ids=final_job_ids,
-                n_generations=n_generations,
             )
 
             if any(jid is not None for jid in current_job_ids):
@@ -594,8 +591,9 @@ class JobScheduler:
         current_generation: list[int | None],
         final_job_ids: list[str],
         n_seeds: int,
+        n_generations: int,
     ) -> ChainCampaignUpdate | None:
-        """Phase 1 of ``_advance_chain_campaign``: gate generation-0 submission
+        """Phase 1 of ``_advance_chain_campaign``: gate whole-lineage submission
         on ParCa. Extracted purely to keep ``_tick`` under the project's
         cyclomatic-complexity limit — see that method's own docstring for the
         full 3-phase state machine this is one third of.
@@ -636,16 +634,21 @@ class JobScheduler:
                 terminal_status=JobStatus.FAILED,
                 error_message="chain dispatch: ParCa failed",
             )
-        # ParCa SUCCEEDED -- fan out generation 0 for every seed at once.
+        # ParCa SUCCEEDED -- fan out ONE whole-lineage job per seed at once. Each
+        # seed's job runs all ``n_generations`` in a single LineageProcess, so
+        # lineage_time_offset accumulates across generations and a field_timeline
+        # dose fires at its intended cumulative time (Run-3 fix; see
+        # submit_chain_lineage / docs/design-chain-one-lineageprocess.md). This
+        # is the ONLY submission burst -- no per-generation follow-up.
         runner_s3_uri = await simulation_service_ray.stage_runner(experiment_id)
         cache_variant = getattr(simulation.config, "cache_variant", None) or None
         expect_new_genes, expect_bundle_overrides = strain_from_config(simulation.config)
         # lineage_debug_division (item 106/#210, v2ecoli#733): opt-in diagnostic,
         # same re-derive-from-config-every-tick reasoning as cache_variant above.
         lineage_debug_division = bool(getattr(simulation.config, "lineage_debug_division", False))
-        submitted = await simulation_service_ray.submit_chain_generation_batch(
+        submitted = await simulation_service_ray.submit_chain_lineage_batch(
             seeds=list(range(n_seeds)),
-            generation_index=0,
+            n_generations=n_generations,
             experiment_id=experiment_id,
             commit=commit,
             cache_s3=simulation_service_ray.cache_s3_uri(commit, variant=cache_variant),
@@ -664,13 +667,15 @@ class JobScheduler:
         for seed in range(n_seeds):
             if seed in submitted:
                 current_job_ids[seed] = submitted[seed]
+                # A seed now runs its WHOLE lineage in one job; current_generation
+                # tracks "in flight" (0) vs resolved, not a per-generation cursor.
                 current_generation[seed] = 0
-            # else: generation-0 submission itself failed for this seed (even
-            # after retry-on-throttle) -- current_job_ids[seed] stays None, so
-            # this seed is already "resolved" (with no final id of its own)
-            # the moment every OTHER seed resolves.
+            # else: lineage submission itself failed for this seed (even after
+            # retry-on-throttle) -- current_job_ids[seed] stays None, so this seed
+            # is already "resolved" (with no final id of its own) the moment every
+            # OTHER seed resolves.
         logger.info(
-            "Chain dispatch %s: ParCa succeeded -> %d/%d seed generation-0 jobs submitted",
+            "Chain dispatch %s: ParCa succeeded -> %d/%d seed whole-lineage jobs submitted",
             experiment_id,
             len(submitted),
             n_seeds,
@@ -686,79 +691,42 @@ class JobScheduler:
         self,
         simulation_service_ray: SimulationServiceRay,
         *,
-        simulation: Simulation,
-        commit: str,
-        experiment_id: str,
         current_job_ids: list[str | None],
-        current_generation: list[int | None],
         final_job_ids: list[str],
-        n_generations: int,
     ) -> None:
         """Phase 2 of ``_advance_chain_campaign``: batch-poll every seed's
-        current in-flight job and advance or resolve each one — mutates
-        ``current_job_ids``/``current_generation``/``final_job_ids`` in place
-        (all three are freshly-copied lists owned by this one tick, never
-        shared, so in-place mutation is safe). Extracted purely to keep
-        ``_tick`` under the project's cyclomatic-complexity limit.
+        in-flight WHOLE-LINEAGE job and resolve each one that has reached a
+        terminal state — mutates ``current_job_ids``/``final_job_ids`` in place
+        (both are freshly-copied lists owned by this one tick, never shared, so
+        in-place mutation is safe). Extracted purely to keep ``_tick`` under the
+        project's cyclomatic-complexity limit.
 
-        Backlog items 93, 105: ``injected_processes``/``variants``/
-        ``composite_id``/``cache_variant``/``exchange_fluxes``/
-        ``exchange_flux_basis`` are re-derived from ``simulation.config`` once
-        per tick (same campaign, same config, for every seed advanced this
-        tick) rather than persisted anywhere new — see
-        ``_advance_parca_gate``'s docstring for why re-deriving from the
-        already-fresh ``simulation`` row is restart-safe for free, and for
-        what ``cache_variant``/``exchange_fluxes``/``exchange_flux_basis``
-        each select.
+        Since each seed now runs its whole lineage in ONE job (all generations in
+        one LineageProcess — see ``submit_chain_lineage``), a terminal state
+        simply resolves that seed; there is no per-generation follow-up
+        submission, so none of the per-tick config re-derivation the superseded
+        per-generation advancement needed (``injected_processes``/``variants``/
+        ``cache_variant``/``exchange_fluxes``/…) is required here.
         """
         in_flight = [jid for jid in current_job_ids if jid is not None]
         if not in_flight:
             return
         statuses = simulation_service_ray.get_batch_job_statuses(in_flight)
-        injected_processes = injected_processes_from_config(simulation.config)
-        variants = getattr(simulation.config, "variants", None) or None
-        composite_id = getattr(simulation.config, "composite_id", None) or None
-        cache_variant = getattr(simulation.config, "cache_variant", None) or None
-        exchange_fluxes = getattr(simulation.config, "exchange_fluxes", None) or None
-        exchange_flux_basis = getattr(simulation.config, "exchange_flux_basis", None) or None
-        expect_new_genes, expect_bundle_overrides = strain_from_config(simulation.config)
-        lineage_debug_division = bool(getattr(simulation.config, "lineage_debug_division", False))
-        next_gen_runner_s3_uri: str | None = None
         for seed, job_id in enumerate(current_job_ids):
             if job_id is None:
                 continue
             status = statuses.get(job_id)
             if status not in (JobStatus.COMPLETED, JobStatus.FAILED):
                 continue  # still running, or not yet visible -- leave alone this tick
-            gen = current_generation[seed] or 0
-            if status == JobStatus.FAILED or gen + 1 >= n_generations:
-                # this seed's chain is done -- success (reached the last
-                # generation) or permanent failure, either way it contributes
-                # its final job id.
-                current_job_ids[seed] = None
-                final_job_ids.append(job_id)
-                continue
-            if next_gen_runner_s3_uri is None:
-                next_gen_runner_s3_uri = await simulation_service_ray.stage_runner(experiment_id)
-            current_job_ids[seed] = simulation_service_ray.submit_chain_generation(
-                seed=seed,
-                generation_index=gen + 1,
-                experiment_id=experiment_id,
-                commit=commit,
-                cache_s3=simulation_service_ray.cache_s3_uri(commit, variant=cache_variant),
-                runner_s3_uri=next_gen_runner_s3_uri,
-                tags=simulation_service_ray.chain_base_tags(simulation=simulation, commit=commit),
-                injected_processes=injected_processes,
-                variants=variants,
-                composite_id=composite_id,
-                exchange_fluxes=exchange_fluxes,
-                exchange_flux_basis=exchange_flux_basis,
-                expect_new_genes=expect_new_genes,
-                expect_bundle_overrides=expect_bundle_overrides,
-                lineage_debug_division=lineage_debug_division,
-                task_env=resolve_task_env(simulation.config),
-            )
-            current_generation[seed] = gen + 1
+            # Each seed runs its WHOLE lineage in one job now, so any terminal
+            # state resolves that seed -- success (the whole lineage completed)
+            # or permanent failure -- and it contributes its final job id. No
+            # per-generation advancement and no S3 daughter-state handoff:
+            # division is in-process inside the single LineageProcess, which is
+            # exactly what makes lineage_time_offset accumulate so a field_timeline
+            # dose fires (see submit_chain_lineage).
+            current_job_ids[seed] = None
+            final_job_ids.append(job_id)
 
     async def _finalize_campaign(
         self,

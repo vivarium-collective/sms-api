@@ -3404,6 +3404,92 @@ class TestSeedGenerationCommand:
         assert overrides["stop_at_division"] is True
 
 
+class TestSeedLineageCommand:
+    """_seed_lineage_command builds ONE seed's WHOLE lineage as a single command:
+    all n_generations in one LineageProcess. This is the Run-3 fix — running the
+    whole lineage in one process is what makes lineage_time_offset accumulate
+    across generations so a field_timeline dose scheduled at a cumulative time
+    fires (the per-generation chain reset it to 0 every job)."""
+
+    @staticmethod
+    def _overrides(cmd: str) -> dict[str, Any]:
+        tokens = shlex.split(cmd)
+        return dict(json.loads(tokens[tokens.index("--overrides") + 1]))
+
+    def test_runs_all_generations_in_one_lineageprocess_with_no_daughter_state(self) -> None:
+        """The whole point: n_generations=N in ONE job (not n_generations=1 per
+        job), one seed, and NONE of the per-generation daughter-state /
+        checkpoint / stop_at_division keys — division is in-process, so the
+        LineageProcess accumulates lineage_time_offset across generations."""
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+        ):
+            cmd = service._seed_lineage_command(
+                seed=7,
+                n_generations=8,
+                experiment_id="sim47-chain-experiment",
+                runner_s3_uri="s3://mybucket/vecoli-output/sim47-chain-experiment/run_pbg.py",
+            )
+        assert "--composite-id v2ecoli.composites.ecoli_baseline.ecoli_baseline " in cmd
+        assert "-n 1" in cmd
+        assert "AWS_BATCH_JOB_ARRAY_INDEX" not in cmd
+
+        overrides = self._overrides(cmd)
+        # One LineageProcess for the WHOLE lineage.
+        assert overrides["n_seeds"] == 1
+        assert overrides["n_generations"] == 8
+        assert overrides["seed"] == 7
+        assert "base_seed" not in overrides
+        # NO per-generation daughter-state handoff — division is in-process, and
+        # this is exactly what stops lineage_time_offset from resetting to 0.
+        assert "initial_generation_index" not in overrides
+        assert "initial_carry_state_path" not in overrides
+        assert "daughter_state_out_path" not in overrides
+        # NOT gated to stop after one division: run every generation.
+        assert "stop_at_division" not in overrides
+        # Same per-seed S3 out layout as the per-generation path.
+        assert overrides["out_dir"] == "s3://mybucket/vecoli-output/sim47-chain-experiment/seed_07"
+        assert overrides["analyses"] == "none"
+
+    def test_injected_processes_and_variants_forwarded_and_omitted(self) -> None:
+        """The dose sweep rides in injected_processes/variants; they must thread
+        through verbatim, and be absent when not supplied (byte-for-byte with the
+        per-generation command's own passthrough contract)."""
+        service = SimulationServiceRay()
+        injected = {
+            "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
+            "add_processes": [],
+            "exclude_processes": [],
+            "fork_repo": "",
+        }
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+        ):
+            with_inj = self._overrides(
+                service._seed_lineage_command(
+                    seed=0,
+                    n_generations=20,
+                    experiment_id="exp-run3",
+                    runner_s3_uri="s3://mybucket/vecoli-output/exp-run3/run_pbg.py",
+                    injected_processes=injected,
+                )
+            )
+            without = self._overrides(
+                service._seed_lineage_command(
+                    seed=0,
+                    n_generations=20,
+                    experiment_id="exp-run3",
+                    runner_s3_uri="s3://mybucket/vecoli-output/exp-run3/run_pbg.py",
+                )
+            )
+        assert with_inj["injected_processes"] == injected
+        assert "injected_processes" not in without
+        assert "variants" not in without
+
+
 class TestStrainFromConfig:
     """strain_from_config (sms-ecoli#210 / #215): the shared helper JobScheduler
     and the sim submit use to read (new_genes, bundle_overrides) off a config's

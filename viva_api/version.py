@@ -1244,7 +1244,25 @@
 #            non-deterministic task ordering). No new env var, no entrypoint
 #            change, no image rebuild -- reuses the existing recursive sync.
 #            5 new/extended tests.
-__version__ = "0.9.134"
+#           0.9.135 -- feat: chain dispatch runs each seed's WHOLE lineage in
+#            ONE LineageProcess (all generations), not one Batch job per
+#            generation. The per-generation chain (_seed_generation_command,
+#            n_generations=1 + S3 daughter-state checkpoint per job) made every
+#            generation a FRESH LineageProcess whose lineage_time_offset restarts
+#            at 0.0, so a field_timeline dose scheduled at a cumulative-lineage
+#            time (Run 3's DOSE_ONSET_TIME_S=10000, ~gen 4) NEVER fired -- every
+#            chain sweep was a silent no-dose control (sim186 confirmed: zero
+#            drug, identical FBA control-vs-dose across all 36 combos). Now
+#            _advance_parca_gate fans out ONE submit_chain_lineage job per seed
+#            (new _seed_lineage_command: n_generations=N, no
+#            initial_generation_index/daughter-state/stop_at_division) and
+#            _advance_seed_generations polls each lineage job to resolution (no
+#            per-generation follow-up submission -- division is in-process, which
+#            is exactly what makes lineage_time_offset accumulate so the dose
+#            fires). Per-seed async independence preserved; parity with the
+#            Nextflow path. See docs/design-chain-one-lineageprocess.md.
+#            New TestSeedLineageCommand + updated TestAdvanceChainCampaign.
+__version__ = "0.9.135"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
