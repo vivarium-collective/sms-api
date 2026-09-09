@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import shlex
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ _SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "cd2_nextflow_dispat
 _spec = importlib.util.spec_from_file_location("cd2_nextflow_dispatches", _SCRIPT)
 assert _spec is not None and _spec.loader is not None
 t: Any = importlib.util.module_from_spec(_spec)
+sys.modules[_spec.name] = t  # @dataclass resolves the module through sys.modules
 _spec.loader.exec_module(t)
 
 FLAT = {  # Runs 1/2/4 shape
