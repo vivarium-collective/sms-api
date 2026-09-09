@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import shlex
-import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-import cd2_nextflow_dispatches as t
+_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "cd2_nextflow_dispatches.py"
+_spec = importlib.util.spec_from_file_location("cd2_nextflow_dispatches", _SCRIPT)
+assert _spec is not None and _spec.loader is not None
+t: Any = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(t)
 
 FLAT = {  # Runs 1/2/4 shape
     "swap_processes": {"ecoli-metabolism": "ecoli-metabolism-redux"},
