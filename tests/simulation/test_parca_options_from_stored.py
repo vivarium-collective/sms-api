@@ -3,6 +3,8 @@ this build's ParcaOptions forbids (smsvpctest 2026-09-09: rnaseq_* keys from a b
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 from pydantic import ValidationError
 
@@ -17,14 +19,16 @@ def test_stored_row_with_foreign_keys_parses_with_them_dropped(caplog: pytest.Lo
         "rnaseq_basal_dataset_id": 7,
         "rnaseq_fill_missing_genes_from_ref": True,
     }
-    opts = parca_options_from_stored(row)
+    with caplog.at_level(logging.WARNING, logger="viva_api.simulation.database_service"):
+        opts = parca_options_from_stored(row)
     assert opts.new_genes == "on"
     assert not hasattr(opts, "rnaseq_manifest_path")
     assert "rnaseq_basal_dataset_id" in caplog.text and "rnaseq_manifest_path" in caplog.text
 
 
 def test_clean_row_is_parsed_strictly_and_silently(caplog: pytest.LogCaptureFixture) -> None:
-    assert parca_options_from_stored({"new_genes": "off"}).new_genes == "off"
+    with caplog.at_level(logging.WARNING, logger="viva_api.simulation.database_service"):
+        assert parca_options_from_stored({"new_genes": "off"}).new_genes == "off"
     assert "ignoring" not in caplog.text
 
 
