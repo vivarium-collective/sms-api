@@ -425,6 +425,30 @@ def injected_processes_from_config(config: Any) -> dict[str, Any] | None:
     return result
 
 
+def _thread_injected_processes_into_params(params: dict[str, Any], config: Any) -> None:
+    """Thread the config's own injection intent into a multi-node composite's params.
+
+    sms-ecoli#166 (2026-09-09): a config's top-level ``swap_processes`` /
+    ``add_processes`` / ``exclude_processes`` (or a nested ``injected_processes``
+    block) never reached the multi-node path -- only chain dispatch and the
+    single-shot ``_sim_command`` called ``injected_processes_from_config`` -- so
+    every ``lineage_ray_batch`` CD2 Run 4 dispatch (both arms) silently ran CLASSIC
+    ``ecoli-metabolism`` although its stored config declared the redux swap (787's
+    GLP_UNBND traceback is in ``v2ecoli/processes/metabolism.py``; 744's history
+    carries the classic-only FBA listeners and none of redux's). The composite
+    already accepts ``injected_processes`` as a param (v2ecoli#663).
+
+    Explicit ``params["injected_processes"]`` wins (the same "explicit params win"
+    rule every other key follows); a config with no injection intent leaves
+    ``params`` byte-for-byte unchanged (the helper returns None). Mutates in place.
+    """
+    if "injected_processes" in params:
+        return
+    injected = injected_processes_from_config(config)
+    if injected:
+        params["injected_processes"] = injected
+
+
 def _batch_domain_overrides(
     *,
     injected_processes: dict[str, Any] | None = None,
@@ -3252,6 +3276,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             raise ValueError("multi_node_dispatch.composite_id is required")
         num_nodes = int(mnp_dispatch.get("num_nodes") or 1)
         params = dict(mnp_dispatch.get("params") or {})
+        _thread_injected_processes_into_params(params, ecoli_simulation.config)
         task_env = resolve_task_env(ecoli_simulation.config, mnp_dispatch)
         steps = int(mnp_dispatch.get("steps") or 1)
         # required_run_interval (item 105/#166, the K4-canary "under-run" empty-
