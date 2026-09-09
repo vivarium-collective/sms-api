@@ -1230,7 +1230,21 @@
 #            composite's own misleading global_time=1.0. Never visible before
 #            0.9.130 itself, since _assert_emitted_output always failed FIRST
 #            for this exact dispatch shape. 4 new/extended tests.
-__version__ = "0.9.131"
+#           0.9.132 -- fix: _submit_multi_node_composite now stages each
+#            seed_overrides[*].cache_dir S3 prefix (server-side copy under the
+#            dispatch's own cache_s3), then rewrites the override to the local
+#            path it resolves to via the existing stage_s3->stage_dir sync.
+#            Real bug (backlog item 106): seed_overrides[*].cache_dir was a raw
+#            s3:// URI passed straight through to LineageProcess.config
+#            ["cache_dir"] unmodified -- v2ecoli's read_cache_version does a
+#            plain os.path.exists() on it, unconditionally False for an s3://
+#            string regardless of whether the real object exists, raising
+#            StaleCacheError. Confirmed on two real dispatches (database_id
+#            733/738), each failing on a different seed (Ray's own
+#            non-deterministic task ordering). No new env var, no entrypoint
+#            change, no image rebuild -- reuses the existing recursive sync.
+#            5 new/extended tests.
+__version__ = "0.9.132"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in

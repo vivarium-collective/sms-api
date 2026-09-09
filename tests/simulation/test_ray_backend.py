@@ -1452,6 +1452,238 @@ class TestSubmitMultiNodeComposite:
         assert mock_batch.submit_job.call_count == 2
 
 
+def _fake_s3_paginator(pages: list[dict[str, Any]]) -> MagicMock:
+    paginator = MagicMock()
+    paginator.paginate.return_value = pages
+    return paginator
+
+
+class TestSeedOverrideCacheStaging:
+    """Backlog item 106, 2026-09-09: seed_overrides[*].cache_dir is a raw s3://
+    URI, but the dispatch only ever staged ONE (stage_s3, stage_dir) pair -- the
+    base/chassis cache. v2ecoli passes an override's cache_dir straight through
+    to a plain os.path.exists() check, which is unconditionally False for an
+    s3:// string -- StaleCacheError regardless of whether the real object
+    exists (confirmed via two real dispatches, database_id 733/738, each
+    failing on a different seed). Fix: server-side copy each override's own S3
+    prefix under the dispatch's own cache_s3 (picked up by the EXISTING
+    recursive stage_s3->stage_dir sync), then rewrite cache_dir to the local
+    path it resolves to."""
+
+    @pytest.mark.asyncio
+    async def test_seed_overrides_cache_dir_staged_and_rewritten_to_local_path(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {
+                    "n_seeds": 2,
+                    "n_generations": 1,
+                    "seed_overrides": {
+                        "0": {"cache_dir": "s3://otherbucket/founders/seed0"},
+                    },
+                },
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-20", "composite-20"])
+        mock_s3 = MagicMock()
+        mock_s3.get_paginator.return_value = _fake_s3_paginator([
+            {
+                "Contents": [
+                    {"Key": "founders/seed0/cache_version.json"},
+                    {"Key": "founders/seed0/simData.cPickle"},
+                ]
+            }
+        ])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        def _boto3_client(service_name: str, **_kwargs: Any) -> MagicMock:
+            return mock_s3 if service_name == "s3" else mock_batch
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", side_effect=_boto3_client),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            job_id = await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-seed-override"
+            )
+
+        assert job_id == JobId.ray("composite-20")
+
+        # Every object under the source prefix was copied server-side, under
+        # this dispatch's own cache_s3 prefix, keyed by seed.
+        copy_calls = mock_s3.copy_object.call_args_list
+        assert len(copy_calls) == 2
+        for call in copy_calls:
+            assert call.kwargs["Bucket"] == "mybucket"
+            assert call.kwargs["CopySource"]["Bucket"] == "otherbucket"
+            assert "_seed_overrides/0/" in call.kwargs["Key"]
+        copied_keys = {c.kwargs["Key"].rsplit("/", 1)[-1] for c in copy_calls}
+        assert copied_keys == {"cache_version.json", "simData.cPickle"}
+
+        # The composite's own --overrides JSON carries the REWRITTEN, LOCAL
+        # cache_dir -- not the original raw s3:// URI -- so v2ecoli's plain
+        # os.path.exists() check (which the real bug traces to) finds a real
+        # local path once the existing stage_s3->stage_dir sync lands it.
+        _parca_call, composite_call = mock_batch.submit_job.call_args_list
+        cmd = _env_of(composite_call)["RAY_JOB_CMD"]
+        assert f"{PARCA_CACHE_DIR}/_seed_overrides/0" in cmd
+        assert "s3://otherbucket" not in cmd
+
+    @pytest.mark.asyncio
+    async def test_no_seed_overrides_is_completely_unaffected(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Every existing caller (no seed_overrides at all) must be byte-for-byte
+        unaffected -- no S3 client touched, no extra behavior."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {"n_seeds": 2, "n_generations": 1},
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-21", "composite-21"])
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=mock_batch),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            job_id = await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-no-override"
+            )
+
+        assert job_id == JobId.ray("composite-21")
+        assert not hasattr(mock_batch, "copy_object") or not mock_batch.copy_object.called
+
+    @pytest.mark.asyncio
+    async def test_seed_overrides_with_a_non_s3_cache_dir_passes_through_unchanged(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """A seed_overrides entry whose cache_dir is already a local path (or any
+        other non-s3:// value) is left exactly as given -- no copy attempted,
+        no rewrite. Only ever needed by a caller that pre-stages its own
+        override some other way; not exercised by any real caller today."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {
+                    "n_seeds": 2,
+                    "n_generations": 1,
+                    "seed_overrides": {"0": {"cache_dir": "/already/local/path"}},
+                },
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch(["parca-22", "composite-22"])
+        mock_s3 = MagicMock()
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+
+        def _boto3_client(service_name: str, **_kwargs: Any) -> MagicMock:
+            return mock_s3 if service_name == "s3" else mock_batch
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", side_effect=_boto3_client),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-local-override"
+            )
+
+        assert not mock_s3.copy_object.called
+        _parca_call, composite_call = mock_batch.submit_job.call_args_list
+        cmd = _env_of(composite_call)["RAY_JOB_CMD"]
+        assert "/already/local/path" in cmd
+
+    @pytest.mark.asyncio
+    async def test_missing_cache_variant_still_fails_loud_even_with_seed_overrides_set(
+        self,
+        experiment_request: "SimulationRequest",
+        database_service: "DatabaseServiceSQL",
+    ) -> None:
+        """Regression for a real review finding (cd2-questions, 2026-09-09):
+        seed_overrides staging must run AFTER the cache_variant existence
+        check, not alongside cache_s3's own computation -- otherwise staging
+        real objects into cache_s3's own prefix (under _seed_overrides/<seed>/)
+        would make an UNBUILT chassis's own get_listing() come back non-empty,
+        silently defeating the guard test_cache_variant_missing_content_
+        fails_loud_instead_of_building_stock exists to prove. Both guards must
+        hold at once: missing chassis content still raises, and no S3 copy
+        happens before that raise."""
+        setattr(  # noqa: B010
+            experiment_request.config,
+            "multi_node_dispatch",
+            {
+                "composite_id": "v2ecoli.composites.lineage_ray_batch",
+                "num_nodes": 2,
+                "params": {
+                    "seed_overrides": {"0": {"cache_dir": "s3://otherbucket/founders/seed0"}},
+                },
+                "cache_variant": "cd2-run1-k4-candidate-v1-lambda050",
+            },
+        )
+        simulation = await database_service.insert_simulation(sim_request=experiment_request)
+
+        mock_batch = _fake_multi_node_batch([])
+        mock_s3 = MagicMock()
+        fake_file_service = AsyncMock()
+        fake_file_service.upload_file = AsyncMock()
+        fake_file_service.get_listing = AsyncMock(return_value=[])  # nothing staged at this commit yet
+
+        def _boto3_client(service_name: str, **_kwargs: Any) -> MagicMock:
+            return mock_s3 if service_name == "s3" else mock_batch
+
+        service = SimulationServiceRay()
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch("viva_api.simulation.simulation_service_ray.boto3.client", side_effect=_boto3_client),
+            patch("viva_api.dependencies.get_file_service", return_value=fake_file_service),
+            pytest.raises(ValueError, match="cd2-run1-k4-candidate-v1-lambda050"),
+        ):
+            await service.submit_ecoli_simulation_job(
+                ecoli_simulation=simulation, database_service=database_service, correlation_id="corr-guard-order"
+            )
+
+        # The guard raised BEFORE any seed-override staging happened -- no S3
+        # copy leaked ahead of the existence check, and nothing was submitted.
+        assert not mock_s3.copy_object.called
+        mock_batch.submit_job.assert_not_called()
+
+
 class TestMultiNodeAnalysisCommand:
     """Item 109: _multi_node_analysis_command tries a hive-parquet read
     (matching run_standalone_analysis.py's own DuckDB mechanism) before
