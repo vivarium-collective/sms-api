@@ -18,7 +18,8 @@ discovery, and one thing not yet demonstrated: the gather at 336-scale. Everythi
 inventory — every known shortcoming of the Nextflow dispatch path, with what is measured, what is
 assumed, and who owns it.
 
-> Companion to [`plan-nextflow-dispatch.md`](plan-nextflow-dispatch.md) ("act 1"),
+> Companion to [`plan-nextflow-dispatch.md`](plan-nextflow-dispatch.md) ("act 1") and
+> [`plan-nextflow-act3.md`](plan-nextflow-act3.md) ("act 3": all four CD2 workloads on this path),
 > which carries the design and the go/no-go gate table. This document is the
 > **execution** half: what is broken, in what order it gets fixed, and how far it
 > has got. Act 1 stays the reference for *why the path is shaped this way*.

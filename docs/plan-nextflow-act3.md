@@ -88,6 +88,8 @@ every expected `lineage_seed=`/`variant=` partition is present with real history
   wrong image fails at `!ParameterSerializer[...]` resolution, loudly.
 - **`media` names** must be a condition in the cache's `saved_media`.
 
+**Sequence:** [act 1](plan-nextflow-dispatch.md) (design + go/no-go gates) → [act 2](plan-nextflow-act2.md) (gate 4 / 1b closed, blockers, Run 2 on the path) → this document.
+
 ## Progress log
 
 | date | event |
