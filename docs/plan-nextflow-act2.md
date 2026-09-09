@@ -1,17 +1,21 @@
 # Nextflow dispatch, act 2: closing gate 4 and the shortcomings behind it
 
-**Status (2026-09-08 15:30Z): GATES 4 AND 1b ARE CLOSED.** Simulation **574** (simulator 167,
-sms-ecoli `1c66700` → v2ecoli `b9942d78`) completed end to end: ParCa → three lineages →
-the gather, with the analyses receiving **all three sweeps** and their sim_data. Seven
-blockers were found and cleared in sequence to get here. Phases 1 and 2 are done — the
-cancel reconciler and the 32 GB gather default went live on `smsvpctest` in 0.9.122 and are
-carried by every later roll (the cluster is on 0.9.125 as of #507).
-**Gate 1b is also closed** (sim 577, 14:5xZ): independent founders verified on
-infrastructure. What remains is content-level (Phase 3: #449, the `cd1_exchange_fluxes`
-column pending verification on a ≥ #741 image), Phase 4 (ordinal identity), Phase 5 hygiene,
-and one thing not yet demonstrated: the gather at 336-scale. Everything
-else here is inventory — every known shortcoming of the Nextflow dispatch path,
-with what is measured, what is assumed, and who owns it.
+**Status (2026-09-09 01:10Z): GATES 4 AND 1b ARE CLOSED; THE NEXTFLOW RUN 2 IS RUNNING.**
+Simulation **574** (simulator 167, sms-ecoli `1c66700` → v2ecoli `b9942d78`) closed gate 4 end to
+end: ParCa → three lineages → the gather, with the analyses receiving **all three sweeps** and their
+sim_data; seven blockers were found and cleared in sequence to get there. **Gate 1b** closed on sim
+577 (independent founders verified on infrastructure). Phases 1 and 2 are done — the cancel
+reconciler and the 32 GB gather default went live in 0.9.122 and every later roll carries them (the
+cluster is on 0.9.127). Phase 5: G closed (v2ecoli#746), #484 fixed (#514), e2e opt-in (#515).
+**Sim 683** — the real Run 2 shape (simulator 172, 10 seeds × 8 generations, independent founders,
+`exchange_fluxes` injected, gather in-campaign) — has been running since 21:42Z.
+**2026-09-09, team pain points picked up** (not Nextflow-specific): (A) `cd1_exchange_fluxes` bound
+to redux's `estimated_exchange_dmdt__*` — v2ecoli#747, validated on 666's history (−1.0000 vs the
+listener); (B)+(C) MNP `experiment_id` threading and refuse-to-under-run for lineage-shaped
+composites — viva-api#525. Still open: Phase 3 (#449), Phase 4 (ordinal identity), PBG#208, nested
+discovery, and one thing not yet demonstrated: the gather at 336-scale. Everything else here is
+inventory — every known shortcoming of the Nextflow dispatch path, with what is measured, what is
+assumed, and who owns it.
 
 > Companion to [`plan-nextflow-dispatch.md`](plan-nextflow-dispatch.md) ("act 1"),
 > which carries the design and the go/no-go gate table. This document is the
@@ -539,6 +543,15 @@ calls `reconcile_local_tasks()` alongside `_reconcile_orphaned_build` /
 
 ### Phase 3 — Make the gather trustworthy
 
+- **`cd1_exchange_fluxes` on the redux listener set — v2ecoli#747 (2026-09-09, open).** The 10/11 on
+  574/679 was not a missing config: `ecoli-metabolism-redux` never emits `external_exchange_fluxes`; it
+  emits `listeners__fba_results__estimated_exchange_dmdt__<MOL>[c|p]` (counts/tick, LP-raw sign, uptake
+  positive). #747 binds those when the classic column is absent, converts with the listener's own
+  `counts_to_gdcw_rate` per tick and flips the sign, so the TSV is mmol/gDCW/h uptake-negative on either
+  metabolism; compartment-agnostic because `VIOLACEIN[c]` is the one cytoplasmic exchange. Checked on
+  666's history: GLC −5.9482 vs the listener's −5.9484. 683 (image 172) will still show 10/11; the next
+  image gets 11/11.
+
 - **#449**: default `analysis_options` from the simulation config's own block, *and*
   reject `include_analysis` with empty options at the API boundary. The boundary check
   is the cheap half and needs no science decision (same shape as #456).
@@ -657,12 +670,15 @@ stays current.
 | 2026-09-08 | 12-hour sync at 13:15Z: sms-ecoli `main` → `bc0ff34e` (v2ecoli `e4db5e67`: #741 emit-robustness, #743 coupled emit, #738); simulator 167 predates it. @eagmon: `external_exchange_fluxes` is emitted at ≥ #741 — my redux diagnosis superseded, pending verification on a newer image. Runs 1–4 dispatching on MNP (Alex), where analyses need a manual flush; the Nextflow gather auto-runs. Alex closed the `media` question (not urgent; MNP/chain have their own routes). @cplong90 independently confirmed the J3 probe consumed the prebuilt founder caches correctly |
 | 2026-09-08 | Gate 1b run dispatched: sim **577** (`sim167-gate1b-founders-3x1-fc4d`), 3 seeds × 1 gen, `--independent-founders`, same `j3` variant as 574 — the shared-founder control, in which seeds differ in only **1.4–1.6 %** of 16,321 bulk counts at t=0 |
 | 2026-09-08 | **GATE 1b CLOSED — sim 577 COMPLETED ~14:50Z.** Independent founders: 30.3–30.7 % of 16,321 bulk counts differ at t=0 between seeds, vs 1.4–1.6 % for the shared-founder control (574). v2ecoli#731 verified on infrastructure |
-| 2026-09-08 | 7-hour sync 19:40Z: Alex superseded the "stale caches" line — fresh K4/J3 chassis at commit `2fddfcb8`, Run 1 cell-only (665) and **Run 2 (666, 8 gens)** dispatched on MNP; Run 1 coupled on its 3rd re-fire past v2ecoli#745/sms-ecoli#289; Run 4's second config needs a chassis rebuild (680); Run 3 unchanged. Cluster 0.9.125. @cplong90: `inputs_hash` can condemn but not clear a pin. New code not touching this path: viva-api#502/#504/#506, v2ecoli#744/#745 |
-| 2026-09-09 | 4-hour sync 00:28Z: **Run 2 proven on MNP** (681, 10×4, 23:38Z); Run 4 fully done incl. its second config (32/32) and eagmon's sign-off; Run 1 coupled seed 0 complete; Run 1 cell-only re-fire (701) in flight on the #520 fix; Run 3 root cause = PBG `ray:` actor pooling (not this path); viva-api#484 closed by #514; eagmon has not yet picked up the redux binding. 683 at 155 min: 10/10 RUNNING, 0 retries |
-| 2026-09-08 | Alex: no collision with 683 — "go ahead" (22:05Z). Xarray root cause = viva-api `run_pbg._redirect_emitters` (#520, deployed 0.9.127; cluster rolled 0.9.126 → 0.9.127 for #513/#520). Alex's exact-match 4-gen re-fire (681) reached gen 3 clean. 683 at 60 min: 10/10 lineages RUNNING, 0 retries |
-| 2026-09-08 | **Nextflow Run 2 dispatched: sim 683** (shape A on simulator 172; mirrors 666's spec with independent founders; parquet-only, gather in-campaign). Announced on #166 |
-| 2026-09-08 | **Alex's Run 2 (sim 666) FAILED 21:08Z** — the 665 xarray bug at the generation-4→5 boundary (seed 6, `emitstep_gen=4` missing). My "not exposed" claim retracted on #166 with the traceback; parquet history 0–4 for all 10 seeds is intact. v2ecoli#746 merged (`7cb19315`) |
-| 2026-09-08 | Phase 5 pass while 666 runs: v2ecoli#746 (16 lineage knobs declared — G closed), viva-api#514 (#484), viva-api#515 (e2e opt-in). Run 2 hedge command pre-staged in both shapes with `exchange_fluxes` in `injected_processes` |
-| 2026-09-08 | 20:40Z: answered @cplong90 and @AlexPatrie on #166 with measurements — 666 is parquet (not xarray-exposed); 679 omitted `exchange_fluxes` (gap 1, mine — must ride in `injected_processes` on this path); `cd1_exchange_fluxes` hard-binds `external_exchange_fluxes`, absent even on 666 (gap 2, the redux binding, @eagmon). Hedge offer for a Nextflow Run 2 replication stands |
-| 2026-09-08 | **sim 679** (`sim172-exch-verify-2x1-6add`, simulator 172 = sms-ecoli `7e7fce1` / v2ecoli `e4db5e67`) COMPLETED 19:34Z: image validated for Run 2 — 10 analyses `ok`, gather **succeeded first try at 32 GB** (#495 live), 101 objects / 678 MB. `cd1_exchange_fluxes` still 10/11: schema read shows redux emits `estimated_exchange_dmdt__*`, never `external_exchange_fluxes` (classic does). Redux binding → @eagmon |
 | 2026-09-08 | Team status (Alex, [sms-ecoli#166 at 15:04Z](https://github.com/CovertLabEcoli/sms-ecoli/issues/166#issuecomment-5587273617), MNP path): Run 1 coupled **10/10 proven**, content-verified; Run 4 `minimal` **42/42** and `_with_trp` **41/42** (genotype 7: `NegativeCountsError`, WATER in `ecoli-rna-degradation`, to the science team); Run 1 cell-only and Run 2 blocked on **stale founder caches** (old v2ecoli pin) — fresh chassis rebuilding; Run 3: #741 now surfaces two real bugs (Eran's). Chris on the Run 1 data: "looking great so far" |
+| 2026-09-08 | **sim 679** (`sim172-exch-verify-2x1-6add`, simulator 172 = sms-ecoli `7e7fce1` / v2ecoli `e4db5e67`) COMPLETED 19:34Z: image validated for Run 2 — 10 analyses `ok`, gather **succeeded first try at 32 GB** (#495 live), 101 objects / 678 MB. `cd1_exchange_fluxes` still 10/11: schema read shows redux emits `estimated_exchange_dmdt__*`, never `external_exchange_fluxes` (classic does). Redux binding → @eagmon |
+| 2026-09-08 | 7-hour sync 19:40Z: Alex superseded the "stale caches" line — fresh K4/J3 chassis at commit `2fddfcb8`, Run 1 cell-only (665) and **Run 2 (666, 8 gens)** dispatched on MNP; Run 1 coupled on its 3rd re-fire past v2ecoli#745/sms-ecoli#289; Run 4's second config needs a chassis rebuild (680); Run 3 unchanged. Cluster 0.9.125. @cplong90: `inputs_hash` can condemn but not clear a pin. New code not touching this path: viva-api#502/#504/#506, v2ecoli#744/#745 |
+| 2026-09-08 | 20:40Z: answered @cplong90 and @AlexPatrie on #166 with measurements — 666 is parquet (not xarray-exposed); 679 omitted `exchange_fluxes` (gap 1, mine — must ride in `injected_processes` on this path); `cd1_exchange_fluxes` hard-binds `external_exchange_fluxes`, absent even on 666 (gap 2, the redux binding, @eagmon). Hedge offer for a Nextflow Run 2 replication stands |
+| 2026-09-08 | Phase 5 pass while 666 runs: v2ecoli#746 (16 lineage knobs declared — G closed), viva-api#514 (#484), viva-api#515 (e2e opt-in). Run 2 hedge command pre-staged in both shapes with `exchange_fluxes` in `injected_processes` |
+| 2026-09-08 | **Alex's Run 2 (sim 666) FAILED 21:08Z** — the 665 xarray bug at the generation-4→5 boundary (seed 6, `emitstep_gen=4` missing). My "not exposed" claim retracted on #166 with the traceback; parquet history 0–4 for all 10 seeds is intact. v2ecoli#746 merged (`7cb19315`) |
+| 2026-09-08 | **Nextflow Run 2 dispatched: sim 683** (shape A on simulator 172; mirrors 666's spec with independent founders; parquet-only, gather in-campaign). Announced on #166 |
+| 2026-09-08 | Alex: no collision with 683 — "go ahead" (22:05Z). Xarray root cause = viva-api `run_pbg._redirect_emitters` (#520, deployed 0.9.127; cluster rolled 0.9.126 → 0.9.127 for #513/#520). Alex's exact-match 4-gen re-fire (681) reached gen 3 clean. 683 at 60 min: 10/10 lineages RUNNING, 0 retries |
+| 2026-09-09 | 4-hour sync 00:28Z: **Run 2 proven on MNP** (681, 10×4, 23:38Z); Run 4 fully done incl. its second config (32/32) and eagmon's sign-off; Run 1 coupled seed 0 complete; Run 1 cell-only re-fire (701) in flight on the #520 fix; Run 3 root cause = PBG `ray:` actor pooling (not this path); viva-api#484 closed by #514; eagmon has not yet picked up the redux binding. 683 at 155 min: 10/10 RUNNING, 0 retries |
+| 2026-09-09 | **(A) v2ecoli#747 opened 00:55Z** — `cd1_exchange_fluxes` binds redux's `estimated_exchange_dmdt__*` when the classic column is absent (per-tick `counts_to_gdcw_rate`, sign flipped, compartment-agnostic). Validated on sim 666's history: converted GLC −5.9482 vs the listener's own `glucose_exchange` −5.9484 (ratio −1.0000, 136 rows), VIOLACEIN +0.140. 5 tests. @eagmon told on #166; it's his module |
+| 2026-09-09 | **(B)+(C) viva-api#525 opened 01:05Z** — both in `run_pbg.py`, the one place that can see a composite's declared parameters (`to_document` raises on undeclared overrides, so the API cannot default blindly). (C) `--experiment-id` is passed by `_multi_node_composite_command` and injected iff the composite declares it — ends every lineage MNP campaign landing under `experiment_id=lineage_ray_batch`. (B) a composite that declares `n_generations` is refused when `-n` < `n_generations × max_duration_per_gen` — the hole the API-side clamp (87e5ca04, 0.9.118+) cannot see when `n_generations` is also omitted. 313 tests pass; no version bump yet |
+| 2026-09-09 | 683 at 01:02Z: still `running` (lineages expected 02:30–03:45Z, then the gather at 32 GB). Verification when done: 10 `lineage_seed=` partitions, `analysis/` published (10/11 expected on image 172), founders differ at t=0, `listeners__exchange_flux__*` present |
