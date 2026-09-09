@@ -3,33 +3,36 @@ this build's ParcaOptions forbids (smsvpctest 2026-09-09: rnaseq_* keys from a b
 
 from __future__ import annotations
 
-import logging
+from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
 
+from viva_api.simulation import database_service
 from viva_api.simulation.database_service import parca_options_from_stored
 from viva_api.simulation.models import ParcaOptions
 
 
-def test_stored_row_with_foreign_keys_parses_with_them_dropped(caplog: pytest.LogCaptureFixture) -> None:
+def test_stored_row_with_foreign_keys_parses_with_them_dropped() -> None:
     row = {
         "new_genes": "on",
         "rnaseq_manifest_path": "x.tsv",
         "rnaseq_basal_dataset_id": 7,
         "rnaseq_fill_missing_genes_from_ref": True,
     }
-    with caplog.at_level(logging.WARNING, logger="viva_api.simulation.database_service"):
+    with patch.object(database_service.logger, "warning") as warn:
         opts = parca_options_from_stored(row)
     assert opts.new_genes == "on"
     assert not hasattr(opts, "rnaseq_manifest_path")
-    assert "rnaseq_basal_dataset_id" in caplog.text and "rnaseq_manifest_path" in caplog.text
+    warn.assert_called_once()
+    logged = str(warn.call_args)
+    assert "rnaseq_basal_dataset_id" in logged and "rnaseq_manifest_path" in logged
 
 
-def test_clean_row_is_parsed_strictly_and_silently(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.WARNING, logger="viva_api.simulation.database_service"):
+def test_clean_row_is_parsed_strictly_and_silently() -> None:
+    with patch.object(database_service.logger, "warning") as warn:
         assert parca_options_from_stored({"new_genes": "off"}).new_genes == "off"
-    assert "ignoring" not in caplog.text
+    warn.assert_not_called()
 
 
 def test_a_real_validation_error_still_raises() -> None:
