@@ -1,6 +1,6 @@
 # Nextflow dispatch, act 2: closing gate 4 and the shortcomings behind it
 
-**Status (2026-09-09 01:10Z): GATES 4 AND 1b ARE CLOSED; THE NEXTFLOW RUN 2 IS RUNNING.**
+**Status (2026-09-09 01:30Z): GATES 4 AND 1b ARE CLOSED; THE NEXTFLOW RUN 2 IS RUNNING.**
 Simulation **574** (simulator 167, sms-ecoli `1c66700` → v2ecoli `b9942d78`) closed gate 4 end to
 end: ParCa → three lineages → the gather, with the analyses receiving **all three sweeps** and their
 sim_data; seven blockers were found and cleared in sequence to get there. **Gate 1b** closed on sim
@@ -10,9 +10,10 @@ cluster is on 0.9.127). Phase 5: G closed (v2ecoli#746), #484 fixed (#514), e2e 
 **Sim 683** — the real Run 2 shape (simulator 172, 10 seeds × 8 generations, independent founders,
 `exchange_fluxes` injected, gather in-campaign) — has been running since 21:42Z.
 **2026-09-09, team pain points picked up** (not Nextflow-specific): (A) `cd1_exchange_fluxes` bound
-to redux's `estimated_exchange_dmdt__*` — v2ecoli#747, validated on 666's history (−1.0000 vs the
-listener); (B)+(C) MNP `experiment_id` threading and refuse-to-under-run for lineage-shaped
-composites — viva-api#525. Still open: Phase 3 (#449), Phase 4 (ordinal identity), PBG#208, nested
+to redux's `estimated_exchange_dmdt__*` — v2ecoli#747 **merged** (`f0274348`), validated on 666's
+history (−1.0000 vs the listener), pinned into sms-ecoli by #294 (`b7e65278`), simulator building;
+(B)+(C) MNP `experiment_id` threading and refuse-to-under-run for lineage-shaped composites —
+viva-api#525 **merged** (`bd034ac9`), rolling to `smsvpctest` as **0.9.128** (#527). Still open: Phase 3 (#449), Phase 4 (ordinal identity), PBG#208, nested
 discovery, and one thing not yet demonstrated: the gather at 336-scale. Everything else here is
 inventory — every known shortcoming of the Nextflow dispatch path, with what is measured, what is
 assumed, and who owns it.
@@ -682,3 +683,7 @@ stays current.
 | 2026-09-09 | **(A) v2ecoli#747 opened 00:55Z** — `cd1_exchange_fluxes` binds redux's `estimated_exchange_dmdt__*` when the classic column is absent (per-tick `counts_to_gdcw_rate`, sign flipped, compartment-agnostic). Validated on sim 666's history: converted GLC −5.9482 vs the listener's own `glucose_exchange` −5.9484 (ratio −1.0000, 136 rows), VIOLACEIN +0.140. 5 tests. @eagmon told on #166; it's his module |
 | 2026-09-09 | **(B)+(C) viva-api#525 opened 01:05Z** — both in `run_pbg.py`, the one place that can see a composite's declared parameters (`to_document` raises on undeclared overrides, so the API cannot default blindly). (C) `--experiment-id` is passed by `_multi_node_composite_command` and injected iff the composite declares it — ends every lineage MNP campaign landing under `experiment_id=lineage_ray_batch`. (B) a composite that declares `n_generations` is refused when `-n` < `n_generations × max_duration_per_gen` — the hole the API-side clamp (87e5ca04, 0.9.118+) cannot see when `n_generations` is also omitted. 313 tests pass; no version bump yet |
 | 2026-09-09 | 683 at 01:02Z: still `running` (lineages expected 02:30–03:45Z, then the gather at 32 GB). Verification when done: 10 `lineage_seed=` partitions, `analysis/` published (10/11 expected on image 172), founders differ at t=0, `listeners__exchange_flux__*` present |
+| 2026-09-09 | 01:10–01:15Z: **v2ecoli#747 merged** (`f0274348`); **viva-api#525 merged** (`bd034ac9`) after one mypy-strict fix on a test helper; docs #526 merged. Watchers do the merging; the docs edit had to move into a separate git worktree because the deploy chain switches branches and tags `HEAD` in the main checkout |
+| 2026-09-09 | **sms-ecoli#294 merged** (`b7e65278`, squash): v2ecoli pin `e4db5e67` → `f0274348` (6 commits, verified against origin/main: #744 #745 #746 #747). Simulator build from sms-ecoli `main` started via `atlantis simulator latest --repo-url … --branch main` — the first watcher used a nonexistent `simulator upload` verb and was replaced before it fired. This image is the first that can score 11/11 on a J3 sweep |
+| 2026-09-09 | **Release 0.9.128 (#527) in flight** at the user's request so B/C go live: bump in `version.py` (changelog block + `__version__`), `pyproject.toml`, `uv.lock`, and BOTH stanford-test overlays (the db-migration one had drifted to 0.9.122). Chain: checks → admin merge → origin/main version gate → GH Action build → apply + rollout → marker grep (`_apply_declared_run_identity` in `run_pbg.py`) → `/version` |
+| 2026-09-09 | 683 at 01:25Z: still `running`, ~3 h 45 m in; no retries seen. Lineages due 02:30–03:45Z, then the 32 GB gather |
