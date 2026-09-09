@@ -73,7 +73,17 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.128
+    newTag: 0.9.129
+    # 2026-09-09: 0.9.128 -> 0.9.129, viva-api#536 -- _check_required_run_interval
+    # (0.9.128/#525) now exempts composites whose merged overrides carry
+    # stop_at_division=True. Chain-dispatch's own per-generation job submission
+    # (_seed_generation_command) always hardcodes -n 1 deliberately -- steps
+    # there is a "go" signal, not the simulated-time budget the
+    # n_generations x max_duration_per_gen contract assumes (true for MNP's
+    # one-continuous-invocation lineage_ray_batch, not chain-dispatch's
+    # per-generation-job shape). Found live: Dispatch 720/721:Run 3 both
+    # tripped the new guard on every seed despite the species
+    # AmbiguousLookupError itself (bigraph-schema#187) being genuinely fixed.
     # 2026-09-08: 0.9.125 -> 0.9.126, viva-api#513 -- Bug A fix: stage
     # vEcoli-private (not the public mirror) as /app/vEcoli. Adds a required
     # (fail-loud, no floating-to-master-tip default) vecoli_private_commit
