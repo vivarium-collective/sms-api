@@ -73,7 +73,8 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.129
+    newTag: 0.9.130
+    # 2026-09-09: 0.9.129 -> 0.9.130 -- parca-versions list tolerates legacy ParcaOptions (same fix class as #504)
     # 2026-09-09: 0.9.128 -> 0.9.129, viva-api#536 -- _check_required_run_interval
     # (0.9.128/#525) now exempts composites whose merged overrides carry
     # stop_at_division=True. Chain-dispatch's own per-generation job submission
