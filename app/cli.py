@@ -1041,6 +1041,13 @@ def simulation_run(
         help="Free-form tag to attach for later filtering (e.g. --tag cd1). Repeat for multiple. "
         "Tags can also be added later with 'atlantis simulation tag <id> <tag>'.",
     ),
+    task_env: list[str] = Option(
+        default_factory=list,
+        help="NAME=VALUE set in the environment of EVERY simulation task this dispatch launches; "
+        "repeat for multiple. The documented use is V2ECOLI_SKIP_CACHE_VERIFY=1 after a v2ecoli "
+        "commit re-keyed the ParCa caches without changing their biology (sms-ecoli#166). Names the "
+        "service sets itself (PYTHONPATH, RAY_*, CONTAINER_*, AWS_*, ...) are refused.",
+    ),
     poll: bool = Option(default=False, help="Poll simulation status until completion."),
     base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
 ) -> None:
@@ -1102,6 +1109,7 @@ def simulation_run(
             ecoli_sources_repo_url=sources_repo,
             ecoli_sources_ref=sources_ref,
             tags=list(tag) or None,
+            extra_params={"task_env": _parse_task_env(task_env)} if task_env else None,
         )
 
     console.print(f"[memphis.success]Simulation submitted![/]  ID: {simulation.database_id}")
@@ -1199,6 +1207,13 @@ def composite_run(
         'Example: --params \'{"n_seeds": 100, "n_generations": 10}\'.',
     ),
     steps: int = Option(default=36000, help="Total simulated seconds requested for the whole composite run."),
+    task_env: list[str] = Option(
+        default_factory=list,
+        help="NAME=VALUE set in the environment of EVERY simulation task this dispatch launches; "
+        "repeat for multiple. The documented use is V2ECOLI_SKIP_CACHE_VERIFY=1 after a v2ecoli "
+        "commit re-keyed the ParCa caches without changing their biology (sms-ecoli#166). Names the "
+        "service sets itself (PYTHONPATH, RAY_*, CONTAINER_*, AWS_*, ...) are refused.",
+    ),
     simulation_config: str | None = Option(
         default=None,
         help="Config filename under the simulator repo's configs/ (e.g. 'mecillinam_wellmixed.json'). "
@@ -1264,6 +1279,8 @@ def composite_run(
             "steps": steps,
         }
     }
+    if task_env:
+        extra_params["multi_node_dispatch"]["task_env"] = _parse_task_env(task_env)
 
     with console.status("[memphis.spinner]Submitting composite dispatch..."):
         simulation = data_service.run_workflow(
@@ -1377,6 +1394,23 @@ def _nf_generator_params(
     return nf_params
 
 
+def _parse_task_env(entries: list[str]) -> dict[str, str]:
+    """`--task-env NAME=VALUE` (repeatable) -> the request's `task_env` object.
+
+    Split on the FIRST `=` so a value may itself contain one. An entry without
+    `=` is refused here: the server would refuse it too, but after the round
+    trip, and with less to say about which flag was wrong.
+    """
+    out: dict[str, str] = {}
+    for entry in entries:
+        name, sep, value = entry.partition("=")
+        if not sep or not name:
+            get_console().print(f"[memphis.error]--task-env expects NAME=VALUE, got {entry!r}[/]")
+            raise typer.Exit(1)
+        out[name] = value
+    return out
+
+
 def _nf_dispatch_payload(
     *,
     composite_id: str,
@@ -1394,6 +1428,7 @@ def _nf_dispatch_payload(
     resources: str | None,
     nextflow_arg: list[str],
     work_dir: str | None,
+    task_env: list[str] | None = None,
 ) -> dict[str, object]:
     """Assemble `extra_params.nextflow_dispatch` from the CLI options.
 
@@ -1429,6 +1464,8 @@ def _nf_dispatch_payload(
         dispatch["work_dir"] = work_dir
     if nextflow_arg:
         dispatch["nextflow_args"] = list(nextflow_arg)
+    if task_env:
+        dispatch["task_env"] = _parse_task_env(task_env)
     if resources:
         dispatch["resources"] = _nf_json_object(resources, "--resources")
     return dispatch
@@ -1519,6 +1556,13 @@ def composite_nextflow(
         "'-dump-hashes' prints each component of a task hash and is the only way to see WHY a "
         "--resume did not match.",
     ),
+    task_env: list[str] = Option(
+        default_factory=list,
+        help="NAME=VALUE set in the environment of EVERY simulation task this dispatch launches; "
+        "repeat for multiple. The documented use is V2ECOLI_SKIP_CACHE_VERIFY=1 after a v2ecoli "
+        "commit re-keyed the ParCa caches without changing their biology (sms-ecoli#166). Names the "
+        "service sets itself (PYTHONPATH, RAY_*, CONTAINER_*, AWS_*, ...) are refused.",
+    ),
     work_dir: str | None = Option(
         default=None, help="Override the S3 work directory. Omit to use the deployment-derived one."
     ),
@@ -1559,6 +1603,7 @@ def composite_nextflow(
         resources=resources,
         nextflow_arg=nextflow_arg,
         work_dir=work_dir,
+        task_env=task_env,
     )
 
     data_service = get_data_service(base_url=base_url)

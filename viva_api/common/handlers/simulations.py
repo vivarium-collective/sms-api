@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from viva_api.analysis.models import TsvOutputFile
 from viva_api.common import StrEnumBase
-from viva_api.common.dispatch_validation import validate_nextflow_dispatch
+from viva_api.common.dispatch_validation import validate_dispatch_task_envs, validate_nextflow_dispatch
 from viva_api.common.handlers.simulators import upload_simulator
 from viva_api.common.hpc.job_service import JobStatusUpdate
 from viva_api.common.models import JobBackend, JobStatus, SSHTarget
@@ -732,6 +732,9 @@ async def run_simulation_workflow(  # noqa: C901
     # only the request, so they can run here.
     if config_data.get("nextflow_dispatch") is not None:
         validate_nextflow_dispatch(config_data["nextflow_dispatch"])
+    # task_env (sms-ecoli#166): every place a request may carry one, checked here
+    # for the same reason -- a bad NAME=value is a typo, not a run.
+    validate_dispatch_task_envs(config_data)
 
     # 5. Create placeholder parca dataset entry
     # Even though parca runs as part of the Nextflow workflow, we need a database entry

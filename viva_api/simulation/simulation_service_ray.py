@@ -30,6 +30,7 @@ base (cloning its node properties, swapping the image to ``v2ecoli:<commit>``).
 
 import asyncio
 import copy
+import functools
 import importlib.resources as _res
 import json
 import logging
@@ -49,7 +50,7 @@ from botocore.config import Config
 from pydantic import BaseModel
 
 from viva_api.common import analysis_dag
-from viva_api.common.dispatch_validation import validate_nextflow_dispatch
+from viva_api.common.dispatch_validation import resolve_task_env, task_env_as_batch_list, validate_nextflow_dispatch
 from viva_api.common.hpc.job_service import JobStatusInfo
 from viva_api.common.hpc.k8s_job_service import K8sJobService
 from viva_api.common.hpc.local_task_service import LocalTaskService
@@ -701,6 +702,7 @@ class SimulationServiceRay(SimulationService):
         expect_bundle_overrides: str | list[str] | None = None,
         require_clean_chain: bool = False,
         lineage_debug_division: bool = False,
+        task_env: dict[str, str] | None = None,
     ) -> str:
         """Submit a Ray MNP job via boto3, mirroring sms-cdk scripts/ray_batch_submit.sh.
 
@@ -758,6 +760,12 @@ class SimulationServiceRay(SimulationService):
         # that aren't. Every node runs its own raylet, so this belongs in
         # shared_env, not head-only.
         shared_env.append({"name": "RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE", "value": "1"})
+        # task_env (sms-ecoli#166): the request's own env, validated at the boundary
+        # (dispatch_validation.validate_task_env), reaching EVERY node -- e.g.
+        # V2ECOLI_SKIP_CACHE_VERIFY=1 after a cache-re-keying v2ecoli commit.
+        if task_env:
+            shared_env.extend(task_env_as_batch_list(task_env))
+            logger.info("MNP job %s: task_env passthrough %s", job_name, dict(task_env))
 
         # The head additionally runs the workload (RAY_JOB_CMD) and writes the report.
         # Workers receive these too but never act on them — the entrypoint branches on
@@ -975,6 +983,7 @@ class SimulationServiceRay(SimulationService):
         expect_bundle_overrides: str | list[str] | None = None,
         require_clean_chain: bool = False,
         lineage_debug_division: bool = False,
+        task_env: dict[str, str] | None = None,
     ) -> str:
         """Submit a plain, standalone AWS Batch container-type job (backlog item 71).
 
@@ -1012,6 +1021,10 @@ class SimulationServiceRay(SimulationService):
                 lineage_debug_division=lineage_debug_division,
             ),
         ]
+        # task_env (sms-ecoli#166): see _submit_mnp -- same passthrough, one container.
+        if task_env:
+            env.extend(task_env_as_batch_list(task_env))
+            logger.info("Container job %s: task_env passthrough %s", job_name, dict(task_env))
 
         kwargs: dict[str, Any] = {
             "jobName": job_name,
@@ -1357,7 +1370,9 @@ class SimulationServiceRay(SimulationService):
         registry = f"{settings.ecr_account_id}.dkr.ecr.{settings.batch_region}.amazonaws.com"
         return f"{registry}/{settings.ray_ecr_repository}:{commit}-submit"
 
-    def _awsbatch_nf_params(self, commit: str, experiment_id: str) -> dict[str, Any]:
+    def _awsbatch_nf_params(
+        self, commit: str, experiment_id: str, task_env: dict[str, str] | None = None
+    ) -> dict[str, Any]:
         """The `awsbatch` profile's inputs, derived from settings -- never from the request.
 
         These name the deployment's queue, registry and work bucket, so they are
@@ -1400,7 +1415,13 @@ class SimulationServiceRay(SimulationService):
             # that injects the same line into vEcoli's config.template
             # (simulation_service_k8s.py).
             "s3_endpoint": f"https://s3.{settings.batch_region}.amazonaws.com",
-            "container_env": {"PYTHONPATH": V2ECOLI_DIR, "V2E_ROOT": V2ECOLI_DIR},
+            # task_env (sms-ecoli#166) rides in the same directive: the renderer emits
+            # every entry as a `--env K=V` containerOption on the awsbatch profile's
+            # process scope, so it reaches EVERY Batch task (parca, lineage,
+            # analysis) -- not the K8s head, which needs none of it. The service's
+            # own two keys are listed first so a request cannot shadow them (the
+            # validator refuses those names anyway).
+            "container_env": {"PYTHONPATH": V2ECOLI_DIR, "V2E_ROOT": V2ECOLI_DIR, **(task_env or {})},
             "work_dir": f"s3://{settings.s3_work_bucket}/{settings.s3_work_prefix}/{experiment_id}/work",
         }
 
@@ -1580,6 +1601,7 @@ class SimulationServiceRay(SimulationService):
         # reachable directly, and it is the last point before a Job is created.
         validate_nextflow_dispatch(nf_dispatch)
         composite_id = nf_dispatch.get("composite_id")
+        task_env = resolve_task_env(ecoli_simulation.config, nf_dispatch)
 
         commit = simulator.git_commit_hash
         # The RUN's own id, read from the simulation record rather than from the
@@ -1618,7 +1640,9 @@ class SimulationServiceRay(SimulationService):
         nf_params: dict[str, Any] | None = None
         work_dir = nf_dispatch.get("work_dir")
         if executor == "awsbatch":
-            nf_params = self._awsbatch_nf_params(commit, campaign_key)
+            nf_params = self._awsbatch_nf_params(commit, campaign_key, task_env=task_env)
+            if task_env:
+                logger.info("Nextflow dispatch %s: task_env passthrough %s", run_id, task_env)
             # Retry counts are the caller's to tune; the deployment's identity is not.
             for key in ("max_spot_attempts", "max_transfer_attempts", "max_retries"):
                 if nf_dispatch.get(key) is not None:
@@ -1869,6 +1893,7 @@ class SimulationServiceRay(SimulationService):
         commit = simulator.git_commit_hash
         experiment_id = str(ecoli_simulation.config.experiment_id)
         cache_variant = mbp_dispatch.get("cache_variant") or None
+        task_env = resolve_task_env(ecoli_simulation.config, mbp_dispatch)
         cache_s3 = self.cache_s3_uri(commit, variant=cache_variant)
 
         job_def = self._ensure_container_job_def(self._image_uri(commit), commit)
@@ -1909,6 +1934,7 @@ class SimulationServiceRay(SimulationService):
                 out_s3=cache_s3,
                 out_dir=PARCA_CACHE_DIR,
                 tags={**base_tags, "Phase": "parca"},
+                task_env=task_env,
             )
 
         command = self._mbp_tracked_command(
@@ -1938,6 +1964,7 @@ class SimulationServiceRay(SimulationService):
             stage_dir=PARCA_CACHE_DIR,
             depends_on=[parca_job_id] if parca_job_id else None,
             tags={**base_tags, "Phase": "mbp_tracked"},
+            task_env=task_env,
         )
         return JobId.ray(job_id)
 
@@ -2396,7 +2423,8 @@ class SimulationServiceRay(SimulationService):
             sim_data_uri=sim_data_uri,
             result_out_dir=result_uri,
             v2ecoli_dir=V2ECOLI_DIR,
-            submit_container=self._submit_container,
+            # task_env (sms-ecoli#166): the campaign's own env reaches its gather too.
+            submit_container=functools.partial(self._submit_container, task_env=resolve_task_env(simulation.config)),
             job_definition=job_definition,
             job_name=f"ray-analysis-{experiment_id}-{_rand_suffix()}"[:128],
             out_s3=self._results_s3_uri(experiment_id),
@@ -2936,6 +2964,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         }
 
         # 1. ParCa job (1 node) → cache to S3.
+        task_env = resolve_task_env(config)
         parca_job_id = self._submit_mnp(
             job_name=f"ray-parca-{commit}-{_rand_suffix()}",
             job_definition=job_def,
@@ -2944,6 +2973,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             out_s3=cache_s3,
             out_dir=PARCA_CACHE_DIR,
             tags={**base_tags, "Phase": "parca"},
+            task_env=task_env,
         )
 
         # 2. Simulation ensemble (N-node Ray cluster), gated on ParCa, staging the
@@ -2989,6 +3019,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             stage_dir=PARCA_CACHE_DIR,
             depends_on=[parca_job_id],
             tags={**base_tags, "Phase": "sim"},
+            task_env=task_env,
             # Wrong-strain guard (sms-ecoli#210 / #215): tell the entrypoint which
             # strain this run staged so it rejects a cache built for a different one.
             # off/None (wild-type) emits nothing, so this is inert for non-strain runs.
@@ -3221,6 +3252,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             raise ValueError("multi_node_dispatch.composite_id is required")
         num_nodes = int(mnp_dispatch.get("num_nodes") or 1)
         params = dict(mnp_dispatch.get("params") or {})
+        task_env = resolve_task_env(ecoli_simulation.config, mnp_dispatch)
         steps = int(mnp_dispatch.get("steps") or 1)
         # required_run_interval (item 105/#166, the K4-canary "under-run" empty-
         # emit bug: sms-ecoli#166 comment 5579146363, eagmon): `steps` silently
@@ -3360,6 +3392,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                 out_s3=cache_s3,
                 out_dir=PARCA_CACHE_DIR,
                 tags={**base_tags, "Phase": "parca"},
+                task_env=task_env,
             )
 
         # seed_overrides[*].cache_dir (item 115/106): a raw s3:// URI naming a
@@ -3401,6 +3434,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             depends_on=[parca_job_id] if parca_job_id else None,
             tags={**base_tags, "Phase": "composite"},
             require_clean_chain=require_clean_chain,
+            task_env=task_env,
         )
         logger.info(
             "Multi-node composite %s (%s): parca job %s -> composite job %s (%d nodes)",
@@ -3462,6 +3496,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
         lineage_debug_division: bool = False,
+        task_env: dict[str, str] | None = None,
     ) -> str:
         """Submit ONE seed's ONE generation as a standalone container-type job
         (backlog item 71 Phase 4) — the app-level-gated replacement for the
@@ -3507,6 +3542,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             expect_new_genes=expect_new_genes,
             expect_bundle_overrides=expect_bundle_overrides,
             lineage_debug_division=lineage_debug_division,
+            task_env=task_env,
         )
 
     async def submit_chain_generation_batch(
@@ -3527,6 +3563,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         expect_new_genes: str | None = None,
         expect_bundle_overrides: str | None = None,
         lineage_debug_division: bool = False,
+        task_env: dict[str, str] | None = None,
     ) -> dict[int, str]:
         """Submit the SAME generation index for MULTIPLE seeds at once,
         TPS-paced below the account-wide ``SubmitJob`` rate limit (reuses
@@ -3576,6 +3613,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                     expect_new_genes=expect_new_genes,
                     expect_bundle_overrides=expect_bundle_overrides,
                     lineage_debug_division=lineage_debug_division,
+                    task_env=task_env,
                 )
             except Exception:
                 logger.exception(
@@ -3805,6 +3843,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             out_s3=cache_s3,
             out_dir=PARCA_CACHE_DIR,
             tags={**base_tags, "Phase": "parca"},
+            task_env=resolve_task_env(config),
         )
 
         await database_service.insert_hpcrun(
