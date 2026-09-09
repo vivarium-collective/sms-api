@@ -282,14 +282,30 @@ def plan_campaign(
             "use one seed per variant or --independent-founders"
         )
     inj = injected_processes_for(cfg, label)
+    fluxes = (
+        (exchange_fluxes or VIOLACEIN_EXCHANGE_FLUXES)
+        if (run in RUNS_WITH_EXCHANGE_FLUXES or exchange_fluxes)
+        else None
+    )
+    if fluxes:
+        # In BOTH places on purpose: the top-level knobs exist only since
+        # v2ecoli#746 (simulators >= 178); on an older image they are swallowed
+        # by the generator's **_ignored and the two KPI columns silently vanish
+        # (sim 679). LineageProcess reads the injection block first, so carrying
+        # them there too is what sim 683 did and works on every image.
+        inj = {
+            **(inj or {"swap_processes": {}, "add_processes": [], "exclude_processes": [], "fork_repo": ""}),
+            "exchange_fluxes": fluxes,
+            "exchange_flux_basis": EXCHANGE_FLUX_BASIS,
+        }
     specs = variant_specs(variants or [{"variant_name": f"run{run}"}], inj)
     params: dict[str, Any] = {"variants": specs}
     if media:
         params["media"] = media
     if "time_step" in cfg and cfg["time_step"] is not None:
         params["time_step"] = cfg["time_step"]
-    if run in RUNS_WITH_EXCHANGE_FLUXES or exchange_fluxes:
-        params["exchange_fluxes"] = exchange_fluxes or VIOLACEIN_EXCHANGE_FLUXES
+    if fluxes:
+        params["exchange_fluxes"] = fluxes
         params["exchange_flux_basis"] = EXCHANGE_FLUX_BASIS
     return CampaignPlan(
         label=label,

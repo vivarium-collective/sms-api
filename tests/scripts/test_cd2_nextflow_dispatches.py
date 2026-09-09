@@ -230,3 +230,20 @@ def test_deep_merge_replaces_leaves_and_merges_dicts() -> None:
         "a": {"b": 1, "c": 3},
         "d": [2],
     }
+
+
+def test_exchange_fluxes_ride_in_the_injection_block_too_for_pre_746_images() -> None:
+    plan = t.plan_campaign(
+        run="1",
+        cfg=FLAT,
+        label="k4",
+        simulator_id=173,
+        simulation_config="c",
+        variants=[{"variant_name": "s0", "cache_uri": "s3://b/s0"}],
+    )
+    inj = plan.params["variants"][0]["injected_processes"]
+    assert inj["exchange_fluxes"] == t.VIOLACEIN_EXCHANGE_FLUXES and inj["exchange_flux_basis"] == "gdcw"
+    assert inj["swap_processes"] == {"ecoli-metabolism": "ecoli-metabolism-redux"}  # the config's block survives
+    assert plan.params["exchange_fluxes"] == t.VIOLACEIN_EXCHANGE_FLUXES  # and the #746 knob is still set
+    run3 = t.plan_campaign(run="3", cfg=NESTED, label="mec", simulator_id=181, simulation_config="c")
+    assert "exchange_fluxes" not in run3.params["variants"][0]["injected_processes"]
