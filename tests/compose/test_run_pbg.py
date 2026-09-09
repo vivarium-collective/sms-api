@@ -259,8 +259,9 @@ def test_redirect_emitters_injects_out_dir_when_absent(tmp_path: Path) -> None:
     <workspace>/.pbg/parquet-runs. In the container that dir is never synced to S3,
     so the run would succeed and produce nothing readable."""
     doc: dict[str, Any] = {"composition": {"emitter": {"address": "local:ParquetEmitter", "config": {}}}}
-    n = run_pbg._redirect_emitters(doc, tmp_path / "out")
+    n, s3_locations = run_pbg._redirect_emitters(doc, tmp_path / "out")
     assert n == 1
+    assert s3_locations == []  # nothing pre-existing to redirect FROM
     assert doc["composition"]["emitter"]["config"]["out_dir"] == str(tmp_path / "out")
 
 
@@ -287,13 +288,13 @@ def test_redirect_emitters_creates_a_missing_config_block(tmp_path: Path) -> Non
 
 def test_redirect_emitters_finds_emitters_nested_in_lists(tmp_path: Path) -> None:
     doc: dict[str, Any] = {"emitters": [{"address": "local:ParquetEmitter", "config": {}}, {"address": "local:noop"}]}
-    assert run_pbg._redirect_emitters(doc, tmp_path) == 1
+    assert run_pbg._redirect_emitters(doc, tmp_path)[0] == 1
 
 
 def test_redirect_emitters_is_a_noop_without_emitters(tmp_path: Path) -> None:
     """A document need not declare one — 0 is a legitimate answer, not an error."""
     doc: dict[str, Any] = {"composition": {"proc": {"address": "local:SomeProcess", "config": {"out_dir": "keep"}}}}
-    assert run_pbg._redirect_emitters(doc, tmp_path) == 0
+    assert run_pbg._redirect_emitters(doc, tmp_path) == (0, [])
     assert doc["composition"]["proc"]["config"]["out_dir"] == "keep"
 
 
@@ -316,7 +317,7 @@ def test_redirect_emitters_does_not_count_or_touch_a_ram_or_console_emitter(tmp_
         "ram": {"address": "local:RAMEmitter", "config": {}},
         "console": {"address": "local:ConsoleEmitter"},
     }
-    n = run_pbg._redirect_emitters(doc, tmp_path / "out")
+    n, _ = run_pbg._redirect_emitters(doc, tmp_path / "out")
     assert n == 0
     assert doc["ram"]["config"] == {}  # no meaningless out_dir key added
     assert "config" not in doc["console"]  # no config block fabricated for it either
@@ -332,10 +333,29 @@ def test_redirect_emitters_still_counts_a_real_file_backed_emitter_alongside_a_r
         "ram": {"address": "local:RAMEmitter", "config": {}},
         "parquet": {"address": "local:ParquetEmitter", "config": {}},
     }
-    n = run_pbg._redirect_emitters(doc, tmp_path / "out")
+    n, _ = run_pbg._redirect_emitters(doc, tmp_path / "out")
     assert n == 1
     assert doc["ram"]["config"] == {}
     assert doc["parquet"]["config"]["out_dir"] == str(tmp_path / "out")
+
+
+def test_redirect_emitters_captures_a_preexisting_s3_out_dir_for_crosscheck(tmp_path: Path) -> None:
+    """The second return value exists precisely so _assert_emitted_output can find
+    real output an emitter wrote to its ORIGINAL destination instead of honoring
+    the local redirect (the real Dispatch 727:Run 3 seed0 shape, 2026-09-09)."""
+    doc: dict[str, Any] = {"e": {"address": "local:ParquetEmitter", "config": {"out_dir": "s3://bucket/real/place"}}}
+    n, s3_locations = run_pbg._redirect_emitters(doc, tmp_path)
+    assert n == 1
+    assert s3_locations == ["s3://bucket/real/place"]
+
+
+def test_redirect_emitters_does_not_capture_a_non_s3_preexisting_location(tmp_path: Path) -> None:
+    """A local/relative authored path is meaningless as a cross-check candidate --
+    only a real s3:// URI is worth polling."""
+    doc: dict[str, Any] = {"e": {"address": "local:ParquetEmitter", "config": {"out_dir": "/authored/elsewhere"}}}
+    n, s3_locations = run_pbg._redirect_emitters(doc, tmp_path)
+    assert n == 1
+    assert s3_locations == []
 
 
 # --- _redirect_emitters: xarray goes straight to S3 (CD2 Dispatch 665/666 fix) ---
@@ -356,8 +376,9 @@ def test_redirect_emitters_routes_xarray_straight_to_s3_when_ray_out_s3_is_set(
     periodic sync already targets) fixes this at the source."""
     monkeypatch.setenv("RAY_OUT_S3", "s3://smsvpctest-shared/vecoli-output/exp-123/")
     doc: dict[str, Any] = {"e": {"address": "local:XArrayEmitter", "config": {"out_uri": "s3://old/place"}}}
-    n = run_pbg._redirect_emitters(doc, tmp_path / "out")
+    n, s3_locations = run_pbg._redirect_emitters(doc, tmp_path / "out")
     assert n == 1
+    assert s3_locations == ["s3://old/place"]
     assert doc["e"]["config"]["out_uri"] == "s3://smsvpctest-shared/vecoli-output/exp-123/"
 
 
@@ -721,6 +742,81 @@ def test_unreachable_shared_prefix_says_so_rather_than_claiming_no_output(
 
 def test_without_ray_out_s3_behaviour_is_unchanged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Single-node and non-Batch callers keep the old, purely local semantics."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    monkeypatch.delenv("RAY_OUT_S3", raising=False)
+    calls = _fake_aws(monkeypatch, _S3_WITH_OUTPUT)
+
+    with pytest.raises(SystemExit) as exc:
+        run_pbg._assert_emitted_output(tmp_path)
+    assert calls == []
+    assert "no shared prefix" in str(exc.value)
+
+
+# --- redirected_from_s3: LineageProcess/chain-dispatch's own emitter can bypass the
+# local redirect entirely and write straight to its pre-redirect S3 destination, with
+# no RAY_OUT_S3 available at all to cross-check (real incident: Dispatch 727:Run 3
+# seed0, 2026-09-09 -- a genuinely successful ~360MB run reported a hard failure) ---
+
+
+def test_redirected_from_s3_rescues_a_chain_dispatch_run_with_no_ray_out_s3(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exact real shape: RAY_OUT_S3 is unset (chain-dispatch never sets it --
+    it's an MNP-only signal), but the document had a file-backed emitter whose
+    pre-redirect out_dir/out_uri really was where the run's own LineageProcess
+    wrote its real output. That location must be checked before failing."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    monkeypatch.delenv("RAY_OUT_S3", raising=False)
+    calls = _fake_aws(monkeypatch, _S3_WITH_OUTPUT)
+    (tmp_path / "final_state.json").write_text("{}")  # only the fallback, locally
+
+    run_pbg._assert_emitted_output(tmp_path, ["s3://bucket/vecoli-output/x/seed_00"])  # must NOT raise
+    assert calls and calls[0][1:4] == ["s3", "ls", "--recursive"]
+
+
+def test_redirected_from_s3_checked_even_when_ray_out_s3_is_also_set_but_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """RAY_OUT_S3 and a redirected emitter's own original location are independent
+    candidates, not mutually exclusive: a run must succeed if EITHER has real
+    output, even if RAY_OUT_S3 itself is empty."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    monkeypatch.setenv("RAY_OUT_S3", "s3://bucket/vecoli-output/empty-prefix/")
+    (tmp_path / "final_state.json").write_text("{}")
+
+    calls: list[list[str]] = []
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/local/bin/aws")
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        listing = _S3_WITH_OUTPUT if cmd[-1] == "s3://bucket/vecoli-output/x/seed_00" else _S3_EMPTY_ONLY
+        return subprocess.CompletedProcess(cmd, 0, stdout=listing, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    run_pbg._assert_emitted_output(tmp_path, ["s3://bucket/vecoli-output/x/seed_00"])  # must NOT raise
+    assert any(c[-1] == "s3://bucket/vecoli-output/empty-prefix/" for c in calls)
+    assert any(c[-1] == "s3://bucket/vecoli-output/x/seed_00" for c in calls)
+
+
+def test_still_fails_when_redirected_from_s3_is_also_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The new candidates don't weaken the guard: still raises, and the message
+    now names every location actually checked."""
+    monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
+    monkeypatch.delenv("RAY_OUT_S3", raising=False)
+    monkeypatch.setattr(run_pbg, "_SHARED_OUTPUT_WAIT_SECONDS", 0)
+    _fake_aws(monkeypatch, _S3_EMPTY_ONLY)
+
+    with pytest.raises(SystemExit) as exc:
+        run_pbg._assert_emitted_output(tmp_path, ["s3://bucket/vecoli-output/x/seed_00"])
+    assert "s3://bucket/vecoli-output/x/seed_00" in str(exc.value)
+
+
+def test_redirected_from_s3_defaults_to_none_and_behaves_like_before(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every pre-existing caller passes only `results_dir` -- the new parameter
+    must be fully optional and change nothing when omitted."""
     monkeypatch.setenv("PBG_REQUIRE_OUTPUT", "1")
     monkeypatch.delenv("RAY_OUT_S3", raising=False)
     calls = _fake_aws(monkeypatch, _S3_WITH_OUTPUT)
