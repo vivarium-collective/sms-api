@@ -1166,7 +1166,17 @@
 #            (ParquetEmitter, SQLiteEmitter, ...) is completely unaffected --
 #            confirmed by a dedicated regression test that RAY_OUT_S3 being
 #            set does not change parquet's own redirect target. 3 new tests.
-__version__ = "0.9.127"
+# 0.9.128 -- fix(run_pbg): (C) `--experiment-id` is passed by
+#            _multi_node_composite_command and injected into the overrides
+#            iff the composite declares experiment_id (to_document raises on
+#            undeclared keys, so only the container can decide) -- every
+#            lineage MNP campaign no longer lands under the literal hive key
+#            experiment_id=lineage_ray_batch (sms-ecoli#166). (B) a composite
+#            that declares n_generations is REFUSED when -n < n_generations x
+#            max_duration_per_gen -- the under-run hole the API-side clamp
+#            (87e5ca04) cannot see when the request omits n_generations too.
+#            viva-api#525. Also #514 (/status short-circuit), #515 (e2e opt-in).
+__version__ = "0.9.128"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
