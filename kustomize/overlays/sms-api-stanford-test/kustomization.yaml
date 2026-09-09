@@ -73,7 +73,16 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.130
+    newTag: 0.9.131
+    # 2026-09-09: 0.9.130 -> 0.9.131, viva-api#550 -- _lineage_generation_duration_total
+    # now also reads BatchBaselineRunner's own batch.wall_s, not just
+    # summary.generations[].duration. Found live firing 0.9.130 itself: Dispatch
+    # 736:Run 3 seed0 -- the emit-gate fix (#543) worked, but execution then
+    # reached a DIFFERENT, previously-masked gate (_assert_run_advanced /
+    # PBG_MIN_GLOBAL_TIME) and still failed ("advanced only 1.0 of simulated
+    # time") despite a real division at t=2528s (final_state.json's own
+    # batch.wall_s == 2528.0). Never visible before 0.9.130, since the emit-gate
+    # always failed first for this exact dispatch shape.
     # 2026-09-09: 0.9.129 -> 0.9.130, viva-api#543 -- _assert_emitted_output now
     # also cross-checks each file-backed emitter's own pre-redirect S3 location,
     # not just RAY_OUT_S3 (MNP-only, never set for chain-dispatch). Found live:
