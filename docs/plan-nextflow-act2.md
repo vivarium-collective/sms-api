@@ -1,6 +1,6 @@
 # Nextflow dispatch, act 2: closing gate 4 and the shortcomings behind it
 
-**Status (2026-09-09 01:30Z): GATES 4 AND 1b ARE CLOSED; THE NEXTFLOW RUN 2 IS RUNNING.**
+**Status (2026-09-09 01:35Z): GATES 4 AND 1b ARE CLOSED; THE NEXTFLOW RUN 2 IS RUNNING.**
 Simulation **574** (simulator 167, sms-ecoli `1c66700` → v2ecoli `b9942d78`) closed gate 4 end to
 end: ParCa → three lineages → the gather, with the analyses receiving **all three sweeps** and their
 sim_data; seven blockers were found and cleared in sequence to get there. **Gate 1b** closed on sim
@@ -13,7 +13,7 @@ cluster is on 0.9.127). Phase 5: G closed (v2ecoli#746), #484 fixed (#514), e2e 
 to redux's `estimated_exchange_dmdt__*` — v2ecoli#747 **merged** (`f0274348`), validated on 666's
 history (−1.0000 vs the listener), pinned into sms-ecoli by #294 (`b7e65278`), simulator building;
 (B)+(C) MNP `experiment_id` threading and refuse-to-under-run for lineage-shaped composites —
-viva-api#525 **merged** (`bd034ac9`), rolling to `smsvpctest` as **0.9.128** (#527). Still open: Phase 3 (#449), Phase 4 (ordinal identity), PBG#208, nested
+viva-api#525 **merged** (`bd034ac9`), **live on `smsvpctest` as 0.9.128** (#527, verified on the pod 01:32Z). Simulator **178** (sms-ecoli `b7e6527`) is built — the first image that can score 11/11. Still open: Phase 3 (#449), Phase 4 (ordinal identity), PBG#208, nested
 discovery, and one thing not yet demonstrated: the gather at 336-scale. Everything else here is
 inventory — every known shortcoming of the Nextflow dispatch path, with what is measured, what is
 assumed, and who owns it.
@@ -687,3 +687,5 @@ stays current.
 | 2026-09-09 | **sms-ecoli#294 merged** (`b7e65278`, squash): v2ecoli pin `e4db5e67` → `f0274348` (6 commits, verified against origin/main: #744 #745 #746 #747). Simulator build from sms-ecoli `main` started via `atlantis simulator latest --repo-url … --branch main` — the first watcher used a nonexistent `simulator upload` verb and was replaced before it fired. This image is the first that can score 11/11 on a J3 sweep |
 | 2026-09-09 | **Release 0.9.128 (#527) in flight** at the user's request so B/C go live: bump in `version.py` (changelog block + `__version__`), `pyproject.toml`, `uv.lock`, and BOTH stanford-test overlays (the db-migration one had drifted to 0.9.122). Chain: checks → admin merge → origin/main version gate → GH Action build → apply + rollout → marker grep (`_apply_declared_run_identity` in `run_pbg.py`) → `/version` |
 | 2026-09-09 | 683 at 01:25Z: still `running`, ~3 h 45 m in; no retries seen. Lineages due 02:30–03:45Z, then the 32 GB gather |
+| 2026-09-09 | **Simulator 178 BUILT** 01:25:43Z (10 min; sms-ecoli `b7e6527` → v2ecoli `f0274348`) — carries the redux `cd1_exchange_fluxes` binding (#747) and all 16 lineage knobs (#746). Any J3 sweep on it should gather 11/11 |
+| 2026-09-09 | **0.9.128 DEPLOYED 01:32Z** (#527 → build run 34299217031 → apply + rollout): pod `api-548654d775-bbtvp` on `ghcr.io/vivarium-collective/sms-api:0.9.128`; markers `_apply_declared_run_identity` ×2 in `run_pbg.py`, `--experiment-id` ×4 in the service; `/version` = 0.9.128; tagged `v0.9.128`. B and C are live: the next lineage MNP dispatch lands under its own `experiment_id=` and an under-run lineage composite is refused. Whole chain 13 min, unattended, no retries |
