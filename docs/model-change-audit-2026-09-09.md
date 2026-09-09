@@ -1,5 +1,7 @@
 # Model-change audit: v2ecoli and sms-ecoli (2026-09-09)
 
+> Two passes. **Part 1** classifies every commit by *effect* (did the model change?). **Part 2**, added the same evening at Jim's request, re-classifies the same commits by the *context* they were made in — migration of a scientific artifact, translation correction, scientific refinement, or plumbing — and answers whether the plumbing PRs made modeling decisions. Appendices A–B are Part 1's full reports; C–D are Part 2's; E is Part 2's rubric.
+
 **Question asked (Jim, 2026-09-09):** have changes been made to the *model itself* — equations, parameters, defaults, media data, and the declared input/output relationships between processes — as opposed to workflow, dispatch, emitters, analysis, tests and tooling? There may be no clean separation; where the boundary is blurry is itself part of the answer.
 
 **Who this is for:** Eran Agmon and Chris Long, the people. The two repos' commit history is largely Claude sessions posting under the team's GitHub logins, so "reviewed under login X" below never means "a human read it".
@@ -26,6 +28,37 @@ The initial v2ecoli port (+8,707/−4,672) and the v2parca vendoring (+188,866 l
 ## Engineering suggestions (process, not model)
 
 These are about how changes flow, not what the model should be: (1) treat `ecoli_baseline.py` execution layers, `inject.py`, `injection_topologies.py`, `configs/cd2/*.json` `process_configs`, `bridge/`, and every `INPUT_FILES` member as **model-bearing paths** that require a review by the other scientist's login before merge; (2) require a pin-bump PR to name the model-semantic commits it imports (the DHPS hook revert/reland is the cautionary example); (3) record the simulator id and both repo commits in `run_identity.json` (the same provenance gap Chris and eagmon raised today), so "which model ran" is answerable from the artifact; (4) add a rendered-document structural test that the set of processes and ports in a built baseline matches a checked-in manifest, so a wiring change cannot land silently.
+
+---
+
+# Part 2 — the same changes, classified by the context they were made in (2026-09-09, second pass)
+
+**Question asked (Jim, 2026-09-09):** the models were migrated from a repo with the v1 vEcoli structure and had to be injected and somewhat refactored — a migration PR is the transfer of a scientific artifact and should say so; recent composition debugging may have corrected translation mistakes; and Alex's and Jim's plumbing PRs, even where a Claude session wrote them with a scientific-sounding rationale, were never meant to make modeling decisions. So: for each change, is it debugging software or refining the science, judged by the PR's own context?
+
+**Method.** Same two repos, same commit lists as Part 1 (every A/B/P-A row, plus sms-ecoli's C/E rows and the model-semantic pin bumps). This pass read the PR body, every comment and review, and the commit message, and classified **intent** and **authority** rather than effect: **M** migration of a named source (with the fidelity claim and admitted deviations recorded); **T** translation correction (the stated reason is "v2 diverged from vEcoli; restore it"); **S** a scientific refinement or modeling choice with no source-model authority (justification quoted verbatim); **W** plumbing; **W!** plumbing whose diff nonetheless embedded a modeling decision. Authority = what the PR appeals to: vEcoli, a citation, a team decision, "it no longer crashes", or nothing. The rubric is Appendix E; the two full reports are Appendices C and D.
+
+## Headline findings
+
+1. **The engineers' plumbing PRs did not make modeling decisions.** v2ecoli: one A/B row under an engineer login in the whole history (#356, a serialization-name fix that resolves to the identical type), zero W!. sms-ecoli: eight rows under `AlexPatrie`/`jcschaff`, seven clean W and one W! by the letter only — #312 repointed the Run 3 sweep generator's default base to the config that the scientist-login PRs #303/#306/#309 had just designated as Run 3. #299's dose grid, onset and scale were checked byte-for-byte against `vEcoli-private@antibiotics-cd2`'s `antibiotic_cocktail.json` and are identical. #297 (solver fallback) disclosed its degenerate-vertex consequence to @cplong90 and is the only PR in the debugging era where a modeling-relevant consequence was written down, addressed to a named scientist and approved on the record. #314 (skip a non-integrable tick) changes behaviour only on a path that previously killed the lineage; its residual risk is governance (nothing counts skipped ticks), not physics.
+2. **Where plumbing did embed modeling decisions, it was under scientist logins, and mostly in the original translation.** v2ecoli has 12 W! rows, all under `eagmon`/"Eran", 8 of them April–May port commits and 3 more from June; only one (#393, media substitution "chosen for runnability") is later. sms-ecoli has two: #162's non-negativity clamp on the homeostatic dm/dt of **every** metabolite on every redux tick, added to fix a crash that the source model avoids structurally (log-space intermediates) — no source authority, no citation, no review, in every native redux result since 2026-08-30; and #230, which deleted a run config three days after it was approved, mislabelled as fork residue.
+3. **The largest single item is not in Part 1's tables at all.** Direct commit `c9053136b` (2026-04-12), whose body opens "Lexical cleanup, no behavior change", also changed `DEFAULT_FEATURES` from `['ppgpp_regulation','trna_attenuation']` to `['ppgpp_regulation']` with the comment "disabled to match v1 default". tRNA attenuation has been off by default in every v2ecoli run since and still is at the tip (`ecoli_baseline.py:601`). The cited authority is "v1 default", so this may be a *correct* translation — but it landed inside a commit that declared itself behaviour-neutral, verified by a dry-mass trajectory that could not detect it. Supercoiling, extracted as a feature module the same week and "previously always-on", was never restored. **Whether vEcoli's defaults actually have these two off is a question only Eran and Chris can answer**, and it matters for every comparison the project has published.
+4. **The migration's fidelity claim is thinner than its README.** The initial port names its source as a *branch* (vEcoli "composite") and pins it as an editable local path, never a commit; the "identical biological output" claim in the README rests on one scalar at t = 60 s (384.6 vs 384.5 fg). The best number the repo ever published is #112's 0.27 % dry-mass agreement at 2,520 s — but the reference arm's sim_data was regenerated out-of-repo, not archived. #89's title says "bit-equivalent"; its body says 0.5 % relative tolerance on four scalars. The knowing deviations — seven processes taken out of the allocator on asserted biology, the murein FBA objective adjustment deleted as a "testing hack", per-process RNG re-seeding, supercoiling off, the EcoCyc 29.6→29.1 rollback landed under a CI/caching PR with "biology-domain work, not in scope" deferred and never resumed — are each in a commit body and nowhere a scientist would read them together.
+5. **sms-ecoli's migration is better documented than v2ecoli's, and says plainly that it is transferring an artifact.** #137 (peptidoglycan) claims "verbatim physics, diff-verified byte-identical" and its plan says "do NOT re-derive or improve the biophysics"; #152's numpy ODE matches the fork's jax RHS to ~1.8e-12; #156 exists only to prove parity (four processes at rel 1e-6, no divergences). Deviations are declared: a reconstructed `DEFAULT_MEDIA_RECIPES` fallback in pg_shape (media data authored here, not ported); gillespie on tau-leaping because CI has no C++ toolchain; #148's whole antibiotic layer landing with the dose inert ("drug delivery is v2ecoli-blocked"); #152's 2–3× violacein titer gap declared "a finding, not a bug" with no scientist comment. The design doc's fidelity programme (three arms: Arm1≠Arm2 ⇒ bridge bug, Arm2≠Arm3 ⇒ port bug) was never completed — Arm 1 became reference-only before any port after #137.
+6. **The translation corrections are real and are the right kind of fix.** Nine T rows in v2ecoli and six in sms-ecoli each name the vEcoli behaviour they restore (e.g. #304 "match vEcoli's nonnegative_accumulate", #203's three peptidoglycan mechanics bugs from vEcoli-private #93 — which was still a draft when adopted; #156's parity test had deliberately locked the bugs in and had to be rewritten). One caveat for the scientists: #203 keeps one of the source's remaining inconsistencies on purpose "to mirror the source".
+7. **The S list is short and belongs to Eran and Chris.** v2ecoli: #638's 60 mM ammonium pool ("~2× the M9 value, sized so nitrogen is not the binding constraint"), #137/#123's DnaA machinery (the only rows with evidence of a named non-Claude scientist — 8 feedback rounds with Rashmi/Haochen, kept as files rather than comments, merged from Draft by mistake), #243's Shape deriver (the only literature citation in the audit), #271's ppGpp Hill gain `b²/(b+K)`, K = 1e-11, chosen to make two engines agree and absent from its PR body. sms-ecoli: #199's `raise_lysis → lyse` policy (title says eagmon-approved, thread records no approval), #213's first-order mecillinam decay (Brouwers 2020, opt-in), #309's Run 3 scale ("Eran confirmed", reported not linked), #171's Run 4 strain choice. Two adjacent numbers with no primary citation anywhere in either repo: #306's DHPS kinetics (kcat 0.38, km 7.82e-3, k_i 5.15e-3).
+8. **Governance is the gap, not intent.** Zero inline review comments across all 67 v2ecoli PRs and all 43 sms-ecoli PRs examined; every comment and review under the same two logins; #128 self-flagged "⚠️ Behavioral change — please review" (division moved from D-period- to mass-gated) and received nothing; five sms-ecoli PRs carry a self-comment "held for Eran's go" and merged 2–20 minutes later with no recorded go; #244 claims "un-wires all dnaA mechanisms" and is true only of the execution-layer list.
+
+## Cross-tabs
+
+**v2ecoli (84 rows):** M 11 · T 9 · S 6 · W 46 · W! 12. By login: `eagmon`/"Eran" 67 rows (all 12 W!), `cplong90` 16 (0 W!), `AlexPatrie` 1 (W), `jcschaff` 0.
+**sms-ecoli (50 rows, three carrying two intents):** M 17 · T 6 · S 4 · W 23 · W! 3. By login: scientist 42 rows (2 W!), engineer 8 rows (1 W!, #312, see finding 1).
+
+## What this means for how we work (process, not model)
+
+- A **migration PR** should name its source to the commit, state its fidelity criterion before measuring, and list "changed on the way" under its own heading. #208 and #738 in v2ecoli and #137/#152/#156 in sms-ecoli are the templates; the April port is the anti-template.
+- A **plumbing PR that must choose a value or a rule** should do what #297 did: a "caveat (science side)" section addressed to a named scientist, and merge only on that person's approval. #162 is the counter-example.
+- **Feature defaults are model content.** `DEFAULT_FEATURES`, `BASE_EXECUTION_LAYERS`, the failure policies and the `flow` blocks should be diffed and named in every PR that touches them, and a checked-in manifest test (Part 1, suggestion 4) would have caught `c9053136b`.
+- The two open questions for Eran and Chris the people, stated as questions: (a) are tRNA attenuation and supercoiling meant to be off by default, as vEcoli's defaults or as a v2 choice? (b) is #162's global clamp the intended model, or should the violacein intermediates live in the ODE's log-space state as they do in the fork?
 
 ---
 
@@ -738,4 +771,989 @@ pins, invisibly.
 | ParCa reconstruction overrides | — → added metabolite concentrations, modified protein half-lives, removed RNA half-lives (3 TSVs + bundle overrides) | `b2676fe2` #272 |
 | Run-4 ParCa `bundle_overrides` | absent → `models/parca/violacein_bundle_overrides.tsv` | `6ccb5cf1` #206 |
 | MBP aeration | parsed but **never mounted** (flat 1.5 L/min on all 10 seeds) → ramp actually mounted | `0d1bace2` #313 |
+
+---
+
+# Appendix C — v2ecoli intent report (Part 2)
+
+## v2ecoli intent audit (second pass): why was each model-changing commit made?
+
+**Scope.** Every row of the first-pass report's §2 tables — A (32 rows), "A commits from the
+April–May port era" (12 rows), B (38 rows) — plus the initial commit `68e4c12ab`, plus one
+addendum row the first pass did not surface (`c9053136b`, §6). **84 rows total.**
+**Method.** For each row: the PR body, every PR comment, every PR review, every inline review
+comment (`gh api .../pulls/N/comments`), and the squashed commit body. Read-only; nothing
+posted, pushed or checked out. Times are UTC.
+
+**Two facts to hold while reading the review column.**
+1. **Every inline review comment count in this audit is zero.** `gh api .../pulls/<N>/comments`
+   returned `0` for all 67 PRs queried. There is no line-level review anywhere in the
+   model-changing history of this repo.
+2. **Every comment and every review on every PR in this set was posted by `eagmon` or
+   `cplong90`** — the two scientist logins, which are also the logins their Claude sessions post
+   under. No third party ever commented. A PR body or review written by a Claude session is not
+   a human endorsement, and this audit never records one as such.
+
+---
+
+### 1. Totals
+
+#### Intent × effect
+
+Effect codes are taken from the first pass unchanged (A = model semantics, B = declared
+interfaces/wiring, P-A / P-B = the ParCa/reconstruction equivalents, "port" = the initial commit).
+
+| intent | A | P-A | B | P-B | port | **total** |
+|---|---|---|---|---|---|---|
+| **M** migration | 1 | 1 | 8 | 0 | 1 | **11** |
+| **T** translation correction | 5 | 1 | 3 | 0 | 0 | **9** |
+| **S** scientific refinement | 3 | 0 | 3 | 0 | 0 | **6** |
+| **W!** plumbing that decided modeling | 11 | 1 | 0 | 0 | 0 | **12** |
+| **W** plumbing | 19 | 3 | 23 | 1 | 0 | **46** |
+| **total** | **39** | **6** | **37** | **1** | **1** | **84** |
+
+#### Intent × login class
+
+Login classes per the rubric. `AlexPatrie` / `jcschaff` = engineer; `eagmon`, `cplong90`,
+git authors `Eran` / `Eran Agmon` = scientist. **The logins are Claude sessions much of the
+time; this table says "authored under login X", not "person X typed it".**
+
+| intent | eagmon / "Eran" | cplong90 | AlexPatrie | jcschaff | total |
+|---|---|---|---|---|---|
+| M | 11 | 0 | 0 | 0 | 11 |
+| T | 6 | 3 | 0 | 0 | 9 |
+| S | 5 | 1 | 0 | 0 | 6 |
+| **W!** | **12** | **0** | **0** | **0** | **12** |
+| W | 33 | 12 | 1 | 0 | 46 |
+| **total** | **67** | **16** | **1** | **0** | **84** |
+
+**The headline answer to "did the plumbing PRs make modeling decisions".** Only **one** row in
+the whole A/B set is under an engineer login (`868cf2a36`, AlexPatrie, #356), and it is clean
+`W` — a serialization-format fix that resolves to the identical registered type, with the PR
+saying so explicitly. **Zero W! rows under engineer logins.** All 12 W! rows are under
+`eagmon` / `Eran`; **`cplong90` has none either.**
+
+The W! population is also *old*: 8 of 12 are from the April–May port window and 3 more from
+June. Only one (`3c5fe1a2c`, #393, 2026-07-26) is later. The "plumbing PRs made modeling
+decisions" risk Jim was looking for is real but it is **concentrated in the original
+translation, not in the recent dispatch work.**
+
+---
+
+### 2. The migration: what was claimed, and what was verified
+
+#### 2a. The initial port (April 2026, direct commits, no PR, no review)
+
+**`68e4c12ab` (2026-04-10, "Initial v2ecoli: pure process-bigraph partitioned E. coli model").**
+The entire commit body is four lines: *"Port of vEcoli's composite branch to pure
+process-bigraph with no vivarium-core dependency. Partitioned architecture only
+(requester/allocator/evolver pattern)."* **The source is named as a branch, never as a commit.**
+No vEcoli SHA appears in this or any other April commit — I grepped every commit body from
+2026-04-09 to 2026-04-25 for a SHA or a `CovertLab` reference and found none. `pyproject.toml`
+at this commit pins the source as `vecoli = { path = "../vEcoli", editable = true }` — a local
+editable sibling checkout. **The scientific artifact that was transferred is therefore
+identified only as "whatever was in `../vEcoli` on that machine on 2026-04-10."** That is the
+single most consequential provenance gap in the repo.
+
+**`339429637` (2026-04-10, "Port processes from vEcoli composite branch with exact schemas",
+34 files, +8707/−4672).** The declared-surface port. *"Replace all process files with vEcoli
+versions (exact config_schema, inputs/outputs, topology, and update logic)"*, *"Copy schema.py,
+schema_types.py, data_predicates.py from vEcoli"*, *"Regenerate sim_data_cache.dill from
+vEcoli's LoadSimData"*. Fidelity claim: **"exact"**, asserted, not measured. The body ends with
+an admission that the port is incomplete: *"WIP: Process __init__ methods still reference
+defaults keys not in config cache."* No review of any kind.
+
+**`a8de7718f` / `5263924a3` / `247578781` / `9531bbd39` / `967f63891` / `bff33e036`
+(2026-04-10→11).** The six-step schema migration. Each says explicitly that vEcoli's own type
+declarations did not survive the transfer intact: `a8de7718f` — *"vEcoli's string-based port
+types … don't parse correctly in current bigraph-schema. Need to replace inputs()/outputs()
+return values with object-based types … while keeping all other process code from vEcoli."*
+`967f63891` deletes `ports_schema` (−1098 lines) and replaces per-port pre-population with a
+713 KB dill pickle of extracted vEcoli defaults. The fidelity evidence offered at each step is a
+**single scalar at a single time point**: *"Benchmark: 384.6fg, 1.12x — no regression."* Three
+of the six commits carry that identical line. No review.
+
+**`3a8add97e` (2026-04-10, "Fix partitioned architecture: cell now grows correctly").** The
+commit that made the port viable: *"Initialize next_update_time for all partitioned processes
+(0.0)"* — requesters/evolvers gate on it, so they had never fired. The fidelity claim for the
+whole port is stated here in full: *"Benchmark (60s): dry_mass=384.6fg (matches vEcoli 384.5fg),
+1.12x ratio."* **That is the entire verified basis of "identical biological output": one mass
+number, at t = 60 s, before the first replication event.**
+
+**The README and STATUS of that week (`a3e5bbadc`, 2026-04-11)** state the fidelity claim to the
+public: *"It ports all 55 biological processes from vEcoli with identical biological output and
+comparable performance"*, with a table row *"Mass difference | — | 0.0%"* footnoted to the same
+60-second benchmark. STATUS.md is more honest in the same commit: *"Config defaults loaded from
+pickle … rather than inline in source files"*, *"WCM division fires via exception handling
+(Division step tries structural modification that crashes — bridge catches and handles)"*,
+*"Daughter EcoliWCM processes start fresh (don't inherit mother's internal state)"*.
+
+**`0641f9800` / `1a5c0abe2` / `0e282f535` (2026-04-11) — what was knowingly changed.** These are
+the three "remove partitioning ceremony" commits, and they are the ones a reader of the README
+would not expect. Seven processes are promoted `PartitionedProcess → Step` on **asserted
+biological grounds with no vEcoli authority cited** — *"TF-ligand binding is local"*,
+*"phosphotransfer is system-specific"*, *"water/NMP competition is marginal"*, *"RNAP pool not
+shared with ribosome init"*. vEcoli partitions all seven. `0641f9800` additionally states
+*"Metabolism: remove reduce_murein_objective testing hack"* — deleting an FBA objective
+adjustment (`CPD-12261[p] /= 2.27`) — and changes Complexation to *"cache Gillespie result from
+request phase, only re-run in evolve if allocation differs"*, a different RNG stream. All three
+are classified **W!** below.
+
+**`09094fe16` / `bd48262f0` / `0223c7078` (2026-04-11) — features knowingly dropped, then two of
+three restored.** `09094fe16` extracts supercoiling (a 270-line block out of `ChromosomeStructure`)
+and ppGpp regulation into feature modules and sets `DEFAULT_FEATURES = []`; `bd48262f0` does the
+same for tRNA attenuation. Both were, in the commits' own words, *"previously always-on"*.
+`0223c7078` restores two of them the same day — *"DEFAULT_FEATURES now includes ppgpp_regulation
+and trna_attenuation … These were previously always-on but were disabled when the features were
+extracted as composable modules"* — and **silently leaves supercoiling out. It is still off at
+the tip** (`DEFAULT_FEATURES = ['ppgpp_regulation']`, `ecoli_baseline.py:601`). tRNA attenuation
+was then turned off again the next day by a commit that declared itself behaviour-neutral (§6).
+
+**`c454a2726` (2026-04-20, merged as #25) — the EcoCyc rollback.** PR #25's body is entirely
+about cache fingerprinting and CI and **does not mention a knowledge-base change at all**. The
+squashed commit body does, in full: *"v2parca commit 226dcce refreshed 10 BioCyc-sourced TSVs
+from the EcoCyc API (v29.1 → v29.6). The refresh introduced inconsistencies that make
+`SimulationDataEcoli.initialize()` raise"*, and then: *"Until the data inconsistencies are fixed
+properly (biology-domain work, not in scope here), roll the 10 refreshed TSVs back to the
+pre-226dcce state."* Two named breakages (a hybrid-TU check on TU0-6021; a ~15 Da mass-balance
+assertion on MONOMER-51_ACETOACETYL-COA_RXN), and the note that *"Upstream vEcoli ParCa fails
+identically — this is inherited from their KB."* The whole-cell model has run on EcoCyc **v29.1**
+ever since, and the deferral was never picked up. Classified **W!**.
+
+#### 2b. Later migration PRs (porting from vEcoli / vEcoli-private / the fork)
+
+**#208 `1bca6e82e` (2026-06-13) — the model M row, and the best-documented one.** *"Ports the one
+science improvement from vEcoli `master` since v2ecoli forked (2026-04-10) that is both important
+and portable: the two-component-system / monomer-counts correctness bundle (upstream PR #415)."*
+Source named down to the upstream PR. **Two deviations declared under their own heading, "Two
+deliberate adaptations vs upstream":** (1) *"`raise` → `warn` on compartment mismatch. Upstream
+raises to force a `modified_proteins.tsv` edit; in v2ecoli that flat file ships in the pinned
+`ecoli_sources` package (not editable here)"*; (2) a *"Defensive `getattr` fallback to
+`molecule_names`"* because v2ecoli builds sim_data from a pickled fixture. It also states what
+is **not** yet true: *"A full ParCa re-run … activates the 4-extra-monomers + compartment
+canonicalization in real sim_data (the fixture currently predates the port)."* This is what a
+migration PR should look like. Review: none.
+
+**#738 `a9cf24ed8` (2026-09-08) — the three vEcoli-private reconstruction overrides.** *"the
+v2ecoli code that consumes them was never ported — so the parameters were **inert** … This ports
+the vEcoli-private **code halves** faithfully (exact diffs, no approximation)."* Each of the
+three cites its vEcoli-private commit (#84; #79 / `f4e9cc0a`; `b3e5a737` + `1bcbf91e`) and the
+data files are *"copied verbatim from vEcoli-private's base flat"*. Declared deviation: the data
+ships as v2ecoli `flat_overrides/` rather than in the base bundle, *"so a plain `v2ecoli-parca`
+resolves them"* — i.e. **the port makes the three parameters unconditional on every ParCa build**,
+which the PR states plainly. Verification is a full 52-condition chassis build with numbers
+(pABA 8e-6 M, DHPPP 1e-8 M, MurD half-life 1914.725 min vs *"36 s before this PR"*). The comment
+thread is four consecutive self-comments by `eagmon` that assert the TU0-941 item is inert,
+retract that, then re-assert it — a visible correctness wobble with no second party. Net effect
+is two effective and one staged override, unconditional, unreviewed by anyone else.
+
+**#468 `ebb3c7c0f` (2026-08-07) — precedence, not a port, but a reconstruction-authority
+decision.** *"v2ecoli's four whole-file overrides won over **any** base — including a genotype
+variant. One of those keys is `dna_sites`."* The fix protects a variant's own generated keys.
+The reason it was done this way rather than upstreaming the data is stated and is scientific:
+*"those boxes are **Phase-1-provisional** (low-affinity coords eyeballed, re-anchored in Phase 2
+per `407b5b42`) … Promoting still-changing model content into the shared supplier package is
+wrong."* Authority is the design thread on issue #466. WT bundles byte-identical.
+
+**#590 `13bcc44a9` (2026-08-24) and #637 (2026-08-31), both cplong90 — the new-gene-insertion
+joins.** #590: *"`KnowledgeBaseEcoli` joins **8 of the 12** files a new-gene insertion can ship"*,
+and the three missing ones are the reactions, kinetics and operon — *"every flux and yield readout
+is a structural zero that is indistinguishable from a genuine 'not produced' result"*, measured
+as *"0 of its reactions reached `reaction_stoich`"*. #637 (a P-C row, outside the first-pass
+tables) adds multi-cassette support and establishes by control experiment that cassettes must be
+spliced high-to-low: *"The same cassette lands ~1.96 kb apart depending only on whether another
+insertion was present."* Both are careful, both are measured, both name the failure mode as
+silent. #590 carries the only `APPROVED` review in the P-A set (from `eagmon`).
+
+**#112 (2026-05-31) — the vEcoli vs v2ecoli comparison report.** The strongest fidelity number
+the repo ever published for the port as a whole: *"**Result @2520s:** vEcoli **11.9×** vs v2ecoli
+**14.9×** wall-time; final dry mass **707.2 vs 705.3 fg**, chromosomes 2/2, forks 4/4."* That is
+**0.27% on dry mass at 2520 s** — a real, run-to-division comparison, and materially better
+evidence than the April benchmark. Note it also records that *"vEcoli's `sim_data` was regenerated
+from current master via ParCa (out-of-repo)"* — the reference arm's parameters were rebuilt, not
+archived. Merged 21 seconds after it was opened.
+
+**#89 (2026-05-28) — the "bit-identical" claim, checked.** The PR title says *"bit-equivalent
+kinetics + metabolism speedups"*, but the body's actual claim is weaker and is stated honestly:
+*"All changes preserve trajectory equivalence at every 120 s sample point of `dry_mass`,
+`cell_mass`, `effective_elongation_rate`, and `fba_objective`, verified at **`tol_rel=0.005`**."*
+**0.5% relative tolerance on four scalars is not bit-identity**, and the PR does not claim it is —
+but the word "bit-equivalent" in the title does, and that is the phrase that propagates. The same
+PR volunteers a correction of its own earlier numbers (*"Earlier non-paired measurements quoted
+higher numbers — 5–7% — but those were partly thermal drift artifacts"*), so the honesty is real;
+the title is the problem.
+
+#### 2c. Do the descriptions make clear that a scientific artifact was being transferred?
+
+**Partly, and decreasingly with time.** The April commits do say "port … from vEcoli" in their
+subject lines, so a reader knows *something* came from elsewhere. What they do not do — not once —
+is (a) pin the source to a commit, (b) state a fidelity criterion before measuring, or (c)
+separate "translated faithfully" from "changed on the way". The README's *"identical biological
+output"* is backed by one scalar at t = 60 s. The knowing deviations — seven processes taken out
+of the allocator on asserted biological grounds, the deleted murein objective adjustment, the
+per-process RNG change, supercoiling left permanently off, the EcoCyc v29.1 rollback — are each
+described somewhere in a commit body, but **never in a document that a scientist reading the
+README would find**, and never together. STATUS.md's "Known Limitations" section, which is the
+one place a reader would look, lists none of them.
+
+By contrast the *later* migration PRs (#208, #738, #590, #637) are exemplary on exactly the axes
+the early ones miss: named upstream commit, explicit "deliberate adaptations vs upstream"
+sections, measured before/after values, and an honest statement of what is still inert. The
+practice improved. It improved **after** the artifact had already been transferred.
+
+---
+
+### 3. Full table (most recent first)
+
+`sha8 | date | PR | login (class) | effect | intent | authority | stated motivation | embedded modeling decision | human endorsement?`
+Quotes are ≤ 40 words. "endorsement" = a comment/review by the *other* scientist login, and is
+still not proof a person read it. `sc` = scientist login, `eng` = engineer login.
+
+#### A — model semantics
+
+| sha8 | date | PR | login | eff | intent | authority | stated motivation | decision embedded | endorse? |
+|---|---|---|---|---|---|---|---|---|---|
+| `a9cf24ed8` | 09-08 | #738 | eagmon (sc) | P-A | **M** | vEcoli-private | "This ports the vEcoli-private **code halves** faithfully (exact diffs, no approximation)." | — (deviation: data ships as v2ecoli overrides, so effective on *every* build) | no — 4 self-comments incl. a claim, retraction, re-claim |
+| `6c00a11fd` | 09-04 | #683 | eagmon (sc) | A | W | crash | "a caller that declares only `swap_processes` gets `ecoli-metabolism-redux` built with an **empty config** … one-tick collapse that still reports success" | — | no. Re-lands a change Chris had closed (#667) after replacing it with a guard |
+| `5add30cf9` | 09-04 | #679 | cplong90 (sc) | A | W | none (measured) | "a cell in an anoxic reactor was told oxygen was available, indefinitely … The apparent concentration scales with the timestep" | scope choice: O₂ republished post-consumption, **CO₂/glucose/NH₄ deliberately not**, exemption "conditional on CO2 being net-secreted" | no |
+| `9785729c0` | 09-02 | #653 | eagmon (sc) | A | W | crash | "its `external` species stayed `None` → `NaN` and the ODE crashed at 1 s with `solve_ivp: y0 must be finite`" | — | no |
+| `268515f0d` | 09-02 | #638 | cplong90 (sc) | A | **S** | none | "Ammonium is now a finite medium pool … Before, it was static from the media recipe and effectively infinite." | **`ammonium_medium_mM = 60`**, chosen: "~2× the M9 recipe value (30.272 mM), sized so nitrogen is not the binding constraint at the OD10 working point" | `eagmon` APPROVED review |
+| `63cd60f76` | 09-02 | #648 | cplong90 (sc) | A | W | none | "the single-cell path was the only route to an injection, so population- and reactor-scale runs could not express a capability the single-cell path already had" | — (PR retracts its own "silent failure" framing in a second commit) | `eagmon` APPROVED |
+| `0c76bb542` | 09-01 | #640 | eagmon (sc) | A | W | none (audit) | "an injected batch run degraded to a **basal FBA lineage with no error**" | — | cplong90 comment (raising the sibling gap) |
+| `167668af5` | 08-31 | #632 | cplong90 (sc) | A | W | none (store contract) | "the reactor drained in proportion to **elapsed time rather than cell demand** — over N ticks, ~N/2 too much" | — | no (two self-commissioned review rounds, both described in-body) |
+| `44bd8ea15` | 08-30 | #591 | eagmon (sc) | A | W | none (reproducibility) | "they integrate the wrong represented population for `chunk_boundary − division_tick` ticks — a count set by `chunk`, an emit-cadence knob" | — | cplong90 validated and reported **the acceptance bar not met**, then partly retracted; merged anyway |
+| `6bcc29d66` | 08-28 | #623 | eagmon (sc) | A | W | none | "every daughter silently reverted to the unperturbed cached configs at division. This breaks any multi-generation perturbation study." | — | no |
+| `2ecb11cab` | 08-27 | #610 | eagmon (sc) | A | W | crash | "a **`ZeroDivisionError: float division by zero`** — whose message contains 'division' — is silently mislabeled as a genuine division" | — | no |
+| `8f5580622` | 08-27 | #612 | eagmon (sc) | A | W | crash | "returned `{}` (no `next_update_time`), which the global clock reads as a non-advancing 0.0 interval and deadlocks the composite" | scheduling rule: skipped Evolver now reschedules +1 timestep (prior behaviour was a deadlock, so no results moved) | no |
+| `89e94aa37` | 08-27 | #607 | cplong90 (sc) | A | **T** | vEcoli (fork) | "the fork's `LoadSimData` computes `generation = len(agent_id)` … That is the only mechanism by which a config's staged shift ever takes effect" | — | no |
+| `f2038e39a` | 08-27 | #611 | eagmon (sc) | A ⚠ | W | crash | "a downstream unit conversion `mol / (volume * N_A)` raises **`ZeroDivisionError`** on the first tick"; "Pure wiring fix — every forwarded kwarg already exists on `baseline()`" | — | no |
+| `fdeb3243d` | 08-19 | #539 | cplong90 (sc) | A | W | none (definitional) | "Every consumer of those is on a dry basis, so all three were overstated by the wet/dry ratio, **measured at 3.3315**" | — (derived biomass moves 3.33×; underlying sim bit-identical, shown 7200/7200) | no |
+| `25a6a7949` | 08-21 | #568 | cplong90 (sc) | A | W | none | "Metabolism seeds **unlimited** molecules at `inf` … and no delta can move `inf`" | deliberate: "**`+inf` is allowed** — it is this model's encoding of 'unlimited'" | no |
+| `1e6ecc5a8` | 08-21 | #550 | cplong90 (sc) | A | W | none | "**Zero matches, every tick.** #541's original claim that the reverse path was 'complete for gases' … was wrong: it was complete for nothing." | exchange scale `cells_per_agent` → `population.cell_count`, argued from mass conservation | no |
+| `2fa846368` | 08-20 | #548 | cplong90 (sc) | A | W | none (documented contract) | "The store kept the stale 20.0 mmol/gDCW/h cap regardless, and the cell went on consuming a substrate that was gone." | — | no |
+| `f98218a93` | 08-19 | #535 | cplong90 (sc) | A | **T** | vEcoli / the fork | "resolving `ecoli.library.sim_data` to the **installed `vecoli` package** rather than to the fork the caller named … The failure is silent." | — | no |
+| `3c5fe1a2c` | 07-26 | #393 | eagmon (sc) | A | **W!** | none | "`build_generator` strictly rejects unknown params, and studies carried params/composite-refs the generators don't accept." | **"Comparison studies now run the lightweight `media:` perturbation (chosen for runnability), NOT the calibrated per-condition ParCa re-fit"** | no |
+| `8d636e06c` | 06-29 | #293 | cplong90 (sc) | A ⚠ | **T** | **vEcoli** | comment: "Is this bug also in vEcoli? No — it's a port-introduced regression," quoting vEcoli's `"_updater": "set"` on the same store | — | `eagmon` APPROVED |
+| `9675fe4f7` | 06-27 | #289 | eagmon (sc) | A | **T** | vEcoli comparison | "a stale per-condition bundle could bake the wrong `media_id` (e.g. `with_aa`→`minimal`) … read as a bogus 'port divergence'" | — | no |
+| `29c4dc262` | 06-24 | #271 | eagmon (sc) | A | **W!** | mixed | PR body is *only* about the comparison harness; the three model changes are absent from it | see §4 — `d_period=True` default (cites vEcoli in-code), **ppGpp Hill gain with a new `K = 1e-11`**, ParCa ppGpp `adjustment = 1` floor | no |
+| `bf60df0d4` | 06-16 | #244 | eagmon (sc) | A | **W!** | team/process | "PR #137 (a **draft** dnaa investigation PR) was merged to main by mistake … everyone's default `baseline` model changed." | claims "the execution layers are now **byte-identical to pre-#137** (verified)" — but 315 DnaA boxes and the dnaA autoregulation code are still on `main` today (§4) | no |
+| `717b976af` | 06-15 | #137 | eagmon (sc) | A | **S** | none / Rashmi | "**Draft — ongoing investigation.**"; "autoregulation **resolves the V-tension** the dnaa-3 V-sweep proved no constitutive V could — it caps the DnaA peak (1567→635, ~2.5×)" | DnaA replication-initiation on by default; `AUTOREG_STRENGTH = 0.8`; 307→315 DnaA boxes | co-authored `@RashmiKaldera`; 8 Rashmi/Haochen feedback rounds exist **as files**, none as GitHub comments |
+| `4c439bd0e` | 06-06 | #128 | eagmon (sc) | A | **W!** | crash | "Coerce `dry_mass` (and the stored `threshold`) to plain fg floats" — framed as units plumbing | **self-disclosed**: "Division timing is now **mass-gated** (Division step) rather than **D-period-gated** (MarkDPeriod)" … fires "~27s before" | **no** — the PR says "⚠️ **Behavioral change — please review**" and received zero comments and zero reviews |
+| `5e7f02a00` | 06-06 | #123 | eagmon (sc) | A | **S** | none | "DnaA-ATP hydrolysis modeled as a kinetic equilibrium reaction (the mechanism the `dnaa2-bf8b82e-*` runs depend on)" | 2 new default equilibrium reactions; a two-phase ODE solve; and — **not mentioned in the PR** — `_moleculeRecursiveSearch`'s guard `val != 0 → val < 0`, affecting all multi-product reactions | no |
+| `e8d61b1d0` | 06-18 | #275 | eagmon (sc) | P-A | **T** | **vEcoli** | "vEcoli strips the tag (`monomer["id"][:-3]`); v2 didn't." Verified: "max\|Δ\| **0.24 → 1.1e-16** (exact)" | — | no |
+| `ebb3c7c0f` | 08-06 | #468 | eagmon (sc) | P-A | W | team (#466) | "The override then discarded it and restored **pre-deletion** coordinates. The variant validated, the manifest was correct, and one of its keys never reached ParCa." | precedence rule: a variant's generated keys beat `parca_overrides.tsv` (WT byte-identical) | no |
+| `13bcc44a9` | 08-24 | #590 | cplong90 (sc) | P-A | W | none | "every flux and yield readout is a **structural zero that is indistinguishable from a genuine 'not produced' result**" | guard choice: an added TU may not reach back into the original genome — "**Checked rather than clamped**" | `eagmon` APPROVED |
+| `e9e4c6930` | 08-01 | #446 | eagmon (sc) | P-A | W | none | "Restores the ParCa cache's two guarantees (they were inoperative) and makes the pipeline fail loud instead of silently shipping a mis-calibrated or partial fit. **Calibration-neutral**" | — (SCHEMA_VERSION 1→2 invalidates every cache; a partial fit now aborts) | no (1 self-comment) |
+
+#### A — April–May port era (direct commits; commit body is the only context except where a PR is noted)
+
+| sha8 | date | PR | login | eff | intent | authority | stated motivation | decision embedded | endorse? |
+|---|---|---|---|---|---|---|---|---|---|
+| `38ee8d22c` | 05-25 | #76 | eagmon (sc) | A | **W!** | none | PR frames the whole set as "**Eight infrastructure items** … All pure infra — **zero biology coupling**" | per-process RNG seeds via `crc32(process_name, master_seed)` — **changes every trajectory in the repo from this commit on**; the "zero biology coupling" claim is false for item 1 | no |
+| `d6743606f` | 05-06 | #30 | eagmon (sc) | A | W | crash | commit body: "`promote()` injected the `overwrite` wrapper at the parent map level, so … siblings [were dropped] … the next Evolver hit `KeyError: 'allocate'`" | — (PR body, an install-simplification PR, never mentions it; the squashed commit body documents it fully) | no |
+| `2147fca41` | 04-13 | — | Eran (sc) | A | W | crash | "The resulting ModuleNotFoundError was raised inside `Division.next_update` and silently swallowed by process-bigraph" | — | — (direct commit) |
+| `c2c95db2e` | 04-12 | — | Eran (sc) | A | W | prior behaviour | "the departitioned and reconciled generators still expected those 8 to be partitioned and silently returned None for them — so they were dropped from the simulation entirely" | — | — |
+| `0e282f535` | 04-11 | — | Eran (sc) | A | **W!** | none | "Part 3 (complete): The allocator now manages only processes with genuine cross-process resource competition." | 4 processes leave the allocator on asserted grounds — "water/NMP competition is marginal", "RNAP pool not shared with ribosome init"; they now read un-partitioned counts | — |
+| `1a5c0abe2` | 04-11 | — | Eran (sc) | A | **W!** | none | "Remove PartitionedProcess ceremony where no resource competition exists." | 3 processes → Step on asserted biology ("TF-ligand binding is local", "phosphotransfer is system-specific"); Equilibrium's greedy flux correction now runs on full, not allocated, counts | — |
+| `0223c7078` | 04-11 | — | Eran (sc) | A | **T** | prior / wcEcoli | "These were previously always-on but were disabled when the features were extracted as composable modules." | **supercoiling is not restored** and is still off at the tip | — |
+| `0641f9800` | 04-11 | — | Eran (sc) | A | **W!** | none | "Simplify process modules: inline ODE solvers, remove partitioning ceremony, add SimplifiedMetabolism" | "**remove `reduce_murein_objective` testing hack**" (deletes the `CPD-12261[p] /= 2.27` FBA objective adjustment); Complexation single Gillespie draw; ProteinDegradation stops consuming allocated water | — |
+| `bd48262f0` | 04-11 | — | Eran (sc) | A | **W!** | none | "New `steps/trna_attenuation.py`: TrnaAttenuationConfig step … when absent, all transcripts elongate normally." | an always-on mechanism becomes off-by-default (restored 3 commits later, then turned off again — §6) | — |
+| `09094fe16` | 04-11 | — | Eran (sc) | A | **W!** | none | "Introduces a feature module system for composable simulation configurations." | "Removed 270-line `calculate_superhelical_densities` block"; `DEFAULT_FEATURES=[]` turns **supercoiling and ppGpp regulation, both previously always-on, off by default** | — |
+| `3a8add97e` | 04-10 | — | Eran (sc) | A | **M** | vEcoli | "Initialize next_update_time for all partitioned processes (0.0)"; "Benchmark (60s): dry_mass=384.6fg (matches vEcoli 384.5fg)" | — | — |
+| `c454a2726` | 04-20 | #25 | eagmon (sc) | P-A | **W!** | crash | PR body: cache fingerprinting + CI only. Commit body: "roll the 10 refreshed TSVs back to the pre-226dcce state. That restores a working ParCa pipeline." | **the model's knowledge base is EcoCyc v29.1, not v29.6**, chosen because v29.6 raised; explicitly deferred as "biology-domain work, not in scope here" | no |
+
+#### B — declared interfaces / wiring
+
+| sha8 | date | PR | login | eff | intent | authority | stated motivation | decision | endorse? |
+|---|---|---|---|---|---|---|---|---|---|
+| `8cf9a4bc8` | 09-09 | #755 | eagmon (sc) | B | W | team | "`ecoli-metabolism` must stay antibiotic-agnostic — all drug knowledge belongs in the injected layer (sms-ecoli), not in v2ecoli." | — (reverts #753's rate law one day after it landed) | no (2 self-comments, one a self-review) |
+| `034fd6f3b` | 09-07 | #737 | eagmon (sc) | B | W | crash | "Root causes taken from the actual `smsvpctest-ray-batch` CloudWatch tracebacks, not inferred." | — | no |
+| `91b905a79` | 09-04 | #684 | eagmon (sc) | B | W | none | "v2ecoli's wheel doesn't ship `scripts/` … On the GovCloud pod that's the **sms-ecoli** vendored copy" | fail-loud contract: a registered class that won't import now raises | no |
+| `3084a15f9` | 09-03 | #672 | eagmon (sc) | B | W | none | "Two **general, domain-agnostic framework** capabilities … No subsystem-specific (e.g. antibiotic) logic or naming lives here" | — | no |
+| `803393d77` | 09-03 | #658 | cplong90 (sc) | B | W | none (type system) | "an injected subsystem that secretes a species the bundle never registered writes into a key nobody created … every downstream reader sees **bit-exact zero**" | `setdefault` not assignment, so a real initial condition can never be reset | no |
+| `ca3dc931f` | 09-02 | #655 | eagmon (sc) | B | W | crash | "a native gillespie port's `kf > 0` → `TypeError: '>' not supported between instances of 'str' and 'int'`" | "the fork supplies the calibrated VALUES while the native process supplies the LOGIC" | no |
+| `cad6e4598` | 09-02 | #651 | eagmon (sc) | B | W | team | "native==fork is already proven, so the fork-comparison scaffolding is no longer maintained." | retires the fork-comparison arm entirely | no |
+| `a407c9a75` | 08-30 | #631 | eagmon (sc) | B | W | team / deployment | "**Why:** unblocks running the native candidate through viva-api with no server change" | — | no |
+| `a35cbdd15` | 08-30 | #629 | eagmon (sc) | B | W | team | "Makes the v2ecoli whole-cell engine **drug-agnostic** … the engine holds zero knowledge of mecillinam (or any drug)." | retires `mecillinam`→`cell_geometry` auto-enable; `cell_geometry` becomes a neutral engine feature | no |
+| `6107a0f6d` | 08-25 | #594 | cplong90 (sc) | B | **T** | **vEcoli** | "which is the conversion a genuine vEcoli applies to its own exchanges — same units, same sign convention"; test lands at 8.6 vs vEcoli's 9.73 | default `basis` stays `counts`; two declared choices (first observation → 0.0; undefined → 0.0 not NaN) | no |
+| `e0c800285` | 08-22 | #575 | eagmon (sc) | B | W | none | "variant-sweep-phenotype studies could emit bulk counts but not listeners" | — | no |
+| `47e7c01cc` | 08-19 | #543 | cplong90 (sc) | B | W | crash / intermittency | "**Ordering is established before the injected processes exist**, so they keep the default." Pre-fix a script "failed **4 of 5** runs" | declaration order expresses dependency | self-comment flagging the pattern to eagmon |
+| `8f1de5ea6` | 08-18 | #525 | eagmon (sc) | B | W | crash | "surfaces specifically when process-bigraph re-realizes a daughter's structural subtree at cell division — a hard crash mid-simulation" | — | no |
+| `56589f5d1` | 08-17 | #522 | eagmon (sc) | B | W | crash | "A store an *earlier* spec in the same `apply()` call had just introduced got wrongly flattened to a generic node" | — | no |
+| `6952797a0` | 08-14 | #493 | eagmon (sc) | B | W | crash | "the process read a bare `[]` default and crashed on `bulk['id']`"; "**Metabolism's translated topology is byte-identical to before — no regression.**" | — | no |
+| `998bd1551` | 08-13 | #491 | eagmon (sc) | B | **T** | the fork | "the installed class carries a different store layout and crashes at runtime … so the **transferred code never actually runs**" | — | no |
+| `6116a8234` | 08-13 | #489 | eagmon (sc) | B | W | vEcoli | "applies a wrapped process's own `initial_state()` to the port defaults (faithful to how vEcoli seeds e.g. antibiotic `reaction_parameters`)" | — | no |
+| `029cd6731` | 08-14 | #476 | cplong90 (sc) | P-B | W | team | "The transform is not gone — it **moved to `ecoli-sources`** … Coverage moved and got stronger." | — | routed to eagmon by a self-comment; eagmon's prior judgment on ecoli-sources#12 is the cited gate |
+| `3dbb09bb6` | 07-27 | #407 | eagmon (sc) | B | W | crash | "daughters reverted to plain FBA baseline, and the pbg division re-realization then crashed … (`KeyError: 'current_timeline'`)" | — | no |
+| `ee74c4c57` | 07-27 | #396 | eagmon (sc) | B | W | crash | "its `next_update_time` applied a tick late → `GlobalClock` returned `full_step=0` → the run hung on tick 2" | — | no |
+| `39101963c` | 07-26 | #392 | eagmon (sc) | B | W | none | "every real run built the bare baseline, silently dropped the pack step, and wrote no packs" | — | no |
+| `aada8d108` | 07-26 | #384 | eagmon (sc) | B | **S** | none (anatomy asserted) | "Makes the v2ecoli 3D structural model faithful to the baseline sim + gram-negative anatomy." | `envelope` default **True**; changed nucleoid constants — affects the 3D artifact, not WCM state | no |
+| `d83777b1a` | 07-25 | #370 | eagmon (sc) | B | W | none | "gives its ports biological types … (inherit `float`; bind to plain-float stores, no wiring change)" | — | no |
+| `60af7cb3c` | 07-25 | #361 | eagmon (sc) | B | W | none | "**parity byte-identical** to current main … RNG order preserved" | removes 2 dead input ports; also records that "the repo's June-24 `baseline_parity_signature.json` golden is **stale** relative to today's main" | no |
+| `868cf2a36` | 07-24 | #356 | **AlexPatrie (eng)** | B | **W** | crash | "that instance serializes to its `repr` … which is not a parseable bigraph-schema type expression"; "Local-mode behaviour is unchanged (the name resolves to the same registered type)." | **none — clean** | no |
+| `010bf7540` | 06-16 | #243 | eagmon (sc) | B | **S** | **citation** | "Adds the **Shape** process (Skalnik et al. 2023, SM §3.1) … Length formula verified == paper." | width 1 µm, density 1.1 g/mL, periplasm fraction 0.2 — read-only deriver, nothing reads `shape` | no |
+| `1bca6e82e` | 06-13 | #208 | eagmon (sc) | B | **M** | vEcoli #415 | "Ports the one science improvement from vEcoli `master` since v2ecoli forked (2026-04-10) that is both important and portable" | two declared deviations: `raise`→`warn`; `getattr` fallback | no |
+| `ba6769052` | 06-12 | #100 | eagmon (sc) | B | **S** | none | "incrementally turning v2ecoli's hybrid algorithmic whole-cell model into a likelihood-bearing, PDMP-class model" | FBA-bridge hook force-bound but empty (LP identical); PDMP kinetics opt-in, default `"discrete"` | no — 31 self-comments (a sprint log) |
+| `693a220c0` | 05-30 | #105 | eagmon (sc) | B | W | none | "Internal math stays in bare fg and is wrapped only at the emit boundary → **parity-preserving** (before/after baseline trajectories coincide, rel 0)" | opt-in `mass_conservation`, default OFF; verdict "the baseline conserves mass to ~1%" | no (2 self-comments) |
+| `5e30aa0f3` | 05-13 | #37 | eagmon (sc) | B | W | none | "Adopts `@composite_generator` … as the standard mechanism for declaring v2ecoli's three architectures" | daughter documents now built by calling `baseline()` + overlaying divided state — **not called out as a semantic change** in the body | no |
+| `704b8afc7` | 04-12 | — | Eran (sc) | B | **T** | **vEcoli** | "upstream vEcoli auto-wires global_time into every partitioned process's topology (`composites/ecoli_composite.py:461-462`), but v2ecoli converted the process to a plain Step and lost that wiring" | — | — |
+| `bff33e036` | 04-11 | — | Eran (sc) | B | **M** | vEcoli | "Moved port_defaults into inputs()/outputs() using `_default` dict syntax." | — | — |
+| `967f63891` | 04-10 | — | Eran (sc) | B | **M** | vEcoli | "Replaced `_seed_state_from_ports` with `_seed_state_from_defaults` using `port_defaults.pickle` (full defaults extracted from vEcoli)"; "Benchmark: 384.6fg" | port pre-population now comes from a 713 KB dill pickle keyed by class name | — |
+| `9531bbd39` | 04-10 | — | Eran (sc) | B | **M** | vEcoli | "These return the `_default` values from ports_schema, used for initial state seeding."; "Benchmark: 384.6fg, 1.12x — no regression." | — | — |
+| `247578781` | 04-10 | — | Eran (sc) | B | **M** | vEcoli | "Generated inputs()/outputs() methods for all 11 PartitionedProcess subclasses **from extracted vEcoli schemas**" | — | — |
+| `5263924a3` | 04-10 | — | Eran (sc) | B | **M** | vEcoli | "Use vEcoli-compatible nested request/allocate stores"; "Remaining: List vs Map type resolution conflict" | — | — |
+| `a8de7718f` | 04-10 | — | Eran (sc) | B | **M** | vEcoli | "vEcoli's string-based port types … don't parse correctly in current bigraph-schema. Need to replace inputs()/outputs() return values with object-based types" | the declared type surface is re-expressed, not copied | — |
+| `339429637` | 04-10 | — | Eran (sc) | B | **M** | vEcoli | "Replace all process files with vEcoli versions (exact config_schema, inputs/outputs, topology, and update logic)" | "Remove defaults dicts"; WIP admission in the same body | — |
+| `68e4c12ab` | 04-10 | — | Eran (sc) | port | **M** | vEcoli | "Port of vEcoli's composite branch to pure process-bigraph with no vivarium-core dependency. Partitioned architecture only" | source pinned only as `path = "../vEcoli", editable = true` | — |
+
+---
+
+### 4. The W! list — plumbing PRs that made a modeling decision
+
+**Engineer logins first, per the rubric.**
+
+#### Engineer logins (`AlexPatrie`, `jcschaff`)
+
+**None.** The A/B tables contain exactly one commit under an engineer login — `868cf2a36`
+(AlexPatrie, #356, 2026-07-24) — and it is clean `W`. It changes `{"batch": InPlaceDict()}` to
+`{"batch": "inplace_dict"}` so the document survives `.pbg` serialization on the remote dispatch
+path, and the PR states the invariant: *"Local-mode behaviour is unchanged (the name resolves to
+the same registered type)."* No numeric value, no rule, no default, no input/output relationship
+changed. **The answer to "did the plumbing PRs make modeling decisions" is, for the engineer
+side, no.**
+
+#### Scientist logins (all 12 under `eagmon` / `Eran`; `cplong90` has none)
+
+1. **`c9053136b` (2026-04-12, direct commit) — the largest one, and it is not in the first-pass
+   tables.** Subject: *"Collapse unique_update_N declarations behind a FLUSH sentinel"*; body
+   opens *"**Lexical cleanup, no behavior change.**"* and asserts *"EXECUTION_LAYERS and FLOW_ORDER
+   are identical byte-for-byte."* The diff also contains:
+   `-DEFAULT_FEATURES = ['ppgpp_regulation', 'trna_attenuation']  # match original wcEcoli behavior`
+   `+DEFAULT_FEATURES = ['ppgpp_regulation']  # trna_attenuation disabled to match v1 default`.
+   **tRNA attenuation has been off by default in every v2ecoli run since 2026-04-12 and is still
+   off at the tip** (`ecoli_baseline.py:601`). The mechanism is real — per `bd48262f0`, when the
+   store is absent *"all transcripts elongate normally."* The new comment cites "v1 default" as
+   authority, so this may be a correct `T`; but it was landed inside a commit that declared
+   itself behaviour-neutral, with a verification (a dry-mass trajectory) that would not have
+   detected it.
+2. **`29c4dc262` (#271, 2026-06-24) — three model changes inside a comparison-harness PR.** The
+   PR body describes only the harness. The squash contains: (a) `Division.d_period` defaults to
+   `True`, so the dry-mass threshold is no longer consulted — this half *does* cite authority, in
+   a code comment: *"vEcoli's default (`d_period=True`)"*, *"mirrors vEcoli
+   `ecoli/processes/cell_division.py`"*; (b) **a new rate-law form and a new constant** — the hard
+   `ppgpp_scale[==0] = 1` switch becomes `b²/(b+K)` with `_PPGPP_SCALE_K = 1e-11`, justified in
+   the code as *"the cooperative-threshold biology (a promoter needs a minimum RNAP-recruitment
+   competence before a bound TF can act)"* and sized as *"in the empty gap between the numerical
+   noise floor (~1e-13) and the smallest real expression (~1e-9)"*; (c) a ParCa ppGpp
+   `adjustment = 1` floor. **(b) has no source-model authority — its purpose is to make two
+   engines agree** (*"one truly-null gene (TU0-14529) reached ~19% of all transcription on
+   carbon-poor media in one engine and ~0 in the other"*). This is a modeling decision taken for
+   reproducibility reasons, and it is invisible from the PR.
+3. **`c454a2726` (#25, 2026-04-20) — the EcoCyc v29.6 → v29.1 rollback.** Landed under a PR about
+   cache fingerprinting. The commit body is honest and explicit, including the deferral: *"Until
+   the data inconsistencies are fixed properly (biology-domain work, not in scope here)"*. The
+   deferral was never taken up. **The whole-cell model's knowledge base is one minor version
+   behind because a build broke.**
+4. **`38ee8d22c` (#76, 2026-05-25) — per-process RNG seeds.** The PR's own framing is *"All pure
+   infra — **zero biology coupling**"*, which is not true of item 1. The change is defensible as a
+   bug fix (multi-seed ensembles were bit-identical), but the *decomposition chosen* —
+   `crc32(process_name, master_seed)` — is a modeling choice about the stochastic structure of the
+   model, and it silently rebased every trajectory in the repo.
+5. **`4c439bd0e` (#128, 2026-06-06) — division trigger changes under a units fix.** The only W!
+   whose author flagged it: *"⚠️ **Behavioral change — please review** … Division timing is now
+   **mass-gated** … rather than **D-period-gated**"*, firing ~27 s early, and *"anything comparing
+   long runs should be re-baselined."* **The PR received zero comments and zero reviews.** The
+   request for review is on the record and was not answered.
+6. **`bf60df0d4` (#244, 2026-06-16) — an incomplete revert claimed as complete.** The PR says
+   *"the execution layers are now **byte-identical to pre-#137** (verified), so main's default
+   model is the pre-investigation WCM again"*, and *"Un-wires **all** dnaA mechanisms"*. At
+   `origin/main` today: `initial_conditions.py:660` still reads *"Total: 315 sites"* (pre-#137 was
+   307), and `transcript_initiation.py:80-84` still carries
+   `AUTOREG_STRENGTH = float(os.environ.get("DNAA_AUTOREG_STRENGTH", "0.8"))` with the
+   autoregulation applied at `:639`. The claim is about `BASE_EXECUTION_LAYERS` and is true of
+   that list; it is not true of "the default model".
+7. **`3c5fe1a2c` (#393, 2026-07-26) — the media substitution.** A study-config conformance PR:
+   *"`build_generator` strictly rejects unknown params."* The fix replaces `condition:` with
+   `media:` across 8 studies, and the PR states the consequence itself: *"Comparison studies now
+   run the lightweight `media:` perturbation **(chosen for runnability)**, NOT the calibrated
+   per-condition ParCa re-fit."* Trading a calibrated per-condition ParCa cache for an in-cache
+   media lever, on runnability grounds, is a modeling decision.
+8–12. **The five April port refactors** — `09094fe16`, `bd48262f0`, `1a5c0abe2`, `0e282f535`,
+   `0641f9800`. Each is framed as architecture ("composable feature modules", "remove
+   partitioning ceremony", "simplify process modules") and each removes or re-scopes a mechanism
+   that vEcoli has: supercoiling and ppGpp off by default; tRNA attenuation off by default; seven
+   processes out of the allocator on asserted biology; the murein FBA objective adjustment
+   deleted as a "testing hack"; Complexation's RNG stream changed. Two of the three feature flips
+   were restored the same day by `0223c7078`; **supercoiling never was.**
+
+---
+
+### 5. The S list — for Eran and Chris the people to review
+
+Six rows state a scientific claim or make a modeling choice with no source-model authority. None
+carries a human endorsement — the one `APPROVED` review below was posted under a login whose
+Claude session also writes PR bodies in this repo.
+
+| sha8 | PR | date | the justification, verbatim | endorsement |
+|---|---|---|---|---|
+| `268515f0d` | #638 | 09-02 | **"The 60 mM default is ~2× the M9 recipe value (30.272 mM), sized so nitrogen is not the binding constraint at the OD10 working point."** Safety argument: *"any value above 1e-5 mM is behaviourally identical to the previous static one"*, with the qualification *"At exhaustion the pool clamps to `0.0` … a **cliff, not a taper**."* | `eagmon` APPROVED, and the review does check the load-bearing claim (`IMPORT_CONSTRAINT_THRESHOLD = 1e-5`, AMMONIUM not in `carbon_sources`). Still one login reviewing another login. |
+| `717b976af` | #137 | 06-15 | *"autoregulation **resolves the V-tension** the dnaa-3 V-sweep proved no constitutive V could — it caps the DnaA peak (1567→635, ~2.5×)"*; *"the **Hill form (n=4, K=0.5)** is correct (lifts the trough)"*; verdict *"supported-with-calibration-pending"*. | The **only** row in the audit with evidence of a named non-Claude scientist: co-authored `@RashmiKaldera`, *"8 feedback rounds (Rashmi/Haochen, through 2026-06-05)"*. But those rounds live as files in the PR, not as GitHub comments, and the PR was **merged from Draft by mistake** (see #244). |
+| `5e7f02a00` | #123 | 06-06 | *"Per-reaction `integrate_dt` flag in the equilibrium process + DnaA-ATP hydrolysis modeled as a kinetic equilibrium reaction (the mechanism the `dnaa2-bf8b82e-*` runs depend on)."* | none. ⚠ The `_moleculeRecursiveSearch` guard change (`val != 0` → `val < 0`), which affects **all** multi-product equilibrium reactions, is in the diff but not in the PR body. |
+| `aada8d108` | #384 | 07-26 | *"Makes the v2ecoli 3D structural model faithful to the baseline sim + gram-negative anatomy."* `envelope` default `True`, changed nucleoid constants. | none. Effect is the 3D artifact, not WCM state — lowest stakes on this list. |
+| `010bf7540` | #243 | 06-16 | *"Adds the **Shape** process (Skalnik et al. 2023, SM §3.1) … Length formula verified == paper."* Width 1 µm, density 1.1 g/mL, periplasm fraction 0.2. | none — but it is the **only row in the entire audit with a literature citation**, and the deriver is read-only (nothing in the model reads `shape`). |
+| `ba6769052` | #100 | 06-12 | *"incrementally turning v2ecoli's hybrid algorithmic whole-cell model into a likelihood-bearing, PDMP-class model — one subsystem per phase — while keeping the cell viable."* | none (31 self-comments). Merged surface is inert by default: the FBA-bridge hook is force-bound with an empty `_default`, PDMP kinetics opt-in at `"discrete"`. |
+
+Adjacent, worth reading alongside these (C-rows, so outside the tables but same character):
+**#669** — `d_period_cv` stochastic division, *"The model was under-dispersed (CV ~7% vs a
+biological 10–30%)"*, default `0.0`; its PR subject also claims a landed ATP-synthase fix that
+is not on `main`. **#592** — opt-in carbon-exhaustion arrest, root-caused on the real FBA
+(*"objective_value is **unchanged** (3.05204 → 3.05205)"*), and the one PR in this repo where a
+second login ran the acceptance and **reported it failing** (*"the arrest never engages once the
+cell divides"*), which then produced #623. **#753** — a sulfadiazine DHPS competitive-inhibition
+rate law with literal constants, ported from vEcoli-private and **reverted the next day** by #755
+for being drug knowledge in the wrong repo.
+
+---
+
+### 6. What I could not determine, and what is uncertain
+
+1. **Who typed any of it.** `eagmon` and `cplong90` are both people and both Claude sessions.
+   Every PR body in this set that carries a `🤖 Generated with Claude Code` footer, and every one
+   whose commits carry `Co-Authored-By: Claude …`, is at least partly session-written — that is
+   most of them. I have recorded *login*, never *person*. The one place a non-session human is
+   named is #137 (`@RashmiKaldera`, and Rashmi/Haochen feedback rounds), and even there the
+   feedback exists as files rather than as GitHub activity.
+2. **No line-level review exists.** 0 inline review comments across all 67 PRs queried. Four
+   `APPROVED` reviews exist in the whole set (#638, #648, #293, #590), all by `eagmon`, all on
+   `cplong90` PRs. `eagmon`'s own model-changing PRs — including the W! rows — carry **zero
+   reviews by anyone**.
+3. **The first-pass tables are not exhaustive for W!.** I found `c9053136b` by chasing the
+   `DEFAULT_FEATURES` value at the tip, not from the tables — its subject and body both declare
+   it behaviour-neutral, so a subject-level or body-level pass cannot catch it. There may be
+   others of that shape. A targeted `git log -S` sweep over the ~15 default-bearing constants
+   (`DEFAULT_FEATURES`, `BASE_EXECUTION_LAYERS`, threshold literals) would be the way to close it;
+   I did that only for `DEFAULT_FEATURES`.
+4. **Squash merges hide the boundary between PR body and commit content.** #25 and #30 both carry
+   substantive model or store changes that the PR body does not mention but the squashed commit
+   body does. Anyone auditing from PR bodies alone would miss both. Conversely #271's three model
+   changes *are* described in the individual pre-squash commit messages and are absent from the PR
+   body — so neither surface alone is reliable.
+5. **The port-era direct commits have no context beyond their own bodies.** For `68e4c12ab`,
+   `339429637`, `a8de7718f`, `5263924a3`, `247578781`, `9531bbd39`, `967f63891`, `bff33e036`,
+   `3a8add97e`, `704b8afc7`, `09094fe16`, `bd48262f0`, `0223c7078`, `0641f9800`, `1a5c0abe2`,
+   `0e282f535`, `c2c95db2e`, `2147fca41`, `c9053136b` — **there is no PR, no thread, and no
+   review**. Everything in §2a and the port-era rows of §3 comes from commit bodies, the
+   2026-04-11 README/STATUS, and the diffs. I could not establish the source vEcoli commit for
+   any of them.
+6. **Effect is not re-derived.** Every A/B/P/⚠ code is the first pass's. Where a PR's own claim
+   contradicts the first pass (e.g. #244 asserting byte-identical execution layers vs the first
+   pass's note that the 315-box initial state survived) I checked the tip and reported both; I did
+   not re-audit diffs otherwise.
+7. **Two PRs merged with their stated acceptance criterion unmet.** #591 (`cplong90`: *"the
+   reactor trajectory is still chunk-dependent in the fed phase, so the acceptance bar is not yet
+   met"*, later partly retracted for lacking a repeat-run control) and #592 (validated as *"not a
+   problem with the arrest mechanism itself"* but *"the arrest never engages once the cell
+   divides"*). Both merged. Whether that was a considered call or an unread thread, I cannot tell.
+
+
+---
+
+# Appendix D — sms-ecoli intent report (Part 2)
+
+## sms-ecoli — INTENT audit (second pass)
+
+**Repo:** `CovertLabEcoli/sms-ecoli` @ `origin/main`, fetched 2026-09-09. Read-only; nothing posted.
+**Input:** the first-pass effect classification (`audit_sms_ecoli.md` §2a, §2b, §3a, §3c) plus the
+model-semantic pin bumps named in its §4. **50 rows** classified by INTENT and AUTHORITY from the PR
+body, every PR comment and review, and the commit body. Squash-merge repo: one commit = one PR.
+
+**Method note that shapes everything below:** *no PR in this audit carries a single inline review
+comment* (`gh api .../pulls/N/comments` returns 0 for all 43 PRs). There are exactly **two formal
+`APPROVED` reviews** in the whole set (#297, #183). Every other "review" is a comment posted under
+`eagmon` — in five cases on `eagmon`'s own PR. Per the rubric, a comment under a login that is also
+a Claude session is not human endorsement, and I have not guessed who typed.
+
+---
+
+### 1. Totals
+
+#### Intent × effect (3 rows carry two intents: #299 M+W, #213 T+S, #199 T+S)
+
+| intent | A (semantics) | B (interfaces) | C (opt-in) | D (mechanical) | E (design) | pin bump | **total** |
+|---|---|---|---|---|---|---|---|
+| **M** migration | 10 | 3 | 1 | 3 | 0 | 0 | **17** |
+| **T** translation correction | 6 | 0 | 0 | 0 | 0 | 0 | **6** |
+| **S** scientific refinement | 2 | 0 | 0 | 0 | 2 | 0 | **4** |
+| **W** plumbing / debugging | 8 | 4 | 0 | 0 | 2 | 9 | **23** |
+| **W!** plumbing that decided model | 2 | 0 | 0 | 0 | 1 | 0 | **3** |
+| **total assignments** | 28 | 7 | 1 | 3 | 5 | 9 | **53** |
+
+#### Intent × login class
+
+| intent | scientist logins (eagmon, cplong90 / "Eran Agmon", "Chris Long") | engineer logins (AlexPatrie / "A.P.", jcschaff) |
+|---|---|---|
+| **M** | 16 | 1 |
+| **T** | 6 | 0 |
+| **S** | 4 | 0 |
+| **W** | 16 | 7 |
+| **W!** | **2** | **1** |
+| rows | 42 | 8 |
+
+**The headline:** the engineer logins did *not* quietly make the modeling decisions. Of their 8 rows,
+7 are clean W and one (#312) is W! only in the narrow sense that a default it repointed selects which
+drug mechanisms 36 Run-3 configs carry — and the config it repointed *to* is the one the scientists'
+own PRs (#303/#306/#309) designated as Run 3. The two unambiguous W! rows are both under `eagmon`.
+
+---
+
+### 2. The migration of the sms-owned scientific artifacts into the v2 structure
+
+#### The design doc, and its stated motivation
+
+The PRs cite `docs/superpowers/specs/2026-08-26-sms-modules-extension-framework-design.md`
+(on `main`). Its §1 states the scientific goal first and the engineering goal second:
+
+> "We want to run the **vEcoli antibiotic/violacein analyses** (the ~20 the configs declare under
+> `analysis_options`) on **v2ecoli candidate (`ecoli_baseline`) output**, driven by a **vEcoli-private
+> config** the way the comparison harness drives the reference".
+
+The engineering finding that justified the structural move:
+
+> "almost the entire vendored `v2ecoli/` tree IS public v2ecoli — including the model, the comparison
+> harness, the analysis framework … The genuinely sms-only *code* is **three helper files**."
+
+A second spec, `2026-08-27-three-arm-vecoli-equivalence-design.md` (PR #138), supplies the *fidelity
+programme* the ports were meant to be graded against — three arms of the same biology so that
+"Arm1≠Arm2 ⇒ bridge bug; Arm2≠Arm3 ⇒ native-port bug". This is the closest thing in the repo to a
+stated scientific acceptance criterion for the migration, and it names a 6-tier porting programme
+(N1 pg family → N6 metabolism-redux). **Arms 1 and 2 were never completed**: §0 of that spec records
+that Arm 1 "emits NOTHING to parquet" and becomes "REFERENCE-ONLY", so the layered diagnosis the
+design promises was not available for any port after #137.
+
+#### #124 — Design + SP1 (`91455d7d`, 2026-08-27, eagmon) — M (container)
+
+Not a scientific-artifact transfer: it creates the `sms_modules` package and declares the dependency.
+It ships the design spec above. **Fidelity claim:** none applicable. **Deviation admitted:** the lock
+is knowingly out of sync ("`pyproject.toml` and `uv.lock` are intentionally out of sync and the
+lock-check CI will fail"). Carries the one substantive scientist comment in the whole migration:
+`cplong90` warned that `scripts/` did not follow the package, so "upstream fixes arrive
+half-applied", and that the floating `branch = "main"` pin "broke here on its first day".
+
+#### #127 — retire the vendored tree (`f13aca0b`, 2026-08-27, eagmon) — M (container)
+
+The structural migration itself. **Does not say a scientific artifact is being transferred**, and does
+not need to — it moves the *container*. **Fidelity claim:** "Suite: 238 passed, 42 skipped, 0 failed"
+and an L0–L5 audit gate. **Deviation admitted, and it is the important one:** `v2ecoli` is pinned as
+`branch = "main"`, i.e. **floating** — for the first week of the dependency era the model could change
+under the repo with no commit here. `cplong90` demonstrated exactly that on #124 the same day.
+
+#### #137 — pg_maturation + pg_shape ports (`d6f90f95`, 2026-08-27, eagmon) — M
+
+**Source:** named precisely, `~/code/vEcoli-private/ecoli/processes/antibiotics/{pg_shape,pg_maturation}.py`
+plus `ecoli/library/schema.py:919` (`divide_pg_cellwall`). **Fidelity claim:** the strongest in the
+set — "**verbatim physics** from the fork (`diff`-verified byte-identical); adds only a docstring
+provenance note + a guarded registration footer", and the SP4 plan instructs "Do NOT re-derive or
+'improve' the biophysics." **Admitted deviation:** one, and it is scientific — `pg_shape` gains
+"a module-level `DEFAULT_MEDIA_RECIPES` fallback (reconstructed for the `"minimal"` baseline media
+from the EcoCyc flat file)", applied only when no `media_recipes` is supplied. That is media data
+authored here, not ported. **Says plainly it is a transfer:** yes. **Deferred:** the two live gates —
+fork-injection smoke and the 2-generation `divide_pg_cellwall`-at-division test — were explicitly out
+of scope, so the ports landed without any run-level fidelity evidence.
+
+#### #142 — MetabolismReduxClassic + violacein new-gene data (`c2360dfd`, 2026-08-28, eagmon) — M
+
+**Source:** the fork's `metabolism_redux_classic`; the violacein new-gene TSVs are described as
+"committed construct gene-definition INPUT data" with a rebuild script. **Fidelity claim:** a real
+run-level comparison — "`no_metabolism` **PASSES** against genuine vEcoli-private … (t=0 <0.05%,
+t≈799 ≤2.4%, mRNA mean ~1%), and metabolic baseline … within ~2%". **Admitted deviation:** the
+`with_metabolism` arm needed a config round-trip fix (`quote`-typed params) before the LP would solve
+at all, and the PR states plainly "**Model note — `VIOLACEIN[c] = 0` on both** … Genuine vEcoli
+behaves identically — correct FBA dead-end behavior, not a native-seam artifact." That is honest
+reporting of a null result. **Says plainly it is a transfer:** yes.
+
+#### #148 — the 6-process antibiotic layer + injection topologies (`8d9d2a93`, 2026-08-28, eagmon) — M
+
+The commit that put the antibiotic mechanism in this repo: 2137 lines, six processes, 24 configs.
+**Source:** the vEcoli-private antibiotic process family and its 12 configs, with "the 12
+vEcoli-private source twins (provenance)" committed alongside. **Fidelity claim: none at the physics
+level in this PR** — the evidence offered is CI, an audit gate, and three studies that "✓ ran".
+**Admitted deviations, and they are large and honestly stated:** "**Drug delivery is v2ecoli-blocked.**
+… no environmental dose is delivered through the runnable seam"; "**Multi-dose MIC needs the variant
+sweep**"; one analysis "errors on ragged pg-lattice arrays". So the entire antibiotic layer landed
+with the dose inert — the thing it exists to model was untestable at merge. **Says plainly it is a
+transfer:** yes.
+
+#### #152 — violacein kinetic ODE (`86375737`, 2026-08-29, eagmon) — M
+
+**Source:** named to the file — the fork's `ecoli/processes/metabolism_redux.py`: "the fork's **S_VIO
+pathway ODE** (`forward_step` + all `VIO_*` constants) and the **weight-100 `vio_flux` export-pin**".
+**Fidelity claim: the best in the audit** — "the ported numpy RHS matches the fork's jax
+`forward_step_jax` to **~1.8e-12** (24 cases)", the kinetics bridge reproduces the fork's unit
+handling at "max dev 0.0". **Admitted deviation, stated as a scientific finding:** "the native
+violacein titer runs **~2–3× the fork's reference range** … this is a genuine **candidate-vs-reference
+divergence**". A 2–3× titer gap declared a finding rather than a defect, with no scientist comment on
+the PR. **Says plainly it is a transfer:** yes.
+
+#### #156 — vEcoli reference-parity tests (`d82593bf`, 2026-08-30, eagmon) — M (verification)
+
+The one PR whose whole purpose is fidelity. Turns four processes "from *isolation-tested only* into
+*vEcoli-reference-tested*", comparing each to "an **independent reference of the same worked example
+the vEcoli source uses**" — pg_shape `rel=1e-6` (actual ~1e-13), pg_maturation `rel=1e-6` (~1e-8),
+gillespie against vEcoli's own `test_gillespie.py`, field_timeline against the source's own worked
+timeseries. **"No real native-vs-vEcoli divergences found (no xfails)."** Two admitted deviations:
+gillespie uses TauLeaping because "the source's SSACSolver needs a C++ toolchain absent in CI", and
+the pg_shape test **encoded the source's bugs on purpose** — "Documents the source's
+`stress_theta := stress_z` quirk, carried verbatim in the port". That characterization test is what
+##203 later had to rewrite.
+
+#### #203 — pg mechanics fixes "from vEcoli-private #93" (`b2088be1`, 2026-09-03, eagmon) — T
+
+**Source:** `CovertLabEcoli/vEcoli-private#93`, plus a literature citation for one value (eLife 72863
+supp 2). **What was corrected:** three genuine mechanics bugs (sign of the quadratic coefficient,
+`Etheta`→`Ez` axial modulus, `stress_theta = stress_z` copy-paste) and one initialization value
+(`prop_crosslinked` 0.20→0.28, stems split 2/3 tetra : 1/3 tri, pentapeptide init 0). **Fidelity
+handling is the subtle part:** #156's parity test had been written to *lock in* the bugs, so #203
+"Updated to the **corrected** thin-shell physics … while keeping `solve_p_final`'s `beta` on its own
+`Etheta`-based `a_z` to mirror the source (the fork fixed `a_z` only in `get_stress_strain`)". So the
+port now deliberately carries the source's *remaining* inconsistency. **Caveat:** the authority cited,
+vEcoli-private#93, is described as "(draft)" at merge time — sms-ecoli adopted a fork change before
+the fork accepted it. The `stress_theta` fix alone doubles the hoop stress the lysis gate reads.
+
+#### #272 — vEcoli-private #93 configs + flat_overrides (`b2676fe2`, 2026-09-07, eagmon) — M
+
+**Source:** named to the commit — `metabolite_concentrations_added.tsv` (#84 `68772795`),
+`rna_half_lives_removed.tsv` (#79 `f4e9cc0a`), `protein_half_lives_modified.tsv` (`b3e5a737`),
+"Copied verbatim from vEcoli-private master". **Fidelity claim:** verbatim copy + provenance headers;
+no numeric verification here (that came in #280's pin bump, which measured pABA = 8e-06 mol/L,
+MurD = 1914.725 min against a full chassis build). **Says plainly it is model data:** yes, and
+unusually well — "**These change sim_data — they do nothing until a ParCa rebuild passes this
+manifest.**" **Admitted deviations:** the Run 3 and Run 4 configs it generates are marked
+`_provenance.NEEDS_REVIEW`, and it states its own scale deviation: "`generations=8`/`n_init_sims=1`
+chosen for the CD2 8-gen target — **source used 2**." Three open questions were addressed to
+`@cplong90 @AlexPatrie`; **neither replied on the PR, which merged 9 minutes after opening.**
+
+#### #299 — the Run 3 dose grid (`1dbff758`, 2026-09-09, AlexPatrie) — M + W
+
+**Source:** "a direct, mechanical port of vEcoli-private's own
+`ecoli/variants/antibiotic_cocktail_timeline.py::apply_variant`", verified against
+"the real, unmerged source (`origin/antibiotics-cd2`)". **I checked this claim against
+vEcoli-private directly.** `configs/antibiotic_cocktail.json` on branch `antibiotics-cd2` carries
+mecillinam `[0, 1e-05, 1e-4, 1e-3, 1e-2, 0.1]`, sulfadiazine `[0, 1e-4, 1e-3, 1e-2, 0.1, 1]`,
+`times = [[10000]]`, `generations: 20`, `n_init_sims: 4` — **exactly** what #299 hardcodes, scale
+included. The claim "nothing here is a new scientific decision" **holds**. **But** `main` also carries
+`configs/experiments/antibiotic_cocktail_vecoli_ref.json` (landed by #272, mirroring vEcoli-private
+**master**/#93) with a *different* grid: mecillinam `[0, 2.89e-4, 5.78e-4, 1.16e-3, 2.31e-3, 4.62e-3]`
+× sulfadiazine `[0, 5.99e-3, 0.024, 0.0959, 0.392]` — a 6×5 near-log dilution series, 30 points.
+So two vEcoli-private branches give two different Run-3 dose grids, both present in this repo, and the
+one being executed is from the unmerged branch. #299 flagged this itself and did not resolve it:
+"which vEcoli-private branch is authoritative for this grid (36 vs a conflicting 9-combo description
+in this repo's own `study.yaml`) — raised with the team on #166, not resolved here."
+
+#### #308 — the plain FBA objective from vEcoli MASTER (`c5c4f143`, 2026-09-09, eagmon) — M, opt-in
+
+**Source:** "vEcoli-private MASTER's PLAIN `MetabolismRedux` FBA objective", with the five
+differences enumerated in the body. **Fidelity claim: the most rigorous method in the audit** — a
+generator script runs "the **FORK's real plain `NetworkFlowModel.solve`** (fork venv)" on a fixture
+and dumps the reference; the native path is matched at rtol 1e-6, "**Actual max flux deviation: 0.0**".
+**Admitted deviation:** none in the ported path; the *default* stays classic, so this is C, inert.
+The eagmon comment records a self-caught methodological error worth noting — a first fixture was
+degenerate and "the gate couldn't discriminate", rebuilt with two metabolites. It ends "Held for
+Eran's go"; the PR merged 9 minutes later.
+
+#### The common shape
+
+All ten migration PRs **do say plainly that a scientific artifact is being transferred**, and most
+name the source to the file or commit. Where fidelity was claimed numerically it was claimed well
+(1.8e-12, 0.0, rtol 1e-6, byte-identical). The gap is not honesty — it is that the two ports with the
+largest scientific surface, **#148 (the entire antibiotic layer) and #142's `with_metabolism` arm**,
+landed with **no physics-level fidelity evidence at all**, and #148 landed with the dose mechanism
+inert by its own admission. The "somewhat refactored" that Jim asked about is, concretely: the
+`DEFAULT_MEDIA_RECIPES` media fallback (#137), the config-driven `excluded_reactions` that replaced
+vEcoli's hardcoded `BAD_RXNS` (#142, reverted by #301), `VIOLACEIN[c]` added to the process's own
+exchange set instead of the reconstruction (#155), the `met_map` skip (#175), and the numpy-for-jax
+RHS translation (#152).
+
+---
+
+### 3. Full table (most recent first)
+
+Login class: **sci** = eagmon / cplong90 / "Eran Agmon" / "Chris Long"; **eng** = AlexPatrie / "A.P." /
+jcschaff. Endorsement column: only a formal `APPROVED` review or a substantive comment under a
+*different* login than the author counts; a self-comment is marked as such.
+
+| sha | date | PR | login (class) | effect | intent | authority | stated motivation (quote) | embedded modeling decision (S, W!) | human endorsement seen? |
+|---|---|---|---|---|---|---|---|---|---|
+| `2a3c3661` | 09-09 | #314 | jcschaff (eng) | A | W | crash | "One tick with a non-integrable state is skipped with a `RuntimeWarning` … and returns an empty update, instead of aborting the whole lineage." | — (see §4 borderline: freezes the wall for one tick, only where the lineage previously died) | eagmon comment (not a review) |
+| `50cb3e4e` | 09-09 | #312 | AlexPatrie (eng) | A/E | **W!** | team (#303/#306/#309 config-of-record) | "combos built against the old default would silently omit both drug mechanisms" | **Repoints the sweep generator's default base config, and commits the 36 resolved combos — selecting which drug mechanisms all 36 Run-3 dispatches carry.** | none |
+| `f0a9d1b0` | 09-09 | #309 | eagmon (sci) | E | S | team (Eran, reported) | "Eran confirmed the Run 3 antibiotic-cocktail scale: **4 seeds × 20 generations × 36 concentrations**" | Run 3 scale: `generations` 8→20, `n_init_sims` 1→4 | eagmon self-comment; merged 2 min later |
+| `c5c4f143` | 09-09 | #308 | eagmon (sci) | C | M | vEcoli-private MASTER | "Ports vEcoli-private MASTER's PLAIN `MetabolismRedux` FBA objective … as a **guarded, config-selectable** path" | — (default unchanged) | eagmon self-comment, "Held for Eran's go" |
+| `588bb043` | 09-09 | #306 | eagmon (sci) | A+B | M | vEcoli reference / the reverted v2ecoli#753 block | "Rate law + constants match the vEcoli reference (and the reverted #753 block) exactly" | — (but kcat 0.38, km_paba 7.82e-3, k_i 5.15e-3 carry **no primary citation in this repo**) | eagmon self-review ×2, "Held for Eran's direct go" |
+| `6c438e50` | 09-09 | #301 | eagmon (sci) | A | T | vEcoli-private master, run; + team ("Eran's 'follow Robotato/master' directive") | "This restores the source's unconditional behavior: hardcode the canonical `BAD_RXNS` … and apply it on every run" | Selected the plain-redux **51**-reaction list over classic's 48 and the installed package's 5 — a reference-variant choice; residual "solver variant" deviation admitted | none; the Eran directive is cited, not linked |
+| `0f7c2216` | 09-09 | #304 | eagmon (sci) | A | T | vEcoli (`nonnegative_accumulate`) | "vEcoli's `local_field` applies the exchange delta with the **`nonnegative_accumulate`** updater, so the field pool never goes below 0" | — | none |
+| `3a52c450` | 09-09 | #303 | eagmon (sci) | A+B | M | vEcoli param_store / vEcoli-private master `antibiotic_cocktail.json` | "resolved from the vEcoli param_store in the same unit convention as the existing mecillinam literals … validated by reproducing the existing mecillinam literals exactly" | — | eagmon self-review, "Eran approves" (no record of it) |
+| `1dbff758` | 09-09 | #299 | AlexPatrie (eng) | A | M + W | vEcoli-private branch `antibiotics-cd2` | "every dose value is already fully specified upstream, **nothing here is a new scientific decision**" | — (**verified true**; but the source branch is unmerged and conflicts with the in-repo #93 reference grid — §4) | none |
+| `cd0d3021` | 09-08 | #297 | jcschaff (eng) | A | W | crash + vEcoli#440 precedent (in review) | "on `SolverError` … or a non-optimal status, retry the same problem on **HIGHS**, then **CLARABEL**" | — (disclosed: "a fallback solver may return a **different optimal vertex**"; §4) | **APPROVED by eagmon** |
+| `77248228` | 09-08 | #292 | AlexPatrie (eng) | B | W | crash (`AmbiguousLookupError`) | "the topology's nested `species: {"bulk": ["bulk"]}` wire targets a port this process instance never declares" | — | none |
+| `4e7d1d19` | 09-08 | #291 | AlexPatrie (eng) | B | W | crash (`AmbiguousLookupError`) | "The wire is also provably redundant: `update()` … already reads the identical external dose from the `boundary` port independently" | — | none |
+| `b2676fe2` | 09-07 | #272 | eagmon (sci) | A+B+E | M | vEcoli-private master #93 (commits named) | "**These change sim_data — they do nothing until a ParCa rebuild passes this manifest.**" | Run 3 scale chosen against the source: "`generations=8`… — source used 2" | asked @cplong90 @AlexPatrie; **no reply; merged in 9 min** |
+| `df53f704` | 09-07 | #266 | eagmon (sci) | B | W | team (configs are cplong90's) | "a simulator image built from `main` (simulator 160) can't see the K4 cell-only config because it lives only on the study branch" | — | **cplong90 sign-off comment** (substantive, and adds two safety caveats) |
+| `17d67194` | 09-04 | #213 | eagmon (sci) | A | T + S | vEcoli fork dose-response; citation (Brouwers 2020) | "`field_timeline` delivers a decaying environmental source (first-order hydrolysis, k=1.375e-4/s, half-life 1.4 hr, Brouwers 2020) so native external drug drains across the lineage like the fork" | **S:** adds a drug-decay mechanism and its rate constant; **T:** `lineage_time_offset` restores absolute-time dosing. Both default to no-change | none |
+| `6ccb5cf1` | 09-03 | #206 | eagmon (sci) | A | W | crash ("chain dispatch: ParCa failed") | "Four violacein configs declare `new_genes` … but **omit `bundle_overrides`** … asserts `This new_genes_data subdirectory is invalid`" | — (changes the reconstruction, but to the strain the config always declared) | none |
+| `b2088be1` | 09-03 | #203 | eagmon (sci) | A | T | vEcoli-private#93 (**a draft at merge time**) + eLife 72863 supp 2 | "Ports the peptidoglycan shape/maturation mechanics fixes from **vEcoli-private#93** … which were faithful ports of the fork and carried the same bugs" | `prop_crosslinked` 0.20→0.28 (cited); a parity test was rewritten from characterization to corrected physics | none |
+| `279b7bb1` | 09-03 | #199 | eagmon (sci) | A+B | T + S | vEcoli port names (fix 1); **asserted** (fix 2) | "**Fix 2 — pg-shape lyse policy (eagmon-approved dose-response policy)** … records the lysed flag and continues, which is the correct behavior for a dose-response" | **S:** three failure policies `raise_lysis`→`lyse` — the cell now lyses and the run continues where it previously aborted | **the title claims eagmon approval; nothing in the PR records it** |
+| `76b73a19` | 09-02 | #183 | cplong90 (sci) | A | M | public `ecoli_sources` gfp set | "the 7 gfp flat TSVs, copied verbatim from the shipped **public** gfp gene set … Verified byte-identical" | The 19-row **composition** (two-cassette arrangement, insertion loci) is authored here, not ported; the PR flags an untested positional-ordering hazard | **APPROVED by eagmon** |
+| `fff9091a` | 09-01 | #182 | eagmon (sci) | B | M | vEcoli-private#91 | "**Round-trip verified**: resolving the flat config … `==` the original resolved dict" | — | none |
+| `fb1d0250` | 09-01 | #177 | eagmon (sci) | A | M | vEcoli `configs/spatial.json` | "Port vEcoli's `configs/spatial.json` (**byte-identical** to the vEcoli configs installed in this venv)" | — (the spatial field, GLC 1.0 mM, is ported not chosen) | none |
+| `677bbe90` | 09-01 | #175 | eagmon (sci) | A | W | crash (`KeyError`) | "Skip exchange metabolites absent from the network's `met_map` … This is a **no-op for the LP and the emitted output**" | — (documented inline "as a native-port divergence from the verbatim source") | none |
+| `2dac7051` | 08-31 | #138 | eagmon (sci) | A+B+E | W (+ design spec) | crash (`ZeroDivisionError` misread as a division) | design spec: "Layering makes divergences diagnosable (Arm1≠Arm2 ⇒ bridge bug; Arm2≠Arm3 ⇒ native-port bug)" | — | none |
+| `59391f8f` | 08-31 | #167 | eagmon (sci) | B | M | vEcoli-private (verbatim) | "copied **verbatim** from vEcoli-private" … "A config path that 404s **silently falls back to a basal template** (no violacein)" | — | none |
+| `9e204009` | 08-30 | #162 | eagmon (sci) | A | **W!** | crash (`ValueError: n < 0` at division) | "Molecule counts are physically ≥ 0, so this is a **general correctness guard**, not vio-specific" | **Adds a hard non-negativity clamp to the homeostatic `dm/dt` on every tick of every redux run — a rule the reference does not have. The PR states the fork avoids the state structurally, by keeping the intermediates in log-space, not by clamping.** | none |
+| `0cb3f361` | 08-30 | #157 | eagmon (sci) | B | M | vEcoli-private + a v2ecoli companion PR | "The engine seeds them at **correct submass**, replacing the sms inject layer's zero-mass `extra_bulk_species` append" | — (molar masses 325.426 / 343.426 come with the seam) | none |
+| `96e85087` | 08-30 | #155 | eagmon (sci) | A | T | vEcoli fork ParCa (the fork carries the exchange) | "The fix — **in the process, not the ParCa** … Cache-agnostic and permanent" | — but the deviation matters: a secretion reaction is now added to the network **from process code**, so any future cache silently gains it and the reconstruction never records it | none |
+| `86375737` | 08-29 | #152 | eagmon (sci) | A | M | the fork's `ecoli/processes/metabolism_redux.py` | "the ported numpy RHS matches the fork's jax `forward_step_jax` to **~1.8e-12** (24 cases)" | — ; admitted: "the native violacein titer runs **~2–3× the fork's reference range** … a genuine candidate-vs-reference divergence" | none |
+| `6b213f5b` | 08-29 | #147 | eagmon (sci) | B | W | KPI reads 0.0 | "the KPI leaves … read **0.0** — glucose being 0 on a growing cell means the exchange-flux *lift* + gdcw-basis isn't yet capturing the native candidate's fluxes" | — | none |
+| `8d9d2a93` | 08-29 | #148 | eagmon (sci) | A+B | M | vEcoli-private 12 configs + the fork antibiotic processes | "**v2-native antibiotic process layer** — six native processes … injected onto single-cell `ecoli_baseline`" | — ; admitted: "**Drug delivery is v2ecoli-blocked** … no environmental dose is delivered through the runnable seam" | none |
+| `c2360dfd` | 08-28 | #142 | eagmon (sci) | A+B | M | the fork's `metabolism_redux_classic` + violacein construct data | "`no_metabolism` **PASSES** against genuine vEcoli-private … within single-seed stochastic tolerance" | — ; admitted: `VIOLACEIN[c] = 0` on both arms, argued correct | none |
+| `d6f90f95` | 08-27 | #137 | eagmon (sci) | A | M | vEcoli-private `pg_shape.py` / `pg_maturation.py` / `schema.py:919` | "**verbatim physics** from the fork (`diff`-verified byte-identical); adds only a docstring provenance note + a guarded registration footer" | — ; deviation: a `DEFAULT_MEDIA_RECIPES` minimal-media fallback "reconstructed … from the EcoCyc flat file" | none |
+| `f13aca0b` | 08-27 | #127 | eagmon (sci) | D | M (container) | engineering (sync cost) | "sms-ecoli stops **vendoring the entire v2ecoli tree** … and instead **imports `v2ecoli` as a `branch=main` git dependency**" | — ; the floating pin is the deviation | none |
+| `91455d7d` | 08-27 | #124 | eagmon (sci) | D | M (container) | design spec | "sms-ecoli becomes a thin private workspace that imports pinned public v2ecoli + private `sms-modules`" | — | **cplong90 comment** — two real design objections (scripts drift; the floating pin "broke here on its first day") |
+| `d82593bf` | 08-30 | #156 | eagmon (sci) | D | M (verification) | vEcoli source worked examples | "compare the native process to an **independent reference of the same worked example the vEcoli source uses**" | — ; "**No real native-vs-vEcoli divergences found (no xfails)**"; the pg_shape test deliberately encoded the source's `stress_theta` bug | none |
+| **§2b — outside model paths** | | | | | | | | | |
+| `0d1bace2` | 09-09 | #313 | cplong90 (sci) | A | W | silent no-op | "`--aeration-schedule` parsed its file, wrote `bird_reactor_config["aeration_schedule"]`, and returned. **Nothing consumed that key.**" | — (adds a units/trigger declaration rule to schedule files) | self-describes a "met-eng lane" review at a named sha |
+| `e9e79d0b` | 09-02 | #191 | cplong90 (sci) | A | W | silent wild-type sweep | "23 configs … **nest** that block … For those it returns `None` → `baseline()` builds plain native metabolism → **bit-exact 0.0 product, exit 0, no warning.**" | — (11 configs with a hardcoded `fork_repo` now raise instead of silently running wild-type — a deliberate, narrow refusal) | none |
+| **§3c — experiment design** | | | | | | | | | |
+| `0651836c` | 09-06 | #230 | eagmon (sci) | E | **W!** | "0 refs" | "Orphan config (0 refs; the other top-level configs have 7-10 refs each): `configs/meteng_vio_gfp_composed_constitutive.json`" | **Deletes the only config that used the composed vio+GFP strain #183 landed 3 days earlier (and eagmon had APPROVED), labelling it "fork-mirror residue from v2ecoli sync" — it was authored in-repo, not mirrored. The overlay + 7 gfp TSVs + guard test survive on `main` with nothing referencing them.** | none |
+| `188da919` | 08-31 | #171 | eagmon (sci) | E | S | team (@cplong90's #86 review, elsewhere) | "added by mistake in #167; the tnaA/trpR knockout is **viz-mechanics only** (per @cplong90's #86 review), not a Run 4 config" | Changes which strains Run 4 screens (native_oe in, tnaA/trpR KO out) | cites cplong90 on another PR; nothing on this one |
+| `e1ca115a` | 06-27 | — | Eran Agmon (sci) | E | W | commit body only | "each `cond_<name>_1x4.json` inherits the vEcoli-fork condition config and pins `n_init_sims=1/generations=4` (config = source of truth for run shape)" | — | **direct commit, no PR — commit body is the only context** |
+| `f4eb0d9c` | 06-27 | — | Eran Agmon (sci) | E | W | commit body only | subject only: "feat(harness): example manifests (5cond 1x4 standard; baseline 4x4 statistical)" | — | **direct commit, no PR, no body** |
+| **§4 — model-semantic pin bumps** | | | | | | | | | |
+| `4bd7c82a` | 09-09 | #310 | jcschaff (eng) | pin | W | upstream PR ids | "#755 (generic `imposed_flux_bounds` hook; `sim_data.py` back to its pre-#753 bytes, so the `INPUT_FILES` hash matches simulator 182's and every existing ParCa cache verifies)" | — ; **names** that this is the image carrying the DHPS process | none |
+| `74ffb930` | 09-09 | #307 | eagmon (sci) | pin | W | upstream PR ids | "removes the drug-specific antibiotic code from the v2ecoli side … and adds the `imposed_flux_bounds` hook … **activating the DHPS growth-inhibition readout end-to-end with no further config change**" | — ; the clearest statement in the audit that a pin bump changes biology | eagmon self-comment |
+| `385abec9` | 09-09 | #305 | jcschaff (eng) | pin | W | upstream PR ids | "#751 (gather resource knobs), #752 (one Nextflow gather per variant), **#753 (DHPS inhibition, eagmon)**" | — ; names the model change but not its effect (it baked sulfadiazine-specific logic into v2ecoli metabolism; reverted 37 min later by #307) | none |
+| `2e82279b` | 09-08 | #280 | eagmon (sci) | pin | W | upstream PR + integration measurement | "`metabolite_concentrations_added` — pABA + DHPPP become homeostatic targets → **unblocks Run 3 sulfadiazine**"; verified "`conc_dict` pABA = 8e-06 mol/L … MurD half-life = exactly 1914.725 min" | — ; **the model of a good pin bump**: names the biology and measures it | none |
+| `4378a057` | 08-24 | #106 | cplong90 (sci) | pin | W | schema resolution | "`vector_slots()` resolved only `VectorObservationSchema`, so … the new per-replicate vector slots would have silently failed to resolve" | — ; **`ecoli-sources` also carries the ParCa flat files and (per #301) a copy of `metabolism_redux.py`; no model delta is enumerated** | none |
+| `b9cebabd` | 08-24 | #109 | cplong90 (sci) | pin | W | measurement data | "ships the 18 new per-replicate vector tables (proteome+transcriptome × 9 Ginkgo groups) … **real-sample distributions** for the MMD goodness-of-fit axis, not synthesized" | — (validation data, not model) | none |
+| `b40b0a1b` | 08-18 | #70 | cplong90 (sci) | pin | W | missing data | "Pinned to be3c588 …, not the deleted f59a346e48 — that rev carries 10 of 20 cultivation groups … so a verbatim restore would have presented as missing data rather than a bad pin" | — | none |
+| `b5f08bd0` | 06-26 | — | Chris Long (sci) | pin | W | commit body | "Repoint the pin from the now-merged feature-branch tip (8348cb5) to the stable main commit … **Content-identical bundle**" | — | direct commit |
+| `34bcd16c` | 06-18 | — | Chris Long (sci) | pin | W | commit body + citations | "Picks up the validation-data subsystem's Metabolism and Proteome references: basal__metabolic_fluxes (**Crown 2015 + Toya 2010**) … basal__proteome (**Schmidt 2016 MG1655**)" | — (validation data; well cited) | direct commit |
+
+---
+
+### 4. The W! list — did the plumbing PRs make modeling decisions?
+
+#### Engineer logins first
+
+**`50cb3e4e` #312 — AlexPatrie, 2026-09-09 — W!**
+The diff changes one CLI default and commits 36 configs:
+```
+- base_path = ... else "configs/experiments/antibiotic_cocktail_native_run.json"
++ base_path = ... else "configs/cd2/run3_antibiotic_pg_sulfadiazine.json"
+- out_dir   = ... else "out/run3_cocktail_sweep"          # untracked
++ out_dir   = ... else "configs/cd2/run3_sweep"           # committed
+```
+**The decision embedded:** which model system the entire Run 3 sweep dose. The old base carries no
+sulfadiazine transport and no DHPS inhibition; the new one carries both. Every one of the 36
+committed combos is therefore a *different biological system* from what #299's generator would have
+produced the day before, and this is the commit that made those 36 files the repo's Run-3 corpus.
+**Mitigation, and it is real:** the new base is the config that #303, #306 and #309 — all scientist-
+login PRs — had just established as Run 3, and the PR says so. This is W! by the letter of the rubric
+("changes a default that alters results where it did not previously crash") rather than in spirit.
+
+#### Scientist logins
+
+**`9e204009` #162 — eagmon, 2026-08-30 — W!, and the strongest case in the audit**
+Intent is unambiguously plumbing: every native violacein multi-generation run "was **silently stalling
+at generation 0**" because a negative bulk count broke `divide_bulk`'s binomial split. The fix:
+```python
+estimated_homeostatic_dmdt = np.maximum(estimated_homeostatic_dmdt, -homeostatic_metabolite_counts)
+```
+**The decision embedded:** a hard non-negativity clamp is now applied to the homeostatic `dm/dt` of
+**every homeostatic metabolite on every tick of every redux run** — not just the violacein
+intermediates that motivated it. It is presented as physically self-evident ("Molecule counts are
+physically ≥ 0"), and it is — but the PR's own root-cause paragraph says the reference model avoids
+the situation **structurally**, not by clamping: "The **fork never hits this** because it keeps these
+intermediates in the pathway ODE's floored log-space state (`VIO_CONC_FLOOR`), never as bulk counts."
+So this is a new rule added to the native model to compensate for a structural difference from the
+source, with no source authority, no citation, and no review. Every native redux result since
+2026-08-30 carries it.
+
+**`0651836c` #230 — eagmon, 2026-09-06 — W!**
+A housekeeping PR ("remove fork-mirror residue from v2ecoli sync") deleted
+`configs/meteng_vio_gfp_composed_constitutive.json`. Verified against git history: that file was
+**added 3 days earlier by cplong90 in #183**, which eagmon had formally APPROVED — it was authored
+in-repo, not mirrored from the fork, so the PR's provenance label is factually wrong and its "0 refs"
+criterion was true only because the config was new. Its data survives (`composed_overlay.tsv`, the 7
+gfp TSVs, `tests/test_composed_overlay.py`) with **nothing on `main` referencing it**: the composed
+vio+GFP two-cassette strain is still buildable but no run declares it. A reference-count criterion
+applied to a scientific corpus removes exactly the artifacts that are newest.
+
+#### Borderline — the two Jim asked about by name, and my answer
+
+**#297 (jcschaff) — a modeling *consequence*, disclosed and endorsed; not W!.** Yes, choosing
+GLOP→HIGHS→CLARABEL embeds a tie-break: on a degenerate norm-1 optimum a different solver returns a
+different optimal vertex, so fluxes differ. But it fires **only** where GLOP raised or was non-optimal
+— i.e. only on ticks that previously produced no result at all; "Ticks where GLOP is optimal are
+byte-for-byte unchanged". And the PR did the right thing with it: a "Caveat (science side,
+@cplong90)" section states the vertex risk explicitly, offers to restrict or reorder, and eagmon
+formally **APPROVED**. This is the one PR in the debugging era where a modeling-relevant consequence
+was written down, addressed to a named scientist, and accepted on the record. It should be the pattern.
+
+**#314 (jcschaff) — a model behaviour choice, but only on a previously fatal path; not W!.**
+Choosing "skip the tick, carry `pg_cellwall` unchanged, warn" over "abort" *is* a statement about the
+model — for one timestep no peptidoglycan maturation chemistry happens. But the alternative was a dead
+lineage, and the PR is explicit that it does not fix the cause: "It does not fix why the daughter's
+first-tick mass is not finite … it makes the symptom survivable and *visible*." The real risk it
+creates is governance, not physics: a lineage can now complete with N skipped ticks and nothing grades
+N. The `RuntimeWarning` is the only signal, and no analysis reads it.
+
+**#299 (AlexPatrie) — M, and the fidelity claim checks out.** I verified the grid, the 10,000 s onset,
+`generations: 20` and `n_init_sims: 4` against `CovertLabEcoli/vEcoli-private` branch
+`antibiotics-cd2`'s `configs/antibiotic_cocktail.json`: identical. "Nothing here is a new scientific
+decision" is true. What is *not* settled is which upstream branch is authoritative — see finding 1.
+
+#### Pin bumps
+
+Intent of all nine is W. **None silently changed biology in a way its body concealed** — #307 and
+##280 state the biological effect explicitly and #280 measures it; #305 and #310 name the upstream PR
+that carries it. The systemic risk is one level down and is not visible in any bump body: the
+`ecoli-sources` pin was last moved 2026-08-24 for a *schema* reason (#106), and #301 later discovered
+that the same package "is a **stale snapshot** of `metabolism_redux.py`" carrying 5 of the 51
+`BAD_RXNS` — a model process frozen inside a data-package pin nobody was tracking as a model input.
+
+---
+
+### 5. The S list — for Eran and Chris the people to review
+
+Four scientific choices were made in this repo with no source-model authority. None carries a formal
+review; two are recorded only as a claim about an approval that happened elsewhere.
+
+1. **`279b7bb1` #199 — pg-shape failure policy `raise_lysis` → `lyse` (×3).** Justification:
+   *"records the lysed flag and continues, which is the correct behavior for a dose-response and is
+   what the downstream analyses read."* The PR title calls it an "eagmon-approved dose-response
+   policy"; **nothing in the PR thread records that approval.** The change was bundled into a PR
+   whose headline item is a topology-key crash fix. Effect: a drug-induced lysis now yields a
+   completed, plotted run instead of an aborted one — which is what a dose-response needs, and also
+   what makes a lysing arm indistinguishable from a surviving one unless the flag is read.
+   *(Later partial corroboration: #272 records that vEcoli-private#93's own
+   `mecillinam_shape_vecoli_ref.json` uses the `lyse` policy — but that landed four days after #199.)*
+
+2. **`17d67194` #213 — drug decay as a delivered mechanism.** Justification: *"delivers a decaying
+   environmental source (first-order hydrolysis, k=1.375e-4/s, half-life 1.4 hr, Brouwers 2020) so
+   native external drug drains across the lineage like the fork."* Cited to a paper, defaults to
+   no-change, and validated against the fork (native IC50 0.20–0.26 µM vs fork 0.175–0.28). The
+   decision to review is whether first-order hydrolysis at that rate is the right model of mecillinam
+   loss in this environment, and whether it should be on by default for Run 3.
+
+3. **`f0a9d1b0` #309 — Run 3 scale, `generations` 8 → 20, `n_init_sims` 1 → 4.** Justification:
+   *"Eran confirmed the Run 3 antibiotic-cocktail scale: 4 seeds × 20 generations × 36
+   concentrations."* Reported, not linked. (It agrees with the `antibiotics-cd2` source config, so
+   the value is independently corroborated — but the PR did not know that; it merged 2 minutes after
+   its own review comment.)
+
+4. **`188da919` #171 — Run 4 screens native_oe, not the tnaA/trpR knockout.** Justification: *"the
+   tnaA/trpR knockout is viz-mechanics only (per @cplong90's #86 review), not a Run 4 config."* One
+   config added, one deleted; the cited review is on a different PR.
+
+**Two adjacent items that are not S but belong in front of a scientist:**
+- **#306's DHPS kinetics** — kcat 0.38, km_paba 7.82e-3 mM, k_i 5.15e-3 mM. The PR's authority is
+  "match the vEcoli reference (and the reverted #753 block) exactly"; **no primary citation for the
+  three numbers appears anywhere in this repo.**
+- **#152's 2–3× violacein titer divergence**, declared "a finding, not a bug" with a bit-faithful ODE.
+  No scientist commented.
+
+---
+
+### 6. What I could not determine
+
+- **Whether any `ecoli-sources` / `ecoli-sources-private` pin bump changed reconstruction or model
+  code.** Their bodies name only schema and validation-data reasons; the package also ships the ParCa
+  flat files and (per #301) at least one model process file. Answering this needs a diff of the
+  package between `2dfabd52`, `840bc973`, and their June predecessors — outside this repo.
+- **Who actually typed any of it.** Every login in this audit posts as both a person and a Claude
+  session; five PRs (#303, #306, #308, #309, #307) carry a review comment posted under `eagmon` on
+  `eagmon`'s own PR, and four of those say the merge is "held for Eran's go" while the PR merged 2–20
+  minutes later with no recorded go. I have reported that as a fact about the record, not as an
+  inference about who read what.
+- **The two June direct commits** (`e1ca115a`, `f4eb0d9c`) have no PR; `f4eb0d9c` has no commit body
+  at all, so its subject line is the entire available context.
+- **Whether `vEcoli-private` branch `antibiotics-cd2` or `master`/#93 is the authoritative Run 3 dose
+  grid.** Both are present in this repo. #299 raised it on sms-ecoli#166 and it is unresolved there;
+  I did not read that issue thread as it is outside the commit list.
+- **Whether the #199 "eagmon-approved" and #301 "Eran's follow-Robotato/master directive" claims are
+  real.** Both are asserted in PR bodies and neither is linked to anything.
+
+
+---
+
+# Appendix E — Part 2 rubric
+
+## Intent audit rubric (second pass over the 2026-09-09 model-change audit)
+
+Context from Jim (the user), verbatim in substance:
+- The models were MIGRATED from another repo with the v1 vEcoli structure (vEcoli / vEcoli-private /
+  the "fork"), and had to be INJECTED into the v2ecoli composition and somewhat refactored. A migration
+  PR is the transfer of a scientific artifact; its description should make that clear, and we want to
+  extract the scientific justification and motivation of the entire PR (what was ported, from where,
+  what fidelity was claimed or verified, what was knowingly changed).
+- More recently the team has been DEBUGGING THE COMPOSITION under the v2ecoli structure. Some of those
+  fixes may have corrected mistakes in the original translation. Those are software fixes whose
+  authority is "what vEcoli does".
+- Most recently Alex Patrie and Jim Schaff (via their Claude sessions, posting as @AlexPatrie /
+  @jcschaff) have been changing things to get the PLUMBING to work. Even where those PRs were written
+  with a scientific-sounding rationale, the intent is NOT to make modeling decisions. We need to know
+  whether any of them did anyway.
+
+The first pass classified EFFECT (A semantics / B interfaces / C opt-in / P parca / E design). This pass
+classifies INTENT and AUTHORITY, from the PR description, the PR thread, and the commit message —
+i.e. by the CONTEXT the change was made in. Do not re-derive effect; take it from the first pass.
+
+### Intent codes (exactly one per commit; add a second only if the PR itself is two things)
+- **M  Migration** — ports model code or model data from a named source (vEcoli, vEcoli-private, the
+  fork, vivarium-ecoli, a paper's supplement). Record: the source (repo/branch/file if named), the
+  fidelity claim (e.g. "reference-parity tests", "rtol 1e-6", "byte-identical", none), and any
+  deviation from the source the PR admits (refactor, dropped feature, changed default).
+- **T  Translation correction** — the PR's stated reason is that v2ecoli/sms-ecoli behaved differently
+  from the source model and this restores the source behaviour. Authority cited = the source model.
+  Record the cited reference behaviour.
+- **S  Scientific refinement / modeling decision** — the stated reason is a scientific claim or a
+  choice with no source-model authority: a new mechanism, a parameter value with a citation or none,
+  a media/condition definition, enabling/disabling a mechanism by default, a dose grid, a division
+  rule. Record the justification VERBATIM (short quote) and whether a human-looking comment from
+  eagmon or cplong90 endorses it (a PR body written by a Claude session is not endorsement).
+- **W  Plumbing / software debugging** — the stated reason is software: a crash, a config not
+  reaching its target, a store type, ordering, threading a knob, a dispatcher need. No claim about
+  what the biology should be.
+- **W!** — a W-intent PR whose diff nonetheless makes a modeling decision (chooses a numeric value,
+  adds or removes a rule, changes a default that alters results where it did not previously crash,
+  changes a declared input/output relationship between processes for a reason other than restoring the
+  source). This is the category Jim most wants to see. Say exactly what decision was embedded.
+
+### Authority column
+What the PR appeals to: `vEcoli` (names the reference behaviour), `citation` (paper/database),
+`none` (asserts), `crash` (the only justification is that it no longer crashes), `team` (a decision
+recorded in an issue/thread by a person — link it).
+
+### Login classes (logins are Claude sessions much of the time; say so, do not guess who typed)
+scientist logins: eagmon, cplong90 (and git authors "Eran", "Eran Agmon", "Chris Long").
+engineer logins: AlexPatrie / "A.P.", jcschaff / "Jim Schaff".
+
+### Method
+- For every commit in the first-pass A, B (and P-A, and the "outside model paths" A) tables: read the
+  PR body and ALL comments/reviews (`gh pr view N -R <repo> --json title,body,author,comments,reviews`
+  or `gh api repos/<repo>/pulls/N/comments`), and the commit body (`git show -s --format=%B <sha>`).
+  For direct commits with no PR, the commit body is the only context; say so.
+- Quote, do not paraphrase, the sentence(s) that state the motivation. ≤ 40 words per quote.
+- Read-only. Do not post, comment, push, or check anything out. Do not run simulations.
+- Timezone: GitHub gives UTC; keep it.
+
+### Output (markdown file; the path is given in your task)
+1. Totals: intent × effect cross-tab; intent × login-class cross-tab.
+2. The migration PRs, each with a paragraph: source, what was ported, fidelity claim, admitted
+   deviations, whether the description says it is a scientific artifact transfer.
+3. The full table, most recent first: sha | date | PR | login (class) | effect | intent | authority |
+   stated motivation (quote) | embedded modeling decision (for S and W!) | human endorsement seen?
+4. The W! list on its own, engineer logins first — these are the answer to "did the plumbing PRs make
+   modeling decisions".
+5. The S list on its own with the justifications, for Eran and Chris the people to review.
+6. What you could not determine (missing PR body, squash with no thread, etc.).
 
