@@ -300,3 +300,26 @@ def test_run3_sweep_is_one_variant_per_dose_combo_with_its_own_resolved_timeline
     )
     assert plan.n_seeds == 4 and plan.n_generations == 20 and len(plan.params["variants"]) == 36
     assert "exchange_fluxes" not in plan.params
+
+
+def test_parse_index_set_handles_singles_ranges_and_blanks() -> None:
+    assert t.parse_index_set("0") == {0}
+    assert t.parse_index_set("0,5-7, 9,") == {0, 5, 6, 7, 9}
+
+
+def test_run3_combos_keeps_only_the_named_grid_points_and_rejects_out_of_range() -> None:
+    repo = Path("/Users/jimschaff/Documents/workspace/sms-ecoli")
+    cfg_path = repo / "configs/cd2/run3_antibiotic_pg_sulfadiazine.json"
+    if not cfg_path.exists():
+        pytest.skip("sms-ecoli checkout not available")
+    cfg = json.loads(cfg_path.read_text())
+    everything, seeds, gens = t.run3_sweep_variants(cfg, repo, "pilot")
+    assert len(everything) == 36
+    one, seeds1, gens1 = t.run3_sweep_variants(cfg, repo, "pilot", combos={0})
+    assert [v["variant_name"] for v in one] == [everything[0]["variant_name"]]
+    assert one[0]["injected_processes"] == everything[0]["injected_processes"]
+    assert (seeds1, gens1) == (seeds, gens)  # the scale comes from the grid, not the subset
+    two, _, _ = t.run3_sweep_variants(cfg, repo, "pilot", combos={35, 5})
+    assert [v["variant_name"] for v in two] == [everything[5]["variant_name"], everything[35]["variant_name"]]
+    with pytest.raises(t.TranslationError, match="out of range"):
+        t.run3_sweep_variants(cfg, repo, "pilot", combos={36})

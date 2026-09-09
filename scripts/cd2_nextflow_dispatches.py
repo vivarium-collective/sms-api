@@ -245,8 +245,20 @@ def founder_variants(mapping: dict[str, Any], arm: str, prefix: str) -> list[dic
     return out
 
 
+def parse_index_set(spec: str) -> set[int]:
+    """``"0,5-7"`` -> ``{0, 5, 6, 7}``."""
+    out: set[int] = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        lo, _, hi = part.partition("-")
+        out.update(range(int(lo), int(hi or lo) + 1))
+    return out
+
+
 def run3_sweep_variants(
-    base_cfg: dict[str, Any], sms_ecoli: Path, campaign_id: str
+    base_cfg: dict[str, Any], sms_ecoli: Path, campaign_id: str, combos: set[int] | None = None
 ) -> tuple[list[dict[str, Any]], int, int]:
     """One variant per (mecillinam, sulfadiazine) dose combo, from sms-ecoli#299's own generator.
 
@@ -256,8 +268,9 @@ def run3_sweep_variants(
     real 4 seeds x 20 generations. On the MNP path that is 36 dispatches; here it is ONE
     campaign whose variants each carry their own resolved injection block (the campaign
     id names the run, so the per-combo ``experiment_id`` the generator stamps is dropped
-    -- the ``variant=`` partition is the combo's identity). Returns
-    ``(variants, n_seeds, n_generations)``.
+    -- the ``variant=`` partition is the combo's identity). ``combos`` keeps only those
+    grid indices (0-35, the generator's order: mecillinam outer, sulfadiazine inner) -- a
+    pilot is one combo, the real Run 3 is all 36. Returns ``(variants, n_seeds, n_generations)``.
     """
     import importlib.util
 
@@ -271,9 +284,15 @@ def run3_sweep_variants(
     sys.modules[spec.name] = sweep
     spec.loader.exec_module(sweep)
     base = {**base_cfg, "experiment_id": base_cfg.get("experiment_id") or campaign_id}  # the generator indexes it
-    combos = sweep.build_all_combo_configs(base)
+    all_combos = sweep.build_all_combo_configs(base)
+    if combos is not None:
+        bad = sorted(c for c in combos if c < 0 or c >= len(all_combos))
+        if bad:
+            raise TranslationError(f"--run3-combos out of range {bad}: the grid has {len(all_combos)} combos")
     variants: list[dict[str, Any]] = []
-    for i, combo in enumerate(combos):
+    for i, combo in enumerate(all_combos):
+        if combos is not None and i not in combos:
+            continue
         tl = combo["injected_processes"]["process_configs"]["field_timeline"]["timeline"]
         mec = next(v["mecillinam"] for _, v in tl if "mecillinam" in v)
         sulf = next(v["sulfadiazine"] for _, v in tl if "sulfadiazine" in v)
@@ -282,7 +301,7 @@ def run3_sweep_variants(
         if not inj:
             raise TranslationError(f"combo {i}: no injection block came out of the generated config")
         variants.append({"variant_name": f"combo{i:02d}_mec{mec:g}_sulf{sulf:g}", "injected_processes": inj})
-    return variants, int(combos[0]["n_init_sims"]), int(combos[0]["generations"])
+    return variants, int(all_combos[0]["n_init_sims"]), int(all_combos[0]["generations"])
 
 
 def plan_campaign(
@@ -393,7 +412,9 @@ def resolve_variants(a: argparse.Namespace, cfg: dict[str, Any]) -> list[dict[st
     if a.run3_sweep:
         if a.run != "3":
             raise SystemExit("--run3-sweep is for --run 3")
-        variants, sweep_seeds, sweep_gens = run3_sweep_variants(cfg, a.sms_ecoli, a.label)
+        variants, sweep_seeds, sweep_gens = run3_sweep_variants(
+            cfg, a.sms_ecoli, a.label, combos=parse_index_set(a.run3_combos) if a.run3_combos else None
+        )
         a.seeds = a.seeds if a.seeds is not None else sweep_seeds
         a.generations = a.generations if a.generations is not None else sweep_gens
     if a.variants_json:
@@ -417,6 +438,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--independent-founders", action="store_true")
     p.add_argument(
         "--run3-sweep", action="store_true", help="Run 3: one variant per mec x sulf dose combo (sms-ecoli#299 grid)"
+    )
+    p.add_argument(
+        "--run3-combos", help="with --run3-sweep: keep only these grid indices, e.g. '0' or '0,5-7' (default all 36)"
     )
     p.add_argument(
         "--variants-json",
