@@ -1276,7 +1276,14 @@ def test_main_threads_experiment_id_through_to_run(monkeypatch: pytest.MonkeyPat
 
     seen: dict[str, Any] = {}
 
-    def fake_run(input_file, steps, composite_id=None, overrides=None, experiment_id=None, **kw):
+    def fake_run(
+        input_file: str | None,
+        steps: int,
+        composite_id: str | None = None,
+        overrides: dict[str, Any] | None = None,
+        experiment_id: str | None = None,
+        **kw: Any,
+    ) -> Path:
         seen.update(steps=steps, composite_id=composite_id, overrides=overrides, experiment_id=experiment_id)
         return Path("/dev/null")
 
