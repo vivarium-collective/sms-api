@@ -265,7 +265,8 @@ def run3_sweep_variants(
     if not mod_path.exists():
         raise TranslationError(f"{mod_path} not found -- needs sms-ecoli >= #299")
     spec = importlib.util.spec_from_file_location("antibiotic_cocktail_sweep", mod_path)
-    assert spec is not None and spec.loader is not None
+    if spec is None or spec.loader is None:
+        raise TranslationError(f"cannot load {mod_path}")
     sweep: Any = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = sweep
     spec.loader.exec_module(sweep)
@@ -372,6 +373,34 @@ def plan_campaign(
     )
 
 
+def resolve_variants(a: argparse.Namespace, cfg: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Turn the CLI's founder / cache / sweep / JSON options into the variant list (and default seeds/gens)."""
+    variants: list[dict[str, Any]] | None = None
+    if a.founders:
+        variants = founder_variants(json.loads(a.founders.read_text()), FOUNDER_ARMS[a.run], f"run{a.run}")
+        if a.seeds is None:
+            a.seeds = 1
+    if a.cache_variants or a.cache_template:
+        names = [n.strip() for n in (a.cache_variants or "").split(",") if n.strip()]
+        if a.cache_template:
+            if not a.cache_range or "-" not in a.cache_range:
+                raise SystemExit("--cache-template needs --cache-range first-last")
+            lo, hi = (int(x) for x in a.cache_range.split("-", 1))
+            names += expand_template(a.cache_template, lo, hi)
+        variants = cache_variants(names, a.cache_commit or "", f"run{a.run}", a.cache_root)
+        if a.seeds is None:
+            a.seeds = int(cfg.get("n_init_sims") or 1)
+    if a.run3_sweep:
+        if a.run != "3":
+            raise SystemExit("--run3-sweep is for --run 3")
+        variants, sweep_seeds, sweep_gens = run3_sweep_variants(cfg, a.sms_ecoli, a.label)
+        a.seeds = a.seeds if a.seeds is not None else sweep_seeds
+        a.generations = a.generations if a.generations is not None else sweep_gens
+    if a.variants_json:
+        variants = json.loads(a.variants_json)
+    return variants
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--run", required=True, choices=sorted(RUN_CONFIGS))
@@ -415,29 +444,7 @@ def main(argv: list[str] | None = None) -> int:
     a = p.parse_args(argv)
 
     cfg = load_workflow_config(a.sms_ecoli / RUN_CONFIGS[a.run])
-    variants: list[dict[str, Any]] | None = None
-    if a.founders:
-        variants = founder_variants(json.loads(a.founders.read_text()), FOUNDER_ARMS[a.run], f"run{a.run}")
-        if a.seeds is None:
-            a.seeds = 1
-    if a.cache_variants or a.cache_template:
-        names = [n.strip() for n in (a.cache_variants or "").split(",") if n.strip()]
-        if a.cache_template:
-            if not a.cache_range or "-" not in a.cache_range:
-                raise SystemExit("--cache-template needs --cache-range first-last")
-            lo, hi = (int(x) for x in a.cache_range.split("-", 1))
-            names += expand_template(a.cache_template, lo, hi)
-        variants = cache_variants(names, a.cache_commit or "", f"run{a.run}", a.cache_root)
-        if a.seeds is None:
-            a.seeds = int(cfg.get("n_init_sims") or 1)
-    if a.run3_sweep:
-        if a.run != "3":
-            raise SystemExit("--run3-sweep is for --run 3")
-        variants, sweep_seeds, sweep_gens = run3_sweep_variants(cfg, a.sms_ecoli, a.label)
-        a.seeds = a.seeds if a.seeds is not None else sweep_seeds
-        a.generations = a.generations if a.generations is not None else sweep_gens
-    if a.variants_json:
-        variants = json.loads(a.variants_json)
+    variants = resolve_variants(a, cfg)
     plan = plan_campaign(
         run=a.run,
         cfg=cfg,
