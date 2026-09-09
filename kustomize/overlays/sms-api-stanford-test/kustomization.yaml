@@ -73,7 +73,7 @@ images:
   # conflict, logged rather than silent. Same root cause as #392/0.9.92 --
   # reconstructing the block instead of merging into it.
   - name: ghcr.io/vivarium-collective/sms-api
-    newTag: 0.9.127
+    newTag: 0.9.128
     # 2026-09-08: 0.9.125 -> 0.9.126, viva-api#513 -- Bug A fix: stage
     # vEcoli-private (not the public mirror) as /app/vEcoli. Adds a required
     # (fail-loud, no floating-to-master-tip default) vecoli_private_commit
