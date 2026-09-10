@@ -285,8 +285,19 @@ images:
   # vivarium-workbench (pyproject.toml's own version field still reads 0.3.78 --
   # a known, harmless one-increment lag, not corrected here to keep this a pure
   # deploy-config change).
+  # 0.3.80 (2026-09-10): workbench#1044 -- a real, foundational fix: the
+  # workbench's own remote-dispatch flow never sent a config_filename to
+  # sms-api on ANY path, so no CD2 run has ever actually been dispatchable
+  # through this UI. Threads a real config_filename through
+  # study-detail.js -> remote_run_submit -> SmsApiClient.run_simulation() ->
+  # sms-api's real simulation_config_filename param. Unset by default, so
+  # every existing caller (e.g. "Run current spec") is byte-identical to
+  # before. Full CI green (99-test scoped suite + full 4-shard suite + types +
+  # quarantine watch) before merge. Heads-up posted to sms-ecoli#166 before
+  # this deploy (not a fresh approval ask -- same namespace, same low-risk
+  # pattern already approved and run once today for 0.3.79).
   - name: ghcr.io/vivarium-collective/vivarium-workbench
-    newTag: 0.3.79
+    newTag: 0.3.80
 
 replicas:
   - count: 1
