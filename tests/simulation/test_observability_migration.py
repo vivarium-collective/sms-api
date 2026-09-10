@@ -255,7 +255,7 @@ async def test_migrated_schema_agrees_with_the_orm_for_what_this_migration_owns(
                     source="api",
                     seq=1,
                     ts=datetime.datetime(2026, 9, 10, 12, 0, 0),
-                    layer="dispatcher",
+                    component="dispatcher",
                     event="submitted",
                     span_id="s0",
                 )
@@ -269,7 +269,7 @@ async def test_migrated_schema_agrees_with_the_orm_for_what_this_migration_owns(
                 async with engine.begin() as dup:
                     await dup.execute(
                         text(
-                            "INSERT INTO hpcrun_event (hpcrun_id, trace_id, source, seq, ts, layer, event) "
+                            "INSERT INTO hpcrun_event (hpcrun_id, trace_id, source, seq, ts, component, event) "
                             "VALUES (:h, 'tr', 'api', 1, '2026-09-10 12:00:00', 'dispatcher', 'submitted')"
                         ),
                         {"h": hpcrun_id},
@@ -326,3 +326,54 @@ async def test_migration_can_be_re_applied_after_a_downgrade(
     for table in _OWNED_TABLES:
         assert table in restored.tables
     assert restored.tables["hpcrun"] >= _NEW_HPCRUN_COLUMNS
+
+
+@pytest.mark.asyncio
+async def test_migration_renames_the_draft_layer_column_to_component(
+    fresh_postgres_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An earlier draft of this same revision named the event column ``layer``;
+    the settled schema calls it ``component``. A database that received the
+    draft (dev, before the rename landed) must be carried across in place,
+    keeping its rows. The rename is a no-op everywhere else -- which every
+    other test here already covers by never having a ``layer`` column at all.
+    """
+    await _migrate_to(fresh_postgres_url, OBS_REVISION, monkeypatch)
+    cfg = _alembic_config(fresh_postgres_url)
+    monkeypatch.setenv("SQLALCHEMY_DATABASE_URL", fresh_postgres_url)
+
+    engine = create_async_engine(fresh_postgres_url)
+    try:
+        db = DatabaseServiceSQL(async_engine=engine)
+        await _shim_missing_hpcrun_columns(engine)
+        _ref_id, hpcrun_id = await _a_run(db)
+        # Put the database back into the draft shape, with a row in it.
+        async with engine.begin() as conn:
+            await conn.execute(text("ALTER TABLE hpcrun_event RENAME COLUMN component TO layer"))
+            await conn.execute(
+                text(
+                    "INSERT INTO hpcrun_event (hpcrun_id, trace_id, source, seq, ts, layer, event) "
+                    "VALUES (:h, 'tr', 'api', 1, '2026-09-10 12:00:00', 'dispatcher', 'submitted')"
+                ),
+                {"h": hpcrun_id},
+            )
+    finally:
+        await engine.dispose()
+
+    # Re-run the revision against that draft-shaped database: stamp back one
+    # revision and upgrade again. The tables are NOT dropped, so this is
+    # exactly the IF NOT EXISTS + rename path a real dev database would take.
+    await asyncio.to_thread(command.stamp, cfg, PRE_OBS_REVISION)
+    await asyncio.to_thread(command.upgrade, cfg, OBS_REVISION)
+
+    actual = await _reflect(fresh_postgres_url)
+    assert "component" in actual.tables["hpcrun_event"]
+    assert "layer" not in actual.tables["hpcrun_event"]
+
+    engine = create_async_engine(fresh_postgres_url)
+    try:
+        async with engine.connect() as conn:
+            rows = [tuple(r) for r in (await conn.execute(text("SELECT component, event FROM hpcrun_event"))).all()]
+        assert rows == [("dispatcher", "submitted")], "the draft row must survive the rename"
+    finally:
+        await engine.dispose()
