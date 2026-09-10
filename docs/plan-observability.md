@@ -506,6 +506,65 @@ Most of this runs on a laptop; the cluster pilots are the final rung, not the fi
 - Laptop: `PBG_EVENT_SINKS=file:./events.jsonl vwb run-study …` produces the same event stream
   with no AWS configuration.
 
+### D5. The Ray / multi-node path (added 2026-09-10, after Jim asked what it does with an instrumented simulator)
+
+Alex's pbg-native Ray dispatch was not called out separately above. Checked against the branch
+chain rather than reasoned about, it behaves better than expected in one way and worse in another.
+
+**It instruments itself with no extra wiring.** Three facts compose:
+
+1. `get_emitter()` lazily calls `configure(default='none')`, and `configure` still reads
+   `PBG_EVENT_SINKS` from the environment — `default` only applies when the variable is absent.
+   So *any* process that inherits the environment becomes a live emitter on first touch.
+2. The dispatcher already puts the `PBG_*` block on every node: `with_events_env(...)` →
+   `task_env` → `shared_env` → the single `"0:"` node-property override (the CDK base job
+   definition declares one node range and the entrypoint self-branches head vs worker).
+   Ray worker processes are forked by that node's raylet and inherit it.
+3. Inside an actor, `_RayBatchActor.batch_update` calls `composite.update(...)`, and
+   `Composite.update` calls `self.run(interval)` — the fully hooked path.
+
+So ticks, structural changes and process exceptions are emitted **from inside the actors**, not
+only from the driver, and no `runtime_env.env_vars` plumbing is needed. The plan's earlier risk
+note ("MNP actors need `PBG_*` through `runtime_env`") is **wrong and is retracted**: the Batch
+node override already covers it, and the lazy `configure` does the rest. The driver additionally
+contributes `process.init` (Ray `init_cell` cold-start timing) and `runtime.error` (shard flush).
+
+**What the actor path does *not* give:** `_RayBatchActor.batch_update`'s per-`proc_id` wrapper
+re-raises a better-named `RuntimeError` but emits no event of its own. The per-process exception
+context comes from the inner composite's own `process.exception`, which is emitted inside the
+actor and reaches the sink from there.
+
+**Two defects this exposed downstream, both fixed in v2ecoli#772 (`4d6a4e22`):**
+
+| defect | why the other paths never showed it |
+|---|---|
+| the S3 object key was `AWS_BATCH_JOB_ID`, so **every process on a node shared one object** and each whole-object rewrite dropped the others' events, silently | Nextflow and chain run one Python process per task, where the job id *is* unique. A multi-node child's id is `<mainJobId>#<nodeIndex>` — per node, not per process. Fixed by appending the pid. |
+| the sink buffer was **unbounded**, and the object is rewritten whole, so cumulative bytes written grow with the square of the event count | a lineage task emits a few thousand events; a process running many composites at a high tick rate does not. Fixed by keeping head + rolling tail with an explicit `sink.truncated` marker. |
+
+**One open engine-contract question, raised on process-bigraph#209 (comment 5621486676) for
+Eran to decide.** `run.start`/`run.end` fire on *every* `Composite.run`, and on this path a
+`Composite.run` is one tick of one cell, not one simulation:
+
+```
+run events  =  2 × n_composites_per_actor × driver_ticks
+```
+
+For 100 cells over 3,600 s at a 1 s step that is 720,000 events, against roughly 360 per
+generation on the lineage path (where `LineageProcess` calls `run()` in 10 s slices — itself a
+consequence of #773's stop-at-division slicing, which raised that path from 1 run per generation
+to ~360). The heartbeat is wall-clock throttled and does not have this problem; only the run pair
+does, because it is per-call rather than per-unit-of-time. Three options are on the PR; the
+preferred one rate-limits the pair per Composite instance, always emitting the first run and any
+run that ends in error, and folding suppressed runs into the next `run.end` as `runs=N, total=…`.
+
+A depth-based rule (suppress nested runs) does **not** work here: in an actor process there is no
+enclosing run, so every cell's run is the outermost one in its own context. The distinguishing
+property is the rate, not the nesting.
+
+**Status:** nothing is blocked on this. Events are off by default on every path, the lineage
+paths are unaffected at their current call rate, and the downstream cap makes the Ray path
+degrade visibly rather than without bound.
+
 ## Risks and open questions
 
 - **Spot reclaim visibility**: Batch retries reclaim internally (`maxSpotAttempts`), so
@@ -522,7 +581,10 @@ Most of this runs on a laptop; the cluster pilots are the final rung, not the fi
 - **Exception type preservation**: bare re-raise is mandatory (division detection); `add_note`
   needs Python ≥ 3.11, else the attribute only.
 - **Ray identity**: `_stable_proc_id = id(shadow)` carries no path; H5 names class + shard until
-  the runtime records the path at enqueue. MNP actors need `PBG_*` through `runtime_env`.
+  the runtime records the path at enqueue. ~~MNP actors need `PBG_*` through `runtime_env`.~~
+  **Retracted 2026-09-10 (see D5)**: the Batch node-property override already puts `PBG_*` on
+  every node and Ray workers inherit it, so actors instrument themselves. The real Ray issues
+  are the per-process object key and the `run.start`/`run.end` rate, both covered in D5.
 - **Engine default off vs stdout**: a judgement call Eran may reverse; one line in `configure()`.
 - **Alembic**: one migration, one fingerprint marker; PARTIAL must be accepted by CLI/TUI/GUI and
   the workbench's terminal-status buckets (`remote_run_views.py:43-44`) — flag to Alex.
