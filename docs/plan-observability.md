@@ -358,7 +358,29 @@ the pins move from branch hashes to the merge commits.
    Parallel with B/C; tolerates an empty prefix until the new image runs.
 5. **viva-api PR-E** — CloudWatch enrichment. Optional.
 
-## Verification
+## Verification — a local ladder first (Jim, 06:10Z), the cluster last
+
+Most of this runs on a laptop; the cluster pilots are the final rung, not the first:
+
+1. **pytest** in each repo (D2/D3/D4 tests; `capsys` on the JSON lines).
+2. **Local toy models on the engine**: process-bigraph's own composites — `_two_increasers`
+   (`tests.py:3135`), the Gillespie composite (`:587`) and above all `test_grow_divide`
+   (`:540`, a real structural division) — run with `PBG_EVENT_SINKS=stdout` and
+   `detail=timing,invoke,spans`: `run_start` → `tick` → `structural_change` at the division →
+   `run_end`, an injected raising process → `exception` with path and state summary, and the
+   on/off invariance. Seconds, no vEcoli, no AWS.
+3. **Local real model, short**: v2ecoli's local sweep runner (`v2ecoli/workflow/run.py --config …
+   --max-sim-time 300`) on the bare cache with `V2ECOLI_SKIP_CACHE_VERIFY=1` and the file sink:
+   `generation_start` with the carry report, heartbeats every 30 s, `chunk_flushed`, and a
+   `failure_record` from an injected raising process. Minutes on a laptop.
+4. **Local Nextflow**: `nextflow` 25.04.3 is installed and `generate_nextflow_config(executor=
+   'local')` already exists, so a rendered `workflow_nf` document runs on the laptop with plain
+   local processes (toy composite or the 300 s ecoli run): exercises the retry template
+   (`errorStrategy` exit set), `trace.csv` and its parser, `.nextflow.log`/`failure.json`
+   handling, and the file-sink events end to end. `nextflow -preview` stays the compile check.
+5. **`vwb smoke`** for the workbench side; `PBG_EVENT_SINKS=file:./events.jsonl vwb run-study …`
+   for the laptop event stream.
+6. **Cluster**: the branch-chain pilots below, only after 1–5 pass.
 
 - Unit: D2/D3 tests above; viva-api `tests/simulation/test_scheduler.py::TestUpdateNextflowHeads`
   (mirror `TestUpdateMultiNodeJobs:886` incl. the disjointness test `:987` and the loop-order
