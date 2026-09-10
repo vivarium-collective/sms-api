@@ -275,8 +275,18 @@ images:
   # bump not yet merged as of this edit. Courtesy-corrected here only so THIS
   # unrelated sms-api bump (v0.9.61) doesn't downgrade it; not this session's
   # own change to author a changelog entry for.
+  # 0.3.79 (2026-09-10): stale-deploy catch-up, requested by Chris/Eran on
+  # sms-ecoli#166 -- picks up workbench#1041 (cache_variant sibling placement
+  # + mbp_dispatch UI, item 110) and workbench#1042 (Investigation-association
+  # fix on study-create) which had been merged but never deployed to this
+  # namespace. No sms-ecoli/v2ecoli science-stack change (workbench#932 already
+  # made this image workbench-only; this tag just advances vivarium-workbench's
+  # own git history from 727ce1bf to 021c1069). Tagged v0.3.79 on
+  # vivarium-workbench (pyproject.toml's own version field still reads 0.3.78 --
+  # a known, harmless one-increment lag, not corrected here to keep this a pure
+  # deploy-config change).
   - name: ghcr.io/vivarium-collective/vivarium-workbench
-    newTag: 0.3.78
+    newTag: 0.3.79
 
 replicas:
   - count: 1
