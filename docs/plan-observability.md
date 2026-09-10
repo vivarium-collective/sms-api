@@ -14,6 +14,10 @@ multi-generation run built from `main` for five hours. Finding it needed:
   `/aws/batch/job`);
 - reconstructing simulation id → Batch job id → log stream by hand, every time;
 - a bisect image (simulator 192) to prove which of three co-shipped PRs was at fault;
+- ~~the Run 3 dose firing ~2,900 s early on sim 898~~ (withdrawn 08:15Z: under the Nextflow path's
+  window semantics it fired at 10,001 s; what looked like a clock bug was two dispatch paths with
+  different lineage semantics — a generation ends at division on the chain path but runs the full
+  window, daughters included, on the Nextflow path — found only by an opt-in debug print);
 - noticing by accident that 943's Nextflow head was silently re-running a
   deterministic crash (retry 3 of 10, API status "running"), and that 749 said
   "running" for hours after its head had finished with four failed tasks.
