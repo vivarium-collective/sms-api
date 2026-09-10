@@ -805,7 +805,29 @@ def _apply_declared_run_identity(
     return merged
 
 
-def _check_required_run_interval(spec: Any, overrides: dict[str, Any] | None, steps: int) -> None:
+# The composite whose batch route (n_seeds > 1 or n_generations > 1) is a single
+# Step -- see _check_required_run_interval. Mirrors
+# simulation_service_ray.V2ECOLI_BATCH_BASELINE_COMPOSITE_ID without importing
+# the service into this runner (which is staged into the container on its own).
+_BATCH_BASELINE_COMPOSITE_IDS = frozenset({
+    "v2ecoli.composites.ecoli_baseline.ecoli_baseline",
+    "v2ecoli.composites.ecoli_baseline",
+})
+
+
+def _is_batch_baseline_shape(composite_id: str | None, *, n_seeds: int, n_generations: int) -> bool:
+    """``ecoli_baseline`` with more than one seed or generation builds
+    ``BatchBaselineRunner`` (``composites/ecoli_baseline.py``, ``baseline``'s
+    ``n_seeds>1 or n_generations>1`` gate), a Step that completes in one
+    update; ``-n 1`` is then the whole run."""
+    if not composite_id or composite_id not in _BATCH_BASELINE_COMPOSITE_IDS:
+        return False
+    return n_seeds > 1 or n_generations > 1
+
+
+def _check_required_run_interval(
+    spec: Any, overrides: dict[str, Any] | None, steps: int, composite_id: str | None = None
+) -> None:
     """Refuse to under-run a lineage-shaped composite.
 
     ``Composite.run(steps)`` advances TOTAL SIMULATED TIME, and every
@@ -822,21 +844,29 @@ def _check_required_run_interval(spec: Any, overrides: dict[str, Any] | None, st
     than silently stretch the run -- the caller asked for a duration, and a
     wrong one is a bug in the request, not something to paper over.
 
-    **Exempt when ``stop_at_division`` is set (CD2 Run 3, chain-dispatch,
-    sms-ecoli#166).** Chain-dispatch's own per-generation job submission
-    (``_seed_generation_command``) always hardcodes ``-n 1`` deliberately --
-    with ``stop_at_division: True`` (item 103), ``LineageProcess`` advances to
-    a real division INTERNALLY regardless of the nominal step count; ``steps``
-    there is a "go" signal, not a simulated-time budget this check's own
-    ``n_generations * max_duration_per_gen`` contract assumes. That contract
-    is exactly right for MNP's ``lineage_ray_batch`` (one continuous
-    invocation covering every generation, no early exit) -- it does not hold
-    for chain-dispatch's per-generation-job shape, where each job legitimately
-    runs `-n 1`. ``stop_at_division`` is precisely the signal that
-    distinguishes this from Dispatch 438's own actual failure shape (no
-    ``n_generations``, no ``steps``, and no ``stop_at_division`` either, so
-    nothing makes the run advance) -- so checking it here cannot reopen that
-    bug.
+    Two shapes are exempt, because for them ``-n`` is a trigger, not a budget:
+
+    * **``stop_at_division`` set** (the retired per-generation chain job,
+      ``_seed_generation_command``, item 103): ``LineageProcess`` advances to a
+      real division INTERNALLY regardless of the nominal step count. Kept for
+      any caller that still sends it.
+    * **The batch shape of ``ecoli_baseline``** (``n_generations > 1`` or
+      ``n_seeds > 1`` on ``V2ECOLI_BATCH_BASELINE_COMPOSITE_ID``): ``baseline()``
+      routes that request to ``BatchBaselineRunner``, a *Step* whose ONE update
+      runs every seed's whole lineage (``run_workflow`` -> per-seed
+      ``LineageProcess``), so ``-n 1`` IS the complete run. This is exactly what
+      chain dispatch submits since viva-api#578 (``_seed_lineage_command``:
+      ``n_generations=N``, ``-n 1``, no ``stop_at_division``); without this
+      exemption every whole-lineage chain job was refused here on 0.9.135
+      (sms-ecoli#166, 2026-09-10). Sizing ``-n`` to ``n_generations *
+      max_duration_per_gen`` instead would only add tens of thousands of empty
+      framework ticks around a Step that already ran once.
+
+    The contract itself is exactly right for MNP's ``lineage_ray_batch`` (one
+    continuous invocation of ``ray:LineageProcess`` nodes with per-generation
+    intervals, no early exit) and for the single-cell ``ecoli_baseline`` (no
+    batch route, so a 1 s run really is Dispatch 438's failure shape: no
+    ``n_generations``, no ``steps``, nothing makes the run advance).
     """
     declared = _declared_params(spec)
     if "n_generations" not in declared:
@@ -848,8 +878,11 @@ def _check_required_run_interval(spec: Any, overrides: dict[str, Any] | None, st
     try:
         n_generations = int(merged.get("n_generations") or 1)
         max_duration = float(merged.get("max_duration_per_gen") or 3600.0)
+        n_seeds = int(merged.get("n_seeds") or 1)
     except (TypeError, ValueError):
         return  # not ours to validate; the generator will
+    if _is_batch_baseline_shape(composite_id, n_seeds=n_seeds, n_generations=n_generations):
+        return  # BatchBaselineRunner is a Step: one update runs the whole sweep
     required = math.ceil(n_generations * max_duration)
     if steps < required:
         raise SystemExit(
@@ -937,7 +970,7 @@ def run(
         # override below, which reads overrides["experiment_id"] itself.
         spec = _lookup_spec(composite_id)
         overrides = _apply_declared_run_identity(spec, overrides, experiment_id)
-        _check_required_run_interval(spec, overrides, steps)
+        _check_required_run_interval(spec, overrides, steps, composite_id=composite_id)
     with _v2ecoli_parquet_emitter_override(results_dir, overrides):
         document, core = _resolve_document(input_file, composite_id, overrides, core)
         # Neither _workspace_core()/_build_core() nor a composite's own
