@@ -110,7 +110,7 @@ async def test_a_cancel_without_a_message_clears_stale_error_text(
 
 
 @pytest.mark.asyncio
-async def test_finalize_nextflow_head_is_single_winner_and_records_partial(
+async def test_finalize_nextflow_head_is_single_winner(
     experiment_request: SimulationRequest, database_service: DatabaseServiceSQL
 ) -> None:
     import asyncio
@@ -118,52 +118,61 @@ async def test_finalize_nextflow_head_is_single_winner_and_records_partial(
     hpcrun_id = await _row(database_service, experiment_request)
     results = await asyncio.gather(
         database_service.finalize_nextflow_head(
-            hpcrun_id, JobStatus.PARTIAL, error_message="analysis_v8 failed", error_source="command_err", exit_code=0
+            hpcrun_id, JobStatus.FAILED, error_message="analysis_v8 failed", error_source="command_err", exit_code=0
         ),
         database_service.finalize_nextflow_head(hpcrun_id, JobStatus.FAILED, error_message="late"),
     )
     assert sorted(results) == [False, True]
     row = await database_service.get_hpcrun(hpcrun_id)
     assert row is not None
-    assert row.status in (JobStatus.PARTIAL, JobStatus.FAILED)  # whichever tick won
+    assert row.status is JobStatus.FAILED  # whichever tick won
     assert row.status.is_terminal
     active = await database_service.list_active_nextflow_hpcruns()
     assert all(r.database_id != hpcrun_id for r in active)
 
 
 # ---------------------------------------------------------------------------
-# the new status value must not disturb rows written before it existed
+# the status vocabulary must not grow
 # ---------------------------------------------------------------------------
 
 
-def test_partial_joins_the_terminal_set_without_moving_the_legacy_values() -> None:
-    """``PARTIAL`` is a new label on a live Postgres enum type (the migration
-    adds it with ``ADD VALUE IF NOT EXISTS``). Every status a pre-observability
-    row can already hold must keep its identity and its terminal-ness, so
-    loading an old row is unaffected by the addition."""
+def test_the_status_vocabulary_is_unchanged_by_the_observability_work() -> None:
+    """No new status label, deliberately.
+
+    An earlier draft added ``PARTIAL`` for "some tasks succeeded, some did not".
+    It was dropped: nothing branched on it (it was terminal-set membership and a
+    CLI colour), Postgres cannot drop an enum label once added, and every client
+    that did not learn it would treat the run as non-terminal and poll forever.
+    Which tasks survived belongs in ``error_message`` and the per-task rows,
+    which carry it at far higher resolution than a label can.
+
+    This test exists so that re-adding one is a deliberate act with a migration
+    behind it, not a quiet edit to an enum.
+    """
     from viva_api.common.models import TERMINAL_JOB_STATUSES
     from viva_api.simulation.tables_orm import JobStatusDB
 
-    assert JobStatus.PARTIAL.is_terminal and JobStatus.PARTIAL in TERMINAL_JOB_STATUSES
-    # the pre-PARTIAL world, unchanged in both directions
+    assert {s.value for s in JobStatusDB} == {
+        "waiting", "pending", "queued", "running", "completed", "cancelled", "failed",
+    }
+    assert frozenset({
+        JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED,
+    }) == TERMINAL_JOB_STATUSES
     for legacy in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
         assert legacy.is_terminal
         assert JobStatusDB.from_job_status(legacy).to_job_status() is legacy
     for legacy in (JobStatus.WAITING, JobStatus.PENDING, JobStatus.QUEUED, JobStatus.RUNNING):
         assert not legacy.is_terminal
         assert JobStatusDB.from_job_status(legacy).to_job_status() is legacy
-    # and the new one round-trips by the same route the ORM uses
-    assert JobStatusDB.from_job_status(JobStatus.PARTIAL) is JobStatusDB.PARTIAL
-    assert JobStatusDB.PARTIAL.to_job_status() is JobStatus.PARTIAL
 
 
 @pytest.mark.asyncio
 async def test_a_row_written_with_a_legacy_status_still_loads_after_the_migration(
     experiment_request: SimulationRequest, database_service: DatabaseServiceSQL
 ) -> None:
-    """Adding the ``PARTIAL`` label to the live enum must not change how an
-    existing row reads back: a run finalized as FAILED before the migration
-    still loads as FAILED, with its new columns simply null."""
+    """The migration must not change how an existing row reads back: a run
+    finalized as FAILED before it still loads as FAILED, with the new
+    observability columns simply null."""
     hpcrun_id = await _row(database_service, experiment_request)
     await database_service.update_hpcrun_status(
         hpcrun_id,

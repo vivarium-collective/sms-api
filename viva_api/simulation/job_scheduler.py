@@ -799,10 +799,11 @@ class JobScheduler:
         # non-empty, so a single surviving lineage out of thousands reported the
         # whole sweep complete and the multivariant analysis then ran over a store
         # full of undetectable holes (CD2 audit §2.11 / P0-7). A partial result is
-        # terminal but NOT a success: mark it FAILED (there is no PARTIAL job
-        # status without a DB enum migration; see the PR note) and name the
-        # missing/failed seed chains, and do not submit an analysis over an
-        # incomplete store.
+        # terminal but NOT a success: mark it FAILED, name the missing/failed
+        # seed chains in ``error_message``, and do not submit an analysis over an
+        # incomplete store. How many seeds survived is recorded in the message
+        # rather than in the status -- a status that means "look at the data to
+        # find out" is not a status.
         all_succeeded = len(succeeded) == n_seeds
         error_source: str | None = None
         if all_succeeded:
@@ -816,11 +817,12 @@ class JobScheduler:
                 error_message = "chain dispatch: zero seed chains succeeded"
                 terminal_status = JobStatus.FAILED
             else:
-                # Terminal but not a success: k/N lineages are on disk, the
-                # rest are not. PARTIAL keeps that distinguishable from "nothing
-                # ran" without an analysis over an incomplete store.
+                # Terminal but not a success: k/N lineages are on disk, the rest
+                # are not. The k/N count goes in the message, where a reader can
+                # act on it; the status stays FAILED because the campaign did not
+                # deliver what was asked of it.
                 error_message = f"chain dispatch: partial completion — {len(succeeded)}/{n_seeds} seed chains succeeded"
-                terminal_status = JobStatus.PARTIAL
+                terminal_status = JobStatus.FAILED
             if reasons:
                 error_message += "; failed: " + "; ".join(reasons)
                 error_source = "batch_status_reason"
@@ -982,10 +984,9 @@ class JobScheduler:
         once (single-winner conditional UPDATE, like ``_advance_multi_node_job``).
 
         Status rule (``nextflow_trace.classify_run``): every task COMPLETED/CACHED
-        and head exit 0 -> COMPLETED; head 0 but a task never succeeded (the
-        ``errorStrategy finish`` shape, sim 749) -> PARTIAL; head non-zero or no
-        trace rows -> FAILED. When the trace cannot be read at all, the K8s Job
-        condition decides, as before.
+        and head exit 0 -> COMPLETED; anything else -> FAILED, with the per-task
+        detail in ``error_message`` and the trace rows. When the trace cannot be
+        read at all, the K8s Job condition decides, as before.
         """
         job_info = await simulation_service_ray.get_job_status(hpc_run.job_id)
         if job_info is None or job_info.status not in (JobStatus.COMPLETED, JobStatus.FAILED):

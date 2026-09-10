@@ -1,26 +1,28 @@
 """The observability migration, exercised against the REAL Alembic chain.
 
-Every other ``PARTIAL`` test in this branch builds its schema with
+Every other test of this migration builds its schema with
 ``Base.metadata.create_all`` (``tests/fixtures/postgres_fixtures.py``). As
-``tests/simulation/test_jobstatusdb_cancel_migration.py`` spells out at
-length, ``create_all`` always reflects the CURRENT ORM model -- including
-``JobStatusDB.PARTIAL`` -- so it is *structurally incapable* of catching a
-defect that lives in the gap between the migration history and that model.
-That is exactly the gap that produced the real production failure::
+``tests/simulation/test_jobstatusdb_cancel_migration.py`` spells out at length,
+``create_all`` always reflects the CURRENT ORM model, so it is *structurally
+incapable* of catching a defect that lives in the gap between the migration
+history and that model. That is exactly the gap that produced the real
+production failure::
 
     InvalidTextRepresentationError: invalid input value for enum jobstatusdb: "CANCELLED"
 
-``PARTIAL`` is the same shape of change as that one: a new label on a live
-Postgres enum, bound by NAME (upper-case) because ``ORMHpcRun.status`` has no
-``values_callable``. So it gets the same shape of test -- schema built by
-``alembic upgrade``, never ``create_all``.
+So this migration gets the same shape of test as that one: schema built by
+``alembic upgrade`` from empty, never ``create_all``.
 
 Covered here:
 
-* the pre-observability schema genuinely lacks ``PARTIAL`` (and the new
-  columns/tables), and the real application write genuinely fails against it;
-* ``a3b5c7d9e1f2`` adds upper-case ``PARTIAL`` while leaving every prior label
-  intact, and the identical write then succeeds and reads back terminal;
+* the pre-observability schema genuinely lacks the new columns and tables --
+  the baseline the migration has to move;
+* **the migration does not touch the status enum at all.** An earlier draft
+  added a ``PARTIAL`` label; dropping it is what keeps this migration pure
+  addition, and therefore free of the deploy-ordering constraint an
+  ``ALTER TYPE ... ADD VALUE`` imposes. Pinned by a test rather than a comment;
+* a real terminal write round-trips against the migrated schema and drops out
+  of the active-run queries that bind this same column;
 * the migrated schema agrees with the ORM for everything this migration owns
   (checked with the shipped ``schema_diff`` machinery, not a hand-written list);
 * the migration is idempotent -- a no-op on a ``create_all`` database that
@@ -138,18 +140,12 @@ async def _a_run(db: DatabaseServiceSQL) -> tuple[int, int]:
 
 
 @pytest.mark.asyncio
-async def test_pre_observability_schema_lacks_partial_and_the_new_objects(
+async def test_pre_observability_schema_lacks_the_new_objects(
     fresh_postgres_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The real, currently-deployed shape: no ``PARTIAL``, no event tables, no
-    new ``hpcrun`` columns -- the baseline the migration has to move."""
+    """The real, currently-deployed shape: no event tables and no new ``hpcrun``
+    columns -- the baseline the migration has to move."""
     await _migrate_to(fresh_postgres_url, PRE_OBS_REVISION, monkeypatch)
-
-    labels = await _real_jobstatusdb_labels(fresh_postgres_url)
-    assert "PARTIAL" not in labels
-    assert "partial" not in labels
-    # backlog item 40's fix is already in the chain here; PARTIAL is the only gap.
-    assert {"PENDING", "CANCELLED", "COMPLETED", "FAILED"} <= labels
 
     actual = await _reflect(fresh_postgres_url)
     for table in _OWNED_TABLES:
@@ -158,11 +154,22 @@ async def test_pre_observability_schema_lacks_partial_and_the_new_objects(
 
 
 @pytest.mark.asyncio
-async def test_observability_migration_adds_uppercase_partial_and_keeps_prior_labels(
+async def test_the_migration_does_not_touch_the_status_enum(
     fresh_postgres_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The label is added in the case the ORM actually binds (upper-case NAME),
-    and nothing already there is disturbed."""
+    """The enum is left exactly as it was found -- and that is the point.
+
+    An earlier draft of this migration added a ``PARTIAL`` label. Dropping it
+    removed three costs at once: Postgres cannot remove an enum label once
+    added, so the change was permanent; the ``ADD VALUE`` forced the migration
+    Job to complete before any new app pod could serve traffic, or a write would
+    raise ``InvalidTextRepresentationError``; and any client that had not
+    learned the label would treat the run as non-terminal and poll forever.
+
+    Because the enum is untouched, this migration is pure addition -- new
+    nullable columns and new tables -- and imposes no deploy ordering at all.
+    A test rather than a comment, so re-adding a label is a deliberate act.
+    """
     await _migrate_to(fresh_postgres_url, PRE_OBS_REVISION, monkeypatch)
     before = await _real_jobstatusdb_labels(fresh_postgres_url)
 
@@ -171,40 +178,28 @@ async def test_observability_migration_adds_uppercase_partial_and_keeps_prior_la
     await asyncio.to_thread(command.upgrade, cfg, OBS_REVISION)
 
     after = await _real_jobstatusdb_labels(fresh_postgres_url)
-    assert "PARTIAL" in after, "the ORM binds by NAME; a lower-case label would not be reachable"
-    assert before <= after, f"a prior label was lost: {sorted(before - after)}"
-    assert after - before == {"PARTIAL"}
+    assert after == before, f"the migration changed the status enum: {sorted(after ^ before)}"
 
 
 @pytest.mark.asyncio
-async def test_partial_write_fails_against_the_pre_migration_schema(engine_pre_obs: AsyncEngine) -> None:
-    """The failure the migration exists to prevent, through the real
-    application code path, against a migration-built database."""
-    db = DatabaseServiceSQL(async_engine=engine_pre_obs)
-    _ref_id, hpcrun_id = await _a_run(db)
-
-    with pytest.raises(DBAPIError, match="jobstatusdb"):
-        await db.update_hpcrun_status(
-            hpcrun_id=hpcrun_id, update=JobStatusUpdate(job_id=JobId.slurm(1), status=JobStatus.PARTIAL)
-        )
-
-
-@pytest.mark.asyncio
-async def test_partial_write_succeeds_and_reads_back_terminal_after_the_migration(
+async def test_a_terminal_write_round_trips_against_the_migrated_schema(
     engine_post_obs: AsyncEngine,
 ) -> None:
-    """The identical write now succeeds, round-trips, and is terminal --
-    so the pollers stop on it rather than looping forever."""
+    """The real application write path, against a migration-built database.
+
+    ``FAILED`` is what a run with some tasks missing now records; it must
+    round-trip and be terminal, so the pollers stop on it rather than looping.
+    """
     db = DatabaseServiceSQL(async_engine=engine_post_obs)
     ref_id, hpcrun_id = await _a_run(db)
 
     await db.update_hpcrun_status(
-        hpcrun_id=hpcrun_id, update=JobStatusUpdate(job_id=JobId.slurm(1), status=JobStatus.PARTIAL)
+        hpcrun_id=hpcrun_id, update=JobStatusUpdate(job_id=JobId.slurm(1), status=JobStatus.FAILED)
     )
 
     run = await db.get_hpcrun_by_ref(ref_id=ref_id, job_type=JobType.BUILD_IMAGE)
     assert run is not None
-    assert run.status == JobStatus.PARTIAL
+    assert run.status == JobStatus.FAILED
     assert run.status.is_terminal
 
     # The active-run queries bind JobStatusDB members against this same column
@@ -289,7 +284,7 @@ async def test_migration_is_a_noop_on_a_create_all_database(
 ) -> None:
     """The real deployment case the migration's ``IF NOT EXISTS`` clauses are
     for: the app bootstrapped this database with ``create_all`` (so every
-    object, and the ``PARTIAL`` label, already exist), it was stamped at the
+    object already exists), it was stamped at the
     pre-observability revision by the reconciler, and the migration then runs.
     It must not fail on a duplicate object or a duplicate enum label."""
     monkeypatch.setenv("SQLALCHEMY_DATABASE_URL", fresh_postgres_url)
@@ -305,7 +300,6 @@ async def test_migration_is_a_noop_on_a_create_all_database(
     await asyncio.to_thread(command.upgrade, cfg, OBS_REVISION)
 
     labels = await _real_jobstatusdb_labels(fresh_postgres_url)
-    assert "PARTIAL" in labels
     actual = await _reflect(fresh_postgres_url)
     for table in _OWNED_TABLES:
         assert table in actual.tables
@@ -327,7 +321,6 @@ async def test_migration_can_be_re_applied_after_a_downgrade(
     for table in _OWNED_TABLES:
         assert table not in dropped.tables
     assert not (_NEW_HPCRUN_COLUMNS & dropped.tables["hpcrun"])
-    assert "PARTIAL" in await _real_jobstatusdb_labels(fresh_postgres_url)
 
     await asyncio.to_thread(command.upgrade, cfg, OBS_REVISION)
     restored = await _reflect(fresh_postgres_url)

@@ -50,15 +50,20 @@ def test_a_resumed_run_is_all_cached_and_counts_as_success() -> None:
     assert nt.classify_run(0, summary) is JobStatus.COMPLETED
 
 
-def test_a_failed_task_among_completed_ones_is_partial_whatever_the_head_exit() -> None:
+def test_a_failed_task_among_completed_ones_is_failed_and_names_the_task() -> None:
     """Sim 749's shape: the head exits non-zero under `errorStrategy finish` after
-    one task failed while every other task completed. The trace decides: PARTIAL,
-    not FAILED, and the failed task is named."""
+    one task failed while every other task completed.
+
+    The status is FAILED either way -- the run did not deliver what was asked of
+    it. What the trace buys is not a different *label* but a usable *message*:
+    the failing task is named, so nobody has to open CloudWatch to find out
+    which one, and the head's exit code is no longer the sole evidence.
+    """
     summary = nt.summarize(nt.parse_trace_csv(_fixture("trace.failed.csv")))
     assert summary.completed == 2 and summary.failed == 1
     assert [r.name for r in nt.final_failed_rows(summary)] == ["analysis_v0"]
-    assert nt.classify_run(1, summary) is JobStatus.PARTIAL
-    assert nt.classify_run(0, summary) is JobStatus.PARTIAL
+    assert nt.classify_run(1, summary) is JobStatus.FAILED
+    assert nt.classify_run(0, summary) is JobStatus.FAILED
     headline = nt.failure_headline(1, summary, "head pod Error")
     assert "analysis_v0" in headline and "head exit 1" in headline and "head pod Error" in headline
 
@@ -86,7 +91,7 @@ def test_a_retry_that_later_succeeded_is_not_a_run_failure() -> None:
     assert nt.classify_run(0, summary) is JobStatus.COMPLETED
 
 
-def test_reclaimed_task_with_no_exit_code_is_partial_not_a_crash() -> None:
+def test_reclaimed_task_with_no_exit_code_is_failed_not_a_crash() -> None:
     """Hand-written: Batch retries a Spot reclaim internally, and the exhausted
     case reaches Nextflow with no exit code (`-`). A laptop cannot produce it."""
     header = _fixture("trace.ok.csv").splitlines()[0]
@@ -94,7 +99,7 @@ def test_reclaimed_task_with_no_exit_code_is_partial_not_a_crash() -> None:
     reclaimed = "9\tab/cdef01\t-\tlineage_v0_s1\tABORTED\t-\t2026-09-10 02:10:08.500\t-\t-\t-\t-\t-\t-\t-"
     summary = nt.summarize(nt.parse_trace_csv("\n".join([header, ok_row, reclaimed])))
     assert summary.failed_rows[0].exit is None
-    assert nt.classify_run(0, summary) is JobStatus.PARTIAL
+    assert nt.classify_run(0, summary) is JobStatus.FAILED
 
 
 def _fake_file_service(keys: list[str], contents: dict[str, bytes]) -> MagicMock:

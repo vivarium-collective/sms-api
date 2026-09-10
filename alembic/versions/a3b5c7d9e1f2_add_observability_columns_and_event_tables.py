@@ -1,4 +1,4 @@
-"""add observability columns, event/span tables, PARTIAL status
+"""add observability columns and the event/span tables
 
 Revision ID: a3b5c7d9e1f2
 Revises: f76e43d01841
@@ -15,10 +15,12 @@ Observability plan (docs/plan-observability.md), viva-api part A/B storage:
   so re-ingesting an ``events.jsonl`` object is idempotent.
 * ``hpcrun_span``: the run's trace tree (campaign > parca / lineage / analysis >
   generation > ...), materialised from ``span_start``/``span_end`` events.
-* ``jobstatusdb`` gains the ``PARTIAL`` label (bound by NAME, see 44335812e447):
-  a terminal state that is not a success -- a Nextflow head that exited 0 under
-  ``errorStrategy finish`` after a task failed, or a chain campaign with k/N
-  seeds succeeded. Both were reported as FAILED before.
+* ``jobstatusdb`` is deliberately UNCHANGED. An earlier draft added a
+  ``PARTIAL`` label; it was dropped because nothing branched on it (it was a
+  terminal-set member and a CLI colour), because Postgres cannot drop an enum
+  label once added, and because "which tasks survived" belongs in the per-task
+  rows and ``error_message``, not in a status. Keeping the enum fixed also keeps
+  this migration free of the deploy-ordering constraint an ``ADD VALUE`` imposes.
 
 Idempotent throughout (``IF NOT EXISTS``) so it is a no-op on a fresh
 ``create_all`` database that already has every object.
@@ -102,7 +104,6 @@ def upgrade() -> None:
     op.execute("CREATE INDEX IF NOT EXISTS ix_hpcrun_span_hpcrun_id ON hpcrun_span (hpcrun_id)")
     op.execute("CREATE INDEX IF NOT EXISTS ix_hpcrun_span_trace_id ON hpcrun_span (trace_id)")
 
-    op.execute("ALTER TYPE jobstatusdb ADD VALUE IF NOT EXISTS 'PARTIAL'")
 
 
 def downgrade() -> None:

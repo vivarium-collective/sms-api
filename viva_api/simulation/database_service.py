@@ -322,7 +322,7 @@ class DatabaseService(ABC):
         attempt: int | None = None,
     ) -> bool:
         """Atomically transition one Nextflow-head HpcRun from PENDING/RUNNING to
-        a terminal ``status`` (COMPLETED / PARTIAL / FAILED), returning ``True``
+        a terminal ``status`` (COMPLETED / FAILED), returning ``True``
         only if THIS call performed the transition -- the same single-row
         conditional UPDATE ``finalize_multi_node_job`` uses, for the same reason
         (two overlapping polling ticks must not both act)."""

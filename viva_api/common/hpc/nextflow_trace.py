@@ -166,21 +166,28 @@ def classify_run(head_exit_code: int | None, summary: TraceSummary) -> JobStatus
 
     The trace decides, not the head's exit code, because under ``errorStrategy
     finish`` the head exits non-zero after ANY task failure -- sim 749's head
-    exited 1 with 100/100 generations published and one gather dead, which is
-    not the same thing as nothing having run:
+    exited 1 with 100/100 generations published and one gather dead, and reading
+    the exit code alone reported that as a total failure:
 
     * no trace rows at all -> FAILED (the head never reached a task: a render
       error, a missing cache, ...);
-    * a task that never succeeded (or never reached a terminal state) while
-      others completed -> PARTIAL; while nothing completed -> FAILED;
+    * any task that never succeeded -> FAILED, however many others completed;
     * every task COMPLETED/CACHED -> COMPLETED, unless the head itself exited
       non-zero (a publish/stage-out failure after the science ran) -> FAILED.
+
+    **There is deliberately no "partly succeeded" status.** A run that stopped
+    with only some results stopped *because something failed*, so FAILED is the
+    honest label; which tasks survived is a question for the per-task rows
+    (``/simulations/{id}/tasks``) and ``error_message``, which carry it at far
+    higher resolution than any single label could. What actually fixed 749's
+    mislabelling was reading the trace here instead of trusting the head's exit
+    code -- not a new name for one of the outcomes.
     """
     if summary.total == 0:
         return JobStatus.FAILED
     succeeded = summary.completed + summary.cached
     if final_failed_rows(summary) or summary.other:
-        return JobStatus.PARTIAL if succeeded else JobStatus.FAILED
+        return JobStatus.FAILED
     if head_exit_code not in (None, 0):
         return JobStatus.FAILED
     return JobStatus.COMPLETED

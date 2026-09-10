@@ -28,10 +28,6 @@ class JobStatusDB(enum.Enum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     FAILED = "failed"
-    # Enum labels are bound by NAME (see migration 44335812e447), so the live
-    # Postgres type needs the 'PARTIAL' label -- added by the observability
-    # migration with ADD VALUE IF NOT EXISTS.
-    PARTIAL = "partial"
 
     def to_job_status(self) -> JobStatus:
         return JobStatus(self.value)

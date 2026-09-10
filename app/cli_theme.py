@@ -117,9 +117,6 @@ def status_style(status: str) -> str:
         return "memphis.success"
     if status in ("failed", "cancelled"):
         return "memphis.error"
-    if status in ("partial",):
-        # Terminal but not a success: some required work is missing.
-        return "memphis.warning"
     if status in ("running", "pending"):
         return "memphis.running"
     return "memphis.info"
@@ -131,6 +128,4 @@ def status_border(status: str) -> str:
         return "memphis.border.success"
     if status in ("failed", "cancelled"):
         return "memphis.border.error"
-    if status in ("partial",):
-        return "memphis.border.warning"
     return "memphis.border.info"

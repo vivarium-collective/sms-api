@@ -695,9 +695,10 @@ class TestAdvanceChainCampaign:
         refetched = await database_service.get_hpcrun(hpcrun.database_id)
         assert refetched is not None
         assert refetched.status != JobStatus.COMPLETED
-        # Terminal but not a success (observability plan D4c): PARTIAL, not FAILED,
-        # so "2 of 3 lineages are on disk" stays distinguishable from "nothing ran".
-        assert refetched.status == JobStatus.PARTIAL
+        # Terminal and not a success: FAILED. "2 of 3 lineages are on disk" is
+        # recorded in error_message, where a reader can act on it, rather than in
+        # a status -- the campaign did not deliver what was asked of it either way.
+        assert refetched.status == JobStatus.FAILED
         assert refetched.error_message is not None
         assert "2/3" in refetched.error_message
         # The failed seed is named by what Batch said, not by a bare job id.
@@ -2004,7 +2005,7 @@ class TestUpdateNextflowHeads:
 
         refetched = await database_service.get_hpcrun(hpcrun.database_id)
         assert refetched is not None
-        assert refetched.status == JobStatus.PARTIAL
+        assert refetched.status == JobStatus.FAILED
         assert refetched.error_source == "command_err"
         assert refetched.error_message is not None
         assert refetched.error_message.startswith("Nextflow task analysis_v8 (exit 1) failed")
@@ -2012,14 +2013,16 @@ class TestUpdateNextflowHeads:
         assert refetched.exit_code == 0
 
     @pytest.mark.asyncio
-    async def test_lineage_failure_after_a_completed_parca_is_partial_with_the_lineage_traceback(
+    async def test_lineage_failure_after_a_completed_parca_names_the_lineage_traceback(
         self, database_service: DatabaseServiceSQL
     ) -> None:
         """Sim 943's shape: ParCa completed, the lineage died in generation 1,
-        the head exited 1. The trace decides (one task completed, one never
-        succeeded -> PARTIAL: the chassis is on disk, the science is not), the
-        row records one attempt and exit 1, and the error is the lineage's own
-        traceback rather than Kubernetes' "backoff limit" text."""
+        the head exited 1.
+
+        FAILED, because the science did not run. The value the trace adds is the
+        MESSAGE, not the label: one attempt and exit 1 are recorded, and the
+        error is the lineage's own traceback rather than Kubernetes' "backoff
+        limit" text -- which is what actually shortens the next diagnosis."""
         sim, hpcrun = await insert_nextflow_head_job(database_service, job_name="nf-failed")
         exp = sim.experiment_id
         workdir = f"nextflow/work/{exp}/work/cc/33333333333333333333333333333333"
@@ -2042,7 +2045,7 @@ class TestUpdateNextflowHeads:
 
         refetched = await database_service.get_hpcrun(hpcrun.database_id)
         assert refetched is not None
-        assert refetched.status == JobStatus.PARTIAL
+        assert refetched.status == JobStatus.FAILED
         assert refetched.exit_code == 1 and refetched.attempt == 1
         assert refetched.error_message is not None and "NegativeCountsError" in refetched.error_message
         assert refetched.error_message.startswith("Nextflow task runs_v0:lineage_v0_s0 (exit 1) failed")

@@ -118,7 +118,7 @@ class K8sJobService:
 
         The structured sibling of :meth:`get_pod_termination` for the Nextflow
         head poller (observability plan D4c): the exit code decides COMPLETED vs
-        PARTIAL vs FAILED together with ``trace.csv``, and the reason ("OOMKilled",
+        COMPLETED vs FAILED together with ``trace.csv``, and the reason ("OOMKilled",
         "Error", "Completed") is worth more than Kubernetes' Job-level "backoff
         limit" text. Best-effort, never raises; ``(None, None)`` means "no better
         answer available" (pod gone after the Job TTL, API unreachable).

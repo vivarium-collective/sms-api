@@ -1053,7 +1053,7 @@ class AtlantisTUI(App[None]):
             if run.error_message:
                 self.write_log(f"  [red]Error: {run.error_message}[/red]")
 
-            if status in ("completed", "partial", "failed", "cancelled"):
+            if status in ("completed", "failed", "cancelled"):
                 # Terminal state: show simulation details instead of (unavailable) log
                 try:
                     sim = self.svc.get_workflow(simulation_id=sid)
