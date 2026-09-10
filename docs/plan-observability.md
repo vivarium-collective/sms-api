@@ -1,6 +1,6 @@
 # Observability plan for whole-cell campaigns (viva-api · v2ecoli · process-bigraph)
 
-> **Status (2026-09-10 05:50Z): APPROVED by Jim; implementation started.** PR-A (viva-api `feat/nextflow-head-poller`) and PR-B (process-bigraph `feat/events`) are in progress; PR-C/PR-D follow. Progress rows go in `docs/plan-nextflow-act3.md`; this file is the design of record. Companion to `plan-nextflow-dispatch.md`, `plan-nextflow-act2.md`, `plan-nextflow-act3.md`.
+> **Status (2026-09-10 06:20Z): APPROVED by Jim; PR-A is up as viva-api#609 (reviewer eagmon), PR-B (process-bigraph `feat/events`) in progress; PR-C/PR-D follow. Progress rows go in `docs/plan-nextflow-act3.md`; this file is the design of record. Companion to `plan-nextflow-dispatch.md`, `plan-nextflow-act2.md`, `plan-nextflow-act3.md`.
 
 
 ## Context — why now
@@ -112,7 +112,7 @@ And the gaps they leave: no exception wrapping anywhere on the tick path (`proce
 (`LineageStep.update` has no try/except); the scheduler never polls a Nextflow head (only a
 user's `GET /status` does, mapping the K8s condition to FAILED with "backoff limit"); Nextflow
 retries any non-zero exit three times (`nextflow_deploy.py:200-201`), each attempt invisible;
-`.nextflow.log` is never uploaded on the v2ecoli path; no CloudWatch client; no events endpoint.
+~~`.nextflow.log` is never uploaded on the v2ecoli path~~ (wrong: the head runs with `cwd=outdir`, which `_render_nf_command` stages wholesale, so it lands at `vecoli-output/<exp>/.nextflow.log`; the *reader* looked in the vEcoli key — fixed in PR-A); no CloudWatch client; no events endpoint.
 
 ## Design
 
@@ -276,6 +276,10 @@ env (`:1030`), MNP `shared_env` (+ Ray `runtime_env.env_vars`) all get `PBG_EVEN
 `PBG_TRACEPARENT`, `PBG_EVENT_SINKS="stdout,s3://…/events/"`, `PBG_EVENT_FLUSH_S`,
 `PBG_EVENT_HEARTBEAT_S`, `PBG_EVENT_TAGS` ({backend, seed, generation, …}); whitelist `PBG_*`
 in the task-env validator. The dispatcher opens the campaign span (`span_id` stored on the row).
+**Format (PR-A, viva-api#609)**: `PBG_TRACE_BAGGAGE` and `PBG_EVENT_TAGS` are W3C baggage form,
+`key=value,key2=value2`, not JSON — values render into docker `--env`, and `validate_task_env`
+forbids quotes, whitespace, `$` and backslashes. Trace ids are derived (`sha256(correlation_id)[:32]`;
+campaign span `sha256("campaign:"+cid)[:16]`), not minted, because the handler submits before it inserts.
 
 **(b) Storage + ingester** — `ORMHpcRunEvent` (`hpcrun_event`: hpcrun_id, source, seq, ts,
 layer, event, level, generation, global_time, wall_time, span_id, parent_span_id, payload,
@@ -297,8 +301,10 @@ idle rows skipped. `JobScheduler._polling_loop` (`job_scheduler.py:143-167`) gai
 `list_active_nextflow_hpcruns()`; `JobScheduler.update_nextflow_heads()` mirrors
 `update_multi_node_jobs`: on head terminal → `get_pod_termination` for exit/reason, read
 `{results}/trace.csv` (new `common/hpc/nextflow_trace.py::parse_trace_csv`), status =
-COMPLETED (all rows COMPLETED/CACHED) / PARTIAL (head 0, some FAILED) / FAILED (head ≠ 0 or no
-rows); `error_message` precedence: latest `failure_record` → failed row's `.command.err`
+COMPLETED (all rows COMPLETED/CACHED) / PARTIAL (some rows FAILED but real work landed) / FAILED
+(no rows, or nothing landed) — **the trace decides; the head's exit code is only a tie-break** (PR-A):
+under `errorStrategy finish` the head always exits non-zero after any task failure (749's head exited 1),
+so 943's shape (ParCa completed, lineage failed) reads PARTIAL, not FAILED; `error_message` precedence: latest `failure_record` → failed row's `.command.err`
 tail (lift `diagnose_sim.py::_fetch_s3_text`) → CloudWatch (e) → K8s condition; persist
 `exit_code`, `attempt`, `error_source`. `_render_nf_command` `:1560-1568` also uploads
 `.nextflow.log` (mirror `simulation_service_k8s.py:274`); `_get_s3_nextflow_log` tries the
