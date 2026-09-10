@@ -1025,7 +1025,7 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
     # (viva-api#484: a cancelled campaign read "unknown" a minute after the
     # cancel handler itself had answered "cancelled"). The write a few lines
     # down exists precisely so this read need not hit the backend again.
-    if hpc_run.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+    if hpc_run.status is not None and hpc_run.status.is_terminal:
         return SimulationRun(id=int(id), status=hpc_run.status, error_message=hpc_run.error_message)
 
     # Route to the service that owns this run (by the run's backend), not the global default.
@@ -1039,13 +1039,18 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
         return SimulationRun(id=int(id), status=JobStatus.UNKNOWN)
 
     # Persist terminal status to DB so future calls don't need to hit the backend
-    if job_status_info.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+    if job_status_info.status.is_terminal:
         update = JobStatusUpdate(
             job_id=hpc_run.job_id,
             status=job_status_info.status,
             start_time=job_status_info.start_time,
             end_time=job_status_info.end_time,
             error_message=job_status_info.error_message,
+            # A live poll's message is the backend's generic one (a K8s Job
+            # condition, a Batch statusReason); it must not overwrite a task
+            # traceback the scheduler already captured.
+            error_source="k8s_condition" if hpc_run.job_id.backend == JobBackend.K8S_NEXTFLOW else None,
+            exit_code=job_status_info.exit_code,
         )
         await db_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, update=update)
 
@@ -1106,7 +1111,7 @@ async def get_simulation_chain_progress(db_service: DatabaseService, id: int) ->
         seeds_failed = len(result.failed_job_ids)
 
     seeds_in_progress = seeds_total - seeds_succeeded - seeds_failed
-    terminal = hpc_run.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+    terminal = hpc_run.status is not None and hpc_run.status.is_terminal
     return ChainProgress(
         id=int(id),
         seeds_total=seeds_total,
@@ -1140,7 +1145,7 @@ async def cancel_simulation(
         raise ValueError(f"No HPC run found for simulation {simulation_id}")
 
     # Only cancel jobs that are still active
-    if hpc_run.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+    if hpc_run.status is not None and hpc_run.status.is_terminal:
         return SimulationRun(id=simulation_id, status=hpc_run.status)
 
     # Cancel via the service that owns this run (by its backend), not necessarily the
@@ -2000,15 +2005,21 @@ async def _get_ray_log(hpc_run: HpcRun, db_service: DatabaseService, simulation_
 
 
 async def _get_k8s_log(hpc_run: HpcRun, db_service: DatabaseService, simulation_id: int) -> str:
-    """Read K8s Job pod logs via the K8s API, falling back to S3 .nextflow.log."""
-    from viva_api.simulation.simulation_service_k8s import SimulationServiceK8s
+    """Read K8s Job pod logs via the K8s API, falling back to S3 .nextflow.log.
 
-    simulation_service = get_simulation_service()
-    if not isinstance(simulation_service, SimulationServiceK8s):
-        raise TypeError("K8s logs requested but simulation service is not SimulationServiceK8s")
+    Routed by the RUN's backend, not the deployment default: a v2ecoli Nextflow
+    head (``K8S_NEXTFLOW``) is owned by ``SimulationServiceRay`` on a deployment
+    whose default service may be K8s-less, and the previous
+    ``isinstance(get_simulation_service(), SimulationServiceK8s)`` check raised
+    TypeError for exactly that run. Both services expose the same ``_k8s``.
+    """
+    simulation_service = get_simulation_service_for_job(hpc_run.job_id)
+    k8s = getattr(simulation_service, "_k8s", None)
+    if simulation_service is None or k8s is None:
+        raise TypeError(f"K8s logs requested for {hpc_run.job_id} but no service with a K8s client owns it")
 
     # Try K8s pod logs first
-    log_content = simulation_service._k8s.get_job_logs(hpc_run.job_id.value)
+    log_content: str | None = k8s.get_job_logs(hpc_run.job_id.value)
     if log_content is not None:
         return log_content
 
@@ -2032,14 +2043,20 @@ async def _get_s3_nextflow_log(db_service: DatabaseService, simulation_id: int) 
         return None
 
     experiment_id = simulation.config.experiment_id
-    log_key = f"{settings.s3_work_prefix}/{experiment_id}/logs/.nextflow.log"
-    log_s3 = S3FilePath(s3_path=Path(log_key))
-
-    try:
-        content = await file_service.get_file_contents(log_s3)
-        if content:
-            return content.decode("utf-8", errors="replace")
-    except Exception:
-        logger.debug(f"S3 .nextflow.log not found at {log_key}")
+    # Two layouts: vEcoli's head copies the log to `<work>/<exp>/logs/`; a
+    # v2ecoli Nextflow head runs `nextflow` from its render dir, which
+    # _render_nf_command stages wholesale to the run's RESULTS prefix, so the
+    # log lands beside trace.csv at `vecoli-output/<exp>/.nextflow.log` (sim 749).
+    candidate_keys = [
+        f"{settings.s3_work_prefix}/{experiment_id}/logs/.nextflow.log",
+        f"{data_layout.RayLayout.experiment_prefix(str(simulation.experiment_id))}/.nextflow.log",
+    ]
+    for log_key in candidate_keys:
+        try:
+            content = await file_service.get_file_contents(S3FilePath(s3_path=Path(log_key)))
+            if content:
+                return content.decode("utf-8", errors="replace")
+        except Exception:
+            logger.debug(f"S3 .nextflow.log not found at {log_key}")
 
     return None

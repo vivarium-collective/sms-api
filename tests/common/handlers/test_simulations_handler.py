@@ -1318,3 +1318,68 @@ async def test_a_terminal_row_is_reported_without_asking_a_backend_that_may_be_g
         run = await handlers.get_simulation_status(db_service=db, id=567)
     assert run.status == JobStatus.CANCELLED
     service.get_job_status.assert_not_awaited()
+
+
+# --- Observability plan D4c: the log path routes by the RUN's backend -----------
+
+
+@pytest.mark.asyncio
+async def test_k8s_log_for_a_nextflow_head_uses_the_service_that_owns_the_run() -> None:
+    """A v2ecoli Nextflow head is owned by SimulationServiceRay; the old
+    `isinstance(get_simulation_service(), SimulationServiceK8s)` check raised
+    TypeError for exactly that run on a deployment whose default service is not
+    the vEcoli K8s one."""
+    from viva_api.common.handlers.simulations import _get_k8s_log
+
+    hpc_run = HpcRun(
+        database_id=1,
+        job_id=JobId.k8s_nextflow("nf-exp-abc"),
+        correlation_id="c",
+        job_type=JobType.SIMULATION,
+        ref_id=1,
+        status=JobStatus.FAILED,
+    )
+    ray_service = MagicMock()
+    ray_service._k8s.get_job_logs.return_value = "N E X T F L O W\nexecutor > awsbatch\n"
+    with patch(
+        "viva_api.common.handlers.simulations.get_simulation_service_for_job", return_value=ray_service
+    ) as lookup:
+        log = await _get_k8s_log(hpc_run, MagicMock(), 1)
+    assert log.startswith("N E X T F L O W")
+    lookup.assert_called_once_with(hpc_run.job_id)
+    ray_service._k8s.get_job_logs.assert_called_once_with("nf-exp-abc")
+
+
+@pytest.mark.asyncio
+async def test_s3_nextflow_log_falls_back_to_the_v2ecoli_results_layout() -> None:
+    """A v2ecoli head stages its render dir wholesale to the RESULTS prefix, so
+    `.nextflow.log` sits beside trace.csv at vecoli-output/<exp>/.nextflow.log
+    (sim 749) -- not under the vEcoli `<work>/<exp>/logs/` key."""
+    from viva_api.common.handlers.simulations import _get_s3_nextflow_log
+
+    simulation = MagicMock()
+    simulation.experiment_id = "sim184-run1-k4"
+    simulation.config.experiment_id = "sim184-run1-k4"
+    db = MagicMock()
+    db.get_simulation = AsyncMock(return_value=simulation)
+    fs = MagicMock()
+
+    async def _get(s3_path: Any) -> bytes | None:
+        return (
+            b"Sep-10 03:15 Execution complete -- Goodbye" if str(s3_path.s3_path).startswith("vecoli-output/") else None
+        )
+
+    fs.get_file_contents = AsyncMock(side_effect=_get)
+    saved = get_file_service()
+    set_file_service(fs)
+    try:
+        with patch("viva_api.common.handlers.simulations.get_settings") as settings:
+            settings.return_value = MagicMock(
+                s3_work_prefix="nextflow/work", s3_work_bucket="mybucket", s3_output_prefix="vecoli-output"
+            )
+            log = await _get_s3_nextflow_log(db, 1)
+    finally:
+        set_file_service(saved)
+    assert log is not None and "Goodbye" in log
+    tried = [str(c.args[0].s3_path) for c in fs.get_file_contents.await_args_list]
+    assert tried == ["nextflow/work/sim184-run1-k4/logs/.nextflow.log", "vecoli-output/sim184-run1-k4/.nextflow.log"]

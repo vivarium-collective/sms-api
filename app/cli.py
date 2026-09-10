@@ -431,7 +431,7 @@ def worker_read(
 #: single update(), which is a probe.
 JOB_CLASS_METHODS = ("run_study", "run_study_analyses", "run_investigation_analysis")
 
-_TERMINAL = ("completed", "failed", "cancelled")
+_TERMINAL = ("completed", "partial", "failed", "cancelled")
 
 
 def _identity_note(identity: str) -> str:
@@ -930,7 +930,7 @@ def simulator_latest(
     poll_interval = 15
     elapsed = 0
     status = "running"
-    while status not in ("completed", "failed", "cancelled"):
+    while status not in ("completed", "partial", "failed", "cancelled"):
         time.sleep(poll_interval)
         elapsed += poll_interval
         status = data_service.submit_get_simulator_build_status(simulator=uploaded)
@@ -1127,7 +1127,7 @@ def simulation_run(
     elapsed = 0
     status = "running"
     run = None
-    while status not in ("completed", "failed", "cancelled", "unknown"):
+    while status not in ("completed", "partial", "failed", "cancelled", "unknown"):
         time.sleep(poll_interval)
         elapsed += poll_interval
         try:
@@ -1306,7 +1306,7 @@ def composite_run(
     elapsed = 0
     status = "running"
     run = None
-    while status not in ("completed", "failed", "cancelled", "unknown"):
+    while status not in ("completed", "partial", "failed", "cancelled", "unknown"):
         time.sleep(poll_interval)
         elapsed += poll_interval
         try:
@@ -1631,7 +1631,7 @@ def composite_nextflow(
 
     console.print("\n[memphis.info]Polling simulation status...[/]")
     status = "running"
-    while status not in ("completed", "failed", "cancelled", "unknown"):
+    while status not in ("completed", "partial", "failed", "cancelled", "unknown"):
         _time_nf.sleep(30)
         run = data_service.submit_get_workflow(simulation_id=sim_id)
         status = str(getattr(run, "status", "unknown"))
@@ -1744,7 +1744,7 @@ def simulation_status(
     poll_interval = 30
     elapsed = 0
     status = "running"
-    while status not in ("completed", "failed", "cancelled", "unknown"):
+    while status not in ("completed", "partial", "failed", "cancelled", "unknown"):
         time.sleep(poll_interval)
         elapsed += poll_interval
         try:

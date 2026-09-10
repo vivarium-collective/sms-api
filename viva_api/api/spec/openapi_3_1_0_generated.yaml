@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.9.134
+  version: 0.9.137
 paths:
   /api/v1/simulations/discovery:
     get:
@@ -1328,7 +1328,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-09-09T20:28:58.128445'
+                  created_at: '2026-09-10T02:15:30.517153'
                 parca_config:
                   outdir: /projects/SMS/sms_api/prod/sims
                   operons: true
@@ -4071,6 +4071,51 @@ components:
             type: array
           - type: 'null'
           title: External Job Ids
+        exit_code:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Exit Code
+        attempt:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Attempt
+        error_source:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Source
+        trace_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trace Id
+        campaign_span_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Campaign Span Id
+        events_s3_prefix:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Events S3 Prefix
+        stage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stage
+        generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Generation
+        last_event_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Event At
         job_id_ext:
           type: string
           title: Job Id Ext
@@ -4125,6 +4170,7 @@ components:
       - completed
       - cancelled
       - failed
+      - partial
       title: JobStatus
       description: Shared job status enum for simulations, analyses, and other HPC
         jobs.
@@ -4796,7 +4842,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-09-09 20:28:58.061335'
+          default: '2026-09-10 02:15:30.447139'
         job_id:
           anyOf:
           - type: string

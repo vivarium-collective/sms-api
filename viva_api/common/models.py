@@ -113,6 +113,18 @@ class JobStatus(StrEnumBase):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     FAILED = "failed"
+    # Terminal, but NOT a success: the run finished with some of its required
+    # work missing -- a Nextflow head that exited 0 under `errorStrategy finish`
+    # after a task failed (sim 749: 100/100 generations published, the
+    # per-variant gather dead), or a chain campaign with k/N seed lineages
+    # succeeded. Previously both were reported as FAILED, indistinguishable from
+    # "nothing ran" (observability plan D4c).
+    PARTIAL = "partial"
+
+    @property
+    def is_terminal(self) -> bool:
+        """COMPLETED, PARTIAL, FAILED or CANCELLED -- the run will not change again."""
+        return self in TERMINAL_JOB_STATUSES
 
     @classmethod
     def from_slurm_state(cls, slurm_state: str) -> "JobStatus":
@@ -142,6 +154,14 @@ class JobStatus(StrEnumBase):
         """
         return _BATCH_STATE_MAP.get(batch_state.strip().upper() if batch_state else "", cls.UNKNOWN)
 
+
+#: The statuses after which a run's row will not change again.
+TERMINAL_JOB_STATUSES: frozenset[JobStatus] = frozenset({
+    JobStatus.COMPLETED,
+    JobStatus.PARTIAL,
+    JobStatus.FAILED,
+    JobStatus.CANCELLED,
+})
 
 # Map SLURM job states to JobStatus (defined after enum class)
 # See: https://slurm.schedmd.com/squeue.html#SECTION_JOB-STATE-CODES

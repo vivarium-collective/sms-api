@@ -59,9 +59,11 @@ class ViewerLaunch:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "uid": uid,
-        })
+        field_dict.update(
+            {
+                "uid": uid,
+            }
+        )
         if study is not UNSET:
             field_dict["study"] = study
         if run is not UNSET:

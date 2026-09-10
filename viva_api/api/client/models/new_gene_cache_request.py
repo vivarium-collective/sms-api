@@ -29,6 +29,7 @@ class NewGeneCacheRequest:
             seed (Union[Unset, int]):  Default: 0.
             media_condition (Union[None, Unset, str]):
             fixed_media (Union[None, Unset, str]):
+            source_variant (Union[None, Unset, str]):
     """
 
     parca_dataset_id: int
@@ -40,6 +41,7 @@ class NewGeneCacheRequest:
     seed: Union[Unset, int] = 0
     media_condition: Union[None, Unset, str] = UNSET
     fixed_media: Union[None, Unset, str] = UNSET
+    source_variant: Union[None, Unset, str] = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -77,14 +79,22 @@ class NewGeneCacheRequest:
         else:
             fixed_media = self.fixed_media
 
+        source_variant: Union[None, Unset, str]
+        if isinstance(self.source_variant, Unset):
+            source_variant = UNSET
+        else:
+            source_variant = self.source_variant
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "parca_dataset_id": parca_dataset_id,
-            "variant": variant,
-            "expression": expression,
-            "translation_efficiency": translation_efficiency,
-        })
+        field_dict.update(
+            {
+                "parca_dataset_id": parca_dataset_id,
+                "variant": variant,
+                "expression": expression,
+                "translation_efficiency": translation_efficiency,
+            }
+        )
         if rel_exp_adj is not UNSET:
             field_dict["rel_exp_adj"] = rel_exp_adj
         if rel_trl_eff_adj is not UNSET:
@@ -95,6 +105,8 @@ class NewGeneCacheRequest:
             field_dict["media_condition"] = media_condition
         if fixed_media is not UNSET:
             field_dict["fixed_media"] = fixed_media
+        if source_variant is not UNSET:
+            field_dict["source_variant"] = source_variant
 
         return field_dict
 
@@ -147,6 +159,15 @@ class NewGeneCacheRequest:
 
         fixed_media = _parse_fixed_media(d.pop("fixed_media", UNSET))
 
+        def _parse_source_variant(data: object) -> Union[None, Unset, str]:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Union[None, Unset, str], data)
+
+        source_variant = _parse_source_variant(d.pop("source_variant", UNSET))
+
         new_gene_cache_request = cls(
             parca_dataset_id=parca_dataset_id,
             variant=variant,
@@ -157,6 +178,7 @@ class NewGeneCacheRequest:
             seed=seed,
             media_condition=media_condition,
             fixed_media=fixed_media,
+            source_variant=source_variant,
         )
 
         new_gene_cache_request.additional_properties = d

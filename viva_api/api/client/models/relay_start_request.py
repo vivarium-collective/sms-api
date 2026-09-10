@@ -46,9 +46,11 @@ class RelayStartRequest:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "commit": commit,
-        })
+        field_dict.update(
+            {
+                "commit": commit,
+            }
+        )
         if workspace is not UNSET:
             field_dict["workspace"] = workspace
         if session_key is not UNSET:
