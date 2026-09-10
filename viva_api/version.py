@@ -1262,7 +1262,17 @@
 #            fires). Per-seed async independence preserved; parity with the
 #            Nextflow path. See docs/design-chain-one-lineageprocess.md.
 #            New TestSeedLineageCommand + updated TestAdvanceChainCampaign.
-__version__ = "0.9.137"
+#           0.9.138 -- fix(mbp-dispatch): thread --aeration-trigger through the
+#            remote coupled dispatch (#621, AlexPatrie). _mbp_tracked_command
+#            built --reactor-config/--aeration-schedule from mbp_dispatch but
+#            never --aeration-trigger, which run_mbp_tracked.py REQUIRES
+#            alongside a schedule (load_aeration_schedule() exits nonzero
+#            without it). Invisible until sms-ecoli#334's kLa-350 recalibration
+#            made a SECOND aeration schedule the first to be fired remotely.
+#            Emitted only when aeration_schedule is also set, mirroring the
+#            local script's coupling. Deployed for the coupled Run 1 re-fire on
+#            simulator 199 (sms-ecoli#166).
+__version__ = "0.9.138"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
