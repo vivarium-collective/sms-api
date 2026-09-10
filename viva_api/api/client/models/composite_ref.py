@@ -41,11 +41,9 @@ class CompositeRef:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "ref": ref,
-            }
-        )
+        field_dict.update({
+            "ref": ref,
+        })
         if overrides is not UNSET:
             field_dict["overrides"] = overrides
 

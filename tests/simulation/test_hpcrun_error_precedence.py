@@ -153,11 +153,22 @@ def test_the_status_vocabulary_is_unchanged_by_the_observability_work() -> None:
     from viva_api.simulation.tables_orm import JobStatusDB
 
     assert {s.value for s in JobStatusDB} == {
-        "waiting", "pending", "queued", "running", "completed", "cancelled", "failed",
+        "waiting",
+        "pending",
+        "queued",
+        "running",
+        "completed",
+        "cancelled",
+        "failed",
     }
-    assert frozenset({
-        JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED,
-    }) == TERMINAL_JOB_STATUSES
+    assert (
+        frozenset({
+            JobStatus.COMPLETED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+        })
+        == TERMINAL_JOB_STATUSES
+    )
     for legacy in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
         assert legacy.is_terminal
         assert JobStatusDB.from_job_status(legacy).to_job_status() is legacy

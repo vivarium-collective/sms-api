@@ -19,7 +19,7 @@ Sep-10 02:10:07.962 [main] DEBUG nextflow.Session - Run name: distraught_minsky
 Sep-10 02:10:07.962 [main] DEBUG nextflow.Session - Executor pool size: 16
 Sep-10 02:10:07.965 [main] DEBUG nextflow.file.FilePorter - File porter settings maxRetries=3; maxTransfers=50; pollTimeout=null
 Sep-10 02:10:07.967 [main] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'FileTransfer' minSize=10; maxSize=48; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
-Sep-10 02:10:07.980 [main] DEBUG nextflow.cli.CmdRun - 
+Sep-10 02:10:07.980 [main] DEBUG nextflow.cli.CmdRun -
   Version: 25.04.3 build 5949
   Created: 02-06-2025 20:56 UTC (16:56 EDT)
   System: Mac OS X 15.7.4
@@ -56,7 +56,7 @@ Sep-10 02:10:08.232 [main] DEBUG nextflow.processor.TaskProcessor - Starting pro
 Sep-10 02:10:08.232 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > analysis_v0
 Sep-10 02:10:08.233 [main] DEBUG nextflow.script.ScriptRunner - Parsed script files:
   Script_8998c78db346ab27: /tmp/nf-toy/main.nf
-Sep-10 02:10:08.233 [main] DEBUG nextflow.script.ScriptRunner - > Awaiting termination 
+Sep-10 02:10:08.233 [main] DEBUG nextflow.script.ScriptRunner - > Awaiting termination
 Sep-10 02:10:08.233 [main] DEBUG nextflow.Session - Session await
 Sep-10 02:10:08.290 [Task submitter] WARN  n.executor.BashWrapperBuilder - Task runtime metrics are not reported when using macOS without a container engine
 Sep-10 02:10:08.297 [Task submitter] DEBUG n.executor.local.LocalTaskHandler - Launch cmd line: /bin/bash -ue .command.run

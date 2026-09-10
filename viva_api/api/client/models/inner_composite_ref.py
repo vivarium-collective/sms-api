@@ -32,12 +32,10 @@ class InnerCompositeRef:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "ref": ref,
-                "hops": hops,
-            }
-        )
+        field_dict.update({
+            "ref": ref,
+            "hops": hops,
+        })
 
         return field_dict
 

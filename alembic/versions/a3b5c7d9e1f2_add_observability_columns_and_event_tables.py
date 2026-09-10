@@ -105,7 +105,6 @@ def upgrade() -> None:
     op.execute("CREATE INDEX IF NOT EXISTS ix_hpcrun_span_trace_id ON hpcrun_span (trace_id)")
 
 
-
 def downgrade() -> None:
     """Drop the tables and columns. The enum label stays: Postgres has no DROP
     VALUE (see 44335812e447's downgrade for the same reasoning)."""

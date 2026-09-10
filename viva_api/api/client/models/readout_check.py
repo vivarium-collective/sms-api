@@ -61,11 +61,9 @@ class ReadoutCheck:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "spec": spec,
-            }
-        )
+        field_dict.update({
+            "spec": spec,
+        })
         if ref is not UNSET:
             field_dict["ref"] = ref
         if state is not UNSET:
