@@ -1,6 +1,6 @@
 # Observability plan for whole-cell campaigns (viva-api · v2ecoli · process-bigraph)
 
-> **Status (2026-09-10 06:50Z): APPROVED by Jim, re-planned once: the engine is general-purpose (§D1′ — `component`, dotted event names, opaque string baggage; no domain vocabulary in process-bigraph). PR-A = viva-api#609; PR-B = process-bigraph#209 being generalised; PR-C/PR-D in progress; PR-C/PR-D follow. Progress rows go in `docs/plan-nextflow-act3.md`; this file is the design of record. Companion to `plan-nextflow-dispatch.md`, `plan-nextflow-act2.md`, `plan-nextflow-act3.md`.
+> **Status (2026-09-10 16:15Z): all four implementation PRs are complete, cluster-validated, and awaiting review. None is merged.** Approved by Jim 05:45Z, re-planned once at 06:50Z (§D1′ — the engine is general-purpose: `component`, dotted event names, opaque string baggage, no domain vocabulary in process-bigraph), extended at 15:50Z (§D5 — the Ray/multi-node path). See **§Where each piece actually is** below for heads and state. Progress rows go in `docs/plan-nextflow-act3.md`; this file is the design of record. Companion to `plan-nextflow-dispatch.md`, `plan-nextflow-act2.md`, `plan-nextflow-act3.md`.
 
 
 ## Context — why now
@@ -438,6 +438,71 @@ Same seed, same config, same chassis on both images; the control run proves the 
 proves the events, `/status`, `/events`, and the failure path — all before Eran reviews a line.
 The three branches ride the same review order afterwards (PR-B → PR-C → sms-ecoli pin), and
 the pins move from branch hashes to the merge commits.
+
+## Where each piece actually is (2026-09-10 16:15Z)
+
+Nothing is merged. Everything below is built, tested and measured; the gate is review.
+
+| piece | PR | head | state |
+|---|---|---|---|
+| **PR-B** engine — `events.py`, hooks H1–H5, entrypoints, retry template | process-bigraph#209 | `66bccbdd` | draft, review requested |
+| **PR-C** runner — events wrapper, S3 sink plugin, carry report, failure record, classification test | v2ecoli#772 | `4d6a4e22` | draft |
+| **PR-A** head poller, `trace.csv`, PARTIAL, error precedence, `PBG_*` env, the migration | viva-api#609 | `baad10a3` | open, review requested |
+| **PR-D** ingester, `/events`, `/tasks`, richer `/status`, CLI, `run_pbg.py` bootstrap | viva-api#612 | `5b9b2d87` | open, stacked on #609 |
+| **PR-E** CloudWatch enrichment | — | — | not started (optional, last) |
+
+### What has been proved, on the cluster, not in argument
+
+- **Invariance.** Instrumented image (simulator 196) vs control (194), row by row on `global_time`:
+  Nextflow 956 vs 951 (4,204 rows) and chain 957 vs 952 (5,276 rows) — **0 differing bulk vectors,
+  0.0 on six mass listeners**, identical divisions.
+- **Overhead −0.1 %** (1,887 s instrumented vs 1,889 s not).
+- **Zero-config works**: the instrumented image emitted task/lineage/generation spans, `run.start`,
+  `tick` every ~30 s wall, `lineage.chunk.flushed` and baggage with no `PBG_*` env at all, because
+  the CLI entrypoints default to stdout.
+- **The stream diagnosed a real bug on its own** before #773 existed: 956 gen 0 read
+  `structure.changed @2528` → `run.end @3600` → `lineage.division t_division=1072` — the window
+  semantics, visible in one glance at the event stream rather than after a bisect.
+- **Graceful degradation is real and now pinned by 13 tests** across four legacy shapes (an old DB
+  row, a Nextflow run with no `trace.csv`, an image that never emits, a pre-#209 engine pin).
+  Everything probed was already graceful; no behaviour changes were needed. The one thing that was
+  *not* graceful lives outside these repos — the workbench's terminal-status buckets lacked
+  `PARTIAL` (Alex fixed it in vwb#1045).
+- **The migration is tested against the real alembic chain**, not `create_all` — see below.
+
+### Two findings worth carrying forward
+
+**The `create_all` testing gap, and the pre-existing defect under it (viva-api#618).** Every
+`PARTIAL` test originally built its schema with `Base.metadata.create_all`, which always reflects
+the current model and is therefore structurally incapable of catching migration-vs-ORM drift — the
+exact class that produced the production `invalid input value for enum jobstatusdb: "CANCELLED"`.
+`tests/simulation/test_observability_migration.py` now drives `alembic upgrade` from empty and
+asserts the real `update_hpcrun_status(..., PARTIAL)` fails before the migration and succeeds after.
+The migration itself needed no fix (`ALTER TYPE … ADD VALUE IF NOT EXISTS` does not need an
+`autocommit_block()` on PG15). Doing that surfaced **viva-api#618**: the chain *cannot* build a
+working schema from empty at all — `analysis` and the compose tables are ALTERed by migrations that
+never CREATE them, and several `hpcrun` columns exist only via `create_all`. Pre-existing, filed
+rather than fixed inside a PR under review, and it blocks the stated end goal of guarding
+`create_all` off in production.
+
+**Compatibility in both directions.** A newer viva-api with an older simulator is safe: the ingester
+finds no trace id, makes zero object-store calls and writes nothing. An instrumented simulator under
+a legacy viva-api still writes `events.jsonl` into its out_dir via the entrypoint default — the
+events exist, they just never reach the database. A composite run against a pre-#209 engine gets the
+null emitter, which absorbs every call including the error paths.
+
+### Deploy chain, once reviewed
+
+Order matters; each step is a pin.
+
+```
+process-bigraph release
+  → v2ecoli pin bump
+    → sms-ecoli pin bump   ← BOTH pins move together: sms-ecoli pins the ENGINE itself
+      → simulator image       (pyproject.toml:273) as well as v2ecoli. Bumping one is a
+        → viva-api deploy      uv lock conflict ("conflicting URLs for process-bigraph").
+           (carries the migration)
+```
 
 ## Rollout order (value at every step; parallel where independent)
 
