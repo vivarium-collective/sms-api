@@ -1,6 +1,6 @@
 # Observability plan for whole-cell campaigns (viva-api · v2ecoli · process-bigraph)
 
-> **Status (2026-09-10 06:20Z): APPROVED by Jim; PR-A is up as viva-api#609 (reviewer eagmon), PR-B (process-bigraph `feat/events`) in progress; PR-C/PR-D follow. Progress rows go in `docs/plan-nextflow-act3.md`; this file is the design of record. Companion to `plan-nextflow-dispatch.md`, `plan-nextflow-act2.md`, `plan-nextflow-act3.md`.
+> **Status (2026-09-10 06:50Z): APPROVED by Jim, re-planned once: the engine is general-purpose (§D1′ — `component`, dotted event names, opaque string baggage; no domain vocabulary in process-bigraph). PR-A = viva-api#609; PR-B = process-bigraph#209 being generalised; PR-C/PR-D in progress; PR-C/PR-D follow. Progress rows go in `docs/plan-nextflow-act3.md`; this file is the design of record. Companion to `plan-nextflow-dispatch.md`, `plan-nextflow-act2.md`, `plan-nextflow-act3.md`.
 
 
 ## Context — why now
@@ -160,6 +160,94 @@ retries any non-zero exit three times (`nextflow_deploy.py:200-201`), each attem
     `warning` (one per occurrence, next to each `warnings.warn`); `failure_record`.
   - dispatcher (written straight to the DB, never through the engine): `submitted`,
     `cache_staged`, `retry_observed`, `head_exit`, `task_outcome`, `reaped`.
+
+### D1′. The base-library boundary (Jim, 06:40Z, on process-bigraph#209): the engine is general-purpose
+
+process-bigraph knows composites, processes, steps, runs, ticks, structural changes, protocol
+runtimes, exceptions, and entrypoint invocations ("tasks"). It knows nothing about cells,
+lineages, generations, seeds, variants, campaigns, dispatchers, runners, ParCa, analyses, or any
+cloud. The redesign makes that a rule the code can be checked against, not a convention:
+
+- **Schema**: `v, ts, seq, source, component, event, level, trace_id, span_id, parent_span_id,
+  global_time, wall_time, baggage, tags, payload`. `layer` (a fixed `engine|runner|dispatcher|api`
+  vocabulary) is replaced by **`component`**, a free-form string: the engine emits
+  `"process_bigraph"`; callers set their own (`"v2ecoli.lineage"`, `"viva_api.dispatch"`).
+  `baggage` (W3C semantics), span `attrs`, `tags` and `payload` are opaque maps; the engine never
+  reads a key by name and coerces values by literal shape only (int/float/bool/str), never per key.
+- **Event names are dotted and namespaced by component**; the `event` field is a free string. The
+  engine documents only its own:
+
+  | engine event | when |
+  |---|---|
+  | `run.start` / `run.end` | `Composite.run` (span `run`) |
+  | `tick` | throttled heartbeat in `_run_inner` |
+  | `structure.changed` | `apply_updates` reconcile summary reports a structural change |
+  | `process.exception` | a Process/Step `invoke` raised (path, class, address, interval, state summary) |
+  | `process.init` | a protocol runtime initialised a remote process (Ray `init_cell` timing) |
+  | `runtime.error` | a protocol runtime flush failed (Ray shard) |
+  | `task.start` / `task.end` | the CLI entrypoints (`run_composite`, `run_step`); span `task` |
+  | `span.start` / `span.end` | every span boundary |
+  | `sink.error` | a sink raised and was disabled |
+  | `process.invoke`, `process.timing` | opt-in detail |
+
+  Callers own everything else and the engine never enumerates it: v2ecoli emits
+  `lineage.generation.start`, `lineage.division`, `lineage.generation.end`, `lineage.checkpoint`,
+  `lineage.chunk.flushed`, `lineage.warning`, `lineage.failure`; viva-api emits `dispatch.submitted`,
+  `dispatch.cache.staged`, `dispatch.retry`, `dispatch.head.exit`, `dispatch.task.outcome`,
+  `dispatch.reaped`.
+- **Identity**: `trace_id`/`span_id`/`parent_span_id` only. Domain identifiers (`sim_id`,
+  `experiment_id`, `variant`, `lineage_seed`, `generation`) travel in `baggage`, set by the caller
+  (`PBG_TRACE_BAGGAGE` from the dispatcher, `emitter.bind(**kv)` from the runner) and promoted into
+  columns by viva-api's ingester. No `PBG_EVENT_IDENTITY`, no fixed identity block.
+- **Entrypoints**: span name from `--span-name`, default the document/class basename (never
+  `lineage`/`parca`); `failure.json` holds exception type/message, traceback tail, the engine's
+  `pbg_context`, and the current baggage/attrs — nothing domain-shaped. The helper is
+  `exception_record()`, not `failure_record()`.
+- **Nextflow template**: `params.run_tag` (not `sim_tag`) → `tag` directive; `retry_exit_codes`
+  and per-label `maxRetries`/`errorStrategy` stay (generic). Tests use generic labels (`light`,
+  `heavy`), never `lineage`/`parca`/`analysis`.
+- **Prose**: docstrings, comments, tests and the PR text reference only process-bigraph's own
+  examples (the growth-division composite, `_two_increasers`, Gillespie); no sim numbers, no
+  sms-ecoli/v2ecoli/viva-api names, no cloud names, no "campaign/runner/dispatcher/cell". The
+  boundary paragraph stays, phrased generically ("domain identifiers belong in `baggage`").
+- **Enforced by a test**: `test_events_vocabulary_is_domain_free` greps the shipped `events.py`,
+  the hooks in `composite.py`/`protocols/ray.py`, the entrypoints and `nextflow_deploy.py` for a
+  deny-list (`lineage, generation, variant, seed, campaign, dispatcher, runner, parca, cell,
+  sim_id, experiment_id, viva, vecoli, batch job`) so the boundary survives future PRs.
+
+Consequences downstream: v2ecoli (PR-C) names its events under `lineage.*`, binds its keys into
+baggage, sets `component`; viva-api (PR-D) stores `component` instead of `layer`, promotes
+`generation`/`variant`/`lineage_seed` out of baggage, and presents them first-class in the API
+and CLI. The plan's D1 identity block and D2 event table above are superseded by this section.
+
+**Concrete changes to process-bigraph#209** (audit of `feat/events` @ `487ba0ef` vs `78d1488`;
+the identity block and per-key coercion are already gone in `487ba0e`, so this is the rest):
+
+| what | where | change |
+|---|---|---|
+| `layer` field, default `'engine'`, doc'd as `engine\|runner\|dispatcher\|api` | `events.py:75, :495, :598` and every internal `'engine'` literal; `run_composite.py:130`; test `test_events.py:116-121` freezes the wire schema | rename to `component: str`, engine value `"process_bigraph"`, free-form; the schema-freeze test asserts `component` is a string |
+| flat event names | all emit sites | `run.start`, `run.end`, `tick`, `structure.changed`, `process.exception`, `process.init`, `runtime.error`, `task.start`, `task.end`, `span.start`, `span.end`, `sink.error`, `process.invoke`, `process.timing`; document the set once in the module docstring |
+| `sim_tag` | `nextflow_deploy.py:202-206`, test `:52-55` (`sim946`) | `run_tag`; test value `'task-a'` |
+| global int coercion of baggage values (`events.py:675-680`; `007` → `7`) | | W3C baggage is string→string: keep values as strings on the wire; no coercion in the engine; consumers coerce |
+| `failure_record()` | `events.py:751`, entrypoints | `exception_record()`; the `failure.json` sidecar keeps its name |
+| `os.environ['PBG_TRACEPARENT'] = …` in library functions | `run_composite.py:129`, `run_step.py:156` | do it only in `main()` (CLI), behind `export_context=True`; in-process callers get no env mutation |
+| domain prose | `events.py:4, 26, 29, 43-44, 49, 161, 15, 254`; `composite.py:3036`; `protocols/ray.py:492-493`; `nextflow_deploy.py:166` | "structural changes (a process added or removed)", "which experiment, which replicate, which parameter set", "the caller derived (e.g. a hash of an upstream correlation id)", "launchers render env through `docker --env`", "without walking a whole state tree", `mysink://host/path`, "callers may classify control-flow exceptions by type, so the original exception must propagate unchanged", "one bad composite … name the `proc_id`", drop the private anecdote |
+| test fixtures | `test_events.py:105, 117, 279-290, 408-410`; `test_nextflow_deploy.py:27, 43-46, 575` | `{'experiment': 'exp-1', 'replicate': 3, 'stage': 'pilot'}`, `'boom'`, labels `heavy`/`reporting`, "workflow" not "campaign" |
+| PR #209 body | | rewrite: engine-only framing, the growth-division example, the boundary rule, no sim numbers / repo names / internal hostname (`LT-0919652-32327` appears in the sample) |
+| vocabulary test | new `process_bigraph/tests/test_events_vocabulary.py` | grep `events.py`, the hook regions of `composite.py`/`protocols/ray.py`, `run_composite.py`, `run_step.py` and the lines this PR adds to `nextflow_deploy.py` for the deny-list; fails on any hit |
+
+Out of scope for #209 but noted: `nextflow_deploy.py` on `main` already says vEcoli ×6, ParCa ×5,
+campaign ×4 in inherited prose (`:5, :29, :119, :148, :157, :197, :206, :283, :299`), and
+`composite_generator.py:383-392` / `emitter.py:305-307` carry `experiment_id`/`run_id`. A separate
+"generic vocabulary" cleanup PR to process-bigraph, if Eran wants it; not mixed into this one.
+
+Stable API surface kept unchanged (consumers pin to it): `configure/get_emitter/set_emitter`,
+`EventSink` + `register_sink_factory` + entry-point group + `resolve_sink(s)`, `bind`, `event`,
+`span/start_span/Span.end`, `current_context/current_traceparent`, `heartbeat/count`, `exception`
+→ `exc.pbg_context`, `parse_traceparent/mint_*`, `parse_baggage`, `summarize_state`,
+`traceback_tail`, `retry_error_strategy`, `AWSBATCH_DEFAULTS['retry_exit_codes']`, the CLI flags
+`--failure-out/--summary-out/--span-name`. Only names change: `layer→component`,
+`failure_record→exception_record`, `sim_tag→run_tag`, event names to the dotted set.
 
 ### D2. Engine (process-bigraph PR, we author, eagmon reviews → release 1.9.0)
 
