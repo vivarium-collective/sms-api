@@ -2306,6 +2306,77 @@ class SimulationServiceRay(SimulationService):
             f" --overrides {shlex.quote(json.dumps(overrides))} -n 1"
         )
 
+    def _seed_lineage_command(
+        self,
+        *,
+        seed: int,
+        n_generations: int,
+        experiment_id: str,
+        runner_s3_uri: str,
+        injected_processes: dict[str, Any] | None = None,
+        variants: dict[str, Any] | None = None,
+        composite_id: str | None = None,
+        exchange_fluxes: dict[str, Any] | None = None,
+        exchange_flux_basis: str | None = None,
+    ) -> str:
+        """Build ONE seed's WHOLE-LINEAGE command: all ``n_generations`` in a
+        single ``LineageProcess`` (one Batch job per seed), not one job per
+        generation.
+
+        This is the Run-3 fix. ``_seed_generation_command`` runs one generation
+        per job (``n_generations=1``, ``stop_at_division=True``) with an S3
+        daughter-state checkpoint handed between jobs — so every generation job
+        is a *fresh* ``LineageProcess`` whose ``lineage_time_offset`` restarts at
+        0.0, and a ``field_timeline`` dose scheduled at a cumulative-lineage time
+        (e.g. ``DOSE_ONSET_TIME_S=10000``) is compared against a per-generation
+        clock that only reaches ~3000 s — so it NEVER fires (silent no-dose
+        control; see docs/design-chain-one-lineageprocess.md).
+
+        Running the whole lineage in ONE ``LineageProcess`` (exactly as the
+        Nextflow path already does, and as the ``n_generations>1`` batch shape in
+        ``_sim_command`` does) makes ``lineage_time_offset`` accumulate across
+        generations, so the dose fires at its intended cumulative time. Division
+        is in-process, so NO ``initial_generation_index`` /
+        ``initial_carry_state_path`` / ``daughter_state_out_path`` and NO
+        ``stop_at_division`` — ``baseline()``'s own ``n_seeds>1 or
+        n_generations>1`` gate routes ``n_generations>1`` through the
+        batch/lineage shape. ``seed``/``injected_processes``/``variants``/
+        ``exchange_fluxes`` are threaded identically to
+        ``_seed_generation_command`` (same per-seed S3 out layout).
+        """
+        seed_out_dir = data_layout.RayLayout.seed_results_uri(experiment_id, seed).rstrip("/")
+        overrides: dict[str, Any] = {
+            "n_seeds": 1,
+            "n_generations": int(n_generations),
+            "cache_dir": PARCA_CACHE_DIR,
+            "out_dir": seed_out_dir,
+            "experiment_id": experiment_id,
+            # The campaign's analysis DAG node runs analyses once over the landed
+            # sweep -- skip the composite's own inline flush (matches the batch
+            # and per-generation paths).
+            "analyses": "none",
+            "parallel": "",
+            # ecoli_baseline.baseline()'s own per-seed param (see
+            # _seed_generation_command): run exactly this seed's lineage.
+            "seed": int(seed),
+        }
+        if injected_processes:
+            overrides["injected_processes"] = injected_processes
+        if variants:
+            overrides["variants"] = variants
+        if exchange_fluxes:
+            overrides["exchange_fluxes"] = exchange_fluxes
+            if exchange_flux_basis:
+                overrides["exchange_flux_basis"] = exchange_flux_basis
+        env = PBG_RUNNER_ENV
+        return (
+            f"cd {V2ECOLI_DIR}"
+            f" && aws s3 cp {runner_s3_uri} /tmp/run_pbg.py"
+            f" && {env} python /tmp/run_pbg.py"
+            f" --composite-id {composite_id or V2ECOLI_BATCH_BASELINE_COMPOSITE_ID}"
+            f" --overrides {shlex.quote(json.dumps(overrides))} -n 1"
+        )
+
     def _analysis_command(
         self,
         *,
@@ -3648,6 +3719,144 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                     experiment_id,
                     seed,
                     generation_index,
+                )
+                continue
+        return submitted
+
+    def submit_chain_lineage(
+        self,
+        *,
+        seed: int,
+        n_generations: int,
+        experiment_id: str,
+        commit: str,
+        cache_s3: str,
+        runner_s3_uri: str,
+        tags: dict[str, str],
+        batch_client: Any = None,
+        injected_processes: dict[str, Any] | None = None,
+        variants: dict[str, Any] | None = None,
+        composite_id: str | None = None,
+        exchange_fluxes: dict[str, Any] | None = None,
+        exchange_flux_basis: str | None = None,
+        expect_new_genes: str | None = None,
+        expect_bundle_overrides: str | None = None,
+        lineage_debug_division: bool = False,
+        task_env: dict[str, str] | None = None,
+    ) -> str:
+        """Submit ONE seed's WHOLE lineage as a single standalone container job:
+        all ``n_generations`` in one ``LineageProcess``.
+
+        Replaces the per-generation ``submit_chain_generation`` on the chain
+        path. Because the whole lineage now runs in one process,
+        ``lineage_time_offset`` accumulates across generations and a
+        ``field_timeline`` dose scheduled at a cumulative time actually fires
+        (the Run-3 fix; see ``_seed_lineage_command``). Per-seed independence is
+        preserved — one job per seed, no cross-seed barrier — so this keeps the
+        scheduler's fully-asynchronous per-seed model.
+        """
+        # Same container job def as the per-generation jobs: peak memory of a
+        # whole-lineage LineageProcess matches one generation (advance_generation
+        # flushes + consolidates each generation, so no whole-lineage buffer
+        # growth), and _submit_container sets no attemptDurationSeconds, so the
+        # longer wall-clock of N generations simply runs. (Spot interruption of a
+        # long lineage loses the partial run's job success even though gens
+        # 0..N-1 are durably on disk; resume-from-generation is a possible
+        # follow-up -- see docs/design-chain-one-lineageprocess.md.)
+        job_def = self._ensure_container_job_def(self._image_uri(commit), commit)
+        return self._submit_container(
+            job_name=f"chain-seed{seed}-lineage-{experiment_id}-{_rand_suffix()}"[:128],
+            job_definition=job_def,
+            job_cmd=self._seed_lineage_command(
+                seed=seed,
+                n_generations=n_generations,
+                experiment_id=experiment_id,
+                runner_s3_uri=runner_s3_uri,
+                injected_processes=injected_processes,
+                variants=variants,
+                composite_id=composite_id,
+                exchange_fluxes=exchange_fluxes,
+                exchange_flux_basis=exchange_flux_basis,
+            ),
+            out_s3=data_layout.RayLayout.seed_results_uri(experiment_id, seed),
+            out_dir=SIM_OUT_DIR,
+            stage_s3=cache_s3,
+            stage_dir=PARCA_CACHE_DIR,
+            tags={**tags, "Seed": str(seed), "Generations": str(n_generations)},
+            batch_client=batch_client,
+            expect_new_genes=expect_new_genes,
+            expect_bundle_overrides=expect_bundle_overrides,
+            lineage_debug_division=lineage_debug_division,
+            task_env=task_env,
+        )
+
+    async def submit_chain_lineage_batch(
+        self,
+        *,
+        seeds: list[int],
+        n_generations: int,
+        experiment_id: str,
+        commit: str,
+        cache_s3: str,
+        runner_s3_uri: str,
+        tags: dict[str, str],
+        injected_processes: dict[str, Any] | None = None,
+        variants: dict[str, Any] | None = None,
+        composite_id: str | None = None,
+        exchange_fluxes: dict[str, Any] | None = None,
+        exchange_flux_basis: str | None = None,
+        expect_new_genes: str | None = None,
+        expect_bundle_overrides: str | None = None,
+        lineage_debug_division: bool = False,
+        task_env: dict[str, str] | None = None,
+    ) -> dict[int, str]:
+        """Fan out ONE whole-lineage job per seed, TPS-paced below the
+        account-wide ``SubmitJob`` rate limit (same ``_SubmitJobPacer`` +
+        retry-configured client as ``submit_chain_generation_batch``).
+
+        Replaces the per-generation ``submit_chain_generation_batch`` on the
+        chain path. This is the ONLY submission burst now: every seed's lineage
+        is fanned out once, the instant ParCa succeeds; there is no per-seed
+        per-generation follow-up submission (the scheduler only polls each
+        lineage job to resolution). A per-seed submission failure is logged and
+        that seed omitted from the returned mapping — other seeds unaffected.
+        """
+        pacer = _SubmitJobPacer()
+        submit_client = boto3.client(
+            "batch",
+            region_name=get_settings().batch_region,
+            config=Config(retries={"mode": "standard", "max_attempts": _SUBMIT_JOB_MAX_ATTEMPTS}),
+        )
+        submitted: dict[int, str] = {}
+        for seed in seeds:
+            await pacer.wait()
+            try:
+                submitted[seed] = self.submit_chain_lineage(
+                    seed=seed,
+                    n_generations=n_generations,
+                    experiment_id=experiment_id,
+                    commit=commit,
+                    cache_s3=cache_s3,
+                    runner_s3_uri=runner_s3_uri,
+                    tags=tags,
+                    batch_client=submit_client,
+                    injected_processes=injected_processes,
+                    variants=variants,
+                    composite_id=composite_id,
+                    exchange_fluxes=exchange_fluxes,
+                    exchange_flux_basis=exchange_flux_basis,
+                    expect_new_genes=expect_new_genes,
+                    expect_bundle_overrides=expect_bundle_overrides,
+                    lineage_debug_division=lineage_debug_division,
+                    task_env=task_env,
+                )
+            except Exception:
+                logger.exception(
+                    "Chain dispatch %s: seed %d lineage submission failed "
+                    "(even after retry-on-throttle) -- this seed's lineage is "
+                    "omitted; other seeds are unaffected",
+                    experiment_id,
+                    seed,
                 )
                 continue
         return submitted
