@@ -2768,6 +2768,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         seed: int = 0,
         media_condition: str | None = None,
         fixed_media: str | None = None,
+        source_variant: str | None = None,
     ) -> JobId:
         """Submit ``build_new_gene_cache.py`` as a standalone container job
         (backlog item 105), stamping a new-gene INDUCTION LEVEL onto a
@@ -2806,7 +2807,11 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                 media_condition=media_condition,
                 fixed_media=fixed_media,
             ),
-            stage_s3=self.cache_s3_uri(commit),
+            # ``source_variant`` (sms-ecoli#166, 2026-09-09): stage the chassis from
+            # a variant slot instead of the shared bare commit slot, which any
+            # chain dispatch's ``run_parca`` on this commit rewrites (last writer
+            # wins). None keeps the bare-slot source byte-for-byte.
+            stage_s3=self.cache_s3_uri(commit, variant=source_variant),
             stage_dir=PARCA_CACHE_DIR,
             out_s3=self.cache_s3_uri(commit, variant=variant),
             out_dir=NEW_GENE_INDUCED_CACHE_DIR,
