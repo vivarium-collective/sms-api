@@ -2131,6 +2131,51 @@ class TestUpdateNextflowHeads:
             patch.object(scheduler, "update_chain_campaigns", new=lambda: _record("chain")),
             patch.object(scheduler, "update_multi_node_jobs", new=lambda: _record("mnp")),
             patch.object(scheduler, "update_nextflow_heads", new=lambda: _record("nf")),
+            patch.object(scheduler, "ingest_run_events", new=lambda: _record("events")),
         ):
             await scheduler._polling_loop(interval_seconds=0)
-        assert order == ["reconcile", "reap", "running", "chain", "mnp", "nf"]
+        # The event ingester (plan D4b) runs last: it folds what the tasks wrote
+        # AFTER every poller has had its say about the rows this tick.
+        assert order == ["reconcile", "reap", "running", "chain", "mnp", "nf", "events"]
+
+    @pytest.mark.asyncio
+    async def test_ingest_is_skipped_when_disabled_or_without_a_file_service(self) -> None:
+        mock_database = AsyncMock()
+        scheduler = JobScheduler(messaging_service=MagicMock(), database_service=mock_database)
+        with patch("viva_api.dependencies.get_file_service", return_value=None):
+            await scheduler.ingest_run_events()
+        mock_database.list_hpcruns_for_event_ingest.assert_not_called()
+        settings = MagicMock(events_ingest_enabled=False)
+        with patch("viva_api.simulation.job_scheduler.get_settings", return_value=settings):
+            await scheduler.ingest_run_events()
+        mock_database.list_hpcruns_for_event_ingest.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dispatcher_events_are_recorded_under_the_campaign_span(
+        self, database_service: DatabaseServiceSQL
+    ) -> None:
+        """A finalized Nextflow head leaves ``dispatch.head.exit`` and one
+        ``dispatch.task.outcome`` per never-succeeded task, source ``api``."""
+        sim, hpcrun = await insert_nextflow_head_job(database_service, job_name="nf-events")
+        self._use_s3({
+            f"vecoli-output/{sim.experiment_id}/trace.csv": _trace(
+                ("aa/111111", "parca_v0", "COMPLETED", "0"), ("bb/222222", "runs_v0:lineage_v0_s0", "FAILED", "1")
+            )
+        })
+        mock_ray = _nf_mock_ray(JobStatus.COMPLETED, exit_code=0, reason="Completed")
+        scheduler = JobScheduler(
+            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
+        )
+        await scheduler._advance_nextflow_head(hpcrun, mock_ray)
+
+        events = await database_service.list_hpcrun_events(hpcrun.database_id)
+        by_name = {e.event: e for e in events}
+        assert set(by_name) == {"dispatch.head.exit", "dispatch.task.outcome"}
+        head = by_name["dispatch.head.exit"]
+        assert (
+            head.component == "viva_api.dispatch" and head.source == "api" and head.span_id == hpcrun.campaign_span_id
+        )
+        assert head.payload is not None and head.payload["status"] == "partial" and head.payload["exit_code"] == 0
+        outcome = by_name["dispatch.task.outcome"]
+        assert outcome.level == "error" and outcome.payload is not None
+        assert outcome.payload["name"] == "runs_v0:lineage_v0_s0" and outcome.payload["task_hash"] == "bb/222222"

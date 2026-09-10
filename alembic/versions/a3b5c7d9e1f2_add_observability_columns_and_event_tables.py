@@ -14,7 +14,7 @@ Observability plan (docs/plan-observability.md), viva-api part A/B storage:
   (``tick`` heartbeats are never stored); unique on ``(trace_id, source, seq)``
   so re-ingesting an ``events.jsonl`` object is idempotent.
 * ``hpcrun_span``: the run's trace tree (campaign > parca / lineage / analysis >
-  generation > ...), materialised from ``span_start``/``span_end`` events.
+  generation > ...), materialised from ``span.start``/``span.end`` events.
 * ``jobstatusdb`` is deliberately UNCHANGED. An earlier draft added a
   ``PARTIAL`` label; it was dropped because nothing branched on it (it was a
   terminal-set member and a CLI colour), because Postgres cannot drop an enum
@@ -65,7 +65,7 @@ def upgrade() -> None:
             source VARCHAR NOT NULL,
             seq INTEGER NOT NULL,
             ts TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-            layer VARCHAR NOT NULL,
+            component VARCHAR NOT NULL,
             event VARCHAR NOT NULL,
             level VARCHAR NOT NULL DEFAULT 'info',
             generation INTEGER,
@@ -77,6 +77,23 @@ def upgrade() -> None:
             tags JSONB,
             CONSTRAINT uq_hpcrun_event_trace_source_seq UNIQUE (trace_id, source, seq)
         )
+        """
+    )
+    # An earlier draft of this revision named the column ``layer``; the settled
+    # schema (plan D1') calls it ``component`` (a free string such as
+    # "process_bigraph", "v2ecoli.lineage", "viva_api.dispatch"). Rename in
+    # place where that draft was applied; a no-op everywhere else.
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_name = 'hpcrun_event' AND column_name = 'layer')
+               AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'hpcrun_event' AND column_name = 'component') THEN
+                ALTER TABLE hpcrun_event RENAME COLUMN layer TO component;
+            END IF;
+        END $$
         """
     )
     op.execute("CREATE INDEX IF NOT EXISTS ix_hpcrun_event_hpcrun_id ON hpcrun_event (hpcrun_id)")
