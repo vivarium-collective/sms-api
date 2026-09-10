@@ -185,7 +185,6 @@ def classify_run(head_exit_code: int | None, summary: TraceSummary) -> JobStatus
     """
     if summary.total == 0:
         return JobStatus.FAILED
-    succeeded = summary.completed + summary.cached
     if final_failed_rows(summary) or summary.other:
         return JobStatus.FAILED
     if head_exit_code not in (None, 0):

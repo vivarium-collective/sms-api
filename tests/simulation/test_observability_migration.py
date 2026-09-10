@@ -299,7 +299,6 @@ async def test_migration_is_a_noop_on_a_create_all_database(
     await asyncio.to_thread(command.stamp, cfg, PRE_OBS_REVISION)
     await asyncio.to_thread(command.upgrade, cfg, OBS_REVISION)
 
-    labels = await _real_jobstatusdb_labels(fresh_postgres_url)
     actual = await _reflect(fresh_postgres_url)
     for table in _OWNED_TABLES:
         assert table in actual.tables
