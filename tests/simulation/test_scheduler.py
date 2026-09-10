@@ -2050,7 +2050,12 @@ class TestUpdateNextflowHeads:
 
     @pytest.mark.asyncio
     async def test_without_a_trace_the_k8s_condition_still_decides(self, database_service: DatabaseServiceSQL) -> None:
+        """A run from before the trace/observability work -- no ``trace.csv`` in
+        S3 at all -- must finalize on the Kubernetes condition alone, not raise,
+        and must leave every observability column exactly as it found it."""
         _sim, hpcrun = await insert_nextflow_head_job(database_service, job_name="nf-notrace")
+        before = await database_service.get_hpcrun(hpcrun.database_id)
+        assert before is not None
         mock_ray = _nf_mock_ray(JobStatus.FAILED, exit_code=1, reason="Error")
         scheduler = JobScheduler(
             messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
@@ -2063,6 +2068,20 @@ class TestUpdateNextflowHeads:
         assert refetched.status == JobStatus.FAILED
         assert refetched.error_message == "Job has reached the specified backoff limit"
         assert refetched.error_source == "k8s_condition"
+        # nothing the trace would have supplied got invented, and the row's own
+        # identity/campaign fields are untouched
+        assert refetched.stage is None
+        assert refetched.generation is None
+        assert refetched.last_event_at is None
+        assert refetched.attempt is None
+        assert refetched.database_id == before.database_id
+        assert refetched.correlation_id == before.correlation_id
+        assert refetched.job_type == before.job_type
+        assert refetched.ref_id == before.ref_id
+        assert refetched.trace_id == before.trace_id
+        assert refetched.campaign_span_id == before.campaign_span_id
+        assert refetched.chain_n_generations == before.chain_n_generations
+        assert refetched.multi_node_composite_id == before.multi_node_composite_id
 
     @pytest.mark.asyncio
     async def test_concurrent_finalize_only_one_tick_wins(self, database_service: DatabaseServiceSQL) -> None:

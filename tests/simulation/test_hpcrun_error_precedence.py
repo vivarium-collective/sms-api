@@ -129,3 +129,53 @@ async def test_finalize_nextflow_head_is_single_winner_and_records_partial(
     assert row.status.is_terminal
     active = await database_service.list_active_nextflow_hpcruns()
     assert all(r.database_id != hpcrun_id for r in active)
+
+
+# ---------------------------------------------------------------------------
+# the new status value must not disturb rows written before it existed
+# ---------------------------------------------------------------------------
+
+
+def test_partial_joins_the_terminal_set_without_moving_the_legacy_values() -> None:
+    """``PARTIAL`` is a new label on a live Postgres enum type (the migration
+    adds it with ``ADD VALUE IF NOT EXISTS``). Every status a pre-observability
+    row can already hold must keep its identity and its terminal-ness, so
+    loading an old row is unaffected by the addition."""
+    from viva_api.common.models import TERMINAL_JOB_STATUSES
+    from viva_api.simulation.tables_orm import JobStatusDB
+
+    assert JobStatus.PARTIAL.is_terminal and JobStatus.PARTIAL in TERMINAL_JOB_STATUSES
+    # the pre-PARTIAL world, unchanged in both directions
+    for legacy in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+        assert legacy.is_terminal
+        assert JobStatusDB.from_job_status(legacy).to_job_status() is legacy
+    for legacy in (JobStatus.WAITING, JobStatus.PENDING, JobStatus.QUEUED, JobStatus.RUNNING):
+        assert not legacy.is_terminal
+        assert JobStatusDB.from_job_status(legacy).to_job_status() is legacy
+    # and the new one round-trips by the same route the ORM uses
+    assert JobStatusDB.from_job_status(JobStatus.PARTIAL) is JobStatusDB.PARTIAL
+    assert JobStatusDB.PARTIAL.to_job_status() is JobStatus.PARTIAL
+
+
+@pytest.mark.asyncio
+async def test_a_row_written_with_a_legacy_status_still_loads_after_the_migration(
+    experiment_request: SimulationRequest, database_service: DatabaseServiceSQL
+) -> None:
+    """Adding the ``PARTIAL`` label to the live enum must not change how an
+    existing row reads back: a run finalized as FAILED before the migration
+    still loads as FAILED, with its new columns simply null."""
+    hpcrun_id = await _row(database_service, experiment_request)
+    await database_service.update_hpcrun_status(
+        hpcrun_id,
+        JobStatusUpdate(
+            job_id=JobId.k8s_nextflow("nf-exp-abc"),
+            status=JobStatus.FAILED,
+            error_message="legacy failure",
+        ),
+    )
+
+    row = await database_service.get_hpcrun(hpcrun_id)
+    assert row is not None
+    assert row.status is JobStatus.FAILED and row.status.is_terminal
+    assert row.error_message == "legacy failure"
+    assert row.stage is None and row.generation is None and row.last_event_at is None and row.exit_code is None
