@@ -127,3 +127,62 @@ def test_status_panel_shows_the_progress_fields() -> None:
     assert "stage: lineage\\[variant=0,lineage_seed=0] > generation\\[generation=1]" in text
     assert "generation: 1" in text and "last event: 2026-09-10 06:48:02" in text and "attempt: 1" in text
     assert _progress_lines(SimulationRun(id=1, status=JobStatus.RUNNING)) == ""
+
+
+# ---------------------------------------------------------------------------
+# legacy runs: no events recorded, and the CLI has to say so rather than crash
+# ---------------------------------------------------------------------------
+
+
+def _empty_svc() -> MagicMock:
+    """A run with no observability records at all -- the shape every campaign
+    dispatched before the emitters shipped will keep for the rest of its life."""
+    svc = MagicMock()
+    svc.get_workflow_events.side_effect = lambda simulation_id, **kw: SimulationEvents(
+        id=749, trace_id=None, events=[], next=None, tree=[] if kw.get("tree") else None
+    )
+    svc.get_workflow_status.return_value = SimulationRun(id=749, status=JobStatus.COMPLETED)
+    svc.get_workflow_tasks.return_value = []
+    return svc
+
+
+def test_events_on_a_legacy_run_says_so_and_exits_zero() -> None:
+    svc = _empty_svc()
+    with patch("app.cli.get_data_service", return_value=svc):
+        result = runner.invoke(cli_app, ["simulation", "events", "749"])
+    assert result.exit_code == 0, result.output
+    assert "No events recorded yet" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_events_tree_on_a_legacy_run_says_so_and_exits_zero() -> None:
+    svc = _empty_svc()
+    with patch("app.cli.get_data_service", return_value=svc):
+        result = runner.invoke(cli_app, ["simulation", "events", "749", "--tree"])
+    assert result.exit_code == 0, result.output
+    assert "No spans recorded yet" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_tasks_on_a_legacy_run_says_so_and_exits_zero() -> None:
+    svc = _empty_svc()
+    with patch("app.cli.get_data_service", return_value=svc):
+        result = runner.invoke(cli_app, ["simulation", "tasks", "749"])
+    assert result.exit_code == 0, result.output
+    assert "No tasks reported for this run" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_status_of_a_legacy_run_renders_the_classic_panels_only() -> None:
+    """``atlantis simulation status`` on a run with no progress fields must
+    look exactly as it did before this plan: the Workflow Log and Simulation
+    Status panels, and no half-filled progress line offering ``stage: None``."""
+    svc = _empty_svc()
+    svc.get_workflow_log.return_value = "N E X T F L O W\nexecutor >  awsbatch (3)\nCompleted at: ...\n"
+    with patch("app.app_data_service.E2EDataService", return_value=svc):
+        result = runner.invoke(cli_app, ["simulation", "status", "749"])
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "Workflow Log" in out and "Simulation Status" in out and "COMPLETED" in out
+    for absent in ("stage:", "generation:", "last event:", "attempt:", "exit code:"):
+        assert absent not in out, absent

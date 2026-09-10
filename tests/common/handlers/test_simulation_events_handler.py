@@ -88,9 +88,19 @@ async def test_status_carries_stage_generation_and_open_spans_from_the_row_and_s
 
 @pytest.mark.asyncio
 async def test_status_of_a_row_without_a_trace_answers_the_three_classic_fields_only() -> None:
+    """A pre-migration row (or any run on a legacy image) answers exactly what
+    it always did. Every field this plan adds is null, and no span lookup is
+    even attempted -- the additive-only guarantee, field by field, so a later
+    change cannot start returning a placeholder or raising on old rows."""
     db = _db(_row(trace_id=None, generation=None, last_event_at=None, attempt=None, status=JobStatus.COMPLETED))
     run = await handlers.get_simulation_status(db_service=db, id=943)
-    assert run.status == JobStatus.COMPLETED and run.stage is None and run.open_spans is None
+
+    # the three fields every existing client reads, unchanged
+    assert (run.id, run.status, run.error_message) == (943, JobStatus.COMPLETED, None)
+    # everything the observability plan added: absent, not empty-but-present
+    for field in ("stage", "generation", "last_event_at", "attempt", "exit_code", "error_source", "trace_id"):
+        assert getattr(run, field) is None, field
+    assert run.open_spans is None
     db.list_hpcrun_spans.assert_not_awaited()
 
 
@@ -125,6 +135,21 @@ async def test_events_filters_page_and_tree() -> None:
     assert gen_labels == ["generation[generation=0]", "generation[generation=1]"]
     gen1_node = root.children[1]
     assert {e.event for e in gen1_node.events} >= {"process.exception", "lineage.failure"}
+
+
+@pytest.mark.asyncio
+async def test_events_on_a_legacy_run_is_an_empty_page_not_a_404() -> None:
+    """A run with no observability records -- no trace id, no rows -- is a
+    legitimate, answerable question: the run exists and has no events yet.
+    404 stays reserved for a simulation that does not exist, so a client can
+    tell "nothing recorded" from "wrong id"."""
+    db = _db(_row(trace_id=None, generation=None, last_event_at=None, attempt=None), events=[], spans=[])
+
+    page = await handlers.get_simulation_events(db_service=db, id=943)
+    assert page.id == 943 and page.events == [] and page.next is None and page.trace_id is None
+
+    tree = await handlers.get_simulation_events(db_service=db, id=943, tree=True)
+    assert tree.tree == [] and tree.events == []
 
 
 @pytest.mark.asyncio

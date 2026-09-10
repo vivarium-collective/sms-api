@@ -2151,6 +2151,65 @@ class TestUpdateNextflowHeads:
         mock_database.list_hpcruns_for_event_ingest.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_one_bad_run_does_not_stop_the_others_from_ingesting(self) -> None:
+        """During a rollout the ingest loop sweeps a mixture: rows from before
+        the migration, rows on legacy images, and rows that emit. One row that
+        blows up inside the ingester (an unreadable object, a half-written
+        prefix) must be logged and stepped over -- it cannot stall the tick and
+        starve the runs that do have events."""
+        from viva_api.simulation import event_ingest
+
+        def _row(database_id: int, trace_id: str | None) -> HpcRun:
+            return HpcRun(
+                database_id=database_id,
+                job_id=JobId.k8s_nextflow(f"nf-{database_id}"),
+                correlation_id=f"c-{database_id}",
+                job_type=JobType.SIMULATION,
+                ref_id=database_id,
+                status=JobStatus.RUNNING,
+                trace_id=trace_id,
+            )
+
+        legacy = _row(1, None)  # pre-migration row
+        broken = _row(2, "b" * 32)
+        modern = _row(3, "c" * 32)
+
+        mock_database = AsyncMock()
+        mock_database.list_hpcruns_for_event_ingest.return_value = [legacy, broken, modern]
+        mock_database.get_simulation.return_value = MagicMock(experiment_id="exp")
+        scheduler = JobScheduler(messaging_service=MagicMock(), database_service=mock_database)
+
+        seen: list[int] = []
+
+        async def _ingest(
+            hpc_run: HpcRun,
+            _sim: object,
+            _fs: object,
+            _db: object,
+            _settings: object,
+            now: object = None,
+        ) -> event_ingest.IngestResult:
+            seen.append(hpc_run.database_id)
+            if hpc_run.database_id == 2:
+                raise RuntimeError("unreadable events object")
+            return event_ingest.IngestResult(hpcrun_id=hpc_run.database_id)
+
+        settings = MagicMock(
+            events_ingest_enabled=True,
+            events_ingest_max_objects_per_tick=50,
+            events_ingest_idle_seconds=600,
+            events_ingest_terminal_grace_seconds=900,
+        )
+        with (
+            patch("viva_api.simulation.job_scheduler.get_settings", return_value=settings),
+            patch("viva_api.dependencies.get_file_service", return_value=MagicMock()),
+            patch.object(event_ingest, "ingest_run_events", new=_ingest),
+        ):
+            await scheduler.ingest_run_events()
+
+        assert seen == [1, 2, 3]  # the raiser did not end the sweep
+
+    @pytest.mark.asyncio
     async def test_dispatcher_events_are_recorded_under_the_campaign_span(
         self, database_service: DatabaseServiceSQL
     ) -> None:

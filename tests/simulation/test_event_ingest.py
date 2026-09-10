@@ -174,6 +174,7 @@ class _S3(FileService):
     def __init__(self, objects: dict[str, bytes]) -> None:
         self.objects = objects
         self.reads: list[str] = []
+        self.listings: list[str] = []
 
     async def download_file(self, s3_path: Any, file_path: Any = None) -> Any:
         raise NotImplementedError
@@ -195,6 +196,7 @@ class _S3(FileService):
 
     async def get_listing(self, s3_path: Any) -> list[ListingItem]:
         prefix = str(s3_path.s3_path).rstrip("/") + "/"
+        self.listings.append(prefix)
         return [
             ListingItem(Key=k, LastModified=datetime.datetime.now(UTC), ETag="e", Size=len(v))
             for k, v in sorted(self.objects.items())
@@ -435,3 +437,101 @@ async def test_dispatcher_events_get_their_own_sequence_and_list_candidates(
         datetime.datetime.now() - datetime.timedelta(minutes=15)
     )
     assert hpcrun.database_id in {r.database_id for r in candidates}
+
+
+# ---------------------------------------------------------------------------
+# legacy rows and legacy images: the absence of observability must be graceful
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_pre_migration_row_is_skipped_without_touching_storage_or_the_database() -> None:
+    """Every ``hpcrun`` row that existed before the observability migration has
+    ``trace_id IS NULL`` (the column is new and nullable). The ingester runs
+    over those rows on every scheduler tick for as long as they stay active, so
+    the skip has to be free: no listing, no object read, no write.
+    """
+    legacy = HpcRun(
+        database_id=7,
+        job_id=JobId.k8s_nextflow("nf-legacy"),
+        correlation_id="749_abc_xyz",
+        job_type=JobType.SIMULATION,
+        ref_id=749,
+        status=JobStatus.RUNNING,
+        trace_id=None,
+        events_s3_prefix=None,
+    )
+    s3 = _S3({})
+    db = MagicMock()  # any await on a bare MagicMock would raise; none is expected
+
+    result = await event_ingest.ingest_run_events(legacy, None, s3, db, _settings())
+
+    assert result.skipped_reason == "no trace_id on the row"
+    assert result.objects_listed == 0 and result.objects_read == 0 and result.events_inserted == 0
+    assert s3.listings == [] and s3.reads == []
+    assert db.mock_calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_run_on_a_legacy_image_writes_no_events_and_keeps_its_progress(
+    database_service: DatabaseServiceSQL,
+) -> None:
+    """A run dispatched on a simulator image that predates the emitters has a
+    trace id (the API derives one) but never writes an events object. The pass
+    says so and leaves the row exactly as it found it -- in particular it must
+    not stamp an empty ``stage``/``last_event_at`` over what is already there.
+    """
+    simulation, hpcrun = await _insert_run(database_service, correlation_id=f"c-{uuid.uuid4().hex[:6]}")
+    assert hpcrun.trace_id
+    s3 = _S3({})  # the prefix exists in the layout, but the legacy image put nothing under it
+
+    result = await event_ingest.ingest_run_events(hpcrun, simulation, s3, database_service, _settings())
+
+    assert result.skipped_reason == "no events objects yet"
+    assert result.objects_listed == 0 and result.events_inserted == 0
+    assert s3.reads == []  # listed once, read nothing
+
+    refetched = await database_service.get_hpcrun(hpcrun.database_id)
+    assert refetched is not None
+    assert refetched.stage is None and refetched.generation is None and refetched.last_event_at is None
+    assert await database_service.get_hpcrun_events_cursor(hpcrun.database_id) in (None, {})
+    assert await database_service.list_hpcrun_events(hpcrun.database_id) == []
+    assert await database_service.list_hpcrun_spans(hpcrun.database_id) == []
+
+
+@pytest.mark.asyncio
+async def test_an_older_emitter_shape_still_parses_and_stores(
+    database_service: DatabaseServiceSQL,
+) -> None:
+    """An image built before the schema settled writes ``layer`` instead of
+    ``component`` and stamps the domain keys at the top level rather than in
+    ``baggage``. Those objects must still land in the table -- an image and an
+    API of different vintages is the normal state during a rollout.
+    """
+    simulation, hpcrun = await _insert_run(database_service, correlation_id=f"c-{uuid.uuid4().hex[:6]}")
+    assert hpcrun.trace_id
+    old_shape = "\n".join([
+        (
+            '{"v": 1, "seq": 1, "ts": "2026-09-10T06:00:00.000Z", "source": "batch-legacy",'
+            f' "trace_id": "{hpcrun.trace_id}", "layer": "runner", "event": "lineage.generation.start",'
+            ' "level": "info", "sim_id": "749", "experiment_id": "sim184-legacy", "generation": 0,'
+            ' "variant": "1", "lineage_seed": "2", "payload": {"gen_seed": 11}}'
+        ),
+        (
+            '{"v": 1, "seq": 2, "ts": "2026-09-10T06:30:00.000Z", "source": "batch-legacy",'
+            f' "trace_id": "{hpcrun.trace_id}", "layer": "runner", "event": "lineage.generation.end",'
+            ' "level": "info", "generation": 0, "payload": {"duration": 2528.0}}'
+        ),
+    ])
+    key = f"nextflow/work/{simulation.experiment_id}/events/{hpcrun.trace_id}/batch-legacy.jsonl"
+    s3 = _S3({key: old_shape.encode()})
+
+    result = await event_ingest.ingest_run_events(hpcrun, simulation, s3, database_service, _settings())
+
+    assert result.bad_lines == 0 and result.events_inserted == 2
+    stored = await database_service.list_hpcrun_events(hpcrun.database_id)
+    start = next(e for e in stored if e.event == "lineage.generation.start")
+    assert start.component == "runner"  # the old `layer` value, carried through rather than rejected
+    assert start.generation == 0 and start.variant == 1 and start.lineage_seed == 2
+    refetched = await database_service.get_hpcrun(hpcrun.database_id)
+    assert refetched is not None and refetched.generation == 0
