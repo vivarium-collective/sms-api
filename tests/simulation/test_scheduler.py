@@ -2234,7 +2234,7 @@ class TestUpdateNextflowHeads:
         assert (
             head.component == "viva_api.dispatch" and head.source == "api" and head.span_id == hpcrun.campaign_span_id
         )
-        assert head.payload is not None and head.payload["status"] == "partial" and head.payload["exit_code"] == 0
+        assert head.payload is not None and head.payload["status"] == "failed" and head.payload["exit_code"] == 0
         outcome = by_name["dispatch.task.outcome"]
         assert outcome.level == "error" and outcome.payload is not None
         assert outcome.payload["name"] == "runs_v0:lineage_v0_s0" and outcome.payload["task_hash"] == "bb/222222"

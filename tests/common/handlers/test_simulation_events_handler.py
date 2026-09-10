@@ -107,7 +107,7 @@ async def test_status_of_a_row_without_a_trace_answers_the_three_classic_fields_
 @pytest.mark.asyncio
 async def test_events_filters_page_and_tree() -> None:
     events, spans = _stream("lineage_failed_gen1.jsonl")
-    db = _db(_row(status=JobStatus.PARTIAL), events=events, spans=spans)
+    db = _db(_row(status=JobStatus.FAILED), events=events, spans=spans)
 
     flat = await handlers.get_simulation_events(db_service=db, id=943)
     assert flat.trace_id == TRACE and flat.next is None
@@ -175,7 +175,7 @@ async def test_tasks_for_a_nextflow_run_come_from_the_trace() -> None:
         async def get_file_contents(self, s3_path: Any) -> bytes | None:
             return trace.encode() if str(s3_path.s3_path).endswith("/trace.csv") else None
 
-    db = _db(_row(status=JobStatus.PARTIAL))
+    db = _db(_row(status=JobStatus.FAILED))
     saved = get_file_service()
     set_file_service(_S3())  # type: ignore[arg-type]
     try:
@@ -197,7 +197,7 @@ async def test_tasks_for_a_chain_campaign_come_from_describe_jobs() -> None:
         chain_final_job_ids=["job-a", "job-b"],
         chain_current_job_ids=[None, None],
         chain_n_generations=5,
-        status=JobStatus.PARTIAL,
+        status=JobStatus.FAILED,
     )
     db = _db(row)
     service = MagicMock(spec=SimulationServiceRay)

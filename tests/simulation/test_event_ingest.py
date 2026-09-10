@@ -347,9 +347,9 @@ async def test_ingest_is_idempotent_across_rewrites_and_closes_spans_on_a_termin
         f' "trace_id": "{hpcrun.trace_id}", "span_id": "9999aaaa9999aaaa", "parent_span_id": null,'
         ' "payload": {"name": "analysis", "attrs": {}, "start_ts": "2026-09-10T06:50:00.000Z"}}\n'
     ).encode()
-    assert await database_service.finalize_nextflow_head(hpcrun.database_id, JobStatus.PARTIAL, error_message="x")
+    assert await database_service.finalize_nextflow_head(hpcrun.database_id, JobStatus.FAILED, error_message="x")
     terminal = await database_service.get_hpcrun(hpcrun.database_id)
-    assert terminal is not None and terminal.status == JobStatus.PARTIAL
+    assert terminal is not None and terminal.status == JobStatus.FAILED
     fourth = await event_ingest.ingest_run_events(terminal, simulation, s3, database_service, settings)
     assert fourth.stage is None
     analysis = next(s for s in await database_service.list_hpcrun_spans(hpcrun.database_id) if s.name == "analysis")

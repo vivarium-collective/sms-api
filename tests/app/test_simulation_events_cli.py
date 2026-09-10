@@ -39,7 +39,7 @@ def _page(name: str, *, tree: bool) -> SimulationEvents:
 def _svc(name: str = "lineage_failed_gen1.jsonl") -> MagicMock:
     svc = MagicMock()
     svc.get_workflow_events.side_effect = lambda simulation_id, **kw: _page(name, tree=bool(kw.get("tree")))
-    svc.get_workflow_status.return_value = SimulationRun(id=943, status=JobStatus.PARTIAL)
+    svc.get_workflow_status.return_value = SimulationRun(id=943, status=JobStatus.FAILED)
     svc.get_workflow_tasks.return_value = [
         SimulationTask(
             name="parca_v0", status="COMPLETED", job_id="aaa-111", task_hash="aa/111111", exit_code=0, attempt=1
@@ -99,7 +99,7 @@ def test_events_follow_stops_when_the_run_is_terminal() -> None:
     with patch("app.cli.get_data_service", return_value=svc), patch("time.sleep"):
         result = runner.invoke(cli_app, ["simulation", "events", "943", "--follow"])
     assert result.exit_code == 0, result.output
-    assert "Run is partial; no more events." in result.output
+    assert "Run is failed; no more events." in result.output
     svc.get_workflow_status.assert_called_once()
 
 
