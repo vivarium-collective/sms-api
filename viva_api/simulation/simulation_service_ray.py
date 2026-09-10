@@ -1880,9 +1880,7 @@ class SimulationServiceRay(SimulationService):
             f" --aeration-schedule {shlex.quote(f'{V2ECOLI_DIR}/{aeration_schedule}')}" if aeration_schedule else ""
         )
         aeration_trigger_flag = (
-            f" --aeration-trigger {shlex.quote(aeration_trigger)}"
-            if aeration_schedule and aeration_trigger
-            else ""
+            f" --aeration-trigger {shlex.quote(aeration_trigger)}" if aeration_schedule and aeration_trigger else ""
         )
         studies_root = f"{SIM_OUT_DIR}/studies"
         return (
