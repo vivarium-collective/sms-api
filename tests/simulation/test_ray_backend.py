@@ -2061,6 +2061,91 @@ class TestSubmitMultiNodeAnalysisExtraction:
         assert "export V2ECOLI_SIM_DATA=s3://mybucket/ray-parca-cache/abc123/simData.cPickle" in cmd
 
 
+class TestNewGeneCacheSourceVariant:
+    """``source_variant`` on ``submit_new_gene_cache_job`` (sms-ecoli#166, 2026-09-09):
+    the induction job may stage its chassis from a variant slot instead of the
+    shared bare commit slot, which any chain dispatch's ``run_parca`` rewrites
+    (the 6299ba5 violacein chassis was overwritten seven hours after its 42
+    inductions, and every later re-induction died with "no new-gene cistrons")."""
+
+    @pytest.mark.asyncio
+    async def test_default_stages_from_the_bare_commit_slot(self) -> None:
+        service = SimulationServiceRay()
+        captured: dict[str, Any] = {}
+
+        def fake_submit_container(*, job_cmd: str, **kw: Any) -> str:
+            captured.update(kw)
+            captured["job_cmd"] = job_cmd
+            return "ngc-1"
+
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch.object(service, "_submit_container", side_effect=fake_submit_container),
+            patch.object(service, "_ensure_container_job_def", return_value="job-def:1"),
+            patch.object(service, "_image_uri", return_value="ghcr.io/example/image:abc"),
+        ):
+            job_id = await service.submit_new_gene_cache_job(
+                commit="abc123",
+                variant="cd2-run4-carina-lin-genotype1",
+                expression=1174897.5549395303,
+                translation_efficiency=0.285,
+            )
+            bare = service.cache_s3_uri("abc123")
+            out = service.cache_s3_uri("abc123", variant="cd2-run4-carina-lin-genotype1")
+
+        assert job_id == JobId.ray("ngc-1")
+        assert captured["stage_s3"] == bare
+        assert captured["out_s3"] == out
+        assert "--expression 1174897.5549395303" in captured["job_cmd"]
+
+    @pytest.mark.asyncio
+    async def test_source_variant_stages_from_the_variant_slot(self) -> None:
+        service = SimulationServiceRay()
+        captured: dict[str, Any] = {}
+
+        def fake_submit_container(*, job_cmd: str, **kw: Any) -> str:
+            captured.update(kw)
+            return "ngc-2"
+
+        with (
+            patch("viva_api.simulation.simulation_service_ray.get_settings", _ray_settings),
+            patch("viva_api.common.storage.data_layout.get_settings", _ray_settings),
+            patch.object(service, "_submit_container", side_effect=fake_submit_container),
+            patch.object(service, "_ensure_container_job_def", return_value="job-def:1"),
+            patch.object(service, "_image_uri", return_value="ghcr.io/example/image:abc"),
+        ):
+            await service.submit_new_gene_cache_job(
+                commit="abc123",
+                variant="cd2-run4-carina-lin-genotype1",
+                expression=1174897.5549395303,
+                translation_efficiency=0.285,
+                source_variant="cd2-run4-vio-chassis",
+            )
+            source = service.cache_s3_uri("abc123", variant="cd2-run4-vio-chassis")
+            bare = service.cache_s3_uri("abc123")
+            out = service.cache_s3_uri("abc123", variant="cd2-run4-carina-lin-genotype1")
+
+        assert captured["stage_s3"] == source
+        assert captured["stage_s3"] != bare
+        # The OUTPUT slot is still the induced variant, never the source slot.
+        assert captured["out_s3"] == out
+
+    def test_request_model_accepts_and_defaults_source_variant(self) -> None:
+        from viva_api.simulation.models import NewGeneCacheRequest
+
+        base = NewGeneCacheRequest(parca_dataset_id=1, variant="v", expression=1.0, translation_efficiency=0.2)
+        assert base.source_variant is None
+        req = NewGeneCacheRequest.model_validate({
+            "parca_dataset_id": 1,
+            "variant": "v",
+            "expression": 1.0,
+            "translation_efficiency": 0.2,
+            "source_variant": "chassis",
+        })
+        assert req.source_variant == "chassis"
+
+
 class TestSubmitMnpStandaloneQueueRouting:
     """Backlog item 65: a genuinely standalone (numNodes=1) MNP submission has no
     inter-node traffic to protect, so it gains nothing from ray_mnp_queue's

@@ -333,6 +333,14 @@ class NewGeneCacheRequest(BaseModel):
     seed: int = 0
     media_condition: str | None = None
     fixed_media: str | None = None
+    # Stage the SOURCE chassis from ``ray-parca-cache/<commit>/<source_variant>/``
+    # instead of the bare commit slot (sms-ecoli#166, 2026-09-09): the bare slot is
+    # shared and last-writer-wins -- a later chain dispatch's ``run_parca`` on the
+    # same commit overwrote the violacein chassis seven hours after the genotype
+    # inductions, and every later re-induction died with "no new-gene cistrons".
+    # A chassis built into a variant slot cannot be clobbered that way. None
+    # keeps today's behaviour byte-for-byte.
+    source_variant: str | None = None
 
 
 class NewGeneCacheJob(BaseModel):

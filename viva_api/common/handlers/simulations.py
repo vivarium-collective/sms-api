@@ -920,6 +920,7 @@ async def run_new_gene_cache(
         seed=request.seed,
         media_condition=request.media_condition,
         fixed_media=request.fixed_media,
+        source_variant=request.source_variant,
     )
     return NewGeneCacheJob(
         job_id=str(job_id),
