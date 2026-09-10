@@ -1814,6 +1814,7 @@ class SimulationServiceRay(SimulationService):
         injected_processes: str | None = None,
         reactor_config: str | None = None,
         aeration_schedule: str | None = None,
+        aeration_trigger: str | None = None,
     ) -> str:
         """The container command for a ``run_mbp_tracked.py`` dispatch (backlog item
         105/106's own Run 1 sibling gap: the coupled composite's real missing-output
@@ -1848,6 +1849,17 @@ class SimulationServiceRay(SimulationService):
         ``V2ECOLI_DIR`` (matching how every other file reference in this dispatch
         family is expressed) and resolved to absolute here, once, rather than
         pushing that concern onto every caller.
+
+        ``aeration_trigger`` (added 2026-09-10, sms-ecoli#334's real recalibration):
+        the local ``run_mbp_tracked.py --aeration-schedule`` flag requires an
+        explicit ``--aeration-trigger`` (``biomass``|``time``) alongside it --
+        without it, ``load_aeration_schedule()`` exits nonzero rather than
+        guessing. This dispatch path passed ``aeration_schedule`` through since
+        2026-09-06 with no way to also pass its required companion flag, a real
+        gap only surfaced once a second aeration schedule (kLa 350) needed firing
+        remotely -- every prior remote coupled dispatch used the one schedule
+        this gap never affected. Only emitted when ``aeration_schedule`` is also
+        set, matching the local script's own coupling between the two.
         """
         max_gens_flag = f" --max-generations {int(max_generations)}" if max_generations is not None else ""
         duration_flag = f" --duration-sec {int(duration_sec)}" if duration_sec is not None else ""
@@ -1867,6 +1879,11 @@ class SimulationServiceRay(SimulationService):
         aeration_schedule_flag = (
             f" --aeration-schedule {shlex.quote(f'{V2ECOLI_DIR}/{aeration_schedule}')}" if aeration_schedule else ""
         )
+        aeration_trigger_flag = (
+            f" --aeration-trigger {shlex.quote(aeration_trigger)}"
+            if aeration_schedule and aeration_trigger
+            else ""
+        )
         studies_root = f"{SIM_OUT_DIR}/studies"
         return (
             f"cd {V2ECOLI_DIR}"
@@ -1876,7 +1893,7 @@ class SimulationServiceRay(SimulationService):
             f" --cache-dir {shlex.quote(cache_dir)}"
             f"{max_gens_flag}{duration_flag}{chunk_flag}{daughters_flag}{arrest_flag}"
             f"{seed_flag}{cells_per_agent_flag}{glucose_flag}{ammonium_flag}"
-            f"{injected_processes_flag}{reactor_config_flag}{aeration_schedule_flag}"
+            f"{injected_processes_flag}{reactor_config_flag}{aeration_schedule_flag}{aeration_trigger_flag}"
         )
 
     async def _submit_mbp_tracked_dispatch(
@@ -1977,6 +1994,7 @@ class SimulationServiceRay(SimulationService):
             injected_processes=mbp_dispatch.get("injected_processes"),
             reactor_config=mbp_dispatch.get("reactor_config"),
             aeration_schedule=mbp_dispatch.get("aeration_schedule"),
+            aeration_trigger=mbp_dispatch.get("aeration_trigger"),
         )
         job_id = self._submit_container(
             job_name=f"mbp-tracked-{experiment_id}-{_rand_suffix()}"[:128],
