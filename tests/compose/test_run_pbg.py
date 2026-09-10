@@ -1409,6 +1409,63 @@ def test_required_run_interval_uses_the_overrides_when_given() -> None:
     _check_required_run_interval(_LINEAGE, {"n_generations": 2, "max_duration_per_gen": 1200.0}, 2400)
 
 
+_BASELINE = _Spec({
+    "n_seeds": {"type": "integer", "default": 1},
+    "n_generations": {"type": "integer", "default": 1},
+    "max_duration_per_gen": {"type": "float", "default": 3600.0},
+    "seed": {"type": "integer", "default": 0},
+})
+_BASELINE_ID = "v2ecoli.composites.ecoli_baseline.ecoli_baseline"
+
+
+def test_batch_shape_of_ecoli_baseline_is_exempt_from_the_under_run_check() -> None:
+    """viva-api#578's whole-lineage chain job (sms-ecoli#166, 2026-09-10):
+    ecoli_baseline with n_generations>1 builds BatchBaselineRunner, a Step whose
+    one update runs the whole lineage, so `-n 1` is the complete run. On 0.9.135
+    this guard refused every such job."""
+    from viva_api.compose.run_pbg import _check_required_run_interval
+
+    _check_required_run_interval(_BASELINE, {"n_generations": 20, "n_seeds": 1}, 1, composite_id=_BASELINE_ID)
+    _check_required_run_interval(_BASELINE, {"n_generations": 1, "n_seeds": 4}, 1, composite_id=_BASELINE_ID)
+    # The single-cell shape (one seed, one generation) is NOT the batch route:
+    # a 1 s run there is Dispatch 438's failure shape and must still be refused.
+    with pytest.raises(SystemExit, match="refusing to under-run"):
+        _check_required_run_interval(_BASELINE, {"n_generations": 1, "n_seeds": 1}, 1, composite_id=_BASELINE_ID)
+    # Another composite declaring n_generations keeps the contract (MNP's lineage_ray_batch).
+    with pytest.raises(SystemExit, match="required 72000"):
+        _check_required_run_interval(
+            _LINEAGE, {"n_generations": 20}, 1, composite_id="v2ecoli.composites.lineage_ray_batch"
+        )
+
+
+def test_chain_whole_lineage_command_passes_the_under_run_guard() -> None:
+    """The exact overrides `_seed_lineage_command` emits (n_generations=N, -n 1,
+    no stop_at_division) must clear the guard the container runs them through."""
+    import json
+    import shlex
+
+    from viva_api.compose.run_pbg import _check_required_run_interval
+    from viva_api.simulation.simulation_service_ray import (
+        V2ECOLI_BATCH_BASELINE_COMPOSITE_ID,
+        SimulationServiceRay,
+    )
+
+    cmd = SimulationServiceRay._seed_lineage_command(
+        SimulationServiceRay.__new__(SimulationServiceRay),
+        seed=3,
+        n_generations=20,
+        experiment_id="sim189-run3-x",
+        runner_s3_uri="s3://b/run_pbg.py",
+    )
+    tokens = shlex.split(cmd.split("python /tmp/run_pbg.py", 1)[1])
+    overrides = json.loads(tokens[tokens.index("--overrides") + 1])
+    steps = int(tokens[tokens.index("-n") + 1])
+    composite_id = tokens[tokens.index("--composite-id") + 1]
+    assert steps == 1 and composite_id == V2ECOLI_BATCH_BASELINE_COMPOSITE_ID
+    assert overrides["n_generations"] == 20 and "stop_at_division" not in overrides
+    _check_required_run_interval(_BASELINE, overrides, steps, composite_id=composite_id)
+
+
 def test_stop_at_division_is_exempt_from_the_under_run_check() -> None:
     """CD2 Run 3 (chain-dispatch, sms-ecoli#166): each per-generation job
     hardcodes -n 1 deliberately (_seed_generation_command) -- stop_at_division

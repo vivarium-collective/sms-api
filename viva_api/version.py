@@ -1262,7 +1262,7 @@
 #            fires). Per-seed async independence preserved; parity with the
 #            Nextflow path. See docs/design-chain-one-lineageprocess.md.
 #            New TestSeedLineageCommand + updated TestAdvanceChainCampaign.
-__version__ = "0.9.135"
+__version__ = "0.9.136"
 #           0.9.101 -- _submit_mnp now sets RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
 #           on every node of every Ray MNP submission. Found: a single-node
 #           lineage_ray_batch diagnostic (database_id=344, 2026-09-05) died in
