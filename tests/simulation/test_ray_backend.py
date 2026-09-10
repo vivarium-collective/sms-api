@@ -4721,6 +4721,7 @@ class TestMbpTrackedCommand:
             injected_processes="workspace/studies/cd2-pnnl-03-od10-batch/injection_vio_gfp_v0.json",
             reactor_config="workspace/studies/cd2-pnnl-03-od10-batch/reactor_route1_pnnl_aerobic_top.json",
             aeration_schedule="workspace/studies/cd2-pnnl-03-od10-batch/aeration_ramp_route1_density.json",
+            aeration_trigger="biomass",
         )
         assert "--seed 3" in cmd
         assert "--cells-per-agent 90000000000.0" in cmd
@@ -4738,6 +4739,26 @@ class TestMbpTrackedCommand:
             "--aeration-schedule /app/v2ecoli/workspace/studies/cd2-pnnl-03-od10-batch/"
             "aeration_ramp_route1_density.json" in cmd
         )
+        assert "--aeration-trigger biomass" in cmd
+
+    def test_aeration_trigger_suppressed_without_a_schedule(self) -> None:
+        """sms-ecoli#334's real gap (2026-09-10): the local run_mbp_tracked.py
+        couples --aeration-trigger to --aeration-schedule (the trigger is
+        meaningless without a schedule to apply it to) -- this dispatch path
+        must mirror that coupling rather than emit a dangling flag."""
+        service = SimulationServiceRay()
+        cmd = service._mbp_tracked_command(
+            variant="reactor-bird-coupled-batch-multigen",
+            max_generations=2,
+            duration_sec=None,
+            chunk=None,
+            emitter="parquet",
+            cache_dir="/app/v2ecoli/out/cache",
+            single_daughters=True,
+            carbon_exhaustion_arrest=False,
+            aeration_trigger="biomass",
+        )
+        assert "--aeration-trigger" not in cmd
 
     def test_run1_params_omitted_by_default_byte_for_byte_unaffected(self) -> None:
         """Every existing caller (Dispatch 370's own shape) omits all 7 -- must
@@ -4987,6 +5008,7 @@ class TestSubmitMbpTrackedDispatch:
                 "injected_processes": "workspace/studies/cd2-pnnl-03-od10-batch/injection_vio_gfp_v0.json",
                 "reactor_config": "workspace/studies/cd2-pnnl-03-od10-batch/reactor_route1_pnnl_aerobic_top.json",
                 "aeration_schedule": "workspace/studies/cd2-pnnl-03-od10-batch/aeration_ramp_route1_density.json",
+                "aeration_trigger": "biomass",
             },
         )
         simulation = await database_service.insert_simulation(sim_request=experiment_request)
@@ -5027,6 +5049,7 @@ class TestSubmitMbpTrackedDispatch:
             "--aeration-schedule /app/v2ecoli/workspace/studies/cd2-pnnl-03-od10-batch/"
             "aeration_ramp_route1_density.json" in cmd
         )
+        assert "--aeration-trigger biomass" in cmd
 
 
 @pytest.mark.asyncio
