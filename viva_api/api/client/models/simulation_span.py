@@ -95,12 +95,10 @@ class SimulationSpan:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "span_id": span_id,
-                "name": name,
-            }
-        )
+        field_dict.update({
+            "span_id": span_id,
+            "name": name,
+        })
         if parent_span_id is not UNSET:
             field_dict["parent_span_id"] = parent_span_id
         if attrs is not UNSET:

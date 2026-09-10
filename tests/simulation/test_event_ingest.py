@@ -71,7 +71,8 @@ def test_parse_drops_other_traces_and_non_events() -> None:
     assert event_ingest.parse_event_line('["not", "an", "object"]') is None
     assert event_ingest.parse_event_line("") is None
     legacy = event_ingest.parse_event_line(
-        '{"event": "run_start", "seq": 3, "ts": "2026-09-10T00:00:00Z", "layer": "engine", "generation": 2, "variant": "1"}'
+        '{"event": "run_start", "seq": 3, "ts": "2026-09-10T00:00:00Z", "layer": "engine",'
+        ' "generation": 2, "variant": "1"}'
     )
     assert legacy is not None and legacy.component == "engine" and legacy.generation == 2 and legacy.variant == 1
     ok = event_ingest.parse_event_line('{"event": "run.start", "seq": "7", "ts": "2026-09-10T00:00:00Z"}')
@@ -339,7 +340,8 @@ async def test_ingest_is_idempotent_across_rewrites_and_closes_spans_on_a_termin
     # a run that went terminal with a span still open: the ingester closes it as unknown
     open_key = f"nextflow/work/{simulation.experiment_id}/events/{hpcrun.trace_id}/late-writer.jsonl"
     s3.objects[open_key] = (
-        '{"event": "span.start", "seq": 1, "ts": "2026-09-10T06:50:00.000Z", "source": "late-writer", "layer": "runner",'
+        '{"event": "span.start", "seq": 1, "ts": "2026-09-10T06:50:00.000Z", "source": "late-writer",'
+        ' "layer": "runner",'
         f' "trace_id": "{hpcrun.trace_id}", "span_id": "9999aaaa9999aaaa", "parent_span_id": null,'
         ' "payload": {"name": "analysis", "attrs": {}, "start_ts": "2026-09-10T06:50:00.000Z"}}\n'
     ).encode()
