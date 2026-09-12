@@ -36,11 +36,9 @@ class StateDocument:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "document": document,
-            }
-        )
+        field_dict.update({
+            "document": document,
+        })
         if ref is not UNSET:
             field_dict["ref"] = ref
 

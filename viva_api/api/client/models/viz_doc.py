@@ -26,11 +26,9 @@ class VizDoc:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "viz_doc": viz_doc,
-            }
-        )
+        field_dict.update({
+            "viz_doc": viz_doc,
+        })
 
         return field_dict
 

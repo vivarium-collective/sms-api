@@ -26,11 +26,9 @@ class ConfigDocument:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "config": config,
-            }
-        )
+        field_dict.update({
+            "config": config,
+        })
 
         return field_dict
 
