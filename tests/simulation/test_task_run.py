@@ -290,3 +290,74 @@ def test_derived_task_name_is_sanitized_for_jobname() -> None:
     job_name = call.kwargs["jobName"]
     assert job_name.startswith("task-foo-bar-")  # dots -> dashes, no dots in the jobName
     assert "." not in job_name
+
+
+def _logs_fake(
+    events: list[str], *, log_stream: str | None = "stream/abc", group: str | None = "/aws/batch/job"
+) -> MagicMock:
+    """A boto3 double answering both the batch (describe_jobs/-job_definitions)
+    and CloudWatch-logs (get_log_events) calls get_task_logs makes."""
+    fake = MagicMock()
+    container = {"logStreamName": log_stream} if log_stream else {}
+    fake.describe_jobs.return_value = {"jobs": [{"container": container, "jobDefinition": "jd:1"}]}
+    fake.describe_job_definitions.return_value = {
+        "jobDefinitions": [{"containerProperties": {"logConfiguration": {"options": {"awslogs-group": group}}}}]
+    }
+    fake.get_log_events.return_value = {"events": [{"message": m} for m in events]}
+    return fake
+
+
+def test_get_task_logs_reads_cloudwatch_stream() -> None:
+    database_service = AsyncMock()
+    database_service.get_task.return_value = _submitted_task_dto(job_id_ext="c-42")
+    fake = _logs_fake(["hello", "world"])
+    settings = _container_settings(ray_batch_log_group="", ray_log_s3_prefix="s3://b/logs")
+    service = SimulationServiceRay()
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", lambda: settings),
+        patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=fake),
+    ):
+        import asyncio
+
+        result = asyncio.run(service.get_task_logs(1, database_service))
+    assert result.lines == ["hello", "world"]
+    assert result.log_stream == "stream/abc"
+    # group resolved from the job def's logConfiguration
+    fake.get_log_events.assert_called_once()
+    assert fake.get_log_events.call_args.kwargs["logGroupName"] == "/aws/batch/job"
+    assert result.report_uri == "s3://b/logs/c-42/report.json"
+
+
+def test_get_task_logs_empty_before_container_starts() -> None:
+    database_service = AsyncMock()
+    database_service.get_task.return_value = _submitted_task_dto(job_id_ext="c-43")
+    fake = _logs_fake([], log_stream=None)  # no stream yet
+    settings = _container_settings(ray_batch_log_group="", ray_log_s3_prefix="")
+    service = SimulationServiceRay()
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", lambda: settings),
+        patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=fake),
+    ):
+        import asyncio
+
+        result = asyncio.run(service.get_task_logs(1, database_service))
+    assert result.lines == []
+    fake.get_log_events.assert_not_called()
+
+
+def test_get_task_logs_prefers_configured_log_group() -> None:
+    database_service = AsyncMock()
+    database_service.get_task.return_value = _submitted_task_dto(job_id_ext="c-44")
+    fake = _logs_fake(["x"])
+    settings = _container_settings(ray_batch_log_group="/configured/group", ray_log_s3_prefix="")
+    service = SimulationServiceRay()
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", lambda: settings),
+        patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=fake),
+    ):
+        import asyncio
+
+        result = asyncio.run(service.get_task_logs(1, database_service))
+    assert result.lines == ["x"]
+    assert fake.get_log_events.call_args.kwargs["logGroupName"] == "/configured/group"
+    fake.describe_job_definitions.assert_not_called()  # configured group short-circuits resolution

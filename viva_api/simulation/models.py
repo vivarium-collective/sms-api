@@ -699,6 +699,19 @@ class TaskRunRequest(BaseModel):
         return v
 
 
+class TaskLogsDTO(BaseModel):
+    """A task run's CloudWatch logs (viva-api#631 slice 3). ``lines`` is empty
+    until the container has started (no log stream yet) or when no log group can
+    be resolved; ``status`` lets the caller decide whether to keep polling."""
+
+    task_id: int
+    job_id_ext: str | None = None
+    status: JobStatus | None = None
+    log_stream: str | None = None
+    lines: list[str] = Field(default_factory=list)
+    report_uri: str | None = None  # s3:// report.json the entrypoint ships, if configured
+
+
 class TaskDTO(BaseModel):
     """A task run's tracked state (submit response and status share this shape)."""
 

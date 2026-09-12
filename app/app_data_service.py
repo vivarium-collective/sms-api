@@ -25,6 +25,7 @@ from viva_api.simulation.models import (
     Simulator,
     SimulatorVersion,
     TaskDTO,
+    TaskLogsDTO,
     TaskRunRequest,
 )
 
@@ -296,6 +297,9 @@ class E2EDataService:
 
     def get_task_status(self, task_id: int) -> TaskDTO:
         return self.submit_get_task_status(task_id=task_id)
+
+    def get_task_logs(self, task_id: int, limit: int = 1000) -> TaskLogsDTO:
+        return self.submit_get_task_logs(task_id=task_id, limit=limit)
 
     def run_uploaded_task(
         self,
@@ -731,6 +735,17 @@ class E2EDataService:
             raise
         except Exception as e:
             raise httpx.HTTPError(f"Could not load task status for id {task_id}") from e
+
+    def submit_get_task_logs(self, task_id: int, limit: int = 1000) -> TaskLogsDTO:
+        try:
+            response = self.client.get(url=f"/api/v1/tasks/{task_id}/logs", params={"limit": limit})
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return TaskLogsDTO(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not load task logs for id {task_id}") from e
 
     # -- Streaming output download --
 
