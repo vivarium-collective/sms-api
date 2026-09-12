@@ -231,6 +231,7 @@ simulator_cli = typer.Typer(help="Manage simulator (vEcoli) versions and builds.
 simulation_cli = typer.Typer(help="Run and inspect simulation workflows.")
 parca_cli = typer.Typer(help="Inspect parca (parameter calculator) datasets and runs.")
 analysis_cli = typer.Typer(help="Inspect analysis jobs and outputs.")
+task_cli = typer.Typer(help="Run a self-contained repo-path script on the in-region task compute (viva-api#631).")
 compose_cli = typer.Typer(help="Compose (process-bigraph) simulation commands.")
 composite_cli = typer.Typer(
     help="Process-bigraph-native composite dispatch (item 101/109) -- N real, ray:-addressed "
@@ -248,6 +249,7 @@ cli.add_typer(simulator_cli, name="simulator")
 cli.add_typer(simulation_cli, name="simulation")
 cli.add_typer(parca_cli, name="parca")
 cli.add_typer(analysis_cli, name="analysis")
+cli.add_typer(task_cli, name="task")
 cli.add_typer(compose_cli, name="compose")
 cli.add_typer(composite_cli, name="composite")
 cli.add_typer(worker_cli, name="worker")
@@ -1895,6 +1897,90 @@ def analysis_plots(
     plots = data_service.get_analysis_plots(analysis_id=analysis_id)
     for plot in plots:
         display_json(plot.model_dump(), console)
+
+
+# -- Task commands (viva-api#631: in-region task-run verb) --
+
+
+@task_cli.command("run", help="Submit a self-contained repo-path script to the in-region task compute.")
+def task_run(
+    script: str = Argument(help="Repo-path to a script already in the image (e.g. scripts/foo.py)."),
+    args: list[str] = Option(
+        default_factory=list,
+        help="Positional argument to pass to the script, in order. Repeat for multiple.",
+    ),
+    sim_data: list[str] = Option(
+        default_factory=list,
+        help="NAME=URI sim-data reference passed to the script; repeat for multiple.",
+    ),
+    memory_class: str = Option(default="standard", help="Batch instance memory class: standard or large."),
+    commit: str | None = Option(default=None, help="Image commit to run in; defaults to the latest."),
+    name: str | None = Option(default=None, help="Human label for the task; defaults to the script's basename."),
+    wait: bool = Option(default=False, help="Poll until the task reaches a terminal status."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import time
+
+    from rich.panel import Panel
+
+    from viva_api.simulation.models import TaskRunRequest
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    request = TaskRunRequest(
+        script=script,
+        args=list(args),
+        sim_data_refs=_parse_task_env(sim_data) if sim_data else None,
+        memory_class=memory_class,
+        commit=commit,
+        name=name,
+    )
+    with console.status("[memphis.spinner]Submitting task..."):
+        task = data_service.run_task(request)
+
+    console.print(f"[memphis.success]Task submitted![/]  ID: {task.database_id}")
+    display_json(task.model_dump(), console)
+
+    if not wait:
+        console.print(f"\n[memphis.hint]Track progress:[/]  atlantis task status {task.database_id}")
+        return
+
+    # Poll until done
+    console.print("\n[memphis.info]Polling task status...[/]")
+    poll_interval = 10
+    elapsed = 0
+    status = "running"
+    result = task
+    while status not in ("completed", "failed", "cancelled", "unknown"):
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+        try:
+            result = data_service.get_task_status(task_id=task.database_id)
+            status = result.status.value if result.status else "unknown"
+        except Exception as e:
+            console.print(f"  [{elapsed}s] [memphis.error]error: {e}[/]")
+            continue
+        console.print(f"  [{elapsed}s] status: [{status_style(status)}]{status}[/]")
+
+    error_detail = f"\n{result.error_message}" if result.error_message else ""
+    console.print(
+        Panel(
+            f"[{status_style(status)}]{status.upper()}[/]{error_detail}",
+            title=f"Task {task.database_id}",
+            border_style=status_border(status),
+        )
+    )
+
+
+@task_cli.command("status", help="Get the status of a task run.")
+def task_status(
+    task_id: int = Argument(help="Task database ID."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+    task = data_service.get_task_status(task_id=task_id)
+    display_json(task.model_dump(), console)
 
 
 # -- Compose (process-bigraph) commands --

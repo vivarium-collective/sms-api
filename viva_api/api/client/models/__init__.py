@@ -107,7 +107,11 @@ from .state_document import StateDocument
 from .state_document_document import StateDocumentDocument
 from .stop_env_worker_response_stop_env_worker import StopEnvWorkerResponseStopEnvWorker
 from .stop_relayed_env_worker_response_stop_relayed_env_worker import StopRelayedEnvWorkerResponseStopRelayedEnvWorker
+from .task_dto import TaskDTO
+from .task_dto_sim_data_refs_type_0 import TaskDTOSimDataRefsType0
 from .task_response import TaskResponse
+from .task_run_request import TaskRunRequest
+from .task_run_request_sim_data_refs_type_0 import TaskRunRequestSimDataRefsType0
 from .task_status_response import TaskStatusResponse
 from .task_submit_request import TaskSubmitRequest
 from .task_submit_request_params_type_0 import TaskSubmitRequestParamsType0
@@ -229,7 +233,11 @@ __all__ = (
     "StateDocumentDocument",
     "StopEnvWorkerResponseStopEnvWorker",
     "StopRelayedEnvWorkerResponseStopRelayedEnvWorker",
+    "TaskDTO",
+    "TaskDTOSimDataRefsType0",
     "TaskResponse",
+    "TaskRunRequest",
+    "TaskRunRequestSimDataRefsType0",
     "TaskStatusResponse",
     "TaskSubmitRequest",
     "TaskSubmitRequestParamsType0",

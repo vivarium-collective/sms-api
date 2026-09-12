@@ -59,6 +59,7 @@ APP_ORIGINS = [
 APP_ROUTERS = [
     "sms",
     "core",
+    "tasks",
 ]
 ENV = get_settings()
 assets_dir = Path(ENV.assets_dir)

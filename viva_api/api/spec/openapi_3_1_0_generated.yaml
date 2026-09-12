@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: sms-api
-  version: 0.9.134
+  version: 0.9.138
 paths:
   /api/v1/simulations/discovery:
     get:
@@ -1328,9 +1328,9 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-09-09T20:28:58.128445'
+                  created_at: '2026-09-12T13:15:14.402469'
                 parca_config:
-                  outdir: /projects/SMS/sms_api/prod/sims
+                  outdir: .
                   operons: true
                   ribosome_fitting: true
                   rnapoly_fitting: true
@@ -1396,6 +1396,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HpcRun'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks:
+    post:
+      tags:
+      - Tasks
+      summary: Submit a self-contained repo-path script to the in-region task compute
+        (viva-api#631)
+      operationId: run-task
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskRunRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskDTO'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/status:
+    get:
+      tags:
+      - Tasks
+      summary: Poll a task run's status (viva-api#631)
+      operationId: get-task-status
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of a submitted task.
+          title: Task Id
+        description: Database ID of a submitted task.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskDTO'
         '422':
           description: Validation Error
           content:
@@ -4331,7 +4385,7 @@ components:
         parca_config:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: /projects/SMS/sms_api/prod/sims
+            outdir: .
             operons: true
             ribosome_fitting: true
             rnapoly_fitting: true
@@ -4363,7 +4417,7 @@ components:
         outdir:
           type: string
           title: Outdir
-          default: /projects/SMS/sms_api/prod/sims
+          default: .
         operons:
           type: boolean
           title: Operons
@@ -4796,7 +4850,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-09-09 20:28:58.061335'
+          default: '2026-09-12 13:15:14.337534'
         job_id:
           anyOf:
           - type: string
@@ -4838,7 +4892,7 @@ components:
         parca_options:
           $ref: '#/components/schemas/ParcaOptions'
           default:
-            outdir: /projects/SMS/sms_api/prod/sims
+            outdir: .
             operons: true
             ribosome_fitting: true
             rnapoly_fitting: true
@@ -5031,6 +5085,66 @@ components:
       required:
       - document
       title: StateDocument
+    TaskDTO:
+      properties:
+        database_id:
+          type: integer
+          title: Database Id
+        name:
+          type: string
+          title: Name
+        script:
+          type: string
+          title: Script
+        args:
+          items:
+            type: string
+          type: array
+          title: Args
+        sim_data_refs:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Sim Data Refs
+        memory_class:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Memory Class
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/JobStatus'
+          - type: 'null'
+        job_id_ext:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Job Id Ext
+        out_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Out Uri
+        result_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Result Uri
+        error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Message
+      additionalProperties: true
+      type: object
+      required:
+      - database_id
+      - name
+      - script
+      title: TaskDTO
+      description: A task run's tracked state (submit response and status share this
+        shape).
     TaskResponse:
       properties:
         task_id:
@@ -5082,6 +5196,51 @@ components:
       - method
       - status
       title: TaskResponse
+    TaskRunRequest:
+      properties:
+        script:
+          type: string
+          title: Script
+        args:
+          items:
+            type: string
+          type: array
+          title: Args
+        sim_data_refs:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Sim Data Refs
+        memory_class:
+          type: string
+          title: Memory Class
+          default: standard
+        commit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Commit
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+      additionalProperties: true
+      type: object
+      required:
+      - script
+      title: TaskRunRequest
+      description: 'Request to run a self-contained script on the in-region task compute
+
+        (viva-api#631). Slice 1: ``script`` is a path to a script already in the
+
+        image (e.g. an fss-combine / ptools-regather turnkey script that lives in
+        the
+
+        repo). ``memory_class`` routes the instance via the same mechanism as
+
+        analyses (viva-api#629).'
     TaskStatusResponse:
       properties:
         task_id:

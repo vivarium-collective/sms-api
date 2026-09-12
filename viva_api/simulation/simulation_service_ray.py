@@ -74,10 +74,12 @@ from viva_api.simulation.models import (
     RepoDiscovery,
     Simulation,
     SimulatorVersion,
+    TaskDTO,
+    TaskRunRequest,
     VecoliSource,
 )
 from viva_api.simulation.simulation_service import SimulationService
-from viva_api.simulation.tables_orm import AnalysisStatusDB
+from viva_api.simulation.tables_orm import AnalysisStatusDB, TaskStatusDB
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +177,12 @@ PBG_RUNNER_ENV = (
 # documented no-op ("no <dir>; nothing to upload"). It is still declared so anything
 # the analysis does drop locally lands under the run's own S3 prefix.
 ANALYSIS_OUT_DIR = f"{V2ECOLI_DIR}/.pbg/runs/analysis"
+# In-region task compute (viva-api#631 slice 1): an arbitrary repo-path script
+# run through the SAME standalone container path as ParCa/the analysis DAG
+# node. Mirrors ANALYSIS_OUT_DIR's own rationale — a script that writes only to
+# S3 leaves this empty (a documented sync no-op); declared so anything a
+# script drops locally still lands under the run's own S3 prefix.
+TASK_OUT_DIR = f"{V2ECOLI_DIR}/.pbg/runs/task"
 # Where the head writes the entrypoint's metrics report (uploaded as report.json).
 REPORT_PATH = "/tmp/report.json"  # noqa: S108
 
@@ -2959,6 +2967,72 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             out_dir=VARIANT_CACHE_DIR,
         )
         return JobId.ray(job_id)
+
+    async def submit_task(self, request: TaskRunRequest, database_service: DatabaseService) -> TaskDTO:
+        """Submit a self-contained repo-path script as a standalone AWS Batch
+        container job (viva-api#631 slice 1).
+
+        Same one-node container shape ``submit_parca_job``/the analysis DAG
+        node already use (``_ensure_container_job_def`` + ``_submit_container``)
+        — this method's only real job is building the ``python <script>
+        <args...>`` command line and recording the result on the ``task``
+        table (mirroring how ``_submit_analysis_job`` records to ``analysis``)
+        so ``GET /tasks/{id}/status`` has a row to poll.
+
+        ``request.commit`` pins the image commit the script runs in; ``None``
+        resolves to the default repo/branch's latest commit, the same
+        fallback every other Ray dispatch path here already uses.
+
+        ``request.sim_data_refs``, when present, rides in as a single JSON env
+        var (``TASK_SIM_DATA_REFS``) rather than individual vars — the shape
+        is caller-defined (script-specific reference names -> URIs), so there
+        is no fixed set of env-var names to emit.
+        """
+        commit = request.commit or await self.get_latest_commit_hash()
+        job_def = self._ensure_container_job_def(self._image_uri(commit), commit)
+        task_name = request.name or Path(request.script).stem
+        job_cmd = "python " + shlex.quote(request.script)
+        if request.args:
+            job_cmd += " " + " ".join(shlex.quote(a) for a in request.args)
+        out_uri = self._results_s3_uri(f"tasks/{task_name}-{_rand_suffix()}").rstrip("/")
+        task_env: dict[str, str] | None = None
+        if request.sim_data_refs:
+            task_env = {"TASK_SIM_DATA_REFS": json.dumps(request.sim_data_refs)}
+        batch_job_id = self._submit_container(
+            job_name=f"task-{task_name}-{_rand_suffix()}"[:128],
+            job_definition=job_def,
+            job_cmd=job_cmd,
+            out_s3=out_uri,
+            out_dir=TASK_OUT_DIR,
+            task_env=task_env,
+            memory_class=request.memory_class,
+        )
+        return await database_service.record_task(
+            name=task_name,
+            script=request.script,
+            args=list(request.args),
+            sim_data_refs=request.sim_data_refs,
+            memory_class=request.memory_class,
+            status=TaskStatusDB.COMPUTING,
+            job_id_ext=str(batch_job_id),
+            out_uri=out_uri,
+        )
+
+    async def get_task_status(self, task_id: int, database_service: DatabaseService) -> TaskDTO:
+        """Poll a task's tracked Batch job (if any) and persist its mapped status.
+
+        A task with no ``job_id_ext`` yet (shouldn't happen post-``submit_task``,
+        but mirrors the defensive style elsewhere in this class) is returned
+        as-is rather than raising -- there is nothing to poll.
+        """
+        task = await database_service.get_task(task_id)
+        if task.job_id_ext is None:
+            return task
+        statuses = self.get_batch_job_statuses([task.job_id_ext])
+        batch_status = statuses.get(task.job_id_ext)
+        if batch_status is None:
+            return task
+        return await database_service.update_task_status(task_id, TaskStatusDB.from_job_status(batch_status))
 
     @override
     async def submit_ecoli_simulation_job(
