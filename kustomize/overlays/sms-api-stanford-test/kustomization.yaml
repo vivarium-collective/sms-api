@@ -296,8 +296,24 @@ images:
   # quarantine watch) before merge. Heads-up posted to sms-ecoli#166 before
   # this deploy (not a fresh approval ask -- same namespace, same low-risk
   # pattern already approved and run once today for 0.3.79).
+  # 0.3.81 (2026-09-12): workbench#1053 -- replaces the "Dispatch composite
+  # (advanced)" panel's blocking window.confirm() with a real, non-blocking
+  # DOM modal (_confirmModal). confirm()/alert()/prompt() are the only
+  # web-platform APIs that freeze the whole page's JS event loop until a
+  # human dismisses them -- which had made this exact dialog impossible to
+  # drive through any browser-automation tool (three real attempts hung on
+  # it during the 2026-09-11 CD2 Vignette-1 UI-verification push). The new
+  # modal preserves the identical safety property workbench#... (item 20a)
+  # added -- a human must see the resolved simulator_id/mechanism/params and
+  # explicitly click before real AWS Batch spend happens -- via plain DOM
+  # instead of a blocking native dialog, so screenshots/clicks/automation all
+  # work normally. Workbench-only change, no sms-api/dispatch-payload change.
+  # Full CI green (js + 4-shard pytest + types + quarantine watch); 4 new
+  # regression tests (tests/test_dispatch_confirm_modal.py); live-verified in
+  # a real browser (screenshot succeeds while the modal is open, a real click
+  # on OK resolves the confirmation) before merging.
   - name: ghcr.io/vivarium-collective/vivarium-workbench
-    newTag: 0.3.80
+    newTag: 0.3.81
 
 replicas:
   - count: 1
