@@ -68,11 +68,9 @@ class TaskLogsDTO:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "task_id": task_id,
-            }
-        )
+        field_dict.update({
+            "task_id": task_id,
+        })
         if job_id_ext is not UNSET:
             field_dict["job_id_ext"] = job_id_ext
         if status is not UNSET:
