@@ -185,8 +185,7 @@ notes/
 
 # Reference/knowledge docs, composite dumps, and dispatch scripts -- real
 # content Jim/others may want to browse in the repo, but not shippable
-# runtime code. Dockerfile-api never referenced this path; Dockerfile-sms's
-# broad `COPY . .` would otherwise pull it into that (unsupported) image.
+# runtime code. Dockerfile-api never references this path.
 knowledge/
 
 # Archives: never ship tarballs in a build context. assets/ptools/ alone holds
@@ -196,6 +195,5 @@ knowledge/
 **/*.tar.gz
 
 # Local git history (~3 GB) -- no image needs it. The version baked into images
-# is the static one in pyproject.toml/viva_api/version.py, not derived from VCS,
-# and Dockerfile-sms's `git clone` pulls vEcoli over the network, not from here.
+# is the static one in pyproject.toml/viva_api/version.py, not derived from VCS.
 **/.git
