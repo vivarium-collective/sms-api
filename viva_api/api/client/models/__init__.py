@@ -110,6 +110,7 @@ from .stop_env_worker_response_stop_env_worker import StopEnvWorkerResponseStopE
 from .stop_relayed_env_worker_response_stop_relayed_env_worker import StopRelayedEnvWorkerResponseStopRelayedEnvWorker
 from .task_dto import TaskDTO
 from .task_dto_sim_data_refs_type_0 import TaskDTOSimDataRefsType0
+from .task_logs_dto import TaskLogsDTO
 from .task_response import TaskResponse
 from .task_run_request import TaskRunRequest
 from .task_run_request_sim_data_refs_type_0 import TaskRunRequestSimDataRefsType0
@@ -237,6 +238,7 @@ __all__ = (
     "StopRelayedEnvWorkerResponseStopRelayedEnvWorker",
     "TaskDTO",
     "TaskDTOSimDataRefsType0",
+    "TaskLogsDTO",
     "TaskResponse",
     "TaskRunRequest",
     "TaskRunRequestSimDataRefsType0",

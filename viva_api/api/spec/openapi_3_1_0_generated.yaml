@@ -1328,7 +1328,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-09-12T13:51:46.302394'
+                  created_at: '2026-09-12T19:30:34.310354'
                 parca_config:
                   outdir: .
                   operons: true
@@ -1475,6 +1475,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TaskDTO'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}/logs:
+    get:
+      tags:
+      - Tasks
+      summary: Read a task run's CloudWatch logs (viva-api#631)
+      operationId: get-task-logs
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: Database ID of a submitted task.
+          title: Task Id
+        description: Database ID of a submitted task.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 10000
+          minimum: 1
+          description: Max recent log events to return.
+          default: 1000
+          title: Limit
+        description: Max recent log events to return.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskLogsDTO'
         '422':
           description: Validation Error
           content:
@@ -4915,7 +4954,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-09-12 13:51:46.241449'
+          default: '2026-09-12 19:30:34.250050'
         job_id:
           anyOf:
           - type: string
@@ -5210,6 +5249,46 @@ components:
       title: TaskDTO
       description: A task run's tracked state (submit response and status share this
         shape).
+    TaskLogsDTO:
+      properties:
+        task_id:
+          type: integer
+          title: Task Id
+        job_id_ext:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Job Id Ext
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/JobStatus'
+          - type: 'null'
+        log_stream:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Log Stream
+        lines:
+          items:
+            type: string
+          type: array
+          title: Lines
+        report_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Report Uri
+      additionalProperties: true
+      type: object
+      required:
+      - task_id
+      title: TaskLogsDTO
+      description: 'A task run''s CloudWatch logs (viva-api#631 slice 3). ``lines``
+        is empty
+
+        until the container has started (no log stream yet) or when no log group can
+
+        be resolved; ``status`` lets the caller decide whether to keep polling.'
     TaskResponse:
       properties:
         task_id:

@@ -348,6 +348,10 @@ class Settings(BaseSettings):
     ray_n_steps: int = 600  # default sim steps per seed (run_phase0_xarray_ensemble --n-steps)
     ray_chunk: int = 60  # default xarray emitter flush interval (--chunk)
     ray_log_s3_prefix: str = ""  # s3:// prefix for Ray session logs + report.json (RayLogS3Prefix stack output)
+    # CloudWatch log group the container/task jobs write stdout+stderr to (awslogs
+    # driver). Empty -> resolved from the job definition's logConfiguration at read
+    # time (viva-api#631 slice 3, `atlantis task logs`).
+    ray_batch_log_group: str = ""
 
     # --- Ray-on-Batch ARRAY dispatch settings ---
     # Used for the canonical/batch_baseline multiseed x multigeneration sweep: one

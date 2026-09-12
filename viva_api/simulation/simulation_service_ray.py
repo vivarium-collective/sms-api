@@ -75,6 +75,7 @@ from viva_api.simulation.models import (
     Simulation,
     SimulatorVersion,
     TaskDTO,
+    TaskLogsDTO,
     TaskRunRequest,
     VecoliSource,
 )
@@ -3130,6 +3131,59 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         if batch_status is None:
             return task
         return await database_service.update_task_status(task_id, TaskStatusDB.from_job_status(batch_status))
+
+    def _resolve_log_group(self, job_definition: str | None) -> str | None:
+        """The CloudWatch log group a container job writes to: the configured
+        ``ray_batch_log_group`` if set, else the awslogs-group from the job
+        definition's logConfiguration. None when neither is available."""
+        configured = get_settings().ray_batch_log_group
+        if configured:
+            return configured
+        if not job_definition:
+            return None
+        try:
+            defs = self._batch().describe_job_definitions(jobDefinitions=[job_definition]).get("jobDefinitions", [])
+            options = defs[0].get("containerProperties", {}).get("logConfiguration", {}).get("options", {})
+            group = options.get("awslogs-group")
+            return group if isinstance(group, str) else None
+        except Exception:
+            logger.warning("could not resolve log group from job definition %s", job_definition, exc_info=True)
+            return None
+
+    async def get_task_logs(self, task_id: int, database_service: DatabaseService, *, limit: int = 1000) -> TaskLogsDTO:
+        """The CloudWatch logs for a task's Batch job (viva-api#631 slice 3).
+
+        Resolves the job's log stream (``describe_jobs`` -> container.logStreamName)
+        and log group, then reads up to ``limit`` recent events. Returns an empty
+        ``lines`` (not an error) when the container hasn't started yet (no stream)
+        or no group can be resolved, so a caller can poll until logs appear."""
+        task = await database_service.get_task(task_id)
+        result = TaskLogsDTO(task_id=task_id, job_id_ext=task.job_id_ext, status=task.status)
+        log_prefix = get_settings().ray_log_s3_prefix
+        if log_prefix and task.job_id_ext:
+            result.report_uri = f"{log_prefix.rstrip('/')}/{task.job_id_ext}/report.json"
+        if not task.job_id_ext:
+            return result
+        jobs = self._batch().describe_jobs(jobs=[task.job_id_ext]).get("jobs", [])
+        if not jobs:
+            return result
+        job = jobs[0]
+        stream = job.get("container", {}).get("logStreamName")
+        if not stream:
+            return result  # container not started yet
+        group = self._resolve_log_group(job.get("jobDefinition"))
+        if not group:
+            return result
+        result.log_stream = stream
+        try:
+            logs_client = boto3.client("logs", region_name=get_settings().storage_s3_region)
+            events = logs_client.get_log_events(
+                logGroupName=group, logStreamName=stream, startFromHead=True, limit=limit
+            ).get("events", [])
+            result.lines = [str(e.get("message", "")) for e in events]
+        except Exception:
+            logger.warning("could not read CloudWatch logs for task %s (stream %s)", task_id, stream, exc_info=True)
+        return result
 
     @override
     async def submit_ecoli_simulation_job(

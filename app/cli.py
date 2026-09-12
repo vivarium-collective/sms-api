@@ -2006,6 +2006,45 @@ def task_status(
     display_json(task.model_dump(), console)
 
 
+@task_cli.command("logs", help="Read a task run's CloudWatch logs.")
+def task_logs(
+    task_id: int = Argument(help="Task database ID."),
+    limit: int = Option(default=1000, help="Max recent log events to fetch."),
+    follow: bool = Option(default=False, help="Poll for new logs until the task reaches a terminal status."),
+    base_url: ApiBaseUrl = Option(default=API_BASE_URL, help="API server base URL."),
+) -> None:
+    import time
+
+    console = get_console()
+    data_service = get_data_service(base_url=base_url)
+
+    def _print(result: object, seen: int) -> int:
+        lines = getattr(result, "lines", []) or []
+        for line in lines[seen:]:
+            console.print(line, markup=False, highlight=False)
+        return len(lines)
+
+    result = data_service.get_task_logs(task_id=task_id, limit=limit)
+    printed = _print(result, 0)
+    if not printed:
+        status = result.status.value if result.status else "unknown"
+        console.print(f"[memphis.hint]No logs yet (task status: {status}).[/]")
+    if not follow:
+        return
+
+    # Follow: poll until the task is terminal, printing only new lines.
+    terminal = {"completed", "failed", "cancelled"}
+    while True:
+        task_dto = data_service.get_task_status(task_id=task_id)
+        status_val = task_dto.status.value if task_dto.status else "unknown"
+        result = data_service.get_task_logs(task_id=task_id, limit=limit)
+        printed = _print(result, printed)
+        if status_val in terminal:
+            console.print(f"[{status_style(status_val)}]--- task {status_val} ---[/]")
+            return
+        time.sleep(10)
+
+
 # -- Compose (process-bigraph) commands --
 
 

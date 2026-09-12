@@ -10,14 +10,14 @@ timeout (see CLAUDE.md "Pitfall 6").
 import json
 import logging
 
-from fastapi import Body, File, Form, HTTPException, UploadFile
+from fastapi import Body, File, Form, HTTPException, Query, UploadFile
 from fastapi import Path as FastAPIPath
 
 from viva_api.common.gateway.utils import get_router_config
 from viva_api.config import ComputeBackend
 from viva_api.dependencies import get_database_service, get_simulation_service_for_backend
 from viva_api.simulation.database_service import DatabaseService
-from viva_api.simulation.models import TaskDTO, TaskRunRequest
+from viva_api.simulation.models import TaskDTO, TaskLogsDTO, TaskRunRequest
 from viva_api.simulation.simulation_service_ray import SimulationServiceRay
 
 logger = logging.getLogger(__name__)
@@ -127,4 +127,26 @@ async def get_task_status(
         raise
     except Exception as e:
         logger.exception("Error getting task status for %s", task_id)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@config.router.get(
+    path="/tasks/{task_id}/logs",
+    response_model=TaskLogsDTO,
+    operation_id="get-task-logs",
+    tags=["Tasks"],
+    summary="Read a task run's CloudWatch logs (viva-api#631)",
+)
+async def get_task_logs(
+    task_id: int = FastAPIPath(description="Database ID of a submitted task."),
+    limit: int = Query(default=1000, ge=1, le=10000, description="Max recent log events to return."),
+) -> TaskLogsDTO:
+    simulation_service = _require_ray_service()
+    database_service = _require_database_service()
+    try:
+        return await simulation_service.get_task_logs(task_id, database_service, limit=limit)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error getting task logs for %s", task_id)
         raise HTTPException(status_code=500, detail=str(e)) from e
