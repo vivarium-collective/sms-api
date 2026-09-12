@@ -24,6 +24,8 @@ from viva_api.simulation.models import (
     SimulationRun,
     Simulator,
     SimulatorVersion,
+    TaskDTO,
+    TaskRunRequest,
 )
 
 
@@ -286,6 +288,14 @@ class E2EDataService:
 
     def get_analysis_plots(self, analysis_id: int) -> list[OutputFile]:
         return self.submit_get_analysis_plots(analysis_id=analysis_id)
+
+    # -- Tasks (viva-api#631) --
+
+    def run_task(self, request: TaskRunRequest) -> TaskDTO:
+        return self.submit_task_run(request)
+
+    def get_task_status(self, task_id: int) -> TaskDTO:
+        return self.submit_get_task_status(task_id=task_id)
 
     # -- Low-level HTTP methods: Simulator --
 
@@ -640,6 +650,30 @@ class E2EDataService:
             raise
         except Exception as e:
             raise httpx.HTTPError(f"Could not load analysis plots for id {analysis_id}") from e
+
+    # -- Low-level HTTP methods: Tasks (viva-api#631) --
+
+    def submit_task_run(self, request: TaskRunRequest) -> TaskDTO:
+        try:
+            response = self.client.post(url="/api/v1/tasks", json=request.model_dump(mode="json"))
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return TaskDTO(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not submit task for script {request.script}") from e
+
+    def submit_get_task_status(self, task_id: int) -> TaskDTO:
+        try:
+            response = self.client.get(url=f"/api/v1/tasks/{task_id}/status")
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return TaskDTO(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not load task status for id {task_id}") from e
 
     # -- Streaming output download --
 

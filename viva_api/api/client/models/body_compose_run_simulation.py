@@ -33,9 +33,11 @@ class BodyComposeRunSimulation:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "uploaded_file": uploaded_file,
-        })
+        field_dict.update(
+            {
+                "uploaded_file": uploaded_file,
+            }
+        )
         if analysis_options is not UNSET:
             field_dict["analysis_options"] = analysis_options
 

@@ -1,7 +1,7 @@
 import datetime
 import enum
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import ForeignKey, Index, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -16,6 +16,14 @@ from viva_api.simulation.models import (
     SimulatorVersion,
     WorkerEvent,
 )
+
+if TYPE_CHECKING:
+    # Deferred: TaskDTO is imported at runtime inside ORMTask.to_dto() below to
+    # avoid a circular import (viva_api.simulation.models does not import
+    # tables_orm, but importing TaskDTO at module scope here would still force
+    # models.py to fully resolve before this module does). This TYPE_CHECKING-only
+    # import just gives the string return annotation a real name to resolve.
+    from viva_api.simulation.models import TaskDTO
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +65,31 @@ class AnalysisStatusDB(enum.Enum):
 
     @classmethod
     def from_job_status(cls, status: JobStatus) -> "AnalysisStatusDB":
+        if status == JobStatus.COMPLETED:
+            return cls.READY
+        if status in (JobStatus.FAILED, JobStatus.CANCELLED):
+            return cls.FAILED
+        return cls.COMPUTING
+
+
+class TaskStatusDB(enum.Enum):
+    """Coarse readiness of an in-region task run (viva-api#631). Mirrors
+    AnalysisStatusDB — a task is a self-contained script submitted to the
+    in-region task compute, so it maps onto the same job-status vocabulary."""
+
+    COMPUTING = "computing"
+    READY = "ready"
+    FAILED = "failed"
+
+    def to_job_status(self) -> JobStatus:
+        return {
+            TaskStatusDB.COMPUTING: JobStatus.RUNNING,
+            TaskStatusDB.READY: JobStatus.COMPLETED,
+            TaskStatusDB.FAILED: JobStatus.FAILED,
+        }[self]
+
+    @classmethod
+    def from_job_status(cls, status: JobStatus) -> "TaskStatusDB":
         if status == JobStatus.COMPLETED:
             return cls.READY
         if status in (JobStatus.FAILED, JobStatus.CANCELLED):
@@ -338,6 +371,51 @@ class ORMAnalysis(Base):
             backend=self.backend,
             error_message=self.error_message,
             job_id_ext=self.job_id_ext,
+        )
+
+
+class ORMTask(Base):
+    """An in-region task run (viva-api#631): a self-contained script executed on
+    the in-region task compute (instance IAM role — no SSO, no WAN signing skew),
+    submitted through the same container/task queue as analyses, with memory-class
+    routing (viva-api#629). ``args``/``sim_data_refs`` are the request payload;
+    the columns are what the status endpoint queries on. Distinct from ``analysis``
+    because a task is an arbitrary script, not a named analysis over a sweep."""
+
+    __tablename__ = "task"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(nullable=False)
+    script: Mapped[str] = mapped_column(nullable=False)  # repo-path (slice 1)
+    args: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    sim_data_refs: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    memory_class: Mapped[str | None] = mapped_column(nullable=True, server_default="standard")
+    status: Mapped[TaskStatusDB | None] = mapped_column(nullable=True)
+    job_name: Mapped[str | None] = mapped_column(nullable=True)
+    job_id_ext: Mapped[str | None] = mapped_column(nullable=True, index=True)  # batch job id
+    out_uri: Mapped[str | None] = mapped_column(nullable=True)
+    result_uri: Mapped[str | None] = mapped_column(nullable=True)
+    error_message: Mapped[str | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True, server_default=func.now())
+    updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        nullable=True, server_default=func.now(), onupdate=func.now()
+    )
+
+    def to_dto(self) -> "TaskDTO":
+        from viva_api.simulation.models import TaskDTO
+
+        return TaskDTO(
+            database_id=self.id,
+            name=self.name,
+            script=self.script,
+            args=list(self.args or []),
+            sim_data_refs=self.sim_data_refs,
+            memory_class=self.memory_class,
+            status=self.status.to_job_status() if self.status is not None else None,
+            job_id_ext=self.job_id_ext,
+            out_uri=self.out_uri,
+            result_uri=self.result_uri,
+            error_message=self.error_message,
         )
 
 

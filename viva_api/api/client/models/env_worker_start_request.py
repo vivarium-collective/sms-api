@@ -58,12 +58,14 @@ class EnvWorkerStartRequest:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "commit": commit,
-            "callback_host": callback_host,
-            "callback_port": callback_port,
-            "token": token,
-        })
+        field_dict.update(
+            {
+                "commit": commit,
+                "callback_host": callback_host,
+                "callback_port": callback_port,
+                "token": token,
+            }
+        )
         if workspace is not UNSET:
             field_dict["workspace"] = workspace
         if session_key is not UNSET:

@@ -671,3 +671,34 @@ class SimulationObservables(BaseModel):
     store: Literal["zarr", "parquet"]
     time: list[float]
     series: dict[str, list[float | None]]
+
+
+class TaskRunRequest(BaseModel):
+    """Request to run a self-contained script on the in-region task compute
+    (viva-api#631). Slice 1: ``script`` is a path to a script already in the
+    image (e.g. an fss-combine / ptools-regather turnkey script that lives in the
+    repo). ``memory_class`` routes the instance via the same mechanism as
+    analyses (viva-api#629)."""
+
+    script: str  # repo-path to a script in the image (slice 1)
+    args: list[str] = Field(default_factory=list)
+    sim_data_refs: dict[str, Any] | None = None
+    memory_class: str = "standard"
+    commit: str | None = None  # image commit to run in; None -> latest/default
+    name: str | None = None  # optional human label; defaults to the script name
+
+
+class TaskDTO(BaseModel):
+    """A task run's tracked state (submit response and status share this shape)."""
+
+    database_id: int
+    name: str
+    script: str
+    args: list[str] = Field(default_factory=list)
+    sim_data_refs: dict[str, Any] | None = None
+    memory_class: str | None = None
+    status: JobStatus | None = None
+    job_id_ext: str | None = None
+    out_uri: str | None = None
+    result_uri: str | None = None
+    error_message: str | None = None
