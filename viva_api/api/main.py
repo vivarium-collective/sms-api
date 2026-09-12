@@ -57,24 +57,17 @@ APP_ORIGINS = [
     "https://sms.cam.uchc.edu",
 ]
 APP_ROUTERS = [
-    # "antibiotics",
-    # "biofactory",
     "sms",
     "core",
-    # "inference",
-    # "variants",
 ]
 ENV = get_settings()
 assets_dir = Path(ENV.assets_dir)
 ACTIVE_URL = ServerMode.detect(assets_dir / "dev" / "config" / ".dev_env")
 UI_NAMES = [
-    # "antibiotic",
-    # "biofactory",
     "configure",  # no dataservice needed; possible uses though!
     "explore",  # uses dataservice, with nfs
     "dashboard",  # Atlantis EUTE dashboard — full end-to-end workflow
     "composer",  # compose (process-bigraph) colony simulation builder
-    # "single_cell",  # uses /core router w/ generated client, no nfs
 ]
 
 
