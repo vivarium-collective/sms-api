@@ -297,6 +297,25 @@ class E2EDataService:
     def get_task_status(self, task_id: int) -> TaskDTO:
         return self.submit_get_task_status(task_id=task_id)
 
+    def run_uploaded_task(
+        self,
+        *,
+        local_path: str,
+        args: list[str],
+        sim_data_refs: dict[str, str] | None,
+        memory_class: str,
+        commit: str | None,
+        name: str | None,
+    ) -> TaskDTO:
+        return self.submit_uploaded_task_run(
+            local_path=local_path,
+            args=args,
+            sim_data_refs=sim_data_refs,
+            memory_class=memory_class,
+            commit=commit,
+            name=name,
+        )
+
     # -- Low-level HTTP methods: Simulator --
 
     def submit_get_latest_simulator(self, repo_url: str | None = None, branch: str | None = None) -> Simulator:
@@ -663,6 +682,44 @@ class E2EDataService:
             raise
         except Exception as e:
             raise httpx.HTTPError(f"Could not submit task for script {request.script}") from e
+
+    def submit_uploaded_task_run(
+        self,
+        *,
+        local_path: str,
+        args: list[str],
+        sim_data_refs: dict[str, str] | None,
+        memory_class: str,
+        commit: str | None,
+        name: str | None,
+    ) -> TaskDTO:
+        import json
+        from pathlib import Path
+
+        path = Path(local_path)
+        if not path.is_file():
+            raise httpx.HTTPError(f"No such script file to upload: {local_path}")
+        data: dict[str, object] = {"memory_class": memory_class, "args": args}
+        if sim_data_refs:
+            data["sim_data_refs"] = json.dumps(sim_data_refs)
+        if commit:
+            data["commit"] = commit
+        if name:
+            data["name"] = name
+        try:
+            with path.open("rb") as fh:
+                response = self.client.post(
+                    url="/api/v1/tasks/upload",
+                    files={"script": (path.name, fh, "text/x-python")},
+                    data=data,
+                )
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return TaskDTO(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not submit uploaded task for {local_path}") from e
 
     def submit_get_task_status(self, task_id: int) -> TaskDTO:
         try:

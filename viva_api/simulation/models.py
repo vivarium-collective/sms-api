@@ -2,6 +2,7 @@ import datetime
 import enum
 import hashlib
 import json
+import re
 from dataclasses import field
 from typing import Any, Literal
 
@@ -686,6 +687,16 @@ class TaskRunRequest(BaseModel):
     memory_class: str = "standard"
     commit: str | None = None  # image commit to run in; None -> latest/default
     name: str | None = None  # optional human label; defaults to the script name
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, v: str | None) -> str | None:
+        # The name becomes part of the Batch jobName ([A-Za-z0-9_-], <=128), so a
+        # bad one would fail submit_job with a 500. Reject it up front (422)
+        # instead. A None name is fine -- the service derives a sanitized one.
+        if v is not None and not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", v):
+            raise ValueError("name must be 1-128 characters of [A-Za-z0-9_-]")
+        return v
 
 
 class TaskDTO(BaseModel):
