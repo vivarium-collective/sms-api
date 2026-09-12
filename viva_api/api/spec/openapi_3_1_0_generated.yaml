@@ -1328,7 +1328,7 @@ paths:
                   git_repo_url: https://github.com/CovertLabEcoli/vEcoli-private
                   git_branch: master
                   database_id: 25
-                  created_at: '2026-09-12T13:15:14.402469'
+                  created_at: '2026-09-12T13:51:46.302394'
                 parca_config:
                   outdir: .
                   operons: true
@@ -1414,6 +1414,31 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TaskRunRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskDTO'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/upload:
+    post:
+      tags:
+      - Tasks
+      summary: Upload a script and run it on the in-region task compute (viva-api#631)
+      operationId: run-uploaded-task
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_run-uploaded-task'
         required: true
       responses:
         '200':
@@ -3447,6 +3472,46 @@ components:
             \ set by one of them."
       type: object
       title: Body_run-ecoli-simulation-new
+    Body_run-uploaded-task:
+      properties:
+        script:
+          type: string
+          contentMediaType: application/octet-stream
+          title: Script
+          description: The script file to run.
+        args:
+          items:
+            type: string
+          type: array
+          title: Args
+          description: Positional args passed to the script.
+          default: []
+        sim_data_refs:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sim Data Refs
+          description: JSON object of caller-defined sim-data references.
+        memory_class:
+          type: string
+          title: Memory Class
+          default: standard
+        commit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Commit
+          description: Image commit to run in; default latest.
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+          description: Optional human label; defaults to the script name.
+      type: object
+      required:
+      - script
+      title: Body_run-uploaded-task
     ChainProgress:
       properties:
         id:
@@ -4850,7 +4915,7 @@ components:
         last_updated:
           type: string
           title: Last Updated
-          default: '2026-09-12 13:15:14.337534'
+          default: '2026-09-12 13:51:46.241449'
         job_id:
           anyOf:
           - type: string

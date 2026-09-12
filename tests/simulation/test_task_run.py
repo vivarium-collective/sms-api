@@ -193,3 +193,100 @@ async def test_get_task_status_not_yet_visible_in_batch_leaves_status_unchanged(
 
     database_service.update_task_status.assert_not_called()
     assert result.status == JobStatus.RUNNING
+
+
+def test_submit_uploaded_task_stages_script_and_runs_staged_path() -> None:
+    """slice 2: an uploaded script is put to S3 and run from the staged dir; the
+    container's CONTAINER_STAGE_S3 -> CONTAINER_STAGE_DIR sync pulls it in."""
+    from viva_api.simulation.simulation_service_ray import TASK_STAGE_DIR
+
+    request = TaskRunRequest(script="ignored.py", args=["--x", "1"], memory_class="standard", commit="abc1234")
+    database_service = AsyncMock()
+    database_service.record_task.return_value = _submitted_task_dto(
+        script="s3://mybucket/vecoli-output/tasks/scripts/x/myscript.py"
+    )
+
+    batch = _fake_container_batch(["c-9"])
+    service = SimulationServiceRay()
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+        patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+        patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=batch),
+    ):
+        import asyncio
+
+        asyncio.run(
+            service.submit_uploaded_task(
+                request, script_bytes=b"print('hi')\n", filename="myscript.py", database_service=database_service
+            )
+        )
+
+    # The script was PUT to S3 under a tasks/scripts/ prefix.
+    assert batch.put_object.called
+    put_kwargs = batch.put_object.call_args.kwargs
+    assert put_kwargs["Key"].endswith("/myscript.py") and "tasks/scripts/" in put_kwargs["Key"]
+    assert put_kwargs["Body"] == b"print('hi')\n"
+
+    (call,) = batch.submit_job.call_args_list
+    env = {e["name"]: e["value"] for e in call.kwargs["containerOverrides"]["environment"]}
+    # Runs the STAGED path, and the entrypoint is told to sync the script in.
+    assert env["CONTAINER_JOB_CMD"] == f"python {TASK_STAGE_DIR}/myscript.py --x 1"
+    assert "tasks/scripts/" in env["CONTAINER_STAGE_S3"]
+    assert env["CONTAINER_STAGE_DIR"] == TASK_STAGE_DIR
+
+    # Recorded with the staged S3 uri as the script label.
+    kwargs = database_service.record_task.call_args.kwargs
+    assert kwargs["script"].startswith("s3://") and kwargs["script"].endswith("/myscript.py")
+
+
+def test_submit_uploaded_task_sanitizes_filename_to_basename() -> None:
+    """A path-y upload filename never escapes the stage dir."""
+    from viva_api.simulation.simulation_service_ray import TASK_STAGE_DIR
+
+    request = TaskRunRequest(script="ignored.py", commit="abc1234")
+    database_service = AsyncMock()
+    database_service.record_task.return_value = _submitted_task_dto()
+
+    batch = _fake_container_batch(["c-10"])
+    service = SimulationServiceRay()
+    with (
+        patch("viva_api.simulation.simulation_service_ray.get_settings", _container_settings),
+        patch("viva_api.common.storage.data_layout.get_settings", _container_settings),
+        patch("viva_api.simulation.simulation_service_ray.boto3.client", return_value=batch),
+    ):
+        import asyncio
+
+        asyncio.run(
+            service.submit_uploaded_task(
+                request, script_bytes=b"x", filename="../../etc/evil.py", database_service=database_service
+            )
+        )
+    (call,) = batch.submit_job.call_args_list
+    env = {e["name"]: e["value"] for e in call.kwargs["containerOverrides"]["environment"]}
+    assert env["CONTAINER_JOB_CMD"] == f"python {TASK_STAGE_DIR}/evil.py"
+
+
+def test_task_run_request_rejects_bad_name() -> None:
+    """A name with characters outside the Batch jobName charset is a 422 at the
+    model boundary, not a 500 from submit_job."""
+    import pydantic
+    import pytest
+
+    with pytest.raises(pydantic.ValidationError):
+        TaskRunRequest(script="scripts/foo.py", name="bad name!")
+    # A clean name is accepted.
+    TaskRunRequest(script="scripts/foo.py", name="run_4-fss")
+
+
+def test_derived_task_name_is_sanitized_for_jobname() -> None:
+    """When name is omitted, the derived script stem (which can carry dots) is
+    sanitized to the Batch jobName charset."""
+    request = TaskRunRequest(script="scripts/foo.bar.py", commit="abc1234")
+    database_service = AsyncMock()
+    database_service.record_task.return_value = _submitted_task_dto()
+
+    _, batch = _submit_task(request, database_service=database_service, submit_ids=["c-11"])
+    (call,) = batch.submit_job.call_args_list
+    job_name = call.kwargs["jobName"]
+    assert job_name.startswith("task-foo-bar-")  # dots -> dashes, no dots in the jobName
+    assert "." not in job_name

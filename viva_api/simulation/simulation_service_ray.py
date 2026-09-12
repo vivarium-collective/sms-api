@@ -183,6 +183,23 @@ ANALYSIS_OUT_DIR = f"{V2ECOLI_DIR}/.pbg/runs/analysis"
 # S3 leaves this empty (a documented sync no-op); declared so anything a
 # script drops locally still lands under the run's own S3 prefix.
 TASK_OUT_DIR = f"{V2ECOLI_DIR}/.pbg/runs/task"
+# Where the container entrypoint syncs an uploaded task script (viva-api#631
+# slice 2): submit_uploaded_task stages the script to an S3 prefix and passes it
+# as CONTAINER_STAGE_S3, which batch-container-entrypoint.sh `aws s3 sync`s into
+# CONTAINER_STAGE_DIR before running the command -- so the job_cmd runs
+# `python <TASK_STAGE_DIR>/<script>`.
+TASK_STAGE_DIR = f"{V2ECOLI_DIR}/.pbg/task_script"
+
+
+def _safe_task_name(raw: str) -> str:
+    """Reduce a task name to the Batch jobName charset ([A-Za-z0-9_-], <=128) so
+    it can't fail submit_job. A user-provided name already passed
+    TaskRunRequest's validator; this also sanitizes the auto-derived script stem
+    (which can carry dots and other characters)."""
+    cleaned = re.sub(r"[^A-Za-z0-9_-]", "-", raw)[:128].strip("-")
+    return cleaned or "task"
+
+
 # Where the head writes the entrypoint's metrics report (uploaded as report.json).
 REPORT_PATH = "/tmp/report.json"  # noqa: S108
 
@@ -2989,11 +3006,89 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
         is no fixed set of env-var names to emit.
         """
         commit = request.commit or await self.get_latest_commit_hash()
+        task_name = _safe_task_name(request.name or Path(request.script).stem)
+        job_cmd = self._task_job_cmd(request.script, request.args)
+        return await self._dispatch_task(
+            task_name=task_name,
+            script_label=request.script,
+            job_cmd=job_cmd,
+            request=request,
+            commit=commit,
+            database_service=database_service,
+        )
+
+    async def submit_uploaded_task(
+        self,
+        request: TaskRunRequest,
+        *,
+        script_bytes: bytes,
+        filename: str,
+        database_service: DatabaseService,
+    ) -> TaskDTO:
+        """Submit an UPLOADED script (viva-api#631 slice 2).
+
+        The script bytes are staged to an S3 prefix; the container entrypoint's
+        existing input-staging (``CONTAINER_STAGE_S3`` -> ``CONTAINER_STAGE_DIR``,
+        an ``aws s3 sync``) pulls it into the container before the command runs,
+        so the job_cmd is ``python <TASK_STAGE_DIR>/<script>``. No entrypoint
+        change is needed -- this reuses the same stage-in path ParCa's cache
+        staging already uses.
+        """
+        commit = request.commit or await self.get_latest_commit_hash()
+        safe_name = Path(filename).name  # never trust an uploaded path
+        if not safe_name:
+            raise ValueError("uploaded task script has no filename")
+        task_name = _safe_task_name(request.name or Path(safe_name).stem)
+        stage_s3 = self._results_s3_uri(f"tasks/scripts/{task_name}-{_rand_suffix()}").rstrip("/")
+        self._upload_task_script(stage_s3, safe_name, script_bytes)
+        job_cmd = self._task_job_cmd(f"{TASK_STAGE_DIR}/{safe_name}", request.args)
+        return await self._dispatch_task(
+            task_name=task_name,
+            script_label=f"{stage_s3}/{safe_name}",
+            job_cmd=job_cmd,
+            request=request,
+            commit=commit,
+            database_service=database_service,
+            stage_s3=stage_s3,
+            stage_dir=TASK_STAGE_DIR,
+        )
+
+    @staticmethod
+    def _task_job_cmd(script: str, args: list[str]) -> str:
+        cmd = "python " + shlex.quote(script)
+        if args:
+            cmd += " " + " ".join(shlex.quote(a) for a in args)
+        return cmd
+
+    def _upload_task_script(self, stage_s3_prefix: str, filename: str, script_bytes: bytes) -> None:
+        """Put the uploaded script under ``stage_s3_prefix`` so the container's
+        input staging syncs it in. Uses the instance/task S3 credentials, same as
+        every other S3 write on this service."""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(stage_s3_prefix)
+        bucket = parsed.netloc
+        key = f"{parsed.path.strip('/')}/{filename}"
+        boto3.client("s3", region_name=get_settings().storage_s3_region).put_object(
+            Bucket=bucket, Key=key, Body=script_bytes
+        )
+
+    async def _dispatch_task(
+        self,
+        *,
+        task_name: str,
+        script_label: str,
+        job_cmd: str,
+        request: TaskRunRequest,
+        commit: str,
+        database_service: DatabaseService,
+        stage_s3: str | None = None,
+        stage_dir: str | None = None,
+    ) -> TaskDTO:
+        """Shared submit path for repo-path and uploaded tasks: one-node container
+        job (``_ensure_container_job_def`` + ``_submit_container``) recorded on the
+        ``task`` table so ``GET /tasks/{id}/status`` has a row to poll."""
         job_def = self._ensure_container_job_def(self._image_uri(commit), commit)
-        task_name = request.name or Path(request.script).stem
-        job_cmd = "python " + shlex.quote(request.script)
-        if request.args:
-            job_cmd += " " + " ".join(shlex.quote(a) for a in request.args)
         out_uri = self._results_s3_uri(f"tasks/{task_name}-{_rand_suffix()}").rstrip("/")
         task_env: dict[str, str] | None = None
         if request.sim_data_refs:
@@ -3004,12 +3099,14 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             job_cmd=job_cmd,
             out_s3=out_uri,
             out_dir=TASK_OUT_DIR,
+            stage_s3=stage_s3,
+            stage_dir=stage_dir,
             task_env=task_env,
             memory_class=request.memory_class,
         )
         return await database_service.record_task(
             name=task_name,
-            script=request.script,
+            script=script_label,
             args=list(request.args),
             sim_data_refs=request.sim_data_refs,
             memory_class=request.memory_class,

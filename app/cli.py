@@ -1902,9 +1902,14 @@ def analysis_plots(
 # -- Task commands (viva-api#631: in-region task-run verb) --
 
 
-@task_cli.command("run", help="Submit a self-contained repo-path script to the in-region task compute.")
+@task_cli.command("run", help="Submit a self-contained script (repo-path or --upload) to the in-region task compute.")
 def task_run(
-    script: str = Argument(help="Repo-path to a script already in the image (e.g. scripts/foo.py)."),
+    script: str | None = Argument(
+        default=None, help="Repo-path to a script already in the image (e.g. scripts/foo.py). Omit when using --upload."
+    ),
+    upload: str | None = Option(
+        default=None, help="Local path to a script file to upload and run, instead of a repo-path script."
+    ),
     args: list[str] = Option(
         default_factory=list,
         help="Positional argument to pass to the script, in order. Repeat for multiple.",
@@ -1926,17 +1931,35 @@ def task_run(
     from viva_api.simulation.models import TaskRunRequest
 
     console = get_console()
+    if bool(script) == bool(upload):
+        console.print(
+            "[memphis.error]Provide exactly one of: a repo-path SCRIPT argument, or --upload <local file>.[/]"
+        )
+        raise typer.Exit(1)
     data_service = get_data_service(base_url=base_url)
-    request = TaskRunRequest(
-        script=script,
-        args=list(args),
-        sim_data_refs=_parse_task_env(sim_data) if sim_data else None,
-        memory_class=memory_class,
-        commit=commit,
-        name=name,
-    )
+    sim_data_refs = _parse_task_env(sim_data) if sim_data else None
     with console.status("[memphis.spinner]Submitting task..."):
-        task = data_service.run_task(request)
+        if upload:
+            task = data_service.run_uploaded_task(
+                local_path=upload,
+                args=list(args),
+                sim_data_refs=sim_data_refs,
+                memory_class=memory_class,
+                commit=commit,
+                name=name,
+            )
+        elif script is not None:  # the XOR check above guarantees this; also narrows for mypy
+            request = TaskRunRequest(
+                script=script,
+                args=list(args),
+                sim_data_refs=sim_data_refs,
+                memory_class=memory_class,
+                commit=commit,
+                name=name,
+            )
+            task = data_service.run_task(request)
+        else:  # unreachable: the XOR check above guarantees exactly one path
+            raise typer.Exit(1)
 
     console.print(f"[memphis.success]Task submitted![/]  ID: {task.database_id}")
     display_json(task.model_dump(), console)
