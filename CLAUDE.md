@@ -21,8 +21,7 @@ SMS API (Simulating Microbial Systems API, also known as Atlantis API) is a Fast
 ```
 viva_api/
 ├── api/           # FastAPI routes and generated OpenAPI client
-│   ├── routers/   # Route handlers: sms, core, compose, env_worker, antibiotics,
-│   │              #   biofactory, inference, variants
+│   ├── routers/   # Route handlers: sms, core, compose, env_worker
 │   ├── client/    # Auto-generated OpenAPI client (do NOT edit manually)
 │   └── spec/      # Generated OpenAPI spec
 ├── analysis/      # Analysis job orchestration (post-simulation)
@@ -337,7 +336,7 @@ async with get_ssh_session_service().session() as ssh:
 ## Tooling
 
 - **Linting/Formatting**: ruff (line length 120). Pre-commit runs ruff lint + ruff format.
-- **Type checking**: mypy with strict mode. Excludes: `viva_api/api/client/`, `app/ui/`, `notes/`, `scratchpads/`.
+- **Type checking**: mypy with strict mode. Excludes: `viva_api/api/client/`, `app/ui/`, `notes/`.
 - **Python**: 3.12.9 (pinned exact).
 - **Package manager**: uv with hatchling build backend.
 
@@ -583,7 +582,3 @@ switching the workbench to a freshly materialized build — cold-start dominated
 suspected, time the *server* side rather than trusting the client's status.
 `idleTimeout` lives in `../sms-cdk/lib/internal-alb-stack.ts` and needs
 `cdk deploy` — see Pitfall 3.
-
-# PRIORITY
-
-Implement that which is laid out in ./PLAN.md, if not already done.
