@@ -30,21 +30,22 @@ from viva_api.simulation.simulation_service_ray import (
 # analysis_memory_class — the sizing rule
 # ---------------------------------------------------------------------------
 
-def test_single_scale_is_standard_at_any_size():
-    opts = {"single": {"ptools_rxns": {}}}
+
+def test_single_scale_is_standard_at_any_size() -> None:
+    opts: dict[str, Any] = {"single": {"ptools_rxns": {}}}
     assert analysis_memory_class(opts, n_seeds=64, n_generations=64) == "standard"
 
 
 @pytest.mark.parametrize("scale", ["multigeneration", "multiseed"])
-def test_multicell_scale_routes_large_past_the_standard_box(scale):
-    opts = {scale: {"ptools_rxns_multiseed": {}}}
+def test_multicell_scale_routes_large_past_the_standard_box(scale: str) -> None:
+    opts: dict[str, Any] = {scale: {"ptools_rxns_multiseed": {}}}
     assert analysis_memory_class(opts, n_generations=4) == "standard"
     assert analysis_memory_class(opts, n_generations=8) == "large"
     assert analysis_memory_class(opts, n_generations=10) == "large"
 
 
-def test_max_over_scales_wins():
-    opts = {
+def test_max_over_scales_wins() -> None:
+    opts: dict[str, Any] = {
         "single": {"ptools_rxns": {}},
         "multigeneration": {"ptools_rxns_multigeneration": {}},
     }
@@ -52,7 +53,7 @@ def test_max_over_scales_wins():
     assert analysis_memory_class(opts, n_generations=3) == "standard"
 
 
-def test_non_scale_map_and_missing_generations_are_standard():
+def test_non_scale_map_and_missing_generations_are_standard() -> None:
     # The "applicable" keyword (a str, resolved inside the image) has nothing to
     # size on here; neither does a missing generation count.
     assert analysis_memory_class("applicable", n_generations=10) == "standard"
@@ -63,6 +64,7 @@ def test_non_scale_map_and_missing_generations_are_standard():
 # ---------------------------------------------------------------------------
 # _submit_container — queue selection
 # ---------------------------------------------------------------------------
+
 
 def _submit(memory_class: str, *, large_queue: str) -> Any:
     settings = _container_settings(ray_container_large_queue=large_queue)
@@ -82,23 +84,23 @@ def _submit(memory_class: str, *, large_queue: str) -> Any:
     return call
 
 
-def test_large_routes_to_the_large_queue_when_provisioned():
+def test_large_routes_to_the_large_queue_when_provisioned() -> None:
     call = _submit("large", large_queue="smscdk-ray-standalone-large")
     assert call.kwargs["jobQueue"] == "smscdk-ray-standalone-large"
 
 
-def test_large_falls_back_to_standard_queue_when_unset():
+def test_large_falls_back_to_standard_queue_when_unset() -> None:
     # Unprovisioned large queue: unchanged behaviour, the standard queue.
     call = _submit("large", large_queue="")
     assert call.kwargs["jobQueue"] == "smscdk-ray-standalone"
 
 
-def test_standard_uses_the_standard_queue_even_when_large_exists():
+def test_standard_uses_the_standard_queue_even_when_large_exists() -> None:
     call = _submit("standard", large_queue="smscdk-ray-standalone-large")
     assert call.kwargs["jobQueue"] == "smscdk-ray-standalone"
 
 
-def test_default_memory_class_is_standard():
+def test_default_memory_class_is_standard() -> None:
     # Callers that don't pass memory_class (parca, builds, chain generations) are
     # unaffected: the standard queue, even with a large queue provisioned.
     settings = _container_settings(ray_container_large_queue="smscdk-ray-standalone-large")

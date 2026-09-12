@@ -202,6 +202,16 @@ APPLICABLE_ANALYSES = "applicable"
 # v2ecoli.workflow.analysis_runner: a per-lineage multiseed/multigeneration group
 # peaks ~8 GB/generation (~78 GB over 10 generations, #786), past the 60 GB
 # standard box; single/multidaughter read one cell and stay standard.
+#
+# DRIFT TRAP: v2ecoli's copy also honors an analysis class that DECLARES
+# `memory_class = "large"` (analysis_runner._declared_memory_class); this copy
+# does NOT -- it derives purely from scale x generations, because sms-api has no
+# ANALYSIS_REGISTRY to read a class attribute from. So declaring memory_class on
+# an analysis currently has NO effect on which queue the API picks. Latent today
+# (nothing declares it). If a module ever needs to force "large" regardless of
+# scale, thread the declared class through analysis_options / task_env so this
+# function can see it; until then a declaration would route large in v2ecoli's
+# in-image reasoning but STANDARD here -- do not let that gap go silent.
 _ANALYSIS_STANDARD_INSTANCE_GB = 60
 _ANALYSIS_GB_PER_GENERATION = 8.0
 _ANALYSIS_MULTI_CELL_SCALES = frozenset({"multigeneration", "multiseed"})
@@ -233,6 +243,7 @@ def analysis_memory_class(
         if scale in _ANALYSIS_MULTI_CELL_SCALES and isinstance(entries, dict) and entries and over_standard:
             return "large"
     return "standard"
+
 
 # ── Chain-dispatch campaign submission (backlog item 33) ────────────────────
 #
@@ -1085,13 +1096,12 @@ class SimulationServiceRay(SimulationService):
         large_queue = getattr(settings, "ray_container_large_queue", "")
         if memory_class == "large" and isinstance(large_queue, str) and large_queue.strip():
             job_queue = large_queue
-            logger.info(
-                "Container job %s: memory_class=large -> large-memory queue %s", job_name, job_queue
-            )
+            logger.info("Container job %s: memory_class=large -> large-memory queue %s", job_name, job_queue)
         elif memory_class == "large":
             logger.info(
-                "Container job %s: memory_class=large but no ray_container_large_queue set; "
-                "using standard queue %s", job_name, job_queue
+                "Container job %s: memory_class=large but no ray_container_large_queue set; using standard queue %s",
+                job_name,
+                job_queue,
             )
 
         env: list[dict[str, str]] = [
