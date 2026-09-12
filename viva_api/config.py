@@ -374,6 +374,13 @@ class Settings(BaseSettings):
     # blank queue/job-def (matches compose_ray_image_tag's own precedent below).
     ray_container_queue: str = ""  # Batch container job queue (e.g. "smscdk-ray-standalone")
     ray_container_job_definition: str = ""  # Batch container job definition (e.g. "smscdk-ray-container")
+    # A second container queue backed by a large-memory (200 GB r7i) compute
+    # environment, for analysis jobs whose multiseed/multigeneration gather peaks
+    # past the standard box (v2ecoli#786; routing derived by analysis_memory_class
+    # in simulation_service_ray). Same fallback convention as ray_mnp_standalone_queue:
+    # empty means "not provisioned", and _submit_container falls back to
+    # ray_container_queue, so behaviour is unchanged until sms-cdk provisions it.
+    ray_container_large_queue: str = ""  # Batch large-memory container queue (e.g. "smscdk-ray-standalone-large")
 
     # EC2 build machine (legacy, replaced by Batch DooD builds)
     build_node_host: str = ""
