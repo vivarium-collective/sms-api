@@ -96,11 +96,9 @@ class ComposeDocumentSubmission:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "document": document,
-            }
-        )
+        field_dict.update({
+            "document": document,
+        })
         if interval_time is not UNSET:
             field_dict["interval_time"] = interval_time
         if batch_submission is not UNSET:

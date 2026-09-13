@@ -71,11 +71,9 @@ class TaskRunRequest:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "script": script,
-            }
-        )
+        field_dict.update({
+            "script": script,
+        })
         if args is not UNSET:
             field_dict["args"] = args
         if sim_data_refs is not UNSET:

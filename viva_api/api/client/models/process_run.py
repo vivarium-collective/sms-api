@@ -63,11 +63,9 @@ class ProcessRun:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "address": address,
-            }
-        )
+        field_dict.update({
+            "address": address,
+        })
         if config is not UNSET:
             field_dict["config"] = config
         if inputs is not UNSET:

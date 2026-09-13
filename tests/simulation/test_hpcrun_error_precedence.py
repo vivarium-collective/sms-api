@@ -170,7 +170,7 @@ async def test_status_poll_does_NOT_lock_the_trace_poller_out_of_a_nextflow_head
 
     # This is the bug, pinned: whoever writes terminal FIRST decides forever.
     assert won is False
-    assert row.status is JobStatus.COMPLETED          # wrong, and permanent
+    assert row.status is JobStatus.COMPLETED  # wrong, and permanent
     assert row.error_message is None
     # ... and the row has already dropped out of the poller's work list, so there
     # is no later tick that could correct it.
