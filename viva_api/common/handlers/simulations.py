@@ -102,6 +102,12 @@ _MANIFEST_REQUIRED_COLUMNS = {"dataset_id", "file_path"}
 # Safety limits
 _MAX_TARBALL_BYTES = 500 * 1024 * 1024  # 500 MB
 _MAX_FILE_COUNT = 10_000
+# A run emits a span per stage/generation/seed, so a long multiseed x multigen
+# campaign can have thousands. The flat event list is already bounded (limit <=
+# 1000 + cursor); the span tree must be too (eagmon, #612 review S2). Generous
+# enough that a real campaign renders whole, finite enough that one status call
+# cannot pull an unbounded result set.
+_MAX_SPAN_ROWS = 5_000
 _SKIP_DIRS = {".git", "__pycache__", ".venv", "node_modules", ".tox"}
 _SKIP_EXTENSIONS = {".pyc", ".pyo", ".so", ".dylib", ".exe"}
 
@@ -1075,7 +1081,15 @@ async def _simulation_run(
         try:
             from viva_api.simulation.event_ingest import open_span_labels
 
-            spans = {s.span_id: s for s in await db_service.list_hpcrun_spans(hpc_run.database_id)}
+            # ``open_span_labels`` discards closed spans anyway, so ask SQL for the
+            # open ones: bounded by how many can be open AT ONCE (campaign > lineage >
+            # generation), not by how many the run has produced. A plain LIMIT would be
+            # wrong here -- ordered by start_ts it truncates the NEWEST spans, which are
+            # exactly the open ones ``stage`` is derived from.
+            spans = {
+                s.span_id: s
+                for s in await db_service.list_hpcrun_spans(hpc_run.database_id, open_only=True)
+            }
             if spans:
                 open_spans = open_span_labels(spans)
                 stage = " > ".join(open_spans) if open_spans else stage
@@ -1134,7 +1148,7 @@ async def get_simulation_events(
     next_cursor = events[-1].cursor if len(events) >= limit and events and events[-1].cursor is not None else None
     response = SimulationEvents(id=int(id), trace_id=hpc_run.trace_id, events=events, next=next_cursor)
     if tree:
-        spans = await db_service.list_hpcrun_spans(hpc_run.database_id)
+        spans = await db_service.list_hpcrun_spans(hpc_run.database_id, limit=_MAX_SPAN_ROWS)
         response.tree = build_span_tree(spans, events)
     return response
 

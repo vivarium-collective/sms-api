@@ -87,6 +87,30 @@ async def test_status_carries_stage_generation_and_open_spans_from_the_row_and_s
 
 
 @pytest.mark.asyncio
+async def test_status_asks_SQL_for_open_spans_only() -> None:
+    """S2 (eagmon, #612): ``/status`` used to read EVERY span of the run just to
+    derive ``stage``, which is a span per stage/generation/seed on a long campaign.
+
+    A plain LIMIT would be the wrong bound here: the query is ordered by
+    ``start_ts``, so truncating drops the NEWEST spans -- precisely the open ones
+    ``stage`` is computed from. Filtering to ``end_ts IS NULL`` in SQL bounds the
+    read by how many spans can be open AT ONCE instead, and cannot drop the rows
+    the answer depends on.
+    """
+    _events, spans = _stream("lineage_running_gen1.jsonl")
+    db = _db(_row(), spans=[s for s in spans if s.end_ts is None])
+    service = MagicMock()
+    service.get_job_status = AsyncMock(return_value=MagicMock(status=JobStatus.RUNNING, error_message=None))
+    with patch.object(handlers, "get_simulation_service_for_job", return_value=service):
+        run = await handlers.get_simulation_status(db_service=db, id=943)
+
+    db.list_hpcrun_spans.assert_awaited_once()
+    assert db.list_hpcrun_spans.await_args.kwargs.get("open_only") is True
+    # and the answer is unchanged by the narrower read
+    assert run.stage == "lineage[variant=0,lineage_seed=0] > generation[generation=1]"
+
+
+@pytest.mark.asyncio
 async def test_status_of_a_row_without_a_trace_answers_the_three_classic_fields_only() -> None:
     """A pre-migration row (or any run on a legacy image) answers exactly what
     it always did. Every field this plan adds is null, and no span lookup is
@@ -102,6 +126,22 @@ async def test_status_of_a_row_without_a_trace_answers_the_three_classic_fields_
         assert getattr(run, field) is None, field
     assert run.open_spans is None
     db.list_hpcrun_spans.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_the_span_tree_query_is_BOUNDED() -> None:
+    """S2 (eagmon, #612): the flat event list is bounded (limit <= 1000 + cursor);
+    the ?tree= span query must be too. A long multiseed x multigen run emits a span
+    per stage/generation/seed, so an uncapped read is an unbounded result set on an
+    ordinary API call."""
+    from viva_api.common.handlers.simulations import _MAX_SPAN_ROWS, get_simulation_events
+
+    db = _db(_row(), events=[], spans=[])
+    await get_simulation_events(db_service=db, id=1, tree=True)
+
+    db.list_hpcrun_spans.assert_awaited_once()
+    assert db.list_hpcrun_spans.await_args.kwargs.get("limit") == _MAX_SPAN_ROWS
+    assert _MAX_SPAN_ROWS > 0
 
 
 @pytest.mark.asyncio

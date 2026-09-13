@@ -182,7 +182,18 @@ class DatabaseService(ABC):
         pass
 
     @abstractmethod
-    async def list_hpcrun_spans(self, hpcrun_id: int) -> list[SimulationSpan]:
+    async def list_hpcrun_spans(
+        self, hpcrun_id: int, *, open_only: bool = False, limit: int | None = None
+    ) -> list[SimulationSpan]:
+        """Spans of one run, outermost-ish first (start_ts, then id).
+
+        ``open_only`` filters to spans with no ``end_ts`` IN SQL -- what ``/status``
+        needs for ``stage``, and inherently bounded by how many spans can be open at
+        once (campaign > lineage > generation), rather than by how many the run has
+        produced. ``limit`` caps the row count for callers that genuinely need the
+        whole set (the ``?tree=`` view); a long multiseed x multigen run has a span
+        per stage/generation/seed, so neither caller should be unbounded
+        (eagmon, #612 review S2)."""
         pass
 
     @abstractmethod
@@ -1161,13 +1172,19 @@ class DatabaseServiceSQL(DatabaseService):
             row.error = span.error
 
     @override
-    async def list_hpcrun_spans(self, hpcrun_id: int) -> list[SimulationSpan]:
+    async def list_hpcrun_spans(
+        self, hpcrun_id: int, *, open_only: bool = False, limit: int | None = None
+    ) -> list[SimulationSpan]:
         async with self.async_sessionmaker() as session:
             stmt = (
                 select(ORMHpcRunSpan)
                 .where(ORMHpcRunSpan.hpcrun_id == hpcrun_id)
                 .order_by(ORMHpcRunSpan.start_ts.nulls_last(), ORMHpcRunSpan.id)
             )
+            if open_only:
+                stmt = stmt.where(ORMHpcRunSpan.end_ts.is_(None))
+            if limit is not None:
+                stmt = stmt.limit(limit)
             result: Result[tuple[ORMHpcRunSpan]] = await session.execute(stmt)
             return [self._span_from_orm(row) for row in result.scalars().all()]
 
