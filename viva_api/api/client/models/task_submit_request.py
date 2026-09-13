@@ -44,12 +44,10 @@ class TaskSubmitRequest:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "job_name": job_name,
-                "method": method,
-            }
-        )
+        field_dict.update({
+            "job_name": job_name,
+            "method": method,
+        })
         if params is not UNSET:
             field_dict["params"] = params
 

@@ -44,11 +44,9 @@ class EnvWorkerStatusResponse:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "job_name": job_name,
-            }
-        )
+        field_dict.update({
+            "job_name": job_name,
+        })
         if status is not UNSET:
             field_dict["status"] = status
         if exists is not UNSET:

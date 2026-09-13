@@ -571,7 +571,7 @@ async def test_get_simulation_status_non_chain_run_unaffected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_status_does_NOT_persist_a_terminal_nextflow_head(monkeypatch) -> None:
+async def test_status_does_NOT_persist_a_terminal_nextflow_head() -> None:
     """B1 (eagmon, #609): GET /status must not finalize a Nextflow head.
 
     The sim-749 shape: the head exits 0 with a gather task dead, so the K8s Job
@@ -616,7 +616,7 @@ async def test_status_does_NOT_persist_a_terminal_nextflow_head(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
-async def test_status_still_persists_a_terminal_head_for_other_backends(monkeypatch) -> None:
+async def test_status_still_persists_a_terminal_head_for_other_backends() -> None:
     """The B1 fix is scoped to K8S_NEXTFLOW. Other backends have no separate trace
     authority, so a live poll is the only source and must still be cached -- this
     is the viva-api#484 behaviour (a cancelled campaign reading "unknown" a minute

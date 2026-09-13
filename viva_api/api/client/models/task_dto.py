@@ -106,13 +106,11 @@ class TaskDTO:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "database_id": database_id,
-                "name": name,
-                "script": script,
-            }
-        )
+        field_dict.update({
+            "database_id": database_id,
+            "name": name,
+            "script": script,
+        })
         if args is not UNSET:
             field_dict["args"] = args
         if sim_data_refs is not UNSET:

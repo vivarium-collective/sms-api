@@ -34,14 +34,12 @@ class RelayStartResponse:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "job_name": job_name,
-                "image": image,
-                "namespace": namespace,
-                "connected": connected,
-            }
-        )
+        field_dict.update({
+            "job_name": job_name,
+            "image": image,
+            "namespace": namespace,
+            "connected": connected,
+        })
 
         return field_dict
 
