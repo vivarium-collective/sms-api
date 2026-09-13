@@ -72,11 +72,9 @@ class SimulationEvents:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "id": id,
-            }
-        )
+        field_dict.update({
+            "id": id,
+        })
         if trace_id is not UNSET:
             field_dict["trace_id"] = trace_id
         if events is not UNSET:

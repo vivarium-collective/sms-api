@@ -71,12 +71,10 @@ class SimulationTask:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "name": name,
-                "status": status,
-            }
-        )
+        field_dict.update({
+            "name": name,
+            "status": status,
+        })
         if job_id is not UNSET:
             field_dict["job_id"] = job_id
         if task_hash is not UNSET:

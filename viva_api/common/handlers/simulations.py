@@ -1101,10 +1101,7 @@ async def _simulation_run(
             # generation), not by how many the run has produced. A plain LIMIT would be
             # wrong here -- ordered by start_ts it truncates the NEWEST spans, which are
             # exactly the open ones ``stage`` is derived from.
-            spans = {
-                s.span_id: s
-                for s in await db_service.list_hpcrun_spans(hpc_run.database_id, open_only=True)
-            }
+            spans = {s.span_id: s for s in await db_service.list_hpcrun_spans(hpc_run.database_id, open_only=True)}
             if spans:
                 open_spans = open_span_labels(spans)
                 stage = " > ".join(open_spans) if open_spans else stage
