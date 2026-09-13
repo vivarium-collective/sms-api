@@ -1038,18 +1038,33 @@ async def get_simulation_status(db_service: DatabaseService, id: int) -> Simulat
         logger.warning(f"Job {hpc_run.job_id} not yet visible in backend, returning UNKNOWN")
         return SimulationRun(id=int(id), status=JobStatus.UNKNOWN)
 
-    # Persist terminal status to DB so future calls don't need to hit the backend
-    if job_status_info.status.is_terminal:
+    # Persist terminal status to DB so future calls don't need to hit the backend.
+    #
+    # B1 (eagmon, #609 review) -- NOT for a Nextflow head. There the K8s Job
+    # condition is not the run's outcome: a head can exit 0 with a gather task
+    # dead (the sim-749 case), so K8s reports Complete while the trace says
+    # otherwise. Finalization is single-winner by construction --
+    # ``finalize_nextflow_head``'s ``WHERE status IN (PENDING, RUNNING)`` means
+    # whoever writes terminal FIRST decides forever, and a terminal row
+    # short-circuits this handler at the top, so there is no self-correction.
+    # Persisting the raw condition here would therefore lock the trace poller out
+    # through nothing more exotic than someone calling GET /status inside the
+    # <= 30 s gap before the next scheduler tick -- and the run would read
+    # COMPLETED forever with a failed task in it.
+    #
+    # So: report what the backend currently says, but let the poller be the one
+    # that writes it down. The cost is one extra backend poll per /status call
+    # until the scheduler finalizes; the alternative is a wrong terminal status.
+    if job_status_info.status.is_terminal and hpc_run.job_id.backend != JobBackend.K8S_NEXTFLOW:
         update = JobStatusUpdate(
             job_id=hpc_run.job_id,
             status=job_status_info.status,
             start_time=job_status_info.start_time,
             end_time=job_status_info.end_time,
             error_message=job_status_info.error_message,
-            # A live poll's message is the backend's generic one (a K8s Job
-            # condition, a Batch statusReason); it must not overwrite a task
-            # traceback the scheduler already captured.
-            error_source="k8s_condition" if hpc_run.job_id.backend == JobBackend.K8S_NEXTFLOW else None,
+            # Backends other than the Nextflow head have no separate trace
+            # authority, so a live poll is the only source and may write freely.
+            error_source=None,
             exit_code=job_status_info.exit_code,
         )
         await db_service.update_hpcrun_status(hpcrun_id=hpc_run.database_id, update=update)
