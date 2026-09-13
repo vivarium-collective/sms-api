@@ -87,12 +87,14 @@ class NewGeneCacheRequest:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "parca_dataset_id": parca_dataset_id,
-            "variant": variant,
-            "expression": expression,
-            "translation_efficiency": translation_efficiency,
-        })
+        field_dict.update(
+            {
+                "parca_dataset_id": parca_dataset_id,
+                "variant": variant,
+                "expression": expression,
+                "translation_efficiency": translation_efficiency,
+            }
+        )
         if rel_exp_adj is not UNSET:
             field_dict["rel_exp_adj"] = rel_exp_adj
         if rel_trl_eff_adj is not UNSET:

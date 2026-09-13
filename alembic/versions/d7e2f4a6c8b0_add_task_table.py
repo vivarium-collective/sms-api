@@ -1,0 +1,56 @@
+"""add task table (in-region task-run verb, viva-api#631)
+
+Revision ID: d7e2f4a6c8b0
+Revises: f76e43d01841
+Create Date: 2026-09-12
+
+Adds the ``task`` table backing ``POST /api/v1/tasks`` — a self-contained script
+run on the in-region task compute (slice 1). Distinct from ``analysis`` because a
+task is an arbitrary script, not a named analysis over a sweep. Introduces the
+``taskstatusdb`` enum (labels match the TaskStatusDB member names, as create_all
+uses member names).
+"""
+
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+from alembic import op
+
+# revision identifiers, used by Alembic.
+revision: str = "d7e2f4a6c8b0"
+down_revision: str | Sequence[str] | None = "f76e43d01841"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+# Enum labels match the TaskStatusDB member names (create_all uses member names).
+_task_status = postgresql.ENUM("COMPUTING", "READY", "FAILED", name="taskstatusdb")
+
+
+def upgrade() -> None:
+    _task_status.create(op.get_bind(), checkfirst=True)
+    op.create_table(
+        "task",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("name", sa.String(), nullable=False),
+        sa.Column("script", sa.String(), nullable=False),
+        sa.Column("args", postgresql.JSONB(), nullable=False, server_default=sa.text("'[]'")),
+        sa.Column("sim_data_refs", postgresql.JSONB(), nullable=True),
+        sa.Column("memory_class", sa.String(), nullable=True, server_default="standard"),
+        sa.Column("status", _task_status, nullable=True),
+        sa.Column("job_name", sa.String(), nullable=True),
+        sa.Column("job_id_ext", sa.String(), nullable=True),
+        sa.Column("out_uri", sa.String(), nullable=True),
+        sa.Column("result_uri", sa.String(), nullable=True),
+        sa.Column("error_message", sa.String(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=True, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(), nullable=True, server_default=sa.func.now()),
+    )
+    op.create_index("ix_task_job_id_ext", "task", ["job_id_ext"])
+
+
+def downgrade() -> None:
+    op.drop_index("ix_task_job_id_ext", table_name="task")
+    op.drop_table("task")
+    _task_status.drop(op.get_bind(), checkfirst=True)

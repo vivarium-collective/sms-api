@@ -39,12 +39,14 @@ class NewGeneCacheJob:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "job_id": job_id,
-            "commit": commit,
-            "variant": variant,
-            "cache_s3_uri": cache_s3_uri,
-        })
+        field_dict.update(
+            {
+                "job_id": job_id,
+                "commit": commit,
+                "variant": variant,
+                "cache_s3_uri": cache_s3_uri,
+            }
+        )
 
         return field_dict
 

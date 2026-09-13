@@ -96,11 +96,11 @@ order that gives value at each step without waiting for the engine PR.
 
 | primitive | where | state |
 |---|---|---|
-| `PROCESS_BIGRAPH_TRACE_FILE` JSONL sink + `_trace_invoke` | process-bigraph `composite.py:43-110`, fired at `:3049` | built, referenced nowhere, records only *successful* invokes |
+| `PROCESS_BIGRAPH_TRACE_FILE` JSONL sink + `_trace_invoke` | process-bigraph `composite.py:43-110`, fired at `:3049` | built, referenced nowhere, records only *successful* invokes — **removed by #209; compatibility decision in D2′** |
 | `_summarize_value` (scalars, numpy → shape/dtype/sum/head, dict depth 3) | `composite.py:59-87` | reusable as the state summariser; lacks NaN/negative flags |
 | `TimingSummary` / `Composite.timing_summary()` | `composite.py:150-192`, `:2724` | computed on every run, printed by nothing |
 | `ReconcileSummary` (touched leaf paths + structural flag per tick) | `composite.py:3211-3220` | used for scheduling, then discarded |
-| `PROCESS_BIGRAPH_PROFILE_PROCESSES` per-process timing | `composite.py:55`, `:1508` | env-flippable, undocumented |
+| `PROCESS_BIGRAPH_PROFILE_PROCESSES` per-process timing | `composite.py:55`, `:1508` | env-flippable, undocumented — kept intact by #209 (D2′) |
 | Nextflow `trace.csv` (per-task status + Batch `native_id`) | staged out by `_render_nf_command` (viva-api `simulation_service_ray.py:1585`) | never read |
 | Nextflow weblog receiver + typed models | viva-api `common/hpc/nextflow_weblog.py` | wired only into the legacy SLURM path |
 | `K8sJobService.get_pod_termination` (reason + exit code) | `common/hpc/k8s_job_service.py:116-146` | unused on the simulation path |
@@ -270,7 +270,8 @@ New module `process_bigraph/events.py`:
   default to **stdout**, so a container gets events with zero configuration.
 - Move `_summarize_value` here (re-export from `composite`), add `min/max/nan_count/neg_count`
   to the ndarray branch, add `summarize_state(state, max_roots=64)` (one level of root
-  stores). Retire `PROCESS_BIGRAPH_TRACE_FILE`/`PROCESS_BIGRAPH_PROFILE_PROCESSES` as aliases.
+  stores). Retire `PROCESS_BIGRAPH_TRACE_FILE`/`PROCESS_BIGRAPH_PROFILE_PROCESSES` as aliases
+  — **see D2′ for what "alias" must mean; the branch as of `411203e` changes the trace file's shape.**
 
 Hooks in `process_bigraph/composite.py` (all data already in scope):
 - **H3 `run` `:2618-2629`**: `run_start` before the contextvar set; `run_end` in the
@@ -310,6 +311,150 @@ path and re-raises the original type; a raising sink never breaks the sim; entry
 Ray `batch_update` error names the proc_id; **instrumentation on/off yields identical state**
 (the existing invariant test, extended). `test_nextflow_deploy.py`: retry only on the exit set,
 per-label override, tag directive.
+
+### D2′. Legacy tracing vs the new events API — the compatibility decision (Jim, 2026-09-11, on #209)
+
+process-bigraph already shipped two observability hooks before this plan. #209 must add the
+OTel-style events **without breaking anyone who uses them**. This section records what each
+one is, what the branch did to it, and the decision.
+
+#### What `main` has today (the legacy mechanism)
+
+Both switches are read **at import time** in `composite.py` (`:43-110`, hook at `:3049`).
+
+```bash
+# one flat JSONL record per *successful* Process/Step invoke; nothing else in the file
+PROCESS_BIGRAPH_TRACE_FILE=/tmp/run_a.jsonl  python my_sim.py
+PROCESS_BIGRAPH_TRACE_FILE=/tmp/run_b.jsonl  python my_sim.py
+diff <(jq -c . /tmp/run_a.jsonl) <(jq -c . /tmp/run_b.jsonl)      # first diverging step
+
+# per-process invoke time in TimingSummary.per_process (a dict write on the hot path, so opt-in)
+PROCESS_BIGRAPH_PROFILE_PROCESSES=1 python my_sim.py
+```
+
+```python
+# the same two things from code
+composite._profile_per_process = True          # before run(); or the env var above
+composite.run(3600.0)
+print(composite.timing_summary())              # TimingSummary: total / process / framework, top-N paths
+```
+
+Trace record (one per line; `path` is a **list**, `gt` is the key for global time):
+
+```json
+{"path": ["agents", "0", "metabolism"], "cls": "Metabolism", "gt": 12.0, "interval": 1.0,
+ "input": {"...": "_summarize_value(state)"}, "output": {"...": "_summarize_value(update)"}}
+```
+
+Properties worth keeping in mind: no overhead when unset; the file is opened once at import
+with `buffering=1`, so a Ray worker that inherits the env writes its own lines to the same
+path; a trace error is written as `{"trace_error": ...}` and never raised into the sim.
+`TimingSummary` is a **pull** API (the caller asks after `run()`); the trace file is a **push**
+API for one event type with no context (no ids, no timestamps, no failures).
+
+#### What #209 adds (the new mechanism)
+
+```bash
+# push: a stream of enveloped events to one or more sinks, on only when asked
+PBG_EVENT_SINKS=stdout,file:/tmp/events.jsonl \
+PBG_EVENT_DETAIL=timing,invoke,spans \
+PBG_TRACEPARENT=00-<32 hex trace_id>-<16 hex parent span>-01 \
+PBG_TRACE_BAGGAGE='experiment=exp1,replicate=3' \
+PBG_EVENT_TAGS='job=abc123,backend=batch' \
+python my_sim.py
+```
+
+```python
+from process_bigraph import events
+
+em = events.configure('file:/tmp/events.jsonl')          # or rely on PBG_EVENT_SINKS
+em.bind(experiment='exp1')                                # opaque baggage on every event
+with em.span('task', name='gen-3'):                       # spans nest: task -> run -> (tick/invoke)
+    composite.run(3600.0)                                 # run.start / tick / process.exception / run.end
+em.event('my_app.checkpoint', path='s3://...', component='my_app')   # callers own their namespaces
+
+class MySink(events.EventSink):                           # any destination; the engine imports no SDKs
+    def emit(self, event): ...
+events.register_sink_factory('myscheme', lambda spec: MySink(spec))   # PBG_EVENT_SINKS=myscheme:...
+```
+
+Every line is the D1 envelope; the per-invoke record (only with `detail=invoke`) is
+
+```json
+{"v": 1, "ts": "2026-09-11T14:02:11.318Z", "seq": 412, "source": "ip-10-0-1-7-311",
+ "component": "process_bigraph", "event": "process.invoke", "level": "debug",
+ "trace_id": "…32 hex…", "span_id": "…16 hex…", "parent_span_id": "…16 hex…",
+ "global_time": 12.0, "wall_time": 41.2, "baggage": {"experiment": "exp1"}, "tags": {"job": "abc123"},
+ "payload": {"path": "agents/0/metabolism", "cls": "Metabolism", "interval": 1.0,
+             "input": {"...": "..."}, "output": {"...": "..."}}}
+```
+
+#### What the branch did to the legacy hooks (verified against merge-base `78d1488`, branch `411203e`)
+
+| legacy construct | on the branch | compatible? |
+|---|---|---|
+| `PROCESS_BIGRAPH_PROFILE_PROCESSES` | read in `events.configure()` → `detail=timing` → `Composite._profile_per_process` | **yes** — same effect; `composite._profile_per_process = True` by hand still works (the run-time check only raises the flag, never clears it) |
+| `TimingSummary`, `Composite.timing_summary()` | untouched, still exported; `run.end` additionally carries `top5` when `timing` is on | **yes** — the `tests.py:3144-3162` test passes |
+| `_summarize_value` | moved to `events.py`, re-exported from `composite` | **yes** |
+| `PROCESS_BIGRAPH_TRACE_FILE` | alias in `configure()`: `file:<path>` sink + `detail=invoke` | **file exists, contents differ** — see below |
+| `_TRACE_FH`, `_trace_invoke` | deleted (private names) | no known importer |
+
+The trace file a legacy client gets back is not the file it had: (a) each line is the full
+envelope, the old fields are under `payload`, `gt` became top-level `global_time`, and `path`
+is a slash-joined string instead of a list; (b) the file also receives `run.start`, `run.end`,
+`tick`, `process.exception` and `sink.error`, so a line-by-line diff of two runs no longer
+lines up; (c) the file is created at first `Composite` construction rather than at import
+(harmless). No `DeprecationWarning` is emitted when the alias is used.
+
+**Who uses the legacy hooks.** Jim (2026-09-11): no `_trace_invoke` invocation in any
+checked-out project. Claude, same day: none in v2ecoli, sms-ecoli, viva-api,
+vivarium-workbench or sms-cdk (`grep`, excluding `.venv`), and `gh search code` for both env
+var names finds only process-bigraph itself and this document. **Scope of that search, stated
+honestly:** GitHub code search covers public repositories plus private ones the token can
+read, indexes default branches only, excludes forks by default, and lags new pushes — so it
+rules out *indexed public* use, not private forks, feature branches, or anyone's laptop. The
+env var was the only documented surface; `_trace_invoke`/`_TRACE_FH` are underscore-private.
+
+#### The three options
+
+| | keep legacy intact (A) | integrate as a compatible alias (B) | replace (C, the branch today) |
+|---|---|---|---|
+| what | leave the `_TRACE_FH`/`_trace_invoke` block in `composite.py` beside the new hook | `configure()` maps the env var to a **`LegacyTraceSink`** that filters `process.invoke` and writes the **old flat record** (`path` list, `gt` key); one-time `DeprecationWarning` naming `PBG_EVENT_SINKS=file:<p>` + `PBG_EVENT_DETAIL=invoke` and the removal release | env var → `file:` sink + `detail=invoke`; old record shape gone |
+| legacy file byte-compatible | yes | yes | **no** |
+| duplicate hot-path code | yes (two `if` checks, two summarisers) | no | no |
+| removal path | none; two systems forever | one release with the warning, then delete ~30 lines | already removed |
+| cost on #209 | 0 (revert the deletion) | ~30 lines + 1 test | 0 |
+
+#### Decision
+
+**B — integrate as a compatible alias.** Rationale: the env var was documented and is the
+kind of thing a diagnostic script hard-codes; it costs thirty lines to keep the file
+byte-compatible for one release, and a `DeprecationWarning` is the only way an unknown client
+learns the new spelling. A keeps two hot-path branches and two summarisers alive with no end
+date. C is defensible on the evidence (no known user) but makes "alias" mean "same env var,
+different file", which is a silent break for exactly the user we cannot see.
+
+Concretely for #209, before merge:
+
+1. `events.py`: `LegacyTraceSink(path)` — `emit()` ignores everything but
+   `event == 'process.invoke'`; writes `{"path": <payload.path split on '/'>, "cls", "gt":
+   <global_time>, "interval", "input", "output"}` with `json.dumps(default=str)` to a
+   line-buffered append handle; `flush`/`close` as `FileSink`.
+2. `configure()`: `PROCESS_BIGRAPH_TRACE_FILE` → append a `LegacyTraceSink` to the resolved
+   sinks (not `file:`), add `invoke` to detail, and `warnings.warn(DeprecationWarning)` once
+   per process naming the replacement and the release in which the alias goes.
+   `PROCESS_BIGRAPH_PROFILE_PROCESSES` stays exactly as it is (already identical in effect);
+   give it the same one-time warning.
+3. `test_file_sink_and_deprecated_aliases`: assert the legacy file has **only** invoke records
+   in the **old shape** (`path` is a list, `gt` present, no `event` key), and that the
+   warning fires once.
+4. Docstring in `events.py` and the PR description: name both aliases, their replacements, and
+   the removal release (the one after 1.9.0).
+5. Not doing: a `_trace_invoke` shim. Private name, no importer found; if one surfaces the
+   forwarding function is two lines.
+
+Status: **proposed on #209 (comment, 2026-09-11); awaiting Jim/Eran confirmation before code
+changes on `feat/events`.**
 
 ### D3. Runner (v2ecoli PR; pins `process-bigraph>=1.9.0`)
 

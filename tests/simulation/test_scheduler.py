@@ -1953,6 +1953,40 @@ class TestUpdateNextflowHeads:
         mock_ray._k8s.get_pod_exit.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_a_FAILED_head_with_an_UNREADABLE_exit_is_not_reported_completed(
+        self, database_service: DatabaseServiceSQL
+    ) -> None:
+        """S1 (eagmon, #609): the head's failure must not be discarded just because
+        its exit code could not be read.
+
+        The K8s Job says FAILED, but ``get_pod_exit`` throws (or the pod is already
+        gone), so exit_code is None. Every task in the trace COMPLETED -- a
+        stage-out/publish failure after the science ran. With exit_code None,
+        ``classify_run``'s tie-break (``not in (None, 0)``) is inert and the run
+        would come back COMPLETED, silently losing the head failure.
+        """
+        sim, hpcrun = await insert_nextflow_head_job(database_service, job_name="nf-noexit")
+        self._use_s3({
+            f"vecoli-output/{sim.experiment_id}/trace.csv": _trace(
+                ("aa/111111", "parca_v0", "COMPLETED", "0"), ("bb/222222", "runs_v0:lineage_v0_s0", "COMPLETED", "0")
+            )
+        })
+        mock_ray = _nf_mock_ray(JobStatus.FAILED, exit_code=None, reason=None)
+        mock_ray._k8s.get_pod_exit.side_effect = RuntimeError("pod is gone")
+        scheduler = JobScheduler(
+            messaging_service=MagicMock(), database_service=database_service, simulation_service_ray=mock_ray
+        )
+
+        await scheduler._advance_nextflow_head(hpcrun, mock_ray)
+
+        refetched = await database_service.get_hpcrun(hpcrun.database_id)
+        assert refetched is not None
+        assert refetched.status == JobStatus.FAILED, "the head failure must survive an unreadable exit code"
+        # The sentinel is for classification ONLY -- the row must not claim we read
+        # an exit code we never read.
+        assert refetched.exit_code is None
+
+    @pytest.mark.asyncio
     async def test_every_task_completed_and_head_zero_is_completed(self, database_service: DatabaseServiceSQL) -> None:
         sim, hpcrun = await insert_nextflow_head_job(database_service, job_name="nf-done")
         self._use_s3({

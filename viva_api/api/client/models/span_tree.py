@@ -52,9 +52,11 @@ class SpanTree:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "span": span,
-        })
+        field_dict.update(
+            {
+                "span": span,
+            }
+        )
         if events is not UNSET:
             field_dict["events"] = events
         if children is not UNSET:

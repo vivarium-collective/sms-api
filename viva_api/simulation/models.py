@@ -2,6 +2,7 @@ import datetime
 import enum
 import hashlib
 import json
+import re
 from dataclasses import field
 from typing import Any, Literal
 
@@ -803,3 +804,57 @@ class SimulationObservables(BaseModel):
     store: Literal["zarr", "parquet"]
     time: list[float]
     series: dict[str, list[float | None]]
+
+
+class TaskRunRequest(BaseModel):
+    """Request to run a self-contained script on the in-region task compute
+    (viva-api#631). Slice 1: ``script`` is a path to a script already in the
+    image (e.g. an fss-combine / ptools-regather turnkey script that lives in the
+    repo). ``memory_class`` routes the instance via the same mechanism as
+    analyses (viva-api#629)."""
+
+    script: str  # repo-path to a script in the image (slice 1)
+    args: list[str] = Field(default_factory=list)
+    sim_data_refs: dict[str, Any] | None = None
+    memory_class: str = "standard"
+    commit: str | None = None  # image commit to run in; None -> latest/default
+    name: str | None = None  # optional human label; defaults to the script name
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, v: str | None) -> str | None:
+        # The name becomes part of the Batch jobName ([A-Za-z0-9_-], <=128), so a
+        # bad one would fail submit_job with a 500. Reject it up front (422)
+        # instead. A None name is fine -- the service derives a sanitized one.
+        if v is not None and not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", v):
+            raise ValueError("name must be 1-128 characters of [A-Za-z0-9_-]")
+        return v
+
+
+class TaskLogsDTO(BaseModel):
+    """A task run's CloudWatch logs (viva-api#631 slice 3). ``lines`` is empty
+    until the container has started (no log stream yet) or when no log group can
+    be resolved; ``status`` lets the caller decide whether to keep polling."""
+
+    task_id: int
+    job_id_ext: str | None = None
+    status: JobStatus | None = None
+    log_stream: str | None = None
+    lines: list[str] = Field(default_factory=list)
+    report_uri: str | None = None  # s3:// report.json the entrypoint ships, if configured
+
+
+class TaskDTO(BaseModel):
+    """A task run's tracked state (submit response and status share this shape)."""
+
+    database_id: int
+    name: str
+    script: str
+    args: list[str] = Field(default_factory=list)
+    sim_data_refs: dict[str, Any] | None = None
+    memory_class: str | None = None
+    status: JobStatus | None = None
+    job_id_ext: str | None = None
+    out_uri: str | None = None
+    result_uri: str | None = None
+    error_message: str | None = None

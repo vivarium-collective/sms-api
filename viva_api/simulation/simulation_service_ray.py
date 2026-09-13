@@ -75,10 +75,13 @@ from viva_api.simulation.models import (
     RepoDiscovery,
     Simulation,
     SimulatorVersion,
+    TaskDTO,
+    TaskLogsDTO,
+    TaskRunRequest,
     VecoliSource,
 )
 from viva_api.simulation.simulation_service import SimulationService
-from viva_api.simulation.tables_orm import AnalysisStatusDB
+from viva_api.simulation.tables_orm import AnalysisStatusDB, TaskStatusDB
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +179,29 @@ PBG_RUNNER_ENV = (
 # documented no-op ("no <dir>; nothing to upload"). It is still declared so anything
 # the analysis does drop locally lands under the run's own S3 prefix.
 ANALYSIS_OUT_DIR = f"{V2ECOLI_DIR}/.pbg/runs/analysis"
+# In-region task compute (viva-api#631 slice 1): an arbitrary repo-path script
+# run through the SAME standalone container path as ParCa/the analysis DAG
+# node. Mirrors ANALYSIS_OUT_DIR's own rationale — a script that writes only to
+# S3 leaves this empty (a documented sync no-op); declared so anything a
+# script drops locally still lands under the run's own S3 prefix.
+TASK_OUT_DIR = f"{V2ECOLI_DIR}/.pbg/runs/task"
+# Where the container entrypoint syncs an uploaded task script (viva-api#631
+# slice 2): submit_uploaded_task stages the script to an S3 prefix and passes it
+# as CONTAINER_STAGE_S3, which batch-container-entrypoint.sh `aws s3 sync`s into
+# CONTAINER_STAGE_DIR before running the command -- so the job_cmd runs
+# `python <TASK_STAGE_DIR>/<script>`.
+TASK_STAGE_DIR = f"{V2ECOLI_DIR}/.pbg/task_script"
+
+
+def _safe_task_name(raw: str) -> str:
+    """Reduce a task name to the Batch jobName charset ([A-Za-z0-9_-], <=128) so
+    it can't fail submit_job. A user-provided name already passed
+    TaskRunRequest's validator; this also sanitizes the auto-derived script stem
+    (which can carry dots and other characters)."""
+    cleaned = re.sub(r"[^A-Za-z0-9_-]", "-", raw)[:128].strip("-")
+    return cleaned or "task"
+
+
 # Where the head writes the entrypoint's metrics report (uploaded as report.json).
 REPORT_PATH = "/tmp/report.json"  # noqa: S108
 
@@ -189,6 +215,62 @@ ANALYSIS_SCALES = ("single", "multidaughter", "multigeneration", "multiseed", "m
 # to enumerate, so it asks the image to resolve the set with its own resolver rather
 # than carrying a second, drift-prone copy of the list.
 APPLICABLE_ANALYSES = "applicable"
+
+# --- Analysis memory-class routing (viva-api#625 / v2ecoli#788) --------------
+#
+# An analysis container runs on one of two Batch instance classes: "standard"
+# (the 60 GB box the analysis job def defaults to, which OOMed on CD2 --
+# v2ecoli#786) and "large" (a 200 GB r7i queue). The class is picked HERE, at
+# submission time, because the queue is chosen before the container runs -- so
+# sms-api cannot ask the model image, where v2ecoli's own analysis_memory_class
+# lives. This is a deliberate small local copy of that sizing (sms-api does not
+# import v2ecoli at runtime; the analysis SCALES it reads are already carried in
+# analysis_options). The constants below MUST stay in step with
+# v2ecoli.workflow.analysis_runner: a per-lineage multiseed/multigeneration group
+# peaks ~8 GB/generation (~78 GB over 10 generations, #786), past the 60 GB
+# standard box; single/multidaughter read one cell and stay standard.
+#
+# DRIFT TRAP: v2ecoli's copy also honors an analysis class that DECLARES
+# `memory_class = "large"` (analysis_runner._declared_memory_class); this copy
+# does NOT -- it derives purely from scale x generations, because sms-api has no
+# ANALYSIS_REGISTRY to read a class attribute from. So declaring memory_class on
+# an analysis currently has NO effect on which queue the API picks. Latent today
+# (nothing declares it). If a module ever needs to force "large" regardless of
+# scale, thread the declared class through analysis_options / task_env so this
+# function can see it; until then a declaration would route large in v2ecoli's
+# in-image reasoning but STANDARD here -- do not let that gap go silent.
+_ANALYSIS_STANDARD_INSTANCE_GB = 60
+_ANALYSIS_GB_PER_GENERATION = 8.0
+_ANALYSIS_MULTI_CELL_SCALES = frozenset({"multigeneration", "multiseed"})
+
+
+def analysis_memory_class(
+    analysis_options: dict[str, Any] | str | None,
+    *,
+    n_seeds: int | None = None,
+    n_generations: int | None = None,
+) -> str:
+    """The Batch instance memory class an analysis submission needs: ``"standard"``
+    or ``"large"``.
+
+    Derived from the scales named in ``analysis_options`` (the ``{scale: {name:
+    params}}`` shape, e.g. from ``analysis_modules_for``) and the sweep's
+    ``n_generations``. Generations drive the per-lineage peak; ``n_seeds`` is
+    accepted for interface parity with v2ecoli's function but the chunked readers
+    make it a non-factor. Any multiseed/multigeneration analysis over enough
+    generations routes the whole job to the large instance; everything else stays
+    standard. Mirrors ``v2ecoli.workflow.analysis_runner.analysis_memory_class``
+    -- see the note above on why sms-api keeps a local copy."""
+    if not n_generations or not isinstance(analysis_options, dict):
+        # No generation count, or the "applicable" keyword / any non-scale-map
+        # (the image resolves the set itself) -- nothing to size on here.
+        return "standard"
+    over_standard = _ANALYSIS_GB_PER_GENERATION * int(n_generations) > _ANALYSIS_STANDARD_INSTANCE_GB
+    for scale, entries in analysis_options.items():
+        if scale in _ANALYSIS_MULTI_CELL_SCALES and isinstance(entries, dict) and entries and over_standard:
+            return "large"
+    return "standard"
+
 
 # ── Chain-dispatch campaign submission (backlog item 33) ────────────────────
 #
@@ -1030,6 +1112,7 @@ class SimulationServiceRay(SimulationService):
         require_clean_chain: bool = False,
         lineage_debug_division: bool = False,
         task_env: dict[str, str] | None = None,
+        memory_class: str = "standard",
     ) -> str:
         """Submit a plain, standalone AWS Batch container-type job (backlog item 71).
 
@@ -1050,6 +1133,24 @@ class SimulationServiceRay(SimulationService):
         settings = get_settings()
         if not settings.ray_container_queue:
             raise RuntimeError("ray_container_queue is not set; cannot submit a container-type Batch job.")
+
+        # Memory-class routing (viva-api#625): a "large" job goes to the
+        # large-memory (200 GB r7i) queue when one is provisioned; otherwise it
+        # falls back to the standard queue (same convention as
+        # ray_mnp_standalone_queue), so behaviour is unchanged until sms-cdk sets
+        # ray_container_large_queue. Require a real non-empty string so a settings
+        # double's auto-attribute can't accidentally route.
+        job_queue = settings.ray_container_queue
+        large_queue = getattr(settings, "ray_container_large_queue", "")
+        if memory_class == "large" and isinstance(large_queue, str) and large_queue.strip():
+            job_queue = large_queue
+            logger.info("Container job %s: memory_class=large -> large-memory queue %s", job_name, job_queue)
+        elif memory_class == "large":
+            logger.info(
+                "Container job %s: memory_class=large but no ray_container_large_queue set; using standard queue %s",
+                job_name,
+                job_queue,
+            )
 
         env: list[dict[str, str]] = [
             {"name": "CONTAINER_JOB_CMD", "value": job_cmd},
@@ -1074,7 +1175,7 @@ class SimulationServiceRay(SimulationService):
 
         kwargs: dict[str, Any] = {
             "jobName": job_name,
-            "jobQueue": settings.ray_container_queue,
+            "jobQueue": job_queue,
             "jobDefinition": job_definition,
             "containerOverrides": {"environment": env},
         }
@@ -2566,6 +2667,9 @@ class SimulationServiceRay(SimulationService):
         # either (was a 1-node MNP job) -- moves to the plain container-type
         # path. `job_definition` must now be a container job def (see
         # submit_campaign_analysis's _ensure_container_job_def call).
+        # Route a heavy multiseed/multigeneration gather to the large-memory
+        # queue by declaration instead of OOM-then-hand-rerun (viva-api#625).
+        memory_class = analysis_memory_class(modules, n_seeds=n_seeds, n_generations=n_generations)
         return await analysis_dag.submit_analysis_dag_node(
             sweep_dir=out_uri,
             analysis_options=modules,
@@ -2573,7 +2677,11 @@ class SimulationServiceRay(SimulationService):
             result_out_dir=result_uri,
             v2ecoli_dir=V2ECOLI_DIR,
             # task_env (sms-ecoli#166): the campaign's own env reaches its gather too.
-            submit_container=functools.partial(self._submit_container, task_env=resolve_task_env(simulation.config)),
+            submit_container=functools.partial(
+                self._submit_container,
+                task_env=resolve_task_env(simulation.config),
+                memory_class=memory_class,
+            ),
             job_definition=job_definition,
             job_name=f"ray-analysis-{experiment_id}-{_rand_suffix()}"[:128],
             out_s3=self._results_s3_uri(experiment_id),
@@ -2915,6 +3023,205 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
             out_dir=VARIANT_CACHE_DIR,
         )
         return JobId.ray(job_id)
+
+    async def submit_task(self, request: TaskRunRequest, database_service: DatabaseService) -> TaskDTO:
+        """Submit a self-contained repo-path script as a standalone AWS Batch
+        container job (viva-api#631 slice 1).
+
+        Same one-node container shape ``submit_parca_job``/the analysis DAG
+        node already use (``_ensure_container_job_def`` + ``_submit_container``)
+        — this method's only real job is building the ``python <script>
+        <args...>`` command line and recording the result on the ``task``
+        table (mirroring how ``_submit_analysis_job`` records to ``analysis``)
+        so ``GET /tasks/{id}/status`` has a row to poll.
+
+        ``request.commit`` pins the image commit the script runs in; ``None``
+        resolves to the default repo/branch's latest commit, the same
+        fallback every other Ray dispatch path here already uses.
+
+        ``request.sim_data_refs``, when present, rides in as a single JSON env
+        var (``TASK_SIM_DATA_REFS``) rather than individual vars — the shape
+        is caller-defined (script-specific reference names -> URIs), so there
+        is no fixed set of env-var names to emit.
+        """
+        commit = request.commit or await self.get_latest_commit_hash()
+        task_name = _safe_task_name(request.name or Path(request.script).stem)
+        job_cmd = self._task_job_cmd(request.script, request.args)
+        return await self._dispatch_task(
+            task_name=task_name,
+            script_label=request.script,
+            job_cmd=job_cmd,
+            request=request,
+            commit=commit,
+            database_service=database_service,
+        )
+
+    async def submit_uploaded_task(
+        self,
+        request: TaskRunRequest,
+        *,
+        script_bytes: bytes,
+        filename: str,
+        database_service: DatabaseService,
+    ) -> TaskDTO:
+        """Submit an UPLOADED script (viva-api#631 slice 2).
+
+        The script bytes are staged to an S3 prefix; the container entrypoint's
+        existing input-staging (``CONTAINER_STAGE_S3`` -> ``CONTAINER_STAGE_DIR``,
+        an ``aws s3 sync``) pulls it into the container before the command runs,
+        so the job_cmd is ``python <TASK_STAGE_DIR>/<script>``. No entrypoint
+        change is needed -- this reuses the same stage-in path ParCa's cache
+        staging already uses.
+        """
+        commit = request.commit or await self.get_latest_commit_hash()
+        safe_name = Path(filename).name  # never trust an uploaded path
+        if not safe_name:
+            raise ValueError("uploaded task script has no filename")
+        task_name = _safe_task_name(request.name or Path(safe_name).stem)
+        stage_s3 = self._results_s3_uri(f"tasks/scripts/{task_name}-{_rand_suffix()}").rstrip("/")
+        self._upload_task_script(stage_s3, safe_name, script_bytes)
+        job_cmd = self._task_job_cmd(f"{TASK_STAGE_DIR}/{safe_name}", request.args)
+        return await self._dispatch_task(
+            task_name=task_name,
+            script_label=f"{stage_s3}/{safe_name}",
+            job_cmd=job_cmd,
+            request=request,
+            commit=commit,
+            database_service=database_service,
+            stage_s3=stage_s3,
+            stage_dir=TASK_STAGE_DIR,
+        )
+
+    @staticmethod
+    def _task_job_cmd(script: str, args: list[str]) -> str:
+        cmd = "python " + shlex.quote(script)
+        if args:
+            cmd += " " + " ".join(shlex.quote(a) for a in args)
+        return cmd
+
+    def _upload_task_script(self, stage_s3_prefix: str, filename: str, script_bytes: bytes) -> None:
+        """Put the uploaded script under ``stage_s3_prefix`` so the container's
+        input staging syncs it in. Uses the instance/task S3 credentials, same as
+        every other S3 write on this service."""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(stage_s3_prefix)
+        bucket = parsed.netloc
+        key = f"{parsed.path.strip('/')}/{filename}"
+        boto3.client("s3", region_name=get_settings().storage_s3_region).put_object(
+            Bucket=bucket, Key=key, Body=script_bytes
+        )
+
+    async def _dispatch_task(
+        self,
+        *,
+        task_name: str,
+        script_label: str,
+        job_cmd: str,
+        request: TaskRunRequest,
+        commit: str,
+        database_service: DatabaseService,
+        stage_s3: str | None = None,
+        stage_dir: str | None = None,
+    ) -> TaskDTO:
+        """Shared submit path for repo-path and uploaded tasks: one-node container
+        job (``_ensure_container_job_def`` + ``_submit_container``) recorded on the
+        ``task`` table so ``GET /tasks/{id}/status`` has a row to poll."""
+        job_def = self._ensure_container_job_def(self._image_uri(commit), commit)
+        out_uri = self._results_s3_uri(f"tasks/{task_name}-{_rand_suffix()}").rstrip("/")
+        task_env: dict[str, str] | None = None
+        if request.sim_data_refs:
+            task_env = {"TASK_SIM_DATA_REFS": json.dumps(request.sim_data_refs)}
+        batch_job_id = self._submit_container(
+            job_name=f"task-{task_name}-{_rand_suffix()}"[:128],
+            job_definition=job_def,
+            job_cmd=job_cmd,
+            out_s3=out_uri,
+            out_dir=TASK_OUT_DIR,
+            stage_s3=stage_s3,
+            stage_dir=stage_dir,
+            task_env=task_env,
+            memory_class=request.memory_class,
+        )
+        return await database_service.record_task(
+            name=task_name,
+            script=script_label,
+            args=list(request.args),
+            sim_data_refs=request.sim_data_refs,
+            memory_class=request.memory_class,
+            status=TaskStatusDB.COMPUTING,
+            job_id_ext=str(batch_job_id),
+            out_uri=out_uri,
+        )
+
+    async def get_task_status(self, task_id: int, database_service: DatabaseService) -> TaskDTO:
+        """Poll a task's tracked Batch job (if any) and persist its mapped status.
+
+        A task with no ``job_id_ext`` yet (shouldn't happen post-``submit_task``,
+        but mirrors the defensive style elsewhere in this class) is returned
+        as-is rather than raising -- there is nothing to poll.
+        """
+        task = await database_service.get_task(task_id)
+        if task.job_id_ext is None:
+            return task
+        statuses = self.get_batch_job_statuses([task.job_id_ext])
+        batch_status = statuses.get(task.job_id_ext)
+        if batch_status is None:
+            return task
+        return await database_service.update_task_status(task_id, TaskStatusDB.from_job_status(batch_status))
+
+    def _resolve_log_group(self, job_definition: str | None) -> str | None:
+        """The CloudWatch log group a container job writes to: the configured
+        ``ray_batch_log_group`` if set, else the awslogs-group from the job
+        definition's logConfiguration. None when neither is available."""
+        configured = get_settings().ray_batch_log_group
+        if configured:
+            return configured
+        if not job_definition:
+            return None
+        try:
+            defs = self._batch().describe_job_definitions(jobDefinitions=[job_definition]).get("jobDefinitions", [])
+            options = defs[0].get("containerProperties", {}).get("logConfiguration", {}).get("options", {})
+            group = options.get("awslogs-group")
+            return group if isinstance(group, str) else None
+        except Exception:
+            logger.warning("could not resolve log group from job definition %s", job_definition, exc_info=True)
+            return None
+
+    async def get_task_logs(self, task_id: int, database_service: DatabaseService, *, limit: int = 1000) -> TaskLogsDTO:
+        """The CloudWatch logs for a task's Batch job (viva-api#631 slice 3).
+
+        Resolves the job's log stream (``describe_jobs`` -> container.logStreamName)
+        and log group, then reads up to ``limit`` recent events. Returns an empty
+        ``lines`` (not an error) when the container hasn't started yet (no stream)
+        or no group can be resolved, so a caller can poll until logs appear."""
+        task = await database_service.get_task(task_id)
+        result = TaskLogsDTO(task_id=task_id, job_id_ext=task.job_id_ext, status=task.status)
+        log_prefix = get_settings().ray_log_s3_prefix
+        if log_prefix and task.job_id_ext:
+            result.report_uri = f"{log_prefix.rstrip('/')}/{task.job_id_ext}/report.json"
+        if not task.job_id_ext:
+            return result
+        jobs = self._batch().describe_jobs(jobs=[task.job_id_ext]).get("jobs", [])
+        if not jobs:
+            return result
+        job = jobs[0]
+        stream = job.get("container", {}).get("logStreamName")
+        if not stream:
+            return result  # container not started yet
+        group = self._resolve_log_group(job.get("jobDefinition"))
+        if not group:
+            return result
+        result.log_stream = stream
+        try:
+            logs_client = boto3.client("logs", region_name=get_settings().storage_s3_region)
+            events = logs_client.get_log_events(
+                logGroupName=group, logStreamName=stream, startFromHead=True, limit=limit
+            ).get("events", [])
+            result.lines = [str(e.get("message", "")) for e in events]
+        except Exception:
+            logger.warning("could not read CloudWatch logs for task %s (stream %s)", task_id, stream, exc_info=True)
+        return result
 
     @override
     async def submit_ecoli_simulation_job(
@@ -4380,6 +4687,7 @@ echo "Submit image pushed: $ECR_REGISTRY/{settings.ray_ecr_repository}:{commit}-
                 depends_on=None,
                 depends_type=None,
                 tags=tags,
+                memory_class=analysis_memory_class(modules, n_seeds=n_seeds, n_generations=n_generations),
             )
         except Exception as e:
             logger.exception("Multi-node analysis submission failed for %s", experiment_id)

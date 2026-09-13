@@ -570,6 +570,87 @@ async def test_get_simulation_status_non_chain_run_unaffected() -> None:
     mock_db_service.update_hpcrun_status.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_status_does_NOT_persist_a_terminal_nextflow_head(monkeypatch) -> None:
+    """B1 (eagmon, #609): GET /status must not finalize a Nextflow head.
+
+    The sim-749 shape: the head exits 0 with a gather task dead, so the K8s Job
+    condition reads Complete. Persisting that here would write the row terminal,
+    and ``finalize_nextflow_head``'s ``WHERE status IN (PENDING, RUNNING)`` means
+    the trace poller could then never win -- the run would read COMPLETED forever
+    with a failed task in it. Reachable by nothing more exotic than polling status
+    inside the <= 30 s gap before the next scheduler tick.
+
+    So the handler still REPORTS what the backend says; it just must not write it.
+    """
+    from viva_api.common.handlers.simulations import get_simulation_status
+    from viva_api.common.hpc.job_service import JobStatusInfo
+
+    hpc_run = HpcRun(
+        database_id=301,
+        job_id=JobId.k8s_nextflow("nf-exp-749"),
+        correlation_id="N/A",
+        job_type=JobType.SIMULATION,
+        ref_id=749,
+        status=JobStatus.RUNNING,
+    )
+    mock_db_service = AsyncMock()
+    mock_db_service.get_simulation.return_value = SimpleNamespace(database_id=749)
+    mock_db_service.get_hpcrun_by_ref.return_value = hpc_run
+
+    mock_service = AsyncMock()
+    mock_service.get_job_status.return_value = JobStatusInfo(
+        job_id=hpc_run.job_id, status=JobStatus.COMPLETED, start_time="t0", end_time="t1"
+    )
+
+    with patch(
+        "viva_api.common.handlers.simulations.get_simulation_service_for_job",
+        return_value=mock_service,
+    ):
+        result = await get_simulation_status(db_service=mock_db_service, id=749)
+
+    # reported live ...
+    assert result.status == JobStatus.COMPLETED
+    # ... but NOT written down: the poller stays the single writer of the outcome.
+    mock_db_service.update_hpcrun_status.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_status_still_persists_a_terminal_head_for_other_backends(monkeypatch) -> None:
+    """The B1 fix is scoped to K8S_NEXTFLOW. Other backends have no separate trace
+    authority, so a live poll is the only source and must still be cached -- this
+    is the viva-api#484 behaviour (a cancelled campaign reading "unknown" a minute
+    after the cancel handler answered) that the persist exists for."""
+    from viva_api.common.handlers.simulations import get_simulation_status
+    from viva_api.common.hpc.job_service import JobStatusInfo
+
+    hpc_run = HpcRun(
+        database_id=302,
+        job_id=JobId.ray("ray-job-xyz"),
+        correlation_id="N/A",
+        job_type=JobType.SIMULATION,
+        ref_id=750,
+        status=JobStatus.RUNNING,
+    )
+    mock_db_service = AsyncMock()
+    mock_db_service.get_simulation.return_value = SimpleNamespace(database_id=750)
+    mock_db_service.get_hpcrun_by_ref.return_value = hpc_run
+
+    mock_service = AsyncMock()
+    mock_service.get_job_status.return_value = JobStatusInfo(
+        job_id=hpc_run.job_id, status=JobStatus.COMPLETED, start_time="t0", end_time="t1"
+    )
+
+    with patch(
+        "viva_api.common.handlers.simulations.get_simulation_service_for_job",
+        return_value=mock_service,
+    ):
+        result = await get_simulation_status(db_service=mock_db_service, id=750)
+
+    assert result.status == JobStatus.COMPLETED
+    mock_db_service.update_hpcrun_status.assert_called_once()
+
+
 # ─── get_simulation_chain_progress (backlog item 6) ─────────────────────────
 
 

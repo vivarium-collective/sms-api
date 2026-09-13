@@ -1015,6 +1015,20 @@ class JobScheduler:
         if exit_code is None and job_info.status == JobStatus.COMPLETED:
             exit_code = 0
 
+        # S1 (eagmon, #609 review): a head the K8s Job reports as FAILED whose exit
+        # code we could NOT read -- get_pod_exit threw, or the pod is already gone.
+        # Left as None, ``classify_run``'s tie-break is inert (``not in (None, 0)``),
+        # so a run whose every task COMPLETED comes back COMPLETED and the head's
+        # failure is silently discarded -- precisely the stage-out/publish failure
+        # the tie-break exists to catch.
+        #
+        # The sentinel is deliberately LOCAL to the classification: -1 is not a real
+        # exit code and must not be written to the database as though we had read one.
+        # ``exit_code`` itself stays None, so the row records "unknown", which is true.
+        head_exit_for_classification = exit_code
+        if exit_code is None and job_info.status == JobStatus.FAILED:
+            head_exit_for_classification = -1
+
         simulation = await self.database_service.get_simulation(simulation_id=hpc_run.ref_id)
         experiment_id = str(simulation.experiment_id) if simulation is not None else None
         trace_rows = await self._read_nextflow_trace(experiment_id)
@@ -1025,7 +1039,7 @@ class JobScheduler:
         attempt: int | None = None
         if trace_rows is not None:
             summary = nextflow_trace.summarize(trace_rows)
-            status = nextflow_trace.classify_run(exit_code, summary)
+            status = nextflow_trace.classify_run(head_exit_for_classification, summary)
             attempt = summary.max_attempt or None
             if status != JobStatus.COMPLETED:
                 head_reason = f"head pod {reason}" if reason else None

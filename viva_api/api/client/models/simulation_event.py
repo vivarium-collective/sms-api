@@ -153,13 +153,15 @@ class SimulationEvent:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "seq": seq,
-            "source": source,
-            "ts": ts,
-            "component": component,
-            "event": event,
-        })
+        field_dict.update(
+            {
+                "seq": seq,
+                "source": source,
+                "ts": ts,
+                "component": component,
+                "event": event,
+            }
+        )
         if cursor is not UNSET:
             field_dict["cursor"] = cursor
         if level is not UNSET:

@@ -264,3 +264,6 @@ assets/info/
 # artifacts and analysis plots, regenerated per run — never a repo artifact.
 # 11 of these were swept into a commit by `git add -A` on 2026-08-28.
 debug/
+
+# Local SQLite scratch DBs (a stale sms.db was tracked at repo root until 2026-09).
+*.db

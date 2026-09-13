@@ -56,11 +56,13 @@ class VariantCacheRequest:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "parca_dataset_id": parca_dataset_id,
-            "variant": variant,
-            "perturbations": perturbations,
-        })
+        field_dict.update(
+            {
+                "parca_dataset_id": parca_dataset_id,
+                "variant": variant,
+                "perturbations": perturbations,
+            }
+        )
         if seed is not UNSET:
             field_dict["seed"] = seed
         if fixed_media is not UNSET:

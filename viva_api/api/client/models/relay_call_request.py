@@ -44,9 +44,11 @@ class RelayCallRequest:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "method": method,
-        })
+        field_dict.update(
+            {
+                "method": method,
+            }
+        )
         if params is not UNSET:
             field_dict["params"] = params
         if timeout is not UNSET:
