@@ -24,6 +24,9 @@ from viva_api.simulation.models import (
     SimulationRun,
     Simulator,
     SimulatorVersion,
+    TaskDTO,
+    TaskLogsDTO,
+    TaskRunRequest,
 )
 
 
@@ -286,6 +289,36 @@ class E2EDataService:
 
     def get_analysis_plots(self, analysis_id: int) -> list[OutputFile]:
         return self.submit_get_analysis_plots(analysis_id=analysis_id)
+
+    # -- Tasks (viva-api#631) --
+
+    def run_task(self, request: TaskRunRequest) -> TaskDTO:
+        return self.submit_task_run(request)
+
+    def get_task_status(self, task_id: int) -> TaskDTO:
+        return self.submit_get_task_status(task_id=task_id)
+
+    def get_task_logs(self, task_id: int, limit: int = 1000) -> TaskLogsDTO:
+        return self.submit_get_task_logs(task_id=task_id, limit=limit)
+
+    def run_uploaded_task(
+        self,
+        *,
+        local_path: str,
+        args: list[str],
+        sim_data_refs: dict[str, str] | None,
+        memory_class: str,
+        commit: str | None,
+        name: str | None,
+    ) -> TaskDTO:
+        return self.submit_uploaded_task_run(
+            local_path=local_path,
+            args=args,
+            sim_data_refs=sim_data_refs,
+            memory_class=memory_class,
+            commit=commit,
+            name=name,
+        )
 
     # -- Low-level HTTP methods: Simulator --
 
@@ -640,6 +673,79 @@ class E2EDataService:
             raise
         except Exception as e:
             raise httpx.HTTPError(f"Could not load analysis plots for id {analysis_id}") from e
+
+    # -- Low-level HTTP methods: Tasks (viva-api#631) --
+
+    def submit_task_run(self, request: TaskRunRequest) -> TaskDTO:
+        try:
+            response = self.client.post(url="/api/v1/tasks", json=request.model_dump(mode="json"))
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return TaskDTO(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not submit task for script {request.script}") from e
+
+    def submit_uploaded_task_run(
+        self,
+        *,
+        local_path: str,
+        args: list[str],
+        sim_data_refs: dict[str, str] | None,
+        memory_class: str,
+        commit: str | None,
+        name: str | None,
+    ) -> TaskDTO:
+        import json
+        from pathlib import Path
+
+        path = Path(local_path)
+        if not path.is_file():
+            raise httpx.HTTPError(f"No such script file to upload: {local_path}")
+        data: dict[str, object] = {"memory_class": memory_class, "args": args}
+        if sim_data_refs:
+            data["sim_data_refs"] = json.dumps(sim_data_refs)
+        if commit:
+            data["commit"] = commit
+        if name:
+            data["name"] = name
+        try:
+            with path.open("rb") as fh:
+                response = self.client.post(
+                    url="/api/v1/tasks/upload",
+                    files={"script": (path.name, fh, "text/x-python")},
+                    data=data,
+                )
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return TaskDTO(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not submit uploaded task for {local_path}") from e
+
+    def submit_get_task_status(self, task_id: int) -> TaskDTO:
+        try:
+            response = self.client.get(url=f"/api/v1/tasks/{task_id}/status")
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return TaskDTO(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not load task status for id {task_id}") from e
+
+    def submit_get_task_logs(self, task_id: int, limit: int = 1000) -> TaskLogsDTO:
+        try:
+            response = self.client.get(url=f"/api/v1/tasks/{task_id}/logs", params={"limit": limit})
+            if response.status_code != 200:
+                raise httpx.HTTPError(f"Server returned {response.status_code}: {response.text}")  # noqa: TRY301
+            return TaskLogsDTO(**response.json())
+        except httpx.HTTPError:
+            raise
+        except Exception as e:
+            raise httpx.HTTPError(f"Could not load task logs for id {task_id}") from e
 
     # -- Streaming output download --
 

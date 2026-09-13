@@ -5,7 +5,6 @@ class JobStatus(str, Enum):
     CANCELLED = "cancelled"
     COMPLETED = "completed"
     FAILED = "failed"
-    PARTIAL = "partial"
     PENDING = "pending"
     QUEUED = "queued"
     RUNNING = "running"

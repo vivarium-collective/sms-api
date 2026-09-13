@@ -27,6 +27,7 @@ from viva_api.simulation.models import (
     SimulationConfig,
     SimulationRequest,
     SimulatorVersion,
+    TaskDTO,
     WorkerEvent,
 )
 from viva_api.simulation.tables_orm import (
@@ -38,7 +39,9 @@ from viva_api.simulation.tables_orm import (
     ORMParcaDataset,
     ORMSimulation,
     ORMSimulator,
+    ORMTask,
     ORMWorkerEvent,
+    TaskStatusDB,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,6 +128,45 @@ class DatabaseService(ABC):
         error_message: str | None = None,
     ) -> ExperimentAnalysisDTO:
         """Update an analysis row's status (and optionally result_uri/error) by id."""
+        pass
+
+    ####################################
+
+    @abstractmethod
+    async def record_task(
+        self,
+        *,
+        name: str,
+        script: str,
+        args: list[Any],
+        sim_data_refs: dict[str, Any] | None,
+        memory_class: str | None,
+        status: TaskStatusDB,
+        job_name: str | None = None,
+        job_id_ext: str | None = None,
+        out_uri: str | None = None,
+        result_uri: str | None = None,
+        error_message: str | None = None,
+    ) -> TaskDTO:
+        """Insert an in-region task-run row (viva-api#631). Plain insert, no
+        dedup — a task submission is a one-shot script invocation, not the
+        (experiment_id, n_tp)-keyed idempotent upsert ``record_analysis`` does."""
+        pass
+
+    @abstractmethod
+    async def get_task(self, database_id: int) -> TaskDTO:
+        """Used by the /tasks router."""
+        pass
+
+    @abstractmethod
+    async def update_task_status(
+        self,
+        task_id: int,
+        status: TaskStatusDB,
+        result_uri: str | None = None,
+        error_message: str | None = None,
+    ) -> TaskDTO:
+        """Update a task row's status (and optionally result_uri/error) by id."""
         pass
 
     ####################################
@@ -606,6 +648,76 @@ class DatabaseServiceSQL(DatabaseService):
             orm_analysis.last_updated = str(datetime.datetime.now())
             await session.flush()
             return orm_analysis.to_dto()
+
+    ##################################
+
+    async def _get_orm_task(self, session: AsyncSession, database_id: int) -> ORMTask | None:
+        stmt1 = select(ORMTask).where(ORMTask.id == database_id).limit(1)
+        result1: Result[tuple[ORMTask]] = await session.execute(stmt1)
+        orm_task: ORMTask | None = result1.scalars().one_or_none()
+        return orm_task
+
+    @override
+    async def record_task(
+        self,
+        *,
+        name: str,
+        script: str,
+        args: list[Any],
+        sim_data_refs: dict[str, Any] | None,
+        memory_class: str | None,
+        status: TaskStatusDB,
+        job_name: str | None = None,
+        job_id_ext: str | None = None,
+        out_uri: str | None = None,
+        result_uri: str | None = None,
+        error_message: str | None = None,
+    ) -> TaskDTO:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_task = ORMTask(
+                name=name,
+                script=script,
+                args=list(args),
+                sim_data_refs=sim_data_refs,
+                memory_class=memory_class,
+                status=status,
+                job_name=job_name,
+                job_id_ext=job_id_ext,
+                out_uri=out_uri,
+                result_uri=result_uri,
+                error_message=error_message,
+            )
+            session.add(orm_task)
+            await session.flush()
+            return orm_task.to_dto()
+
+    @override
+    async def get_task(self, database_id: int) -> TaskDTO:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_task = await self._get_orm_task(session, database_id=database_id)
+            if orm_task is None:
+                raise RuntimeError(f"Task {database_id} not found")
+            return orm_task.to_dto()
+
+    @override
+    async def update_task_status(
+        self,
+        task_id: int,
+        status: TaskStatusDB,
+        result_uri: str | None = None,
+        error_message: str | None = None,
+    ) -> TaskDTO:
+        async with self.async_sessionmaker() as session, session.begin():
+            orm_task = await self._get_orm_task(session, database_id=task_id)
+            if orm_task is None:
+                raise RuntimeError(f"Task {task_id} not found")
+            orm_task.status = status
+            if result_uri is not None:
+                orm_task.result_uri = result_uri
+            if error_message is not None:
+                orm_task.error_message = error_message
+            await session.flush()
+            return orm_task.to_dto()
 
     ##################################
 

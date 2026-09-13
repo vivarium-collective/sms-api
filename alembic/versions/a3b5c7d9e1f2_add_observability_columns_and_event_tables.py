@@ -32,7 +32,11 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a3b5c7d9e1f2"
-down_revision: str | Sequence[str] | None = "f76e43d01841"
+down_revision: str | Sequence[str] | None = "d7e2f4a6c8b0"
+# Re-pointed from f76e43d01841 when this branch merged main: viva-api#631 landed
+# d7e2f4a6c8b0 (the `task` table) on the SAME parent, so leaving this as-is gave
+# TWO alembic heads and `alembic upgrade head` fails outright on a multi-head
+# chain. The revision chain must stay linear.
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

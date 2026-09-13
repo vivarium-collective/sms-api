@@ -360,6 +360,10 @@ class Settings(BaseSettings):
     ray_n_steps: int = 600  # default sim steps per seed (run_phase0_xarray_ensemble --n-steps)
     ray_chunk: int = 60  # default xarray emitter flush interval (--chunk)
     ray_log_s3_prefix: str = ""  # s3:// prefix for Ray session logs + report.json (RayLogS3Prefix stack output)
+    # CloudWatch log group the container/task jobs write stdout+stderr to (awslogs
+    # driver). Empty -> resolved from the job definition's logConfiguration at read
+    # time (viva-api#631 slice 3, `atlantis task logs`).
+    ray_batch_log_group: str = ""
 
     # --- Ray-on-Batch ARRAY dispatch settings ---
     # Used for the canonical/batch_baseline multiseed x multigeneration sweep: one
@@ -386,6 +390,13 @@ class Settings(BaseSettings):
     # blank queue/job-def (matches compose_ray_image_tag's own precedent below).
     ray_container_queue: str = ""  # Batch container job queue (e.g. "smscdk-ray-standalone")
     ray_container_job_definition: str = ""  # Batch container job definition (e.g. "smscdk-ray-container")
+    # A second container queue backed by a large-memory (200 GB r7i) compute
+    # environment, for analysis jobs whose multiseed/multigeneration gather peaks
+    # past the standard box (v2ecoli#786; routing derived by analysis_memory_class
+    # in simulation_service_ray). Same fallback convention as ray_mnp_standalone_queue:
+    # empty means "not provisioned", and _submit_container falls back to
+    # ray_container_queue, so behaviour is unchanged until sms-cdk provisions it.
+    ray_container_large_queue: str = ""  # Batch large-memory container queue (e.g. "smscdk-ray-standalone-large")
 
     # EC2 build machine (legacy, replaced by Batch DooD builds)
     build_node_host: str = ""

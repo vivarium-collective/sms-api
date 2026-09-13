@@ -175,6 +175,15 @@ async def _marker_compose_simulation_analysis_options(conn: AsyncConnection) -> 
     return await _column_exists(conn, "compose_simulation", "analysis_options")
 
 
+async def _marker_task_table(conn: AsyncConnection) -> bool:
+    """True once the ``task`` table exists (d7e2f4a6c8b0, viva-api#631).
+
+    Satisfied for free by a create_all-bootstrapped database — ORMTask is a Base
+    table, so create_db creates it at startup, which is the property every marker
+    in this list needs."""
+    return await _table_exists(conn, "task")
+
+
 async def _marker_hpcrun_events(conn: AsyncConnection) -> bool:
     """True once the observability tables exist (a3b5c7d9e1f2): ``hpcrun_event``."""
     return await _table_exists(conn, "hpcrun_event")
@@ -199,6 +208,7 @@ LEGACY_FINGERPRINTS: list[tuple[str, str]] = [
     ("b4d7e9c02a15", "table 'env_worker_task' exists"),
     ("c7d1f3a9b2e4", "hpcrun.external_job_ids column exists"),
     ("f76e43d01841", "compose_simulation.analysis_options column exists"),
+    ("d7e2f4a6c8b0", "table 'task' exists"),
     ("a3b5c7d9e1f2", "table 'hpcrun_event' exists"),
 ]
 _LEGACY_PREDICATES = [
@@ -215,6 +225,7 @@ _LEGACY_PREDICATES = [
     _marker_env_worker_task,
     _marker_hpcrun_external_job_ids,
     _marker_compose_simulation_analysis_options,
+    _marker_task_table,
     _marker_hpcrun_events,
 ]
 

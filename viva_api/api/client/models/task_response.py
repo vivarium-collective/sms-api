@@ -84,12 +84,14 @@ class TaskResponse:
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "task_id": task_id,
-            "job_name": job_name,
-            "method": method,
-            "status": status,
-        })
+        field_dict.update(
+            {
+                "task_id": task_id,
+                "job_name": job_name,
+                "method": method,
+                "status": status,
+            }
+        )
         if result is not UNSET:
             field_dict["result"] = result
         if error_message is not UNSET:

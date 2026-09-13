@@ -22,6 +22,7 @@ from .body_compose_run_simulation import BodyComposeRunSimulation
 from .body_compose_run_tellurium import BodyComposeRunTellurium
 from .body_run_ecoli_simulation_new import BodyRunEcoliSimulationNew
 from .body_run_ecoli_simulation_new_extra_params_type_0 import BodyRunEcoliSimulationNewExtraParamsType0
+from .body_run_uploaded_task import BodyRunUploadedTask
 from .chain_progress import ChainProgress
 from .check_health_health_get_response_check_health_health_get import CheckHealthHealthGetResponseCheckHealthHealthGet
 from .compose_document_submission import ComposeDocumentSubmission
@@ -107,7 +108,12 @@ from .state_document import StateDocument
 from .state_document_document import StateDocumentDocument
 from .stop_env_worker_response_stop_env_worker import StopEnvWorkerResponseStopEnvWorker
 from .stop_relayed_env_worker_response_stop_relayed_env_worker import StopRelayedEnvWorkerResponseStopRelayedEnvWorker
+from .task_dto import TaskDTO
+from .task_dto_sim_data_refs_type_0 import TaskDTOSimDataRefsType0
+from .task_logs_dto import TaskLogsDTO
 from .task_response import TaskResponse
+from .task_run_request import TaskRunRequest
+from .task_run_request_sim_data_refs_type_0 import TaskRunRequestSimDataRefsType0
 from .task_status_response import TaskStatusResponse
 from .task_submit_request import TaskSubmitRequest
 from .task_submit_request_params_type_0 import TaskSubmitRequestParamsType0
@@ -148,6 +154,7 @@ __all__ = (
     "BodyComposeRunTellurium",
     "BodyRunEcoliSimulationNew",
     "BodyRunEcoliSimulationNewExtraParamsType0",
+    "BodyRunUploadedTask",
     "ChainProgress",
     "CheckHealthHealthGetResponseCheckHealthHealthGet",
     "ComposeDocumentSubmission",
@@ -229,7 +236,12 @@ __all__ = (
     "StateDocumentDocument",
     "StopEnvWorkerResponseStopEnvWorker",
     "StopRelayedEnvWorkerResponseStopRelayedEnvWorker",
+    "TaskDTO",
+    "TaskDTOSimDataRefsType0",
+    "TaskLogsDTO",
     "TaskResponse",
+    "TaskRunRequest",
+    "TaskRunRequestSimDataRefsType0",
     "TaskStatusResponse",
     "TaskSubmitRequest",
     "TaskSubmitRequestParamsType0",
